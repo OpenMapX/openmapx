@@ -8,6 +8,14 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes: ["pgdata:/var/lib/postgresql/data"]
 
+  elasticsearch:
+    image: elasticsearch:7.17.18
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports: ["9200:9200"]
+    volumes: ["esdata:/usr/share/elasticsearch/data"]
+
   martin:
     image: ghcr.io/maplibre/martin:latest
     ports: ["3001:3000"]
@@ -18,17 +26,36 @@ services:
   tileserver:
     image: maptiler/tileserver-gl:latest
     ports: ["8080:8080"]
-    volumes: ["./tiles:/data"]
+    volumes: ["./services/tileserver:/data"]
 
   pelias-api:
     image: pelias/api:latest
     ports: ["4000:4000"]
+    volumes: ["./services/pelias:/etc/pelias"]
+    depends_on: [elasticsearch]
 
   valhalla:
     image: ghcr.io/gis-ops/valhalla:latest
     ports: ["8002:8002"]
-    volumes: ["./valhalla:/custom_files"]
+    volumes: ["./services/valhalla:/custom_files"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    ports: ["5000:5000"]
+    volumes: ["./services/osrm:/data"]
+    command: osrm-routed --algorithm mld /data/map.osrm
+
+  otp:
+    image: opentripplanner/opentripplanner:latest
+    ports: ["8090:8080"]
+    volumes: ["./services/otp:/var/opentripplanner"]
+    command: --load --serve
 
 volumes:
   pgdata:
+  esdata:
 

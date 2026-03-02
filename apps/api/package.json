@@ -1,5 +1,5 @@
 {
-  "name": "@openmapx/api-gateway",
+  "name": "@openmapx/api",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -13,10 +13,13 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
     "@openmapx/core": "workspace:^",
-    "fastify": "^5.7.4"
+    "drizzle-orm": "^0.45.1",
+    "fastify": "^5.7.4",
+    "postgres": "^3.4.8"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "drizzle-kit": "^0.31.9",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

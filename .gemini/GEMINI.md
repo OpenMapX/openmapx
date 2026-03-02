@@ -7,15 +7,15 @@ Monorepo: Turborepo + pnpm. All code is TypeScript.
 ## Architecture
 - `apps/web` — Next.js 15 + App Router + Tailwind + MapLibre GL JS
 - `packages/core` — platform-agnostic business logic (geocoding clients, routing clients, type definitions)
-- `services/api-gateway` — Fastify server proxying Pelias, Valhalla, Martin
+- `apps/api` — Fastify server proxying Pelias, Valhalla, Martin
 - `infra/docker` — Docker Compose for PostGIS, Martin, TileServer GL, Pelias, Valhalla
 
 ## Conventions
 - Strict TypeScript, no `any`
 - Functional React components, server components by default, `"use client"` only when needed
 - Barrel exports via `index.ts` in each package
-- Use workspace protocol: `@openmapx/core`, `@openmapx/api-gateway`
-- Biome for formatting and linting
+- Use workspace protocol: `@openmapx/core`, `@openmapx/api`
+- Biome for formatting and linting (configured at repo root via biome.json)
 - Conventional commits (feat:, fix:, chore:, docs:)
 
 ## Key Commands
