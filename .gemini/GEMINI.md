@@ -5,7 +5,7 @@ OpenMapX is an open-data mapping platform (Google Maps alternative).
 Monorepo: Turborepo + pnpm. All code is TypeScript.
 
 ## Architecture
-- `apps/web` — Next.js 15 + App Router + Tailwind + MapLibre GL JS
+- `apps/web` — Next.js 16 + App Router + Tailwind + MapLibre GL JS
 - `packages/core` — platform-agnostic business logic (geocoding clients, routing clients, type definitions)
 - `apps/api` — Fastify server proxying Pelias, Valhalla, Martin
 - `infra/docker` — Docker Compose for PostGIS, Martin, TileServer GL, Pelias, Valhalla

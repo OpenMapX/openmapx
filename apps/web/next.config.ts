@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: ["@openmapx/core"],
+  turbopack: {
+    root: "../../",
+  },
 };
 
 export default nextConfig;

@@ -1,10 +1,17 @@
 {
   "name": "@openmapx/core",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Platform-agnostic business logic for OpenMapX",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check-types": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
