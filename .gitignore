@@ -36,3 +36,12 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+node_modules/
+.next/
+dist/
+.turbo/
+*.env.local
+.env
+infra/docker/tiles/
+infra/docker/valhalla/
+infra/docker/pgdata/

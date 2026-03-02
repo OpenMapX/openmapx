@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Bash(pnpm *)",
+      "Bash(npx *)",
+      "Bash(turbo *)",
+      "Bash(git *)",
+      "Bash(docker compose *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(cat *)",
+      "Bash(ls *)"
+    ],
+    "deny": ["Bash(rm -rf /)", "Bash(curl *)", "Bash(wget *)"]
+  }
+}
