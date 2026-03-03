@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-:root {
-  --font-roboto: "Roboto", sans-serif;
+body {
+  font-family: var(--font-sans), sans-serif;
 }
 
 html,

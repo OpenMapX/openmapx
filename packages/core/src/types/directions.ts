@@ -15,6 +15,8 @@ export interface Route {
   geometry: LngLat[];
   steps: RouteStep[];
   mode: TravelMode;
+  /** Human-readable summary of the primary road, e.g. "via A57" */
+  summary?: string;
 }
 
 export interface DirectionsResult {

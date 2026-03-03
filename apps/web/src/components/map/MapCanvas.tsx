@@ -7,7 +7,7 @@ import { useMap } from "@/lib/MapContext";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { mapRef } = useMap();
+  const { mapRef, notifyMapReady } = useMap();
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
 
   useEffect(() => {
@@ -47,6 +47,7 @@ export function MapCanvas() {
         });
 
         mapRef.current = map;
+        notifyMapReady();
       });
     };
 
@@ -85,7 +86,7 @@ export function MapCanvas() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [mapRef, setBearing, setCenter, setPitch, setUserLocation, setZoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapRef, notifyMapReady, setBearing, setCenter, setPitch, setUserLocation, setZoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Outer div owns the absolute positioning.
   // MapLibre gets the inner div so its .maplibregl-map class (position: relative)

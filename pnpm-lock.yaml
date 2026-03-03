@@ -38,6 +38,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openstreetmap/id-tagging-schema':
+        specifier: ^6.14.0
+        version: 6.14.0
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.1(postgres@3.4.8)
@@ -1215,6 +1218,9 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@openstreetmap/id-tagging-schema@6.14.0':
+    resolution: {integrity: sha512-VE7a4uyNkaQmGvn4ZM5yURnb58eugM55wzO9CG1yYBFwxCLtJKUsZfGB1MXMFWfbkMQhilWapttbM3EJLw+qTQ==}
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -3399,6 +3405,8 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.19.1
+
+  '@openstreetmap/id-tagging-schema@6.14.0': {}
 
   '@pinojs/redact@0.4.0': {}
 

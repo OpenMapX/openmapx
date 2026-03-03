@@ -8,12 +8,32 @@ interface UseDirectionsParams {
   origin: LngLat | null;
   destination: LngLat | null;
   mode?: TravelMode;
+  avoidHighways?: boolean;
+  avoidTolls?: boolean;
+  avoidFerries?: boolean;
+  units?: "metric" | "imperial";
 }
 
-// Phase 5 — wire up once OSRM/Valhalla is running
-export function useDirections({ origin, destination, mode = "driving" }: UseDirectionsParams) {
+export function useDirections({
+  origin,
+  destination,
+  mode = "driving",
+  avoidHighways = false,
+  avoidTolls = false,
+  avoidFerries = false,
+  units = "metric",
+}: UseDirectionsParams) {
   return useQuery({
-    queryKey: ["directions", origin, destination, mode],
+    queryKey: [
+      "directions",
+      origin,
+      destination,
+      mode,
+      avoidHighways,
+      avoidTolls,
+      avoidFerries,
+      units,
+    ],
     queryFn: () =>
       apiClient.get<DirectionsResult>(API_ENDPOINTS.directions, {
         originLng: String(origin?.[0]),
@@ -21,8 +41,13 @@ export function useDirections({ origin, destination, mode = "driving" }: UseDire
         destLng: String(destination?.[0]),
         destLat: String(destination?.[1]),
         mode,
+        avoidHighways: String(avoidHighways),
+        avoidTolls: String(avoidTolls),
+        avoidFerries: String(avoidFerries),
+        units,
       }),
     enabled: origin !== null && destination !== null,
     staleTime: 120_000,
+    gcTime: 600_000, // Keep cached 10 min so switching back to a mode reuses data
   });
 }

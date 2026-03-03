@@ -12,7 +12,15 @@ import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import type { AutocompleteResult } from "@openmapx/core";
-import { useAutocomplete, useGeocoding, usePlaceStore, useSearchStore } from "@openmapx/core";
+import {
+  useActiveSidePanel,
+  useAutocomplete,
+  useDirectionsStore,
+  useGeocoding,
+  usePlaceStore,
+  useSearchStore,
+} from "@openmapx/core";
+
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -22,10 +30,11 @@ export function SearchBar() {
   const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
     useSearchStore();
   const { setSelectedPlace } = usePlaceStore();
+  const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
+  const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
   const { flyTo } = useMap();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
-
   const { data: autocompleteData, isFetching } = useAutocomplete(query);
   const { data: geocodeData } = useGeocoding(query);
 
@@ -42,13 +51,10 @@ export function SearchBar() {
     setResults(geocodeData ?? []);
   }, [geocodeData, setResults]);
 
+  if (directionsOpen) return null;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
-  };
-
-  const handleClear = () => {
-    setQuery("");
-    inputRef.current?.focus();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -56,7 +62,7 @@ export function SearchBar() {
     inputRef.current?.blur();
     const first = geocodeData?.[0];
     if (first) {
-      flyTo(first.coordinates);
+      flyTo(first.coordinates, 15);
       setSelectedPlace({
         id: first.id,
         name: first.label,
@@ -71,7 +77,7 @@ export function SearchBar() {
     setQuery(result.label);
     setIsFocused(false);
     if (result.coordinates) {
-      flyTo(result.coordinates);
+      flyTo(result.coordinates, 15);
       setSelectedPlace({
         id: result.id,
         name: result.label,
@@ -98,7 +104,7 @@ export function SearchBar() {
       <Paper
         elevation={isFocused ? 4 : 2}
         sx={{
-          width: { xs: "100%", sm: 430 },
+          width: { xs: "100%", sm: 376 },
           borderRadius: showDropdown ? "24px 24px 16px 16px" : "24px",
           overflow: "hidden",
           transition: "box-shadow 0.2s, border-radius 0.15s",
@@ -134,22 +140,35 @@ export function SearchBar() {
             }}
           />
 
-          {query.length > 0 && (
-            <IconButton size="small" onClick={handleClear} aria-label="Clear search">
-              <CloseIcon sx={{ fontSize: 18, color: "text.secondary" }} />
-            </IconButton>
-          )}
-
           <IconButton type="submit" size="small" aria-label="Search">
             <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
           </IconButton>
 
           <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 1 }} />
-          <Tooltip title="Directions" placement="bottom">
-            <IconButton size="small" aria-label="Get directions" sx={{ mr: 0.5 }}>
-              <DirectionsIcon sx={{ fontSize: 22, color: "primary.main" }} />
+          {hasSidePanel ? (
+            <IconButton
+              size="small"
+              aria-label="Close panel"
+              sx={{ mr: 0.5 }}
+              onClick={() => {
+                closeSidePanel();
+                setQuery("");
+              }}
+            >
+              <CloseIcon sx={{ fontSize: 22, color: "text.secondary" }} />
             </IconButton>
-          </Tooltip>
+          ) : (
+            <Tooltip title="Directions" placement="bottom">
+              <IconButton
+                size="small"
+                aria-label="Get directions"
+                sx={{ mr: 0.5 }}
+                onClick={openDirections}
+              >
+                <DirectionsIcon sx={{ fontSize: 22, color: "primary.main" }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
         {/* Suggestions list — directly attached inside the same card */}

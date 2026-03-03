@@ -24,7 +24,7 @@ const theme = createTheme({
     },
   },
   typography: {
-    fontFamily: '"Google Sans", Roboto, Arial, sans-serif',
+    fontFamily: '"Plus Jakarta Sans", Arial, sans-serif',
     fontSize: 14,
     button: {
       textTransform: "none",
