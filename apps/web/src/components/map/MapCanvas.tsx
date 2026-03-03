@@ -8,20 +8,15 @@ import { useMap } from "@/lib/MapContext";
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { mapRef } = useMap();
-  const {
-    center,
-    zoom,
-    bearing,
-    pitch,
-    setCenter,
-    setZoom,
-    setBearing,
-    setPitch,
-    setUserLocation,
-  } = useMapStore();
+  const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    // Read initial viewport values once at mount — not reactive dependencies.
+    // Adding center/zoom/bearing/pitch to the dep array would cause the map to
+    // be destroyed and re-created every time the user pans or zooms.
+    const { center, zoom, bearing, pitch } = useMapStore.getState();
 
     const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
     const styleUrl = `https://api.maptiler.com/maps/streets-v2/style.json?key=${apiKey}`;
@@ -90,18 +85,7 @@ export function MapCanvas() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [
-    bearing,
-    center,
-    mapRef,
-    pitch,
-    setBearing,
-    setCenter,
-    setPitch,
-    setUserLocation,
-    setZoom,
-    zoom,
-  ]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapRef, setBearing, setCenter, setPitch, setUserLocation, setZoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Outer div owns the absolute positioning.
   // MapLibre gets the inner div so its .maplibregl-map class (position: relative)

@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { peliasService } from "../services/pelias.service";
+import { getGeocodingProvider } from "../services/geocoding.factory";
 
 export const autocompleteRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { q: string } }>("/autocomplete", {
@@ -11,8 +11,7 @@ export const autocompleteRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req) => {
-      const { q } = req.query;
-      return peliasService.autocomplete(q);
+      return getGeocodingProvider().autocomplete(req.query.q);
     },
   });
 };

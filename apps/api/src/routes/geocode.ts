@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { peliasService } from "../services/pelias.service";
+import { getGeocodingProvider } from "../services/geocoding.factory";
 
 export const geocodeRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { q: string } }>("/geocode", {
@@ -11,8 +11,7 @@ export const geocodeRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req) => {
-      const { q } = req.query;
-      return peliasService.geocode(q);
+      return getGeocodingProvider().geocode(req.query.q);
     },
   });
 };

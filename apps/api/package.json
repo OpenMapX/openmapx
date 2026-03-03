@@ -2,9 +2,10 @@
   "name": "@openmapx/api",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "node --env-file=.env --watch --import tsx/esm src/server.ts",
     "build": "tsc --noEmit",
     "start": "node dist/server.js",
     "check-types": "tsc --noEmit"

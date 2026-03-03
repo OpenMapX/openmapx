@@ -9,18 +9,41 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import InputBase from "@mui/material/InputBase";
 import Paper from "@mui/material/Paper";
+import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
-import { useSearchStore } from "@openmapx/core";
-import { useRef } from "react";
+import type { AutocompleteResult } from "@openmapx/core";
+import { useAutocomplete, useGeocoding, usePlaceStore, useSearchStore } from "@openmapx/core";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useMap } from "@/lib/MapContext";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 
 export function SearchBar() {
-  const { query, isFocused, suggestions, setQuery, setIsFocused } = useSearchStore();
+  const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
+    useSearchStore();
+  const { setSelectedPlace } = usePlaceStore();
+  const { flyTo } = useMap();
+  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: autocompleteData, isFetching } = useAutocomplete(query);
+  const { data: geocodeData } = useGeocoding(query);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setSuggestions([]);
+      queryClient.removeQueries({ queryKey: ["autocomplete"] });
+    } else {
+      setSuggestions(autocompleteData ?? []);
+    }
+  }, [autocompleteData, query, queryClient, setSuggestions]);
+
+  useEffect(() => {
+    setResults(geocodeData ?? []);
+  }, [geocodeData, setResults]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
-    // TODO Phase 3: trigger autocomplete fetch
   };
 
   const handleClear = () => {
@@ -31,8 +54,36 @@ export function SearchBar() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     inputRef.current?.blur();
-    // TODO Phase 3: trigger geocoding search
+    const first = geocodeData?.[0];
+    if (first) {
+      flyTo(first.coordinates);
+      setSelectedPlace({
+        id: first.id,
+        name: first.label,
+        address: first.label,
+        coordinates: first.coordinates,
+        category: first.type,
+      });
+    }
   };
+
+  const handleSelect = (result: AutocompleteResult) => {
+    setQuery(result.label);
+    setIsFocused(false);
+    if (result.coordinates) {
+      flyTo(result.coordinates);
+      setSelectedPlace({
+        id: result.id,
+        name: result.label,
+        address: result.sublabel ?? result.label,
+        coordinates: result.coordinates,
+        category: result.type,
+      });
+    }
+  };
+
+  const showDropdown = isFocused && suggestions.length > 0;
+  const showSkeleton = isFocused && query.trim().length >= 2 && isFetching && !showDropdown;
 
   return (
     <Box
@@ -41,80 +92,95 @@ export function SearchBar() {
         top: 12,
         left: 12,
         zIndex: 10,
-        // Leave room for TopRightControls; don't right-anchor
         width: { xs: "calc(100% - 110px)", sm: "auto" },
       }}
     >
       <Paper
-        component="form"
-        onSubmit={handleSubmit}
         elevation={isFocused ? 4 : 2}
         sx={{
-          display: "flex",
-          alignItems: "center",
-          height: 48,
-          borderRadius: "24px",
-          px: 0.5,
-          transition: "box-shadow 0.2s",
-          bgcolor: "background.paper",
           width: { xs: "100%", sm: 430 },
+          borderRadius: showDropdown ? "24px 24px 16px 16px" : "24px",
+          overflow: "hidden",
+          transition: "box-shadow 0.2s, border-radius 0.15s",
+          bgcolor: "background.paper",
         }}
       >
-        <IconButton size="small" sx={{ ml: 0.5, mr: 0.5 }} aria-label="Menu">
-          <MenuIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-        </IconButton>
-
-        <InputBase
-          inputRef={inputRef}
-          value={query}
-          onChange={handleChange}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setTimeout(() => setIsFocused(false), 150)}
-          placeholder="Search OpenMapX"
-          inputProps={{ "aria-label": "search" }}
-          sx={{
-            flex: 1,
-            fontSize: 16,
-            "& input": {
-              padding: 0,
-              paddingLeft: "8px",
-              "&::placeholder": { color: "text.secondary", opacity: 1 },
-            },
-          }}
-        />
-
-        {query.length > 0 && (
-          <IconButton size="small" onClick={handleClear} aria-label="Clear search">
-            <CloseIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+        {/* Search input row */}
+        <Box
+          component="form"
+          onSubmit={handleSubmit}
+          sx={{ display: "flex", alignItems: "center", height: 48, px: 0.5 }}
+        >
+          <IconButton size="small" sx={{ ml: 0.5, mr: 0.5 }} aria-label="Menu">
+            <MenuIcon sx={{ fontSize: 22, color: "text.secondary" }} />
           </IconButton>
-        )}
 
-        <IconButton type="submit" size="small" aria-label="Search">
-          <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-        </IconButton>
-
-        {/* Divider + directions button inside the pill */}
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 1 }} />
-        <Tooltip title="Directions" placement="bottom">
-          <IconButton size="small" aria-label="Get directions" sx={{ mr: 0.5 }}>
-            <DirectionsIcon sx={{ fontSize: 22, color: "primary.main" }} />
-          </IconButton>
-        </Tooltip>
-      </Paper>
-
-      {/* Autocomplete dropdown — aligned under the pill */}
-      <Box sx={{ position: "relative", width: { xs: "100%", sm: 430 } }}>
-        {isFocused && suggestions.length > 0 && (
-          <AutocompleteDropdown
-            suggestions={suggestions}
-            onSelect={(result) => {
-              setQuery(result.label);
-              setIsFocused(false);
-              // TODO Phase 3: fly to result coordinates + open place panel
+          <InputBase
+            inputRef={inputRef}
+            value={query}
+            onChange={handleChange}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setTimeout(() => setIsFocused(false), 150)}
+            placeholder="Search OpenMapX"
+            inputProps={{ "aria-label": "search" }}
+            sx={{
+              flex: 1,
+              fontSize: 16,
+              "& input": {
+                padding: 0,
+                paddingLeft: "8px",
+                "&::placeholder": { color: "text.secondary", opacity: 1 },
+              },
             }}
           />
+
+          {query.length > 0 && (
+            <IconButton size="small" onClick={handleClear} aria-label="Clear search">
+              <CloseIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+            </IconButton>
+          )}
+
+          <IconButton type="submit" size="small" aria-label="Search">
+            <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+          </IconButton>
+
+          <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 1 }} />
+          <Tooltip title="Directions" placement="bottom">
+            <IconButton size="small" aria-label="Get directions" sx={{ mr: 0.5 }}>
+              <DirectionsIcon sx={{ fontSize: 22, color: "primary.main" }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
+        {/* Suggestions list — directly attached inside the same card */}
+        {showDropdown && (
+          <>
+            <Divider />
+            <Box sx={{ maxHeight: 320, overflowY: "auto" }}>
+              <AutocompleteDropdown suggestions={suggestions} onSelect={handleSelect} />
+            </Box>
+          </>
         )}
-      </Box>
+
+        {/* Skeleton rows shown while the first results are loading */}
+        {showSkeleton && (
+          <>
+            <Divider />
+            {[0, 1, 2].map((i) => (
+              <Box
+                key={i}
+                sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.25 }}
+              >
+                <Skeleton variant="circular" width={20} height={20} />
+                <Box sx={{ flex: 1 }}>
+                  <Skeleton variant="text" width="55%" height={16} />
+                  <Skeleton variant="text" width="35%" height={13} />
+                </Box>
+              </Box>
+            ))}
+          </>
+        )}
+      </Paper>
     </Box>
   );
 }

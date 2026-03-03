@@ -70,6 +70,7 @@
 | **PostHog** | Open-source analytics |
 
 Always use the latest stable versions of all tools and libraries.
+Ensure proper abstraction layers so you can swap out components (e.g., switch from Pelias to Nominatim) without major refactoring. Focus on modularity and separation of concerns from day one to keep the codebase maintainable as features grow.
 
 ---
 
