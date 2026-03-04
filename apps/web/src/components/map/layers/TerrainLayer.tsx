@@ -5,10 +5,10 @@ import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId, setLayerVisibility } from "./layerStyleUtils";
 
-const SATELLITE_SOURCE_ID = "openmapx-satellite-source";
-const SATELLITE_LAYER_ID = "openmapx-satellite-layer";
+const TERRAIN_SOURCE_ID = "openmapx-terrain-source";
+const TERRAIN_LAYER_ID = "openmapx-terrain-layer";
 
-export function SatelliteLayer() {
+export function TerrainLayer() {
   const { mapRef, mapReady } = useMap();
   const activeLayer = useLayerStore((s) => s.activeLayer);
 
@@ -18,37 +18,35 @@ export function SatelliteLayer() {
 
     const syncLayer = () => {
       if (!map.isStyleLoaded()) return;
-      const shouldShow = activeLayer === "satellite";
+      const shouldShow = activeLayer === "terrain";
 
-      const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
-      if (!apiKey) return;
-
-      if (shouldShow && !map.getSource(SATELLITE_SOURCE_ID)) {
-        map.addSource(SATELLITE_SOURCE_ID, {
+      if (shouldShow && !map.getSource(TERRAIN_SOURCE_ID)) {
+        map.addSource(TERRAIN_SOURCE_ID, {
           type: "raster",
-          tiles: [`https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${apiKey}`],
+          tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
           tileSize: 256,
-          maxzoom: 20,
-          attribution: "MapTiler Satellite",
+          maxzoom: 17,
+          attribution: "OpenTopoMap",
         });
       }
 
-      if (shouldShow && !map.getLayer(SATELLITE_LAYER_ID)) {
+      if (shouldShow && !map.getLayer(TERRAIN_LAYER_ID)) {
         const beforeLayerId = getFirstSymbolLayerId(map);
         map.addLayer(
           {
-            id: SATELLITE_LAYER_ID,
+            id: TERRAIN_LAYER_ID,
             type: "raster",
-            source: SATELLITE_SOURCE_ID,
+            source: TERRAIN_SOURCE_ID,
             paint: {
-              "raster-opacity": 1,
+              "raster-opacity": 0.95,
+              "raster-saturation": -0.15,
             },
           },
           beforeLayerId,
         );
       }
 
-      setLayerVisibility(map, SATELLITE_LAYER_ID, shouldShow);
+      setLayerVisibility(map, TERRAIN_LAYER_ID, shouldShow);
     };
 
     syncLayer();

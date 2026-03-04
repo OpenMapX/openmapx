@@ -1,6 +1,11 @@
 import { Suspense } from "react";
 import { DirectionsDestinationMarker } from "@/components/map/DirectionsDestinationMarker";
+import { LayerSelector } from "@/components/map/LayerSelector";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
+import { SatelliteLayer } from "@/components/map/layers/SatelliteLayer";
+import { TerrainLayer } from "@/components/map/layers/TerrainLayer";
+import { TrafficLayer } from "@/components/map/layers/TrafficLayer";
+import { TransitLayer } from "@/components/map/layers/TransitLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapControls } from "@/components/map/MapControls";
 import { PlaceDeepLink } from "@/components/map/PlaceDeepLink";
@@ -17,6 +22,10 @@ export default function HomePage() {
     <MapProvider>
       <div className="relative w-full h-dvh overflow-hidden">
         <MapCanvas />
+        <SatelliteLayer />
+        <TerrainLayer />
+        <TrafficLayer />
+        <TransitLayer />
         <RouteLayer />
         <UserLocationMarker />
         <SelectedPlaceMarker />
@@ -25,6 +34,7 @@ export default function HomePage() {
         <PlacePanel />
         <DirectionsPanel />
         <TopRightControls />
+        <LayerSelector />
         <MapControls />
         <Suspense>
           <PlaceDeepLink />

@@ -22,7 +22,6 @@ Monorepo: Turborepo + pnpm. All code is TypeScript.
 - `pnpm dev` — start all apps
 - `pnpm build` — build all
 - `pnpm lint` — lint all
-- `cd infra/docker && docker compose up` — backend services
 
 ## Stack Versions
 - Node 24, pnpm latest, Next.js 16, React 19, MapLibre GL JS 5, Fastify 5
