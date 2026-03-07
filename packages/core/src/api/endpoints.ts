@@ -7,4 +7,5 @@ export const API_ENDPOINTS = {
   places: "/api/places",
   traffic: "/api/traffic",
   streetViewImages: "/api/streetview/images",
+  categorySearch: "/api/places/search",
 } as const;

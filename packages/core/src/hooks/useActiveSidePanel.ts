@@ -1,3 +1,4 @@
+import { useCategorySearchStore } from "../stores/categorySearchStore";
 import { useDirectionsStore } from "../stores/directionsStore";
 import { usePlaceStore } from "../stores/placeStore";
 
@@ -9,12 +10,14 @@ import { usePlaceStore } from "../stores/placeStore";
 export function useActiveSidePanel() {
   const { selectedPlace, setSelectedPlace } = usePlaceStore();
   const { isOpen: directionsOpen, close: closeDirections } = useDirectionsStore();
+  const { activeCategory, clearCategory } = useCategorySearchStore();
 
-  const isOpen = selectedPlace !== null || directionsOpen;
+  const isOpen = selectedPlace !== null || directionsOpen || activeCategory !== null;
 
   const close = () => {
     setSelectedPlace(null);
     closeDirections();
+    clearCategory();
   };
 
   return { isOpen, close };

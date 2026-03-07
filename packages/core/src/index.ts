@@ -12,11 +12,14 @@ export { useSession } from "./auth/useSession";
 // Hooks (Phase 3+, require API gateway)
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAutocomplete } from "./hooks/useAutocomplete";
+export { useCategorySearch } from "./hooks/useCategorySearch";
 export { useDirections } from "./hooks/useDirections";
 export { useGeocoding } from "./hooks/useGeocoding";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
+export type { OpeningHoursFilter } from "./stores/categorySearchStore";
+export { useCategorySearchStore } from "./stores/categorySearchStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
 export type { MapLayer } from "./stores/layerStore";
@@ -26,6 +29,8 @@ export { useMapStore } from "./stores/mapStore";
 export { usePlaceStore } from "./stores/placeStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useStreetViewStore } from "./stores/streetViewStore";
+export type { CategoryDefinition, CategoryId, CategoryPlace } from "./types/category";
+export { CATEGORY_DEFINITIONS } from "./types/category";
 export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
 export type { BoundingBox, LngLat } from "./types/geometry";
 export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";
@@ -36,7 +41,7 @@ export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinat
 export { formatDistance, formatDuration, getInitials } from "./utils/formatting";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
 export type { DaySchedule, OpeningHoursStatus } from "./utils/openingHours";
-export { parseOpeningHours } from "./utils/openingHours";
+export { isOpenAt, parseOpeningHours } from "./utils/openingHours";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,

@@ -1,5 +1,6 @@
 "use client";
 
+import CategoryIcon from "@mui/icons-material/Category";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import SearchIcon from "@mui/icons-material/Search";
 import Divider from "@mui/material/Divider";
@@ -20,6 +21,7 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
   poi: <SearchIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
   street: <LocationOnIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
   region: <LocationOnIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
+  category: <CategoryIcon sx={{ fontSize: 20, color: "#007b8b" }} />,
 };
 
 export function AutocompleteDropdown({ suggestions, onSelect }: AutocompleteDropdownProps) {

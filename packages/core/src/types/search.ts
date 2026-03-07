@@ -18,5 +18,5 @@ export interface AutocompleteResult {
   label: string;
   sublabel?: string;
   coordinates?: LngLat;
-  type: "address" | "poi" | "street" | "region";
+  type: "address" | "poi" | "street" | "region" | "category";
 }

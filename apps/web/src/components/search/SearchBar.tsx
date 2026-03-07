@@ -13,6 +13,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import type { AutocompleteResult, LngLat } from "@openmapx/core";
 import {
+  CATEGORY_DEFINITIONS,
   decodeShortPlusCode,
   detectShortPlusCodeCity,
   parseCoordinateInput,
@@ -20,6 +21,7 @@ import {
   parsePlusCodeInput,
   useActiveSidePanel,
   useAutocomplete,
+  useCategorySearchStore,
   useDirectionsStore,
   useGeocoding,
   usePlaceStore,
@@ -37,6 +39,7 @@ export function SearchBar() {
   const { setSelectedPlace } = usePlaceStore();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
+  const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
   const { flyTo, mapRef } = useMap();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -99,10 +102,30 @@ export function SearchBar() {
     }
   }
 
-  const displaySuggestions = syntheticResult ? [syntheticResult] : suggestions;
+  // Inject matching category suggestions at the top of the dropdown
+  const categorySuggestions: AutocompleteResult[] =
+    q.length >= 1
+      ? CATEGORY_DEFINITIONS.filter((cat) => cat.label.toLowerCase().includes(q.toLowerCase())).map(
+          (cat) => ({
+            id: `category-${cat.id}`,
+            label: cat.label,
+            sublabel: "Search category",
+            type: "category" as const,
+          }),
+        )
+      : [];
+
+  const displaySuggestions = syntheticResult
+    ? [syntheticResult]
+    : [...categorySuggestions, ...suggestions];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setQuery(e.target.value);
+    const newValue = e.target.value;
+    // If user modifies the query while a category is active, clear the category
+    if (activeCategory !== null) {
+      clearCategory();
+    }
+    setQuery(newValue);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -126,6 +149,15 @@ export function SearchBar() {
   };
 
   const handleSelect = (result: AutocompleteResult) => {
+    if (result.type === "category") {
+      // Extract category id from the synthetic id ("category-restaurants" → "restaurants")
+      const catId = result.id.replace("category-", "") as Parameters<typeof setActiveCategory>[0];
+      setActiveCategory(catId);
+      setQuery(result.label);
+      setIsFocused(false);
+      return;
+    }
+
     setQuery(result.label);
     setIsFocused(false);
     if (result.coordinates) {

@@ -48,7 +48,6 @@ function expandDays(spec: string): Set<number> {
       const start = DAY_INDEX[range[1]];
       const end = DAY_INDEX[range[2]];
       if (start !== undefined && end !== undefined) {
-        // Handle wrap-around (e.g. Sa-Su)
         let d = start;
         while (true) {
           days.add(d);
@@ -67,6 +66,78 @@ function expandDays(spec: string): Set<number> {
 /** Compares two "HH:MM" strings. Returns negative/zero/positive. */
 function cmpTime(a: string, b: string): number {
   return a.localeCompare(b);
+}
+
+interface Segment {
+  days: Set<number>;
+  open: string;
+  close: string;
+}
+
+/** Parses an OSM opening_hours string into time segments. */
+function parseSegments(raw: string): Segment[] {
+  const ALL_DAYS = new Set([0, 1, 2, 3, 4, 5, 6]);
+  const segments: Segment[] = [];
+
+  for (const part of raw.split(";")) {
+    const trimmed = part.trim();
+    // "Mo-Fr 10:00-19:00" (trailing + means "or later", ignored)
+    const withDays = trimmed.match(/^([\w,\s-]+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})\+?$/);
+    if (withDays) {
+      const [, daySpec, open, close] = withDays;
+      segments.push({
+        days: expandDays(daySpec.trim()),
+        open,
+        close: close === "00:00" ? "24:00" : close,
+      });
+      continue;
+    }
+    // "10:00-19:00" with no day spec — every day
+    const timeOnly = trimmed.match(/^(\d{2}:\d{2})-(\d{2}:\d{2})\+?$/);
+    if (timeOnly) {
+      const [, open, close] = timeOnly;
+      segments.push({
+        days: ALL_DAYS,
+        open,
+        close: close === "00:00" ? "24:00" : close,
+      });
+    }
+  }
+
+  return segments;
+}
+
+/**
+ * Returns whether a place is open on a specific day at a specific hour.
+ * Pass null for dayIdx or hour to mean "any day" / "any time".
+ */
+export function isOpenAt(
+  raw: string | undefined,
+  dayIdx: number | null,
+  hour: number | null,
+): boolean {
+  if (!raw) return false;
+  if (dayIdx === null && hour === null) return true;
+  if (raw === "24/7") return true;
+
+  const segments = parseSegments(raw);
+  const timeStr = hour !== null ? `${String(hour).padStart(2, "0")}:00` : null;
+
+  if (dayIdx !== null && timeStr !== null) {
+    // Specific day + time
+    const seg = segments.find((s) => s.days.has(dayIdx));
+    if (!seg) return false;
+    return cmpTime(timeStr, seg.open) >= 0 && cmpTime(timeStr, seg.close) < 0;
+  }
+
+  if (dayIdx !== null) {
+    // Open on this day at any time
+    return segments.some((s) => s.days.has(dayIdx));
+  }
+
+  // Open at this time on any day
+  if (!timeStr) return false;
+  return segments.some((seg) => cmpTime(timeStr, seg.open) >= 0 && cmpTime(timeStr, seg.close) < 0);
 }
 
 /**
@@ -96,29 +167,9 @@ export function parseOpeningHours(raw: string | undefined): OpeningHoursStatus |
     };
   }
 
-  // Parse each semicolon-delimited segment
-  interface Segment {
-    days: Set<number>;
-    open: string;
-    close: string;
-  }
-  const segments: Segment[] = [];
-
-  for (const part of raw.split(";")) {
-    const trimmed = part.trim();
-    const match = trimmed.match(/^([\w,\s-]+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
-    if (!match) continue;
-    const [, daySpec, open, close] = match;
-    // Normalize "00:00" closing time to "24:00" (common OSM encoding for midnight end-of-day)
-    segments.push({
-      days: expandDays(daySpec.trim()),
-      open,
-      close: close === "00:00" ? "24:00" : close,
-    });
-  }
+  const segments = parseSegments(raw);
 
   if (segments.length === 0) {
-    // Could not parse — show raw string
     return { isOpen: false, label: raw, detail: raw };
   }
 
@@ -133,7 +184,6 @@ export function parseOpeningHours(raw: string | undefined): OpeningHoursStatus |
     };
   });
 
-  // Find today's segment
   const todaySeg = segments.find((s) => s.days.has(todayIdx));
 
   if (todaySeg) {
@@ -151,7 +201,6 @@ export function parseOpeningHours(raw: string | undefined): OpeningHoursStatus |
       };
     }
 
-    // Closed — opening later today?
     if (cmpTime(currentTime, todaySeg.open) < 0) {
       const detail = `Opens at ${todaySeg.open}`;
       return {
@@ -163,7 +212,6 @@ export function parseOpeningHours(raw: string | undefined): OpeningHoursStatus |
       };
     }
 
-    // Already closed for today — find next open day
     for (let i = 1; i <= 7; i++) {
       const nextIdx = (todayIdx + i) % 7;
       const nextSeg = segments.find((s) => s.days.has(nextIdx));
@@ -180,7 +228,6 @@ export function parseOpeningHours(raw: string | undefined): OpeningHoursStatus |
     }
   }
 
-  // Today is closed — find next open day
   for (let i = 1; i <= 7; i++) {
     const nextIdx = (todayIdx + i) % 7;
     const nextSeg = segments.find((s) => s.days.has(nextIdx));

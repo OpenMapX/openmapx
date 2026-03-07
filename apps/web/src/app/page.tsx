@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DirectionsDestinationMarker } from "@/components/map/DirectionsDestinationMarker";
 import { LayerSelector } from "@/components/map/LayerSelector";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
@@ -10,13 +11,18 @@ import { TransitLayer } from "@/components/map/layers/TransitLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapControls } from "@/components/map/MapControls";
 import { PlaceDeepLink } from "@/components/map/PlaceDeepLink";
+import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { StreetViewLegend } from "@/components/map/StreetViewLegend";
 import { StreetViewViewer } from "@/components/map/StreetViewViewer";
 import { TopRightControls } from "@/components/map/TopRightControls";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
+import { CategoryPlaceFloatingCard } from "@/components/panels/CategoryPlaceFloatingCard";
+import { CategoryResultsPanel } from "@/components/panels/CategoryResultsPanel";
 import { DirectionsPanel } from "@/components/panels/DirectionsPanel";
 import { PlacePanel } from "@/components/panels/PlacePanel";
+import { CategoryChips } from "@/components/search/CategoryChips";
+import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
 import { SearchBar } from "@/components/search/SearchBar";
 import { MapProvider } from "@/lib/MapContext";
 
@@ -31,11 +37,17 @@ export default function HomePage() {
         <TransitLayer />
         <RouteLayer />
         <StreetViewLayer />
+        <CategoryResultMarkers />
         <UserLocationMarker />
         <SelectedPlaceMarker />
         <DirectionsDestinationMarker />
         <SearchBar />
+        <CategoryChips />
+        <CategoryFilterBar />
+        <SearchInAreaChip />
         <PlacePanel />
+        <CategoryResultsPanel />
+        <CategoryPlaceFloatingCard />
         <DirectionsPanel />
         <TopRightControls />
         <StreetViewViewer />

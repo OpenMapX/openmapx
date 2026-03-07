@@ -1,0 +1,191 @@
+"use client";
+
+import CloseIcon from "@mui/icons-material/Close";
+import StarIcon from "@mui/icons-material/Star";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
+import type { Place } from "@openmapx/core";
+import { useEffect, useState } from "react";
+import { PlaceInfoTab } from "./PlaceInfoTab";
+import { PlaceOverviewTab } from "./PlaceOverviewTab";
+import { PlaceReviewsTab } from "./PlaceReviewsTab";
+
+interface Props {
+  place: Place;
+  isLoading: boolean;
+  onClose?: () => void;
+  /** Add top padding to the header to clear the floating search bar. True for the full sidebar. */
+  clearSearchBar?: boolean;
+}
+
+export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar = false }: Props) {
+  const [tab, setTab] = useState(0);
+
+  // Reset tab when a different place loads
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
+  useEffect(() => {
+    setTab(0);
+  }, [place.id]);
+
+  const hasPhoto = Boolean(place.photos?.[0]);
+
+  return (
+    <>
+      {/* Header photo */}
+      {hasPhoto && (
+        <Box sx={{ height: 220, position: "relative", flexShrink: 0, overflow: "hidden" }}>
+          <Box
+            component="img"
+            src={place.photos?.[0].url}
+            alt={place.name}
+            onError={(e) => {
+              const container = (e.currentTarget as HTMLImageElement).parentElement;
+              if (container) container.style.display = "none";
+            }}
+            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+          <Box
+            sx={{
+              position: "absolute",
+              bottom: 4,
+              right: 6,
+              bgcolor: "rgba(0,0,0,0.35)",
+              borderRadius: 0.5,
+              px: 0.75,
+              py: 0.25,
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                fontSize: 10,
+                color: "rgba(255,255,255,0.85)",
+                lineHeight: 1,
+                display: "block",
+              }}
+            >
+              {place.photos?.[0].attribution}
+            </Box>
+          </Box>
+          {onClose && (
+            <IconButton
+              onClick={onClose}
+              aria-label="Close"
+              sx={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                bgcolor: "#fff",
+                borderRadius: "50%",
+                boxShadow: 2,
+                p: 0.75,
+                "&:hover": { bgcolor: "grey.100" },
+              }}
+            >
+              <CloseIcon sx={{ fontSize: 24, color: "#000" }} />
+            </IconButton>
+          )}
+        </Box>
+      )}
+
+      {/* Name / rating / category */}
+      <Box
+        sx={{
+          px: 2,
+          pt: clearSearchBar && !hasPhoto ? { xs: 2, sm: "72px" } : 2,
+          pb: 1,
+          position: "relative",
+        }}
+      >
+        {/* Close button when there is no photo */}
+        {onClose && !hasPhoto && (
+          <IconButton
+            onClick={onClose}
+            aria-label="Close"
+            sx={{
+              position: "absolute",
+              top: clearSearchBar ? { xs: 8, sm: "72px" } : 8,
+              right: 8,
+              bgcolor: "#fff",
+              borderRadius: "50%",
+              boxShadow: 2,
+              p: 0.75,
+              "&:hover": { bgcolor: "grey.100" },
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 24, color: "#000" }} />
+          </IconButton>
+        )}
+
+        <Typography variant="h6" fontWeight={600} gutterBottom sx={{ pr: onClose ? 4 : 0 }}>
+          {place.name}
+        </Typography>
+        {place.rating && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
+            <Typography variant="body2" fontWeight={600}>
+              {place.rating.toFixed(1)}
+            </Typography>
+            <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
+            <Typography variant="body2" color="text.secondary">
+              ({place.reviewCount?.toLocaleString()})
+            </Typography>
+          </Box>
+        )}
+        {place.category && (
+          <Chip label={place.category} size="small" sx={{ borderRadius: "4px", fontSize: 12 }} />
+        )}
+      </Box>
+
+      {/* Tabs */}
+      <Tabs
+        value={tab}
+        onChange={(_, v: number) => setTab(v)}
+        sx={{
+          position: "sticky",
+          top: 0,
+          bgcolor: "background.paper",
+          zIndex: 1,
+          minHeight: 48,
+          "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },
+          "& .MuiTab-root": {
+            textTransform: "none",
+            fontSize: 14,
+            fontWeight: 500,
+            minHeight: 48,
+            minWidth: "auto",
+            color: "#5f6368",
+          },
+          "& .Mui-selected": { color: "#007b8b !important" },
+          "& .MuiTabs-indicator": {
+            height: 3,
+            display: "flex",
+            justifyContent: "center",
+            backgroundColor: "transparent",
+            "&::after": {
+              content: '""',
+              display: "block",
+              width: "calc(100% - 32px)",
+              backgroundColor: "#007b8b",
+              borderRadius: "2px 2px 0 0",
+            },
+          },
+          borderBottom: "1px solid rgba(0,0,0,0.1)",
+        }}
+      >
+        <Tab label="Overview" />
+        <Tab label="Reviews" />
+        <Tab label="Info" />
+      </Tabs>
+
+      {tab === 0 && (
+        <PlaceOverviewTab place={place} isLoading={isLoading} onNavigateToInfo={() => setTab(2)} />
+      )}
+      {tab === 1 && <PlaceReviewsTab place={place} />}
+      {tab === 2 && <PlaceInfoTab place={place} isLoading={isLoading} />}
+    </>
+  );
+}
