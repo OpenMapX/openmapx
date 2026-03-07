@@ -2,6 +2,7 @@
 
 import type { CategoryPlace, OpeningHoursFilter } from "@openmapx/core";
 import {
+  CATEGORY_DEFINITIONS,
   isOpenAt,
   parseOpeningHours,
   useCategorySearch,
@@ -26,7 +27,7 @@ function applyHoursFilter(
   return results;
 }
 
-import type { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
+import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { useMap } from "@/lib/MapContext";
@@ -35,7 +36,34 @@ const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";
 const LABEL_LAYER_ID = "category-results-labels";
 
-function buildGeoJson(results: CategoryPlace[]) {
+/**
+ * Creates a 64×64 SVG (2× for retina): red circle with a white MUI icon path.
+ * The icon uses a 24×24 viewBox scaled and centered inside the circle.
+ */
+function createMarkerSvg(iconPath: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+    <circle cx="32" cy="32" r="29" fill="#E54033" stroke="white" stroke-width="4"/>
+    <path d="${iconPath}" fill="white" transform="translate(13, 13) scale(1.583)"/>
+  </svg>`;
+}
+
+function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (map.hasImage(imageId)) {
+      resolve();
+      return;
+    }
+    const img = new Image(64, 64);
+    img.onload = () => {
+      if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(createMarkerSvg(iconPath))}`;
+  });
+}
+
+function buildGeoJson(results: CategoryPlace[], imageId: string) {
   return {
     type: "FeatureCollection" as const,
     features: results.map((place) => ({
@@ -49,6 +77,7 @@ function buildGeoJson(results: CategoryPlace[]) {
         phone: place.phone ?? "",
         website: place.website ?? "",
         openingHours: place.openingHours ?? "",
+        imageId,
       },
     })),
   };
@@ -90,7 +119,10 @@ export function CategoryResultMarkers() {
         return;
       }
 
-      const geojson = buildGeoJson(results);
+      const def = CATEGORY_DEFINITIONS.find((d) => d.id === activeCategory);
+      const iconPath = def?.iconPath ?? "";
+      const imageId = `category-marker-${activeCategory}`;
+      const geojson = buildGeoJson(results, imageId);
 
       if (map.getSource(SOURCE_ID)) {
         (map.getSource(SOURCE_ID) as GeoJSONSource).setData(geojson);
@@ -98,39 +130,41 @@ export function CategoryResultMarkers() {
         map.addSource(SOURCE_ID, { type: "geojson", data: geojson });
       }
 
-      if (!map.getLayer(LAYER_ID)) {
-        map.addLayer({
-          id: LAYER_ID,
-          type: "circle",
-          source: SOURCE_ID,
-          paint: {
-            "circle-radius": 8,
-            "circle-color": "#E54033",
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#FFFFFF",
-          },
-        });
-      }
-
-      if (!map.getLayer(LABEL_LAYER_ID)) {
-        map.addLayer({
-          id: LABEL_LAYER_ID,
-          type: "symbol",
-          source: SOURCE_ID,
-          layout: {
-            "text-field": ["get", "name"],
-            "text-size": 11,
-            "text-offset": [0, 1.6],
-            "text-anchor": "top",
-            "text-max-width": 8,
-          },
-          paint: {
-            "text-color": "#333333",
-            "text-halo-color": "#FFFFFF",
-            "text-halo-width": 1.5,
-          },
-        });
-      }
+      // Load image then add layers (image may already be cached)
+      void loadMarkerImage(map, imageId, iconPath).then(() => {
+        if (!map.getSource(SOURCE_ID)) return;
+        if (!map.getLayer(LAYER_ID)) {
+          map.addLayer({
+            id: LAYER_ID,
+            type: "symbol",
+            source: SOURCE_ID,
+            layout: {
+              "icon-image": ["get", "imageId"],
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+            },
+          });
+        }
+        if (!map.getLayer(LABEL_LAYER_ID)) {
+          map.addLayer({
+            id: LABEL_LAYER_ID,
+            type: "symbol",
+            source: SOURCE_ID,
+            layout: {
+              "text-field": ["get", "name"],
+              "text-size": 11,
+              "text-offset": [0, 2.0],
+              "text-anchor": "top",
+              "text-max-width": 8,
+            },
+            paint: {
+              "text-color": "#333333",
+              "text-halo-color": "#FFFFFF",
+              "text-halo-width": 1.5,
+            },
+          });
+        }
+      });
     };
 
     sync();

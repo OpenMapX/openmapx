@@ -19,7 +19,7 @@ export function MapCanvas() {
     const { center, zoom, bearing, pitch } = useMapStore.getState();
 
     const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
-    const styleUrl = `https://api.maptiler.com/maps/streets-v2/style.json?key=${apiKey}`;
+    const styleUrl = `https://api.maptiler.com/maps/bright-v2/style.json?key=${apiKey}`;
     let destroyed = false;
 
     const initMap = (initialCenter: LngLat, initialZoom: number) => {
