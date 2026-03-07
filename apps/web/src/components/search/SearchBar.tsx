@@ -11,8 +11,13 @@ import InputBase from "@mui/material/InputBase";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
-import type { AutocompleteResult } from "@openmapx/core";
+import type { AutocompleteResult, LngLat } from "@openmapx/core";
 import {
+  decodeShortPlusCode,
+  detectShortPlusCodeCity,
+  parseCoordinateInput,
+  parseDMSCoordinateInput,
+  parsePlusCodeInput,
   useActiveSidePanel,
   useAutocomplete,
   useDirectionsStore,
@@ -22,7 +27,7 @@ import {
 } from "@openmapx/core";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 
@@ -32,11 +37,21 @@ export function SearchBar() {
   const { setSelectedPlace } = usePlaceStore();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
-  const { flyTo } = useMap();
+  const { flyTo, mapRef } = useMap();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const { data: autocompleteData, isFetching } = useAutocomplete(query);
   const { data: geocodeData } = useGeocoding(query);
+  // When user types a short plus code with city, geocode the city name to get
+  // the reference coordinates for decoding. Debounced to avoid firing on every keystroke.
+  const shortPlusCity = detectShortPlusCodeCity(query.trim());
+  const [debouncedCity, setDebouncedCity] = useState("");
+  useEffect(() => {
+    const city = shortPlusCity?.city ?? "";
+    const timer = setTimeout(() => setDebouncedCity(city), 400);
+    return () => clearTimeout(timer);
+  }, [shortPlusCity?.city]);
+  const { data: cityRefData } = useGeocoding(debouncedCity);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -53,6 +68,39 @@ export function SearchBar() {
 
   if (directionsOpen) return null;
 
+  // Detect coordinate / plus-code input and create a synthetic suggestion
+  const q = query.trim();
+  let syntheticResult: AutocompleteResult | null = null;
+  if (q.length >= 2) {
+    let parsed = parseCoordinateInput(q) ?? parseDMSCoordinateInput(q);
+
+    if (!parsed) {
+      // Short plus code with city: use geocoded city coordinates as reference
+      if (shortPlusCity && cityRefData?.[0]) {
+        const lngLat = decodeShortPlusCode(shortPlusCity.code, cityRefData[0].coordinates);
+        if (lngLat) parsed = { lngLat, label: `${shortPlusCity.code} ${shortPlusCity.city}` };
+      }
+
+      // Full plus code or short code without city: use map center as reference
+      if (!parsed) {
+        const raw = mapRef.current?.getCenter();
+        const mapCenter: LngLat | undefined = raw ? [raw.lng, raw.lat] : undefined;
+        parsed = parsePlusCodeInput(q, mapCenter);
+      }
+    }
+
+    if (parsed) {
+      syntheticResult = {
+        id: "special-input",
+        label: parsed.label,
+        coordinates: parsed.lngLat,
+        type: "address",
+      };
+    }
+  }
+
+  const displaySuggestions = syntheticResult ? [syntheticResult] : suggestions;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
   };
@@ -60,6 +108,10 @@ export function SearchBar() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     inputRef.current?.blur();
+    if (syntheticResult) {
+      handleSelect(syntheticResult);
+      return;
+    }
     const first = geocodeData?.[0];
     if (first) {
       flyTo(first.coordinates, 15);
@@ -88,8 +140,9 @@ export function SearchBar() {
     }
   };
 
-  const showDropdown = isFocused && suggestions.length > 0;
-  const showSkeleton = isFocused && query.trim().length >= 2 && isFetching && !showDropdown;
+  const showDropdown = isFocused && displaySuggestions.length > 0;
+  const showSkeleton =
+    isFocused && query.trim().length >= 2 && isFetching && !showDropdown && !syntheticResult;
 
   return (
     <Box
@@ -176,7 +229,7 @@ export function SearchBar() {
           <>
             <Divider />
             <Box sx={{ maxHeight: 320, overflowY: "auto" }}>
-              <AutocompleteDropdown suggestions={suggestions} onSelect={handleSelect} />
+              <AutocompleteDropdown suggestions={displaySuggestions} onSelect={handleSelect} />
             </Box>
           </>
         )}

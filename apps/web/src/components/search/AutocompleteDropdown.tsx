@@ -25,9 +25,11 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
 export function AutocompleteDropdown({ suggestions, onSelect }: AutocompleteDropdownProps) {
   if (suggestions.length === 0) return null;
 
+  const deduped = suggestions.filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i);
+
   return (
     <List dense disablePadding>
-      {suggestions.map((s, i) => (
+      {deduped.map((s, i) => (
         <div key={s.id}>
           {i > 0 && <Divider component="li" />}
           <ListItem disablePadding>

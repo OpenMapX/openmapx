@@ -31,4 +31,16 @@ export { formatDistance, formatDuration } from "./utils/formatting";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
 export type { DaySchedule, OpeningHoursStatus } from "./utils/openingHours";
 export { parseOpeningHours } from "./utils/openingHours";
-export { computePlusCode, plusCodeUrl, shortenPlusCode } from "./utils/plusCode";
+export {
+  parseCoordinateInput,
+  parseDMSCoordinateInput,
+} from "./utils/parseCoordinates";
+export {
+  computePlusCode,
+  decodePlusCode,
+  decodeShortPlusCode,
+  detectShortPlusCodeCity,
+  parsePlusCodeInput,
+  plusCodeUrl,
+  shortenPlusCode,
+} from "./utils/plusCode";

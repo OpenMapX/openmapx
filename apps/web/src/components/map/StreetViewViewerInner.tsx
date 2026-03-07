@@ -4,7 +4,6 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PlaceIcon from "@mui/icons-material/Place";
-import StreetviewIcon from "@mui/icons-material/Streetview";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
@@ -223,8 +222,30 @@ export default function StreetViewViewerInner() {
 
           {/* Source row */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.25 }}>
-            <StreetviewIcon sx={{ fontSize: 20 }} />
-            <Typography sx={{ fontSize: 13 }}>Street-level imagery</Typography>
+            <svg
+              viewBox="-15 -15 65 65"
+              width="24"
+              height="24"
+              style={{ flexShrink: 0 }}
+              aria-label="Mapillary"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+            >
+              <defs>
+                <clipPath id="mapillary-logo-clip">
+                  <circle cx="17.5" cy="17.5" r="32.5" />
+                </clipPath>
+              </defs>
+              <circle cx="17.5" cy="17.5" r="32.5" fill="#05cb63" />
+              <path
+                fill="#FFF"
+                fillRule="evenodd"
+                clipRule="evenodd"
+                clipPath="url(#mapillary-logo-clip)"
+                d="M16.468 25.735c.624.327 15.734 8.542 16.21 8.807.954.528 1.963-.494 1.444-1.45-.261-.48-8.446-15.977-8.722-16.451-.276-.475-.956-.714-1.467-.396-.5.312-1.077.663-1.4.832-.651.34-.731.851-.439 1.42.643 1.248 2.664 5.038 2.896 5.435.484.831-.596 1.78-1.329 1.366-.31-.176-5.107-2.768-5.446-2.971-.339-.203-.94-.201-1.351.484a53.63 53.63 0 00-.837 1.425c-.334.61-.182 1.172.441 1.499zM.517 17.069c-.805-.448-.658-1.613.357-1.91.86-.252 7.844-2.657 9.957-3.386.382-.131.679-.434.807-.82L15.032.724c.317-.957 1.466-.96 1.935-.034.166.33 6.49 12.106 6.71 12.606.22.5.078 1.053-.42 1.372-.5.319-1.312.796-1.596.977-.513.328-1.004.1-1.238-.408-.234-.507-2.038-3.78-2.774-5.169-.368-.694-1.476-.96-1.848.162l-1.224 3.689a1.343 1.343 0 01-.812.827l-3.683 1.254c-.727.247-1.08 1.392-.099 1.874.205.1 4.626 2.538 5.082 2.76.457.224.71.867.443 1.323-.364.622-.83 1.411-1 1.668-.293.444-.87.591-1.353.33C12.671 23.69.804 17.228.517 17.068z"
+              />
+            </svg>
+            <Typography sx={{ fontSize: 13 }}>Mapillary</Typography>
           </Box>
 
           <Divider sx={{ bgcolor: "rgba(255,255,255,0.2)", my: 1 }} />
