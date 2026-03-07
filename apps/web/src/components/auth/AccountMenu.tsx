@@ -1,0 +1,99 @@
+"use client";
+
+import LogoutIcon from "@mui/icons-material/Logout";
+import SettingsIcon from "@mui/icons-material/Settings";
+import Avatar from "@mui/material/Avatar";
+import Box from "@mui/material/Box";
+import Divider from "@mui/material/Divider";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import Typography from "@mui/material/Typography";
+import type { User } from "@openmapx/core";
+import { authClient, getInitials } from "@openmapx/core";
+
+interface AccountMenuProps {
+  anchorEl: HTMLElement | null;
+  onClose: () => void;
+  user: User;
+  onOpenSettings: () => void;
+}
+
+export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: AccountMenuProps) {
+  const open = Boolean(anchorEl);
+
+  const handleSignOut = async () => {
+    onClose();
+    await authClient.signOut();
+  };
+
+  const handleSettings = () => {
+    onClose();
+    onOpenSettings();
+  };
+
+  const initials = getInitials(user.name, user.email);
+
+  return (
+    <Menu
+      anchorEl={anchorEl}
+      open={open}
+      onClose={onClose}
+      onClick={onClose}
+      transformOrigin={{ horizontal: "right", vertical: "top" }}
+      anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+      slotProps={{
+        paper: {
+          sx: {
+            width: 320,
+            borderRadius: "12px",
+            mt: 1,
+            boxShadow: "0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.3)",
+            overflow: "hidden",
+            "& .MuiList-root": { py: 0 },
+            "& .MuiDivider-root": { my: 0 },
+          },
+        },
+      }}
+    >
+      {/* User info header */}
+      <Box sx={{ px: 2, py: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Avatar
+          src={user.image ?? undefined}
+          sx={{
+            width: 40,
+            height: 40,
+            bgcolor: "primary.main",
+            fontSize: 16,
+            fontWeight: 600,
+          }}
+        >
+          {initials}
+        </Avatar>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+            {user.name}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {user.email}
+          </Typography>
+        </Box>
+      </Box>
+      <Divider sx={{ my: "0 !important" }} />
+      <MenuItem onClick={handleSettings} sx={{ py: 1.5 }}>
+        <ListItemIcon>
+          <SettingsIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Account settings</ListItemText>
+      </MenuItem>
+      <Divider sx={{ my: "0 !important" }} />
+      <MenuItem onClick={handleSignOut} sx={{ py: 1.5 }}>
+        <ListItemIcon>
+          <LogoutIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Sign out</ListItemText>
+      </MenuItem>
+    </Menu>
+  );
+}

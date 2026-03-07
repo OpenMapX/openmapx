@@ -197,12 +197,11 @@ export function SearchBar() {
             <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
           </IconButton>
 
-          <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 1 }} />
           {hasSidePanel ? (
             <IconButton
               size="small"
               aria-label="Close panel"
-              sx={{ mr: 0.5 }}
+              sx={{ ml: 1, mr: 0.5 }}
               onClick={() => {
                 closeSidePanel();
                 setQuery("");
@@ -215,10 +214,10 @@ export function SearchBar() {
               <IconButton
                 size="small"
                 aria-label="Get directions"
-                sx={{ mr: 0.5 }}
+                sx={{ ml: 1, mr: 0.5 }}
                 onClick={openDirections}
               >
-                <DirectionsIcon sx={{ fontSize: 22, color: "primary.main" }} />
+                <DirectionsIcon sx={{ fontSize: 22, color: "teal" }} />
               </IconButton>
             </Tooltip>
           )}

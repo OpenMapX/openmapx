@@ -8,22 +8,30 @@
     "dev": "node --env-file=.env --watch --import tsx/esm src/server.ts",
     "build": "tsc --noEmit",
     "start": "node dist/server.js",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "auth:generate": "npx @better-auth/cli@latest generate --config ./src/auth.ts --output ./src/db/auth-schema.ts --yes"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@better-auth/passkey": "^1.5.4",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
     "@openmapx/core": "workspace:^",
     "@openstreetmap/id-tagging-schema": "^6.14.0",
+    "better-auth": "^1.5.4",
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.7.4",
+    "nodemailer": "^8.0.1",
     "postgres": "^3.4.8"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/nodemailer": "^7.0.11",
     "drizzle-kit": "^0.31.9",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

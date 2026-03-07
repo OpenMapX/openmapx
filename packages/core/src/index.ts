@@ -3,6 +3,12 @@
 // API
 export { ApiClient, apiClient } from "./api/client";
 export { API_ENDPOINTS } from "./api/endpoints";
+export type { Session, User } from "./auth/client";
+// Auth
+export { authClient } from "./auth/client";
+export type { OAuthProviderMeta } from "./auth/oauth-providers";
+export { oauthProviders } from "./auth/oauth-providers";
+export { useSession } from "./auth/useSession";
 // Hooks (Phase 3+, require API gateway)
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAutocomplete } from "./hooks/useAutocomplete";
@@ -27,7 +33,7 @@ export type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from ".
 
 // Utils
 export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";
-export { formatDistance, formatDuration } from "./utils/formatting";
+export { formatDistance, formatDuration, getInitials } from "./utils/formatting";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
 export type { DaySchedule, OpeningHoursStatus } from "./utils/openingHours";
 export { parseOpeningHours } from "./utils/openingHours";
