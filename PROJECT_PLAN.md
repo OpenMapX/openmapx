@@ -54,6 +54,7 @@
 | Tool | Purpose |
 |---|---|
 | **Node.js + Fastify** | API gateway / BFF (Backend for Frontend) |
+| **Better Auth** | Authentication layer for sign-up/login, sessions, email verification, password reset, and account lifecycle |
 | **PostgreSQL + PostGIS** | Spatial data, custom POIs, user data |
 | **Redis** | Caching geocoding/routing results, session data |
 | **Typesense** or **Meilisearch** | Fast fuzzy search for places (supplements Pelias) |
@@ -85,9 +86,12 @@ Ensure proper abstraction layers so you can swap out components (e.g., switch fr
 | **5** | Routing via OSRM/Valhalla with drawn polylines |
 | **6** | Layers — satellite, transit, traffic |
 | **7** | Street-level imagery via Mapillary |
-| **8** | Public transit directions via OTP |
-| **9** | Embed mode (`/embed` route for iframe usage) |
-| **10** | Performance — tile caching at edge, service workers, offline support |
+| **8** | Filtering and sorting of search results (distance, rating, open now) |
+| **9** | Category search, category bubble buttons at top of screen (like Google Maps) for Restaurants, Hotels, Activities, Museums, Transit (Train/Bus/Subway), Pharmacies, ATMs that search for places of that category in the visible area (after clicking search in this area button) |
+| **10** | Public transit directions via OTP |
+| **11** | Performance — tile caching at edge, service workers, offline support |
+| **12** | User accounts: sign-up, login, profile, email verification, password reset, account deletion, GDPR compliance, ... |
+| **13** | Account data: lists, search history, saved places, persistance of selected layers and settings, ... |
 
 ---
 

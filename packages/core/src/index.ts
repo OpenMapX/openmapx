@@ -18,6 +18,7 @@ export { useLayerStore } from "./stores/layerStore";
 export { useMapStore } from "./stores/mapStore";
 export { usePlaceStore } from "./stores/placeStore";
 export { useSearchStore } from "./stores/searchStore";
+export { useStreetViewStore } from "./stores/streetViewStore";
 export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
 export type { BoundingBox, LngLat } from "./types/geometry";
 export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";

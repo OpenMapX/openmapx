@@ -1,6 +1,7 @@
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-AppRouter";
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import "mapillary-js/dist/mapillary.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import { Providers } from "./providers";

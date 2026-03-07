@@ -8,6 +8,7 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import LayersIcon from "@mui/icons-material/Layers";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import SatelliteAltIcon from "@mui/icons-material/SatelliteAlt";
+import StreetviewIcon from "@mui/icons-material/Streetview";
 import TerrainIcon from "@mui/icons-material/Terrain";
 import TrafficIcon from "@mui/icons-material/Traffic";
 import Box from "@mui/material/Box";
@@ -23,7 +24,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import type { MapLayer } from "@openmapx/core";
-import { useLayerStore } from "@openmapx/core";
+import { useLayerStore, useStreetViewStore } from "@openmapx/core";
 import type { FocusEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -117,7 +118,7 @@ const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
   },
   {
     id: "street-view",
-    label: "Street View",
+    label: "Street-level imagery",
     preview:
       "linear-gradient(150deg,#d4e5eb 0%,#bcd7d1 40%,#c5d8df 100%), radial-gradient(circle at 52% 32%,#f6be3f 0%,#f6be3f 18%,transparent 19%)",
   },
@@ -170,11 +171,13 @@ const DESKTOP_MORE_MAP_TYPES: readonly DesktopMoreOption[] = [
 function DesktopMoreTile({
   item,
   labelWidth = 132,
+  onClick,
 }: {
   item: DesktopMoreOption;
   labelWidth?: number;
+  onClick?: () => void;
 }) {
-  return (
+  const inner = (
     <Box
       sx={{
         minHeight: 100,
@@ -208,6 +211,16 @@ function DesktopMoreTile({
       </Typography>
     </Box>
   );
+
+  if (onClick) {
+    return (
+      <ButtonBase onClick={onClick} sx={{ pointerEvents: "auto", borderRadius: "11px" }}>
+        {inner}
+      </ButtonBase>
+    );
+  }
+
+  return inner;
 }
 
 export function LayerSelector() {
@@ -225,6 +238,8 @@ export function LayerSelector() {
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const setShowTraffic = useLayerStore((s) => s.setShowTraffic);
   const setShowTransit = useLayerStore((s) => s.setShowTransit);
+  const showCoverage = useStreetViewStore((s) => s.showCoverage);
+  const setShowCoverage = useStreetViewStore((s) => s.setShowCoverage);
 
   const activeBaseOption =
     BASE_LAYER_OPTIONS.find((option) => option.id === activeLayer) ?? BASE_LAYER_OPTIONS[0];
@@ -619,7 +634,22 @@ export function LayerSelector() {
               }}
             >
               {DESKTOP_MORE_MAP_DETAILS.map((item) => (
-                <DesktopMoreTile key={item.id} item={item} labelWidth={96} />
+                <DesktopMoreTile
+                  key={item.id}
+                  item={{
+                    ...item,
+                    selected: item.id === "street-view" ? showCoverage : item.selected,
+                  }}
+                  labelWidth={96}
+                  onClick={
+                    item.id === "street-view"
+                      ? () => {
+                          setShowCoverage(!showCoverage);
+                          handleClose();
+                        }
+                      : undefined
+                  }
+                />
               ))}
             </Box>
 
@@ -775,6 +805,24 @@ export function LayerSelector() {
                   checked={showTransit}
                   onChange={(event) => setShowTransit(event.target.checked)}
                   inputProps={{ "aria-label": "Toggle transit overlay" }}
+                  size="small"
+                />
+              }
+            />
+
+            <FormControlLabel
+              sx={{ mr: 0, ml: 0.25 }}
+              label={
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+                  <StreetviewIcon sx={{ fontSize: 17, color: "text.secondary" }} />
+                  <Typography sx={{ fontSize: 13.5 }}>Street-level imagery</Typography>
+                </Box>
+              }
+              control={
+                <Switch
+                  checked={showCoverage}
+                  onChange={(event) => setShowCoverage(event.target.checked)}
+                  inputProps={{ "aria-label": "Toggle Street-level imagery coverage" }}
                   size="small"
                 />
               }

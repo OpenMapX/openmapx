@@ -5,4 +5,5 @@ export const API_ENDPOINTS = {
   directions: "/api/directions",
   places: "/api/places",
   traffic: "/api/traffic",
+  streetViewImages: "/api/streetview/images",
 } as const;

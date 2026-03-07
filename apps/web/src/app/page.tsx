@@ -3,6 +3,7 @@ import { DirectionsDestinationMarker } from "@/components/map/DirectionsDestinat
 import { LayerSelector } from "@/components/map/LayerSelector";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { SatelliteLayer } from "@/components/map/layers/SatelliteLayer";
+import { StreetViewLayer } from "@/components/map/layers/StreetViewLayer";
 import { TerrainLayer } from "@/components/map/layers/TerrainLayer";
 import { TrafficLayer } from "@/components/map/layers/TrafficLayer";
 import { TransitLayer } from "@/components/map/layers/TransitLayer";
@@ -10,6 +11,8 @@ import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapControls } from "@/components/map/MapControls";
 import { PlaceDeepLink } from "@/components/map/PlaceDeepLink";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
+import { StreetViewLegend } from "@/components/map/StreetViewLegend";
+import { StreetViewViewer } from "@/components/map/StreetViewViewer";
 import { TopRightControls } from "@/components/map/TopRightControls";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { DirectionsPanel } from "@/components/panels/DirectionsPanel";
@@ -27,6 +30,7 @@ export default function HomePage() {
         <TrafficLayer />
         <TransitLayer />
         <RouteLayer />
+        <StreetViewLayer />
         <UserLocationMarker />
         <SelectedPlaceMarker />
         <DirectionsDestinationMarker />
@@ -34,6 +38,8 @@ export default function HomePage() {
         <PlacePanel />
         <DirectionsPanel />
         <TopRightControls />
+        <StreetViewViewer />
+        <StreetViewLegend />
         <LayerSelector />
         <MapControls />
         <Suspense>

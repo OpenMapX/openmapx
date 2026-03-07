@@ -16,6 +16,7 @@
     "@openmapx/core": "workspace:^",
     "@tanstack/react-query": "^5.90.21",
     "framer-motion": "^12.34.4",
+    "mapillary-js": "^4.1.2",
     "maplibre-gl": "^5.19.0",
     "next": "16.1.6",
     "react": "19.2.3",

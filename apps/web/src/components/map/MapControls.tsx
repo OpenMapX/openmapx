@@ -10,6 +10,7 @@ import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import { useMapStore } from "@openmapx/core";
 import { useMap } from "@/lib/MapContext";
+import { Pegman } from "./Pegman";
 
 export function MapControls() {
   const { zoomIn, zoomOut, resetBearing, flyTo } = useMap();
@@ -45,14 +46,14 @@ export function MapControls() {
     >
       {/* My location — topmost, matches Google Maps order */}
       <Tooltip title="My location" placement="left">
-        <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
+        <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
           <IconButton
-            size="medium"
+            size="small"
             onClick={handleMyLocation}
-            sx={{ width: 40, height: 40 }}
+            sx={{ width: 36, height: 36 }}
             aria-label="Go to my location"
           >
-            <MyLocationIcon sx={{ fontSize: 20, color: "primary.main" }} />
+            <MyLocationIcon sx={{ fontSize: 18, color: "primary.main" }} />
           </IconButton>
         </Paper>
       </Tooltip>
@@ -61,26 +62,28 @@ export function MapControls() {
       <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
         <Tooltip title="Zoom in" placement="left">
           <IconButton
-            size="medium"
+            size="small"
             onClick={zoomIn}
-            sx={{ width: 40, height: 40, borderRadius: 0 }}
+            sx={{ width: 36, height: 36, borderRadius: 0 }}
             aria-label="Zoom in"
           >
-            <AddIcon sx={{ fontSize: 20 }} />
+            <AddIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
         <Box sx={{ height: "1px", bgcolor: "divider", mx: 1 }} />
         <Tooltip title="Zoom out" placement="left">
           <IconButton
-            size="medium"
+            size="small"
             onClick={zoomOut}
-            sx={{ width: 40, height: 40, borderRadius: 0 }}
+            sx={{ width: 36, height: 36, borderRadius: 0 }}
             aria-label="Zoom out"
           >
-            <RemoveIcon sx={{ fontSize: 20 }} />
+            <RemoveIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
       </Paper>
+
+      <Pegman />
 
       {/* Compass — only visible when map is rotated */}
       {Math.abs(bearing) > 0.5 && (

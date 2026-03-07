@@ -5,6 +5,7 @@ import { autocompleteRoute } from "./routes/autocomplete";
 import { directionsRoute } from "./routes/directions";
 import { geocodeRoute } from "./routes/geocode";
 import { placesRoute } from "./routes/places";
+import { streetviewRoute } from "./routes/streetview";
 import { trafficRoute } from "./routes/traffic";
 
 const server = Fastify({ logger: true });
@@ -23,6 +24,7 @@ await server.register(autocompleteRoute, { prefix: "/api" });
 await server.register(placesRoute, { prefix: "/api" });
 await server.register(directionsRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
+await server.register(streetviewRoute, { prefix: "/api" });
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "0.0.0.0";
