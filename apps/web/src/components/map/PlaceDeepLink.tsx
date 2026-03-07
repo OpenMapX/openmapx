@@ -31,7 +31,6 @@ export function PlaceDeepLink() {
 
     // Remove deep-link params without adding a history entry
     router.replace("/", { scroll: false });
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional one-shot on mount
   }, [
     flyTo, // Remove deep-link params without adding a history entry
     router.replace,

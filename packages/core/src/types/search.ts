@@ -8,6 +8,11 @@ export interface SearchResult {
   confidence: number;
 }
 
+export interface ReverseGeocodingResult {
+  address: string;
+  city: string;
+}
+
 export interface AutocompleteResult {
   id: string;
   label: string;

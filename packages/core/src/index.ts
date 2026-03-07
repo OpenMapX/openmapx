@@ -10,6 +10,7 @@ export { useDirections } from "./hooks/useDirections";
 export { useGeocoding } from "./hooks/useGeocoding";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
+export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
 export type { MapLayer } from "./stores/layerStore";
@@ -22,7 +23,7 @@ export { useStreetViewStore } from "./stores/streetViewStore";
 export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
 export type { BoundingBox, LngLat } from "./types/geometry";
 export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";
-export type { AutocompleteResult, SearchResult } from "./types/search";
+export type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "./types/search";
 
 // Utils
 export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";

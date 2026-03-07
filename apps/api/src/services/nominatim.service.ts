@@ -5,7 +5,7 @@
  * https://nominatim.org/release-docs/latest/api/Search/
  */
 
-import type { AutocompleteResult, SearchResult } from "@openmapx/core";
+import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider";
 
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
@@ -28,6 +28,20 @@ function mapType(cls: string, type: string): SearchResult["type"] {
   if (cls === "place" && (type === "house" || type === "building")) return "address";
   if (cls === "amenity" || cls === "shop" || cls === "tourism" || cls === "leisure") return "poi";
   return "region";
+}
+
+interface NominatimReverseResult {
+  display_name: string;
+  error?: string;
+  address?: {
+    road?: string;
+    house_number?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+    county?: string;
+  };
 }
 
 async function fetchNominatim(params: Record<string, string>): Promise<NominatimResult[]> {
@@ -57,6 +71,30 @@ export const nominatimService: GeocodingProvider = {
       type: mapType(r.class, r.type),
       confidence: r.importance,
     }));
+  },
+
+  async reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodingResult | null> {
+    const url = new URL(`${NOMINATIM_URL}/reverse`);
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("addressdetails", "1");
+    url.searchParams.set("lat", String(lat));
+    url.searchParams.set("lon", String(lng));
+
+    const res = await fetch(url.toString(), {
+      headers: { "User-Agent": USER_AGENT, "Accept-Language": "en" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as NominatimReverseResult;
+    if (data.error) return null;
+
+    const a = data.address ?? {};
+    const road = a.road ?? "";
+    const houseNumber = a.house_number ?? "";
+    const address =
+      [houseNumber, road].filter(Boolean).join(" ") || data.display_name.split(",")[0];
+    const cityName = a.city ?? a.town ?? a.village ?? "";
+    const city = [cityName, a.state ?? a.county ?? ""].filter(Boolean).join(", ");
+    return { address, city };
   },
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {

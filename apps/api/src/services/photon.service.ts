@@ -5,7 +5,7 @@
  * https://photon.komoot.io
  */
 
-import type { AutocompleteResult, SearchResult } from "@openmapx/core";
+import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider";
 
 const PHOTON_URL = process.env.PHOTON_URL ?? "https://photon.komoot.io";
@@ -19,6 +19,7 @@ interface PhotonProperties {
   street?: string;
   housenumber?: string;
   city?: string;
+  state?: string;
   postcode?: string;
   country?: string;
 }
@@ -54,8 +55,8 @@ function buildLabel(p: PhotonProperties): string {
   return parts.join(", ") || "Unknown location";
 }
 
-async function fetchPhoton(params: Record<string, string>): Promise<PhotonResponse> {
-  const url = new URL(`${PHOTON_URL}/api`);
+async function fetchPhoton(params: Record<string, string>, path = "/api"): Promise<PhotonResponse> {
+  const url = new URL(`${PHOTON_URL}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const res = await fetch(url.toString(), {
@@ -75,6 +76,20 @@ export const photonService: GeocodingProvider = {
       type: mapType(f.properties.osm_key),
       confidence: 1,
     }));
+  },
+
+  async reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodingResult | null> {
+    const data = await fetchPhoton({ lat: String(lat), lon: String(lng), limit: "1" }, "/reverse");
+    const f = data.features[0];
+    if (!f) return null;
+
+    const p = f.properties;
+    const street = p.street ?? "";
+    const houseNumber = p.housenumber ?? "";
+    const address =
+      [houseNumber, street].filter(Boolean).join(" ") || p.name || buildLabel(p).split(",")[0];
+    const city = [p.city, p.state].filter(Boolean).join(", ");
+    return { address, city };
   },
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {

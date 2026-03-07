@@ -11,7 +11,7 @@ import { useMap } from "@/lib/MapContext";
  * when coords/label change to avoid flickering.
  */
 export function usePinMarker(coords: LngLat | null, label: string, showLabel = true) {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef } = useMap();
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
 

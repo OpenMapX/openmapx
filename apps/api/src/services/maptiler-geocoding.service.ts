@@ -4,7 +4,7 @@
  * https://docs.maptiler.com/cloud/geocoding/
  */
 
-import type { AutocompleteResult, SearchResult } from "@openmapx/core";
+import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
@@ -16,6 +16,8 @@ interface MaptilerFeature {
   place_type: string[];
   relevance: number;
   geometry: { coordinates: [number, number] };
+  address?: string;
+  context?: Array<{ id: string; text: string }>;
 }
 
 interface MaptilerResponse {
@@ -46,6 +48,19 @@ async function fetchMaptiler(
   return res.json() as Promise<MaptilerResponse>;
 }
 
+async function fetchMaptilerReverse(lng: number, lat: number): Promise<MaptilerResponse> {
+  const key = process.env.MAPTILER_KEY;
+  if (!key) throw new Error("MAPTILER_KEY env var is required for MapTiler geocoding");
+
+  const url = new URL(`${BASE_URL}/${lng},${lat}.json`);
+  url.searchParams.set("key", key);
+  url.searchParams.set("limit", "1");
+
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`MapTiler reverse geocoding error ${res.status}`);
+  return res.json() as Promise<MaptilerResponse>;
+}
+
 export const maptilerGeocodingService: GeocodingProvider = {
   async geocode(query: string): Promise<SearchResult[]> {
     const data = await fetchMaptiler(query, { limit: "10" });
@@ -56,6 +71,23 @@ export const maptilerGeocodingService: GeocodingProvider = {
       type: mapType(f.place_type),
       confidence: f.relevance,
     }));
+  },
+
+  async reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodingResult | null> {
+    const data = await fetchMaptilerReverse(lng, lat);
+    const feature = data.features[0];
+    if (!feature) return null;
+
+    const houseNumber = feature.address ?? "";
+    const street = feature.text ?? "";
+    const address =
+      [houseNumber, street].filter(Boolean).join(" ") || feature.place_name.split(",")[0];
+    const ctx = feature.context ?? [];
+    const cityName =
+      ctx.find((c) => c.id.startsWith("municipality") || c.id.startsWith("place"))?.text ?? "";
+    const region =
+      ctx.find((c) => c.id.startsWith("region") || c.id.startsWith("state"))?.text ?? "";
+    return { address, city: [cityName, region].filter(Boolean).join(", ") };
   },
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {

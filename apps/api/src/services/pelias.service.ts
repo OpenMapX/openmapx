@@ -4,7 +4,7 @@
  * https://github.com/pelias/pelias
  */
 
-import type { AutocompleteResult, SearchResult } from "@openmapx/core";
+import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider";
 
 const PELIAS_URL = process.env.PELIAS_URL ?? "http://localhost:4000";
@@ -68,6 +68,21 @@ export const peliasService: GeocodingProvider = {
       type: mapLayer(f.properties.layer),
       confidence: f.properties.confidence,
     }));
+  },
+
+  async reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodingResult | null> {
+    const data = await fetchPelias("/v1/reverse", {
+      "point.lat": String(lat),
+      "point.lon": String(lng),
+      size: "1",
+    });
+    const f = data.features[0];
+    if (!f) return null;
+
+    const p = f.properties;
+    const address = p.name ?? p.label.split(",")[0];
+    const city = [p.locality, p.region].filter(Boolean).join(", ");
+    return { address, city };
   },
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {

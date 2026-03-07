@@ -14,4 +14,22 @@ export const geocodeRoute: FastifyPluginAsync = async (fastify) => {
       return getGeocodingProvider().geocode(req.query.q);
     },
   });
+
+  fastify.get<{ Querystring: { lat: string; lng: string } }>("/geocode/reverse", {
+    schema: {
+      querystring: {
+        type: "object",
+        required: ["lat", "lng"],
+        properties: {
+          lat: { type: "string" },
+          lng: { type: "string" },
+        },
+      },
+    },
+    handler: async (req) => {
+      const lat = Number.parseFloat(req.query.lat);
+      const lng = Number.parseFloat(req.query.lng);
+      return getGeocodingProvider().reverseGeocode(lat, lng);
+    },
+  });
 };
