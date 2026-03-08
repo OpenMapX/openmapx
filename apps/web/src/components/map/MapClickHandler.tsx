@@ -4,15 +4,8 @@ import { useMapClickStore, usePlaceStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-
-// Layers with their own click handlers — plain-map click card should not fire when these are hit
-const INTERACTIVE_LAYERS = [
-  "category-results-layer",
-  "mapillary-sequence-layer",
-  "mapillary-photo-layer",
-  "mapillary-pano-layer",
-];
 
 export function MapClickHandler() {
   const { mapRef, mapReady } = useMap();
@@ -26,7 +19,7 @@ export function MapClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
-      const activeLayers = INTERACTIVE_LAYERS.filter((id) => !!map.getLayer(id));
+      const activeLayers = [...INTERACTIVE_LAYER_IDS].filter((id) => !!map.getLayer(id));
       if (activeLayers.length > 0) {
         const features = map.queryRenderedFeatures(e.point, { layers: activeLayers });
         if (features.length > 0) return;

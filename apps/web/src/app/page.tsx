@@ -11,6 +11,7 @@ import { TransitLayer } from "@/components/map/layers/TransitLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
 import { MapControls } from "@/components/map/MapControls";
+import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
 import { PlaceDeepLink } from "@/components/map/PlaceDeepLink";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
@@ -41,6 +42,7 @@ export default function HomePage() {
         <StreetViewLayer />
         <CategoryResultMarkers />
         <MapClickHandler />
+        <MapStylePoiClickHandler />
         <UserLocationMarker />
         <SelectedPlaceMarker />
         <DirectionsDestinationMarker />
