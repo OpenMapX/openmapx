@@ -41,6 +41,8 @@ interface NominatimReverseResult {
     village?: string;
     state?: string;
     county?: string;
+    postcode?: string;
+    country?: string;
   };
 }
 
@@ -90,9 +92,11 @@ export const nominatimService: GeocodingProvider = {
     const a = data.address ?? {};
     const road = a.road ?? "";
     const houseNumber = a.house_number ?? "";
-    const address =
-      [houseNumber, road].filter(Boolean).join(" ") || data.display_name.split(",")[0];
+    const streetPart = [houseNumber, road].filter(Boolean).join(" ");
     const cityName = a.city ?? a.town ?? a.village ?? "";
+    const address = [streetPart || data.display_name.split(",")[0], cityName, a.postcode, a.country]
+      .filter(Boolean)
+      .join(", ");
     const city = [cityName, a.state ?? a.county ?? ""].filter(Boolean).join(", ");
     return { address, city };
   },

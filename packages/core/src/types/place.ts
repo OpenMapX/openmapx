@@ -1,3 +1,4 @@
+import type { FuelPrices } from "./fuel";
 import type { LngLat } from "./geometry";
 
 export interface PlacePhoto {
@@ -33,4 +34,8 @@ export interface Place {
   wikipediaUrl?: string;
   facts?: PlaceFact[];
   reviewLinks?: PlaceReviewLink[];
+  fuelPrices?: FuelPrices;
+  fuelPricesUpdatedAt?: string;
+  fuelAttribution?: { label: string; url: string };
+  isOpen?: boolean;
 }

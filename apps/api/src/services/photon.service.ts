@@ -84,12 +84,8 @@ export const photonService: GeocodingProvider = {
     if (!f) return null;
 
     const p = f.properties;
-    const street = p.street ?? "";
-    const houseNumber = p.housenumber ?? "";
-    const address =
-      [houseNumber, street].filter(Boolean).join(" ") || p.name || buildLabel(p).split(",")[0];
     const city = [p.city, p.state].filter(Boolean).join(", ");
-    return { address, city };
+    return { address: buildLabel(p), city };
   },
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {

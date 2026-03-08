@@ -18,7 +18,16 @@ export function CategoryPlaceFloatingCard() {
     selectedPlace?.name,
   );
 
-  const place = details ?? selectedPlace;
+  // Prefer enriched Nominatim details but always carry fuelPrices from the
+  // original selection, since Nominatim has no knowledge of live fuel prices.
+  const place = details
+    ? {
+        ...details,
+        fuelPrices: selectedPlace?.fuelPrices ?? details.fuelPrices,
+        fuelPricesUpdatedAt: selectedPlace?.fuelPricesUpdatedAt ?? details.fuelPricesUpdatedAt,
+        fuelAttribution: selectedPlace?.fuelAttribution ?? details.fuelAttribution,
+      }
+    : selectedPlace;
 
   if (!place || activeCategory === null) return null;
 

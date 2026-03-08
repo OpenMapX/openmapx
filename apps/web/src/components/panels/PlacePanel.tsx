@@ -5,14 +5,19 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
-import { useCategorySearchStore, usePlaceDetails, usePlaceStore } from "@openmapx/core";
+import {
+  useCategorySearchStore,
+  usePlaceDetails,
+  usePlaceStore,
+  useReverseGeocoding,
+} from "@openmapx/core";
 import { useEffect, useState } from "react";
 import { PlaceDetailContent } from "./place/PlaceDetailContent";
 
 const PANEL_WIDTH = 400;
 
 export function PlacePanel() {
-  const { selectedPlace } = usePlaceStore();
+  const { selectedPlace, setSidePanelCollapsed } = usePlaceStore();
   const { activeCategory } = useCategorySearchStore();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -21,13 +26,41 @@ export function PlacePanel() {
     setCollapsed(false);
   }, [selectedPlace?.id]);
 
+  useEffect(() => {
+    setSidePanelCollapsed(collapsed);
+  }, [collapsed, setSidePanelCollapsed]);
+
+  useEffect(() => {
+    return () => setSidePanelCollapsed(false);
+  }, [setSidePanelCollapsed]);
+
+  // Coordinate/Plus Code places use a synthetic id — skip the API lookup
+  // (it would always 404) and resolve the address via reverse geocoding instead.
+  const isCoordinatePlace = selectedPlace?.id?.startsWith("coordinate-") ?? false;
+
   const { data: details, isLoading } = usePlaceDetails(
-    selectedPlace?.id ?? null,
+    isCoordinatePlace ? null : (selectedPlace?.id ?? null),
     selectedPlace?.coordinates,
     selectedPlace?.name,
   );
 
-  const place = details ?? selectedPlace;
+  const { data: reverseGeo } = useReverseGeocoding(
+    isCoordinatePlace ? (selectedPlace?.coordinates ?? null) : null,
+  );
+
+  const place =
+    details ??
+    (selectedPlace
+      ? {
+          ...selectedPlace,
+          ...(isCoordinatePlace && reverseGeo
+            ? {
+                address: reverseGeo.address,
+                city: reverseGeo.city.split(",")[0].trim(),
+              }
+            : {}),
+        }
+      : null);
 
   // When a category is active, the floating card handles place display instead
   if (!place || activeCategory !== null) return null;

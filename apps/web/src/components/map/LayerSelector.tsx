@@ -24,7 +24,13 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import type { MapLayer } from "@openmapx/core";
-import { useLayerStore, useStreetViewStore } from "@openmapx/core";
+import {
+  useCategorySearchStore,
+  useDirectionsStore,
+  useLayerStore,
+  usePlaceStore,
+  useStreetViewStore,
+} from "@openmapx/core";
 import type { FocusEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -232,6 +238,17 @@ export function LayerSelector() {
   const [zoomLevel, setZoomLevel] = useState<number | null>(null);
   const desktopAnchorRef = useRef<HTMLDivElement | null>(null);
   const closeTimerRef = useRef<number | undefined>(undefined);
+  const selectedPlace = usePlaceStore((s) => s.selectedPlace);
+  const sidePanelCollapsed = usePlaceStore((s) => s.sidePanelCollapsed);
+  const directionsOpen = useDirectionsStore((s) => s.isOpen);
+  const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+
+  // Hide entirely when CategoryPlaceFloatingCard is visible (category + place selected)
+  const hiddenByCategoryCard = activeCategory !== null && selectedPlace !== null;
+  // Shift right on desktop only when a sidebar panel is open AND not collapsed
+  const hasSidePanel =
+    !sidePanelCollapsed && (selectedPlace !== null || directionsOpen || activeCategory !== null);
+
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const showTraffic = useLayerStore((s) => s.showTraffic);
   const showTransit = useLayerStore((s) => s.showTransit);
@@ -311,6 +328,8 @@ export function LayerSelector() {
       map.off("zoom", syncZoom);
     };
   }, [mapReady, mapRef]);
+
+  if (hiddenByCategoryCard) return null;
 
   const open = Boolean(anchorEl);
   const trafficZoomTooLow = zoomLevel !== null && zoomLevel < TRAFFIC_MIN_ZOOM;
@@ -465,7 +484,8 @@ export function LayerSelector() {
         sx={{
           position: "absolute",
           bottom: 14,
-          left: 12,
+          left: { xs: 12, sm: hasSidePanel ? 412 : 12 },
+          transition: "left 0.25s ease",
           zIndex: 10,
         }}
       >

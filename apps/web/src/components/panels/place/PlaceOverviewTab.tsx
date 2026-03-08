@@ -9,17 +9,31 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LanguageIcon from "@mui/icons-material/Language";
+import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PlaceIcon from "@mui/icons-material/Place";
 import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { Place } from "@openmapx/core";
-import { computePlusCode, parseOpeningHours, plusCodeUrl, shortenPlusCode } from "@openmapx/core";
+import type {
+  DaySchedule,
+  FuelPrices,
+  FuelStationDetail,
+  OpeningHoursStatus,
+  Place,
+} from "@openmapx/core";
+import {
+  computePlusCode,
+  parseOpeningHours,
+  plusCodeUrl,
+  shortenPlusCode,
+  useFuelStationDetail,
+} from "@openmapx/core";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { PlaceActionButtons } from "./PlaceActionButtons";
@@ -93,8 +107,109 @@ function DetailRow({
   );
 }
 
+function FuelPrice({ value }: { value: number }) {
+  const str = value.toFixed(3);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "flex-start" }}>
+      <span>{str.slice(0, -1)}</span>
+      <span style={{ fontSize: "0.65em", marginTop: "0.2em" }}>{str.slice(-1)}</span>
+      <span>&nbsp;€</span>
+    </span>
+  );
+}
+
+function fuelDetailToHours(detail: FuelStationDetail): OpeningHoursStatus {
+  if (detail.wholeDay) {
+    return { isOpen: detail.isOpen, label: "Open 24 hours", detail: "Open 24 hours" };
+  }
+  const weekSchedule: DaySchedule[] = detail.openingTimes.map((t) => ({
+    day: t.text,
+    hours: `${t.start.slice(0, 5)}–${t.end.slice(0, 5)}`,
+    isToday: false,
+  }));
+  return {
+    isOpen: detail.isOpen,
+    label: detail.isOpen ? "Open" : "Closed",
+    detail: "",
+    weekSchedule: weekSchedule.length > 0 ? weekSchedule : undefined,
+  };
+}
+
+function formatPriceAge(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60_000);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(diffMs / 3_600_000);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(diffMs / 86_400_000)}d ago`;
+}
+
+function FuelPricesRow({
+  prices,
+  updatedAt,
+  attribution,
+}: {
+  prices: FuelPrices;
+  updatedAt?: string;
+  attribution?: { label: string; url: string };
+}) {
+  const fuels: { label: string; value: number }[] = [];
+  if (prices.diesel !== undefined) fuels.push({ label: "Diesel", value: prices.diesel });
+  if (prices.e5 !== undefined) fuels.push({ label: "E5", value: prices.e5 });
+  if (prices.e10 !== undefined) fuels.push({ label: "E10", value: prices.e10 });
+  if (fuels.length === 0) return null;
+
+  return (
+    <Box sx={{ display: "flex", gap: 2, alignItems: "center", py: 1.25 }}>
+      <Box sx={{ color: TEAL, flexShrink: 0, display: "flex" }}>
+        <LocalGasStationIcon sx={{ fontSize: 22 }} />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+          {fuels.map((f) => (
+            <Chip
+              key={f.label}
+              label={
+                <>
+                  {f.label}
+                  {"  "}
+                  <FuelPrice value={f.value} />
+                </>
+              }
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: 12, height: 24 }}
+            />
+          ))}
+        </Box>
+        {(attribution || updatedAt) && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            {"Live prices"}
+            {updatedAt && ` · Updated ${formatPriceAge(updatedAt)}`}
+            {attribution && (
+              <>
+                {" · "}
+                <Link
+                  href={attribution.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  underline="hover"
+                  sx={{ color: "text.secondary" }}
+                >
+                  {attribution.label}
+                </Link>
+              </>
+            )}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
 export function PlaceOverviewTab({ place, isLoading, onNavigateToInfo }: Props) {
-  const hours = parseOpeningHours(place.openingHours);
+  const { data: fuelDetail } = useFuelStationDetail(place.id);
+  const hours = fuelDetail ? fuelDetailToHours(fuelDetail) : parseOpeningHours(place.openingHours);
   const plusCode = computePlusCode(place.coordinates);
   const shortCode = shortenPlusCode(plusCode);
   const city = place.city ?? null;
@@ -166,8 +281,17 @@ export function PlaceOverviewTab({ place, isLoading, onNavigateToInfo }: Props) 
           )}
         </DetailRow>
 
-        {/* Opening hours */}
-        {isLoading && !place.openingHours ? (
+        {/* Fuel prices */}
+        {place.fuelPrices && (
+          <FuelPricesRow
+            prices={place.fuelPrices}
+            updatedAt={place.fuelPricesUpdatedAt}
+            attribution={place.fuelAttribution}
+          />
+        )}
+
+        {/* Opening hours — Tankerkoenig detail takes priority over OSM */}
+        {isLoading && !place.openingHours && !fuelDetail ? (
           <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
             <Skeleton variant="text" width="60%" />
           </DetailRow>
@@ -200,10 +324,12 @@ export function PlaceOverviewTab({ place, isLoading, onNavigateToInfo }: Props) 
                     >
                       {hours.isOpen ? "Open" : "Closed"}
                     </Typography>
-                    <Typography variant="body2" component="span" color="text.secondary">
-                      {" · "}
-                      {hours.detail}
-                    </Typography>
+                    {hours.detail && (
+                      <Typography variant="body2" component="span" color="text.secondary">
+                        {" · "}
+                        {hours.detail}
+                      </Typography>
+                    )}
                   </Box>
                   {hours.weekSchedule &&
                     (hoursExpanded ? (

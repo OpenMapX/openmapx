@@ -94,7 +94,7 @@ export function SearchBar() {
 
     if (parsed) {
       syntheticResult = {
-        id: "special-input",
+        id: `coordinate-${parsed.lngLat[1].toFixed(6)}-${parsed.lngLat[0].toFixed(6)}`,
         label: parsed.label,
         coordinates: parsed.lngLat,
         type: "address",
@@ -111,6 +111,7 @@ export function SearchBar() {
             label: cat.label,
             sublabel: "Search category",
             type: "category" as const,
+            iconPath: cat.iconPath,
           }),
         )
       : [];

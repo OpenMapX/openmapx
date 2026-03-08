@@ -80,9 +80,8 @@ export const peliasService: GeocodingProvider = {
     if (!f) return null;
 
     const p = f.properties;
-    const address = p.name ?? p.label.split(",")[0];
     const city = [p.locality, p.region].filter(Boolean).join(", ");
-    return { address, city };
+    return { address: p.label, city };
   },
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {

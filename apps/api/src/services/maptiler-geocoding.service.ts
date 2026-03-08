@@ -78,16 +78,12 @@ export const maptilerGeocodingService: GeocodingProvider = {
     const feature = data.features[0];
     if (!feature) return null;
 
-    const houseNumber = feature.address ?? "";
-    const street = feature.text ?? "";
-    const address =
-      [houseNumber, street].filter(Boolean).join(" ") || feature.place_name.split(",")[0];
     const ctx = feature.context ?? [];
     const cityName =
       ctx.find((c) => c.id.startsWith("municipality") || c.id.startsWith("place"))?.text ?? "";
     const region =
       ctx.find((c) => c.id.startsWith("region") || c.id.startsWith("state"))?.text ?? "";
-    return { address, city: [cityName, region].filter(Boolean).join(", ") };
+    return { address: feature.place_name, city: [cityName, region].filter(Boolean).join(", ") };
   },
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {

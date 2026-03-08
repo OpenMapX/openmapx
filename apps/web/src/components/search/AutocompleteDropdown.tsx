@@ -24,6 +24,21 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
   category: <CategoryIcon sx={{ fontSize: 20, color: "#007b8b" }} />,
 };
 
+function CategorySvgIcon({ path }: { path: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={20}
+      height={20}
+      fill="#007b8b"
+      aria-hidden="true"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
+
 export function AutocompleteDropdown({ suggestions, onSelect }: AutocompleteDropdownProps) {
   if (suggestions.length === 0) return null;
 
@@ -36,7 +51,9 @@ export function AutocompleteDropdown({ suggestions, onSelect }: AutocompleteDrop
           {i > 0 && <Divider component="li" />}
           <ListItem disablePadding>
             <ListItemButton onClick={() => onSelect(s)} sx={{ px: 2, py: 1 }}>
-              <ListItemIcon sx={{ minWidth: 36 }}>{iconByType[s.type]}</ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {s.iconPath ? <CategorySvgIcon path={s.iconPath} /> : iconByType[s.type]}
+              </ListItemIcon>
               <ListItemText
                 primary={s.label}
                 secondary={s.sublabel}

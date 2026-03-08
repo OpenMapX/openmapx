@@ -1,3 +1,4 @@
+import type { FuelPrices } from "./fuel";
 import type { LngLat } from "./geometry";
 
 export type CategoryId =
@@ -22,7 +23,19 @@ export type CategoryId =
   | "banks"
   | "car_repair"
   | "parking"
-  | "fuel";
+  | "fuel"
+  | "schools"
+  | "kindergartens"
+  | "ambulance_stations"
+  | "fire_stations"
+  | "police"
+  | "parks"
+  | "churches"
+  | "post_offices"
+  | "ev_charging"
+  | "swimming"
+  | "nightlife"
+  | "bakeries";
 
 export interface CategoryDefinition {
   id: CategoryId;
@@ -175,6 +188,87 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     iconPath:
       "m19.77 7.23.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77M12 10H6V5h6zm6 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1",
   },
+  {
+    id: "schools",
+    label: "Schools",
+    showInChipBar: false,
+    iconPath: "M5 13.18v4L12 21l7-3.82v-4L12 17zM12 3 1 9l11 6 9-4.91V17h2V9z",
+  },
+  {
+    id: "kindergartens",
+    label: "Kindergartens",
+    showInChipBar: false,
+    iconPath:
+      "M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2M8.5 8c.83 0 1.5.67 1.5 1.5S9.33 11 8.5 11 7 10.33 7 9.5 7.67 8 8.5 8m7 0c.83 0 1.5.67 1.5 1.5S16.33 11 15.5 11 14 10.33 14 9.5 14.67 8 15.5 8M12 18c-2.28 0-4.22-1.66-5-4h10c-.78 2.34-2.72 4-5 4",
+  },
+  {
+    id: "ambulance_stations",
+    label: "Ambulance Stations",
+    showInChipBar: false,
+    iconPath:
+      "M10.5 13H8v-3h2.5V7.5h3V10H16v3h-2.5v2.5h-3zM12 2 4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5z",
+  },
+  {
+    id: "fire_stations",
+    label: "Fire Stations",
+    showInChipBar: false,
+    iconPath:
+      "M12 12.9l-2.13 2.09c-.56.56-.87 1.29-.87 2.07C9 18.68 10.35 20 12 20s3-1.32 3-2.94c0-.78-.31-1.52-.87-2.07zM16 6l-.44.55C14.38 5.03 12.5 4 10.39 4 7.41 4 5 6.41 5 9.39c0 2.39 1.55 4.44 3.68 5.25L12 11l4-5z",
+  },
+  {
+    id: "police",
+    label: "Police",
+    showInChipBar: false,
+    iconPath:
+      "M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5zm-1 14H9v-2h2zm0-4H9V7h2zm4 4h-2v-2h2zm0-4h-2V7h2z",
+  },
+  {
+    id: "parks",
+    label: "Parks",
+    showInChipBar: false,
+    iconPath: "M17 12h2L12 2 5.05 12H7l-3.9 6h6.92v4h3.96v-4H21z",
+  },
+  {
+    id: "churches",
+    label: "Churches",
+    showInChipBar: false,
+    iconPath:
+      "M18 12.22V9l-5-2.5V5h2V3h-2V1h-2v2H9v2h2v1.5L6 9v3.22L2 14v8h8v-3c0-1.1.9-2 2-2s2 .9 2 2v3h8v-8z",
+  },
+  {
+    id: "post_offices",
+    label: "Post Offices",
+    showInChipBar: false,
+    iconPath:
+      "M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2m0 4-8 5-8-5V6l8 5 8-5z",
+  },
+  {
+    id: "ev_charging",
+    label: "EV Charging",
+    showInChipBar: false,
+    iconPath: "M7 2v11h3v9l7-12h-4l4-8z",
+  },
+  {
+    id: "swimming",
+    label: "Swimming Pools",
+    showInChipBar: false,
+    iconPath:
+      "M22 21c-1.11 0-1.73-.37-2.5-1-1.12.93-3.23 1-4.5 0-1.12.93-3.23 1-4.5 0-1.12.93-3.23 1-4.5 0-.77.63-1.39 1-2.5 1v-2c1.12 0 1.73-.37 2.5-1 1.12.93 3.23 1 4.5 0 1.12.93 3.23 1 4.5 0 1.12.93 3.23 1 4.5 0 .77.63 1.38 1 2.5 1zM18.5 9.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2M8 9l4-7.93L16 9z",
+  },
+  {
+    id: "nightlife",
+    label: "Nightlife",
+    showInChipBar: false,
+    iconPath:
+      "M1 5h14l-6 9v4h2v2H5v-2h2v-4zm9.1 4 1.4-2H4.49l1.4 2zM17 5h5v3h-3v9c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3c.35 0 .69.06 1 .17z",
+  },
+  {
+    id: "bakeries",
+    label: "Bakeries",
+    showInChipBar: false,
+    iconPath:
+      "M20.5 17.5c.4 0 .75-.23.92-.58L23 13l-1.93-3.96c-.17-.35-.52-.54-.89-.54H15c-.55 0-1 .45-1 1v2h-2V9.5l6.5-1V5l-6.5 1V3h-2v3.13L4 7.5v3h-.5c-.55 0-1 .45-1 1V19h16v-1.5zm-4-5h4l1 2.5-1 2.5h-4v-5zm-2 5H4v-6h10.5v6z",
+  },
 ];
 
 export interface CategoryPlace {
@@ -186,4 +280,8 @@ export interface CategoryPlace {
   phone?: string;
   website?: string;
   openingHours?: string;
+  isOpen?: boolean;
+  fuelPrices?: FuelPrices;
+  fuelPricesUpdatedAt?: string;
+  fuelAttribution?: { label: string; url: string };
 }

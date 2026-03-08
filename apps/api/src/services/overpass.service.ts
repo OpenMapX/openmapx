@@ -83,6 +83,47 @@ export const CATEGORY_FILTERS: Record<string, OsmFilter[]> = {
     { key: "amenity", value: "parking_space" },
   ],
   fuel: [{ key: "amenity", value: "fuel" }],
+  schools: [
+    { key: "amenity", value: "school" },
+    { key: "amenity", value: "university" },
+    { key: "amenity", value: "college" },
+  ],
+  kindergartens: [
+    { key: "amenity", value: "kindergarten" },
+    { key: "amenity", value: "childcare" },
+  ],
+  ambulance_stations: [
+    { key: "amenity", value: "ambulance_station" },
+    { key: "emergency", value: "ambulance_station" },
+  ],
+  fire_stations: [{ key: "amenity", value: "fire_station" }],
+  police: [{ key: "amenity", value: "police" }],
+  parks: [
+    { key: "leisure", value: "park" },
+    { key: "leisure", value: "nature_reserve" },
+    { key: "leisure", value: "garden" },
+  ],
+  churches: [
+    { key: "amenity", value: "place_of_worship" },
+    { key: "building", value: "church" },
+    { key: "building", value: "chapel" },
+  ],
+  post_offices: [{ key: "amenity", value: "post_office" }],
+  ev_charging: [{ key: "amenity", value: "charging_station" }],
+  swimming: [
+    { key: "leisure", value: "swimming_pool" },
+    { key: "leisure", value: "water_park" },
+    { key: "sport", value: "swimming" },
+  ],
+  nightlife: [
+    { key: "amenity", value: "nightclub" },
+    { key: "amenity", value: "casino" },
+    { key: "amenity", value: "stripclub" },
+  ],
+  bakeries: [
+    { key: "shop", value: "bakery" },
+    { key: "shop", value: "pastry" },
+  ],
 };
 
 interface OverpassNode {
@@ -115,6 +156,10 @@ export interface CategoryPlaceResult {
   phone?: string;
   website?: string;
   openingHours?: string;
+  isOpen?: boolean;
+  fuelPrices?: { e5?: number; e10?: number; diesel?: number };
+  fuelPricesUpdatedAt?: string;
+  fuelAttribution?: { label: string; url: string };
 }
 
 export interface BoundingBox {
@@ -152,6 +197,10 @@ function getCategoryValue(tags: Record<string, string>): string | undefined {
     tags.railway ??
     tags.highway ??
     tags.public_transport ??
+    tags.emergency ??
+    tags.shop ??
+    tags.sport ??
+    tags.building ??
     undefined
   );
 }

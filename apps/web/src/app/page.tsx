@@ -9,6 +9,7 @@ import { TerrainLayer } from "@/components/map/layers/TerrainLayer";
 import { TrafficLayer } from "@/components/map/layers/TrafficLayer";
 import { TransitLayer } from "@/components/map/layers/TransitLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
+import { MapClickHandler } from "@/components/map/MapClickHandler";
 import { MapControls } from "@/components/map/MapControls";
 import { PlaceDeepLink } from "@/components/map/PlaceDeepLink";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
@@ -20,6 +21,7 @@ import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { CategoryPlaceFloatingCard } from "@/components/panels/CategoryPlaceFloatingCard";
 import { CategoryResultsPanel } from "@/components/panels/CategoryResultsPanel";
 import { DirectionsPanel } from "@/components/panels/DirectionsPanel";
+import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
 import { PlacePanel } from "@/components/panels/PlacePanel";
 import { CategoryChips } from "@/components/search/CategoryChips";
 import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
@@ -38,6 +40,7 @@ export default function HomePage() {
         <RouteLayer />
         <StreetViewLayer />
         <CategoryResultMarkers />
+        <MapClickHandler />
         <UserLocationMarker />
         <SelectedPlaceMarker />
         <DirectionsDestinationMarker />
@@ -48,6 +51,7 @@ export default function HomePage() {
         <PlacePanel />
         <CategoryResultsPanel />
         <CategoryPlaceFloatingCard />
+        <MapClickFloatingCard />
         <DirectionsPanel />
         <TopRightControls />
         <StreetViewViewer />

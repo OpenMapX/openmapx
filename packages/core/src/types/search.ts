@@ -19,4 +19,6 @@ export interface AutocompleteResult {
   sublabel?: string;
   coordinates?: LngLat;
   type: "address" | "poi" | "street" | "region" | "category";
+  /** SVG path `d` attribute for the icon (used for category suggestions). */
+  iconPath?: string;
 }

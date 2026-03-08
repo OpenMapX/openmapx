@@ -8,4 +8,5 @@ export const API_ENDPOINTS = {
   traffic: "/api/traffic",
   streetViewImages: "/api/streetview/images",
   categorySearch: "/api/places/search",
+  fuelPricesDetail: "/api/fuel-prices/detail",
 } as const;

@@ -135,6 +135,54 @@ export function CategoryFilterBar() {
     }
   }, [anchorEl]);
 
+  // Fuel stations: simple "Open now" toggle chip, no full popover needed
+  if (activeCategory === "fuel") {
+    const isFiltered = openingHoursFilter === "open_now";
+    return (
+      <Box
+        sx={{
+          position: "absolute",
+          top: { xs: 72, sm: 18 },
+          left: { xs: 0, sm: 420 },
+          right: { xs: 0, sm: 108 },
+          zIndex: 10,
+          display: "flex",
+          alignItems: "center",
+          px: { xs: 1, sm: 0 },
+          py: "2px",
+          pointerEvents: "none",
+        }}
+      >
+        <Chip
+          icon={
+            <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
+              <AccessTimeIcon sx={{ fontSize: 16 }} />
+            </Box>
+          }
+          label="Open now"
+          onClick={() => setOpeningHoursFilter(isFiltered ? "any" : "open_now")}
+          variant={isFiltered ? "filled" : "outlined"}
+          sx={{
+            pointerEvents: "auto",
+            height: 36,
+            borderRadius: "18px",
+            fontWeight: 500,
+            fontSize: 13,
+            bgcolor: isFiltered ? TEAL : "background.paper",
+            color: isFiltered ? "#fff" : "text.primary",
+            borderColor: isFiltered ? TEAL : "rgba(0,0,0,0.23)",
+            boxShadow: isFiltered ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+            cursor: "pointer",
+            userSelect: "none",
+            "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
+            "& .MuiChip-label": { pr: "10px" },
+            "&&:hover": { bgcolor: isFiltered ? "#006475" : "grey.300" },
+          }}
+        />
+      </Box>
+    );
+  }
+
   if (!activeCategory || !HOURS_FILTER_CATEGORIES.has(activeCategory)) return null;
 
   const isFiltered = openingHoursFilter !== "any";

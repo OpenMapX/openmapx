@@ -18,7 +18,7 @@ import {
 } from "@openmapx/core";
 import type { ReactNode } from "react";
 
-const CATEGORY_ICONS: Record<CategoryId, ReactNode> = {
+const CATEGORY_ICONS: Partial<Record<CategoryId, ReactNode>> = {
   restaurants: <RestaurantIcon sx={{ fontSize: 16 }} />,
   hotels: <HotelIcon sx={{ fontSize: 16 }} />,
   activities: <LocalActivityIcon sx={{ fontSize: 16 }} />,

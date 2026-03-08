@@ -35,6 +35,7 @@ import {
   useDirections,
   useDirectionsStore,
   useMapStore,
+  usePlaceStore,
 } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ChangeEvent, ReactNode } from "react";
@@ -573,8 +574,17 @@ export function DirectionsPanel() {
   } = useDirectionsStore();
 
   const { userLocation } = useMapStore();
+  const { setSidePanelCollapsed } = usePlaceStore();
   const queryClient = useQueryClient();
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setSidePanelCollapsed(collapsed);
+  }, [collapsed, setSidePanelCollapsed]);
+
+  useEffect(() => {
+    return () => setSidePanelCollapsed(false);
+  }, [setSidePanelCollapsed]);
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
   const [originInput, setOriginInput] = useState(originLabel);
