@@ -1,17 +1,23 @@
 import { create } from "zustand";
 
 interface StreetViewState {
-  showCoverage: boolean;
+  panelOpen: boolean;
+  coverageVisible: boolean;
   activeImageId: string | null;
-  setShowCoverage: (show: boolean) => void;
+  openPanel: () => void;
+  closePanel: () => void;
+  setCoverageVisible: (visible: boolean) => void;
   setActiveImageId: (id: string | null) => void;
   closeViewer: () => void;
 }
 
 export const useStreetViewStore = create<StreetViewState>((set) => ({
-  showCoverage: false,
+  panelOpen: false,
+  coverageVisible: false,
   activeImageId: null,
-  setShowCoverage: (showCoverage) => set({ showCoverage }),
+  openPanel: () => set({ panelOpen: true, coverageVisible: true }),
+  closePanel: () => set({ panelOpen: false, coverageVisible: false, activeImageId: null }),
+  setCoverageVisible: (coverageVisible) => set({ coverageVisible }),
   setActiveImageId: (activeImageId) => set({ activeImageId }),
   closeViewer: () => set({ activeImageId: null }),
 }));

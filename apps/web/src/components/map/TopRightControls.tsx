@@ -44,7 +44,7 @@ export function TopRightControls() {
           zIndex: 10,
         }}
       >
-        <Tooltip title="Google apps" placement="bottom">
+        {/* <Tooltip title="Google apps" placement="bottom">
           <IconButton
             aria-label="Apps"
             sx={{
@@ -55,7 +55,7 @@ export function TopRightControls() {
           >
             <AppsIcon sx={{ fontSize: 22, color: "text.secondary" }} />
           </IconButton>
-        </Tooltip>
+        </Tooltip> */}
 
         <Tooltip title={user ? (user.name ?? "Account") : "Sign in"} placement="bottom">
           <Avatar

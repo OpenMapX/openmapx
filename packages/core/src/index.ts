@@ -19,6 +19,7 @@ export { useGeocoding } from "./hooks/useGeocoding";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
+export { useAirQualityStore } from "./stores/airQualityStore";
 export type { OpeningHoursFilter } from "./stores/categorySearchStore";
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export type { DirectionsState } from "./stores/directionsStore";

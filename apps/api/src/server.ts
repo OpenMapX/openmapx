@@ -2,11 +2,13 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import Fastify from "fastify";
 import { auth } from "./auth";
+import { airQualityRoute } from "./routes/air-quality";
 import { autocompleteRoute } from "./routes/autocomplete";
 import { categorySearchRoute } from "./routes/category-search";
 import { directionsRoute } from "./routes/directions";
 import { fuelPricesRoute } from "./routes/fuel-prices";
 import { geocodeRoute } from "./routes/geocode";
+import { mapillaryRoute } from "./routes/mapillary";
 import { placesRoute } from "./routes/places";
 import { streetviewRoute } from "./routes/streetview";
 import { trafficRoute } from "./routes/traffic";
@@ -60,6 +62,8 @@ await server.register(fuelPricesRoute, { prefix: "/api" });
 await server.register(directionsRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(streetviewRoute, { prefix: "/api" });
+await server.register(airQualityRoute, { prefix: "/api" });
+await server.register(mapillaryRoute, { prefix: "/api" });
 
 // ── Session endpoint ───────────────────────────────────────────────────
 server.get("/api/me", async (request, reply) => {

@@ -1,7 +1,9 @@
 import { Suspense } from "react";
+import { AirQualityLegend } from "@/components/map/AirQualityLegend";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DirectionsDestinationMarker } from "@/components/map/DirectionsDestinationMarker";
 import { LayerSelector } from "@/components/map/LayerSelector";
+import { AirQualityLayer } from "@/components/map/layers/AirQualityLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { SatelliteLayer } from "@/components/map/layers/SatelliteLayer";
 import { StreetViewLayer } from "@/components/map/layers/StreetViewLayer";
@@ -40,6 +42,7 @@ export default function HomePage() {
         <TransitLayer />
         <RouteLayer />
         <StreetViewLayer />
+        <AirQualityLayer />
         <CategoryResultMarkers />
         <MapClickHandler />
         <MapStylePoiClickHandler />
@@ -58,6 +61,7 @@ export default function HomePage() {
         <TopRightControls />
         <StreetViewViewer />
         <StreetViewLegend />
+        <AirQualityLegend />
         <LayerSelector />
         <MapControls />
         <Suspense>

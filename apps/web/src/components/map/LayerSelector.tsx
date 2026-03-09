@@ -1,5 +1,6 @@
 "use client";
 
+import AirIcon from "@mui/icons-material/Air";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CloseIcon from "@mui/icons-material/Close";
@@ -25,6 +26,7 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import type { MapLayer } from "@openmapx/core";
 import {
+  useAirQualityStore,
   useCategorySearchStore,
   useDirectionsStore,
   useLayerStore,
@@ -100,25 +102,25 @@ const DETAIL_OPTIONS: DetailOption[] = [
 const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
   {
     id: "public-transport",
-    label: "Öffentliche\nVerkehrsmittel",
+    label: "Public\nTransport",
     preview:
       "linear-gradient(145deg,#e8edf2 0%,#d9dde2 48%,#f7f8f9 100%), linear-gradient(90deg,#6d60db 0%,#6d60db 36%,#3d7bf3 36%,#3d7bf3 67%,#56b6dc 67%,#56b6dc 100%)",
   },
   {
     id: "traffic",
-    label: "Verkehr",
+    label: "Traffic",
     preview:
       "linear-gradient(145deg,#b8dfcc 0%,#d9e4e8 40%,#b8d8d2 100%), linear-gradient(90deg,#2dd4bf 0%,#2dd4bf 30%,#facc15 30%,#facc15 48%,#ef4444 48%,#ef4444 66%,#3b82f6 66%,#3b82f6 100%)",
   },
   {
     id: "cycling",
-    label: "Radfahren",
+    label: "Cycling",
     preview:
       "radial-gradient(circle at 58% 45%,#9ad5cd 0%,#9ad5cd 23%,transparent 24%), linear-gradient(150deg,#d5e3e8 0%,#bdcad6 45%,#dce9ee 100%), linear-gradient(95deg,#2f9d76 0%,#2f9d76 28%,#e9eef4 28%,#e9eef4 46%,#1d7f63 46%,#1d7f63 62%,#d7dee6 62%,#d7dee6 100%)",
   },
   {
     id: "terrain",
-    label: "Gelände",
+    label: "Terrain",
     preview:
       "linear-gradient(145deg,#99a394 0%,#7c8577 36%,#c7d0c2 100%), radial-gradient(circle at 30% 35%,#6f776b 0%,#6f776b 22%,transparent 23%)",
   },
@@ -130,13 +132,13 @@ const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
   },
   {
     id: "wildfire",
-    label: "Waldbrände",
+    label: "Wildfires",
     preview:
       "linear-gradient(150deg,#c6e7f4 0%,#c7efd8 46%,#dce2ee 100%), radial-gradient(circle at 52% 52%,#ef4444 0%,#ef4444 26%,transparent 27%)",
   },
   {
     id: "air-quality",
-    label: "Luftqualität",
+    label: "Air Quality",
     preview:
       "linear-gradient(150deg,#bde2f0 0%,#bee8d6 48%,#d5deea 100%), radial-gradient(circle at 45% 52%,#6aa53f 0%,#6aa53f 26%,transparent 27%)",
   },
@@ -145,13 +147,13 @@ const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
 const DESKTOP_MORE_MAP_TOOLS: readonly DesktopMoreOption[] = [
   {
     id: "travel-time",
-    label: "Reisedauer",
+    label: "Travel time",
     preview:
       "linear-gradient(150deg,#bee0ef 0%,#c7e9d8 45%,#d6deea 100%), radial-gradient(circle at 40% 46%,#4f83f1 0%,#4f83f1 4%,transparent 5%)",
   },
   {
     id: "measure",
-    label: "Messen",
+    label: "Measure",
     preview:
       "linear-gradient(150deg,#bee0ef 0%,#c7e9d8 45%,#d6deea 100%), linear-gradient(130deg,transparent 0%,transparent 46%,#111827 46%,#111827 54%,transparent 54%,transparent 100%)",
   },
@@ -167,7 +169,7 @@ const DESKTOP_MORE_MAP_TYPES: readonly DesktopMoreOption[] = [
   },
   {
     id: "satellite",
-    label: "Satellit",
+    label: "Satellite",
     preview:
       "radial-gradient(circle at 20% 20%, rgba(104,136,98,1) 0%, rgba(69,96,64,1) 42%, rgba(45,60,42,1) 100%)",
     selected: true,
@@ -255,8 +257,14 @@ export function LayerSelector() {
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const setShowTraffic = useLayerStore((s) => s.setShowTraffic);
   const setShowTransit = useLayerStore((s) => s.setShowTransit);
-  const showCoverage = useStreetViewStore((s) => s.showCoverage);
-  const setShowCoverage = useStreetViewStore((s) => s.setShowCoverage);
+  const svPanelOpen = useStreetViewStore((s) => s.panelOpen);
+  const svCoverageVisible = useStreetViewStore((s) => s.coverageVisible);
+  const svOpenPanel = useStreetViewStore((s) => s.openPanel);
+  const svClosePanel = useStreetViewStore((s) => s.closePanel);
+  const aqPanelOpen = useAirQualityStore((s) => s.panelOpen);
+  const aqLayerVisible = useAirQualityStore((s) => s.layerVisible);
+  const aqOpenPanel = useAirQualityStore((s) => s.openPanel);
+  const aqClosePanel = useAirQualityStore((s) => s.closePanel);
 
   const activeBaseOption =
     BASE_LAYER_OPTIONS.find((option) => option.id === activeLayer) ?? BASE_LAYER_OPTIONS[0];
@@ -633,7 +641,7 @@ export function LayerSelector() {
               }}
             >
               <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#202124", lineHeight: 1 }}>
-                Kartendetails
+                Map Details
               </Typography>
               <IconButton
                 onClick={handleClose}
@@ -658,16 +666,36 @@ export function LayerSelector() {
                   key={item.id}
                   item={{
                     ...item,
-                    selected: item.id === "street-view" ? showCoverage : item.selected,
+                    selected:
+                      item.id === "street-view"
+                        ? svPanelOpen
+                        : item.id === "air-quality"
+                          ? aqPanelOpen
+                          : item.selected,
                   }}
                   labelWidth={96}
                   onClick={
                     item.id === "street-view"
                       ? () => {
-                          setShowCoverage(!showCoverage);
+                          if (svPanelOpen) {
+                            svClosePanel();
+                          } else {
+                            svOpenPanel();
+                            aqClosePanel();
+                          }
                           handleClose();
                         }
-                      : undefined
+                      : item.id === "air-quality"
+                        ? () => {
+                            if (aqPanelOpen) {
+                              aqClosePanel();
+                            } else {
+                              aqOpenPanel();
+                              svClosePanel();
+                            }
+                            handleClose();
+                          }
+                        : undefined
                   }
                 />
               ))}
@@ -678,7 +706,7 @@ export function LayerSelector() {
             <Typography
               sx={{ fontSize: 17, fontWeight: 700, color: "#202124", lineHeight: 1, mb: 0.8 }}
             >
-              Kartentools
+              Map Tools
             </Typography>
             <Box
               sx={{
@@ -699,7 +727,7 @@ export function LayerSelector() {
             <Typography
               sx={{ fontSize: 17, fontWeight: 700, color: "#202124", lineHeight: 1, mb: 0.8 }}
             >
-              Kartentyp
+              Map Type
             </Typography>
             <Box
               sx={{
@@ -718,7 +746,7 @@ export function LayerSelector() {
             <Box sx={{ mt: 0.2, display: "flex", alignItems: "center", gap: 1.1 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.2 }}>
                 <CheckBoxOutlineBlankIcon sx={{ fontSize: 19, color: "#202124" }} />
-                <Typography sx={{ fontSize: 12.5, color: "#202124" }}>Globusansicht</Typography>
+                <Typography sx={{ fontSize: 12.5, color: "#202124" }}>Globe view</Typography>
                 <HelpOutlineIcon sx={{ fontSize: 14, color: "#3c4043" }} />
               </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.2 }}>
@@ -840,9 +868,41 @@ export function LayerSelector() {
               }
               control={
                 <Switch
-                  checked={showCoverage}
-                  onChange={(event) => setShowCoverage(event.target.checked)}
+                  checked={svPanelOpen && svCoverageVisible}
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      svOpenPanel();
+                      aqClosePanel();
+                    } else {
+                      svClosePanel();
+                    }
+                  }}
                   inputProps={{ "aria-label": "Toggle Street-level imagery coverage" }}
+                  size="small"
+                />
+              }
+            />
+
+            <FormControlLabel
+              sx={{ mr: 0, ml: 0.25 }}
+              label={
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+                  <AirIcon sx={{ fontSize: 17, color: "text.secondary" }} />
+                  <Typography sx={{ fontSize: 13.5 }}>Air Quality</Typography>
+                </Box>
+              }
+              control={
+                <Switch
+                  checked={aqPanelOpen && aqLayerVisible}
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      aqOpenPanel();
+                      svClosePanel();
+                    } else {
+                      aqClosePanel();
+                    }
+                  }}
+                  inputProps={{ "aria-label": "Toggle air quality overlay" }}
                   size="small"
                 />
               }

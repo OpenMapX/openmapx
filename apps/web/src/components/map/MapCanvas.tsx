@@ -36,7 +36,7 @@ export function MapCanvas() {
           attributionControl: false,
         });
 
-        map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+        map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right");
 
         map.on("moveend", () => {
           const c = map.getCenter();

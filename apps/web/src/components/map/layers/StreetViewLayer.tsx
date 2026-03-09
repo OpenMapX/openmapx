@@ -1,6 +1,6 @@
 "use client";
 
-import { useStreetViewStore } from "@openmapx/core";
+import { useAirQualityStore, useStreetViewStore } from "@openmapx/core";
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -16,33 +16,41 @@ const MLY_INTERACTIVE_LAYERS = [MLY_PHOTO_LAYER, MLY_PANO_LAYER] as const;
 
 export function StreetViewLayer() {
   const { mapRef, mapReady } = useMap();
-  const showCoverage = useStreetViewStore((s) => s.showCoverage);
+  const coverageVisible = useStreetViewStore((s) => s.coverageVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
+  const aqClosePanel = useAirQualityStore((s) => s.closePanel);
+
+  // Mutual exclusion: close AQ whenever SV coverage turns on (covers Pegman + legend toggle)
+  useEffect(() => {
+    if (coverageVisible) aqClosePanel();
+  }, [coverageVisible, aqClosePanel]);
 
   // Manage coverage layers
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const token = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN ?? "";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
 
     const syncLayers = () => {
-      if (!map.isStyleLoaded()) return;
-
-      if (!showCoverage) {
-        for (const layerId of MLY_LAYERS) {
-          if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (!coverageVisible) {
+        try {
+          for (const layerId of MLY_LAYERS) {
+            if (map.getLayer(layerId)) map.removeLayer(layerId);
+          }
+          if (map.getSource(MLY_SOURCE_ID)) map.removeSource(MLY_SOURCE_ID);
+        } catch {
+          // Tiles may still be in-flight when the source is torn down
         }
-        if (map.getSource(MLY_SOURCE_ID)) map.removeSource(MLY_SOURCE_ID);
         return;
       }
+
+      if (!map.isStyleLoaded()) return;
 
       if (!map.getSource(MLY_SOURCE_ID)) {
         map.addSource(MLY_SOURCE_ID, {
           type: "vector",
-          tiles: [
-            `https://tiles.mapillary.com/maps/vtp/mly1_public/2/{z}/{x}/{y}?access_token=${token}`,
-          ],
+          tiles: [`${apiUrl}/api/mapillary/tiles/{z}/{x}/{y}`],
           minzoom: 6,
           maxzoom: 14,
           attribution: '© <a href="https://www.mapillary.com/" target="_blank">Mapillary</a>',
@@ -108,7 +116,7 @@ export function StreetViewLayer() {
       }
     };
 
-    if (!showCoverage) {
+    if (!coverageVisible) {
       syncLayers();
       return;
     }
@@ -118,12 +126,12 @@ export function StreetViewLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, showCoverage]);
+  }, [mapReady, mapRef, coverageVisible]);
 
   // Click + cursor handlers
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady || !showCoverage) return;
+    if (!map || !mapReady || !coverageVisible) return;
 
     const handleClick = (e: MapLayerMouseEvent) => {
       const id = e.features?.[0]?.properties?.id;
@@ -151,7 +159,7 @@ export function StreetViewLayer() {
         map.off("mouseleave", layerId, handleMouseLeave);
       }
     };
-  }, [mapReady, mapRef, showCoverage, setActiveImageId]);
+  }, [mapReady, mapRef, coverageVisible, setActiveImageId]);
 
   return null;
 }

@@ -7,10 +7,11 @@ import Typography from "@mui/material/Typography";
 import { useStreetViewStore } from "@openmapx/core";
 
 export function StreetViewLegend() {
-  const showCoverage = useStreetViewStore((s) => s.showCoverage);
-  const setShowCoverage = useStreetViewStore((s) => s.setShowCoverage);
+  const panelOpen = useStreetViewStore((s) => s.panelOpen);
+  const coverageVisible = useStreetViewStore((s) => s.coverageVisible);
+  const setCoverageVisible = useStreetViewStore((s) => s.setCoverageVisible);
 
-  if (!showCoverage) return null;
+  if (!panelOpen) return null;
 
   return (
     <Paper
@@ -30,8 +31,8 @@ export function StreetViewLegend() {
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Coverage</Typography>
         <Switch
           size="small"
-          checked={showCoverage}
-          onChange={(e) => setShowCoverage(e.target.checked)}
+          checked={coverageVisible}
+          onChange={(e) => setCoverageVisible(e.target.checked)}
           inputProps={{ "aria-label": "Toggle Street-level imagery coverage" }}
         />
       </Box>

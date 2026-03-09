@@ -20,7 +20,7 @@ const PIN_TIP_OFFSET = GHOST_SIZE * (20 / 24);
 
 export function Pegman() {
   const { mapRef, mapReady } = useMap();
-  const setShowCoverage = useStreetViewStore((s) => s.setShowCoverage);
+  const setCoverageVisible = useStreetViewStore((s) => s.setCoverageVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
 
   const [dragging, setDragging] = useState(false);
@@ -59,7 +59,7 @@ export function Pegman() {
     pegmanRef.current?.setPointerCapture(e.pointerId);
     setDragging(true);
     setGhostPos({ x: e.clientX, y: e.clientY });
-    setShowCoverage(true);
+    setCoverageVisible(true);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -73,10 +73,10 @@ export function Pegman() {
 
     const dot = findNearestDot(e.clientX, e.clientY);
     if (dot?.id != null) {
-      setShowCoverage(false);
+      setCoverageVisible(false);
       setActiveImageId(String(dot.id));
     } else {
-      setShowCoverage(false);
+      setCoverageVisible(false);
     }
   };
 
