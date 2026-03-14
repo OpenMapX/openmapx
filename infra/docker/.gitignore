@@ -1,0 +1,8 @@
+# Downloaded and compiled data (managed by manage.sh)
+data/
+
+# Traefik ACME certificates (auto-generated)
+traefik/acme.json
+
+# Docker Compose environment (contains secrets)
+.env

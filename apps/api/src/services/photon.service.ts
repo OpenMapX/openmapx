@@ -6,6 +6,7 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import { resolvePoiIconPath } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider";
 
 const PHOTON_URL = process.env.PHOTON_URL ?? "https://photon.komoot.io";
@@ -42,7 +43,7 @@ function mapType(key: string): SearchResult["type"] {
 }
 
 function makeId(p: PhotonProperties): string {
-  return `${p.osm_type}${p.osm_id}`;
+  return `${p.osm_type.toLowerCase()}/${p.osm_id}`;
 }
 
 function buildLabel(p: PhotonProperties): string {
@@ -75,6 +76,7 @@ export const photonService: GeocodingProvider = {
       coordinates: f.geometry.coordinates,
       type: mapType(f.properties.osm_key),
       confidence: 1,
+      rawCategory: `${f.properties.osm_key}/${f.properties.osm_value}`,
     }));
   },
 
@@ -99,6 +101,8 @@ export const photonService: GeocodingProvider = {
         sublabel: short !== full ? full : undefined,
         coordinates: f.geometry.coordinates,
         type: mapType(f.properties.osm_key),
+        iconPath: resolvePoiIconPath(f.properties.osm_value),
+        rawCategory: `${f.properties.osm_key}/${f.properties.osm_value}`,
       };
     });
   },

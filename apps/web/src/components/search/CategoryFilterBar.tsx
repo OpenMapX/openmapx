@@ -11,29 +11,9 @@ import Popover from "@mui/material/Popover";
 import Radio from "@mui/material/Radio";
 import Typography from "@mui/material/Typography";
 import type { OpeningHoursFilter } from "@openmapx/core";
-import { useCategorySearchStore } from "@openmapx/core";
+import { HOURS_FILTER_CATEGORY_IDS, useCategorySearchStore } from "@openmapx/core";
 import { useEffect, useState } from "react";
-
-const HOURS_FILTER_CATEGORIES = new Set([
-  "restaurants",
-  "hotels",
-  "activities",
-  "museums",
-  "pharmacies",
-  "cafes",
-  "bars",
-  "supermarkets",
-  "hospitals",
-  "doctors",
-  "dentists",
-  "gyms",
-  "libraries",
-  "cinemas",
-  "banks",
-  "car_repair",
-]);
-
-const TEAL = "#007b8b";
+import { TEAL } from "@/lib/theme";
 
 // Display order: Mon–Sun; JS day indices
 const DAYS: { label: string; idx: number }[] = [
@@ -183,7 +163,7 @@ export function CategoryFilterBar() {
     );
   }
 
-  if (!activeCategory || !HOURS_FILTER_CATEGORIES.has(activeCategory)) return null;
+  if (!activeCategory || !HOURS_FILTER_CATEGORY_IDS.has(activeCategory)) return null;
 
   const isFiltered = openingHoursFilter !== "any";
   const label = chipLabel(openingHoursFilter, openAtDay, openAtHour);

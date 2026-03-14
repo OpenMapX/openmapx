@@ -1,38 +1,17 @@
 "use client";
 
-import type { CategoryPlace, OpeningHoursFilter } from "@openmapx/core";
+import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
-  isOpenAt,
-  parseOpeningHours,
-  useCategorySearch,
   useCategorySearchStore,
+  useFilteredCategoryResults,
   usePlaceStore,
+  useTransitStops,
 } from "@openmapx/core";
-
-function applyHoursFilter(
-  results: CategoryPlace[],
-  filter: OpeningHoursFilter,
-  openAtDay: number | null,
-  openAtHour: number | null,
-): CategoryPlace[] {
-  if (filter === "any") return results;
-  if (filter === "open_24h") return results.filter((p) => p.openingHours === "24/7");
-  if (filter === "open_now")
-    return results.filter((p) => {
-      if (p.isOpen !== undefined) return p.isOpen;
-      return parseOpeningHours(p.openingHours)?.isOpen === true;
-    });
-  if (filter === "open_at") {
-    if (openAtDay === null && openAtHour === null) return results;
-    return results.filter((p) => isOpenAt(p.openingHours, openAtDay, openAtHour));
-  }
-  return results;
-}
-
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
 
 const SOURCE_ID = "category-results-source";
@@ -99,22 +78,73 @@ function buildGeoJson(results: CategoryPlace[], imageId: string) {
   };
 }
 
+const TRANSIT_SOURCE_ID = "transit-stops-source";
+const TRANSIT_LAYER_ID = "transit-stops-layer";
+const TRANSIT_LABEL_LAYER_ID = "transit-stops-labels";
+
+const TRANSIT_BUS_ICON_PATH =
+  "M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z";
+
+const TRANSIT_MODE_ICON_PATHS: Partial<Record<TransportMode, string>> = {
+  rail: "M4 15.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V5c0-3.5-3.58-4-8-4s-8 .5-8 4v10.5zm8 1.5c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-7H6V5h12v5z",
+  bus: TRANSIT_BUS_ICON_PATH,
+  tram: "M19 16.94V8.5c0-2.79-2.61-3.4-5.5-3.5l.9-1.5H19V2H5v1.5h4.4L8.5 5C5.6 5.1 3 5.73 3 8.5v8.44c0 1.45 1.19 2.56 2.59 2.56L4 21v.5h2l2-2h8l2 2h2V21l-1.59-1.5c1.4 0 2.59-1.11 2.59-2.56zM12.5 5h-1l.9-1.5h.2L12.5 5zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V8.5c0-.67.69-1 3-1h6c2.31 0 3 .33 3 1V11z",
+};
+
+function createTransitMarkerSvg(mode: TransportMode): string {
+  const iconPath = TRANSIT_MODE_ICON_PATHS[mode] ?? TRANSIT_BUS_ICON_PATH;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48">
+    <circle cx="24" cy="24" r="21" fill="#00695C" stroke="white" stroke-width="3"/>
+    <path d="${iconPath}" fill="white" transform="translate(8, 8) scale(1.333)"/>
+  </svg>`;
+}
+
+function loadTransitMarkerImage(map: MaplibreMap, mode: TransportMode): Promise<string> {
+  const imageId = `transit-marker-${mode}`;
+  return new Promise((resolve) => {
+    if (map.hasImage(imageId)) {
+      resolve(imageId);
+      return;
+    }
+    const img = new Image(48, 48);
+    img.onload = () => {
+      if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
+      resolve(imageId);
+    };
+    img.onerror = () => resolve(imageId);
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(createTransitMarkerSvg(mode))}`;
+  });
+}
+
+function buildTransitGeoJson(stops: TransitStop[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: stops.map((stop) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [stop.lng, stop.lat] as [number, number] },
+      properties: {
+        id: stop.id,
+        name: stop.name,
+        lat: stop.lat,
+        lng: stop.lng,
+        modes: JSON.stringify(stop.modes),
+        provider: stop.provider,
+        platformCode: stop.platformCode ?? "",
+        parentStationId: stop.parentStationId ?? "",
+        imageId: `transit-marker-${stop.modes[0] ?? "bus"}`,
+      },
+    })),
+  };
+}
+
 export function CategoryResultMarkers() {
   const { mapRef, mapReady, flyTo } = useMap();
-  const {
-    activeCategory,
-    searchBbox,
-    hoveredCategoryPlaceId,
-    setHoveredCategoryPlaceId,
-    openingHoursFilter,
-    openAtDay,
-    openAtHour,
-  } = useCategorySearchStore();
+  const { activeCategory, searchBbox, hoveredCategoryPlaceId, setHoveredCategoryPlaceId } =
+    useCategorySearchStore();
   const { setSelectedPlace } = usePlaceStore();
-  const { data: rawResults } = useCategorySearch(activeCategory, searchBbox);
-  const results = rawResults
-    ? applyHoursFilter(rawResults, openingHoursFilter, openAtDay, openAtHour)
-    : rawResults;
+
+  const { filtered: results, isTransitCategory } = useFilteredCategoryResults();
+  const { data: transitStops } = useTransitStops(isTransitCategory ? searchBbox : null);
 
   // Resolve hovered place for the pin marker
   const hoveredPlace = results?.find((p) => p.id === hoveredCategoryPlaceId) ?? null;
@@ -125,13 +155,88 @@ export function CategoryResultMarkers() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    const removeCategoryLayers = () => {
+      if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
+      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+    };
+
+    const removeTransitLayers = () => {
+      if (map.getLayer(TRANSIT_LABEL_LAYER_ID)) map.removeLayer(TRANSIT_LABEL_LAYER_ID);
+      if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
+      if (map.getSource(TRANSIT_SOURCE_ID)) map.removeSource(TRANSIT_SOURCE_ID);
+    };
+
     const sync = () => {
       if (!map.isStyleLoaded()) return;
 
-      if (!results?.length || !activeCategory) {
-        if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      if (!activeCategory) {
+        removeCategoryLayers();
+        removeTransitLayers();
+        return;
+      }
+
+      // Transit branch: use transit stops source/layers
+      if (isTransitCategory) {
+        removeCategoryLayers();
+
+        if (!transitStops?.length) {
+          removeTransitLayers();
+          return;
+        }
+
+        const geojson = buildTransitGeoJson(transitStops);
+
+        if (map.getSource(TRANSIT_SOURCE_ID)) {
+          (map.getSource(TRANSIT_SOURCE_ID) as GeoJSONSource).setData(geojson);
+        } else {
+          map.addSource(TRANSIT_SOURCE_ID, { type: "geojson", data: geojson });
+        }
+
+        // Load marker images for all unique modes, then add layers
+        const uniqueModes = Array.from(new Set(transitStops.flatMap((s) => s.modes)));
+        void Promise.all(uniqueModes.map((m) => loadTransitMarkerImage(map, m))).then(() => {
+          if (!map.getSource(TRANSIT_SOURCE_ID)) return;
+          if (!map.getLayer(TRANSIT_LAYER_ID)) {
+            map.addLayer({
+              id: TRANSIT_LAYER_ID,
+              type: "symbol",
+              source: TRANSIT_SOURCE_ID,
+              layout: {
+                "icon-image": ["get", "imageId"],
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
+            });
+          }
+          if (!map.getLayer(TRANSIT_LABEL_LAYER_ID)) {
+            map.addLayer({
+              id: TRANSIT_LABEL_LAYER_ID,
+              type: "symbol",
+              source: TRANSIT_SOURCE_ID,
+              layout: {
+                "text-field": ["get", "name"],
+                "text-size": 11,
+                "text-offset": [0, 2.0],
+                "text-anchor": "top",
+                "text-max-width": 8,
+              },
+              paint: {
+                "text-color": "#333333",
+                "text-halo-color": "#FFFFFF",
+                "text-halo-width": 1.5,
+              },
+            });
+          }
+        });
+        return;
+      }
+
+      // Non-transit branch: regular category markers
+      removeTransitLayers();
+
+      if (!results?.length) {
+        removeCategoryLayers();
         return;
       }
 
@@ -193,7 +298,7 @@ export function CategoryResultMarkers() {
     return () => {
       map.off("styledata", sync);
     };
-  }, [results, activeCategory, mapReady, mapRef]);
+  }, [results, activeCategory, isTransitCategory, transitStops, mapReady, mapRef]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -204,6 +309,9 @@ export function CategoryResultMarkers() {
         if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
         if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
         if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+        if (map.getLayer(TRANSIT_LABEL_LAYER_ID)) map.removeLayer(TRANSIT_LABEL_LAYER_ID);
+        if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
+        if (map.getSource(TRANSIT_SOURCE_ID)) map.removeSource(TRANSIT_SOURCE_ID);
       } catch {
         // Map may already be destroyed
       }
@@ -277,10 +385,52 @@ export function CategoryResultMarkers() {
     map.on("mouseenter", LAYER_ID, onEnter);
     map.on("mouseleave", LAYER_ID, onLeave);
 
+    // Transit layer click handler
+    const onTransitClick = (e: MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: [TRANSIT_LAYER_ID] });
+      if (!features.length) return;
+      const props = features[0].properties as {
+        id: string;
+        name: string;
+        lat: number;
+        lng: number;
+        modes: string;
+        provider: string;
+        platformCode: string;
+        parentStationId: string;
+      };
+      const stop: TransitStop = {
+        id: props.id,
+        name: props.name,
+        lat: Number(props.lat),
+        lng: Number(props.lng),
+        modes: JSON.parse(props.modes) as TransportMode[],
+        provider: props.provider,
+        platformCode: props.platformCode || undefined,
+        parentStationId: props.parentStationId || undefined,
+      };
+      flyTo([stop.lng, stop.lat], 16);
+      void resolveStopAsPlace(stop).then(setSelectedPlace);
+    };
+
+    const onTransitEnter = () => {
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const onTransitLeave = () => {
+      map.getCanvas().style.cursor = "";
+    };
+
+    map.on("click", TRANSIT_LAYER_ID, onTransitClick);
+    map.on("mouseenter", TRANSIT_LAYER_ID, onTransitEnter);
+    map.on("mouseleave", TRANSIT_LAYER_ID, onTransitLeave);
+
     return () => {
       map.off("click", LAYER_ID, onClick);
       map.off("mouseenter", LAYER_ID, onEnter);
       map.off("mouseleave", LAYER_ID, onLeave);
+      map.off("click", TRANSIT_LAYER_ID, onTransitClick);
+      map.off("mouseenter", TRANSIT_LAYER_ID, onTransitEnter);
+      map.off("mouseleave", TRANSIT_LAYER_ID, onTransitLeave);
     };
   }, [mapReady, mapRef, setSelectedPlace, flyTo, setHoveredCategoryPlaceId]);
 

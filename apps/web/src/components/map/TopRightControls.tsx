@@ -1,10 +1,8 @@
 "use client";
 
-import AppsIcon from "@mui/icons-material/Apps";
 import PersonIcon from "@mui/icons-material/Person";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, useSession } from "@openmapx/core";
 import { useRef, useState } from "react";

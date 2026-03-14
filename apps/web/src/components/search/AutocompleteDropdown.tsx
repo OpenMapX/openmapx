@@ -1,15 +1,16 @@
 "use client";
 
 import CategoryIcon from "@mui/icons-material/Category";
+import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import SearchIcon from "@mui/icons-material/Search";
 import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import type { AutocompleteResult } from "@openmapx/core";
+import { isTransitName } from "@openmapx/core";
 
 interface AutocompleteDropdownProps {
   suggestions: AutocompleteResult[];
@@ -22,6 +23,7 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
   street: <LocationOnIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
   region: <LocationOnIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
   category: <CategoryIcon sx={{ fontSize: 20, color: "#007b8b" }} />,
+  transit_stop: <DirectionsTransitIcon sx={{ fontSize: 20, color: "#007b8b" }} />,
 };
 
 function CategorySvgIcon({ path }: { path: string }) {
@@ -39,6 +41,18 @@ function CategorySvgIcon({ path }: { path: string }) {
   );
 }
 
+function getResultIcon(s: AutocompleteResult): React.ReactNode {
+  if (s.iconPath) return <CategorySvgIcon path={s.iconPath} />;
+
+  // Transit stop detection by keywords in label/sublabel
+  const text = `${s.label} ${s.sublabel ?? ""}`.toLowerCase();
+  if (isTransitName(text)) {
+    return <DirectionsTransitIcon sx={{ fontSize: 20, color: "#007b8b" }} />;
+  }
+
+  return iconByType[s.type];
+}
+
 export function AutocompleteDropdown({ suggestions, onSelect }: AutocompleteDropdownProps) {
   if (suggestions.length === 0) return null;
 
@@ -47,22 +61,18 @@ export function AutocompleteDropdown({ suggestions, onSelect }: AutocompleteDrop
   return (
     <List dense disablePadding>
       {deduped.map((s, i) => (
-        <div key={s.id}>
-          {i > 0 && <Divider component="li" />}
-          <ListItem disablePadding>
-            <ListItemButton onClick={() => onSelect(s)} sx={{ px: 2, py: 1 }}>
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {s.iconPath ? <CategorySvgIcon path={s.iconPath} /> : iconByType[s.type]}
-              </ListItemIcon>
-              <ListItemText
-                primary={s.label}
-                secondary={s.sublabel}
-                primaryTypographyProps={{ fontSize: 14, fontWeight: 400 }}
-                secondaryTypographyProps={{ fontSize: 12 }}
-              />
-            </ListItemButton>
-          </ListItem>
-        </div>
+        <li key={s.id} style={{ listStyle: "none" }}>
+          {i > 0 && <Divider />}
+          <ListItemButton onClick={() => onSelect(s)} sx={{ px: 2, py: 1 }}>
+            <ListItemIcon sx={{ minWidth: 36 }}>{getResultIcon(s)}</ListItemIcon>
+            <ListItemText
+              primary={s.label}
+              secondary={s.sublabel}
+              primaryTypographyProps={{ fontSize: 14, fontWeight: 400 }}
+              secondaryTypographyProps={{ fontSize: 12 }}
+            />
+          </ListItemButton>
+        </li>
       ))}
     </List>
   );

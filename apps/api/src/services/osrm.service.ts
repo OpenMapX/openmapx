@@ -1,5 +1,5 @@
 /**
- * OSRM routing service client (car routing, Phase 5).
+ * OSRM routing service client (car routing).
  * Default: public OSRM demo server. Override with OSRM_URL env var.
  */
 

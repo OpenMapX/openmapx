@@ -4,7 +4,7 @@ import { API_ENDPOINTS } from "../api/endpoints";
 import type { LngLat } from "../types/geometry";
 import type { Place } from "../types/place";
 
-// Phase 4 — wire up once place API is running
+// TODO: wire up once nearby-places API is implemented
 export function useNearbyPlaces(center: LngLat | null, radiusMetres = 1000) {
   return useQuery({
     queryKey: ["nearby", center, radiusMetres],

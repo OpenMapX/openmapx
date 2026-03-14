@@ -1,53 +1,38 @@
 "use client";
 
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
-import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
-import Paper from "@mui/material/Paper";
-import Skeleton from "@mui/material/Skeleton";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
-import type { CategoryId, CategoryPlace, FuelPrices, OpeningHoursFilter } from "@openmapx/core";
-import {
-  isOpenAt,
-  parseOpeningHours,
-  useCategorySearch,
-  useCategorySearchStore,
-  usePlaceStore,
-} from "@openmapx/core";
-
-function applyHoursFilter(
-  results: CategoryPlace[],
-  filter: OpeningHoursFilter,
-  openAtDay: number | null,
-  openAtHour: number | null,
-): CategoryPlace[] {
-  if (filter === "any") return results;
-  if (filter === "open_24h") return results.filter((p) => p.openingHours === "24/7");
-  if (filter === "open_now")
-    return results.filter((p) => {
-      if (p.isOpen !== undefined) return p.isOpen;
-      return parseOpeningHours(p.openingHours)?.isOpen === true;
-    });
-  if (filter === "open_at") {
-    if (openAtDay === null && openAtHour === null) return results;
-    return results.filter((p) => isOpenAt(p.openingHours, openAtDay, openAtHour));
-  }
-  return results;
-}
-
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import SortIcon from "@mui/icons-material/Sort";
+import TrainIcon from "@mui/icons-material/Train";
+import TramIcon from "@mui/icons-material/Tram";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Skeleton from "@mui/material/Skeleton";
+import Typography from "@mui/material/Typography";
+import type { CategoryPlace, FuelPrices, TransitStop, TransportMode } from "@openmapx/core";
+import {
+  categoryPlaceToPlace,
+  parseOpeningHours,
+  resolveProvider,
+  useCategorySearchStore,
+  useFilteredCategoryResults,
+  usePlaceStore,
+  useProviders,
+  useTransitStops,
+} from "@openmapx/core";
 import { useEffect, useRef, useState } from "react";
+import { FuelPrice } from "@/components/ui/FuelPrice";
+import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
+import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
+import { PANEL_WIDTH } from "@/lib/layout";
+import { useMap } from "@/lib/MapContext";
 
 type SortField = "default" | "price";
 type SortDir = "asc" | "desc";
@@ -79,19 +64,6 @@ function applyCategorySort(
   return results;
 }
 
-import { useMap } from "@/lib/MapContext";
-
-function FuelPrice({ value }: { value: number }) {
-  const str = value.toFixed(3);
-  return (
-    <span style={{ display: "inline-flex", alignItems: "flex-start" }}>
-      <span>{str.slice(0, -1)}</span>
-      <span style={{ fontSize: "0.65em", marginTop: "0.2em" }}>{str.slice(-1)}</span>
-      <span>&nbsp;€</span>
-    </span>
-  );
-}
-
 function FuelPricePills({ prices }: { prices: FuelPrices }) {
   const pills: { label: string; value: number }[] = [];
   if (prices.diesel !== undefined) pills.push({ label: "Diesel", value: prices.diesel });
@@ -117,7 +89,70 @@ function FuelPricePills({ prices }: { prices: FuelPrices }) {
   );
 }
 
-const PANEL_WIDTH = 400;
+const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
+  rail: TrainIcon,
+  tram: TramIcon,
+  bus: DirectionsBusIcon,
+};
+
+function TransitStopCard({
+  stop,
+  onSelect,
+  providers,
+}: {
+  stop: TransitStop;
+  onSelect: (stop: TransitStop) => void;
+  providers: Record<string, { label: string; url: string }> | undefined;
+}) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={() => onSelect(stop)}
+      sx={{
+        width: "100%",
+        textAlign: "left",
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        px: 2,
+        py: 1.5,
+        "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
+      }}
+    >
+      <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+        {stop.name}
+      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        {Array.from(new Set(stop.modes)).map((m) => {
+          const Icon = TRANSIT_MODE_ICONS[m] ?? DirectionsBusIcon;
+          return <Icon key={m} sx={{ fontSize: 16, color: "text.secondary" }} />;
+        })}
+        {(() => {
+          const attr = resolveProvider(providers, stop.provider);
+          return (
+            <Typography variant="caption" color="text.secondary">
+              {attr.url ? (
+                <Link
+                  href={attr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  color="inherit"
+                  underline="hover"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {attr.label}
+                </Link>
+              ) : (
+                attr.label
+              )}
+            </Typography>
+          );
+        })()}
+      </Box>
+    </Box>
+  );
+}
 
 function CategoryPlaceCard({
   place,
@@ -209,12 +244,17 @@ export function CategoryResultsPanel() {
     setMapMoved,
     hoveredCategoryPlaceId,
     setHoveredCategoryPlaceId,
-    openingHoursFilter,
-    openAtDay,
-    openAtHour,
   } = useCategorySearchStore();
   const { setSelectedPlace, setSidePanelCollapsed } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
+
+  const { filtered, isLoading, isError, isTransitCategory } = useFilteredCategoryResults();
+  const { data: transitStops, isPending: transitPending } = useTransitStops(
+    isTransitCategory ? searchBbox : null,
+  );
+  const { data: providers } = useProviders();
+  const transitLoading = isTransitCategory && transitPending;
+
   const [collapsed, setCollapsed] = useState(false);
   const [sortField, setSortField] = useState<SortField>("default");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -227,12 +267,9 @@ export function CategoryResultsPanel() {
   useEffect(() => {
     return () => setSidePanelCollapsed(false);
   }, [setSidePanelCollapsed]);
-  const prevCategoryRef = useRef<CategoryId | null>(null);
 
-  const { data: rawResults, isLoading, isError } = useCategorySearch(activeCategory, searchBbox);
-  const filtered = rawResults
-    ? applyHoursFilter(rawResults, openingHoursFilter, openAtDay, openAtHour)
-    : rawResults;
+  const prevCategoryRef = useRef(activeCategory);
+
   const results = filtered ? applyCategorySort(filtered, sortField, sortDir) : filtered;
   const hasFuelPrices = results?.some((p) => p.fuelPrices) ?? false;
 
@@ -278,20 +315,12 @@ export function CategoryResultsPanel() {
 
   const handleSelectPlace = (place: CategoryPlace) => {
     flyTo(place.coordinates, 17);
-    setSelectedPlace({
-      id: place.id,
-      name: place.name,
-      address: place.address ?? place.name,
-      coordinates: place.coordinates,
-      category: place.category,
-      phone: place.phone,
-      website: place.website,
-      openingHours: place.openingHours,
-      fuelPrices: place.fuelPrices,
-      fuelPricesUpdatedAt: place.fuelPricesUpdatedAt,
-      fuelAttribution: place.fuelAttribution,
-      isOpen: place.isOpen,
-    });
+    setSelectedPlace(categoryPlaceToPlace(place));
+  };
+
+  const handleSelectStop = (s: TransitStop) => {
+    flyTo([s.lng, s.lat], 16);
+    void resolveStopAsPlace(s).then(setSelectedPlace);
   };
 
   if (!activeCategory) return null;
@@ -321,7 +350,7 @@ export function CategoryResultsPanel() {
       >
         {/* Results area */}
         <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}>
-          {isLoading && (
+          {(isTransitCategory ? transitLoading : isLoading) && (
             <Box sx={{ px: 2, py: 2 }}>
               {[0, 1, 2, 3, 4].map((i) => (
                 <Box key={i} sx={{ mb: 2 }}>
@@ -332,7 +361,7 @@ export function CategoryResultsPanel() {
             </Box>
           )}
 
-          {isError && (
+          {!isTransitCategory && isError && (
             <Box sx={{ px: 2, py: 2 }}>
               <Alert severity="error" variant="outlined">
                 Failed to load results. Try again.
@@ -340,13 +369,39 @@ export function CategoryResultsPanel() {
             </Box>
           )}
 
-          {!isLoading && !isError && results && results.length === 0 && (
+          {/* Transit: empty state */}
+          {isTransitCategory && !transitLoading && transitStops && transitStops.length === 0 && (
+            <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
+              <Typography color="text.secondary">No stops found in this area.</Typography>
+            </Box>
+          )}
+
+          {/* Transit: results list */}
+          {isTransitCategory && !transitLoading && transitStops && transitStops.length > 0 && (
+            <>
+              <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {transitStops.length} stop{transitStops.length !== 1 ? "s" : ""}
+                </Typography>
+              </Box>
+              {transitStops.map((stop, i) => (
+                <Box key={stop.id}>
+                  {i > 0 && <Divider sx={{ mx: 2 }} />}
+                  <TransitStopCard stop={stop} onSelect={handleSelectStop} providers={providers} />
+                </Box>
+              ))}
+            </>
+          )}
+
+          {/* Non-transit: empty state */}
+          {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
             <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
               <Typography color="text.secondary">No results found in this area.</Typography>
             </Box>
           )}
 
-          {!isLoading && results && results.length > 0 && (
+          {/* Non-transit: results list */}
+          {!isTransitCategory && !isLoading && results && results.length > 0 && (
             <>
               <Box sx={{ px: 2, pt: 1.5, pb: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
@@ -461,46 +516,9 @@ export function CategoryResultsPanel() {
             </>
           )}
         </Box>
-
-        {isLoading && (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 3, flexShrink: 0 }}>
-            <CircularProgress size={24} />
-          </Box>
-        )}
       </Paper>
 
-      {/* Desktop collapse toggle */}
-      <Tooltip title={collapsed ? "Show sidebar" : "Hide sidebar"} placement="right">
-        <IconButton
-          onClick={() => setCollapsed((c) => !c)}
-          size="small"
-          sx={{
-            display: { xs: "none", sm: "flex" },
-            alignItems: "center",
-            justifyContent: "center",
-            position: "absolute",
-            top: "50%",
-            left: collapsed ? 0 : PANEL_WIDTH,
-            transform: "translateY(-50%)",
-            transition: "left 0.25s ease",
-            zIndex: 9,
-            bgcolor: "background.paper",
-            borderRadius: "0 6px 6px 0",
-            boxShadow: "2px 2px 8px rgba(0,0,0,0.15)",
-            width: 20,
-            height: 48,
-            padding: 0,
-            "&:hover": { bgcolor: "grey.50" },
-          }}
-          aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
-        >
-          {collapsed ? (
-            <ChevronRightIcon sx={{ fontSize: 16 }} />
-          ) : (
-            <ChevronLeftIcon sx={{ fontSize: 16 }} />
-          )}
-        </IconButton>
-      </Tooltip>
+      <SidebarCollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
     </>
   );
 }

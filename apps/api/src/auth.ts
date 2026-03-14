@@ -1,7 +1,7 @@
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { emailOTP, genericOAuth, twoFactor } from "better-auth/plugins";
+import { admin, emailOTP, genericOAuth, twoFactor } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
@@ -121,6 +121,7 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    admin(),
     passkey({
       rpID: process.env.PASSKEY_RP_ID ?? "localhost",
       rpName: "OpenMapX",
@@ -147,7 +148,7 @@ export const auth = betterAuth({
             return {
               id: String(osm.id),
               name: osm.display_name,
-              email: `${osm.id}@users.openstreetmap.org`,
+              email: `${osm.id}@osm.invalid`,
               emailVerified: false,
               image: osm.img?.href,
             };
@@ -174,6 +175,9 @@ export const auth = betterAuth({
                 redirect_uri: redirectURI,
               }),
             });
+            if (!res.ok) {
+              throw new Error(`Mapillary token exchange failed: ${res.status}`);
+            }
             const data = (await res.json()) as {
               access_token: string;
               expires_in: number;
@@ -194,7 +198,7 @@ export const auth = betterAuth({
             return {
               id: data.id,
               name: data.username,
-              email: `${data.id}@users.mapillary.com`,
+              email: `${data.id}@mapillary.invalid`,
               emailVerified: false,
             };
           },

@@ -1,5 +1,5 @@
 /**
- * Nominatim place detail lookups for Phase 4.
+ * Nominatim place detail lookups.
  * Separate from nominatim.service.ts (which handles geocoding/autocomplete)
  * because lookups and reverse-geocode require different endpoints and params.
  */

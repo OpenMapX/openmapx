@@ -3,9 +3,9 @@
 import SearchIcon from "@mui/icons-material/Search";
 import Chip from "@mui/material/Chip";
 import { useCategorySearchStore, usePlaceStore } from "@openmapx/core";
+import { PANEL_WIDTH } from "@/lib/layout";
 import { useMap } from "@/lib/MapContext";
 
-const SIDEBAR_WIDTH = 400;
 // Floating card: sidebar(400) + gap(24) + card(376) = 800px from left edge
 const FLOATING_CARD_RIGHT_EDGE = 800;
 
@@ -47,7 +47,7 @@ export function SearchInAreaChip() {
           xs: "50%",
           sm: floatingCardOpen
             ? `calc(${FLOATING_CARD_RIGHT_EDGE / 2}px + 50%)`
-            : `calc(${SIDEBAR_WIDTH / 2}px + 50%)`,
+            : `calc(${PANEL_WIDTH / 2}px + 50%)`,
         },
         transform: "translateX(-50%)",
         zIndex: 10,

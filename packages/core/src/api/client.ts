@@ -10,7 +10,10 @@ const DEFAULT_BASE_URL =
     : "http://localhost:3000";
 
 export class ApiClient {
-  constructor(private readonly baseUrl: string = DEFAULT_BASE_URL) {}
+  private readonly baseUrl: string;
+  constructor(baseUrl: string = DEFAULT_BASE_URL) {
+    this.baseUrl = baseUrl;
+  }
 
   async get<T>(path: string, params?: Record<string, string>): Promise<T> {
     const url = new URL(path, this.baseUrl);

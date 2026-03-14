@@ -25,4 +25,3 @@ Monorepo: Turborepo + pnpm. All code is TypeScript.
 
 ## Stack Versions
 - Node 24, pnpm latest, Next.js 16, React 19, MapLibre GL JS 5, Fastify 5
-

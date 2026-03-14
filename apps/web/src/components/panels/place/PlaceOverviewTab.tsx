@@ -24,8 +24,11 @@ import type {
   DaySchedule,
   FuelPrices,
   FuelStationDetail,
+  MergedDeparture,
+  MergedRoute,
   OpeningHoursStatus,
   Place,
+  TransportMode,
 } from "@openmapx/core";
 import {
   computePlusCode,
@@ -36,15 +39,19 @@ import {
 } from "@openmapx/core";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { FuelPrice } from "@/components/ui/FuelPrice";
+import { TEAL } from "@/lib/theme";
+import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { PlaceActionButtons } from "./PlaceActionButtons";
 
 interface Props {
   place: Place;
   isLoading: boolean;
   onNavigateToInfo: () => void;
+  onOpenDepartures: (mode?: TransportMode) => void;
+  onOpenLineDetail: (route: MergedRoute) => void;
+  onOpenTripDetail?: (dep: MergedDeparture) => void;
 }
-
-const TEAL = "#007b8b";
 
 function DetailRow({
   icon,
@@ -61,10 +68,13 @@ function DetailRow({
 
   const handleCopy = () => {
     if (!copyValue) return;
-    navigator.clipboard.writeText(copyValue).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(copyValue).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+      () => {},
+    );
   };
 
   return (
@@ -104,17 +114,6 @@ function DetailRow({
         </Tooltip>
       )}
     </Box>
-  );
-}
-
-function FuelPrice({ value }: { value: number }) {
-  const str = value.toFixed(3);
-  return (
-    <span style={{ display: "inline-flex", alignItems: "flex-start" }}>
-      <span>{str.slice(0, -1)}</span>
-      <span style={{ fontSize: "0.65em", marginTop: "0.2em" }}>{str.slice(-1)}</span>
-      <span>&nbsp;€</span>
-    </span>
   );
 }
 
@@ -207,7 +206,14 @@ function FuelPricesRow({
   );
 }
 
-export function PlaceOverviewTab({ place, isLoading, onNavigateToInfo }: Props) {
+export function PlaceOverviewTab({
+  place,
+  isLoading,
+  onNavigateToInfo,
+  onOpenDepartures,
+  onOpenLineDetail,
+  onOpenTripDetail,
+}: Props) {
   const { data: fuelDetail } = useFuelStationDetail(place.id);
   const hours = fuelDetail ? fuelDetailToHours(fuelDetail) : parseOpeningHours(place.openingHours);
   const plusCode = computePlusCode(place.coordinates);
@@ -217,233 +223,250 @@ export function PlaceOverviewTab({ place, isLoading, onNavigateToInfo }: Props) 
   const [hoursExpanded, setHoursExpanded] = useState(false);
 
   return (
-    <Box sx={{ px: 2, pt: 1.5, pb: 2 }}>
-      {/* Action buttons */}
-      <PlaceActionButtons place={place} />
+    <>
+      <Box sx={{ px: 2, pt: 1.5, pb: 2 }}>
+        {/* Action buttons */}
+        <PlaceActionButtons place={place} />
 
-      {/* Description — clickable row leading to Info tab */}
-      {place.description && <Divider sx={{ my: 1 }} />}
-      {place.description && (
-        <Box
-          onClick={onNavigateToInfo}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            cursor: "pointer",
-            py: 1.5,
-            mx: -2,
-            px: 2,
-            "&:hover": { bgcolor: "action.hover" },
-          }}
-        >
-          <Typography variant="body2" sx={{ flex: 1, color: "rgba(0,0,0,0.87)" }}>
-            {place.description}
-          </Typography>
-          <ChevronRightIcon sx={{ fontSize: 20, color: "text.disabled", flexShrink: 0 }} />
-        </Box>
-      )}
-
-      <Divider sx={{ my: 1 }} />
-
-      {/* Detail rows */}
-      <Box sx={{ px: 0 }}>
-        {/* Address */}
-        <DetailRow
-          icon={<PlaceIcon sx={{ fontSize: 22 }} />}
-          copyValue={place.address}
-          copyLabel="Copy address"
-        >
-          <Typography variant="body2" color="rgba(0,0,0,0.87)">
-            {place.address}
-          </Typography>
-        </DetailRow>
-
-        {/* Plus Code */}
-        <DetailRow
-          icon={<AppsIcon sx={{ fontSize: 22 }} />}
-          copyValue={shortCodeDisplay ?? plusCode}
-          copyLabel="Copy Plus Code"
-        >
-          <Link
-            href={plusCodeUrl(plusCode)}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            sx={{ display: "block", color: "rgba(0,0,0,0.87)", typography: "body2" }}
+        {/* Description — clickable row leading to Info tab */}
+        {place.description && <Divider sx={{ my: 1 }} />}
+        {place.description && (
+          <Box
+            role="button"
+            tabIndex={0}
+            onClick={onNavigateToInfo}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onNavigateToInfo();
+              }
+            }}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              cursor: "pointer",
+              py: 1.5,
+              mx: -2,
+              px: 2,
+              "&:hover": { bgcolor: "action.hover" },
+            }}
           >
-            {shortCodeDisplay ?? plusCode}
-          </Link>
-          {shortCodeDisplay && (
-            <Typography variant="caption" color="text.secondary">
-              {plusCode}
+            <Typography variant="body2" sx={{ flex: 1, color: "rgba(0,0,0,0.87)" }}>
+              {place.description}
             </Typography>
+            <ChevronRightIcon sx={{ fontSize: 20, color: "text.disabled", flexShrink: 0 }} />
+          </Box>
+        )}
+
+        <Divider sx={{ my: 1 }} />
+
+        {/* Detail rows */}
+        <Box sx={{ px: 0 }}>
+          {/* Address */}
+          <DetailRow
+            icon={<PlaceIcon sx={{ fontSize: 22 }} />}
+            copyValue={place.address}
+            copyLabel="Copy address"
+          >
+            <Typography variant="body2" color="rgba(0,0,0,0.87)">
+              {place.address}
+            </Typography>
+          </DetailRow>
+
+          {/* Plus Code */}
+          <DetailRow
+            icon={<AppsIcon sx={{ fontSize: 22 }} />}
+            copyValue={shortCodeDisplay ?? plusCode}
+            copyLabel="Copy Plus Code"
+          >
+            <Link
+              href={plusCodeUrl(plusCode)}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="hover"
+              sx={{ display: "block", color: "rgba(0,0,0,0.87)", typography: "body2" }}
+            >
+              {shortCodeDisplay ?? plusCode}
+            </Link>
+            {shortCodeDisplay && (
+              <Typography variant="caption" color="text.secondary">
+                {plusCode}
+              </Typography>
+            )}
+          </DetailRow>
+
+          {/* Fuel prices */}
+          {place.fuelPrices && (
+            <FuelPricesRow
+              prices={place.fuelPrices}
+              updatedAt={place.fuelPricesUpdatedAt}
+              attribution={place.fuelAttribution}
+            />
           )}
-        </DetailRow>
 
-        {/* Fuel prices */}
-        {place.fuelPrices && (
-          <FuelPricesRow
-            prices={place.fuelPrices}
-            updatedAt={place.fuelPricesUpdatedAt}
-            attribution={place.fuelAttribution}
-          />
-        )}
-
-        {/* Opening hours — Tankerkoenig detail takes priority over OSM */}
-        {isLoading && !place.openingHours && !fuelDetail ? (
-          <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
-            <Skeleton variant="text" width="60%" />
-          </DetailRow>
-        ) : (
-          hours && (
-            <Box
-              onClick={hours.weekSchedule ? () => setHoursExpanded((v) => !v) : undefined}
-              sx={{
-                display: "flex",
-                gap: 2,
-                alignItems: "flex-start",
-                py: 1.25,
-                ...(hours.weekSchedule
-                  ? { cursor: "pointer", mx: -2, px: 2, "&:hover": { bgcolor: "action.hover" } }
-                  : {}),
-              }}
-            >
-              <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: "2px" }}>
-                <AccessTimeIcon sx={{ fontSize: 22 }} />
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                {/* Status row */}
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography
-                      variant="body2"
-                      component="span"
-                      fontWeight={500}
-                      color={hours.isOpen ? "success.main" : "error.main"}
-                    >
-                      {hours.isOpen ? "Open" : "Closed"}
-                    </Typography>
-                    {hours.detail && (
-                      <Typography variant="body2" component="span" color="text.secondary">
-                        {" · "}
-                        {hours.detail}
-                      </Typography>
-                    )}
-                  </Box>
-                  {hours.weekSchedule &&
-                    (hoursExpanded ? (
-                      <ExpandLessIcon
-                        sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0, ml: 0.5 }}
-                      />
-                    ) : (
-                      <ExpandMoreIcon
-                        sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0, ml: 0.5 }}
-                      />
-                    ))}
-                </Box>
-
-                {/* Expanded weekly schedule */}
-                {hoursExpanded && hours.weekSchedule && (
-                  <Box sx={{ mt: 1, mb: 0.5 }}>
-                    {hours.weekSchedule.map(({ day, hours: h, isToday }) => (
-                      <Box key={day} sx={{ display: "flex", gap: 2, py: 0.4 }}>
-                        <Typography
-                          variant="body2"
-                          fontWeight={isToday ? 600 : 400}
-                          color={isToday ? "text.primary" : "text.secondary"}
-                          sx={{ width: 96, flexShrink: 0 }}
-                        >
-                          {day}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          fontWeight={isToday ? 600 : 400}
-                          color={isToday ? "text.primary" : "text.secondary"}
-                        >
-                          {h}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          )
-        )}
-
-        {/* Phone */}
-        {isLoading && !place.phone ? (
-          <DetailRow icon={<PhoneIcon sx={{ fontSize: 22 }} />}>
-            <Skeleton variant="text" width="45%" />
-          </DetailRow>
-        ) : (
-          place.phone && (
-            <DetailRow
-              icon={<PhoneIcon sx={{ fontSize: 22 }} />}
-              copyValue={place.phone}
-              copyLabel="Copy phone number"
-            >
-              <Link
-                href={`tel:${place.phone}`}
-                variant="body2"
-                underline="hover"
-                sx={{ color: "rgba(0,0,0,0.87)" }}
-              >
-                {place.phone}
-              </Link>
+          {/* Opening hours — Tankerkoenig detail takes priority over OSM */}
+          {isLoading && !place.openingHours && !fuelDetail ? (
+            <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
+              <Skeleton variant="text" width="60%" />
             </DetailRow>
-          )
-        )}
+          ) : (
+            hours && (
+              <Box
+                onClick={hours.weekSchedule ? () => setHoursExpanded((v) => !v) : undefined}
+                sx={{
+                  display: "flex",
+                  gap: 2,
+                  alignItems: "flex-start",
+                  py: 1.25,
+                  ...(hours.weekSchedule
+                    ? { cursor: "pointer", mx: -2, px: 2, "&:hover": { bgcolor: "action.hover" } }
+                    : {}),
+                }}
+              >
+                <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: "2px" }}>
+                  <AccessTimeIcon sx={{ fontSize: 22 }} />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  {/* Status row */}
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography
+                        variant="body2"
+                        component="span"
+                        fontWeight={500}
+                        color={hours.isOpen ? "success.main" : "error.main"}
+                      >
+                        {hours.isOpen ? "Open" : "Closed"}
+                      </Typography>
+                      {hours.detail && (
+                        <Typography variant="body2" component="span" color="text.secondary">
+                          {" · "}
+                          {hours.detail}
+                        </Typography>
+                      )}
+                    </Box>
+                    {hours.weekSchedule &&
+                      (hoursExpanded ? (
+                        <ExpandLessIcon
+                          sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0, ml: 0.5 }}
+                        />
+                      ) : (
+                        <ExpandMoreIcon
+                          sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0, ml: 0.5 }}
+                        />
+                      ))}
+                  </Box>
 
-        {/* Website */}
-        {isLoading && !place.website ? (
-          <DetailRow icon={<LanguageIcon sx={{ fontSize: 22 }} />}>
-            <Skeleton variant="text" width="55%" />
-          </DetailRow>
-        ) : (
-          place.website && (
-            <DetailRow
-              icon={<LanguageIcon sx={{ fontSize: 22 }} />}
-              copyValue={place.website}
-              copyLabel="Copy website"
-            >
+                  {/* Expanded weekly schedule */}
+                  {hoursExpanded && hours.weekSchedule && (
+                    <Box sx={{ mt: 1, mb: 0.5 }}>
+                      {hours.weekSchedule.map(({ day, hours: h, isToday }) => (
+                        <Box key={day} sx={{ display: "flex", gap: 2, py: 0.4 }}>
+                          <Typography
+                            variant="body2"
+                            fontWeight={isToday ? 600 : 400}
+                            color={isToday ? "text.primary" : "text.secondary"}
+                            sx={{ width: 96, flexShrink: 0 }}
+                          >
+                            {day}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            fontWeight={isToday ? 600 : 400}
+                            color={isToday ? "text.primary" : "text.secondary"}
+                          >
+                            {h}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            )
+          )}
+
+          {/* Phone */}
+          {isLoading && !place.phone ? (
+            <DetailRow icon={<PhoneIcon sx={{ fontSize: 22 }} />}>
+              <Skeleton variant="text" width="45%" />
+            </DetailRow>
+          ) : (
+            place.phone && (
+              <DetailRow
+                icon={<PhoneIcon sx={{ fontSize: 22 }} />}
+                copyValue={place.phone}
+                copyLabel="Copy phone number"
+              >
+                <Link
+                  href={`tel:${place.phone}`}
+                  variant="body2"
+                  underline="hover"
+                  sx={{ color: "rgba(0,0,0,0.87)" }}
+                >
+                  {place.phone}
+                </Link>
+              </DetailRow>
+            )
+          )}
+
+          {/* Website */}
+          {isLoading && !place.website ? (
+            <DetailRow icon={<LanguageIcon sx={{ fontSize: 22 }} />}>
+              <Skeleton variant="text" width="55%" />
+            </DetailRow>
+          ) : (
+            place.website && (
+              <DetailRow
+                icon={<LanguageIcon sx={{ fontSize: 22 }} />}
+                copyValue={place.website}
+                copyLabel="Copy website"
+              >
+                <Link
+                  href={place.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="body2"
+                  underline="hover"
+                  sx={{
+                    display: "block",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    color: "rgba(0,0,0,0.87)",
+                  }}
+                >
+                  {place.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                </Link>
+              </DetailRow>
+            )
+          )}
+
+          {/* Wikipedia */}
+          {place.wikipediaUrl && (
+            <DetailRow icon={<ArticleIcon sx={{ fontSize: 22 }} />}>
               <Link
-                href={place.website}
+                href={place.wikipediaUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 variant="body2"
                 underline="hover"
-                sx={{
-                  display: "block",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  color: "rgba(0,0,0,0.87)",
-                }}
+                sx={{ color: "rgba(0,0,0,0.87)" }}
               >
-                {place.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                Wikipedia
               </Link>
             </DetailRow>
-          )
-        )}
-
-        {/* Wikipedia */}
-        {place.wikipediaUrl && (
-          <DetailRow icon={<ArticleIcon sx={{ fontSize: 22 }} />}>
-            <Link
-              href={place.wikipediaUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="body2"
-              underline="hover"
-              sx={{ color: "rgba(0,0,0,0.87)" }}
-            >
-              Wikipedia
-            </Link>
-          </DetailRow>
-        )}
+          )}
+        </Box>
       </Box>
-    </Box>
+      {/* Transit section — self-hides if no linked stops */}
+      <PlaceTransitSection
+        place={place}
+        onOpenDepartures={onOpenDepartures}
+        onOpenLineDetail={onOpenLineDetail}
+        onOpenTripDetail={onOpenTripDetail}
+      />
+    </>
   );
 }

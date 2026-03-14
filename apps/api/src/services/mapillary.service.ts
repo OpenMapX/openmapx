@@ -1,5 +1,5 @@
 /**
- * Mapillary street-level imagery service client (Phase 7).
+ * Mapillary street-level imagery service client.
  */
 
 const MAPILLARY_TOKEN = process.env.MAPILLARY_TOKEN ?? "";

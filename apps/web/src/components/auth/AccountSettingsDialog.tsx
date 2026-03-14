@@ -149,7 +149,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     }
   };
 
-  // ── Email change handlers ──────────────────────────────────────────
+  // Email change handlers
   const handleRequestEmailChange = async () => {
     setMessage(null);
     try {
@@ -188,7 +188,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     }
   };
 
-  // ── Password change handler ────────────────────────────────────────
+  // Password change handler
   const handleChangePassword = async () => {
     setMessage(null);
     try {
@@ -209,7 +209,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     }
   };
 
-  // ── 2FA handlers ──────────────────────────────────────────────────
+  // 2FA handlers
   const handleEnable2FA = async () => {
     setMessage(null);
     try {

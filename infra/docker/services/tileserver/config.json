@@ -1,0 +1,15 @@
+{
+  "options": {
+    "paths": {
+      "root": "/data",
+      "mbtiles": "/data"
+    },
+    "maxScaleFactor": 3,
+    "serveAllFonts": true
+  },
+  "data": {
+    "openmapx": {
+      "mbtiles": "tiles.mbtiles"
+    }
+  }
+}

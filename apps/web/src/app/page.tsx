@@ -9,7 +9,10 @@ import { SatelliteLayer } from "@/components/map/layers/SatelliteLayer";
 import { StreetViewLayer } from "@/components/map/layers/StreetViewLayer";
 import { TerrainLayer } from "@/components/map/layers/TerrainLayer";
 import { TrafficLayer } from "@/components/map/layers/TrafficLayer";
+import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
 import { TransitLayer } from "@/components/map/layers/TransitLayer";
+import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
+import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
 import { MapControls } from "@/components/map/MapControls";
@@ -41,6 +44,9 @@ export default function HomePage() {
         <TrafficLayer />
         <TransitLayer />
         <RouteLayer />
+        <TransitRouteLayer />
+        <VehicleLiveLayer />
+        <TransitItineraryLayer />
         <StreetViewLayer />
         <AirQualityLayer />
         <CategoryResultMarkers />

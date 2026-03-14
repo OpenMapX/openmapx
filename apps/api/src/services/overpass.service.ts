@@ -124,6 +124,57 @@ export const CATEGORY_FILTERS: Record<string, OsmFilter[]> = {
     { key: "shop", value: "bakery" },
     { key: "shop", value: "pastry" },
   ],
+  aeds: [{ key: "emergency", value: "defibrillator" }],
+  toilets: [{ key: "amenity", value: "toilets" }],
+  laundromats: [
+    { key: "shop", value: "laundry" },
+    { key: "shop", value: "laundromat" },
+  ],
+  hairdressers: [
+    { key: "shop", value: "hairdresser" },
+    { key: "shop", value: "beauty" },
+    { key: "shop", value: "barber" },
+  ],
+  opticians: [
+    { key: "shop", value: "optician" },
+    { key: "healthcare", value: "optometrist" },
+  ],
+  recycling: [{ key: "amenity", value: "recycling" }],
+  car_rental: [{ key: "amenity", value: "car_rental" }],
+  bicycle_rental: [{ key: "amenity", value: "bicycle_rental" }],
+  airports: [
+    { key: "aeroway", value: "aerodrome" },
+    { key: "aeroway", value: "terminal" },
+  ],
+  beaches: [{ key: "natural", value: "beach" }],
+  viewpoints: [{ key: "tourism", value: "viewpoint" }],
+  camping: [
+    { key: "tourism", value: "camp_site" },
+    { key: "tourism", value: "caravan_site" },
+  ],
+  dog_parks: [{ key: "leisure", value: "dog_park" }],
+  drinking_water: [{ key: "amenity", value: "drinking_water" }],
+  veterinarians: [{ key: "amenity", value: "veterinary" }],
+  blood_donation: [{ key: "healthcare", value: "blood_donation" }],
+  mosques: [
+    { key: "building", value: "mosque" },
+    { key: "amenity", value: "mosque" },
+  ],
+  synagogues: [
+    { key: "building", value: "synagogue" },
+    { key: "amenity", value: "synagogue" },
+  ],
+  temples: [
+    { key: "building", value: "temple" },
+    { key: "building", value: "shrine" },
+    { key: "amenity", value: "temple" },
+  ],
+  markets: [{ key: "amenity", value: "marketplace" }],
+  shopping_malls: [
+    { key: "shop", value: "mall" },
+    { key: "shop", value: "department_store" },
+  ],
+  bookstores: [{ key: "shop", value: "books" }],
 };
 
 interface OverpassNode {
@@ -201,6 +252,9 @@ function getCategoryValue(tags: Record<string, string>): string | undefined {
     tags.shop ??
     tags.sport ??
     tags.building ??
+    tags.natural ??
+    tags.aeroway ??
+    tags.healthcare ??
     undefined
   );
 }
@@ -226,7 +280,18 @@ export async function searchByCategory(
 
   for (const el of data.elements) {
     const tags = el.tags ?? {};
-    const name = tags.name;
+    const name =
+      tags.name ??
+      (tags.emergency === "defibrillator" ? "Defibrillator" : undefined) ??
+      (tags.amenity === "toilets" ? "Toilet" : undefined) ??
+      (tags.amenity === "recycling" ? "Recycling" : undefined) ??
+      (tags.amenity === "drinking_water" ? "Drinking Water" : undefined) ??
+      (tags.natural === "beach" ? "Beach" : undefined) ??
+      (tags.tourism === "viewpoint" ? "Viewpoint" : undefined) ??
+      (tags.leisure === "dog_park" ? "Dog Park" : undefined) ??
+      (tags.healthcare === "blood_donation" ? "Blood Donation" : undefined) ??
+      (tags.aeroway === "aerodrome" ? "Airport" : undefined) ??
+      (tags.aeroway === "terminal" ? "Airport Terminal" : undefined);
     if (!name) continue;
 
     const lat = el.type === "node" ? el.lat : el.center.lat;

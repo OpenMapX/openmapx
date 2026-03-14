@@ -8,8 +8,14 @@ import IconButton from "@mui/material/IconButton";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
-import type { Place } from "@openmapx/core";
+import type { MergedRoute, Place, TransportMode } from "@openmapx/core";
+import { usePlaceStore } from "@openmapx/core";
 import { useEffect, useState } from "react";
+import { TEAL } from "@/lib/theme";
+import { LineDetail } from "../transit/LineDetail";
+import { PlaceDeparturesView } from "../transit/PlaceDeparturesView";
+import { PlaceTransitSection } from "../transit/PlaceTransitSection";
+import { TripDetailView } from "../transit/TripDetailView";
 import { PlaceInfoTab } from "./PlaceInfoTab";
 import { PlaceOverviewTab } from "./PlaceOverviewTab";
 import { PlaceReviewsTab } from "./PlaceReviewsTab";
@@ -24,14 +30,117 @@ interface Props {
 
 export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar = false }: Props) {
   const [tab, setTab] = useState(0);
+  const [showDepartures, setShowDepartures] = useState(false);
+  const [departuresModeFilter, setDeparturesModeFilter] = useState<TransportMode | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<MergedRoute | null>(null);
+  const activeTripDep = usePlaceStore((s) => s.activeTripDep);
+  const setActiveTripDep = usePlaceStore((s) => s.setActiveTripDep);
+  const setActiveRouteId = usePlaceStore((s) => s.setActiveRouteId);
+
+  // Sync active route into the store: TripDetailView takes priority over LineDetail
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
+  useEffect(() => {
+    if (activeTripDep) {
+      setActiveRouteId(activeTripDep.route.id);
+    } else {
+      setActiveRouteId(selectedRoute?.id ?? null);
+    }
+  }, [activeTripDep, selectedRoute]);
 
   // Reset tab when a different place loads
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
   useEffect(() => {
     setTab(0);
+    setShowDepartures(false);
+    setDeparturesModeFilter(null);
+    setSelectedRoute(null);
+    setActiveTripDep(null);
   }, [place.id]);
 
-  const hasPhoto = Boolean(place.photos?.[0]);
+  // View priority: TripDetailView > LineDetail > DeparturesView > StopMode > normal
+  if (activeTripDep) {
+    return (
+      <TripDetailView
+        departure={activeTripDep}
+        onBack={() => setActiveTripDep(null)}
+        clearSearchBar={clearSearchBar}
+      />
+    );
+  }
+
+  if (selectedRoute) {
+    return (
+      <LineDetail
+        routeId={selectedRoute.id}
+        routeHint={selectedRoute}
+        place={place}
+        onBack={() => setSelectedRoute(null)}
+        clearSearchBar={clearSearchBar}
+      />
+    );
+  }
+
+  if (showDepartures) {
+    return (
+      <PlaceDeparturesView
+        place={place}
+        onBack={() => {
+          setShowDepartures(false);
+          setDeparturesModeFilter(null);
+        }}
+        clearSearchBar={clearSearchBar}
+        modeFilter={departuresModeFilter}
+        onDepartureClick={(dep) => setActiveTripDep(dep)}
+      />
+    );
+  }
+
+  const isStopMode = place.id.startsWith("stop:");
+
+  if (isStopMode) {
+    return (
+      <Box>
+        {/* Minimal stop header */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            px: 2,
+            pt: clearSearchBar ? { xs: 2, sm: "72px" } : 2,
+            pb: 1,
+          }}
+        >
+          <Typography variant="h6" fontWeight={600} sx={{ flex: 1, minWidth: 0, pr: 1 }}>
+            {place.name}
+          </Typography>
+          {onClose && (
+            <IconButton onClick={onClose} aria-label="Close" size="small" sx={{ mt: -0.5 }}>
+              <CloseIcon />
+            </IconButton>
+          )}
+        </Box>
+        {/* Transit section is the primary content */}
+        <PlaceTransitSection
+          place={place}
+          onOpenDepartures={(mode) => {
+            setDeparturesModeFilter(mode ?? null);
+            setShowDepartures(true);
+          }}
+          onOpenLineDetail={(route) => {
+            setDeparturesModeFilter(null);
+            setSelectedRoute(route);
+          }}
+          onOpenTripDetail={(dep) => setActiveTripDep(dep)}
+        />
+      </Box>
+    );
+  }
+
+  const photoUrl = place.photos?.[0]?.url;
+  const hasPhoto = Boolean(
+    photoUrl && (photoUrl.startsWith("https://") || photoUrl.startsWith("http://")),
+  );
 
   return (
     <>
@@ -40,7 +149,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         <Box sx={{ height: 220, position: "relative", flexShrink: 0, overflow: "hidden" }}>
           <Box
             component="img"
-            src={place.photos?.[0].url}
+            src={photoUrl}
             alt={place.name}
             onError={(e) => {
               const container = (e.currentTarget as HTMLImageElement).parentElement;
@@ -169,7 +278,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
               content: '""',
               display: "block",
               width: "calc(100% - 32px)",
-              backgroundColor: "#007b8b",
+              backgroundColor: TEAL,
               borderRadius: "2px 2px 0 0",
             },
           },
@@ -182,7 +291,20 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
       </Tabs>
 
       {tab === 0 && (
-        <PlaceOverviewTab place={place} isLoading={isLoading} onNavigateToInfo={() => setTab(2)} />
+        <PlaceOverviewTab
+          place={place}
+          isLoading={isLoading}
+          onNavigateToInfo={() => setTab(2)}
+          onOpenDepartures={(mode) => {
+            setDeparturesModeFilter(mode ?? null);
+            setShowDepartures(true);
+          }}
+          onOpenLineDetail={(route) => {
+            setDeparturesModeFilter(null);
+            setSelectedRoute(route);
+          }}
+          onOpenTripDetail={(dep) => setActiveTripDep(dep)}
+        />
       )}
       {tab === 1 && <PlaceReviewsTab place={place} />}
       {tab === 2 && <PlaceInfoTab place={place} isLoading={isLoading} />}

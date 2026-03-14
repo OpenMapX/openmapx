@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { LngLat } from "../types/geometry";
@@ -16,6 +16,5 @@ export function useReverseGeocoding(lngLat: LngLat | null) {
     },
     enabled: lngLat !== null,
     staleTime: 60_000,
-    placeholderData: keepPreviousData,
   });
 }

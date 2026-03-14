@@ -13,7 +13,8 @@
       "!.next",
       "!dist",
       "!.turbo",
-      "!packages/map-styles/src/*.json"
+      "!packages/map-styles/src/*.json",
+      "!apps/web/public/sw.js"
     ]
   },
   "formatter": {

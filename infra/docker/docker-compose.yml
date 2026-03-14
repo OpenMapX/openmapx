@@ -1,61 +1,423 @@
+# ── OpenMapX Docker Compose ───────────────────────────────────────────────
+#
+# Data management:
+#   All services share source data (OSM PBF, GTFS feeds) via hardlinks.
+#   Use ./manage.sh to download, link, and build service data.
+#
+# Profiles:
+#   (none)    Core: postgis, redis
+#   proxy     Traefik reverse proxy (TLS termination, path-based routing)
+#   app       API + Web (Fastify + Next.js, built from repo)
+#   routing   Valhalla + OSRM (Valhalla handles planet, OSRM region-only)
+#   transit   MOTIS + OTP (MOTIS handles planet, OTP region-only)
+#   pelias    Elasticsearch + Pelias (self-hosted geocoding)
+#   tiles     TileServer GL (self-hosted map tiles)
+#   martin    Martin vector tile server (from PostGIS)
+#   build     One-shot build containers (OSRM, OTP, Pelias importers)
+#
+# Local development:
+#   docker compose up -d                              # core only
+#   docker compose --profile routing up -d             # + routing
+#   docker compose --profile transit up -d             # + transit
+#
+# Production deployment:
+#   cp .env.example .env && vim .env                   # configure domain, keys
+#   ./manage.sh download-osm planet                    # ~70 GB
+#   ./manage.sh download-all-feeds                     # ~500+ GTFS feeds
+#   ./manage.sh link && ./manage.sh build-all          # build service data
+#   docker compose --profile proxy --profile app \
+#     --profile routing --profile transit \
+#     --profile tiles up -d
+#
+# Planet-scale notes:
+#   OSRM is skipped (needs ~200 GB RAM) — Valhalla covers routing.
+#   OTP is skipped (can't handle planet + all feeds) — MOTIS covers transit.
+#   Recommended server: 32+ GB RAM, 500+ GB SSD.
+# ─────────────────────────────────────────────────────────────────────────
+
 services:
+
+  # ── Reverse Proxy ───────────────────────────────────────────────────────
+
+  traefik:
+    image: traefik:v3.4
+    profiles: [proxy]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - traefik-acme:/etc/traefik
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    networks: [openmapx]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ── Application ─────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    profiles: [app]
+    env_file: ../../apps/api/.env
+    environment:
+      PORT: "3001"
+      HOST: "0.0.0.0"
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgis:5432/openmapx
+      REDIS_URL: redis://redis:6379
+      OSRM_URL: http://osrm:5000
+      VALHALLA_URL: http://valhalla:8002
+      OTP_URL: http://otp:8080
+      MOTIS_URL: http://motis:8080
+      PELIAS_URL: http://pelias-api:4000
+      CORS_ORIGIN: https://${DOMAIN:-localhost},http://localhost:3000
+      BETTER_AUTH_URL: https://${DOMAIN:-localhost}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      PASSKEY_RP_ID: ${DOMAIN:-localhost}
+      PASSKEY_ORIGIN: https://${DOMAIN:-localhost}
+    depends_on:
+      postgis:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.api.rule: Host(`${DOMAIN:-localhost}`) && PathPrefix(`/api`)
+      traefik.http.routers.api.entrypoints: websecure
+      traefik.http.routers.api.tls.certresolver: letsencrypt
+      traefik.http.services.api.loadbalancer.server.port: "3001"
+      # Health endpoint doesn't have /api prefix
+      traefik.http.routers.api-health.rule: Host(`${DOMAIN:-localhost}`) && Path(`/health`)
+      traefik.http.routers.api-health.entrypoints: websecure
+      traefik.http.routers.api-health.tls.certresolver: letsencrypt
+      traefik.http.routers.api-health.service: api
+    networks: [openmapx]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  web:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://${DOMAIN:-localhost}
+        NEXT_PUBLIC_MAPTILER_KEY: ${MAPTILER_KEY:-}
+        NEXT_PUBLIC_MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
+    profiles: [app]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.web.rule: Host(`${DOMAIN:-localhost}`)
+      traefik.http.routers.web.entrypoints: websecure
+      traefik.http.routers.web.tls.certresolver: letsencrypt
+      traefik.http.routers.web.priority: "1"
+      traefik.http.services.web.loadbalancer.server.port: "3000"
+    networks: [openmapx]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ── Core Infrastructure ────────────────────────────────────────────────
+
   postgis:
     image: postgis/postgis:17-3.5
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     environment:
       POSTGRES_DB: openmapx
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    networks: [openmapx]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redisdata:/data"]
+    networks: [openmapx]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    restart: unless-stopped
+
+  # ── Routing ─────────────────────────────────────────────────────────────
+  # Valhalla: primary router, handles planet-scale (~16 GB RAM for planet)
+  # OSRM: region-only alternative (~4 GB RAM for single country)
+
+  valhalla:
+    image: ghcr.io/gis-ops/valhalla:latest
+    ports: ["127.0.0.1:8002:8002"]
+    volumes:
+      - ./data/valhalla:/custom_files
+      - ./services/valhalla/valhalla.json:/custom_files/valhalla.json:ro
+    environment:
+      serve_tiles: "True"
+      build_elevation: "False"
+    profiles: [routing]
+    networks: [openmapx]
+    deploy:
+      resources:
+        limits:
+          memory: 16g
+    restart: unless-stopped
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    ports: ["127.0.0.1:5000:5000"]
+    volumes: ["./data/osrm:/data:ro"]
+    command: osrm-routed --algorithm mld /data/region.osrm
+    profiles: [routing]
+    networks: [openmapx]
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+    restart: unless-stopped
+
+  # ── Transit ─────────────────────────────────────────────────────────────
+  # MOTIS: primary transit router, handles planet-scale + hundreds of feeds
+  # OTP: region-only alternative (max ~10 GTFS feeds)
+
+  motis:
+    image: ghcr.io/motis-project/motis:latest
+    ports: ["127.0.0.1:8081:8080"]
+    volumes: ["./data/motis:/data:ro"]
+    profiles: [transit]
+    networks: [openmapx]
+    deploy:
+      resources:
+        limits:
+          memory: 16g
+    restart: unless-stopped
+
+  otp:
+    image: opentripplanner/opentripplanner:2.7_2025-04-24T13-13
+    ports: ["127.0.0.1:8090:8080"]
+    volumes:
+      - ./data/otp:/var/opentripplanner
+      - ./services/otp/build-config.json:/var/opentripplanner/build-config.json:ro
+      - ./services/otp/router-config.json:/var/opentripplanner/router-config.json:ro
+    command: --load --serve
+    profiles: [transit]
+    networks: [openmapx]
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+    restart: unless-stopped
+
+  # ── Geocoding (Pelias) ─────────────────────────────────────────────────
 
   elasticsearch:
     image: elasticsearch:7.17.18
     environment:
       - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
-    ports: ["9200:9200"]
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      # Security disabled: single-node geocoding-only instance, bound to 127.0.0.1.
+      # Acceptable risk for internal Pelias indexing. Do NOT expose on public network.
+      - xpack.security.enabled=false
+    ports: ["127.0.0.1:9200:9200"]
     volumes: ["esdata:/usr/share/elasticsearch/data"]
-
-  martin:
-    image: ghcr.io/maplibre/martin:latest
-    ports: ["3001:3000"]
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgis:5432/openmapx
-    depends_on: [postgis]
-
-  tileserver:
-    image: maptiler/tileserver-gl:latest
-    ports: ["8080:8080"]
-    volumes: ["./services/tileserver:/data"]
+    profiles: [pelias]
+    networks: [openmapx]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    restart: unless-stopped
 
   pelias-api:
     image: pelias/api:latest
-    ports: ["4000:4000"]
-    volumes: ["./services/pelias:/etc/pelias"]
-    depends_on: [elasticsearch]
+    ports: ["127.0.0.1:4000:4000"]
+    volumes: ["./services/pelias/pelias.json:/code/pelias.json:ro"]
+    environment:
+      PELIAS_CONFIG: /code/pelias.json
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles: [pelias]
+    networks: [openmapx]
+    restart: unless-stopped
 
-  valhalla:
-    image: ghcr.io/gis-ops/valhalla:latest
-    ports: ["8002:8002"]
-    volumes: ["./services/valhalla:/custom_files"]
+  pelias-placeholder:
+    image: pelias/placeholder:latest
+    ports: ["127.0.0.1:4100:4100"]
+    volumes:
+      - ./services/pelias/pelias.json:/code/pelias.json:ro
+      - ./data/pelias/placeholder:/data/placeholder
+    environment:
+      PELIAS_CONFIG: /code/pelias.json
+    profiles: [pelias]
+    networks: [openmapx]
+    restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
+  pelias-pip:
+    image: pelias/pip-service:latest
+    ports: ["127.0.0.1:4200:4200"]
+    volumes:
+      - ./services/pelias/pelias.json:/code/pelias.json:ro
+      - ./data/pelias/whosonfirst:/data/whosonfirst:ro
+    environment:
+      PELIAS_CONFIG: /code/pelias.json
+    profiles: [pelias]
+    networks: [openmapx]
+    restart: unless-stopped
 
-  osrm:
+  # ── Tile Serving ────────────────────────────────────────────────────────
+
+  martin:
+    image: ghcr.io/maplibre/martin:latest
+    ports: ["127.0.0.1:3002:3000"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgis:5432/openmapx
+    depends_on:
+      postgis:
+        condition: service_healthy
+    profiles: [martin]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.martin.rule: Host(`${DOMAIN:-localhost}`) && PathPrefix(`/martin`)
+      traefik.http.routers.martin.entrypoints: websecure
+      traefik.http.routers.martin.tls.certresolver: letsencrypt
+      traefik.http.middlewares.martin-strip.stripprefix.prefixes: /martin
+      traefik.http.routers.martin.middlewares: martin-strip
+      traefik.http.services.martin.loadbalancer.server.port: "3000"
+    networks: [openmapx]
+    restart: unless-stopped
+
+  tileserver:
+    image: maptiler/tileserver-gl:latest
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - ./data/tileserver:/data:ro
+      - ./services/tileserver/config.json:/data/config.json:ro
+    profiles: [tiles]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.tiles.rule: Host(`${DOMAIN:-localhost}`) && PathPrefix(`/tiles`)
+      traefik.http.routers.tiles.entrypoints: websecure
+      traefik.http.routers.tiles.tls.certresolver: letsencrypt
+      traefik.http.middlewares.tiles-strip.stripprefix.prefixes: /tiles
+      traefik.http.routers.tiles.middlewares: tiles-strip
+      traefik.http.services.tiles.loadbalancer.server.port: "8080"
+    networks: [openmapx]
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    restart: unless-stopped
+
+  # ── Build Services (one-shot, used by manage.sh) ────────────────────────
+
+  osrm-build:
     image: ghcr.io/project-osrm/osrm-backend:latest
-    ports: ["5000:5000"]
-    volumes: ["./services/osrm:/data"]
-    command: osrm-routed --algorithm mld /data/map.osrm
+    volumes: ["./data/osrm:/data"]
+    profiles: [build]
+    networks: [openmapx]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        osrm-extract -p /opt/car.lua /data/region.osm.pbf &&
+        osrm-partition /data/region.osrm &&
+        osrm-customize /data/region.osrm
 
-  otp:
-    image: opentripplanner/opentripplanner:latest
-    ports: ["8090:8080"]
-    volumes: ["./services/otp:/var/opentripplanner"]
-    command: --load --serve
+  otp-build:
+    image: opentripplanner/opentripplanner:2.7_2025-04-24T13-13
+    volumes:
+      - ./data/otp:/var/opentripplanner
+      - ./services/otp/build-config.json:/var/opentripplanner/build-config.json:ro
+    profiles: [build]
+    networks: [openmapx]
+    command: --build --save
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+
+  pelias-schema:
+    image: pelias/schema:latest
+    volumes: ["./services/pelias/pelias.json:/code/pelias.json:ro"]
+    environment:
+      PELIAS_CONFIG: /code/pelias.json
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles: [build]
+    networks: [openmapx]
+
+  pelias-whosonfirst-import:
+    image: pelias/whosonfirst:latest
+    volumes:
+      - ./services/pelias/pelias.json:/code/pelias.json:ro
+      - ./data/pelias/whosonfirst:/data/whosonfirst
+    environment:
+      PELIAS_CONFIG: /code/pelias.json
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles: [build]
+    networks: [openmapx]
+
+  pelias-openstreetmap-import:
+    image: pelias/openstreetmap:latest
+    volumes:
+      - ./services/pelias/pelias.json:/code/pelias.json:ro
+      - ./data/pelias/openstreetmap:/data/openstreetmap
+    environment:
+      PELIAS_CONFIG: /code/pelias.json
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    profiles: [build]
+    networks: [openmapx]
+
+  pelias-placeholder-build:
+    image: pelias/placeholder:latest
+    volumes:
+      - ./services/pelias/pelias.json:/code/pelias.json:ro
+      - ./data/pelias/placeholder:/data/placeholder
+    environment:
+      PELIAS_CONFIG: /code/pelias.json
+    profiles: [build]
+    networks: [openmapx]
+    command: npm run build
 
 volumes:
   pgdata:
   esdata:
+  redisdata:
+  traefik-acme:
 
+networks:
+  openmapx:
+    driver: bridge

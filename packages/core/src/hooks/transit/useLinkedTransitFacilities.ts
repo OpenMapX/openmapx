@@ -1,0 +1,29 @@
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "../../api/client";
+import { API_ENDPOINTS } from "../../api/endpoints";
+import type { Place } from "../../types/place";
+import type { Facility } from "../../types/transit";
+import { isTransitEligiblePlace } from "./transitEligibility";
+
+export function useLinkedTransitFacilities(place: Place | null) {
+  const enabled = isTransitEligiblePlace(place);
+
+  return useQuery({
+    queryKey: [
+      "linked-transit-facilities",
+      place?.id ?? place?.coordinates?.join(","),
+      place?.name,
+    ],
+    queryFn: () => {
+      const p = place as Place;
+      return apiClient.get<Facility[]>(API_ENDPOINTS.transitFacilitiesForPlace, {
+        lat: String(p.coordinates[1]),
+        lng: String(p.coordinates[0]),
+        name: p.name,
+        place_id: p.id,
+      });
+    },
+    enabled,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+}

@@ -3,6 +3,7 @@
 import { useLayerStore } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
+import { PRIMARY_BLUE } from "@/lib/theme";
 import {
   findVectorLineReference,
   getFirstSymbolLayerId,
@@ -48,7 +49,7 @@ export function TransitLayer() {
                   "match",
                   ["get", "class"],
                   "subway",
-                  "#1A73E8",
+                  PRIMARY_BLUE,
                   "tram",
                   "#0F9D58",
                   "rail",

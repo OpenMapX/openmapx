@@ -16,6 +16,7 @@ import {
   useSearchStore,
 } from "@openmapx/core";
 import { useMap } from "@/lib/MapContext";
+import { TEAL } from "@/lib/theme";
 
 export function MapClickFloatingCard() {
   const { clickedLngLat, setClickedLngLat } = useMapClickStore();
@@ -102,7 +103,7 @@ export function MapClickFloatingCard() {
             component="button"
             onClick={handleCoordClick}
             sx={{
-              color: "teal",
+              color: TEAL,
               fontWeight: 500,
               fontSize: 12,
               cursor: "pointer",
@@ -120,7 +121,7 @@ export function MapClickFloatingCard() {
             onClick={handleDirections}
             aria-label="Directions"
             sx={{
-              bgcolor: "teal",
+              bgcolor: TEAL,
               color: "white",
               width: 32,
               height: 32,

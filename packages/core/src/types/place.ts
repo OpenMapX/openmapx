@@ -23,6 +23,8 @@ export interface Place {
   city?: string;
   coordinates: LngLat;
   category?: string;
+  /** Raw category string from the geocoding provider (e.g. "railway/station", "highway/bus_stop"). */
+  rawCategory?: string;
   phone?: string;
   website?: string;
   openingHours?: string;

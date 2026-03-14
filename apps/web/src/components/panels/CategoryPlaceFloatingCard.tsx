@@ -2,9 +2,9 @@
 
 import Paper from "@mui/material/Paper";
 import { useCategorySearchStore, usePlaceDetails, usePlaceStore } from "@openmapx/core";
+import { PANEL_WIDTH } from "@/lib/layout";
 import { PlaceDetailContent } from "./place/PlaceDetailContent";
 
-const SIDEBAR_WIDTH = 400;
 const CARD_WIDTH = 376;
 const CARD_GAP = 24;
 
@@ -37,7 +37,7 @@ export function CategoryPlaceFloatingCard() {
       sx={{
         position: "absolute",
         // Desktop: float to the right of the category sidebar
-        left: { xs: 0, sm: SIDEBAR_WIDTH + CARD_GAP },
+        left: { xs: 0, sm: PANEL_WIDTH + CARD_GAP },
         top: { xs: "auto", sm: 66 },
         bottom: { xs: 0, sm: "auto" },
         right: { xs: 0, sm: "auto" },

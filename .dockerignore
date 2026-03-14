@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+.git
+.gitignore
+*.md
+LICENSE
+.env*
+!.env.example
+infra/docker/data
+**/.DS_Store
+**/tsconfig.tsbuildinfo

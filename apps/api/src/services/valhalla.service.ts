@@ -1,9 +1,10 @@
 /**
- * Valhalla multi-modal routing service client (walking, cycling, Phase 5).
+ * Valhalla multi-modal routing service client (walking, cycling).
  * Default: public FOSSGIS Valhalla instance. Override with VALHALLA_URL env var.
  */
 
 import type { DirectionsResult, Route, RouteStep, TravelMode } from "@openmapx/core";
+import { decodePolyline } from "../utils/polyline.js";
 
 const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 
@@ -38,43 +39,11 @@ interface ValhallaResponse {
   alternates?: Array<{ trip: ValhallaTrip }>;
 }
 
-/** Decode a polyline6-encoded string into [lng, lat] pairs. */
-function decodePolyline6(encoded: string): [number, number][] {
-  const coords: [number, number][] = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-
-  while (index < encoded.length) {
-    let b: number;
-    let shift = 0;
-    let result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    lat += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-
-    shift = 0;
-    result = 0;
-    do {
-      b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (b >= 0x20);
-    lng += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-
-    coords.push([lng / 1e6, lat / 1e6]);
-  }
-  return coords;
-}
-
 function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
-  const allCoords = trip.legs.flatMap((leg) => decodePolyline6(leg.shape));
+  const allCoords = trip.legs.flatMap((leg) => decodePolyline(leg.shape, 6));
 
   const steps: RouteStep[] = trip.legs.flatMap((leg) => {
-    const coords = decodePolyline6(leg.shape);
+    const coords = decodePolyline(leg.shape, 6);
     return leg.maneuvers.map((m) => ({
       instruction: m.instruction,
       distance: m.length * 1000, // km → metres
@@ -127,11 +96,15 @@ export const valhallaService = {
       alternates: 3,
     };
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
     const res = await fetch(`${VALHALLA_URL}/route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     if (!res.ok) throw new Error(`Valhalla error ${res.status}`);
 
     const data = (await res.json()) as ValhallaResponse;

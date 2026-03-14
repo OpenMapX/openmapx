@@ -11,9 +11,7 @@ import type { Place } from "@openmapx/core";
 import { useDirectionsStore, usePlaceStore } from "@openmapx/core";
 import type { ReactNode } from "react";
 import { useState } from "react";
-
-const TEAL = "#007b8b";
-const TEAL_LIGHT = "#e0f2f1";
+import { TEAL, TEAL_LIGHT } from "@/lib/theme";
 
 interface ActionButtonProps {
   icon: ReactNode;

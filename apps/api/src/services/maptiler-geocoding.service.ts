@@ -5,6 +5,7 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import { resolvePoiIconPath } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
@@ -18,6 +19,7 @@ interface MaptilerFeature {
   geometry: { coordinates: [number, number] };
   address?: string;
   context?: Array<{ id: string; text: string }>;
+  properties?: { categories?: string[] };
 }
 
 interface MaptilerResponse {
@@ -70,6 +72,7 @@ export const maptilerGeocodingService: GeocodingProvider = {
       coordinates: f.geometry.coordinates,
       type: mapType(f.place_type),
       confidence: f.relevance,
+      rawCategory: f.properties?.categories?.[0],
     }));
   },
 
@@ -88,12 +91,17 @@ export const maptilerGeocodingService: GeocodingProvider = {
 
   async autocomplete(query: string): Promise<AutocompleteResult[]> {
     const data = await fetchMaptiler(query, { limit: "6", autocomplete: "true" });
-    return data.features.map((f) => ({
-      id: f.id,
-      label: f.text,
-      sublabel: f.place_name,
-      coordinates: f.geometry.coordinates,
-      type: mapType(f.place_type),
-    }));
+    return data.features.map((f) => {
+      const category = f.properties?.categories?.[0];
+      return {
+        id: f.id,
+        label: f.text,
+        sublabel: f.place_name,
+        coordinates: f.geometry.coordinates,
+        type: mapType(f.place_type),
+        iconPath: category ? resolvePoiIconPath(category) : undefined,
+        rawCategory: category,
+      };
+    });
   },
 };

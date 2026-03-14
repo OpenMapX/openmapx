@@ -6,6 +6,7 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import { resolvePoiIconPath } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider";
 
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
@@ -72,6 +73,7 @@ export const nominatimService: GeocodingProvider = {
       coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
       type: mapType(r.class, r.type),
       confidence: r.importance,
+      rawCategory: `${r.class}/${r.type}`,
     }));
   },
 
@@ -111,6 +113,8 @@ export const nominatimService: GeocodingProvider = {
         sublabel: r.display_name,
         coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
         type: mapType(r.class, r.type),
+        iconPath: resolvePoiIconPath(r.type),
+        rawCategory: `${r.class}/${r.type}`,
       };
     });
   },
