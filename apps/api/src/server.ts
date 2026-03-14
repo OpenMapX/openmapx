@@ -7,6 +7,7 @@ import { redis } from "./redis";
 import { airQualityRoute } from "./routes/air-quality";
 import { autocompleteRoute } from "./routes/autocomplete";
 import { categorySearchRoute } from "./routes/category-search";
+import { dataSourcesRoute } from "./routes/data-sources";
 import { directionsRoute } from "./routes/directions";
 import { fuelPricesRoute } from "./routes/fuel-prices";
 import { geocodeRoute } from "./routes/geocode";
@@ -17,6 +18,8 @@ import { placesRoute } from "./routes/places";
 import { streetviewRoute } from "./routes/streetview";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
+import { evChargingProvider } from "./services/data-sources/ev-charging/provider";
+import { dataSourceRegistry } from "./services/data-sources/registry";
 import { gtfsManager } from "./services/gtfs/index";
 import { motisManager } from "./services/motis/manager";
 import { registry } from "./services/transit/registry/index";
@@ -81,6 +84,10 @@ await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(transitRoute, { prefix: "/api" });
 await server.register(gtfsRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
+await server.register(dataSourcesRoute, { prefix: "/api" });
+
+// Data source providers
+dataSourceRegistry.register(evChargingProvider);
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {

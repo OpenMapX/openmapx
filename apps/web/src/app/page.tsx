@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { AirQualityLegend } from "@/components/map/AirQualityLegend";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
+import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
 import { DirectionsDestinationMarker } from "@/components/map/DirectionsDestinationMarker";
 import { LayerSelector } from "@/components/map/LayerSelector";
 import { AirQualityLayer } from "@/components/map/layers/AirQualityLayer";
+import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { SatelliteLayer } from "@/components/map/layers/SatelliteLayer";
 import { StreetViewLayer } from "@/components/map/layers/StreetViewLayer";
@@ -26,6 +28,7 @@ import { TopRightControls } from "@/components/map/TopRightControls";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { CategoryPlaceFloatingCard } from "@/components/panels/CategoryPlaceFloatingCard";
 import { CategoryResultsPanel } from "@/components/panels/CategoryResultsPanel";
+import { DataSourceFilterPanel } from "@/components/panels/DataSourceFilterPanel";
 import { DirectionsPanel } from "@/components/panels/DirectionsPanel";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
 import { PlacePanel } from "@/components/panels/PlacePanel";
@@ -50,6 +53,8 @@ export default function HomePage() {
         <StreetViewLayer />
         <AirQualityLayer />
         <CategoryResultMarkers />
+        <DataSourceLayer />
+        <DataSourceDetailBridge />
         <MapClickHandler />
         <MapStylePoiClickHandler />
         <UserLocationMarker />
@@ -60,6 +65,7 @@ export default function HomePage() {
         <CategoryFilterBar />
         <SearchInAreaChip />
         <PlacePanel />
+        <DataSourceFilterPanel />
         <CategoryResultsPanel />
         <CategoryPlaceFloatingCard />
         <MapClickFloatingCard />

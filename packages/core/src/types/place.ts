@@ -1,3 +1,4 @@
+import type { DataSourceDetail } from "./dataSource";
 import type { FuelPrices } from "./fuel";
 import type { LngLat } from "./geometry";
 
@@ -40,4 +41,5 @@ export interface Place {
   fuelPricesUpdatedAt?: string;
   fuelAttribution?: { label: string; url: string };
   isOpen?: boolean;
+  dataSourceDetail?: DataSourceDetail;
 }

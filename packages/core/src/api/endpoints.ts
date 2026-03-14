@@ -35,4 +35,7 @@ export const API_ENDPOINTS = {
   transitProviders: "/api/transit/providers",
   motisStatus: "/api/motis/status",
   motisFeeds: "/api/motis/feeds",
+  dataSources: "/api/data-sources",
+  dataSourceSearch: "/api/data-sources",
+  dataSourceDetail: "/api/data-sources",
 } as const;

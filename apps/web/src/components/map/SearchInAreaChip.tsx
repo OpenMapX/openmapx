@@ -2,7 +2,7 @@
 
 import SearchIcon from "@mui/icons-material/Search";
 import Chip from "@mui/material/Chip";
-import { useCategorySearchStore, usePlaceStore } from "@openmapx/core";
+import { useCategorySearchStore, useDataSourceStore, usePlaceStore } from "@openmapx/core";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMap } from "@/lib/MapContext";
 
@@ -10,25 +10,47 @@ import { useMap } from "@/lib/MapContext";
 const FLOATING_CARD_RIGHT_EDGE = 800;
 
 export function SearchInAreaChip() {
-  const { activeCategory, mapMoved, setSearchBbox, setMapMoved } = useCategorySearchStore();
+  const {
+    activeCategory,
+    mapMoved: categoryMoved,
+    setSearchBbox: setCategorySearchBbox,
+    setMapMoved: setCategoryMapMoved,
+  } = useCategorySearchStore();
   const { selectedPlace } = usePlaceStore();
+  const activeSource = useDataSourceStore((s) => s.activeSource);
+  const dsMapMoved = useDataSourceStore((s) => s.mapMoved);
+  const setDsSearchBbox = useDataSourceStore((s) => s.setSearchBbox);
+  const setDsMapMoved = useDataSourceStore((s) => s.setMapMoved);
   const { mapRef } = useMap();
 
   const floatingCardOpen = activeCategory !== null && selectedPlace !== null;
 
-  if (!activeCategory || !mapMoved) return null;
+  // Show when either a category or data source is active and map has moved
+  const showForCategory = activeCategory !== null && categoryMoved;
+  const showForDataSource = activeSource !== null && dsMapMoved;
+
+  if (!showForCategory && !showForDataSource) return null;
 
   const handleClick = () => {
     const map = mapRef.current;
     if (!map) return;
     const b = map.getBounds();
-    setSearchBbox({
+    const bbox = {
       west: b.getWest(),
       south: b.getSouth(),
       east: b.getEast(),
       north: b.getNorth(),
-    });
-    setMapMoved(false);
+    };
+
+    if (showForCategory) {
+      setCategorySearchBbox(bbox);
+      setCategoryMapMoved(false);
+    }
+
+    if (showForDataSource) {
+      setDsSearchBbox(bbox);
+      setDsMapMoved(false);
+    }
   };
 
   return (

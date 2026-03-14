@@ -129,7 +129,7 @@ function TransitStopCard({
           return <Icon key={m} sx={{ fontSize: 16, color: "text.secondary" }} />;
         })}
         {(() => {
-          const attr = resolveProvider(providers, stop.provider);
+          const attr = resolveProvider(providers ?? {}, stop.provider);
           return (
             <Typography variant="caption" color="text.secondary">
               {attr.url ? (

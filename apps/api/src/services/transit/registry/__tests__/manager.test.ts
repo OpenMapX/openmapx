@@ -10,9 +10,7 @@ import { fetchRegistryEntries } from "../fetcher.js";
 import { registry } from "../index.js";
 import type { ProtocolType, RegistryEntry } from "../types.js";
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /** Build a minimal RegistryEntry for tests */
 function makeEntry(
@@ -36,9 +34,7 @@ function makeEntry(
   };
 }
 
-// ---------------------------------------------------------------------------
 // Tests
-// ---------------------------------------------------------------------------
 
 describe("RegistryManager (registry singleton)", () => {
   beforeEach(() => {

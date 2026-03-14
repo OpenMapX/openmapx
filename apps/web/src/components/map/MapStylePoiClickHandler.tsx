@@ -106,12 +106,18 @@ export function MapStylePoiClickHandler() {
       const featureId = feature.id ?? `${coords[0].toFixed(5)}-${coords[1].toFixed(5)}`;
       const id = `style-poi-${featureId}`;
 
+      const poiClass = feature.properties?.class as string | undefined;
+      const poiSubclass = feature.properties?.subclass as string | undefined;
+
       setSelectedPlace({
         id,
         name,
         address: name,
         coordinates: coords,
-        category: feature.properties?.class ?? feature.properties?.subclass,
+        // Use subclass as category (more specific, e.g. "charging_station")
+        // and fall back to class (broader, e.g. "car")
+        category: poiSubclass ?? poiClass,
+        rawCategory: poiSubclass ? `${poiClass}/${poiSubclass}` : poiClass,
       });
     };
 

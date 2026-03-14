@@ -50,11 +50,17 @@ export {
   isTransitName,
   isTransitRawCategory,
 } from "./hooks/transit/transitEligibility";
-
 // Hooks — General
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAutocomplete } from "./hooks/useAutocomplete";
 export { useCategorySearch } from "./hooks/useCategorySearch";
+export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
+// Hooks — Data Sources
+export {
+  useDataSourceDetail,
+  useDataSourceSearch,
+  useDataSources,
+} from "./hooks/useDataSources";
 export { useDebounce } from "./hooks/useDebounce";
 export { useDirections } from "./hooks/useDirections";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
@@ -68,6 +74,7 @@ export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export { useAirQualityStore } from "./stores/airQualityStore";
 export type { OpeningHoursFilter } from "./stores/categorySearchStore";
 export { useCategorySearchStore } from "./stores/categorySearchStore";
+export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
 export type { MapLayer } from "./stores/layerStore";
@@ -85,6 +92,15 @@ export {
   categoryPlaceToPlace,
   HOURS_FILTER_CATEGORY_IDS,
 } from "./types/category";
+export type {
+  DataSourceAttribution,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceFilterDef,
+  DataSourceMarkerStyle,
+  DataSourceMeta,
+  DataSourceResult,
+} from "./types/dataSource";
 export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
 export type { FuelOpeningTime, FuelPrices, FuelStationDetail } from "./types/fuel";
 export type { BoundingBox, LngLat } from "./types/geometry";

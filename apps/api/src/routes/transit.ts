@@ -68,9 +68,7 @@ function utcTime(): string {
   return new Date().toISOString().slice(11, 19);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Shared schema fragments                                           */
-/* ------------------------------------------------------------------ */
+/** Shared schema fragments */
 
 const bboxProperties = {
   sw_lat: { type: "string" },
@@ -87,9 +85,7 @@ const idParamSchema = {
   properties: { id: { type: "string" } },
 } as const;
 
-/* ------------------------------------------------------------------ */
-/*  Querystring type interfaces                                       */
-/* ------------------------------------------------------------------ */
+/** Querystring type interfaces */
 
 interface StopsQuery extends BBoxQuery {
   modes?: string;
@@ -154,9 +150,7 @@ interface PlanQuery {
   arrive_by?: string;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Route registration                                                */
-/* ------------------------------------------------------------------ */
+/** Route registration */
 
 export async function transitRoute(server: FastifyInstance): Promise<void> {
   // Shared error handler for transit service calls

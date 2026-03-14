@@ -42,6 +42,7 @@ import { useState } from "react";
 import { FuelPrice } from "@/components/ui/FuelPrice";
 import { TEAL } from "@/lib/theme";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
+import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
 
 interface Props {
@@ -467,6 +468,8 @@ export function PlaceOverviewTab({
         onOpenLineDetail={onOpenLineDetail}
         onOpenTripDetail={onOpenTripDetail}
       />
+      {/* Data source detail sections (e.g. EV charging connectors) */}
+      {place.dataSourceDetail && <DataSourceSections detail={place.dataSourceDetail} />}
     </>
   );
 }

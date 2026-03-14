@@ -28,6 +28,7 @@ import type { MapLayer } from "@openmapx/core";
 import {
   useAirQualityStore,
   useCategorySearchStore,
+  useDataSourceStore,
   useDirectionsStore,
   useLayerStore,
   usePlaceStore,
@@ -244,12 +245,14 @@ export function LayerSelector() {
   const sidePanelCollapsed = usePlaceStore((s) => s.sidePanelCollapsed);
   const directionsOpen = useDirectionsStore((s) => s.isOpen);
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const activeSource = useDataSourceStore((s) => s.activeSource);
 
   // Hide entirely when CategoryPlaceFloatingCard is visible (category + place selected)
   const hiddenByCategoryCard = activeCategory !== null && selectedPlace !== null;
   // Shift right on desktop only when a sidebar panel is open AND not collapsed
   const hasSidePanel =
-    !sidePanelCollapsed && (selectedPlace !== null || directionsOpen || activeCategory !== null);
+    !sidePanelCollapsed &&
+    (selectedPlace !== null || directionsOpen || activeCategory !== null || activeSource !== null);
 
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const showTraffic = useLayerStore((s) => s.showTraffic);

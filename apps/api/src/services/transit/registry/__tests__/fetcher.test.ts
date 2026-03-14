@@ -10,9 +10,7 @@ vi.stubGlobal("fetch", mockFetch);
 // Import after mocks are set up
 const { fetchRegistryEntries } = await import("../fetcher.js");
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /** A valid ÖBB-style JSON payload with hafasMgate protocol and AT region */
 const OEBB_JSON = {
@@ -57,9 +55,7 @@ const GITHUB_TREE = {
   ],
 };
 
-// ---------------------------------------------------------------------------
 // Tests
-// ---------------------------------------------------------------------------
 
 describe("fetchRegistryEntries", () => {
   beforeEach(() => {

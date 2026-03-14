@@ -67,6 +67,8 @@ export interface CategoryDefinition {
   iconPath: string;
   /** Whether this category supports the opening hours filter chip. */
   supportsHoursFilter?: boolean;
+  /** If set, clicking the chip activates the data source system instead of Overpass category search. */
+  dataSourceId?: string;
 }
 
 export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
@@ -284,6 +286,7 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     label: "EV Charging",
     showInChipBar: false,
     iconPath: "M7 2v11h3v9l7-12h-4l4-8z",
+    dataSourceId: "ev-charging",
   },
   {
     id: "swimming",

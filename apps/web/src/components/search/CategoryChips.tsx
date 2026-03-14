@@ -2,6 +2,7 @@
 
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
+import EvStationIcon from "@mui/icons-material/EvStation";
 import HotelIcon from "@mui/icons-material/Hotel";
 import LocalActivityIcon from "@mui/icons-material/LocalActivity";
 import LocalAtmIcon from "@mui/icons-material/LocalAtm";
@@ -13,6 +14,7 @@ import type { CategoryId } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
   useCategorySearchStore,
+  useDataSourceStore,
   useDirectionsStore,
   useSearchStore,
 } from "@openmapx/core";
@@ -32,8 +34,11 @@ export function CategoryChips() {
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
   const { setQuery } = useSearchStore();
   const { isOpen: directionsOpen } = useDirectionsStore();
+  const { activeSource, setActiveSource } = useDataSourceStore();
 
   if (directionsOpen || activeCategory) return null;
+
+  const evActive = activeSource === "ev-charging";
 
   return (
     <Box
@@ -56,6 +61,46 @@ export function CategoryChips() {
       }}
     >
       <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
+        <Chip
+          key="ds-ev-charging"
+          icon={
+            <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
+              <EvStationIcon sx={{ fontSize: 16 }} />
+            </Box>
+          }
+          label="EV Charging"
+          onClick={() => {
+            if (evActive) {
+              setActiveSource(null);
+            } else {
+              clearCategory();
+              setActiveSource("ev-charging");
+            }
+          }}
+          variant={evActive ? "filled" : "outlined"}
+          color={evActive ? "primary" : "default"}
+          sx={{
+            height: 36,
+            borderRadius: "18px",
+            fontWeight: 500,
+            fontSize: 13,
+            bgcolor: evActive ? "#007b8b" : "background.paper",
+            color: evActive ? "#fff" : "text.primary",
+            borderColor: evActive ? "#007b8b" : "rgba(0,0,0,0.23)",
+            boxShadow: evActive ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+            cursor: "pointer",
+            userSelect: "none",
+            flexShrink: 0,
+            "& .MuiChip-icon": {
+              color: "inherit",
+              ml: "10px",
+              mr: "-4px",
+            },
+            "&&:hover": {
+              bgcolor: evActive ? "#006475" : "grey.300",
+            },
+          }}
+        />
         {CATEGORY_DEFINITIONS.filter((cat) => cat.showInChipBar).map((cat) => {
           const isActive = activeCategory === cat.id;
           return (
@@ -72,6 +117,7 @@ export function CategoryChips() {
                   clearCategory();
                   setQuery("");
                 } else {
+                  setActiveSource(null);
                   setActiveCategory(cat.id);
                   setQuery(cat.label);
                 }

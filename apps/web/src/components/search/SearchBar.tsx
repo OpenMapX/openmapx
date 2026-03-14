@@ -25,6 +25,7 @@ import {
   useActiveSidePanel,
   useAutocomplete,
   useCategorySearchStore,
+  useDataSourceStore,
   useDebounce,
   useDirectionsStore,
   useGeocoding,
@@ -107,6 +108,7 @@ export function SearchBar() {
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
+  const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
   const { flyTo, mapRef } = useMap();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -302,8 +304,15 @@ export function SearchBar() {
 
     if (result.type === "category") {
       // Extract category id from the synthetic id ("category-restaurants" → "restaurants")
-      const catId = result.id.replace("category-", "") as Parameters<typeof setActiveCategory>[0];
-      setActiveCategory(catId);
+      const catId = result.id.replace("category-", "");
+      const def = CATEGORY_DEFINITIONS.find((c) => c.id === catId);
+      if (def?.dataSourceId) {
+        // Route to data source system instead of category search
+        clearCategory();
+        setActiveSource(def.dataSourceId);
+      } else {
+        setActiveCategory(catId as Parameters<typeof setActiveCategory>[0]);
+      }
       setQuery(result.label);
       setIsFocused(false);
       return;

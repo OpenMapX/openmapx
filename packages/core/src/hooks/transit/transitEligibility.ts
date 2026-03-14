@@ -96,9 +96,38 @@ const NAME_KEYWORDS = [
   "eki",
 ] as const;
 
+/** Categories that contain transit keywords but are NOT transit infrastructure. */
+const CATEGORY_BLOCKLIST = [
+  // "station" false positives
+  "charging_station",
+  "gas_station",
+  "fire_station",
+  "police_station",
+  "ambulance_station",
+  "coastguard_station",
+  "lifeboat_station",
+  "mountain_rescue_station",
+  "power_station",
+  "sub_station",
+  "substation",
+  "pumping_station",
+  "weather_station",
+  "monitoring_station",
+  "radio_station",
+  "base_station",
+  "recycling_station",
+  // "terminal" false positives
+  "container_terminal",
+  // "train" false positives
+  "training",
+  // "fuel" is a standalone keyword match
+  "fuel",
+] as const;
+
 /** Returns true when rawCategory indicates a transit-infrastructure place. */
 export function isTransitRawCategory(rawCategory: string): boolean {
   const lower = rawCategory.toLowerCase();
+  if (CATEGORY_BLOCKLIST.some((bl) => lower.includes(bl))) return false;
   return CATEGORY_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
@@ -127,6 +156,8 @@ export function isTransitEligiblePlace(place: Place | null): boolean {
   if (!place) return false;
   if (place.id.startsWith("coordinate-")) return false;
   if (!place.coordinates || !place.name) return false;
+  // External data source places (e.g. EV charging) are never transit infrastructure
+  if (place.dataSourceDetail) return false;
 
   if (place.rawCategory !== undefined) {
     return isTransitRawCategory(place.rawCategory);
