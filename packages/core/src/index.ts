@@ -61,7 +61,7 @@ export {
   useDataSourceSearch,
   useDataSources,
 } from "./hooks/useDataSources";
-export { useDebounce } from "./hooks/useDebounce";
+export { useDebounce, useDebouncedCallback } from "./hooks/useDebounce";
 export { useDirections } from "./hooks/useDirections";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
 export { useGeocoding } from "./hooks/useGeocoding";

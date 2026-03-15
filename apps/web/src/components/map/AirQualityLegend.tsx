@@ -1,6 +1,7 @@
 "use client";
 
 import Box from "@mui/material/Box";
+import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
@@ -18,6 +19,7 @@ const AQI_LEVELS = [
 export function AirQualityLegend() {
   const panelOpen = useAirQualityStore((s) => s.panelOpen);
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
+  const loading = useAirQualityStore((s) => s.loading);
   const setLayerVisible = useAirQualityStore((s) => s.setLayerVisible);
 
   if (!panelOpen) return null;
@@ -35,8 +37,22 @@ export function AirQualityLegend() {
         py: 1.5,
         borderRadius: "12px",
         whiteSpace: "nowrap",
+        overflow: "hidden",
       }}
     >
+      {loading && (
+        <LinearProgress
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            borderRadius: "12px 12px 0 0",
+          }}
+        />
+      )}
+
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Air Quality Index</Typography>
         <Switch
@@ -65,10 +81,20 @@ export function AirQualityLegend() {
       </Box>
 
       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
-        Air Quality Index ·{" "}
-        <a href="https://waqi.info" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
-          WAQI
+        Air Quality Index (PM2.5) ·{" "}
+        <a href="https://openaq.org" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
+          OpenAQ
+        </a>{" "}
+        (
+        <a
+          href="https://creativecommons.org/licenses/by/4.0/"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "inherit" }}
+        >
+          CC BY 4.0
         </a>
+        )
       </Typography>
     </Paper>
   );

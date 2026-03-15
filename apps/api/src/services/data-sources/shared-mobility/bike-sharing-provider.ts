@@ -15,7 +15,6 @@ import { searchCityBikes } from "./citybikes-client.js";
 import { searchDbBikes } from "./db-bike-client.js";
 import { dedupStations } from "./dedup.js";
 import { searchDonkey } from "./donkey-client.js";
-import { searchDott } from "./dott-client.js";
 import { fetchGbfsData } from "./gbfs-provider-base.js";
 import {
   mapStationToDetail,
@@ -54,12 +53,6 @@ const META: DataSourceMeta = {
       licenseUrl: "https://docs.citybik.es/api/tos",
     },
     { text: "Nextbike", url: "https://www.nextbike.net" },
-    {
-      text: "Dott",
-      url: "https://ridedott.com",
-      license: "Proprietary",
-      licenseUrl: "https://ridedott.com/api-licence/",
-    },
     { text: "Donkey Republic", url: "https://www.donkey.bike" },
     {
       text: "Deutsche Bahn",
@@ -101,11 +94,10 @@ class BikeSharingProvider implements DataSourceProvider {
 
   async search(bbox: BoundingBox): Promise<DataSourceResult[]> {
     // Fetch from all sources in parallel
-    const [nextbikeResult, cityBikesResult, dottResult, donkeyResult, gbfsResult, dbBikeResult] =
+    const [nextbikeResult, cityBikesResult, donkeyResult, gbfsResult, dbBikeResult] =
       await Promise.allSettled([
         searchNextbike(bbox),
         searchCityBikes(bbox),
-        searchDott(bbox, BIKE_FORM_FACTORS),
         searchDonkey(bbox),
         fetchGbfsData(bbox, BIKE_FORM_FACTORS),
         searchDbBikes(bbox),
@@ -144,14 +136,6 @@ class BikeSharingProvider implements DataSourceProvider {
     for (const s of deduped) {
       updateCache(s.id, s);
       results.push(mapStationToResult(s));
-    }
-
-    // Dott free-floating e-bikes
-    if (dottResult.status === "fulfilled") {
-      for (const v of dottResult.value) {
-        updateCache(v.id, v);
-        results.push(mapVehicleToResult(v));
-      }
     }
 
     // DB free-floating bikes

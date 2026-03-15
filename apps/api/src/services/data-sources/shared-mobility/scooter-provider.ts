@@ -13,7 +13,6 @@ import type {
 } from "@openmapx/core";
 import type { DataSourceProvider } from "../types.js";
 import { dedupStations } from "./dedup.js";
-import { searchDott } from "./dott-client.js";
 import { searchFelyx } from "./felyx-client.js";
 import { fetchGbfsData } from "./gbfs-provider-base.js";
 import { searchGoSharing } from "./gosharing-client.js";
@@ -34,12 +33,6 @@ const META: DataSourceMeta = {
   id: "scooter-sharing",
   name: "E-Scooters",
   attribution: [
-    {
-      text: "Dott",
-      url: "https://ridedott.com",
-      license: "Proprietary",
-      licenseUrl: "https://ridedott.com/api-licence/",
-    },
     { text: "GBFS", url: "https://gbfs.org" },
     { text: "Felyx", url: "https://felyx.com" },
     { text: "GO Sharing", url: "https://go-sharing.com", license: "Proprietary" },
@@ -87,20 +80,17 @@ class ScooterSharingProvider implements DataSourceProvider {
 
   async search(bbox: BoundingBox): Promise<DataSourceResult[]> {
     // Fetch from all sources in parallel
-    const [dottResult, gbfsResult, felyxResult, goSharingResult, linkResult] =
-      await Promise.allSettled([
-        searchDott(bbox, SCOOTER_FORM_FACTORS),
-        fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
-        searchFelyx(bbox),
-        searchGoSharing(bbox),
-        searchLink(bbox),
-      ]);
+    const [gbfsResult, felyxResult, goSharingResult, linkResult] = await Promise.allSettled([
+      fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
+      searchFelyx(bbox),
+      searchGoSharing(bbox),
+      searchLink(bbox),
+    ]);
 
     const results: DataSourceResult[] = [];
 
     // Log results for debugging
     for (const [name, result] of [
-      ["Dott", dottResult],
       ["GBFS", gbfsResult],
       ["Felyx", felyxResult],
       ["GO Sharing", goSharingResult],
@@ -115,14 +105,6 @@ class ScooterSharingProvider implements DataSourceProvider {
               (result.value as { stations: unknown[]; vehicles: unknown[] }).vehicles.length
             : (result.value as unknown[]).length;
         console.log(`[scooter-sharing] ${name}: ${count} results`);
-      }
-    }
-
-    // Dott scooters (68+ German cities, Europe-wide)
-    if (dottResult.status === "fulfilled") {
-      for (const vehicle of dottResult.value) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
       }
     }
 

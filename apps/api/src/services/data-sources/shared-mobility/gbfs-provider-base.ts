@@ -19,7 +19,6 @@ const MAX_SYSTEMS_PER_SEARCH = 20;
 
 // Operators covered by dedicated clients or known to be defunct — skip in GBFS catalog
 const EXCLUDED_GBFS_PREFIXES = [
-  "dott-", // Dedicated client (Dott merged with TIER in 2024)
   "bird-", // Shut down in Europe (2024)
 ];
 const _FETCH_TIMEOUT_MS = 15_000;
@@ -58,7 +57,7 @@ export async function fetchGbfsData(
   const catalog = await loadCatalog();
   const candidates = filterCatalogByBbox(catalog, bbox);
 
-  // Exclude operators that have dedicated clients (Dott) or are defunct (Bird)
+  // Exclude operators that are defunct
   const filtered = candidates.filter(
     (e) => !EXCLUDED_GBFS_PREFIXES.some((p) => e.systemId.startsWith(p)),
   );

@@ -40,7 +40,6 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; title: string }> = {
     icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />,
     title: "E-Scooter Sharing",
   },
-  dott: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, title: "Shared Mobility" },
   felyx: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, title: "E-Scooter Sharing" },
   gosharing: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, title: "E-Scooter Sharing" },
   link: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, title: "E-Scooter Sharing" },
