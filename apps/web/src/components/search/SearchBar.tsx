@@ -108,6 +108,7 @@ export function SearchBar() {
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
+  const activeSource = useDataSourceStore((s) => s.activeSource);
   const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
   const { flyTo, mapRef } = useMap();
   const queryClient = useQueryClient();
@@ -249,9 +250,12 @@ export function SearchBar() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    // If user modifies the query while a category is active, clear the category
+    // If user modifies the query while a category/data source is active, clear it
     if (activeCategory !== null) {
       clearCategory();
+    }
+    if (activeSource !== null) {
+      setActiveSource(null);
     }
     setQuery(newValue);
   };

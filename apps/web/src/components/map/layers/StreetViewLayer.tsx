@@ -53,7 +53,8 @@ export function StreetViewLayer() {
           tiles: [`${apiUrl}/api/mapillary/tiles/{z}/{x}/{y}`],
           minzoom: 6,
           maxzoom: 14,
-          attribution: '© <a href="https://www.mapillary.com/" target="_blank">Mapillary</a>',
+          attribution:
+            '© <a href="https://www.mapillary.com/" target="_blank">Mapillary</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC BY-SA 4.0</a>)',
         });
       }
 

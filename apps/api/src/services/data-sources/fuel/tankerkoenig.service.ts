@@ -1,5 +1,5 @@
-import type { BoundingBox } from "../overpass.service";
-import type { FuelPriceProvider } from "./provider";
+import type { BoundingBox } from "../../overpass.service";
+import type { FuelPriceProvider } from "./price-provider";
 import type { FuelStation } from "./types";
 
 // Germany bounding box (with a small margin)
@@ -83,7 +83,8 @@ export class TankerkoenigService implements FuelPriceProvider {
       const cityPart = [s.postCode, s.place].filter(Boolean).join(" ");
       const address = [streetPart, cityPart].filter(Boolean).join(", ") || undefined;
 
-      const displayName = s.brand && s.brand !== s.name ? `${s.brand} ${s.name}` : s.name;
+      const nameStartsWithBrand = s.brand && s.name.toLowerCase().startsWith(s.brand.toLowerCase());
+      const displayName = s.brand && !nameStartsWithBrand ? `${s.brand} ${s.name}` : s.name;
 
       return {
         id: `tankerkoenig/${s.id}`,
@@ -92,7 +93,12 @@ export class TankerkoenigService implements FuelPriceProvider {
         coordinates: [s.lng, s.lat],
         address,
         isOpen: s.isOpen,
-        attribution: { label: "Tankerkönig", url: "https://www.tankerkoenig.de" },
+        attribution: {
+          label: "Tankerkönig",
+          url: "https://www.tankerkoenig.de",
+          license: "CC BY 4.0",
+          licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        },
         fuelPrices: {
           e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
           e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,

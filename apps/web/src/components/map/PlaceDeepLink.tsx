@@ -21,12 +21,14 @@ export function PlaceDeepLink() {
     const lat = Number(searchParams.get("lat"));
     const lng = Number(searchParams.get("lng"));
     const name = searchParams.get("name") ?? "";
+    const category = searchParams.get("category") ?? undefined;
+    const rawCategory = searchParams.get("rawCategory") ?? undefined;
 
     if (!id || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
     const coordinates: [number, number] = [lng, lat];
     flyTo(coordinates);
-    setSelectedPlace({ id, name, address: name, coordinates, category: undefined });
+    setSelectedPlace({ id, name, address: name, coordinates, category, rawCategory });
     setQuery(name);
 
     // Remove deep-link params without adding a history entry

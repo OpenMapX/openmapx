@@ -1,5 +1,5 @@
-import type { BoundingBox } from "../overpass.service";
-import type { FuelPriceProvider } from "./provider";
+import type { BoundingBox } from "../../overpass.service";
+import type { FuelPriceProvider } from "./price-provider";
 import type { FuelStation } from "./types";
 
 // Spain mainland + Balearics + Canary Islands bounding box
@@ -33,6 +33,8 @@ interface SpainStation {
   "Precio Gasoleo A": string;
   "Precio Gasolina 95 E5": string;
   "Precio Gasolina 95 E10": string;
+  "Precio Gasolina 98 E5": string;
+  "Precio Gases licuados del petróleo": string;
 }
 
 interface SpainResponse {
@@ -88,11 +90,16 @@ export class SpainService implements FuelPriceProvider {
           attribution: {
             label: "Ministerio para la Transición Ecológica",
             url: "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/help",
+            license: "Government Open Data",
+            licenseUrl:
+              "https://sede.serviciosmin.gob.es/es-es/datosabiertos/paginas/modalidades-reutilizacion.aspx",
           },
           fuelPrices: {
             diesel: parseSpanishPrice(s["Precio Gasoleo A"]),
             e5: parseSpanishPrice(s["Precio Gasolina 95 E5"]),
             e10: parseSpanishPrice(s["Precio Gasolina 95 E10"]),
+            sp98: parseSpanishPrice(s["Precio Gasolina 98 E5"]),
+            lpg: parseSpanishPrice(s["Precio Gases licuados del petróleo"]),
           },
         };
       });

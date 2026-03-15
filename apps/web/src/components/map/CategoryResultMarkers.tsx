@@ -45,15 +45,6 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): P
   });
 }
 
-function formatPriceLabel(place: CategoryPlace): string {
-  const p = place.fuelPrices;
-  if (!p) return "";
-  if (p.diesel !== undefined) return `D ${p.diesel.toFixed(3)} €`;
-  if (p.e5 !== undefined) return `E5 ${p.e5.toFixed(3)} €`;
-  if (p.e10 !== undefined) return `E10 ${p.e10.toFixed(3)} €`;
-  return "";
-}
-
 function buildGeoJson(results: CategoryPlace[], imageId: string) {
   return {
     type: "FeatureCollection" as const,
@@ -68,10 +59,6 @@ function buildGeoJson(results: CategoryPlace[], imageId: string) {
         phone: place.phone ?? "",
         website: place.website ?? "",
         openingHours: place.openingHours ?? "",
-        fuelPricesJson: place.fuelPrices ? JSON.stringify(place.fuelPrices) : "",
-        fuelPricesUpdatedAt: place.fuelPricesUpdatedAt ?? "",
-        fuelAttributionJson: place.fuelAttribution ? JSON.stringify(place.fuelAttribution) : "",
-        priceLabel: formatPriceLabel(place),
         imageId,
       },
     })),
@@ -272,12 +259,7 @@ export function CategoryResultMarkers() {
             type: "symbol",
             source: SOURCE_ID,
             layout: {
-              "text-field": [
-                "case",
-                ["!=", ["get", "priceLabel"], ""],
-                ["concat", ["get", "name"], "\n", ["get", "priceLabel"]],
-                ["get", "name"],
-              ],
+              "text-field": ["get", "name"],
               "text-size": 11,
               "text-offset": [0, 2.0],
               "text-anchor": "top",
@@ -340,18 +322,9 @@ export function CategoryResultMarkers() {
         phone: string;
         website: string;
         openingHours: string;
-        fuelPricesJson: string;
-        fuelPricesUpdatedAt: string;
-        fuelAttributionJson: string;
       };
       const coords = (features[0].geometry as unknown as { coordinates: [number, number] })
         .coordinates;
-      const fuelPrices = props.fuelPricesJson
-        ? (JSON.parse(props.fuelPricesJson) as { e5?: number; e10?: number; diesel?: number })
-        : undefined;
-      const fuelAttribution = props.fuelAttributionJson
-        ? (JSON.parse(props.fuelAttributionJson) as { label: string; url: string })
-        : undefined;
       flyTo(coords, 17);
       setSelectedPlace({
         id: props.id,
@@ -362,9 +335,6 @@ export function CategoryResultMarkers() {
         phone: props.phone || undefined,
         website: props.website || undefined,
         openingHours: props.openingHours || undefined,
-        fuelPrices,
-        fuelPricesUpdatedAt: props.fuelPricesUpdatedAt || undefined,
-        fuelAttribution,
       });
     };
 

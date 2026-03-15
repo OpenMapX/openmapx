@@ -52,7 +52,6 @@ export function useDataSourceSearch(
     },
     enabled: sourceId !== null && bbox !== null,
     staleTime: 30_000,
-    placeholderData: (prev) => prev,
   });
 }
 

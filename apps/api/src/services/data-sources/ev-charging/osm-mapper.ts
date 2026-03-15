@@ -126,6 +126,7 @@ export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
       text: "OpenStreetMap contributors",
       url: "https://www.openstreetmap.org",
       license: "ODbL",
+      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
     },
     sections:
       connectorRows.length > 0

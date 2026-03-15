@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { enrichPlace } from "../services/enrichment/index";
-import { lookupByNameAndCoords, lookupByOsmRef } from "../services/nominatim-lookup.service";
+import {
+  lookupByCoords,
+  lookupByNameAndCoords,
+  lookupByOsmRef,
+} from "../services/nominatim-lookup.service";
 import { buildReviewLinks } from "../services/review-links";
 import { withCache } from "../utils/cache.js";
 
@@ -71,7 +75,16 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             throw err;
           }
 
-          const place = await lookupByNameAndCoords(name, lat, lng, rawId);
+          // For data source places (ds- prefix), prefer coords-only reverse geocode
+          // because data source names/addresses often match the wrong OSM element
+          // (e.g. house "373" instead of fuel station at "Rheinberger Str. 373").
+          // For regular places, try name+coords first for precise disambiguation.
+          const isDataSourceLookup = rawId.startsWith("ds-");
+          const place = isDataSourceLookup
+            ? ((await lookupByCoords(lat, lng, rawId)) ??
+              (await lookupByNameAndCoords(name, lat, lng, rawId)))
+            : ((await lookupByNameAndCoords(name, lat, lng, rawId)) ??
+              (await lookupByCoords(lat, lng, rawId)));
           if (!place) {
             const err: CacheableError = {
               statusCode: 404,

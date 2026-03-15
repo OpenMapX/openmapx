@@ -64,8 +64,8 @@ export {
 export { useDebounce } from "./hooks/useDebounce";
 export { useDirections } from "./hooks/useDirections";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
-export { useFuelStationDetail } from "./hooks/useFuelStationDetail";
 export { useGeocoding } from "./hooks/useGeocoding";
+export { useMergedPlace } from "./hooks/useMergedPlace";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
@@ -102,7 +102,6 @@ export type {
   DataSourceResult,
 } from "./types/dataSource";
 export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
-export type { FuelOpeningTime, FuelPrices, FuelStationDetail } from "./types/fuel";
 export type { BoundingBox, LngLat } from "./types/geometry";
 export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";
 export type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "./types/search";

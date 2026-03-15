@@ -23,7 +23,10 @@ export const wikimediaCommonsEnricher: EnrichmentSource = {
 
     if (tag.startsWith("File:")) {
       // Single file — build URL directly without an API call
-      photos.push({ url: commonsFileUrl(tag.slice(5)), attribution: "© Wikimedia Commons" });
+      photos.push({
+        url: commonsFileUrl(tag.slice(5)),
+        attribution: "© Wikimedia Commons (CC BY-SA)",
+      });
     } else {
       // Category — fetch its image members
       const category = tag.startsWith("Category:") ? tag : `Category:${tag}`;
@@ -54,7 +57,7 @@ export const wikimediaCommonsEnricher: EnrichmentSource = {
       for (const page of Object.values(data.query?.pages ?? {})) {
         const info = page.imageinfo?.[0];
         const photoUrl = info?.thumburl ?? info?.url;
-        if (photoUrl) photos.push({ url: photoUrl, attribution: "© Wikimedia Commons" });
+        if (photoUrl) photos.push({ url: photoUrl, attribution: "© Wikimedia Commons (CC BY-SA)" });
       }
     }
 

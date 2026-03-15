@@ -131,7 +131,7 @@ export const wikidataEnricher: EnrichmentSource = {
       result.photos = [
         {
           url: commonsUrl(p18.mainsnak.datavalue.value as string),
-          attribution: "© Wikimedia Commons",
+          attribution: "© Wikimedia Commons (CC BY-SA)",
         },
       ];
     }

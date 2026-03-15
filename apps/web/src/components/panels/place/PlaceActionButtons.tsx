@@ -84,6 +84,8 @@ export function PlaceActionButtons({ place }: Props) {
       lng: lng.toFixed(6),
       name: place.name,
     });
+    if (place.category) params.set("category", place.category);
+    if (place.rawCategory) params.set("rawCategory", place.rawCategory);
     const url = `${window.location.origin}/?${params.toString()}`;
     try {
       if (navigator.share) {

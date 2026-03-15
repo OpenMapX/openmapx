@@ -709,7 +709,10 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
   // GET /api/transit/providers — merged attribution map (static + dynamic registry)
   server.get("/transit/providers", async (_request, reply) => {
     reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
-    const result: Record<string, { label: string; url: string }> = {
+    const result: Record<
+      string,
+      { label: string; url: string; license?: string; licenseUrl?: string }
+    > = {
       ...STATIC_PROVIDER_ATTRIBUTION,
     };
     for (const { slug, label, url } of registry.listProviders()) {

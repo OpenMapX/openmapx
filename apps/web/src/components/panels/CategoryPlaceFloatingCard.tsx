@@ -1,7 +1,12 @@
 "use client";
 
 import Paper from "@mui/material/Paper";
-import { useCategorySearchStore, usePlaceDetails, usePlaceStore } from "@openmapx/core";
+import {
+  useCategorySearchStore,
+  useDataSourceStore,
+  useMergedPlace,
+  usePlaceStore,
+} from "@openmapx/core";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { PlaceDetailContent } from "./place/PlaceDetailContent";
 
@@ -11,32 +16,19 @@ const CARD_GAP = 24;
 export function CategoryPlaceFloatingCard() {
   const { selectedPlace, setSelectedPlace } = usePlaceStore();
   const { activeCategory } = useCategorySearchStore();
+  const activeSource = useDataSourceStore((s) => s.activeSource);
+  const clearSelection = useDataSourceStore((s) => s.clearSelection);
 
-  const { data: details, isLoading } = usePlaceDetails(
-    selectedPlace?.id ?? null,
-    selectedPlace?.coordinates,
-    selectedPlace?.name,
-  );
+  const { place, isLoading } = useMergedPlace(selectedPlace);
 
-  // Prefer enriched Nominatim details but always carry fuelPrices from the
-  // original selection, since Nominatim has no knowledge of live fuel prices.
-  const place = details
-    ? {
-        ...details,
-        fuelPrices: selectedPlace?.fuelPrices ?? details.fuelPrices,
-        fuelPricesUpdatedAt: selectedPlace?.fuelPricesUpdatedAt ?? details.fuelPricesUpdatedAt,
-        fuelAttribution: selectedPlace?.fuelAttribution ?? details.fuelAttribution,
-      }
-    : selectedPlace;
-
-  if (!place || activeCategory === null) return null;
+  // Show when a place is selected and either a category or data source is active
+  if (!place || (activeCategory === null && activeSource === null)) return null;
 
   return (
     <Paper
       elevation={3}
       sx={{
         position: "absolute",
-        // Desktop: float to the right of the category sidebar
         left: { xs: 0, sm: PANEL_WIDTH + CARD_GAP },
         top: { xs: "auto", sm: 66 },
         bottom: { xs: 0, sm: "auto" },
@@ -51,7 +43,10 @@ export function CategoryPlaceFloatingCard() {
       <PlaceDetailContent
         place={place}
         isLoading={isLoading}
-        onClose={() => setSelectedPlace(null)}
+        onClose={() => {
+          setSelectedPlace(null);
+          if (activeSource) clearSelection();
+        }}
       />
     </Paper>
   );

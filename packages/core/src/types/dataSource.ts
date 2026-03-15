@@ -4,6 +4,7 @@ export interface DataSourceAttribution {
   text: string;
   url: string;
   license?: string;
+  licenseUrl?: string;
 }
 
 export interface DataSourceMarkerStyle {
@@ -11,15 +12,23 @@ export interface DataSourceMarkerStyle {
   defaultColor: string;
   inactiveOpacity: number;
   iconPath: string;
+  /** Marker rendering type. "circle" (default) renders colored dots. "icon" renders SVG icon markers with text labels. */
+  type?: "circle" | "icon";
 }
 
 export interface DataSourceMeta {
   id: string;
   name: string;
-  attribution: DataSourceAttribution;
+  attribution: DataSourceAttribution | DataSourceAttribution[];
   categoryChipLabel: string;
   minZoom: number;
   markerStyle: DataSourceMarkerStyle;
+  /** When true, the filter panel shows individual result cards below the filters. */
+  showResultsList?: boolean;
+  /** Human-readable category name for the Place panel (e.g., "Gas Station"). */
+  placeCategory: string;
+  /** Raw category string for data source enrichment routing (e.g., "fuel"). */
+  placeCategoryRaw: string;
 }
 
 export interface DataSourceFilterDef {
@@ -38,6 +47,8 @@ export interface DataSourceResult {
   status?: string;
   summary?: string;
   operator?: string;
+  /** Structured numeric values for client-side sorting (e.g., fuel prices by type). */
+  sortValues?: Record<string, number>;
 }
 
 export interface DataSourceDetailSection {
@@ -47,6 +58,8 @@ export interface DataSourceDetailSection {
   rows?: (string | number)[][];
   items?: string[];
   content?: string;
+  /** Icon type for the section header. Defaults to "bolt" for backward compatibility. */
+  sectionIcon?: "bolt" | "fuel" | "access_time" | "info";
 }
 
 export interface DataSourceDetail {
@@ -63,6 +76,8 @@ export interface DataSourceDetail {
   };
   operator?: { name: string; url?: string };
   usageInfo?: { type: string; cost?: string; membershipRequired?: boolean };
+  /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
+  openingHours?: string;
   attribution: DataSourceAttribution;
   sections: DataSourceDetailSection[];
   osmTags?: Record<string, string>;

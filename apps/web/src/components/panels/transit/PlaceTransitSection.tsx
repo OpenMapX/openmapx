@@ -167,7 +167,10 @@ export function PlaceTransitSection({
                 <Tooltip
                   key={route.id}
                   title={route.providers
-                    .map((p) => resolveProvider(providers, p).label)
+                    .map((p) => {
+                      const attr = resolveProvider(providers, p);
+                      return attr.license ? `${attr.label} (${attr.license})` : attr.label;
+                    })
                     .join(" · ")}
                   placement="top"
                   arrow

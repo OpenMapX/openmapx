@@ -3,11 +3,9 @@
 import Paper from "@mui/material/Paper";
 import {
   useCategorySearchStore,
-  useDataSourceEnrichment,
   useDataSourceStore,
-  usePlaceDetails,
+  useMergedPlace,
   usePlaceStore,
-  useReverseGeocoding,
 } from "@openmapx/core";
 import { useEffect, useState } from "react";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
@@ -18,7 +16,6 @@ export function PlacePanel() {
   const { selectedPlace, setSidePanelCollapsed } = usePlaceStore();
   const { activeCategory } = useCategorySearchStore();
   const activeSource = useDataSourceStore((s) => s.activeSource);
-  const selectedItem = useDataSourceStore((s) => s.selectedItem);
   const [collapsed, setCollapsed] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
@@ -34,65 +31,10 @@ export function PlacePanel() {
     return () => setSidePanelCollapsed(false);
   }, [setSidePanelCollapsed]);
 
-  // Coordinate/Plus Code places use a synthetic id — skip the API lookup
-  // (it would always 404) and resolve the address via reverse geocoding instead.
-  const isCoordinatePlace = selectedPlace?.id?.startsWith("coordinate-") ?? false;
-  // Data source places (ocm:*, osm:*) also have synthetic IDs — skip place lookup,
-  // use reverse geocoding to fill in the address.
-  const isDataSourcePlace = selectedPlace?.dataSourceDetail !== undefined;
-  const needsReverseGeo = isCoordinatePlace || isDataSourcePlace;
+  const { place, isLoading } = useMergedPlace(selectedPlace);
 
-  const { data: details, isLoading } = usePlaceDetails(
-    needsReverseGeo ? null : (selectedPlace?.id ?? null),
-    selectedPlace?.coordinates,
-    selectedPlace?.name,
-  );
-
-  const { data: reverseGeo } = useReverseGeocoding(
-    needsReverseGeo ? (selectedPlace?.coordinates ?? null) : null,
-  );
-
-  // Try to enrich the place with data source detail (e.g. EV charger clicked on map style POI)
-  const enrichedDetail = useDataSourceEnrichment(
-    selectedPlace?.dataSourceDetail ? null : (selectedPlace ?? null),
-  );
-
-  const basePlace =
-    details ??
-    (selectedPlace
-      ? {
-          ...selectedPlace,
-          ...(needsReverseGeo && reverseGeo
-            ? {
-                address: selectedPlace.address || reverseGeo.address,
-                city: selectedPlace.city || reverseGeo.city?.split(",")[0].trim(),
-              }
-            : {}),
-        }
-      : null);
-
-  // Preserve category/rawCategory from the original selection through enrichment,
-  // so transit eligibility checks see the original POI type (e.g. "charging_station")
-  // even after Nominatim overwrites the place with different category metadata.
-  const withPreservedCategory =
-    basePlace && selectedPlace && basePlace !== selectedPlace
-      ? {
-          ...basePlace,
-          category: basePlace.category || selectedPlace.category,
-          rawCategory: basePlace.rawCategory || selectedPlace.rawCategory,
-        }
-      : basePlace;
-
-  // Merge enriched data source detail into the place if available
-  const place =
-    withPreservedCategory && enrichedDetail && !withPreservedCategory.dataSourceDetail
-      ? { ...withPreservedCategory, dataSourceDetail: enrichedDetail }
-      : withPreservedCategory;
-
-  const showingDataSourceDetail = activeSource !== null && selectedItem !== null;
-
-  // When a category is active, the floating card handles place display instead
-  if (!place || (activeCategory !== null && !showingDataSourceDetail)) return null;
+  // When a category or data source is active, the floating card handles place display
+  if (!place || activeCategory !== null || activeSource !== null) return null;
 
   return (
     <>

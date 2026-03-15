@@ -1,5 +1,5 @@
-import type { BoundingBox } from "../overpass.service";
-import type { FuelPriceProvider } from "./provider";
+import type { BoundingBox } from "../../overpass.service";
+import type { FuelPriceProvider } from "./price-provider";
 import type { FuelStation } from "./types";
 
 // Austria bounding box
@@ -104,6 +104,8 @@ export class AustriaService implements FuelPriceProvider {
         attribution: {
           label: "E-Control Spritpreisrechner",
           url: "https://www.spritpreisrechner.at",
+          license: "Public Data",
+          licenseUrl: "https://www.e-control.at/spritpreisrechner",
         },
         fuelPrices: {
           diesel: dieselPrice,

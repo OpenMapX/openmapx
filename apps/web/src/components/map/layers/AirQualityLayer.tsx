@@ -43,7 +43,8 @@ export function AirQualityLayer() {
           type: "raster",
           tiles: [`${apiUrl}/api/air-quality/tiles/{z}/{x}/{y}.png`],
           tileSize: 256,
-          attribution: '© <a href="https://waqi.info/" target="_blank">World Air Quality Index</a>',
+          attribution:
+            '© <a href="https://waqi.info/" target="_blank">World Air Quality Index</a> (<a href="https://aqicn.org/api/" target="_blank">Custom License</a>)',
         });
       }
 

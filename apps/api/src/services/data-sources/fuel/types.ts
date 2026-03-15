@@ -1,12 +1,17 @@
 export interface FuelPrices {
+  diesel?: number;
   e5?: number;
   e10?: number;
-  diesel?: number;
+  sp98?: number;
+  e85?: number;
+  lpg?: number;
 }
 
 export interface FuelAttribution {
   label: string;
   url: string;
+  license?: string;
+  licenseUrl?: string;
 }
 
 export interface FuelStation {

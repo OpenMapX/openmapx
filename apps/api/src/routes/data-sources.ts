@@ -51,9 +51,11 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     const filterHash = filters ? hashKey("f", filters) : "none";
     const cacheKey = `cache:ds:search:${req.params.id}:${roundedBbox}:${filterHash}`;
 
+    const searchTtl = provider.searchCacheTtl ?? 21600;
+
     let results: DataSourceResult[] = [];
     try {
-      results = await withCache(cacheKey, 6 * 3600, () => provider.search(bbox, filters));
+      results = await withCache(cacheKey, searchTtl, () => provider.search(bbox, filters));
     } catch (err) {
       if (err instanceof ApiKeyMissingError) {
         return reply.status(503).send({ error: err.message });
@@ -61,21 +63,25 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
       throw err;
     }
 
-    reply.header("Cache-Control", "public, max-age=300");
+    reply.header("Cache-Control", `public, max-age=${Math.min(searchTtl, 300)}`);
     return reply.send(results);
   });
 
-  // Get detail for a specific item
+  // Get detail for a specific item (wildcard param to support IDs with slashes like "tankerkoenig/uuid")
   fastify.get<{
-    Params: { id: string; itemId: string };
-  }>("/data-sources/:id/detail/:itemId", async (req, reply) => {
+    Params: { id: string; "*": string };
+  }>("/data-sources/:id/detail/*", async (req, reply) => {
     const provider = dataSourceRegistry.get(req.params.id);
     if (!provider) return reply.status(404).send({ error: "Unknown data source" });
 
-    const cacheKey = `cache:ds:detail:${req.params.id}:${req.params.itemId}`;
+    const itemId = req.params["*"];
+    if (!itemId) return reply.status(400).send({ error: "Missing item ID" });
+
+    const detailTtl = provider.detailCacheTtl ?? 21600;
+    const cacheKey = `cache:ds:detail:${req.params.id}:${itemId}`;
     let detail: DataSourceDetail | null = null;
     try {
-      detail = await withCache(cacheKey, 6 * 3600, () => provider.getDetail(req.params.itemId));
+      detail = await withCache(cacheKey, detailTtl, () => provider.getDetail(itemId));
     } catch (err) {
       if (err instanceof ApiKeyMissingError) {
         return reply.status(503).send({ error: err.message });
@@ -83,7 +89,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
       throw err;
     }
 
-    reply.header("Cache-Control", "public, max-age=300");
+    reply.header("Cache-Control", `public, max-age=${Math.min(detailTtl, 300)}`);
     return reply.send(detail);
   });
 };

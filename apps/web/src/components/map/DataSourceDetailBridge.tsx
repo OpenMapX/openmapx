@@ -1,12 +1,23 @@
 "use client";
 
 import type { Place } from "@openmapx/core";
-import { useDataSourceDetail, useDataSourceStore, usePlaceStore } from "@openmapx/core";
-import { useEffect } from "react";
+import {
+  useDataSourceDetail,
+  useDataSourceStore,
+  useDataSources,
+  usePlaceStore,
+} from "@openmapx/core";
+import { useEffect, useMemo } from "react";
 
 export function DataSourceDetailBridge() {
   const selectedItem = useDataSourceStore((s) => s.selectedItem);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
+  const { data: sourcesData } = useDataSources();
+
+  const sourceMeta = useMemo(() => {
+    if (!selectedItem || !sourcesData?.sources) return null;
+    return sourcesData.sources.find((s) => s.id === selectedItem.sourceId) ?? null;
+  }, [selectedItem, sourcesData]);
 
   const { data: detail } = useDataSourceDetail(
     selectedItem?.sourceId ?? null,
@@ -15,6 +26,9 @@ export function DataSourceDetailBridge() {
 
   useEffect(() => {
     if (!detail) return;
+
+    // Skip fallback details with invalid coordinates (station not in cache)
+    if (detail.coordinates[0] === 0 && detail.coordinates[1] === 0) return;
 
     const addressParts = [
       detail.address?.line1,
@@ -28,14 +42,15 @@ export function DataSourceDetailBridge() {
       address: addressParts.join(", "),
       city: detail.address?.town,
       coordinates: detail.coordinates,
-      category: "Charging Station",
-      rawCategory: "charging_station",
+      category: sourceMeta?.placeCategory ?? detail.name,
+      rawCategory: sourceMeta?.placeCategoryRaw ?? "",
       website: detail.operator?.url,
+      openingHours: detail.openingHours,
       dataSourceDetail: detail,
     };
 
     setSelectedPlace(place);
-  }, [detail, setSelectedPlace]);
+  }, [detail, setSelectedPlace, sourceMeta]);
 
   return null;
 }

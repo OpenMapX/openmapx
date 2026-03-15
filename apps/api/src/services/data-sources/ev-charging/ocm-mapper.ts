@@ -5,6 +5,7 @@ const ATTRIBUTION = {
   text: "OpenChargeMap",
   url: "https://openchargemap.org",
   license: "CC BY-SA 4.0",
+  licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
 } as const;
 
 function getMaxPower(poi: OcmPoi): number {

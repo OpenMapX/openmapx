@@ -17,6 +17,17 @@ const RAW_CATEGORY_TO_DATA_SOURCE: Record<string, string> = {
   // MapTiler/OpenMapTiles POI class/subclass combinations
   "car/charging_station": "ev-charging",
   "fuel/charging_station": "ev-charging",
+  // Fuel stations
+  fuel: "fuel",
+  "amenity/fuel": "fuel",
+  "car/fuel": "fuel",
+  "fuel/fuel": "fuel",
+  // Bike sharing
+  bicycle_rental: "bike-sharing",
+  "amenity/bicycle_rental": "bike-sharing",
+  // Car sharing
+  car_sharing: "car-sharing",
+  "amenity/car_sharing": "car-sharing",
 };
 
 // Also build mappings from CategoryDefinition entries that have dataSourceId
@@ -41,13 +52,17 @@ function resolveDataSourceId(place: Place): string | null {
     if (fromRaw) return fromRaw;
   }
   if (place.category) {
-    const fromCategory = RAW_CATEGORY_TO_DATA_SOURCE[place.category];
+    const fromCategory =
+      RAW_CATEGORY_TO_DATA_SOURCE[place.category] ??
+      RAW_CATEGORY_TO_DATA_SOURCE[place.category.toLowerCase()];
     if (fromCategory) return fromCategory;
   }
-  // Check OSM tags for amenity=charging_station
-  if (place.osmTags?.amenity === "charging_station") {
-    return "ev-charging";
-  }
+  // Fallback: check OSM tags for known amenity values
+  const amenity = place.osmTags?.amenity;
+  if (amenity === "charging_station") return "ev-charging";
+  if (amenity === "fuel") return "fuel";
+  if (amenity === "bicycle_rental") return "bike-sharing";
+  if (amenity === "car_sharing") return "car-sharing";
   return null;
 }
 

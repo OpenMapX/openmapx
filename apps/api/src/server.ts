@@ -9,7 +9,6 @@ import { autocompleteRoute } from "./routes/autocomplete";
 import { categorySearchRoute } from "./routes/category-search";
 import { dataSourcesRoute } from "./routes/data-sources";
 import { directionsRoute } from "./routes/directions";
-import { fuelPricesRoute } from "./routes/fuel-prices";
 import { geocodeRoute } from "./routes/geocode";
 import { gtfsRoute } from "./routes/gtfs";
 import { mapillaryRoute } from "./routes/mapillary";
@@ -19,7 +18,11 @@ import { streetviewRoute } from "./routes/streetview";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
 import { evChargingProvider } from "./services/data-sources/ev-charging/provider";
+import { fuelProvider } from "./services/data-sources/fuel/provider";
 import { dataSourceRegistry } from "./services/data-sources/registry";
+import { bikeSharingProvider } from "./services/data-sources/shared-mobility/bike-sharing-provider";
+import { carSharingProvider } from "./services/data-sources/shared-mobility/car-sharing-provider";
+import { scooterSharingProvider } from "./services/data-sources/shared-mobility/scooter-provider";
 import { gtfsManager } from "./services/gtfs/index";
 import { motisManager } from "./services/motis/manager";
 import { registry } from "./services/transit/registry/index";
@@ -75,7 +78,6 @@ await server.register(geocodeRoute, { prefix: "/api" });
 await server.register(autocompleteRoute, { prefix: "/api" });
 await server.register(placesRoute, { prefix: "/api" });
 await server.register(categorySearchRoute, { prefix: "/api" });
-await server.register(fuelPricesRoute, { prefix: "/api" });
 await server.register(directionsRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(streetviewRoute, { prefix: "/api" });
@@ -88,6 +90,10 @@ await server.register(dataSourcesRoute, { prefix: "/api" });
 
 // Data source providers
 dataSourceRegistry.register(evChargingProvider);
+dataSourceRegistry.register(fuelProvider);
+dataSourceRegistry.register(bikeSharingProvider);
+dataSourceRegistry.register(scooterSharingProvider);
+dataSourceRegistry.register(carSharingProvider);
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {

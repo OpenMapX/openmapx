@@ -26,7 +26,8 @@ export function TerrainLayer() {
           tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
           tileSize: 256,
           maxzoom: 17,
-          attribution: "OpenTopoMap",
+          attribution:
+            '© <a href="https://opentopomap.org/about" target="_blank">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC-BY-SA</a>)',
         });
       }
 

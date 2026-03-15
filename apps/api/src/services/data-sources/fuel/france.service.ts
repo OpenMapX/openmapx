@@ -1,5 +1,5 @@
-import type { BoundingBox } from "../overpass.service";
-import type { FuelPriceProvider } from "./provider";
+import type { BoundingBox } from "../../overpass.service";
+import type { FuelPriceProvider } from "./price-provider";
 import type { FuelStation } from "./types";
 
 // France mainland + Corsica bounding box
@@ -30,6 +30,12 @@ interface FranceRecord {
   sp95_maj?: string | null;
   e10_prix?: number | null;
   e10_maj?: string | null;
+  sp98_prix?: number | null;
+  sp98_maj?: string | null;
+  e85_prix?: number | null;
+  e85_maj?: string | null;
+  gplc_prix?: number | null;
+  gplc_maj?: string | null;
 }
 
 interface FranceResponse {
@@ -64,7 +70,7 @@ export class FranceService implements FuelPriceProvider {
     url.searchParams.set("limit", String(MAX_RESULTS));
     url.searchParams.set(
       "select",
-      "id,adresse,ville,geom,gazole_prix,gazole_maj,sp95_prix,sp95_maj,e10_prix,e10_maj",
+      "id,adresse,ville,geom,gazole_prix,gazole_maj,sp95_prix,sp95_maj,e10_prix,e10_maj,sp98_prix,sp98_maj,e85_prix,e85_maj,gplc_prix,gplc_maj",
     );
 
     const res = await fetch(url.toString());
@@ -76,7 +82,14 @@ export class FranceService implements FuelPriceProvider {
       const address = [r.adresse, r.ville].filter(Boolean).join(", ") || undefined;
 
       // Pick the most recent update timestamp across available fuel types
-      const timestamps = [r.gazole_maj, r.sp95_maj, r.e10_maj].filter(Boolean) as string[];
+      const timestamps = [
+        r.gazole_maj,
+        r.sp95_maj,
+        r.e10_maj,
+        r.sp98_maj,
+        r.e85_maj,
+        r.gplc_maj,
+      ].filter(Boolean) as string[];
       const updatedAt = timestamps.length
         ? timestamps.reduce((latest, t) => (t > latest ? t : latest))
         : undefined;
@@ -90,11 +103,16 @@ export class FranceService implements FuelPriceProvider {
         attribution: {
           label: "prix-carburants.gouv.fr",
           url: "https://www.prix-carburants.gouv.fr",
+          license: "Licence Ouverte v2.0",
+          licenseUrl: "https://github.com/etalab/licence-ouverte/blob/master/LO.md",
         },
         fuelPrices: {
           diesel: r.gazole_prix ?? undefined,
           e5: r.sp95_prix ?? undefined,
           e10: r.e10_prix ?? undefined,
+          sp98: r.sp98_prix ?? undefined,
+          e85: r.e85_prix ?? undefined,
+          lpg: r.gplc_prix ?? undefined,
         },
       };
     });

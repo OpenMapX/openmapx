@@ -120,6 +120,34 @@ function distanceMetres(lat1: number, lng1: number, lat2: number, lng2: number):
 }
 
 /**
+ * Reverse-geocode by coordinates to find the nearest OSM element.
+ * Returns a Place with address, opening hours, phone, etc. from the closest
+ * OSM node/way. Unlike lookupByNameAndCoords, this always succeeds if there's
+ * any OSM data near the coordinates — no name matching required.
+ */
+export async function lookupByCoords(
+  lat: number,
+  lng: number,
+  originalId: string,
+): Promise<Place | null> {
+  const url = new URL(`${NOMINATIM_URL}/reverse`);
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("extratags", "1");
+  url.searchParams.set("zoom", "18"); // Building-level precision
+
+  try {
+    const result = await fetchNominatim<NominatimDetailResult>(url);
+    if (!result?.osm_id) return null;
+    return toPlace(result, originalId);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Search Nominatim by name within a bounding box around the given coordinates,
  * then return the closest matching result.
  *
@@ -132,6 +160,37 @@ function distanceMetres(lat1: number, lng1: number, lat2: number, lng2: number):
  */
 const BBOX_DEGREES = 0.015; // ~1.5 km half-width
 const MAX_DISTANCE_M = 500;
+
+// Cache city names by rounded coordinates (~11km grid)
+const cityNameCache = new Map<string, { city: string | null; expiresAt: number }>();
+const CITY_NAME_TTL_MS = 3_600_000; // 1h
+
+/**
+ * Reverse-geocode coordinates to a city name (city-level zoom).
+ * Cached aggressively since the same viewport area maps to the same city.
+ */
+export async function reverseGeocodeCity(lat: number, lng: number): Promise<string | null> {
+  const key = `${Math.round(lat * 10) / 10},${Math.round(lng * 10) / 10}`;
+  const cached = cityNameCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.city;
+
+  try {
+    const url = new URL(`${NOMINATIM_URL}/reverse`);
+    url.searchParams.set("lat", String(lat));
+    url.searchParams.set("lon", String(lng));
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("addressdetails", "1");
+    url.searchParams.set("zoom", "10");
+
+    const result = await fetchNominatim<NominatimDetailResult>(url);
+    const city = result?.address?.city ?? result?.address?.town ?? result?.address?.village ?? null;
+
+    cityNameCache.set(key, { city, expiresAt: Date.now() + CITY_NAME_TTL_MS });
+    return city;
+  } catch {
+    return null;
+  }
+}
 
 export async function lookupByNameAndCoords(
   name: string,

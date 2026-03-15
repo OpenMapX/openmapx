@@ -79,7 +79,11 @@ function parseSegments(raw: string): Segment[] {
   const ALL_DAYS = new Set([0, 1, 2, 3, 4, 5, 6]);
   const segments: Segment[] = [];
 
-  for (const part of raw.split(";")) {
+  // Normalize comma-separated rules to semicolon-separated.
+  // Only split on commas followed by a day abbreviation (e.g., ", Mo" or ",Mo")
+  // to avoid splitting day lists like "Mo,We,Fr".
+  const normalized = raw.replace(/,\s*(?=[A-Z][a-z](?:[-,]|\s+\d))/g, "; ");
+  for (const part of normalized.split(";")) {
     const trimmed = part.trim();
     // "Mo-Fr 10:00-19:00" (trailing + means "or later", ignored)
     const withDays = trimmed.match(/^([\w,\s-]+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})\+?$/);

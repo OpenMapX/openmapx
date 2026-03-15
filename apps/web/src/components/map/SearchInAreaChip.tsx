@@ -2,7 +2,13 @@
 
 import SearchIcon from "@mui/icons-material/Search";
 import Chip from "@mui/material/Chip";
-import { useCategorySearchStore, useDataSourceStore, usePlaceStore } from "@openmapx/core";
+import {
+  useCategorySearchStore,
+  useDataSourceStore,
+  useDataSources,
+  usePlaceStore,
+} from "@openmapx/core";
+import { useMemo } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMap } from "@/lib/MapContext";
 
@@ -19,15 +25,22 @@ export function SearchInAreaChip() {
   const { selectedPlace } = usePlaceStore();
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const dsMapMoved = useDataSourceStore((s) => s.mapMoved);
+  const viewportZoom = useDataSourceStore((s) => s.viewportZoom);
   const setDsSearchBbox = useDataSourceStore((s) => s.setSearchBbox);
   const setDsMapMoved = useDataSourceStore((s) => s.setMapMoved);
+  const { data: sourcesData } = useDataSources();
   const { mapRef } = useMap();
+
+  const activeMinZoom = useMemo(() => {
+    if (!activeSource || !sourcesData?.sources) return 0;
+    return sourcesData.sources.find((s) => s.id === activeSource)?.minZoom ?? 0;
+  }, [activeSource, sourcesData]);
 
   const floatingCardOpen = activeCategory !== null && selectedPlace !== null;
 
   // Show when either a category or data source is active and map has moved
   const showForCategory = activeCategory !== null && categoryMoved;
-  const showForDataSource = activeSource !== null && dsMapMoved;
+  const showForDataSource = activeSource !== null && dsMapMoved && viewportZoom >= activeMinZoom;
 
   if (!showForCategory && !showForDataSource) return null;
 

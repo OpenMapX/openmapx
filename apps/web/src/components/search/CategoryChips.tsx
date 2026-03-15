@@ -1,12 +1,17 @@
 "use client";
 
+import type { SvgIconComponent } from "@mui/icons-material";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
+import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
+import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
 import EvStationIcon from "@mui/icons-material/EvStation";
 import HotelIcon from "@mui/icons-material/Hotel";
 import LocalActivityIcon from "@mui/icons-material/LocalActivity";
 import LocalAtmIcon from "@mui/icons-material/LocalAtm";
+import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
 import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
+import PedalBikeIcon from "@mui/icons-material/PedalBike";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -15,6 +20,7 @@ import {
   CATEGORY_DEFINITIONS,
   useCategorySearchStore,
   useDataSourceStore,
+  useDataSources,
   useDirectionsStore,
   useSearchStore,
 } from "@openmapx/core";
@@ -30,15 +36,22 @@ const CATEGORY_ICONS: Partial<Record<CategoryId, ReactNode>> = {
   atms: <LocalAtmIcon sx={{ fontSize: 16 }} />,
 };
 
+const DATA_SOURCE_ICONS: Record<string, SvgIconComponent> = {
+  "ev-charging": EvStationIcon,
+  fuel: LocalGasStationIcon,
+  "bike-sharing": PedalBikeIcon,
+  "scooter-sharing": ElectricScooterIcon,
+  "car-sharing": DirectionsCarIcon,
+};
+
 export function CategoryChips() {
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
   const { setQuery } = useSearchStore();
   const { isOpen: directionsOpen } = useDirectionsStore();
-  const { activeSource, setActiveSource } = useDataSourceStore();
+  const { activeSource, toggleSource, setActiveSource } = useDataSourceStore();
+  const { data: sourcesData } = useDataSources();
 
-  if (directionsOpen || activeCategory) return null;
-
-  const evActive = activeSource === "ev-charging";
+  if (directionsOpen || activeCategory || activeSource) return null;
 
   return (
     <Box
@@ -61,46 +74,54 @@ export function CategoryChips() {
       }}
     >
       <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
-        <Chip
-          key="ds-ev-charging"
-          icon={
-            <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
-              <EvStationIcon sx={{ fontSize: 16 }} />
-            </Box>
-          }
-          label="EV Charging"
-          onClick={() => {
-            if (evActive) {
-              setActiveSource(null);
-            } else {
-              clearCategory();
-              setActiveSource("ev-charging");
-            }
-          }}
-          variant={evActive ? "filled" : "outlined"}
-          color={evActive ? "primary" : "default"}
-          sx={{
-            height: 36,
-            borderRadius: "18px",
-            fontWeight: 500,
-            fontSize: 13,
-            bgcolor: evActive ? "#007b8b" : "background.paper",
-            color: evActive ? "#fff" : "text.primary",
-            borderColor: evActive ? "#007b8b" : "rgba(0,0,0,0.23)",
-            boxShadow: evActive ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
-            cursor: "pointer",
-            userSelect: "none",
-            flexShrink: 0,
-            "& .MuiChip-icon": {
-              color: "inherit",
-              ml: "10px",
-              mr: "-4px",
-            },
-            "&&:hover": {
-              bgcolor: evActive ? "#006475" : "grey.300",
-            },
-          }}
-        />
+        {(sourcesData?.sources ?? []).map((source) => {
+          const isActive = activeSource === source.id;
+          const IconComponent = DATA_SOURCE_ICONS[source.id] ?? EvStationIcon;
+          return (
+            <Chip
+              key={source.id}
+              icon={
+                <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
+                  <IconComponent sx={{ fontSize: 16 }} />
+                </Box>
+              }
+              label={source.categoryChipLabel}
+              onClick={() => {
+                if (isActive) {
+                  toggleSource(source.id);
+                  setQuery("");
+                } else {
+                  clearCategory();
+                  toggleSource(source.id);
+                  setQuery(source.categoryChipLabel);
+                }
+              }}
+              variant={isActive ? "filled" : "outlined"}
+              color={isActive ? "primary" : "default"}
+              sx={{
+                height: 36,
+                borderRadius: "18px",
+                fontWeight: 500,
+                fontSize: 13,
+                bgcolor: isActive ? "#007b8b" : "background.paper",
+                color: isActive ? "#fff" : "text.primary",
+                borderColor: isActive ? "#007b8b" : "rgba(0,0,0,0.23)",
+                boxShadow: isActive ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+                cursor: "pointer",
+                userSelect: "none",
+                flexShrink: 0,
+                "& .MuiChip-icon": {
+                  color: "inherit",
+                  ml: "10px",
+                  mr: "-4px",
+                },
+                "&&:hover": {
+                  bgcolor: isActive ? "#006475" : "grey.300",
+                },
+              }}
+            />
+          );
+        })}
         {CATEGORY_DEFINITIONS.filter((cat) => cat.showInChipBar).map((cat) => {
           const isActive = activeCategory === cat.id;
           return (

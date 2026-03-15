@@ -1,15 +1,17 @@
 "use client";
 
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import BlockIcon from "@mui/icons-material/Block";
 import CancelIcon from "@mui/icons-material/Cancel";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import CloseIcon from "@mui/icons-material/Close";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import ScheduleIcon from "@mui/icons-material/Schedule";
+import SortIcon from "@mui/icons-material/Sort";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -17,17 +19,19 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Select from "@mui/material/Select";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { DataSourceFilterDef, DataSourceResult } from "@openmapx/core";
 import {
+  useCategorySearchStore,
   useDataSourceSearch,
   useDataSourceStore,
   useDataSources,
@@ -40,6 +44,37 @@ import { TEAL } from "@/lib/theme";
 
 /** Filter IDs that are applied client-side instead of being sent to the API. */
 const CLIENT_SIDE_FILTER_IDS = new Set(["operator", "speed"]);
+
+/** Matches 3-decimal Euro prices like "2.119 €" within a summary string. */
+const EURO_PRICE_GLOBAL_RE = /(\d+\.\d{2})(\d)\s*€/g;
+
+/** Renders a summary string with 3-decimal Euro prices having the last digit in superscript. */
+function FormattedSummary({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  const re = new RegExp(EURO_PRICE_GLOBAL_RE.source, "g");
+  let match = re.exec(text);
+  let key = 0;
+
+  while (match !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    parts.push(
+      <span key={key++} style={{ display: "inline-flex", alignItems: "flex-start" }}>
+        <span>{match[1]}</span>
+        <span style={{ fontSize: "0.65em", marginTop: "0.2em" }}>{match[2]}</span>
+        <span>&nbsp;€</span>
+      </span>,
+    );
+    lastIndex = re.lastIndex;
+    match = re.exec(text);
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return <>{parts}</>;
+}
 
 /**
  * Connector label substrings considered "common" — shown by default.
@@ -148,7 +183,7 @@ function accessGroupIndex(label: string): number {
 function deriveOperatorOptions(results: DataSourceResult[]): string[] {
   const names = new Set<string>();
   for (const r of results) {
-    if (r.operator) names.add(r.operator);
+    if (r.operator && typeof r.operator === "string") names.add(r.operator);
   }
   return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
@@ -178,7 +213,7 @@ function applyClientFilters(
       : [String(operatorFilter)];
     if (opValues.length > 0) {
       const operatorSet = new Set(opValues);
-      out = out.filter((r) => r.operator && operatorSet.has(r.operator));
+      out = out.filter((r) => typeof r.operator === "string" && operatorSet.has(r.operator));
     }
   }
 
@@ -188,14 +223,16 @@ function applyClientFilters(
 export function DataSourceFilterPanel() {
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const filters = useDataSourceStore((s) => s.filters);
-  const selectedItem = useDataSourceStore((s) => s.selectedItem);
   const searchBbox = useDataSourceStore((s) => s.searchBbox);
   const viewportZoom = useDataSourceStore((s) => s.viewportZoom);
-  const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
   const setFilter = useDataSourceStore((s) => s.setFilter);
   const clearFilters = useDataSourceStore((s) => s.clearFilters);
-  const setSidePanelCollapsed = usePlaceStore((s) => s.setSidePanelCollapsed);
+  const selectItem = useDataSourceStore((s) => s.selectItem);
+  const openingHoursFilter = useCategorySearchStore((s) => s.openingHoursFilter);
+  const { setSelectedPlace, setSidePanelCollapsed } = usePlaceStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [sortAsc, setSortAsc] = useState(true);
+  const [activeSortKey, setActiveSortKey] = useState<string | null>(null);
 
   useEffect(() => {
     setSidePanelCollapsed(collapsed);
@@ -233,6 +270,7 @@ export function DataSourceFilterPanel() {
   const {
     data: rawResults,
     isLoading,
+    isFetching,
     isError,
   } = useDataSourceSearch(
     shouldFetch ? activeSource : null,
@@ -240,14 +278,47 @@ export function DataSourceFilterPanel() {
     serverFilters,
   );
 
+  // Show loading when either initial load or refetching with new bbox
+  const showLoading = isLoading || (isFetching && (!rawResults || rawResults.length === 0));
+
   // Derive operator options from raw (pre-client-filter) results
   const operatorOptions = useMemo(() => deriveOperatorOptions(rawResults ?? []), [rawResults]);
 
   // Apply client-side filters for display count
-  const filteredResults = useMemo(
-    () => applyClientFilters(rawResults ?? [], filters),
-    [rawResults, filters],
-  );
+  const filteredResults = useMemo(() => {
+    let results = applyClientFilters(rawResults ?? [], filters);
+    // "Open now" filter from the opening hours chip
+    if (openingHoursFilter === "open_now") {
+      results = results.filter((r) => r.variant === "open");
+    }
+    return results;
+  }, [rawResults, filters, openingHoursFilter]);
+
+  // Available sort options per data source
+  const sortOptions = useMemo(() => {
+    if (activeSource === "fuel") {
+      const ft = filters.fuelType;
+      const key = Array.isArray(ft) && ft.length > 0 ? String(ft[0]) : "diesel";
+      return [{ key, label: "Price" }];
+    }
+    if (activeSource === "scooter-sharing") {
+      return [
+        { key: "range", label: "Range" },
+        { key: "battery", label: "Battery" },
+      ];
+    }
+    return [{ key: "available", label: "Availability" }];
+  }, [activeSource, filters.fuelType]);
+
+  // Sort results when a sort key is active
+  const sortedResults = useMemo(() => {
+    if (!activeSortKey) return filteredResults;
+    return [...filteredResults].sort((a, b) => {
+      const va = a.sortValues?.[activeSortKey] ?? (sortAsc ? Number.MAX_VALUE : -Number.MAX_VALUE);
+      const vb = b.sortValues?.[activeSortKey] ?? (sortAsc ? Number.MAX_VALUE : -Number.MAX_VALUE);
+      return sortAsc ? va - vb : vb - va;
+    });
+  }, [filteredResults, activeSortKey, sortAsc]);
 
   // Check if any filters are active
   const hasActiveFilters = Object.values(filters).some((v) => {
@@ -255,8 +326,8 @@ export function DataSourceFilterPanel() {
     return v !== undefined && v !== null;
   });
 
-  // Hide when no active source, no meta, or detail view is showing
-  if (!activeSource || !sourceMeta || selectedItem !== null) return null;
+  // Hide when no active source or no meta
+  if (!activeSource || !sourceMeta) return null;
 
   const belowMinZoom = sourceMeta && viewportZoom < sourceMeta.minZoom;
 
@@ -319,60 +390,8 @@ export function DataSourceFilterPanel() {
           flexDirection: "column",
         }}
       >
-        {/* Header */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            px: 2,
-            pt: { xs: 2, sm: "72px" },
-            pb: 1,
-          }}
-        >
-          <Typography variant="h6" fontWeight={600} sx={{ flex: 1, minWidth: 0, pr: 1 }}>
-            {sourceMeta.name}
-          </Typography>
-          <IconButton
-            onClick={() => setActiveSource(null)}
-            aria-label="Close"
-            size="small"
-            sx={{ mt: -0.5 }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        {/* Attribution */}
-        <Box sx={{ px: 2, pb: 1 }}>
-          <Typography variant="caption" color="text.secondary">
-            Data from{" "}
-            <Link
-              href="https://openchargemap.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              underline="hover"
-              color="inherit"
-            >
-              OpenChargeMap
-            </Link>
-            {" & "}
-            <Link
-              href="https://www.openstreetmap.org"
-              target="_blank"
-              rel="noopener noreferrer"
-              underline="hover"
-              color="inherit"
-            >
-              OpenStreetMap
-            </Link>
-          </Typography>
-        </Box>
-
-        <Divider />
-
-        {/* Filter sections */}
-        <Box sx={{ flex: 1, overflowY: "auto", px: 2, py: 1.5 }}>
+        {/* Filter sections + results */}
+        <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" }, px: 2, pb: 1.5 }}>
           {/* Clear all filters chip */}
           {hasActiveFilters && (
             <Box sx={{ mb: 1.5 }}>
@@ -454,33 +473,178 @@ export function DataSourceFilterPanel() {
               onChangeOperators={(ops) => setFilter("operator", ops)}
             />
           )}
-        </Box>
 
-        <Divider />
+          {/* Results list (for data sources like fuel that want individual results) */}
+          {sourceMeta.showResultsList && !showLoading && filteredResults.length > 0 && (
+            <Box sx={{ mx: -2 }}>
+              <Divider />
+              <Box
+                sx={{
+                  px: 2,
+                  pt: 1.5,
+                  pb: 0.5,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                }}
+              >
+                <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                  {filteredResults.length} result{filteredResults.length !== 1 ? "s" : ""}
+                </Typography>
 
-        {/* Status footer */}
-        <Box sx={{ px: 2, py: 1.5, textAlign: "center" }}>
-          {belowMinZoom ? (
-            <Typography variant="body2" color="text.secondary">
-              Zoom in to see stations
-            </Typography>
-          ) : isLoading ? (
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1 }}>
-              <CircularProgress size={16} />
-              <Typography variant="body2" color="text.secondary">
-                Loading...
-              </Typography>
+                {/* Sort controls */}
+                <Select
+                  size="small"
+                  value={activeSortKey ?? ""}
+                  displayEmpty
+                  onChange={(e) => setActiveSortKey(e.target.value || null)}
+                  IconComponent={() => null}
+                  startAdornment={
+                    <SortIcon sx={{ fontSize: 14, mr: 0.5, color: "text.secondary" }} />
+                  }
+                  sx={{
+                    fontSize: 12,
+                    height: 28,
+                    "& .MuiSelect-select": { py: 0, pl: 0.5, pr: "8px !important" },
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: TEAL },
+                    "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: TEAL },
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: TEAL },
+                  }}
+                >
+                  <MenuItem value="" sx={{ fontSize: 12 }}>
+                    None
+                  </MenuItem>
+                  {sortOptions.map((opt) => (
+                    <MenuItem key={opt.key} value={opt.key} sx={{ fontSize: 12 }}>
+                      {opt.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {activeSortKey && (
+                  <IconButton
+                    size="small"
+                    onClick={() => setSortAsc((v) => !v)}
+                    title={sortAsc ? "Low to high" : "High to low"}
+                    sx={{ p: 0.25 }}
+                  >
+                    {sortAsc ? (
+                      <ArrowUpwardIcon sx={{ fontSize: 16 }} />
+                    ) : (
+                      <ArrowDownwardIcon sx={{ fontSize: 16 }} />
+                    )}
+                  </IconButton>
+                )}
+              </Box>
+              {sortedResults.map((result, i) => (
+                <Box key={result.id}>
+                  {i > 0 && <Divider sx={{ mx: 2 }} />}
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={() => {
+                      if (!activeSource) return;
+                      selectItem(activeSource, result.id);
+                      // Set place directly from result data so the floating card
+                      // shows immediately with correct name/coordinates/summary
+                      setSelectedPlace({
+                        id: result.id,
+                        name: result.name,
+                        address: result.name,
+                        coordinates: result.coordinates,
+                        category: sourceMeta?.placeCategory,
+                        rawCategory: sourceMeta?.placeCategoryRaw,
+                      });
+                    }}
+                    sx={{
+                      width: "100%",
+                      textAlign: "left",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      px: 2,
+                      py: 1.5,
+                      "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
+                    }}
+                  >
+                    <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+                      {result.name}
+                    </Typography>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+                      {result.summary && (
+                        <Typography variant="caption" color="text.secondary">
+                          <FormattedSummary text={result.summary} />
+                        </Typography>
+                      )}
+                      {result.status && result.status !== "unknown" && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color:
+                              result.status === "open" || result.status === "available"
+                                ? "success.main"
+                                : result.status === "closed" || result.status === "empty"
+                                  ? "error.main"
+                                  : result.status === "full"
+                                    ? "warning.main"
+                                    : "text.secondary",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {result.status === "open"
+                            ? "Open"
+                            : result.status === "closed"
+                              ? "Closed"
+                              : result.status === "available"
+                                ? "Available"
+                                : result.status === "empty"
+                                  ? "Empty"
+                                  : result.status === "full"
+                                    ? "Full"
+                                    : null}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
+              ))}
             </Box>
-          ) : isError ? (
-            <Typography variant="body2" color="error">
-              Failed to load data. Try again.
-            </Typography>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              {filteredResults.length} station{filteredResults.length !== 1 ? "s" : ""} in view
-            </Typography>
           )}
         </Box>
+
+        {/* Status footer — show when below min zoom, loading, error, no results list, or results list is empty */}
+        {(belowMinZoom ||
+          showLoading ||
+          isError ||
+          !sourceMeta.showResultsList ||
+          filteredResults.length === 0) && (
+          <>
+            <Divider />
+            <Box sx={{ px: 2, py: 1.5, textAlign: "center" }}>
+              {belowMinZoom ? (
+                <Typography variant="body2" color="text.secondary">
+                  Zoom in to see stations
+                </Typography>
+              ) : showLoading ? (
+                <Box
+                  sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1 }}
+                >
+                  <CircularProgress size={16} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading...
+                  </Typography>
+                </Box>
+              ) : isError ? (
+                <Typography variant="body2" color="error">
+                  Failed to load data. Try again.
+                </Typography>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  {filteredResults.length} station{filteredResults.length !== 1 ? "s" : ""} in view
+                </Typography>
+              )}
+            </Box>
+          </>
+        )}
       </Paper>
 
       <SidebarCollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />

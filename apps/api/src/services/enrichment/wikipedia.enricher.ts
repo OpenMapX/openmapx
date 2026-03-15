@@ -40,7 +40,7 @@ export const wikipediaEnricher: EnrichmentSource = {
     if (data.thumbnail?.source) {
       // Upscale the thumbnail to 800px by replacing the width segment in the URL
       const photoUrl = data.thumbnail.source.replace(/\/\d+px-/, "/800px-");
-      result.photos = [{ url: photoUrl, attribution: "© Wikipedia" }];
+      result.photos = [{ url: photoUrl, attribution: "© Wikipedia (CC BY-SA 3.0)" }];
     }
 
     return Object.keys(result).length > 0 ? result : null;

@@ -147,6 +147,24 @@ export function AlertCard({ alert, compact = false, expandable = true }: AlertCa
                   ) : (
                     attr.label
                   )}
+                  {attr.license &&
+                    (attr.licenseUrl ? (
+                      <>
+                        {" ("}
+                        <Link
+                          href={attr.licenseUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          color="inherit"
+                          underline="hover"
+                        >
+                          {attr.license}
+                        </Link>
+                        {")"}
+                      </>
+                    ) : (
+                      ` (${attr.license})`
+                    ))}
                 </span>
               );
             })}

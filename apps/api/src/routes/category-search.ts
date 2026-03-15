@@ -1,6 +1,4 @@
 import type { FastifyPluginAsync } from "fastify";
-import { searchFuelStations } from "../services/fuel-prices/factory";
-import type { CategoryPlaceResult } from "../services/overpass.service";
 import { CATEGORY_FILTERS, searchByCategory } from "../services/overpass.service";
 import { hashKey, round, withCache } from "../utils/cache.js";
 
@@ -43,9 +41,7 @@ export const categorySearchRoute: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      // Fuel prices update every ~5min — short TTL keeps prices reasonably fresh.
-      // All other POI categories are stable OSM data — 30min is appropriate.
-      const ttl = category === "fuel" ? 120 : 1800;
+      const ttl = 1800;
 
       // Round bbox to 2dp (~1km) — queries within 1km share a cache entry
       const bboxRounded = {
@@ -59,27 +55,6 @@ export const categorySearchRoute: FastifyPluginAsync = async (fastify) => {
       // Cache-Control is set only on success — not on 400 error responses.
       try {
         const result = await withCache(cacheKey, ttl, async () => {
-          if (category === "fuel") {
-            try {
-              const fuelStations = await searchFuelStations(bbox);
-              if (fuelStations !== null) {
-                return fuelStations.map((s) => ({
-                  id: s.id,
-                  name: s.name,
-                  coordinates: s.coordinates,
-                  address: s.address,
-                  category: "fuel",
-                  isOpen: s.isOpen,
-                  fuelPrices: s.fuelPrices,
-                  fuelPricesUpdatedAt: s.fuelPricesUpdatedAt,
-                  fuelAttribution: s.attribution,
-                })) as CategoryPlaceResult[];
-              }
-            } catch (err) {
-              fastify.log.warn(err, "Fuel price provider error, falling back to Overpass");
-            }
-          }
-
           const filters = CATEGORY_FILTERS[category];
           if (!filters) {
             throw Object.assign(new Error(`Unknown category: ${category}`), { statusCode: 400 });

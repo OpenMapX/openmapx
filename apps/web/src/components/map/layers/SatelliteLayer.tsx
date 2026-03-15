@@ -29,7 +29,8 @@ export function SatelliteLayer() {
           tiles: [`https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${apiKey}`],
           tileSize: 256,
           maxzoom: 20,
-          attribution: "MapTiler Satellite",
+          attribution:
+            '© <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> (<a href="https://www.maptiler.com/copyright/" target="_blank">Proprietary</a>)',
         });
       }
 

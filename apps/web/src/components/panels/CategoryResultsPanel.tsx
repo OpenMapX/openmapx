@@ -1,22 +1,16 @@
 "use client";
 
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
-import SortIcon from "@mui/icons-material/Sort";
 import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import type { CategoryPlace, FuelPrices, TransitStop, TransportMode } from "@openmapx/core";
+import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
 import {
   categoryPlaceToPlace,
   parseOpeningHours,
@@ -28,66 +22,10 @@ import {
   useTransitStops,
 } from "@openmapx/core";
 import { useEffect, useRef, useState } from "react";
-import { FuelPrice } from "@/components/ui/FuelPrice";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
 import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMap } from "@/lib/MapContext";
-
-type SortField = "default" | "price";
-type SortDir = "asc" | "desc";
-
-const SORT_FIELDS: { value: SortField; label: string }[] = [
-  { value: "default", label: "Default" },
-  { value: "price", label: "Price" },
-];
-
-const DIR_LABELS: Record<SortDir, string> = {
-  asc: "Low to high",
-  desc: "High to low",
-};
-
-function applyCategorySort(
-  results: CategoryPlace[],
-  field: SortField,
-  dir: SortDir,
-): CategoryPlace[] {
-  if (field === "default") return results;
-  const asc = dir === "asc";
-  if (field === "price") {
-    return [...results].sort((a, b) => {
-      const pa = a.fuelPrices?.diesel ?? (asc ? Number.MAX_VALUE : -Number.MAX_VALUE);
-      const pb = b.fuelPrices?.diesel ?? (asc ? Number.MAX_VALUE : -Number.MAX_VALUE);
-      return asc ? pa - pb : pb - pa;
-    });
-  }
-  return results;
-}
-
-function FuelPricePills({ prices }: { prices: FuelPrices }) {
-  const pills: { label: string; value: number }[] = [];
-  if (prices.diesel !== undefined) pills.push({ label: "Diesel", value: prices.diesel });
-  if (prices.e5 !== undefined) pills.push({ label: "E5", value: prices.e5 });
-  if (prices.e10 !== undefined) pills.push({ label: "E10", value: prices.e10 });
-  if (pills.length === 0) return null;
-  return (
-    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}>
-      {pills.map((p) => (
-        <Chip
-          key={p.label}
-          label={
-            <>
-              {p.label} <FuelPrice value={p.value} />
-            </>
-          }
-          size="small"
-          variant="outlined"
-          sx={{ fontSize: 11, height: 20, "& .MuiChip-label": { px: 0.75 } }}
-        />
-      ))}
-    </Box>
-  );
-}
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   rail: TrainIcon,
@@ -146,6 +84,24 @@ function TransitStopCard({
               ) : (
                 attr.label
               )}
+              {attr.license &&
+                (attr.licenseUrl ? (
+                  <>
+                    {" ("}
+                    <Link
+                      href={attr.licenseUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      color="inherit"
+                      underline="hover"
+                    >
+                      {attr.license}
+                    </Link>
+                    {")"}
+                  </>
+                ) : (
+                  ` (${attr.license})`
+                ))}
             </Typography>
           );
         })()}
@@ -230,8 +186,6 @@ function CategoryPlaceCard({
         }
         return null;
       })()}
-
-      {place.fuelPrices && <FuelPricePills prices={place.fuelPrices} />}
     </Box>
   );
 }
@@ -256,9 +210,6 @@ export function CategoryResultsPanel() {
   const transitLoading = isTransitCategory && transitPending;
 
   const [collapsed, setCollapsed] = useState(false);
-  const [sortField, setSortField] = useState<SortField>("default");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [sortAnchorEl, setSortAnchorEl] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     setSidePanelCollapsed(collapsed);
@@ -270,8 +221,7 @@ export function CategoryResultsPanel() {
 
   const prevCategoryRef = useRef(activeCategory);
 
-  const results = filtered ? applyCategorySort(filtered, sortField, sortDir) : filtered;
-  const hasFuelPrices = results?.some((p) => p.fuelPrices) ?? false;
+  const results = filtered;
 
   // Auto-search when category becomes active or changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger on activeCategory change
@@ -291,14 +241,12 @@ export function CategoryResultsPanel() {
     setMapMoved(false);
   }, [activeCategory, mapReady]);
 
-  // Clear prev category ref when category is cleared; reset sort on category change
+  // Clear prev category ref when category is cleared
   useEffect(() => {
     if (!activeCategory) {
       prevCategoryRef.current = null;
       setMapMoved(false);
     }
-    setSortField("default");
-    setSortDir("asc");
   }, [activeCategory, setMapMoved]);
 
   // Listen for map movement to show "Search in this area"
@@ -315,7 +263,7 @@ export function CategoryResultsPanel() {
 
   const handleSelectPlace = (place: CategoryPlace) => {
     flyTo(place.coordinates, 17);
-    setSelectedPlace(categoryPlaceToPlace(place));
+    setSelectedPlace(categoryPlaceToPlace(place, activeCategory ?? undefined));
   };
 
   const handleSelectStop = (s: TransitStop) => {
@@ -407,99 +355,6 @@ export function CategoryResultsPanel() {
                 <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
                   {results.length} result{results.length !== 1 ? "s" : ""}
                 </Typography>
-
-                {hasFuelPrices && (
-                  <>
-                    <Box
-                      component="button"
-                      type="button"
-                      onClick={(e: React.MouseEvent<HTMLElement>) =>
-                        setSortAnchorEl(e.currentTarget)
-                      }
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 0.4,
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        p: 0,
-                        color: sortField !== "default" ? "primary.main" : "text.secondary",
-                        fontSize: 12,
-                        fontWeight: sortField !== "default" ? 600 : 400,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <SortIcon sx={{ fontSize: 14 }} />
-                      {sortField !== "default"
-                        ? SORT_FIELDS.find((f) => f.value === sortField)?.label
-                        : "Sort by"}
-                    </Box>
-
-                    {sortField !== "default" && (
-                      <Box
-                        component="button"
-                        type="button"
-                        onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                        title={DIR_LABELS[sortDir]}
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          p: 0,
-                          color: "primary.main",
-                        }}
-                      >
-                        {sortDir === "asc" ? (
-                          <ArrowUpwardIcon sx={{ fontSize: 14 }} />
-                        ) : (
-                          <ArrowDownwardIcon sx={{ fontSize: 14 }} />
-                        )}
-                      </Box>
-                    )}
-
-                    <Menu
-                      anchorEl={sortAnchorEl}
-                      open={Boolean(sortAnchorEl)}
-                      onClose={() => setSortAnchorEl(null)}
-                      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-                      transformOrigin={{ vertical: "top", horizontal: "right" }}
-                    >
-                      {SORT_FIELDS.map((opt) => (
-                        <MenuItem
-                          key={opt.value}
-                          selected={sortField === opt.value}
-                          onClick={() => {
-                            setSortField(opt.value);
-                            setSortAnchorEl(null);
-                          }}
-                          sx={{ fontSize: 14 }}
-                        >
-                          {opt.label}
-                        </MenuItem>
-                      ))}
-                    </Menu>
-                  </>
-                )}
-
-                {hasFuelPrices &&
-                  (() => {
-                    const attr = results?.find((p) => p.fuelAttribution)?.fuelAttribution;
-                    return attr ? (
-                      <Link
-                        href={attr.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        underline="hover"
-                        variant="caption"
-                        sx={{ color: "text.disabled" }}
-                      >
-                        {attr.label}
-                      </Link>
-                    ) : null;
-                  })()}
               </Box>
               {results.map((place, i) => (
                 <Box key={place.id}>

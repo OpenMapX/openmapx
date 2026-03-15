@@ -11,7 +11,11 @@ import Popover from "@mui/material/Popover";
 import Radio from "@mui/material/Radio";
 import Typography from "@mui/material/Typography";
 import type { OpeningHoursFilter } from "@openmapx/core";
-import { HOURS_FILTER_CATEGORY_IDS, useCategorySearchStore } from "@openmapx/core";
+import {
+  HOURS_FILTER_CATEGORY_IDS,
+  useCategorySearchStore,
+  useDataSourceStore,
+} from "@openmapx/core";
 import { useEffect, useState } from "react";
 import { TEAL } from "@/lib/theme";
 
@@ -98,6 +102,7 @@ export function CategoryFilterBar() {
     setOpeningHoursFilter,
     setOpenAtFilter,
   } = useCategorySearchStore();
+  const activeSource = useDataSourceStore((s) => s.activeSource);
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   // Pending state — committed only on Apply
@@ -115,8 +120,8 @@ export function CategoryFilterBar() {
     }
   }, [anchorEl]);
 
-  // Fuel stations: simple "Open now" toggle chip, no full popover needed
-  if (activeCategory === "fuel") {
+  // Fuel stations (data source): simple "Open now" toggle chip
+  if (activeSource === "fuel") {
     const isFiltered = openingHoursFilter === "open_now";
     return (
       <Box

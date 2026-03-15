@@ -30,7 +30,8 @@ export function TrafficLayer() {
           type: "raster",
           tiles: [getTrafficTileTemplate()],
           tileSize: 256,
-          attribution: "Traffic data © TomTom",
+          attribution:
+            'Traffic data © <a href="https://developer.tomtom.com/" target="_blank">TomTom</a> (<a href="https://developer.tomtom.com/terms-and-conditions" target="_blank">Proprietary</a>)',
         });
       }
 

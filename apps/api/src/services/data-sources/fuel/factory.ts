@@ -1,7 +1,7 @@
-import type { BoundingBox } from "../overpass.service";
+import type { BoundingBox } from "../../overpass.service";
 import { AustriaService } from "./austria.service";
 import { FranceService } from "./france.service";
-import type { FuelPriceProvider } from "./provider";
+import type { FuelPriceProvider } from "./price-provider";
 import { SpainService } from "./spain.service";
 import { TankerkoenigService } from "./tankerkoenig.service";
 import type { FuelStation } from "./types";

@@ -16,13 +16,24 @@ import { getEvChargingFilters } from "./reference.js";
 const META: DataSourceMeta = {
   id: "ev-charging",
   name: "EV Charging",
-  attribution: {
-    text: "OpenChargeMap & OpenStreetMap",
-    url: "https://openchargemap.org",
-    license: "CC BY-SA 4.0",
-  },
+  attribution: [
+    {
+      text: "OpenChargeMap",
+      url: "https://openchargemap.org",
+      license: "CC BY-SA 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
+    {
+      text: "OpenStreetMap",
+      url: "https://www.openstreetmap.org",
+      license: "ODbL",
+      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+    },
+  ],
   categoryChipLabel: "EV Charging",
   minZoom: 8,
+  placeCategory: "Charging Station",
+  placeCategoryRaw: "charging_station",
   markerStyle: {
     variantColors: {
       slow: "#4CAF50",
@@ -97,7 +108,7 @@ class EvChargingProvider implements DataSourceProvider {
       source: "unknown",
       name: "EV Charging Station",
       coordinates: [0, 0],
-      attribution: META.attribution,
+      attribution: Array.isArray(META.attribution) ? META.attribution[0] : META.attribution,
       sections: [],
     };
   }

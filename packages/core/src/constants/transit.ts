@@ -16,6 +16,8 @@ export const MODE_COLORS: Record<TransportMode, string> = {
 export interface ProviderAttribution {
   label: string;
   url: string;
+  license?: string;
+  licenseUrl?: string;
 }
 
 /**

@@ -11,7 +11,7 @@ import { useMap } from "@/lib/MapContext";
  * when coords/label change to avoid flickering.
  */
 export function usePinMarker(coords: LngLat | null, label: string, showLabel = true) {
-  const { mapRef } = useMap();
+  const { mapRef, mapReady } = useMap();
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
 
@@ -23,6 +23,7 @@ export function usePinMarker(coords: LngLat | null, label: string, showLabel = t
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mapReady is an intentional trigger so the marker is created once the map initializes
   useEffect(() => {
     if (!coords) {
       markerRef.current?.remove();
@@ -86,5 +87,5 @@ export function usePinMarker(coords: LngLat | null, label: string, showLabel = t
     return () => {
       destroyed = true;
     };
-  }, [coords, label, mapRef, showLabel]);
+  }, [coords, label, mapRef, mapReady, showLabel]);
 }
