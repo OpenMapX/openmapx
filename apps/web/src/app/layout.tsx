@@ -1,6 +1,8 @@
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-AppRouter";
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import "mapillary-js/dist/mapillary.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
@@ -18,12 +20,17 @@ export const metadata: Metadata = {
   description: "Open-data maps — a Google Maps alternative",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" className={plusJakartaSans.variable}>
+    <html lang={locale} className={plusJakartaSans.variable}>
       <body className="h-dvh overflow-hidden antialiased">
         <AppRouterCacheProvider>
-          <Providers>{children}</Providers>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <Providers>{children}</Providers>
+          </NextIntlClientProvider>
         </AppRouterCacheProvider>
       </body>
     </html>

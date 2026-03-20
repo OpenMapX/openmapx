@@ -1,6 +1,6 @@
 "use client";
 
-import { usePlaceStore } from "@openmapx/core";
+import { PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import type { MapMouseEvent, StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
@@ -119,6 +119,7 @@ export function MapStylePoiClickHandler() {
         category: poiSubclass ?? poiClass,
         rawCategory: poiSubclass ? `${poiClass}/${poiSubclass}` : poiClass,
       });
+      useSidebarStore.getState().openSidebar(PANEL.PLACE);
     };
 
     map.on("click", onClick);
@@ -136,11 +137,15 @@ export function MapStylePoiClickHandler() {
       const layerIds = poiLayerIdsRef.current.filter((id) => !!map.getLayer(id));
       if (layerIds.length === 0) return;
       const features = map.queryRenderedFeatures(e.point, { layers: layerIds });
-      map.getCanvas().style.cursor = features.some((f) => f.properties?.name) ? "pointer" : "";
+      if (features.some((f) => f.properties?.name)) {
+        map.getCanvasContainer().style.cursor = "pointer";
+      } else {
+        map.getCanvasContainer().style.cursor = "";
+      }
     };
 
     const onMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
+      map.getCanvasContainer().style.cursor = "";
     };
 
     map.on("mousemove", onMouseMove);

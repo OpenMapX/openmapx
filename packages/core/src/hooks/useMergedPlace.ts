@@ -105,7 +105,7 @@ function mergePlaceFields(
  * (Nominatim, reverse geocoding, data source APIs) and merges them with
  * deterministic priority.
  *
- * Used by both PlacePanel and CategoryPlaceFloatingCard to guarantee
+ * Used by both PlacePanelContent and PlaceDetailCard to guarantee
  * consistent data regardless of how the place was accessed.
  */
 export function useMergedPlace(selectedPlace: Place | null): {

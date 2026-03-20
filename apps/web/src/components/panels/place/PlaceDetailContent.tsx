@@ -10,6 +10,7 @@ import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { MergedRoute, Place, TransportMode } from "@openmapx/core";
 import { usePlaceStore } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TEAL } from "@/lib/theme";
 import { LineDetail } from "../transit/LineDetail";
@@ -18,6 +19,8 @@ import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { TripDetailView } from "../transit/TripDetailView";
 import { PlaceInfoTab } from "./PlaceInfoTab";
 import { PlaceOverviewTab } from "./PlaceOverviewTab";
+import { PlacePhotoGallery } from "./PlacePhotoGallery";
+import { PlacePhotoHero } from "./PlacePhotoHero";
 import { PlaceReviewsTab } from "./PlaceReviewsTab";
 
 interface Props {
@@ -29,7 +32,11 @@ interface Props {
 }
 
 export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar = false }: Props) {
+  const t = useTranslations("place");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const [tab, setTab] = useState(0);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [showDepartures, setShowDepartures] = useState(false);
   const [departuresModeFilter, setDeparturesModeFilter] = useState<TransportMode | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<MergedRoute | null>(null);
@@ -51,6 +58,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
   useEffect(() => {
     setTab(0);
+    setGalleryOpen(false);
     setShowDepartures(false);
     setDeparturesModeFilter(null);
     setSelectedRoute(null);
@@ -115,7 +123,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             {place.name}
           </Typography>
           {onClose && (
-            <IconButton onClick={onClose} aria-label="Close" size="small" sx={{ mt: -0.5 }}>
+            <IconButton onClick={onClose} aria-label={tc("close")} size="small" sx={{ mt: -0.5 }}>
               <CloseIcon />
             </IconButton>
           )}
@@ -137,69 +145,33 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     );
   }
 
-  const photoUrl = place.photos?.[0]?.url;
-  const hasPhoto = Boolean(
-    photoUrl && (photoUrl.startsWith("https://") || photoUrl.startsWith("http://")),
-  );
+  const enrichmentPhotos = place.photos ?? [];
+  const hasPhoto =
+    enrichmentPhotos.length > 0 &&
+    (enrichmentPhotos[0].url.startsWith("https://") ||
+      enrichmentPhotos[0].url.startsWith("http://"));
 
   return (
     <>
-      {/* Header photo */}
-      {hasPhoto && (
-        <Box sx={{ height: 220, position: "relative", flexShrink: 0, overflow: "hidden" }}>
-          <Box
-            component="img"
-            src={photoUrl}
-            alt={place.name}
-            onError={(e) => {
-              const container = (e.currentTarget as HTMLImageElement).parentElement;
-              if (container) container.style.display = "none";
-            }}
-            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-          <Box
-            sx={{
-              position: "absolute",
-              bottom: 4,
-              right: 6,
-              bgcolor: "rgba(0,0,0,0.35)",
-              borderRadius: 0.5,
-              px: 0.75,
-              py: 0.25,
-            }}
-          >
-            <Box
-              component="span"
-              sx={{
-                fontSize: 10,
-                color: "rgba(255,255,255,0.85)",
-                lineHeight: 1,
-                display: "block",
-              }}
-            >
-              {place.photos?.[0].attribution}
-            </Box>
-          </Box>
-          {onClose && (
-            <IconButton
-              onClick={onClose}
-              aria-label="Close"
-              sx={{
-                position: "absolute",
-                top: 8,
-                right: 8,
-                bgcolor: "#fff",
-                borderRadius: "50%",
-                boxShadow: 2,
-                p: 0.75,
-                "&:hover": { bgcolor: "grey.100" },
-              }}
-            >
-              <CloseIcon sx={{ fontSize: 24, color: "#000" }} />
-            </IconButton>
-          )}
-        </Box>
-      )}
+      {/* Header photo with "View photos" */}
+      {hasPhoto ? (
+        <PlacePhotoHero
+          photos={enrichmentPhotos}
+          placeName={place.name}
+          onClose={onClose}
+          onViewPhotos={() => setGalleryOpen(true)}
+        />
+      ) : null}
+
+      {/* Photo gallery modal */}
+      <PlacePhotoGallery
+        open={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        placeName={place.name}
+        placeId={place.id}
+        lat={place.coordinates[1]}
+        lng={place.coordinates[0]}
+      />
 
       {/* Name / rating / category */}
       <Box
@@ -214,7 +186,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         {onClose && !hasPhoto && (
           <IconButton
             onClick={onClose}
-            aria-label="Close"
+            aria-label={tc("close")}
             sx={{
               position: "absolute",
               top: clearSearchBar ? { xs: 8, sm: "72px" } : 8,
@@ -240,7 +212,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             </Typography>
             <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
             <Typography variant="body2" color="text.secondary">
-              ({place.reviewCount?.toLocaleString()})
+              ({place.reviewCount?.toLocaleString(locale)})
             </Typography>
           </Box>
         )}
@@ -285,9 +257,9 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           borderBottom: "1px solid rgba(0,0,0,0.1)",
         }}
       >
-        <Tab label="Overview" />
-        <Tab label="Reviews" />
-        <Tab label="Info" />
+        <Tab label={t("overview")} />
+        <Tab label={t("reviews")} />
+        <Tab label={t("info")} />
       </Tabs>
 
       {tab === 0 && (

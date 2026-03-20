@@ -1,6 +1,6 @@
+import type { OverpassNode } from "../../overpass";
+import { overpassQuerySafe } from "../../overpass";
 import type { BBox, TransitStop, TransportMode } from "../types";
-
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
 function tagsToModes(tags: Record<string, string>): TransportMode[] {
   const modes: TransportMode[] = [];
@@ -25,28 +25,22 @@ function tagsToModes(tags: Record<string, string>): TransportMode[] {
 export async function getStops(bbox: BBox): Promise<TransitStop[]> {
   const [w, s, e, n] = bbox;
   const query = `[out:json][timeout:25];node["public_transport"="stop_position"](${s},${w},${n},${e});out body;`;
-  try {
-    const res = await fetch(OVERPASS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `data=${encodeURIComponent(query)}`,
-    });
-    if (!res.ok) return [];
-    // biome-ignore lint/suspicious/noExplicitAny: external API response
-    const data = (await res.json()) as { elements?: any[] };
-    return (data.elements ?? []).map(
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      (node: any): TransitStop => ({
-        id: `osm:${node.id}`,
-        name: node.tags?.name ?? node.tags?.["name:en"] ?? "Unknown",
-        lat: node.lat,
-        lng: node.lon,
-        modes: tagsToModes(node.tags ?? {}),
-        platformCode: node.tags?.ref ?? undefined,
-        provider: "overpass",
-      }),
-    );
-  } catch {
-    return [];
-  }
+
+  const data = await overpassQuerySafe(query, null);
+  if (!data) return [];
+
+  // Query returns only nodes, safe to cast
+  const nodes = data.elements as unknown as OverpassNode[];
+  return nodes.map((node) => {
+    const tags = node.tags ?? {};
+    return {
+      id: `osm:${node.id}`,
+      name: tags.name ?? tags["name:en"] ?? "Unknown",
+      lat: node.lat,
+      lng: node.lon,
+      modes: tagsToModes(tags),
+      platformCode: tags.ref ?? undefined,
+      provider: "overpass" as const,
+    };
+  });
 }

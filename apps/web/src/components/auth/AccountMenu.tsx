@@ -12,6 +12,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
 import { authClient, getInitials } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 
 interface AccountMenuProps {
   anchorEl: HTMLElement | null;
@@ -22,6 +23,7 @@ interface AccountMenuProps {
 
 export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: AccountMenuProps) {
   const open = Boolean(anchorEl);
+  const t = useTranslations("account");
 
   const handleSignOut = async () => {
     onClose();
@@ -85,14 +87,14 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
         <ListItemIcon>
           <SettingsIcon fontSize="small" />
         </ListItemIcon>
-        <ListItemText>Account settings</ListItemText>
+        <ListItemText>{t("accountSettings")}</ListItemText>
       </MenuItem>
       <Divider sx={{ my: "0 !important" }} />
       <MenuItem onClick={handleSignOut} sx={{ py: 1.5 }}>
         <ListItemIcon>
           <LogoutIcon fontSize="small" />
         </ListItemIcon>
-        <ListItemText>Sign out</ListItemText>
+        <ListItemText>{t("signOut")}</ListItemText>
       </MenuItem>
     </Menu>
   );

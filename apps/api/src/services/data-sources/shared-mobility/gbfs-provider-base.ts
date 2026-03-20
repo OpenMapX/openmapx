@@ -4,6 +4,7 @@
  */
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
+import { cacheGet, cacheSet, TTL } from "../../../utils/cache.js";
 import { reverseGeocodeCity } from "../../nominatim-lookup.service.js";
 import {
   filterCatalogByBbox,
@@ -23,14 +24,14 @@ const EXCLUDED_GBFS_PREFIXES = [
 ];
 const _FETCH_TIMEOUT_MS = 15_000;
 
-// In-memory cache of recently fetched system data
+// Redis cache key prefix and TTL for per-system station/vehicle data
+const SYSTEM_CACHE_PREFIX = "cache:gbfs:system:";
+const SYSTEM_CACHE_TTL = TTL.sharedMobility.stations; // 120s
+
 interface CachedSystemData {
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
-  expiresAt: number;
 }
-const systemDataCache = new Map<string, CachedSystemData>();
-const SYSTEM_DATA_TTL_MS = 120_000; // 2min
 
 function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
   return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
@@ -118,9 +119,10 @@ async function fetchSystemData(
   targetFormFactors: Set<VehicleFormFactor>,
   unknownFormFactor: VehicleFormFactor,
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] } | null> {
-  // Check cache
-  const cached = systemDataCache.get(systemId);
-  if (cached && cached.expiresAt > Date.now()) {
+  // Check Redis cache (persists across requests with different bboxes)
+  const cacheKey = `${SYSTEM_CACHE_PREFIX}${systemId}`;
+  const cached = await cacheGet<CachedSystemData>(cacheKey);
+  if (cached) {
     return {
       stations: cached.stations.filter(
         (s) =>
@@ -294,12 +296,8 @@ async function fetchSystemData(
     });
   }
 
-  // Cache all data (pre-bbox-filter) for reuse
-  systemDataCache.set(systemId, {
-    stations,
-    vehicles,
-    expiresAt: Date.now() + SYSTEM_DATA_TTL_MS,
-  });
+  // Cache all data (pre-bbox-filter) in Redis for reuse across different bboxes
+  await cacheSet(cacheKey, { stations, vehicles }, SYSTEM_CACHE_TTL);
 
   // Filter to bbox
   return {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useAirQualityStore, useStreetViewStore } from "@openmapx/core";
-import type { MapLayerMouseEvent } from "maplibre-gl";
+import { useOverlayExclusion, useStreetViewStore } from "@openmapx/core";
+import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
@@ -16,14 +16,9 @@ const MLY_INTERACTIVE_LAYERS = [MLY_PHOTO_LAYER, MLY_PANO_LAYER] as const;
 
 export function StreetViewLayer() {
   const { mapRef, mapReady } = useMap();
-  const coverageVisible = useStreetViewStore((s) => s.coverageVisible);
+  const layerVisible = useStreetViewStore((s) => s.layerVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
-  const aqClosePanel = useAirQualityStore((s) => s.closePanel);
-
-  // Mutual exclusion: close AQ whenever SV coverage turns on (covers Pegman + legend toggle)
-  useEffect(() => {
-    if (coverageVisible) aqClosePanel();
-  }, [coverageVisible, aqClosePanel]);
+  useOverlayExclusion("street-view", layerVisible);
 
   // Manage coverage layers
   useEffect(() => {
@@ -33,7 +28,7 @@ export function StreetViewLayer() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
 
     const syncLayers = () => {
-      if (!coverageVisible) {
+      if (!layerVisible) {
         try {
           for (const layerId of MLY_LAYERS) {
             if (map.getLayer(layerId)) map.removeLayer(layerId);
@@ -117,7 +112,7 @@ export function StreetViewLayer() {
       }
     };
 
-    if (!coverageVisible) {
+    if (!layerVisible) {
       syncLayers();
       return;
     }
@@ -127,40 +122,42 @@ export function StreetViewLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, coverageVisible]);
+  }, [mapReady, mapRef, layerVisible]);
 
   // Click + cursor handlers
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady || !coverageVisible) return;
+    if (!map || !mapReady || !layerVisible) return;
 
     const handleClick = (e: MapLayerMouseEvent) => {
       const id = e.features?.[0]?.properties?.id;
       if (id != null) setActiveImageId(String(id));
     };
 
-    const handleMouseEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-
-    const handleMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
+    const handleMouseMove = (e: MapMouseEvent) => {
+      const activeLayers = MLY_INTERACTIVE_LAYERS.filter((id) => !!map.getLayer(id));
+      if (activeLayers.length === 0) return;
+      const features = map.queryRenderedFeatures(e.point, { layers: [...activeLayers] });
+      if (features.length > 0) {
+        map.getCanvasContainer().style.cursor = "pointer";
+      } else {
+        map.getCanvasContainer().style.cursor = "";
+      }
     };
 
     for (const layerId of MLY_INTERACTIVE_LAYERS) {
       map.on("click", layerId, handleClick);
-      map.on("mouseenter", layerId, handleMouseEnter);
-      map.on("mouseleave", layerId, handleMouseLeave);
     }
+    map.on("mousemove", handleMouseMove);
 
     return () => {
       for (const layerId of MLY_INTERACTIVE_LAYERS) {
         map.off("click", layerId, handleClick);
-        map.off("mouseenter", layerId, handleMouseEnter);
-        map.off("mouseleave", layerId, handleMouseLeave);
       }
+      map.off("mousemove", handleMouseMove);
+      map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, mapRef, coverageVisible, setActiveImageId]);
+  }, [mapReady, mapRef, layerVisible, setActiveImageId]);
 
   return null;
 }

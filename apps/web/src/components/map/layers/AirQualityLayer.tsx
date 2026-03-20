@@ -1,9 +1,10 @@
 "use client";
 
-import { useAirQualityStore, useDebouncedCallback, useStreetViewStore } from "@openmapx/core";
+import { useAirQualityStore, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
+import { escapeHtml, sanitizeUrl } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
 
@@ -80,16 +81,10 @@ function buildGeoJson(stations: AQStation[]) {
 export function AirQualityLayer() {
   const { mapRef, mapReady } = useMap();
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
-  const closePanel = useAirQualityStore((s) => s.closePanel);
   const setLoading = useAirQualityStore((s) => s.setLoading);
-  const svCoverageVisible = useStreetViewStore((s) => s.coverageVisible);
+  useOverlayExclusion("air-quality", layerVisible);
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
-
-  // Mutual exclusion: close AQ whenever SV coverage turns on
-  useEffect(() => {
-    if (svCoverageVisible) closePanel();
-  }, [svCoverageVisible, closePanel]);
 
   const fetchStations = useCallback(async () => {
     const map = mapRef.current;
@@ -215,9 +210,9 @@ export function AirQualityLayer() {
       const label = aqiLabel(aqi);
       const color = aqiColor(aqi);
 
-      const attrName = String(p.attributionName || "");
-      const attrUrl = String(p.attributionUrl || "");
-      const license = String(p.license || "");
+      const attrName = escapeHtml(String(p.attributionName || ""));
+      const attrUrl = sanitizeUrl(String(p.attributionUrl || ""));
+      const license = escapeHtml(String(p.license || ""));
       const attrLink = attrUrl
         ? `<a href="${attrUrl}" target="_blank" style="color:inherit;text-decoration:underline">${attrName}</a>`
         : attrName;
@@ -227,7 +222,7 @@ export function AirQualityLayer() {
 
       const html = `
         <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:200px">
-          <div style="font-size:14px;font-weight:600;margin-bottom:8px">${p.name}</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:8px">${escapeHtml(String(p.name))}</div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <span style="display:inline-flex;align-items:center;justify-content:center;background:${color};color:#fff;font-weight:700;font-size:18px;border-radius:6px;min-width:48px;height:36px;padding:0 8px">${aqi}</span>
             <div>
@@ -244,28 +239,30 @@ export function AirQualityLayer() {
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
         maxWidth: "280px",
-        className: "aq-popup",
+        className: "omx-popup",
       })
         .setLngLat(coords)
         .setHTML(html)
         .addTo(map);
     };
 
-    const onMouseEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const onMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
+    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (!map.getLayer(AQ_LAYER_ID)) return;
+      const features = map.queryRenderedFeatures(e.point, { layers: [AQ_LAYER_ID] });
+      if (features.length > 0) {
+        map.getCanvasContainer().style.cursor = "pointer";
+      } else {
+        map.getCanvasContainer().style.cursor = "";
+      }
     };
 
     map.on("click", AQ_LAYER_ID, onClick);
-    map.on("mouseenter", AQ_LAYER_ID, onMouseEnter);
-    map.on("mouseleave", AQ_LAYER_ID, onMouseLeave);
+    map.on("mousemove", onMouseMove);
 
     return () => {
       map.off("click", AQ_LAYER_ID, onClick);
-      map.off("mouseenter", AQ_LAYER_ID, onMouseEnter);
-      map.off("mouseleave", AQ_LAYER_ID, onMouseLeave);
+      map.off("mousemove", onMouseMove);
+      map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
     };
   }, [mapReady, mapRef, layerVisible]);

@@ -330,10 +330,23 @@ export async function planTrip(
           // Transit legs have route info; walk legs do not
           const isTransit = !!(leg.routeShortName || leg.routeLongName || leg.routeId);
 
+          // For transit legs, fall back to scheduled times when realtime data is
+          // clearly wrong (e.g. all stops report the same time due to bad GTFS-RT)
+          let legStart = (leg.startTime ?? "") as string;
+          let legEnd = (leg.endTime ?? "") as string;
+          if (isTransit && legStart && legEnd && legStart === legEnd) {
+            const schedStart = leg.scheduledStartTime as string | undefined;
+            const schedEnd = leg.scheduledEndTime as string | undefined;
+            if (schedStart && schedEnd && schedStart !== schedEnd) {
+              legStart = schedStart;
+              legEnd = schedEnd;
+            }
+          }
+
           return {
             mode,
-            startTime: (leg.startTime ?? "") as string,
-            endTime: (leg.endTime ?? "") as string,
+            startTime: legStart,
+            endTime: legEnd,
             from: {
               name: (fromPlace.name ?? "") as string,
               lat: (fromPlace.lat ?? 0) as number,

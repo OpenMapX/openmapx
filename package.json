@@ -5,12 +5,13 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "start": "turbo run start",
-    "lint": "biome check .",
+    "lint": "biome check . && pnpm check-translations",
     "format": "biome format --write .",
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types",
     "prepare": "husky",
-    "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL"
+    "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
+    "check-translations": "pnpm -C apps/web exec tsx scripts/check-translations.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.5",

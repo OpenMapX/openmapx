@@ -1,5 +1,6 @@
 "use client";
 
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -19,6 +20,7 @@ import {
   decodeShortPlusCode,
   detectShortPlusCodeCity,
   isTransitName,
+  PANEL,
   parseCoordinateInput,
   parseDMSCoordinateInput,
   parsePlusCodeInput,
@@ -29,11 +31,15 @@ import {
   useDebounce,
   useDirectionsStore,
   useGeocoding,
+  useMenuStore,
   usePlaceStore,
+  useSavedPlacesStore,
   useSearchStore,
+  useSidebarStore,
   useStopSearch,
 } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
@@ -88,20 +94,23 @@ function searchRelevance(result: AutocompleteResult, query: string): number {
   return score;
 }
 
-const MODE_LABELS: Record<string, string> = {
-  bus: "Bus",
-  rail: "Train",
-  subway: "Subway",
-  tram: "Tram",
-  ferry: "Ferry",
-  gondola: "Gondola",
-  funicular: "Funicular",
-  cable_car: "Cable Car",
-  monorail: "Monorail",
-  walking: "Walking",
+const MODE_LABEL_KEYS: Record<string, string> = {
+  bus: "bus",
+  rail: "rail",
+  subway: "subway",
+  tram: "tram",
+  ferry: "ferry",
+  gondola: "gondola",
+  funicular: "funicular",
+  cable_car: "cableCar",
+  monorail: "monorail",
+  walking: "walking",
 };
 
 export function SearchBar() {
+  const t = useTranslations("search");
+  const tModes = useTranslations("searchModes");
+  const locale = useLocale();
   const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
     useSearchStore();
   const { setSelectedPlace } = usePlaceStore();
@@ -110,14 +119,16 @@ export function SearchBar() {
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
+  const openMenu = useMenuStore((s) => s.open);
+  const { selectedListId, clearSelectedList } = useSavedPlacesStore();
   const { flyTo, mapRef } = useMap();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedQuery = useDebounce(query, 300);
   const debouncedGeoQuery = useDebounce(query, 400);
-  const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery);
-  const { data: geocodeData } = useGeocoding(debouncedGeoQuery);
+  const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
+  const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale);
 
   // Stop search — slower debounce to reduce transit API load
   const rawStopQuery = query.trim().length >= 2 ? query.trim() : "";
@@ -139,7 +150,7 @@ export function SearchBar() {
   // the reference coordinates for decoding.
   const shortPlusCity = detectShortPlusCodeCity(query.trim());
   const debouncedCity = useDebounce(shortPlusCity?.city ?? "", 400);
-  const { data: cityRefData } = useGeocoding(debouncedCity);
+  const { data: cityRefData } = useGeocoding(debouncedCity, locale);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -194,7 +205,7 @@ export function SearchBar() {
           (cat) => ({
             id: `category-${cat.id}`,
             label: cat.label,
-            sublabel: "Search category",
+            sublabel: t("searchCategory"),
             type: "category" as const,
             iconPath: cat.iconPath,
           }),
@@ -205,7 +216,9 @@ export function SearchBar() {
     (stop): AutocompleteResult => ({
       id: `stop-${stop.id}`,
       label: stop.name,
-      sublabel: stop.modes.map((m) => MODE_LABELS[m] ?? m).join(", "),
+      sublabel: stop.modes
+        .map((m) => (MODE_LABEL_KEYS[m] ? tModes(MODE_LABEL_KEYS[m]) : m))
+        .join(", "),
       coordinates: [stop.lng, stop.lat],
       type: "transit_stop",
       transitStop: stop,
@@ -240,10 +253,11 @@ export function SearchBar() {
           address: match.name,
           coordinates: [match.lng, match.lat] as [number, number],
         });
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
         return true;
       }
     } catch {
-      // Silently fall back to PlacePanel
+      // Silently fall back to place panel
     }
     return false;
   };
@@ -282,6 +296,7 @@ export function SearchBar() {
               category: first.type,
               rawCategory: first.rawCategory,
             });
+            useSidebarStore.getState().openSidebar(PANEL.PLACE);
           }
         });
       } else {
@@ -293,6 +308,7 @@ export function SearchBar() {
           category: first.type,
           rawCategory: first.rawCategory,
         });
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
       }
     }
   };
@@ -302,7 +318,10 @@ export function SearchBar() {
       setQuery(result.label);
       setIsFocused(false);
       if (result.coordinates) flyTo(result.coordinates, 15);
-      void resolveStopAsPlace(result.transitStop).then(setSelectedPlace);
+      void resolveStopAsPlace(result.transitStop).then((place) => {
+        setSelectedPlace(place);
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+      });
       return;
     }
 
@@ -314,8 +333,10 @@ export function SearchBar() {
         // Route to data source system instead of category search
         clearCategory();
         setActiveSource(def.dataSourceId);
+        useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
       } else {
         setActiveCategory(catId as Parameters<typeof setActiveCategory>[0]);
+        useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
       }
       setQuery(result.label);
       setIsFocused(false);
@@ -340,6 +361,7 @@ export function SearchBar() {
               category: result.type,
               rawCategory: result.rawCategory,
             });
+            useSidebarStore.getState().openSidebar(PANEL.PLACE);
           }
         });
       } else {
@@ -351,6 +373,7 @@ export function SearchBar() {
           category: result.type,
           rawCategory: result.rawCategory,
         });
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
       }
     }
   };
@@ -385,9 +408,20 @@ export function SearchBar() {
           onSubmit={handleSubmit}
           sx={{ display: "flex", alignItems: "center", height: 48, px: 0.5 }}
         >
-          <IconButton size="small" sx={{ ml: 0.5, mr: 0.5 }} aria-label="Menu">
-            <MenuIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-          </IconButton>
+          {selectedListId ? (
+            <IconButton size="small" sx={{ ml: 0.5, mr: 0.5 }} onClick={clearSelectedList}>
+              <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+            </IconButton>
+          ) : (
+            <IconButton
+              size="small"
+              sx={{ ml: 0.5, mr: 0.5 }}
+              onClick={openMenu}
+              aria-label={t("menuAriaLabel")}
+            >
+              <MenuIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+            </IconButton>
+          )}
 
           <InputBase
             inputRef={inputRef}
@@ -395,8 +429,8 @@ export function SearchBar() {
             onChange={handleChange}
             onFocus={() => setIsFocused(true)}
             onBlur={handleBlur}
-            placeholder="Search OpenMapX"
-            inputProps={{ "aria-label": "search" }}
+            placeholder={t("placeholder")}
+            inputProps={{ "aria-label": t("ariaLabel") }}
             sx={{
               flex: 1,
               fontSize: 16,
@@ -408,14 +442,14 @@ export function SearchBar() {
             }}
           />
 
-          <IconButton type="submit" size="small" aria-label="Search">
+          <IconButton type="submit" size="small" aria-label={t("searchAriaLabel")}>
             <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
           </IconButton>
 
           {hasSidePanel ? (
             <IconButton
               size="small"
-              aria-label="Close panel"
+              aria-label={t("closePanelAriaLabel")}
               sx={{ ml: 1, mr: 0.5 }}
               onClick={() => {
                 closeSidePanel();
@@ -425,12 +459,15 @@ export function SearchBar() {
               <CloseIcon sx={{ fontSize: 22, color: "text.secondary" }} />
             </IconButton>
           ) : (
-            <Tooltip title="Directions" placement="bottom">
+            <Tooltip title={t("directionsTooltip")} placement="bottom">
               <IconButton
                 size="small"
-                aria-label="Get directions"
+                aria-label={t("getDirectionsAriaLabel")}
                 sx={{ ml: 1, mr: 0.5 }}
-                onClick={openDirections}
+                onClick={() => {
+                  openDirections();
+                  useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+                }}
               >
                 <DirectionsIcon sx={{ fontSize: 22, color: TEAL }} />
               </IconButton>

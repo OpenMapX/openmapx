@@ -9,10 +9,12 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import { useMapStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useMap } from "@/lib/MapContext";
 import { Pegman } from "./Pegman";
 
 export function MapControls() {
+  const t = useTranslations("map");
   const { zoomIn, zoomOut, resetBearing, flyTo } = useMap();
   const bearing = useMapStore((s) => s.bearing);
   const setUserLocation = useMapStore((s) => s.setUserLocation);
@@ -45,13 +47,13 @@ export function MapControls() {
       }}
     >
       {/* My location — topmost, matches Google Maps order */}
-      <Tooltip title="My location" placement="left">
+      <Tooltip title={t("myLocation")} placement="left">
         <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
           <IconButton
             size="small"
             onClick={handleMyLocation}
             sx={{ width: 36, height: 36 }}
-            aria-label="Go to my location"
+            aria-label={t("goToMyLocationAriaLabel")}
           >
             <MyLocationIcon sx={{ fontSize: 18, color: "primary.main" }} />
           </IconButton>
@@ -60,23 +62,23 @@ export function MapControls() {
 
       {/* Zoom in / zoom out */}
       <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
-        <Tooltip title="Zoom in" placement="left">
+        <Tooltip title={t("zoomIn")} placement="left">
           <IconButton
             size="small"
             onClick={zoomIn}
             sx={{ width: 36, height: 36, borderRadius: 0 }}
-            aria-label="Zoom in"
+            aria-label={t("zoomInAriaLabel")}
           >
             <AddIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
         <Box sx={{ height: "1px", bgcolor: "divider", mx: 1 }} />
-        <Tooltip title="Zoom out" placement="left">
+        <Tooltip title={t("zoomOut")} placement="left">
           <IconButton
             size="small"
             onClick={zoomOut}
             sx={{ width: 36, height: 36, borderRadius: 0 }}
-            aria-label="Zoom out"
+            aria-label={t("zoomOutAriaLabel")}
           >
             <RemoveIcon sx={{ fontSize: 18 }} />
           </IconButton>
@@ -87,13 +89,13 @@ export function MapControls() {
 
       {/* Compass — only visible when map is rotated */}
       {Math.abs(bearing) > 0.5 && (
-        <Tooltip title="Reset bearing" placement="left">
+        <Tooltip title={t("resetBearing")} placement="left">
           <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
             <IconButton
               size="medium"
               onClick={resetBearing}
               sx={{ width: 40, height: 40 }}
-              aria-label="Reset bearing to north"
+              aria-label={t("resetBearingAriaLabel")}
             >
               <ExploreIcon
                 sx={{

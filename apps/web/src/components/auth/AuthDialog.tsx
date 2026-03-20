@@ -16,6 +16,7 @@ import Link from "@mui/material/Link";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { authClient, oauthProviders } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 type AuthMode = "sign-in" | "sign-up" | "2fa" | "forgot-password" | "reset-password";
@@ -26,6 +27,8 @@ interface AuthDialogProps {
 }
 
 export function AuthDialog({ open, onClose }: AuthDialogProps) {
+  const t = useTranslations("auth");
+  const tc = useTranslations("common");
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -80,7 +83,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           name,
         });
         if (signUpError) {
-          setError(signUpError.message ?? "Sign up failed");
+          setError(signUpError.message ?? t("signUpFailed"));
           return;
         }
       } else {
@@ -89,7 +92,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           password,
         });
         if (signInError) {
-          setError(signInError.message ?? "Sign in failed");
+          setError(signInError.message ?? t("signInFailed"));
           return;
         }
         if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) {
@@ -100,7 +103,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
       }
       handleClose();
     } catch {
-      setError("An unexpected error occurred");
+      setError(t("signInFailed"));
     } finally {
       setLoading(false);
     }
@@ -116,7 +119,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           code: totpCode,
         });
         if (backupError) {
-          setError(backupError.message ?? "Invalid backup code");
+          setError(backupError.message ?? t("invalidBackupCode"));
           return;
         }
       } else {
@@ -124,13 +127,13 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           code: totpCode,
         });
         if (totpError) {
-          setError(totpError.message ?? "Invalid code");
+          setError(totpError.message ?? t("signInFailed"));
           return;
         }
       }
       handleClose();
     } catch {
-      setError("Verification failed");
+      setError(t("verificationFailed"));
     } finally {
       setLoading(false);
     }
@@ -145,13 +148,13 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
         email,
       });
       if (resetError) {
-        setError(resetError.message ?? "Failed to send reset code");
+        setError(resetError.message ?? t("failedSendResetCode"));
         return;
       }
       setMode("reset-password");
-      setSuccessMessage("Verification code sent to your email");
+      setSuccessMessage(t("verificationCodeSentEmail"));
     } catch {
-      setError("Failed to send reset code");
+      setError(t("failedSendResetCode"));
     } finally {
       setLoading(false);
     }
@@ -169,16 +172,16 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
         password: newPassword,
       });
       if (resetError) {
-        setError(resetError.message ?? "Failed to reset password");
+        setError(resetError.message ?? t("failedResetPassword"));
         return;
       }
-      setSuccessMessage("Password reset successfully");
+      setSuccessMessage(t("passwordResetSuccess"));
       setTimeout(() => {
         resetForm();
         setMode("sign-in");
       }, 1500);
     } catch {
-      setError("Failed to reset password");
+      setError(t("failedResetPassword"));
     } finally {
       setLoading(false);
     }
@@ -190,12 +193,12 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
     try {
       const { error: passkeyError } = await authClient.signIn.passkey();
       if (passkeyError) {
-        setError(passkeyError.message ?? "Passkey sign-in failed");
+        setError(passkeyError.message ?? t("passkeySignInFailed"));
         return;
       }
       handleClose();
     } catch {
-      setError("Passkey authentication failed");
+      setError(t("passkeyAuthFailed"));
     } finally {
       setLoading(false);
     }
@@ -210,7 +213,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
         callbackURL: window.location.origin,
       });
     } catch {
-      setError(`${providerName} sign-in failed`);
+      setError(t("oauthSignInFailed", { provider: providerName }));
       setLoading(false);
     }
   };
@@ -233,25 +236,25 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
         <Box sx={{ textAlign: "center", mb: 3 }}>
           <Typography variant="h5" sx={{ fontWeight: 600, color: "text.primary", mb: 0.5 }}>
             {mode === "2fa"
-              ? "2-Step Verification"
+              ? t("twoStepVerification")
               : mode === "forgot-password"
-                ? "Account recovery"
+                ? t("accountRecovery")
                 : mode === "reset-password"
-                  ? "Reset password"
+                  ? t("resetPassword")
                   : mode === "sign-in"
-                    ? "Sign in"
-                    : "Create account"}
+                    ? t("signIn")
+                    : t("createAccount")}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {mode === "2fa"
-              ? "Enter the code from your authenticator app"
+              ? t("enterCodeFromApp")
               : mode === "forgot-password"
-                ? "Enter your email to receive a reset code"
+                ? t("enterEmailForReset")
                 : mode === "reset-password"
-                  ? "Enter the code and your new password"
+                  ? t("enterCodeAndPassword")
                   : mode === "sign-in"
-                    ? "Use your OpenMapX account"
-                    : "Create your OpenMapX account"}
+                    ? t("useYourAccount")
+                    : t("createYourAccount")}
           </Typography>
         </Box>
 
@@ -267,12 +270,12 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           </Alert>
         )}
 
-        {/* ── Forgot password ───────────────────────────────── */}
+        {/* Forgot password */}
         {mode === "forgot-password" ? (
           <Box component="form" onSubmit={handleForgotPassword}>
             <TextField
               fullWidth
-              label="Email"
+              label={t("email")}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -289,7 +292,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
               disabled={loading || !email}
               sx={{ mb: 2, py: 1.2, fontWeight: 600 }}
             >
-              {loading ? <CircularProgress size={22} color="inherit" /> : "Send reset code"}
+              {loading ? <CircularProgress size={22} color="inherit" /> : t("sendResetCode")}
             </Button>
             <Box sx={{ textAlign: "center" }}>
               <Link
@@ -302,7 +305,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 }}
                 sx={{ fontWeight: 500 }}
               >
-                Back to sign in
+                {t("backToSignIn")}
               </Link>
             </Box>
           </Box>
@@ -310,7 +313,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           <Box component="form" onSubmit={handleResetPassword}>
             <TextField
               fullWidth
-              label="Verification code"
+              label={t("verificationCode")}
               value={resetOtp}
               onChange={(e) => setResetOtp(e.target.value)}
               required
@@ -321,7 +324,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
             />
             <TextField
               fullWidth
-              label="New password"
+              label={t("newPassword")}
               type={showPassword ? "text" : "password"}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -334,7 +337,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label="toggle password visibility"
+                        aria-label={t("togglePasswordVisibility")}
                         onClick={() => setShowPassword(!showPassword)}
                         edge="end"
                         size="small"
@@ -353,7 +356,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
               disabled={loading || !resetOtp || !newPassword}
               sx={{ mb: 2, py: 1.2, fontWeight: 600 }}
             >
-              {loading ? <CircularProgress size={22} color="inherit" /> : "Reset password"}
+              {loading ? <CircularProgress size={22} color="inherit" /> : t("resetPassword")}
             </Button>
             <Box sx={{ textAlign: "center" }}>
               <Link
@@ -367,7 +370,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 }}
                 sx={{ fontWeight: 500 }}
               >
-                Back to sign in
+                {t("backToSignIn")}
               </Link>
             </Box>
           </Box>
@@ -375,7 +378,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           <Box component="form" onSubmit={handleVerifyTotp}>
             <TextField
               fullWidth
-              label={useBackupCode ? "Backup code" : "6-digit code"}
+              label={useBackupCode ? t("backupCode") : t("sixDigitCode")}
               value={totpCode}
               onChange={(e) => setTotpCode(e.target.value)}
               required
@@ -394,7 +397,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
               disabled={loading || !totpCode}
               sx={{ mb: 2, py: 1.2, fontWeight: 600 }}
             >
-              {loading ? <CircularProgress size={22} color="inherit" /> : "Verify"}
+              {loading ? <CircularProgress size={22} color="inherit" /> : t("verify")}
             </Button>
             <Box sx={{ textAlign: "center" }}>
               <Link
@@ -408,7 +411,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 }}
                 sx={{ fontWeight: 500 }}
               >
-                {useBackupCode ? "Use authenticator app instead" : "Use a backup code instead"}
+                {useBackupCode ? t("useAuthenticatorApp") : t("useBackupCode")}
               </Link>
             </Box>
           </Box>
@@ -419,7 +422,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
               {mode === "sign-up" && (
                 <TextField
                   fullWidth
-                  label="Name"
+                  label={t("name")}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -430,7 +433,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
               )}
               <TextField
                 fullWidth
-                label="Email"
+                label={t("email")}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -441,7 +444,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
               />
               <TextField
                 fullWidth
-                label="Password"
+                label={t("password")}
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -454,7 +457,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                     endAdornment: (
                       <InputAdornment position="end">
                         <IconButton
-                          aria-label="toggle password visibility"
+                          aria-label={t("togglePasswordVisibility")}
                           onClick={() => setShowPassword(!showPassword)}
                           edge="end"
                           size="small"
@@ -479,7 +482,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                     }}
                     sx={{ fontWeight: 500 }}
                   >
-                    Forgot password?
+                    {t("forgotPassword")}
                   </Link>
                 </Typography>
               )}
@@ -494,16 +497,16 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 {loading ? (
                   <CircularProgress size={22} color="inherit" />
                 ) : mode === "sign-in" ? (
-                  "Sign in"
+                  t("signIn")
                 ) : (
-                  "Create account"
+                  t("createAccount")
                 )}
               </Button>
             </Box>
 
             <Divider sx={{ my: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                or
+                {tc("or")}
               </Typography>
             </Divider>
 
@@ -517,7 +520,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 startIcon={<KeyIcon />}
                 sx={{ mb: 1.5, py: 1, fontWeight: 500 }}
               >
-                Sign in with passkey
+                {t("signInWithPasskey")}
               </Button>
             )}
 
@@ -544,14 +547,14 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                   <Box component="img" src={provider.icon} alt="" sx={{ width: 20, height: 20 }} />
                 }
               >
-                Continue with {provider.name}
+                {t("continueWith", { provider: provider.name })}
               </Button>
             ))}
 
             {/* Toggle sign-in / sign-up */}
             <Box sx={{ textAlign: "center" }}>
               <Typography variant="body2" color="text.secondary">
-                {mode === "sign-in" ? "Don\u2019t have an account?" : "Already have an account?"}{" "}
+                {mode === "sign-in" ? t("noAccount") : t("haveAccount")}{" "}
                 <Link
                   component="button"
                   type="button"
@@ -559,7 +562,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                   onClick={toggleMode}
                   sx={{ fontWeight: 600 }}
                 >
-                  {mode === "sign-in" ? "Create account" : "Sign in"}
+                  {mode === "sign-in" ? t("createAccount") : t("signIn")}
                 </Link>
               </Typography>
             </Box>

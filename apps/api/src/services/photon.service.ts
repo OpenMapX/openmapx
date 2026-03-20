@@ -56,20 +56,24 @@ function buildLabel(p: PhotonProperties): string {
   return parts.join(", ") || "Unknown location";
 }
 
-async function fetchPhoton(params: Record<string, string>, path = "/api"): Promise<PhotonResponse> {
+async function fetchPhoton(
+  params: Record<string, string>,
+  path = "/api",
+  lang?: string,
+): Promise<PhotonResponse> {
   const url = new URL(`${PHOTON_URL}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const res = await fetch(url.toString(), {
-    headers: { "Accept-Language": "en" },
+    headers: { "Accept-Language": lang ?? "en" },
   });
   if (!res.ok) throw new Error(`Photon error ${res.status}`);
   return res.json() as Promise<PhotonResponse>;
 }
 
 export const photonService: GeocodingProvider = {
-  async geocode(query: string): Promise<SearchResult[]> {
-    const data = await fetchPhoton({ q: query, limit: "10", lang: "en" });
+  async geocode(query: string, lang?: string): Promise<SearchResult[]> {
+    const data = await fetchPhoton({ q: query, limit: "10", lang: lang ?? "en" }, "/api", lang);
     return data.features.map((f) => ({
       id: makeId(f.properties),
       label: buildLabel(f.properties),
@@ -80,8 +84,16 @@ export const photonService: GeocodingProvider = {
     }));
   },
 
-  async reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodingResult | null> {
-    const data = await fetchPhoton({ lat: String(lat), lon: String(lng), limit: "1" }, "/reverse");
+  async reverseGeocode(
+    lat: number,
+    lng: number,
+    lang?: string,
+  ): Promise<ReverseGeocodingResult | null> {
+    const data = await fetchPhoton(
+      { lat: String(lat), lon: String(lng), limit: "1" },
+      "/reverse",
+      lang,
+    );
     const f = data.features[0];
     if (!f) return null;
 
@@ -90,8 +102,8 @@ export const photonService: GeocodingProvider = {
     return { address: buildLabel(p), city };
   },
 
-  async autocomplete(query: string): Promise<AutocompleteResult[]> {
-    const data = await fetchPhoton({ q: query, limit: "6", lang: "en" });
+  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+    const data = await fetchPhoton({ q: query, limit: "6", lang: lang ?? "en" }, "/api", lang);
     return data.features.map((f) => {
       const short = f.properties.name ?? buildLabel(f.properties);
       const full = buildLabel(f.properties);

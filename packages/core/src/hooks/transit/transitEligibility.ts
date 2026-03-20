@@ -150,7 +150,7 @@ export function isTransitName(name: string): boolean {
  *  2. rawCategory present → keyword whitelist
  *  3. category present → same keyword whitelist (handles map-click values like
  *     "station", "bus_stop", "railway" from MapTiler feature properties)
- *  4. Neither present → allow (place opened without any category metadata)
+ *  4. Neither present → reject (addresses and other non-transit places)
  */
 export function isTransitEligiblePlace(place: Place | null): boolean {
   if (!place) return false;
@@ -167,6 +167,7 @@ export function isTransitEligiblePlace(place: Place | null): boolean {
     return isTransitRawCategory(place.category);
   }
 
-  // No category info at all → allow.
-  return true;
+  // No category info at all → reject. Actual transit stops/stations always
+  // carry rawCategory from the geocoder or map-click feature properties.
+  return false;
 }

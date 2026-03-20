@@ -8,6 +8,7 @@ import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { AlertSeverity, ServiceAlert } from "@openmapx/core";
 import { resolveProvider, useProviders } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 const SEVERITY_CONFIG: Record<
@@ -17,7 +18,7 @@ const SEVERITY_CONFIG: Record<
     bg: string;
     border: string;
     color: string;
-    label: string;
+    labelKey: string;
   }
 > = {
   info: {
@@ -25,28 +26,28 @@ const SEVERITY_CONFIG: Record<
     bg: "#E8F4FD",
     border: "#90CAF9",
     color: "#1565C0",
-    label: "Info",
+    labelKey: "alertInfo",
   },
   warning: {
     icon: ReportProblemOutlinedIcon,
     bg: "#FFF8E1",
     border: "#FFE082",
     color: "#E65100",
-    label: "Warning",
+    labelKey: "alertWarning",
   },
   severe: {
     icon: ErrorOutlineIcon,
     bg: "#FBE9E7",
     border: "#FFAB91",
     color: "#BF360C",
-    label: "Service disruption",
+    labelKey: "alertSevere",
   },
   critical: {
     icon: ErrorOutlineIcon,
     bg: "#FFEBEE",
     border: "#EF9A9A",
     color: "#B71C1C",
-    label: "Major disruption",
+    labelKey: "alertCritical",
   },
 };
 
@@ -68,6 +69,7 @@ interface AlertCardProps {
 }
 
 export function AlertCard({ alert, compact = false, expandable = true }: AlertCardProps) {
+  const _t = useTranslations("transit");
   const [descExpanded, setDescExpanded] = useState(false);
   const { data: providers } = useProviders();
   const config = SEVERITY_CONFIG[alert.severity];

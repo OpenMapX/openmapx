@@ -9,23 +9,29 @@ import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import {
+  PANEL,
   useDirectionsStore,
   useMapClickStore,
   usePlaceStore,
   useReverseGeocoding,
   useSearchStore,
+  useSidebarStore,
 } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 
 export function MapClickFloatingCard() {
+  const tc = useTranslations("common");
+  const tp = useTranslations("place");
+  const locale = useLocale();
   const { clickedLngLat, setClickedLngLat } = useMapClickStore();
   const { setSelectedPlace } = usePlaceStore();
   const { setQuery, setIsFocused } = useSearchStore();
   const { setDestination, open: openDirections } = useDirectionsStore();
   const { flyTo } = useMap();
 
-  const { data: reverseGeo, isLoading } = useReverseGeocoding(clickedLngLat);
+  const { data: reverseGeo, isLoading } = useReverseGeocoding(clickedLngLat, locale);
 
   if (!clickedLngLat) return null;
 
@@ -43,12 +49,14 @@ export function MapClickFloatingCard() {
       address: reverseGeo?.address ?? coordLabel,
       coordinates: clickedLngLat,
     });
+    useSidebarStore.getState().openSidebar(PANEL.PLACE);
     setClickedLngLat(null);
   };
 
   const handleDirections = () => {
     setDestination(clickedLngLat, reverseGeo?.address ?? coordLabel);
     openDirections();
+    useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
     setClickedLngLat(null);
   };
 
@@ -87,7 +95,7 @@ export function MapClickFloatingCard() {
           <IconButton
             size="small"
             onClick={() => setClickedLngLat(null)}
-            aria-label="Close"
+            aria-label={tc("close")}
             sx={{ mr: -0.5 }}
           >
             <CloseIcon sx={{ fontSize: 16 }} />
@@ -119,7 +127,7 @@ export function MapClickFloatingCard() {
           <IconButton
             size="small"
             onClick={handleDirections}
-            aria-label="Directions"
+            aria-label={tp("directions")}
             sx={{
               bgcolor: TEAL,
               color: "white",

@@ -12,5 +12,5 @@ export interface EnrichmentResult {
 /** A single pluggable data source. Return null if the source has no data for this place. */
 export interface EnrichmentSource {
   readonly name: string;
-  enrich(osmTags: Record<string, string>): Promise<EnrichmentResult | null>;
+  enrich(osmTags: Record<string, string>, lang?: string): Promise<EnrichmentResult | null>;
 }

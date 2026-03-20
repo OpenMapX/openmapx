@@ -7,6 +7,7 @@ import Divider from "@mui/material/Divider";
 import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 
 interface Props {
   place: Place;
@@ -29,6 +30,7 @@ function StarRow({ rating }: { rating: number }) {
 }
 
 export function PlaceReviewsTab({ place }: Props) {
+  const t = useTranslations("place");
   const links = place.reviewLinks ?? [];
 
   return (
@@ -63,7 +65,7 @@ export function PlaceReviewsTab({ place }: Props) {
               </Typography>
               <StarRow rating={place.rating} />
               <Typography variant="caption" color="text.secondary">
-                {place.reviewCount?.toLocaleString() ?? "0"} reviews
+                {t("reviewsCount", { count: place.reviewCount ?? 0 })}
               </Typography>
             </Box>
           </Box>
@@ -75,7 +77,7 @@ export function PlaceReviewsTab({ place }: Props) {
       {links.length > 0 && (
         <>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, px: 0 }}>
-            Find reviews on
+            {t("findReviewsOn")}
           </Typography>
           {links.map(({ platform, url }) => (
             <Box
@@ -108,7 +110,7 @@ export function PlaceReviewsTab({ place }: Props) {
 
       {/* Open data note */}
       <Typography variant="caption" color="text.secondary" align="center" sx={{ display: "block" }}>
-        OpenMapX uses open data — individual reviews are not collected.
+        {t("openDataNote")}
       </Typography>
     </Box>
   );

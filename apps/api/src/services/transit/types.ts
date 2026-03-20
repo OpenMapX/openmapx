@@ -181,6 +181,8 @@ export interface TripPlanParams {
   numItineraries?: number;
   /** When true, `date`+`time` is the desired arrival time, not departure. */
   arriveBy?: boolean;
+  /** Language for localized responses (e.g. "en", "de"). */
+  lang?: string;
 }
 
 /** A transit route that has been merged across multiple providers. */

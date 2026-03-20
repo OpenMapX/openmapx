@@ -10,18 +10,24 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
 import {
+  PANEL,
   useDirectionsStore,
   usePlaceStore,
   useReverseGeocoding,
   useSearchStore,
+  useSidebarStore,
   useStreetViewStore,
 } from "@openmapx/core";
 import type { Viewer as MapillaryViewer, ViewerImageEvent } from "mapillary-js";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { SearchBar } from "@/components/search/SearchBar";
 import { useMap } from "@/lib/MapContext";
 
 export default function StreetViewViewerInner() {
+  const t = useTranslations("streetView");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const activeImageId = useStreetViewStore((s) => s.activeImageId);
   const closeViewer = useStreetViewStore((s) => s.closeViewer);
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
@@ -118,7 +124,7 @@ export default function StreetViewViewerInner() {
 
   const captureDate =
     debouncedMeta !== null
-      ? new Date(debouncedMeta.capturedAt).toLocaleDateString("en-US", {
+      ? new Date(debouncedMeta.capturedAt).toLocaleDateString(locale, {
           month: "short",
           year: "numeric",
         })
@@ -161,7 +167,7 @@ export default function StreetViewViewerInner() {
               size="small"
               onClick={closeViewer}
               sx={{ color: "#fff", p: 0, mt: 0.3, flexShrink: 0 }}
-              aria-label="Back"
+              aria-label={tc("back")}
             >
               <ArrowBackIcon sx={{ fontSize: 20 }} />
             </IconButton>
@@ -177,7 +183,7 @@ export default function StreetViewViewerInner() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {reverseGeo?.address ?? "Unknown location"}
+                {reverseGeo?.address ?? t("unknownLocation")}
               </Typography>
               {reverseGeo?.city && (
                 <Typography sx={{ fontSize: 12, color: "rgba(255,255,255,0.65)", mt: 0.25 }}>
@@ -206,15 +212,20 @@ export default function StreetViewViewerInner() {
                       coordinates: debouncedMeta.lngLat,
                       category: "address",
                     });
+                    useSidebarStore.getState().openSidebar(PANEL.PLACE);
                   }
                   closeViewer();
                 }}
                 sx={{ color: "rgba(255,255,255,0.7)", p: 0.5 }}
-                aria-label="Show on map"
+                aria-label={t("showOnMap")}
               >
                 <PlaceIcon sx={{ fontSize: 19 }} />
               </IconButton>
-              <IconButton size="small" sx={{ color: "rgba(255,255,255,0.7)", p: 0.5 }}>
+              <IconButton
+                size="small"
+                sx={{ color: "rgba(255,255,255,0.7)", p: 0.5 }}
+                aria-label={t("moreOptions")}
+              >
                 <MoreVertIcon sx={{ fontSize: 19 }} />
               </IconButton>
             </Box>
@@ -259,7 +270,7 @@ export default function StreetViewViewerInner() {
 
       <IconButton
         onClick={closeViewer}
-        aria-label="Close Street-level imagery viewer"
+        aria-label={tc("close")}
         sx={{
           position: "absolute",
           top: 8,

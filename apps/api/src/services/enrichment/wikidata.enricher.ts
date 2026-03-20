@@ -1,4 +1,5 @@
 import type { PlaceFact } from "@openmapx/core";
+import { fetchCommonsMetadata } from "./commons-metadata";
 import type { EnrichmentResult, EnrichmentSource } from "./types";
 
 const HEADERS = {
@@ -20,9 +21,9 @@ type Snak = { snaktype: string; datavalue?: DataValue };
 type Claim = { mainsnak: Snak; rank: "preferred" | "normal" | "deprecated" };
 
 type WdEntity = {
-  descriptions?: { en?: { value: string } };
+  descriptions?: Record<string, { value: string }>;
   claims?: Record<string, Claim[]>;
-  sitelinks?: { enwiki?: { title: string } };
+  sitelinks?: Record<string, { title: string }>;
 };
 
 // Property config — each entry describes one Wikidata property to extract
@@ -82,25 +83,26 @@ function formatYear(tv: TimeValue): string {
   return bce ? `${year} BCE` : String(year);
 }
 
-function formatQuantity(qv: QuantityValue): string {
+function formatQuantity(qv: QuantityValue, lang = "en"): string {
   const n = Math.round(Number.parseFloat(qv.amount));
-  return n.toLocaleString("en");
+  return n.toLocaleString(lang);
 }
 
 // Enricher
 export const wikidataEnricher: EnrichmentSource = {
   name: "wikidata",
 
-  async enrich(osmTags) {
+  async enrich(osmTags, lang?) {
     const qid = osmTags.wikidata;
     if (!qid) return null;
 
+    const effectiveLang = lang ?? "en";
     const url = new URL("https://www.wikidata.org/w/api.php");
     url.searchParams.set("action", "wbgetentities");
     url.searchParams.set("ids", qid);
     url.searchParams.set("props", "claims|descriptions|sitelinks");
-    url.searchParams.set("languages", "en");
-    url.searchParams.set("sitefilter", "enwiki");
+    url.searchParams.set("languages", effectiveLang);
+    url.searchParams.set("sitefilter", `${effectiveLang}wiki`);
     url.searchParams.set("format", "json");
 
     const res = await fetch(url.toString(), {
@@ -116,24 +118,33 @@ export const wikidataEnricher: EnrichmentSource = {
     const result: EnrichmentResult = {};
 
     // Description
-    const desc = entity.descriptions?.en?.value;
+    const desc = entity.descriptions?.[effectiveLang]?.value;
     if (desc) result.description = desc.charAt(0).toUpperCase() + desc.slice(1);
 
     // Wikipedia URL
-    const wikiTitle = entity.sitelinks?.enwiki?.title;
+    const wikiTitle = entity.sitelinks?.[`${effectiveLang}wiki`]?.title;
     if (wikiTitle) {
-      result.wikipediaUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(wikiTitle.replace(/ /g, "_"))}`;
+      result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodeURIComponent(wikiTitle.replace(/ /g, "_"))}`;
     }
 
-    // Main image (P18)
+    // Main image (P18) — fetch rich metadata from Commons
     const p18 = bestClaim(entity.claims, "P18");
     if (p18?.mainsnak.datavalue?.type === "string") {
-      result.photos = [
-        {
-          url: commonsUrl(p18.mainsnak.datavalue.value as string),
-          attribution: "© Wikimedia Commons (CC BY-SA)",
-        },
-      ];
+      const p18Filename = p18.mainsnak.datavalue.value as string;
+      const metadata = await fetchCommonsMetadata([p18Filename]);
+      const richPhoto = metadata.get(p18Filename.replace(/_/g, " "));
+      if (richPhoto) {
+        result.photos = [richPhoto];
+      } else {
+        // Fallback if metadata fetch fails
+        result.photos = [
+          {
+            url: commonsUrl(p18Filename),
+            attribution: "© Wikimedia Commons (CC BY-SA)",
+            source: "wikimedia",
+          },
+        ];
+      }
     }
 
     // External platform IDs — used downstream to build direct review links
@@ -168,7 +179,7 @@ export const wikidataEnricher: EnrichmentSource = {
         if (claim?.mainsnak.datavalue?.type === "quantity") {
           facts.push({
             label: prop.label,
-            value: formatQuantity(claim.mainsnak.datavalue.value as QuantityValue),
+            value: formatQuantity(claim.mainsnak.datavalue.value as QuantityValue, effectiveLang),
           });
         }
       } else if (prop.type === "item") {
@@ -187,7 +198,7 @@ export const wikidataEnricher: EnrichmentSource = {
         labelUrl.searchParams.set("action", "wbgetentities");
         labelUrl.searchParams.set("ids", allIds.join("|"));
         labelUrl.searchParams.set("props", "labels");
-        labelUrl.searchParams.set("languages", "en");
+        labelUrl.searchParams.set("languages", effectiveLang);
         labelUrl.searchParams.set("format", "json");
 
         const labelRes = await fetch(labelUrl.toString(), {
@@ -196,11 +207,11 @@ export const wikidataEnricher: EnrichmentSource = {
         });
         if (labelRes.ok) {
           const labelData = (await labelRes.json()) as {
-            entities?: Record<string, { labels?: { en?: { value: string } } }>;
+            entities?: Record<string, { labels?: Record<string, { value: string }> }>;
           };
           for (const { label, ids } of itemsToResolve) {
             const resolved = ids
-              .map((id) => labelData.entities?.[id]?.labels?.en?.value)
+              .map((id) => labelData.entities?.[id]?.labels?.[effectiveLang]?.value)
               .filter(Boolean) as string[];
             if (resolved.length) facts.push({ label, value: resolved.join(", ") });
           }

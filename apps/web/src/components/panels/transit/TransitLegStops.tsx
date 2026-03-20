@@ -6,6 +6,7 @@ import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Typography from "@mui/material/Typography";
 import { useVehicleJourney } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 
 interface TransitLegStopsProps {
@@ -19,16 +20,25 @@ interface TransitLegStopsProps {
 }
 
 export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: TransitLegStopsProps) {
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const [expanded, setExpanded] = useState(false);
   // Fetch eagerly — React Query deduplicates with any other useVehicleJourney(tripId) call
   const { data: journey } = useVehicleJourney(tripId ?? null);
 
   if (!tripId) return null;
 
-  // Slice the full vehicle journey to only the stops for this leg
+  // Slice the full vehicle journey to only the stops for this leg.
+  // For circular routes (Ringlinie), a stop ID can appear multiple times.
+  // Always search for the to-stop AFTER the from-stop to get the correct segment.
   const allStops = journey?.stops ?? [];
   const fromIdx = fromStopId ? allStops.findIndex((s) => s.stopId === fromStopId) : -1;
-  const toIdx = toStopId ? allStops.findIndex((s) => s.stopId === toStopId) : -1;
+  const toIdx =
+    fromIdx !== -1 && toStopId
+      ? allStops.findIndex((s, i) => i > fromIdx && s.stopId === toStopId)
+      : toStopId
+        ? allStops.findIndex((s) => s.stopId === toStopId)
+        : -1;
   const legStops =
     fromIdx !== -1 && toIdx !== -1 && toIdx > fromIdx
       ? allStops.slice(fromIdx, toIdx + 1)
@@ -44,7 +54,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
   // No count info available at all → hide.
   if (count == null) return null;
 
-  const label = `${count} stop${count !== 1 ? "s" : ""}`;
+  const label = tc("stopsCount", { count });
   const hasStops = journey != null && intermediateStops.length > 0;
 
   // Journey hasn't loaded yet but planning reports stops — show non-expandable count.
@@ -90,7 +100,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
               stop.scheduledDeparture ??
               stop.scheduledArrival;
             const timeStr = time
-              ? new Date(time).toLocaleTimeString([], {
+              ? new Date(time).toLocaleTimeString(locale, {
                   hour: "2-digit",
                   minute: "2-digit",
                 })

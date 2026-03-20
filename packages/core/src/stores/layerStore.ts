@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type MapLayer = "default" | "satellite" | "terrain";
+export type MapLayer = "default" | "satellite" | "terrain" | "cycling";
 
 interface LayerState {
   activeLayer: MapLayer;

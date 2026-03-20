@@ -3,7 +3,17 @@ import type { LngLat } from "./geometry";
 
 export interface PlacePhoto {
   url: string;
+  thumbnailUrl?: string;
   attribution: string;
+  source: string;
+  author?: string;
+  authorUrl?: string;
+  license?: string;
+  licenseUrl?: string;
+  pageUrl?: string;
+  capturedAt?: string;
+  /** Photo-specific coordinates [lng, lat] — used for minimap in gallery. */
+  coordinates?: LngLat;
 }
 
 export interface PlaceFact {

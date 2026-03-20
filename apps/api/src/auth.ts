@@ -42,6 +42,11 @@ export const auth = betterAuth({
     .split(",")
     .map((o) => o.trim()),
   appName: "OpenMapX",
+  user: {
+    deleteUser: {
+      enabled: true,
+    },
+  },
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,

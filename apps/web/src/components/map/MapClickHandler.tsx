@@ -1,6 +1,6 @@
 "use client";
 
-import { useMapClickStore, usePlaceStore } from "@openmapx/core";
+import { PANEL, useMapClickStore, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
@@ -25,6 +25,10 @@ export function MapClickHandler() {
         if (features.length > 0) return;
       }
       setSelectedPlace(null);
+      if (useSidebarStore.getState().activeSidebarId === PANEL.PLACE) {
+        useSidebarStore.getState().closeSidebar();
+      }
+      useSidebarStore.getState().closeDetail();
       setClickedLngLat([e.lngLat.lng, e.lngLat.lat]);
     };
 

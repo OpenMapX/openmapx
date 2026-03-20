@@ -1,4 +1,4 @@
-import type { BoundingBox } from "../../overpass.service";
+import type { BoundingBox } from "@openmapx/core";
 import type { FuelPriceProvider } from "./price-provider";
 import type { FuelStation } from "./types";
 
@@ -10,6 +10,7 @@ const API_URL =
 // Cache the full station list — prices are updated daily
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 let _cache: { stations: SpainStation[]; expires: number } | null = null;
+let _inflight: Promise<SpainStation[]> | null = null;
 
 function parseSpanishPrice(value: string | undefined): number | undefined {
   if (!value || value.trim() === "") return undefined;
@@ -43,14 +44,21 @@ interface SpainResponse {
 
 async function fetchAllStations(): Promise<SpainStation[]> {
   if (_cache && _cache.expires > Date.now()) return _cache.stations;
+  if (_inflight) return _inflight;
 
-  const res = await fetch(API_URL, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`Spain fuel API error: ${res.status}`);
+  _inflight = (async () => {
+    const res = await fetch(API_URL, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`Spain fuel API error: ${res.status}`);
 
-  const data = (await res.json()) as SpainResponse;
-  const stations = data.ListaEESSPrecio;
-  _cache = { stations, expires: Date.now() + CACHE_TTL_MS };
-  return stations;
+    const data = (await res.json()) as SpainResponse;
+    const stations = data.ListaEESSPrecio;
+    _cache = { stations, expires: Date.now() + CACHE_TTL_MS };
+    return stations;
+  })().finally(() => {
+    _inflight = null;
+  });
+
+  return _inflight;
 }
 
 export class SpainService implements FuelPriceProvider {

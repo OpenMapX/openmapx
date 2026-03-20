@@ -8,6 +8,7 @@ import {
   useDataSources,
   usePlaceStore,
 } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMap } from "@/lib/MapContext";
@@ -16,6 +17,7 @@ import { useMap } from "@/lib/MapContext";
 const FLOATING_CARD_RIGHT_EDGE = 800;
 
 export function SearchInAreaChip() {
+  const t = useTranslations("search");
   const {
     activeCategory,
     mapMoved: categoryMoved,
@@ -68,7 +70,7 @@ export function SearchInAreaChip() {
 
   return (
     <Chip
-      label="Search in this area"
+      label={t("searchInArea")}
       icon={<SearchIcon sx={{ fontSize: 16, color: "inherit !important" }} />}
       onClick={handleClick}
       sx={{

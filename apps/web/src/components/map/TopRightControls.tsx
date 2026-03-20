@@ -5,12 +5,14 @@ import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, useSession } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { AccountSettingsDialog } from "@/components/auth/AccountSettingsDialog";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 
 export function TopRightControls() {
+  const t = useTranslations("map");
   const { data: session, isPending } = useSession();
   const [authOpen, setAuthOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -42,24 +44,11 @@ export function TopRightControls() {
           zIndex: 10,
         }}
       >
-        {/* <Tooltip title="Google apps" placement="bottom">
-          <IconButton
-            aria-label="Apps"
-            sx={{
-              width: 40,
-              height: 40,
-              "&:hover": { bgcolor: "rgba(0,0,0,0.08)" },
-            }}
-          >
-            <AppsIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-          </IconButton>
-        </Tooltip> */}
-
-        <Tooltip title={user ? (user.name ?? "Account") : "Sign in"} placement="bottom">
+        <Tooltip title={user ? (user.name ?? t("account")) : t("signIn")} placement="bottom">
           <Avatar
             ref={avatarRef}
             component="button"
-            aria-label="Account"
+            aria-label={t("account")}
             src={user?.image ?? undefined}
             onClick={handleAvatarClick}
             sx={{

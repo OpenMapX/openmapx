@@ -2,7 +2,7 @@ import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { ApiKeyMissingError } from "../services/data-sources/ev-charging/ocm.js";
 import { dataSourceRegistry } from "../services/data-sources/registry.js";
-import { hashKey, round, withCache } from "../utils/cache.js";
+import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
   // List available data sources with filter definitions
@@ -10,7 +10,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     const providers = dataSourceRegistry.getAll();
     const sources = await Promise.all(
       providers.map(async (p) => {
-        const filters = await withCache(`cache:ds:filters:${p.id}`, 48 * 3600, () =>
+        const filters = await withCache(`cache:ds:filters:${p.id}`, TTL.dataSources.filters, () =>
           p.getFilters(),
         );
         return { ...p.meta, filters };
@@ -51,7 +51,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     const filterHash = filters ? hashKey("f", filters) : "none";
     const cacheKey = `cache:ds:search:${req.params.id}:${roundedBbox}:${filterHash}`;
 
-    const searchTtl = provider.searchCacheTtl ?? 21600;
+    const searchTtl = provider.searchCacheTtl ?? TTL.dataSources.search;
 
     let results: DataSourceResult[] = [];
     try {
@@ -77,8 +77,9 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     const itemId = req.params["*"];
     if (!itemId) return reply.status(400).send({ error: "Missing item ID" });
 
-    const detailTtl = provider.detailCacheTtl ?? 21600;
-    const cacheKey = `cache:ds:detail:${req.params.id}:${itemId}`;
+    const detailTtl = provider.detailCacheTtl ?? TTL.dataSources.detail;
+    const safeItemId = itemId.length > 200 ? hashKey("", itemId) : itemId;
+    const cacheKey = `cache:ds:detail:${req.params.id}:${safeItemId}`;
     let detail: DataSourceDetail | null = null;
     try {
       detail = await withCache(cacheKey, detailTtl, () => provider.getDetail(itemId));

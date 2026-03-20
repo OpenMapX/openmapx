@@ -12,6 +12,7 @@ interface UseDirectionsParams {
   avoidTolls?: boolean;
   avoidFerries?: boolean;
   units?: "metric" | "imperial";
+  lang?: string;
 }
 
 export function useDirections({
@@ -22,6 +23,7 @@ export function useDirections({
   avoidTolls = false,
   avoidFerries = false,
   units = "metric",
+  lang,
 }: UseDirectionsParams) {
   return useQuery({
     queryKey: [
@@ -33,6 +35,7 @@ export function useDirections({
       avoidTolls,
       avoidFerries,
       units,
+      lang,
     ],
     queryFn: () =>
       apiClient.get<DirectionsResult>(API_ENDPOINTS.directions, {
@@ -45,6 +48,7 @@ export function useDirections({
         avoidTolls: String(avoidTolls),
         avoidFerries: String(avoidFerries),
         units,
+        ...(lang && { lang }),
       }),
     enabled: origin !== null && destination !== null,
     staleTime: 120_000,

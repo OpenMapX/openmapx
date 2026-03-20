@@ -1,5 +1,6 @@
 "use client";
 
+import BookmarkIcon from "@mui/icons-material/Bookmark";
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import SearchIcon from "@mui/icons-material/Search";
@@ -8,9 +9,19 @@ import Box from "@mui/material/Box";
 import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
-import { useDirectionsStore, usePlaceStore } from "@openmapx/core";
+import {
+  PANEL,
+  useDirectionsStore,
+  useIsSaved,
+  usePlaceStore,
+  useSession,
+  useSidebarStore,
+} from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { AuthDialog } from "@/components/auth/AuthDialog";
+import { SavePlaceDialog } from "@/components/panels/saved/SavePlaceDialog";
 import { TEAL, TEAL_LIGHT } from "@/lib/theme";
 
 interface ActionButtonProps {
@@ -66,14 +77,21 @@ interface Props {
 }
 
 export function PlaceActionButtons({ place }: Props) {
+  const t = useTranslations("place");
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const { setDestination, open: openDirections } = useDirectionsStore();
   const { setSelectedPlace } = usePlaceStore();
+  const { data: session } = useSession();
+  const { data: savedInListIds } = useIsSaved(session?.user ? place.id : null);
+  const isSaved = savedInListIds && savedInListIds.length > 0;
 
   const handleDirections = () => {
     setDestination(place.coordinates, place.name);
     openDirections();
     setSelectedPlace(null);
+    useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
   };
 
   const handleShare = async () => {
@@ -92,7 +110,7 @@ export function PlaceActionButtons({ place }: Props) {
         await navigator.share({ title: place.name, url });
       } else {
         await navigator.clipboard.writeText(url);
-        setSnackbar("Link copied to clipboard");
+        setSnackbar(t("linkCopied"));
       }
     } catch {
       // User cancelled share dialog — ignore
@@ -104,13 +122,24 @@ export function PlaceActionButtons({ place }: Props) {
       <Box sx={{ display: "flex", justifyContent: "space-around", py: 1 }}>
         <ActionButton
           icon={<DirectionsIcon />}
-          label="Directions"
+          label={t("directions")}
           filled
           onClick={handleDirections}
         />
-        <ActionButton icon={<BookmarkBorderIcon />} label="Save" />
-        <ActionButton icon={<SearchIcon />} label="Nearby" />
-        <ActionButton icon={<ShareIcon />} label="Share" onClick={handleShare} />
+        <ActionButton
+          icon={isSaved ? <BookmarkIcon /> : <BookmarkBorderIcon />}
+          label={isSaved ? t("savedPlace") : t("savePlace")}
+          filled={isSaved}
+          onClick={() => {
+            if (!session?.user) {
+              setAuthOpen(true);
+            } else {
+              setSaveOpen(true);
+            }
+          }}
+        />
+        <ActionButton icon={<SearchIcon />} label={t("nearby")} />
+        <ActionButton icon={<ShareIcon />} label={t("share")} onClick={handleShare} />
       </Box>
 
       <Snackbar
@@ -120,6 +149,8 @@ export function PlaceActionButtons({ place }: Props) {
         message={snackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
+      <SavePlaceDialog open={saveOpen} onClose={() => setSaveOpen(false)} place={place} />
+      <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   );
 }

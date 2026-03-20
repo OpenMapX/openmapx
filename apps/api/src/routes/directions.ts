@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { osrmService } from "../services/osrm.service.js";
 import { valhallaService } from "../services/valhalla.service.js";
-import { hashKey, round, withCache } from "../utils/cache.js";
+import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 export const directionsRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
@@ -15,6 +15,7 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       avoidTolls?: string;
       avoidFerries?: string;
       units?: string;
+      lang?: string;
     };
   }>("/directions", {
     schema: {
@@ -31,6 +32,7 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
           avoidTolls: { type: "string" },
           avoidFerries: { type: "string" },
           units: { type: "string", enum: ["metric", "imperial"] },
+          lang: { type: "string" },
         },
       },
     },
@@ -45,6 +47,7 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
         avoidTolls,
         avoidFerries,
         units,
+        lang,
       } = req.query;
 
       const origin: [number, number] = [Number(originLng), Number(originLat)];
@@ -68,17 +71,24 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
         avoidTolls: opts.avoidTolls,
         destLat: round(Number(destLat), 4),
         destLng: round(Number(destLng), 4),
+        lang: lang ?? "en",
         mode,
         originLat: round(Number(originLat), 4),
         originLng: round(Number(originLng), 4),
         units: opts.units,
       };
 
-      const result = await withCache(hashKey("cache:directions", keyParams), 3600, () => {
+      const result = await withCache(hashKey("cache:directions", keyParams), TTL.directions, () => {
         if (mode === "driving") {
           return osrmService.route(origin, destination, opts);
         }
-        return valhallaService.route(origin, destination, mode as "walking" | "cycling", opts);
+        return valhallaService.route(
+          origin,
+          destination,
+          mode as "walking" | "cycling",
+          opts,
+          lang,
+        );
       });
       reply.header("Cache-Control", "public, max-age=3600");
       return result;

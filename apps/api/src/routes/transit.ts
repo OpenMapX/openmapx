@@ -148,6 +148,7 @@ interface PlanQuery {
   modes?: string;
   num_itineraries?: string;
   arrive_by?: string;
+  lang?: string;
 }
 
 /** Route registration */
@@ -742,6 +743,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
           modes: { type: "string" },
           num_itineraries: { type: "string" },
           arrive_by: { type: "string" },
+          lang: { type: "string" },
         },
       },
     },
@@ -786,6 +788,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
         modes: q.modes ?? "TRANSIT",
         numItineraries,
         arriveBy: q.arrive_by === "true" || q.arrive_by === "1",
+        lang: q.lang,
       });
       if (!plan) {
         return reply.status(503).send({

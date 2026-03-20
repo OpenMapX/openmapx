@@ -1,0 +1,117 @@
+"use client";
+
+import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
+import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
+import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
+import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import FlightIcon from "@mui/icons-material/Flight";
+import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import type { TravelMode } from "@openmapx/core";
+import type { ReactNode } from "react";
+import { TEAL } from "@/lib/theme";
+
+const MODES: { mode: TravelMode; icon: ReactNode; labelKey: string; disabled?: boolean }[] = [
+  { mode: "driving", icon: <DirectionsCarIcon sx={{ fontSize: 22 }} />, labelKey: "driving" },
+  {
+    mode: "transit",
+    icon: <DirectionsBusIcon sx={{ fontSize: 22 }} />,
+    labelKey: "transit",
+  },
+  { mode: "walking", icon: <DirectionsWalkIcon sx={{ fontSize: 22 }} />, labelKey: "walking" },
+  { mode: "cycling", icon: <DirectionsBikeIcon sx={{ fontSize: 22 }} />, labelKey: "cycling" },
+  {
+    mode: "flying" as TravelMode,
+    icon: <FlightIcon sx={{ fontSize: 22 }} />,
+    labelKey: "flights",
+    disabled: true,
+  },
+];
+
+function ModeButton({
+  icon,
+  label,
+  time,
+  active,
+  disabled,
+  loading,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  time?: string;
+  active: boolean;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip title={label} placement="bottom" arrow>
+      <Box
+        onClick={disabled ? undefined : onClick}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 0.4,
+          px: 0.75,
+          py: 0.5,
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.35 : 1,
+          borderRadius: 1,
+          "&:hover": {},
+          minWidth: 44,
+        }}
+      >
+        {/* Icon inside pill */}
+        <Box
+          sx={{
+            px: 1.5,
+            height: 32,
+            borderRadius: 99,
+            bgcolor: active ? "#a9dde9" : "#fff",
+            "&:hover": active ? {} : { bgcolor: "grey.100" },
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "background-color 0.15s",
+            "& svg": {
+              fontSize: 22,
+              color: "text.primary",
+              transition: "color 0.15s",
+            },
+          }}
+        >
+          {icon}
+        </Box>
+
+        {/* Time label below icon */}
+        <Box sx={{ height: 14, display: "flex", alignItems: "center" }}>
+          {loading ? (
+            <CircularProgress size={10} sx={{ color: "text.disabled" }} />
+          ) : (
+            <Typography
+              variant="caption"
+              sx={{
+                fontSize: 11,
+                lineHeight: 1,
+                color: active ? TEAL : "text.secondary",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                maxWidth: 44,
+                textOverflow: "ellipsis",
+              }}
+            >
+              {time ?? ""}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    </Tooltip>
+  );
+}
+
+export { MODES, ModeButton };

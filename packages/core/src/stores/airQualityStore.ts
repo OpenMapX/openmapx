@@ -1,21 +1,8 @@
-import { create } from "zustand";
+import { createOverlayStore } from "./createOverlayStore";
 
-interface AirQualityState {
-  panelOpen: boolean;
-  layerVisible: boolean;
-  loading: boolean;
-  openPanel: () => void;
-  closePanel: () => void;
-  setLayerVisible: (visible: boolean) => void;
-  setLoading: (loading: boolean) => void;
-}
-
-export const useAirQualityStore = create<AirQualityState>((set) => ({
-  panelOpen: false,
-  layerVisible: false,
-  loading: false,
-  openPanel: () => set({ panelOpen: true, layerVisible: true }),
-  closePanel: () => set({ panelOpen: false, layerVisible: false }),
-  setLayerVisible: (layerVisible) => set({ layerVisible }),
-  setLoading: (loading) => set({ loading }),
-}));
+export const useAirQualityStore = createOverlayStore({
+  extra: { loading: false },
+  actions: (set) => ({
+    setLoading: (loading: boolean) => set({ loading }),
+  }),
+});

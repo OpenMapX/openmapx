@@ -15,55 +15,61 @@ import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { DataSourceDetail, DataSourceDetailSection } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { TEAL } from "@/lib/theme";
 
 /** Section header config per data source type. */
-const SOURCE_HEADERS: Record<string, { icon: ReactNode; title: string }> = {
+const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // EV Charging
-  "ev-charging": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, title: "EV Charging" },
-  ocm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, title: "EV Charging" },
-  osm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, title: "EV Charging" },
+  "ev-charging": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
+  ocm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
+  osm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   // Fuel
-  fuel: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, title: "Fuel Prices" },
-  tankerkoenig: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, title: "Fuel Prices" },
-  france: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, title: "Fuel Prices" },
-  spain: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, title: "Fuel Prices" },
-  austria: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, title: "Fuel Prices" },
+  fuel: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
+  tankerkoenig: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
+  france: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
+  spain: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
+  austria: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
   // Bike Sharing
-  "bike-sharing": { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, title: "Bike Sharing" },
-  nextbike: { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, title: "Bike Sharing" },
-  citybikes: { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, title: "Bike Sharing" },
-  donkey: { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, title: "Bike Sharing" },
+  "bike-sharing": { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, titleKey: "bikeSharing" },
+  nextbike: { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, titleKey: "bikeSharing" },
+  citybikes: { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, titleKey: "bikeSharing" },
+  donkey: { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, titleKey: "bikeSharing" },
   // Scooter Sharing
   "scooter-sharing": {
     icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />,
-    title: "E-Scooter Sharing",
+    titleKey: "eScooterSharing",
   },
-  felyx: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, title: "E-Scooter Sharing" },
-  gosharing: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, title: "E-Scooter Sharing" },
-  link: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, title: "E-Scooter Sharing" },
+  felyx: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
+  gosharing: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
+  link: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
   // Car Sharing
-  "car-sharing": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, title: "Car Sharing" },
-  cambio: { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, title: "Car Sharing" },
+  "car-sharing": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
+  cambio: { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   // GBFS can be any type — will be resolved by prefix
-  gbfs: { icon: <InfoIcon sx={{ fontSize: 20 }} />, title: "Shared Mobility" },
+  gbfs: { icon: <InfoIcon sx={{ fontSize: 20 }} />, titleKey: "sharedMobility" },
 };
 
-function resolveSourceHeader(detail: DataSourceDetail): { icon: ReactNode; title: string } {
+function resolveSourceHeader(detail: DataSourceDetail): {
+  icon: ReactNode;
+  titleKey: string | null;
+  titleFallback: string | null;
+} {
   // Try exact source match first
   const exactMatch = SOURCE_HEADERS[detail.source];
-  if (exactMatch) return exactMatch;
+  if (exactMatch) return { ...exactMatch, titleFallback: null };
 
   // Try prefix (e.g., "tankerkoenig" from "tankerkoenig/uuid", "nextbike" from "nextbike/362/1234")
   const prefix = detail.source.split("/")[0];
   const prefixMatch = SOURCE_HEADERS[prefix];
-  if (prefixMatch) return prefixMatch;
+  if (prefixMatch) return { ...prefixMatch, titleFallback: null };
 
   // Fallback: capitalize source name
   return {
     icon: <InfoIcon sx={{ fontSize: 20 }} />,
-    title: detail.source.charAt(0).toUpperCase() + detail.source.slice(1),
+    titleKey: null,
+    titleFallback: detail.source.charAt(0).toUpperCase() + detail.source.slice(1),
   };
 }
 
@@ -225,6 +231,8 @@ function SectionContent({ section }: { section: DataSourceDetailSection }) {
 }
 
 export function DataSourceSections({ detail }: Props) {
+  const t = useTranslations("dataSources");
+  const tc = useTranslations("common");
   const header = resolveSourceHeader(detail);
 
   return (
@@ -235,7 +243,7 @@ export function DataSourceSections({ detail }: Props) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
         <Box sx={{ color: TEAL, display: "flex" }}>{header.icon}</Box>
         <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-          {header.title}
+          {header.titleKey ? t(header.titleKey) : header.titleFallback}
         </Typography>
       </Box>
 
@@ -279,7 +287,7 @@ export function DataSourceSections({ detail }: Props) {
             )}
             {detail.usageInfo.membershipRequired && (
               <Typography variant="caption" color="text.secondary" display="block">
-                Membership required
+                {t("membershipRequiredLabel")}
               </Typography>
             )}
           </Box>
@@ -308,7 +316,7 @@ export function DataSourceSections({ detail }: Props) {
       <Divider />
       <Box sx={{ px: 2, py: 1.25 }}>
         <Typography variant="caption" color="text.secondary">
-          Data:{" "}
+          {tc("data")}:{" "}
           <Link
             href={detail.attribution.url}
             target="_blank"

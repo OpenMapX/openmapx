@@ -25,6 +25,7 @@ import {
   useLinkedTransitRoutes,
   useProviders,
 } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import type { KeyboardEvent } from "react";
 import { useMemo } from "react";
 import { TEAL } from "@/lib/theme";
@@ -43,12 +44,12 @@ const MODE_ICONS: Partial<Record<TransportMode, SvgIconComponent>> = {
   ferry: DirectionsBoatIcon,
 };
 
-const MODE_LABELS: Partial<Record<TransportMode, string>> = {
-  rail: "Trains",
-  subway: "Subway",
-  tram: "Trams",
-  bus: "Buses",
-  ferry: "Ferries",
+const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
+  rail: "trains",
+  subway: "subway",
+  tram: "trams",
+  bus: "buses",
+  ferry: "ferries",
 };
 
 function groupByMode(routes: MergedRoute[]): Map<TransportMode, MergedRoute[]> {
@@ -74,6 +75,7 @@ export function PlaceTransitSection({
   onOpenLineDetail,
   onOpenTripDetail,
 }: PlaceTransitSectionProps) {
+  const t = useTranslations("transit");
   const { data: routes, isLoading } = useLinkedTransitRoutes(place);
   const { data: providers } = useProviders();
   const { data: alerts } = useLinkedTransitAlerts(place);
@@ -118,7 +120,7 @@ export function PlaceTransitSection({
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1.25 }}>
         <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />
         <Typography variant="subtitle2" fontWeight={600} color="text.primary">
-          Transit
+          {t("transit")}
         </Typography>
       </Box>
 
@@ -131,11 +133,12 @@ export function PlaceTransitSection({
       {/* Routes grouped by mode */}
       {Array.from(grouped.entries()).map(([mode, modeRoutes]) => {
         const Icon = MODE_ICONS[mode] ?? DirectionsBusIcon;
-        const label = MODE_LABELS[mode] ?? mode;
+        const labelKey = MODE_LABEL_KEYS[mode];
+        const label = labelKey ? t(labelKey) : mode;
         return (
           <Box key={mode} sx={{ mb: 1.25 }}>
             <ButtonBase
-              aria-label={`View ${label} departures`}
+              aria-label={t("viewDepartures", { mode: label })}
               onClick={() => onOpenDepartures(mode)}
               sx={{
                 display: "flex",
@@ -202,7 +205,7 @@ export function PlaceTransitSection({
                   }}
                   sx={{ cursor: "pointer", "&:hover": { textDecoration: "underline" } }}
                 >
-                  +{modeRoutes.length - MAX_BADGES_PER_MODE} more
+                  {t("moreRoutes", { count: modeRoutes.length - MAX_BADGES_PER_MODE })}
                 </Typography>
               )}
             </Box>
@@ -214,7 +217,7 @@ export function PlaceTransitSection({
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 1.25, mb: 0.5 }}>
         <ScheduleIcon sx={{ fontSize: 16, color: "text.secondary" }} />
         <Typography variant="caption" color="text.secondary" fontWeight={500}>
-          Next departures
+          {t("nextDepartures")}
         </Typography>
       </Box>
       {depsLoading && !departures && (
@@ -239,7 +242,7 @@ export function PlaceTransitSection({
         </Box>
       ) : !depsLoading && departures ? (
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
-          No departures in the next 60 minutes.
+          {t("noDeparturesInNext60")}
         </Typography>
       ) : null}
 
@@ -267,7 +270,7 @@ export function PlaceTransitSection({
           "&:hover": { borderColor: "#005f6b", bgcolor: "rgba(0,123,139,0.04)" },
         }}
       >
-        View departures & arrivals
+        {t("viewDeparturesArrivals")}
       </Button>
     </Box>
   );

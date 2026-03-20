@@ -2,15 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock cache (always miss so business logic runs)
 
-vi.mock("../cache.js", () => ({
+vi.mock("../../../utils/cache.js", () => ({
   cacheGet: vi.fn().mockResolvedValue(null),
   cacheSet: vi.fn().mockResolvedValue(undefined),
-  cacheKey: vi.fn((_type: string, _params: unknown) => "test-cache-key"),
+  hashKey: vi.fn((_prefix: string, _data: unknown) => "test-cache-key"),
   TTL: {
-    placeStops: 86400,
-    placeRoutes: 300,
-    placeAlerts: 60,
-    placeFacilities: 86400,
+    transit: {
+      placeStops: 86400,
+      placeRoutes: 300,
+      placeAlerts: 60,
+      placeFacilities: 86400,
+    },
   },
 }));
 

@@ -9,6 +9,7 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { Facility } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 
 const FACILITY_ICONS: Record<Facility["type"], typeof ElevatorIcon> = {
   elevator: ElevatorIcon,
@@ -23,12 +24,13 @@ interface FacilitiesSectionProps {
 }
 
 export function FacilitiesSection({ facilities }: FacilitiesSectionProps) {
+  const t = useTranslations("transit");
   if (facilities.length === 0) return null;
 
   return (
     <Box sx={{ px: 2, py: 1.5 }}>
       <Typography variant="subtitle2" gutterBottom>
-        Facilities
+        {t("facilities")}
       </Typography>
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
         {facilities.map((f) => {

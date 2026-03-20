@@ -1,6 +1,6 @@
 "use client";
 
-import { usePlaceStore, useSearchStore } from "@openmapx/core";
+import { PANEL, usePlaceStore, useSearchStore, useSidebarStore } from "@openmapx/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -29,17 +29,12 @@ export function PlaceDeepLink() {
     const coordinates: [number, number] = [lng, lat];
     flyTo(coordinates);
     setSelectedPlace({ id, name, address: name, coordinates, category, rawCategory });
+    useSidebarStore.getState().openSidebar(PANEL.PLACE);
     setQuery(name);
 
     // Remove deep-link params without adding a history entry
     router.replace("/", { scroll: false });
-  }, [
-    flyTo, // Remove deep-link params without adding a history entry
-    router.replace,
-    searchParams.get,
-    setQuery,
-    setSelectedPlace,
-  ]);
+  }, [flyTo, router, searchParams, setQuery, setSelectedPlace]);
 
   return null;
 }

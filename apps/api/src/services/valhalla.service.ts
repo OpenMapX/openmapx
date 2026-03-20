@@ -80,6 +80,7 @@ export const valhallaService = {
     destination: [number, number],
     mode: "walking" | "cycling",
     options: ValhallaRouteOptions = {},
+    lang?: string,
   ): Promise<DirectionsResult> {
     const costingOptions: Record<string, unknown> = {};
     if (options.avoidHighways) costingOptions.use_highways = 0;
@@ -92,7 +93,10 @@ export const valhallaService = {
       ],
       costing: COSTING_MAP[mode],
       costing_options: { [COSTING_MAP[mode]]: costingOptions },
-      directions_options: { units: options.units === "imperial" ? "miles" : "km" },
+      directions_options: {
+        units: options.units === "imperial" ? "miles" : "km",
+        language: lang ?? "en",
+      },
       alternates: 3,
     };
 

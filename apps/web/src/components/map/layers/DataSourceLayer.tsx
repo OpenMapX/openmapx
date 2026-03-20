@@ -7,11 +7,13 @@ import type {
   LngLat,
 } from "@openmapx/core";
 import {
-  useCategorySearchStore,
+  PANEL,
   useDataSourceSearch,
   useDataSourceStore,
   useDataSources,
+  useOpeningHoursStore,
   usePlaceStore,
+  useSidebarStore,
 } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
@@ -131,7 +133,7 @@ export function DataSourceLayer() {
   const setViewport = useDataSourceStore((s) => s.setViewport);
   const setSearchBbox = useDataSourceStore((s) => s.setSearchBbox);
   const setMapMoved = useDataSourceStore((s) => s.setMapMoved);
-  const openingHoursFilter = useCategorySearchStore((s) => s.openingHoursFilter);
+  const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
 
   const { data: sourcesData } = useDataSources();
   const prevSourceRef = useRef<string | null>(null);
@@ -453,35 +455,33 @@ export function DataSourceLayer() {
         category: activeMeta?.placeCategory,
         rawCategory: activeMeta?.placeCategoryRaw,
       });
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     };
 
-    const onMouseEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-
-    const onMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
+    const onMouseMove = (e: MapMouseEvent) => {
+      const layers = [markersLid, labelsLid].filter((id) => !!map.getLayer(id));
+      if (layers.length === 0) return;
+      const features = map.queryRenderedFeatures(e.point, { layers });
+      if (features.length > 0) {
+        map.getCanvasContainer().style.cursor = "pointer";
+      } else {
+        map.getCanvasContainer().style.cursor = "";
+      }
     };
 
     // Bind to markers layer
     map.on("click", markersLid, onClick);
-    map.on("mouseenter", markersLid, onMouseEnter);
-    map.on("mouseleave", markersLid, onMouseLeave);
 
-    // Also bind to labels layer if it exists (for icon mode)
-    if (map.getLayer(labelsLid)) {
-      map.on("click", labelsLid, onClick);
-      map.on("mouseenter", labelsLid, onMouseEnter);
-      map.on("mouseleave", labelsLid, onMouseLeave);
-    }
+    // Also bind to labels layer (for icon mode) — MapLibre no-ops on nonexistent layers
+    map.on("click", labelsLid, onClick);
+
+    map.on("mousemove", onMouseMove);
 
     return () => {
       map.off("click", markersLid, onClick);
-      map.off("mouseenter", markersLid, onMouseEnter);
-      map.off("mouseleave", markersLid, onMouseLeave);
       map.off("click", labelsLid, onClick);
-      map.off("mouseenter", labelsLid, onMouseEnter);
-      map.off("mouseleave", labelsLid, onMouseLeave);
+      map.off("mousemove", onMouseMove);
+      map.getCanvasContainer().style.cursor = "";
     };
   }, [activeSource, activeMeta, mapReady, mapRef, selectItem, setSelectedPlace]);
 

@@ -18,6 +18,7 @@ import {
   useRouteAlerts,
   useVehicleJourney,
 } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import { formatTime } from "@/lib/formatTime";
 import { TEAL } from "@/lib/theme";
 import { AlertsBanner } from "./AlertsBanner";
@@ -31,13 +32,16 @@ interface TripDetailViewProps {
 }
 
 const OCCUPANCY_COLOR = { low: "#2e7d32", medium: "#e65100", high: "#b71c1c" } as const;
-const OCCUPANCY_LABEL = {
-  low: "Low occupancy",
-  medium: "Medium occupancy",
-  high: "High occupancy",
+const OCCUPANCY_KEY = {
+  low: "lowOccupancy",
+  medium: "mediumOccupancy",
+  high: "highOccupancy",
 } as const;
 
 export function TripDetailView({ departure, onBack, clearSearchBar = false }: TripDetailViewProps) {
+  const t = useTranslations("transit");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const {
     data: journey,
     isLoading,
@@ -68,7 +72,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
           borderColor: "divider",
         }}
       >
-        <IconButton size="small" onClick={onBack} aria-label="Back">
+        <IconButton size="small" onClick={onBack} aria-label={tc("back")}>
           <ArrowBackIcon />
         </IconButton>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -82,7 +86,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               {departure.headsign}
             </Typography>
             {departure.occupancy && (
-              <Tooltip title={OCCUPANCY_LABEL[departure.occupancy]}>
+              <Tooltip title={t(OCCUPANCY_KEY[departure.occupancy])}>
                 <AirlineSeatReclineNormalIcon
                   sx={{ fontSize: 18, color: OCCUPANCY_COLOR[departure.occupancy] }}
                 />
@@ -99,21 +103,21 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 color: isCanceled ? "text.disabled" : "text.secondary",
               }}
             >
-              {formatTime(departure.scheduledAt)}
+              {formatTime(departure.scheduledAt, locale)}
             </Typography>
             {isDelayed && !isCanceled && departure.expectedAt && (
               <Typography variant="body2" fontWeight={600} color="error.main">
-                {formatTime(departure.expectedAt)}
+                {formatTime(departure.expectedAt, locale)}
               </Typography>
             )}
             {isCanceled && (
               <Typography variant="caption" color="error.main" fontWeight={600}>
-                Canceled
+                {t("canceled")}
               </Typography>
             )}
             {departure.platform && (
               <Typography variant="body2" color="text.secondary">
-                · Pl. {departure.platform}
+                · {t("platform")} {departure.platform}
               </Typography>
             )}
           </Box>
@@ -140,7 +144,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
       {/* Stop sequence */}
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="subtitle2" gutterBottom>
-          Stops
+          {t("stops")}
         </Typography>
         {isLoading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
@@ -149,7 +153,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
         ) : isError ? (
           <Box sx={{ textAlign: "center", py: 2 }}>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Could not load stop data.
+              {t("couldNotLoadStops")}
             </Typography>
             <Button
               variant="outlined"
@@ -163,7 +167,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 "&:hover": { borderColor: "#005f6b", bgcolor: "rgba(0,123,139,0.04)" },
               }}
             >
-              Retry
+              {tc("retry")}
             </Button>
           </Box>
         ) : journey ? (
@@ -187,7 +191,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 stop.expectedArrival ??
                 stop.scheduledDeparture ??
                 stop.scheduledArrival;
-              const timeStr = time ? formatTime(time) : "";
+              const timeStr = time ? formatTime(time, locale) : "";
               // Only treat as realtime when delaySeconds is explicitly provided (not undefined)
               const isRealtime = stop.delaySeconds !== undefined;
               const delaySec = stop.delaySeconds ?? 0;
@@ -258,7 +262,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                   </Box>
                   {stop.platform && (
                     <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
-                      Pl. {stop.platform}
+                      {t("platform")} {stop.platform}
                     </Typography>
                   )}
                   {!isDeparted && !isCanceledStop && (
@@ -278,9 +282,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
           </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
-            {departure.tripId
-              ? "Stop details will be available closer to departure."
-              : "Stop sequence not available for this service."}
+            {departure.tripId ? t("stopDetailsLater") : t("stopSequenceNotAvailable")}
           </Typography>
         )}
       </Box>
@@ -289,7 +291,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
       {departure.providers.length > 0 && (
         <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.65rem" }}>
-            Data:{" "}
+            {tc("data")}:{" "}
             {departure.providers.map((p, i) => {
               const attr = resolveProvider(providers, p);
               return (

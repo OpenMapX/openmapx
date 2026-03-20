@@ -8,10 +8,15 @@ import type { Place } from "@openmapx/core";
 import { resolveOsmLabel } from "./osm-label.js";
 
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
-const HEADERS = {
+const DEFAULT_HEADERS = {
   "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
   "Accept-Language": "en",
 };
+
+function headersForLang(lang?: string): Record<string, string> {
+  if (!lang) return DEFAULT_HEADERS;
+  return { ...DEFAULT_HEADERS, "Accept-Language": lang };
+}
 
 interface NominatimAddress {
   house_number?: string;
@@ -71,8 +76,8 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
   };
 }
 
-async function fetchNominatim<T>(url: URL): Promise<T> {
-  const res = await fetch(url.toString(), { headers: HEADERS });
+async function fetchNominatim<T>(url: URL, lang?: string): Promise<T> {
+  const res = await fetch(url.toString(), { headers: headersForLang(lang) });
   if (!res.ok) throw new Error(`Nominatim error ${res.status}: ${url.pathname}`);
   return res.json() as Promise<T>;
 }
@@ -91,6 +96,7 @@ export async function lookupByOsmRef(
   osmType: string,
   osmId: string,
   originalId: string,
+  lang?: string,
 ): Promise<Place> {
   const prefix = OSM_TYPE_PREFIX[osmType];
   if (!prefix) throw new Error(`Unknown OSM type: ${osmType}`);
@@ -102,7 +108,7 @@ export async function lookupByOsmRef(
   url.searchParams.set("extratags", "1");
 
   // /lookup returns an array; we asked for exactly one ID
-  const data = await fetchNominatim<NominatimDetailResult[]>(url);
+  const data = await fetchNominatim<NominatimDetailResult[]>(url, lang);
   if (!data[0]) throw new Error(`Nominatim found no result for ${prefix}${osmId}`);
   return toPlace(data[0], originalId);
 }
@@ -129,6 +135,7 @@ export async function lookupByCoords(
   lat: number,
   lng: number,
   originalId: string,
+  lang?: string,
 ): Promise<Place | null> {
   const url = new URL(`${NOMINATIM_URL}/reverse`);
   url.searchParams.set("lat", String(lat));
@@ -139,7 +146,7 @@ export async function lookupByCoords(
   url.searchParams.set("zoom", "18"); // Building-level precision
 
   try {
-    const result = await fetchNominatim<NominatimDetailResult>(url);
+    const result = await fetchNominatim<NominatimDetailResult>(url, lang);
     if (!result?.osm_id) return null;
     return toPlace(result, originalId);
   } catch {
@@ -169,8 +176,13 @@ const CITY_NAME_TTL_MS = 3_600_000; // 1h
  * Reverse-geocode coordinates to a city name (city-level zoom).
  * Cached aggressively since the same viewport area maps to the same city.
  */
-export async function reverseGeocodeCity(lat: number, lng: number): Promise<string | null> {
-  const key = `${Math.round(lat * 10) / 10},${Math.round(lng * 10) / 10}`;
+export async function reverseGeocodeCity(
+  lat: number,
+  lng: number,
+  lang?: string,
+): Promise<string | null> {
+  const effectiveLang = lang ?? "en";
+  const key = `${Math.round(lat * 10) / 10},${Math.round(lng * 10) / 10}:${effectiveLang}`;
   const cached = cityNameCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.city;
 
@@ -182,7 +194,7 @@ export async function reverseGeocodeCity(lat: number, lng: number): Promise<stri
     url.searchParams.set("addressdetails", "1");
     url.searchParams.set("zoom", "10");
 
-    const result = await fetchNominatim<NominatimDetailResult>(url);
+    const result = await fetchNominatim<NominatimDetailResult>(url, lang);
     const city = result?.address?.city ?? result?.address?.town ?? result?.address?.village ?? null;
 
     cityNameCache.set(key, { city, expiresAt: Date.now() + CITY_NAME_TTL_MS });
@@ -197,6 +209,7 @@ export async function lookupByNameAndCoords(
   lat: number,
   lng: number,
   originalId: string,
+  lang?: string,
 ): Promise<Place | null> {
   // Nominatim viewbox: left,top,right,bottom = minLng,maxLat,maxLng,minLat
   const viewbox = [
@@ -215,7 +228,7 @@ export async function lookupByNameAndCoords(
   url.searchParams.set("extratags", "1");
   url.searchParams.set("limit", "5");
 
-  const results = await fetchNominatim<NominatimDetailResult[]>(url);
+  const results = await fetchNominatim<NominatimDetailResult[]>(url, lang);
   if (results.length === 0) return null;
 
   // Pick the result closest to the geocoder's coordinates

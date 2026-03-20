@@ -16,6 +16,7 @@ import {
   useRouteStops,
   useTransitRoute,
 } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { PRIMARY_BLUE } from "@/lib/theme";
 import { AlertsBanner } from "./AlertsBanner";
@@ -44,6 +45,8 @@ export function LineDetail({
   onSelectStop,
   clearSearchBar = false,
 }: LineDetailProps) {
+  const t = useTranslations("transit");
+  const tc = useTranslations("common");
   const { data: routeData, isLoading: routeLoading } = useTransitRoute(routeId);
   // Fall back to the already-fetched hint so the header is never empty.
   // routeData is TransitRoute (no providers), routeHint is MergedRoute (has providers).
@@ -88,7 +91,7 @@ export function LineDetail({
           borderColor: "divider",
         }}
       >
-        <IconButton size="small" onClick={onBack} aria-label="Back">
+        <IconButton size="small" onClick={onBack} aria-label={tc("back")}>
           <ArrowBackIcon />
         </IconButton>
         {routeLoading && !routeHint ? (
@@ -130,7 +133,7 @@ export function LineDetail({
       {/* Stop sequence */}
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="subtitle2" gutterBottom>
-          Stops
+          {t("stops")}
         </Typography>
         {stopsLoading ? (
           Array.from({ length: 6 }).map((_, i) => (
@@ -201,7 +204,7 @@ export function LineDetail({
                   </Typography>
                   {s.platformCode && (
                     <Typography variant="caption" color="text.disabled">
-                      Pl. {s.platformCode}
+                      {t("platform")} {s.platformCode}
                     </Typography>
                   )}
                 </Box>
@@ -210,7 +213,7 @@ export function LineDetail({
           </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
-            Stop data not available.
+            {t("stopDataNotAvailable")}
           </Typography>
         )}
       </Box>
@@ -219,7 +222,7 @@ export function LineDetail({
       {route && providersList.length > 0 && (
         <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.65rem" }}>
-            Data:{" "}
+            {tc("data")}:{" "}
             {providersList.map((p, i) => {
               const attr = resolveProvider(providers, p);
               return (

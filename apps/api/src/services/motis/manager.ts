@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { cacheGet, cacheSet } from "../../utils/cache.js";
 import { validatePublicUrl } from "../../utils/validate-url";
-import { cacheGet, cacheSet } from "../transit/cache";
 import type { BBox } from "../transit/types";
 import type { MotisFeed, MotisStatus } from "./types";
 

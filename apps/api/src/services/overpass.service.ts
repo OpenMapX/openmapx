@@ -1,5 +1,9 @@
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+import type { BoundingBox } from "@openmapx/core";
+import { overpassQuery } from "./overpass";
+
 const MAX_RESULTS = 50;
+
+export type { BoundingBox };
 
 export interface OsmFilter {
   key: string;
@@ -177,27 +181,6 @@ export const CATEGORY_FILTERS: Record<string, OsmFilter[]> = {
   bookstores: [{ key: "shop", value: "books" }],
 };
 
-interface OverpassNode {
-  type: "node";
-  id: number;
-  lat: number;
-  lon: number;
-  tags?: Record<string, string>;
-}
-
-interface OverpassWay {
-  type: "way";
-  id: number;
-  center: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-type OverpassElement = OverpassNode | OverpassWay;
-
-interface OverpassResponse {
-  elements: OverpassElement[];
-}
-
 export interface CategoryPlaceResult {
   id: string;
   name: string;
@@ -213,14 +196,7 @@ export interface CategoryPlaceResult {
   fuelAttribution?: { label: string; url: string };
 }
 
-export interface BoundingBox {
-  south: number;
-  west: number;
-  north: number;
-  east: number;
-}
-
-function buildOverpassQuery(filters: OsmFilter[], bbox: BoundingBox): string {
+function buildCategoryQuery(filters: OsmFilter[], bbox: BoundingBox): string {
   const { south, west, north, east } = bbox;
   const bboxStr = `${south},${west},${north},${east}`;
   const lines = filters
@@ -263,18 +239,8 @@ export async function searchByCategory(
   filters: OsmFilter[],
   bbox: BoundingBox,
 ): Promise<CategoryPlaceResult[]> {
-  const query = buildOverpassQuery(filters, bbox);
-  const res = await fetch(OVERPASS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Overpass API error: ${res.status}`);
-  }
-
-  const data = (await res.json()) as OverpassResponse;
+  const query = buildCategoryQuery(filters, bbox);
+  const data = await overpassQuery(query);
 
   const results: CategoryPlaceResult[] = [];
 
@@ -294,8 +260,17 @@ export async function searchByCategory(
       (tags.aeroway === "terminal" ? "Airport Terminal" : undefined);
     if (!name) continue;
 
-    const lat = el.type === "node" ? el.lat : el.center.lat;
-    const lon = el.type === "node" ? el.lon : el.center.lon;
+    let lat: number;
+    let lon: number;
+    if (el.type === "node") {
+      lat = el.lat;
+      lon = el.lon;
+    } else if (el.type === "way" && el.center) {
+      lat = el.center.lat;
+      lon = el.center.lon;
+    } else {
+      continue;
+    }
 
     results.push({
       id: `${el.type}/${el.id}`,

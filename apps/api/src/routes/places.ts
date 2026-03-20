@@ -6,7 +6,7 @@ import {
   lookupByOsmRef,
 } from "../services/nominatim-lookup.service";
 import { buildReviewLinks } from "../services/review-links";
-import { withCache } from "../utils/cache.js";
+import { TTL, withCache } from "../utils/cache.js";
 
 // Matches "node/12345", "way/678", "relation/99"
 const OSM_ID_RE = /^(node|way|relation)\/(\d+)$/;
@@ -15,6 +15,7 @@ interface PlaceByIdQuery {
   lat?: string;
   lng?: string;
   name?: string;
+  lang?: string;
 }
 
 interface CacheableError {
@@ -43,23 +44,26 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           lat: { type: "string" },
           lng: { type: "string" },
           name: { type: "string" },
+          lang: { type: "string" },
         },
       },
     },
     handler: async (req, reply) => {
       const rawId = decodeURIComponent(req.params.id);
-      const cacheKey = `cache:place:${rawId}`;
+      const lang = req.query.lang;
+      const effectiveLang = lang ?? "en";
+      const cacheKey = `cache:place:${rawId}:${effectiveLang}`;
 
       // Cache-Control is set only on success — error responses (400/404) must not
       // be cached because browsers can cache them when Cache-Control: public is present.
       try {
-        const result = await withCache(cacheKey, 86400, async () => {
+        const result = await withCache(cacheKey, TTL.places.detail, async () => {
           const match = rawId.match(OSM_ID_RE);
 
           if (match) {
             const [, osmType, osmId] = match;
-            const place = await lookupByOsmRef(osmType, osmId, rawId);
-            const { externalIds, ...enrichment } = await enrichPlace(place);
+            const place = await lookupByOsmRef(osmType, osmId, rawId, lang);
+            const { externalIds, ...enrichment } = await enrichPlace(place, lang);
             return { ...place, ...enrichment, reviewLinks: buildReviewLinks(place, externalIds) };
           }
 
@@ -81,10 +85,10 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           // For regular places, try name+coords first for precise disambiguation.
           const isDataSourceLookup = rawId.startsWith("ds-");
           const place = isDataSourceLookup
-            ? ((await lookupByCoords(lat, lng, rawId)) ??
-              (await lookupByNameAndCoords(name, lat, lng, rawId)))
-            : ((await lookupByNameAndCoords(name, lat, lng, rawId)) ??
-              (await lookupByCoords(lat, lng, rawId)));
+            ? ((await lookupByCoords(lat, lng, rawId, lang)) ??
+              (await lookupByNameAndCoords(name, lat, lng, rawId, lang)))
+            : ((await lookupByNameAndCoords(name, lat, lng, rawId, lang)) ??
+              (await lookupByCoords(lat, lng, rawId, lang)));
           if (!place) {
             const err: CacheableError = {
               statusCode: 404,
@@ -93,7 +97,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             throw err;
           }
 
-          const { externalIds, ...enrichment } = await enrichPlace(place);
+          const { externalIds, ...enrichment } = await enrichPlace(place, lang);
           return { ...place, ...enrichment, reviewLinks: buildReviewLinks(place, externalIds) };
         });
         reply.header("Cache-Control", "public, max-age=86400");

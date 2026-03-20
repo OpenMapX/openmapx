@@ -1,15 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
-import { redis } from "../redis.js";
+import { cacheGet, cacheSet, TTL } from "../utils/cache.js";
 
 const OPENAQ_BASE = "https://api.openaq.org/v3";
 /** PM2.5 parameter ID in OpenAQ v3. */
 const PM25_PARAM_ID = 2;
 const FETCH_TIMEOUT_MS = 15_000;
 
-/** TTL for per-station latest values (individual Redis keys). */
-const STATION_CACHE_TTL_S = 3600;
-/** TTL for location metadata per viewport. */
-const LOCATION_CACHE_TTL_S = 3600;
 /** Max stations to fetch latest values for per request. */
 const MAX_LATEST_FETCHES = 100;
 /** Concurrent latest-value fetches (keep well under 60 req/min). */
@@ -157,14 +153,8 @@ async function fetchLocationsInBbox(
 ): Promise<LocationMeta[]> {
   const cacheKey = locationCacheKey(south, west, north, east);
 
-  if (redis) {
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) return JSON.parse(cached) as LocationMeta[];
-    } catch {
-      // Fall through
-    }
-  }
+  const cached = await cacheGet<LocationMeta[]>(cacheKey);
+  if (cached) return cached;
 
   const locations: LocationMeta[] = [];
   let page = 1;
@@ -201,12 +191,8 @@ async function fetchLocationsInBbox(
     page++;
   }
 
-  if (redis && locations.length > 0) {
-    try {
-      await redis.set(cacheKey, JSON.stringify(locations), "EX", LOCATION_CACHE_TTL_S);
-    } catch {
-      // Silent
-    }
+  if (locations.length > 0) {
+    await cacheSet(cacheKey, locations, TTL.airQuality.location);
   }
 
   return locations;
@@ -223,22 +209,11 @@ function stationCacheKey(locationId: number): string {
 }
 
 async function getCachedValue(locationId: number): Promise<StationValue | null> {
-  if (!redis) return null;
-  try {
-    const cached = await redis.get(stationCacheKey(locationId));
-    return cached ? (JSON.parse(cached) as StationValue) : null;
-  } catch {
-    return null;
-  }
+  return cacheGet<StationValue>(stationCacheKey(locationId));
 }
 
 async function cacheValue(locationId: number, value: StationValue): Promise<void> {
-  if (!redis) return;
-  try {
-    await redis.set(stationCacheKey(locationId), JSON.stringify(value), "EX", STATION_CACHE_TTL_S);
-  } catch {
-    // Silent
-  }
+  await cacheSet(stationCacheKey(locationId), value, TTL.airQuality.station);
 }
 
 async function fetchLatestForLocation(
@@ -351,6 +326,11 @@ export const airQualityRoute: FastifyPluginAsync = async (fastify) => {
 
       if ([south, west, north, east].some(Number.isNaN)) {
         return reply.status(400).send({ message: "Invalid bbox coordinates" });
+      }
+
+      const MAX_BBOX_SPAN = 15;
+      if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
+        return reply.status(400).send({ message: "Bounding box too large" });
       }
 
       // 1. Get locations in viewport (with license/attribution metadata)

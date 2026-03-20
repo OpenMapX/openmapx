@@ -1,4 +1,4 @@
-import type { OpeningHoursFilter } from "../stores/categorySearchStore";
+import type { OpeningHoursFilter } from "../stores/openingHoursStore";
 import type { CategoryPlace } from "../types/category";
 import { isOpenAt, parseOpeningHours } from "./openingHours";
 

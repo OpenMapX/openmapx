@@ -5,11 +5,13 @@ import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useStreetViewStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 
 export function StreetViewLegend() {
+  const t = useTranslations("streetView");
   const panelOpen = useStreetViewStore((s) => s.panelOpen);
-  const coverageVisible = useStreetViewStore((s) => s.coverageVisible);
-  const setCoverageVisible = useStreetViewStore((s) => s.setCoverageVisible);
+  const layerVisible = useStreetViewStore((s) => s.layerVisible);
+  const setLayerVisible = useStreetViewStore((s) => s.setLayerVisible);
 
   if (!panelOpen) return null;
 
@@ -28,23 +30,23 @@ export function StreetViewLegend() {
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Coverage</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("coverage")}</Typography>
         <Switch
           size="small"
-          checked={coverageVisible}
-          onChange={(e) => setCoverageVisible(e.target.checked)}
-          inputProps={{ "aria-label": "Toggle Street-level imagery coverage" }}
+          checked={layerVisible}
+          onChange={(e) => setLayerVisible(e.target.checked)}
+          inputProps={{ "aria-label": t("toggleCoverage") }}
         />
       </Box>
 
       <Box sx={{ display: "flex", flexDirection: "row", gap: 2 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Box sx={{ width: 24, height: 3, bgcolor: "#03a9f4", borderRadius: "2px" }} />
-          <Typography sx={{ fontSize: 12 }}>Street-level imagery</Typography>
+          <Typography sx={{ fontSize: 12 }}>{t("streetLevelImagery")}</Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Box sx={{ width: 24, height: 0, borderBottom: "2px dashed #03a9f4" }} />
-          <Typography sx={{ fontSize: 12 }}>Photo sequence</Typography>
+          <Typography sx={{ fontSize: 12 }}>{t("photoSequence")}</Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Box
@@ -57,7 +59,7 @@ export function StreetViewLegend() {
               flexShrink: 0,
             }}
           />
-          <Typography sx={{ fontSize: 12 }}>360° photo</Typography>
+          <Typography sx={{ fontSize: 12 }}>{t("photo360")}</Typography>
         </Box>
       </Box>
     </Paper>

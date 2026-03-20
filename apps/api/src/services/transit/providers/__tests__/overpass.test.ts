@@ -163,7 +163,10 @@ describe("overpass provider", () => {
       const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(url).toBe("https://overpass-api.de/api/interpreter");
       expect(init.method).toBe("POST");
-      expect(init.headers).toEqual({ "Content-Type": "application/x-www-form-urlencoded" });
+      expect(init.headers).toEqual({
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
+      });
       expect(init.body).toContain("data=");
     });
 

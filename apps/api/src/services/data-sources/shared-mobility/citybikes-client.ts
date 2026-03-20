@@ -4,7 +4,7 @@
  */
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
-import { withCache } from "../../../utils/cache.js";
+import { TTL, withCache } from "../../../utils/cache.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const CITYBIKES_BASE = "https://api.citybik.es";
@@ -14,7 +14,6 @@ const HEADERS = {
 };
 const FETCH_TIMEOUT_MS = 10_000;
 const NETWORK_INDEX_CACHE_KEY = "shared-mobility:citybikes:networks";
-const NETWORK_INDEX_CACHE_TTL = 3_600; // 1h
 
 interface CityBikesNetwork {
   id: string;
@@ -68,7 +67,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 async function getNetworkIndex(): Promise<CityBikesNetwork[]> {
   return withCache<CityBikesNetwork[]>(
     NETWORK_INDEX_CACHE_KEY,
-    NETWORK_INDEX_CACHE_TTL,
+    TTL.sharedMobility.networks,
     async () => {
       const data = await fetchJson<{ networks: CityBikesNetwork[] }>(
         `${CITYBIKES_BASE}/v2/networks?fields=id,name,href,company,location`,
@@ -105,32 +104,36 @@ export async function fetchNetworkStations(
   bbox: BoundingBox,
 ): Promise<SharedMobilityStation[]> {
   const cacheKey = `shared-mobility:citybikes:${network.id}`;
-  const stations = await withCache<SharedMobilityStation[]>(cacheKey, 120, async () => {
-    const data = await fetchJson<CityBikesNetworkDetail>(`${CITYBIKES_BASE}${network.href}`);
-    const operator = network.company?.[0] ?? network.name;
+  const stations = await withCache<SharedMobilityStation[]>(
+    cacheKey,
+    TTL.sharedMobility.stations,
+    async () => {
+      const data = await fetchJson<CityBikesNetworkDetail>(`${CITYBIKES_BASE}${network.href}`);
+      const operator = network.company?.[0] ?? network.name;
 
-    return data.network.stations.map(
-      (s): SharedMobilityStation => ({
-        id: `citybikes/${network.id}/${s.id}`,
-        name: s.name,
-        coordinates: [s.longitude, s.latitude] as LngLat,
-        availableVehicles: s.free_bikes,
-        emptySlots: s.empty_slots ?? undefined,
-        capacity:
-          s.extra?.slots ?? (s.empty_slots != null ? s.free_bikes + s.empty_slots : undefined),
-        operator,
-        vehicleTypes: ["bicycle"],
-        isActive: true,
-        source: `citybikes/${network.id}`,
-        attribution: {
-          label: "CityBikes",
-          url: "https://citybik.es",
-          license: "Custom ToS",
-          licenseUrl: "https://docs.citybik.es/api/tos",
-        },
-      }),
-    );
-  });
+      return data.network.stations.map(
+        (s): SharedMobilityStation => ({
+          id: `citybikes/${network.id}/${s.id}`,
+          name: s.name,
+          coordinates: [s.longitude, s.latitude] as LngLat,
+          availableVehicles: s.free_bikes,
+          emptySlots: s.empty_slots ?? undefined,
+          capacity:
+            s.extra?.slots ?? (s.empty_slots != null ? s.free_bikes + s.empty_slots : undefined),
+          operator,
+          vehicleTypes: ["bicycle"],
+          isActive: true,
+          source: `citybikes/${network.id}`,
+          attribution: {
+            label: "CityBikes",
+            url: "https://citybik.es",
+            license: "Custom ToS",
+            licenseUrl: "https://docs.citybik.es/api/tos",
+          },
+        }),
+      );
+    },
+  );
 
   // Filter to bbox
   return stations.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0]));

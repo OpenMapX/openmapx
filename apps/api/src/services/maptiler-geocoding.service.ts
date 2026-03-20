@@ -37,12 +37,14 @@ function mapType(placeType: string[]): SearchResult["type"] {
 async function fetchMaptiler(
   query: string,
   params: Record<string, string>,
+  lang?: string,
 ): Promise<MaptilerResponse> {
   const key = process.env.MAPTILER_KEY;
   if (!key) throw new Error("MAPTILER_KEY env var is required for MapTiler geocoding");
 
   const url = new URL(`${BASE_URL}/${encodeURIComponent(query)}.json`);
   url.searchParams.set("key", key);
+  url.searchParams.set("language", lang ?? "en");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const res = await fetch(url.toString());
@@ -50,12 +52,17 @@ async function fetchMaptiler(
   return res.json() as Promise<MaptilerResponse>;
 }
 
-async function fetchMaptilerReverse(lng: number, lat: number): Promise<MaptilerResponse> {
+async function fetchMaptilerReverse(
+  lng: number,
+  lat: number,
+  lang?: string,
+): Promise<MaptilerResponse> {
   const key = process.env.MAPTILER_KEY;
   if (!key) throw new Error("MAPTILER_KEY env var is required for MapTiler geocoding");
 
   const url = new URL(`${BASE_URL}/${lng},${lat}.json`);
   url.searchParams.set("key", key);
+  url.searchParams.set("language", lang ?? "en");
   url.searchParams.set("limit", "1");
 
   const res = await fetch(url.toString());
@@ -64,8 +71,8 @@ async function fetchMaptilerReverse(lng: number, lat: number): Promise<MaptilerR
 }
 
 export const maptilerGeocodingService: GeocodingProvider = {
-  async geocode(query: string): Promise<SearchResult[]> {
-    const data = await fetchMaptiler(query, { limit: "10" });
+  async geocode(query: string, lang?: string): Promise<SearchResult[]> {
+    const data = await fetchMaptiler(query, { limit: "10" }, lang);
     return data.features.map((f) => ({
       id: f.id,
       label: f.place_name,
@@ -76,8 +83,12 @@ export const maptilerGeocodingService: GeocodingProvider = {
     }));
   },
 
-  async reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodingResult | null> {
-    const data = await fetchMaptilerReverse(lng, lat);
+  async reverseGeocode(
+    lat: number,
+    lng: number,
+    lang?: string,
+  ): Promise<ReverseGeocodingResult | null> {
+    const data = await fetchMaptilerReverse(lng, lat, lang);
     const feature = data.features[0];
     if (!feature) return null;
 
@@ -89,8 +100,8 @@ export const maptilerGeocodingService: GeocodingProvider = {
     return { address: feature.place_name, city: [cityName, region].filter(Boolean).join(", ") };
   },
 
-  async autocomplete(query: string): Promise<AutocompleteResult[]> {
-    const data = await fetchMaptiler(query, { limit: "6", autocomplete: "true" });
+  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+    const data = await fetchMaptiler(query, { limit: "6", autocomplete: "true" }, lang);
     return data.features.map((f) => {
       const category = f.properties?.categories?.[0];
       return {

@@ -1,4 +1,4 @@
-import { redis } from "../../../redis";
+import { cacheGet, cacheSet, TTL } from "../../../utils/cache.js";
 import type { BBox } from "../types";
 import { COUNTRY_BBOXES } from "./country-bboxes";
 import type { CoverageTier, ProtocolType, RegistryEntry } from "./types";
@@ -11,8 +11,7 @@ const JSDELIVR_BASE = "https://cdn.jsdelivr.net/gh/public-transport/transport-ap
 const GITHUB_TREE_URL =
   "https://api.github.com/repos/public-transport/transport-apis/git/trees/v1?recursive=1";
 const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transport-apis/v1";
-const REDIS_KEY = "transit:registry";
-const REDIS_TTL = 48 * 3600; // 48 hours
+const REGISTRY_CACHE_KEY = "transit:registry";
 const MAX_CONCURRENT = 10;
 
 const SUPPORTED_PROTOCOLS: Record<string, ProtocolType> = {
@@ -256,9 +255,7 @@ export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
   }
 
   if (entries && entries.length > 0) {
-    if (redis) {
-      await redis.set(REDIS_KEY, JSON.stringify(entries), "EX", REDIS_TTL).catch(() => {});
-    }
+    await cacheSet(REGISTRY_CACHE_KEY, entries, TTL.transit.registry);
     return entries;
   }
 
@@ -266,14 +263,5 @@ export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
 }
 
 async function loadFromRedisCache(): Promise<RegistryEntry[]> {
-  if (!redis) return [];
-  try {
-    const cached = await redis.get(REDIS_KEY);
-    if (cached) {
-      return JSON.parse(cached) as RegistryEntry[];
-    }
-  } catch {
-    // ignore
-  }
-  return [];
+  return (await cacheGet<RegistryEntry[]>(REGISTRY_CACHE_KEY)) ?? [];
 }

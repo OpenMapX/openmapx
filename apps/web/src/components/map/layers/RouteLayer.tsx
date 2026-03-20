@@ -93,8 +93,6 @@ export function RouteLayer() {
 
       // Click on alt route to select it
       map.on("click", LAYER_ALT_LINE, onClick);
-      map.on("mouseenter", LAYER_ALT_LINE, onEnter);
-      map.on("mouseleave", LAYER_ALT_LINE, onLeave);
     };
 
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
@@ -104,11 +102,14 @@ export function RouteLayer() {
         if (idx !== undefined) setActiveRouteIndex(idx);
       }
     };
-    const onEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const onLeave = () => {
-      map.getCanvas().style.cursor = "";
+    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (!map.getLayer(LAYER_ALT_LINE)) return;
+      const features = map.queryRenderedFeatures(e.point, { layers: [LAYER_ALT_LINE] });
+      if (features.length > 0) {
+        map.getCanvasContainer().style.cursor = "pointer";
+      } else {
+        map.getCanvasContainer().style.cursor = "";
+      }
     };
 
     if (map.isStyleLoaded()) {
@@ -116,11 +117,12 @@ export function RouteLayer() {
     } else {
       map.once("load", setup);
     }
+    map.on("mousemove", onMouseMove);
     return () => {
       map.off("load", setup);
       map.off("click", LAYER_ALT_LINE, onClick);
-      map.off("mouseenter", LAYER_ALT_LINE, onEnter);
-      map.off("mouseleave", LAYER_ALT_LINE, onLeave);
+      map.off("mousemove", onMouseMove);
+      map.getCanvasContainer().style.cursor = "";
     };
   }, [mapRef, mapReady, setActiveRouteIndex]);
 

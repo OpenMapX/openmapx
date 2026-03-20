@@ -15,38 +15,33 @@ import {
   HOURS_FILTER_CATEGORY_IDS,
   useCategorySearchStore,
   useDataSourceStore,
+  useOpeningHoursStore,
 } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TEAL } from "@/lib/theme";
 
 // Display order: Mon–Sun; JS day indices
-const DAYS: { label: string; idx: number }[] = [
-  { label: "Monday", idx: 1 },
-  { label: "Tuesday", idx: 2 },
-  { label: "Wednesday", idx: 3 },
-  { label: "Thursday", idx: 4 },
-  { label: "Friday", idx: 5 },
-  { label: "Saturday", idx: 6 },
-  { label: "Sunday", idx: 0 },
+const DAYS: { key: string; idx: number }[] = [
+  { key: "monday", idx: 1 },
+  { key: "tuesday", idx: 2 },
+  { key: "wednesday", idx: 3 },
+  { key: "thursday", idx: 4 },
+  { key: "friday", idx: 5 },
+  { key: "saturday", idx: 6 },
+  { key: "sunday", idx: 0 },
 ];
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const HOURS: { label: string; value: number | null }[] = [
-  { label: "Any time", value: null },
-  ...Array.from({ length: 24 }, (_, h) => ({
-    label: `${String(h).padStart(2, "0")}:00`,
-    value: h,
-  })),
-];
 
 function chipLabel(
   filter: OpeningHoursFilter,
   openAtDay: number | null,
   openAtHour: number | null,
+  t: (key: string) => string,
 ): string {
-  if (filter === "open_now") return "Open now";
-  if (filter === "open_24h") return "Open 24 hours";
+  if (filter === "open_now") return t("openNow");
+  if (filter === "open_24h") return t("open24h");
   if (filter === "open_at") {
     const d = openAtDay !== null ? DAY_SHORT[openAtDay] : null;
     const h = openAtHour !== null ? `${String(openAtHour).padStart(2, "0")}:00` : null;
@@ -54,8 +49,13 @@ function chipLabel(
     if (d) return d;
     if (h) return h;
   }
-  return "Opening times";
+  return t("openingTimes");
 }
+
+const HOUR_OPTIONS: { value: number | null }[] = [
+  { value: null },
+  ...Array.from({ length: 24 }, (_, h) => ({ value: h })),
+];
 
 function PickerButton({
   label,
@@ -94,14 +94,11 @@ function PickerButton({
 }
 
 export function CategoryFilterBar() {
-  const {
-    activeCategory,
-    openingHoursFilter,
-    openAtDay,
-    openAtHour,
-    setOpeningHoursFilter,
-    setOpenAtFilter,
-  } = useCategorySearchStore();
+  const t = useTranslations("category");
+  const tc = useTranslations("common");
+  const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const { openingHoursFilter, openAtDay, openAtHour, setOpeningHoursFilter, setOpenAtFilter } =
+    useOpeningHoursStore();
   const activeSource = useDataSourceStore((s) => s.activeSource);
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -144,7 +141,7 @@ export function CategoryFilterBar() {
               <AccessTimeIcon sx={{ fontSize: 16 }} />
             </Box>
           }
-          label="Open now"
+          label={t("openNow")}
           onClick={() => setOpeningHoursFilter(isFiltered ? "any" : "open_now")}
           variant={isFiltered ? "filled" : "outlined"}
           sx={{
@@ -171,7 +168,7 @@ export function CategoryFilterBar() {
   if (!activeCategory || !HOURS_FILTER_CATEGORY_IDS.has(activeCategory)) return null;
 
   const isFiltered = openingHoursFilter !== "any";
-  const label = chipLabel(openingHoursFilter, openAtDay, openAtHour);
+  const label = chipLabel(openingHoursFilter, openAtDay, openAtHour, t);
 
   const handleApply = () => {
     if (pendingMode === "open_at") {
@@ -258,9 +255,9 @@ export function CategoryFilterBar() {
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
             {(
               [
-                { value: "any", label: "Any time" },
-                { value: "open_now", label: "Open now" },
-                { value: "open_24h", label: "Open 24 hours" },
+                { value: "any", label: t("anyTime") },
+                { value: "open_now", label: t("openNow") },
+                { value: "open_24h", label: t("open24h") },
               ] as { value: OpeningHoursFilter; label: string }[]
             ).map((opt) => (
               <Box
@@ -302,7 +299,7 @@ export function CategoryFilterBar() {
                 sx={radioSx}
               />
               <Typography variant="body2" fontSize={15}>
-                Open at
+                {t("openAt")}
               </Typography>
             </Box>
 
@@ -322,7 +319,7 @@ export function CategoryFilterBar() {
                 {DAYS.map((d) => (
                   <PickerButton
                     key={d.idx}
-                    label={d.label}
+                    label={t(d.key)}
                     selected={pendingDay === d.idx}
                     onClick={() => setPendingDay(pendingDay === d.idx ? null : d.idx)}
                   />
@@ -345,10 +342,12 @@ export function CategoryFilterBar() {
                   scrollbarWidth: "thin",
                 }}
               >
-                {HOURS.map((h) => (
+                {HOUR_OPTIONS.map((h) => (
                   <PickerButton
                     key={h.value ?? "any"}
-                    label={h.label}
+                    label={
+                      h.value === null ? t("anyTime") : `${String(h.value).padStart(2, "0")}:00`
+                    }
                     selected={pendingHour === h.value}
                     onClick={() => setPendingHour(pendingHour === h.value ? null : h.value)}
                   />
@@ -367,7 +366,7 @@ export function CategoryFilterBar() {
               onClick={handleClear}
               sx={{ textTransform: "none", color: "text.secondary" }}
             >
-              Clear
+              {tc("clear")}
             </Button>
             <Button
               variant="text"
@@ -375,7 +374,7 @@ export function CategoryFilterBar() {
               onClick={handleApply}
               sx={{ textTransform: "none", color: TEAL, fontWeight: 600 }}
             >
-              Apply
+              {tc("apply")}
             </Button>
           </Box>
         </Paper>

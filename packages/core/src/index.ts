@@ -65,25 +65,70 @@ export { useDebounce, useDebouncedCallback } from "./hooks/useDebounce";
 export { useDirections } from "./hooks/useDirections";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
 export { useGeocoding } from "./hooks/useGeocoding";
+export {
+  useHikingArea,
+  useHikingDetail,
+  useHikingGeometry,
+  useHikingSearch,
+  useHikingShelters,
+} from "./hooks/useHikingTrails";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
+export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
+export { usePlacePhotos } from "./hooks/usePlacePhotos";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
-
+export {
+  useCreateList,
+  useDeleteLabel,
+  useDeleteList,
+  useIsSaved,
+  useLabeledPlaces,
+  useRemovePlace,
+  useSavedListPlaces,
+  useSavedLists,
+  useSavePlace,
+  useUpdateLabel,
+  useUpdateList,
+  useUpdatePlace,
+} from "./hooks/useSavedPlaces";
+export type { PanelId } from "./panels/ids";
+export { PANEL } from "./panels/ids";
+export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
+// Panel system
+export type { PanelDefinition, PanelLayer } from "./panels/types";
 // Stores
 export { useAirQualityStore } from "./stores/airQualityStore";
-export type { OpeningHoursFilter } from "./stores/categorySearchStore";
 export { useCategorySearchStore } from "./stores/categorySearchStore";
+// Overlay system
+export type { OverlayStoreBase } from "./stores/createOverlayStore";
+export { useCyclingStore } from "./stores/cyclingStore";
 export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
+export { useEarthquakeStore } from "./stores/earthquakeStore";
+export { useHikingStore } from "./stores/hikingStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
+export { useMenuStore } from "./stores/menuStore";
+export type { OpeningHoursFilter } from "./stores/openingHoursStore";
+export { useOpeningHoursStore } from "./stores/openingHoursStore";
+export type { OverlayEntry, OverlayId } from "./stores/overlayRegistry";
+export {
+  closeExclusionPeers,
+  getOverlayEntry,
+  isOverlayActive,
+  OVERLAY_REGISTRY,
+  toggleOverlay,
+} from "./stores/overlayRegistry";
 export { usePlaceStore } from "./stores/placeStore";
+export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
+export { useSidebarStore } from "./stores/sidebarStore";
 export { useStreetViewStore } from "./stores/streetViewStore";
+export { useWinterSportsStore } from "./stores/winterSportsStore";
 
 // Types
 export type { CategoryDefinition, CategoryId, CategoryPlace } from "./types/category";
@@ -103,7 +148,18 @@ export type {
 } from "./types/dataSource";
 export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
 export type { BoundingBox, LngLat } from "./types/geometry";
+export type {
+  HikingFeatureCollection,
+  HikingTrailDetail,
+  HikingTrailSummary,
+  MountainShelter,
+  SacGrade,
+  SacScale,
+  ShelterFeatureCollection,
+} from "./types/hiking";
+export { SAC_GRADES } from "./types/hiking";
 export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";
+export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
 export type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "./types/search";
 export type {
   AlertSeverity,

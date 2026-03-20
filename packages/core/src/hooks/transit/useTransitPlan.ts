@@ -13,6 +13,8 @@ interface UseTransitPlanParams {
   arriveBy?: string;
   /** Number of itineraries to fetch (1–10, default 3). */
   numItineraries?: number;
+  /** Language for localized responses (e.g. "en", "de"). */
+  lang?: string;
 }
 
 /** Floor a Date to the nearest minute so queries within the same minute share a cache key. */
@@ -26,6 +28,7 @@ export function useTransitPlan({
   departAt,
   arriveBy,
   numItineraries,
+  lang,
 }: UseTransitPlanParams) {
   // When no explicit time is set, floor "now" to the current minute so that
   // React Query can serve cached results for up to staleTime (2 min) instead
@@ -33,7 +36,15 @@ export function useTransitPlan({
   const effectiveTime = arriveBy ?? departAt ?? floorToMinute(new Date().toISOString());
 
   return useQuery({
-    queryKey: ["transit-plan", origin, destination, effectiveTime, !!arriveBy, numItineraries],
+    queryKey: [
+      "transit-plan",
+      origin,
+      destination,
+      effectiveTime,
+      !!arriveBy,
+      numItineraries,
+      lang,
+    ],
     queryFn: () => {
       if (!origin || !destination) throw new Error("Origin and destination required");
       const params: Record<string, string> = {
@@ -48,6 +59,9 @@ export function useTransitPlan({
       }
       if (numItineraries && numItineraries !== 3) {
         params.num_itineraries = String(numItineraries);
+      }
+      if (lang) {
+        params.lang = lang;
       }
       return apiClient.get<TripPlan>(API_ENDPOINTS.transitPlan, params);
     },

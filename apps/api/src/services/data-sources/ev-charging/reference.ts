@@ -1,5 +1,5 @@
 import type { DataSourceFilterDef } from "@openmapx/core";
-import { withCache } from "../../../utils/cache.js";
+import { TTL, withCache } from "../../../utils/cache.js";
 import { getOcmReferenceData } from "./ocm.js";
 
 /**
@@ -8,7 +8,9 @@ import { getOcmReferenceData } from "./ocm.js";
  */
 export async function getEvChargingFilters(): Promise<DataSourceFilterDef[]> {
   try {
-    const refData = await withCache("cache:ds:ev:refdata", 48 * 3600, () => getOcmReferenceData());
+    const refData = await withCache("cache:ds:ev:refdata", TTL.dataSources.evReference, () =>
+      getOcmReferenceData(),
+    );
 
     const connectorOptions = refData.ConnectionTypes.filter(
       (ct) => !ct.IsDiscontinued && !ct.IsObsolete,

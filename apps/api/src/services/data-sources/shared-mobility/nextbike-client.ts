@@ -5,14 +5,13 @@
  */
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
-import { withCache } from "../../../utils/cache.js";
+import { TTL, withCache } from "../../../utils/cache.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const NEXTBIKE_URL = "https://maps.nextbike.net/maps/nextbike-live.json";
 const HEADERS = { "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)" };
 const FETCH_TIMEOUT_MS = 10_000;
 const CACHE_KEY = "shared-mobility:nextbike:all";
-const CACHE_TTL = 120; // 2min — real-time availability
 
 interface NextbikeCountry {
   country: string;
@@ -56,15 +55,19 @@ function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
  * Fetch the global Nextbike dataset and extract stations within the bbox.
  */
 export async function searchNextbike(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
-  const allData = await withCache<NextbikeCountry[]>(CACHE_KEY, CACHE_TTL, async () => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(NEXTBIKE_URL, { headers: HEADERS, signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`Nextbike API error: ${res.status}`);
-    const json = (await res.json()) as { countries: NextbikeCountry[] };
-    return json.countries;
-  });
+  const allData = await withCache<NextbikeCountry[]>(
+    CACHE_KEY,
+    TTL.sharedMobility.stations,
+    async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const res = await fetch(NEXTBIKE_URL, { headers: HEADERS, signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`Nextbike API error: ${res.status}`);
+      const json = (await res.json()) as { countries: NextbikeCountry[] };
+      return json.countries;
+    },
+  );
 
   const stations: SharedMobilityStation[] = [];
 

@@ -8,6 +8,7 @@ import Divider from "@mui/material/Divider";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 
 interface Props {
   place: Place;
@@ -15,7 +16,7 @@ interface Props {
 }
 
 interface TagGroup {
-  label: string;
+  labelKey: string;
   keys: readonly string[];
 }
 
@@ -24,11 +25,11 @@ const ENRICHMENT_KEYS = new Set(["wikidata", "wikipedia", "wikimedia_commons"]);
 
 const TAG_GROUPS: TagGroup[] = [
   {
-    label: "Accessibility",
+    labelKey: "accessibility",
     keys: ["wheelchair", "wheelchair:description", "tactile_paving", "kerb"],
   },
   {
-    label: "Service options",
+    labelKey: "serviceOptions",
     keys: [
       "takeaway",
       "delivery",
@@ -40,7 +41,7 @@ const TAG_GROUPS: TagGroup[] = [
     ],
   },
   {
-    label: "Payment methods",
+    labelKey: "paymentMethods",
     keys: [
       "payment:cash",
       "payment:credit_cards",
@@ -53,15 +54,15 @@ const TAG_GROUPS: TagGroup[] = [
     ],
   },
   {
-    label: "Food and drink",
+    labelKey: "foodAndDrink",
     keys: ["cuisine", "diet:vegan", "diet:vegetarian", "diet:halal", "diet:kosher"],
   },
   {
-    label: "Internet",
+    labelKey: "internet",
     keys: ["internet_access", "internet_access:fee", "wifi"],
   },
   {
-    label: "Recycling",
+    labelKey: "recycling",
     keys: [
       "recycling:batteries",
       "recycling:cans",
@@ -113,7 +114,7 @@ function TagItem({ tagKey, value }: { tagKey: string; value: string }) {
 }
 
 interface RenderedGroup {
-  label: string;
+  labelKey: string;
   entries: Array<{ key: string; value: string }>;
 }
 
@@ -131,7 +132,7 @@ function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
       }
     }
     if (entries.length > 0) {
-      groups.push({ label: group.label, entries });
+      groups.push({ labelKey: group.labelKey, entries });
     }
   }
 
@@ -143,13 +144,14 @@ function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
     }
   }
   if (other.length > 0) {
-    groups.push({ label: "Other details", entries: other });
+    groups.push({ labelKey: "otherDetails", entries: other });
   }
 
   return groups;
 }
 
 export function PlaceInfoTab({ place, isLoading }: Props) {
+  const t = useTranslations("place");
   const hasDescription = Boolean(place.description);
   const hasFacts = Boolean(place.facts?.length);
   const hasOsmTags = Boolean(place.osmTags && Object.keys(place.osmTags).length > 0);
@@ -185,10 +187,10 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
       >
         <InfoOutlinedIcon sx={{ fontSize: 40, opacity: 0.35 }} />
         <Typography variant="body2" fontWeight={500}>
-          No additional information available
+          {t("noAdditionalInfo")}
         </Typography>
         <Typography variant="caption" align="center">
-          OpenStreetMap has no extra attributes for this place.
+          {t("noOsmAttributes")}
         </Typography>
       </Box>
     );
@@ -214,7 +216,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
           {hasDescription && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-              About this place
+              {t("aboutThisPlace")}
             </Typography>
             <Box
               sx={{
@@ -240,11 +242,11 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
 
       {/* OSM attribute groups */}
       {osmGroups.map((group, idx) => (
-        <Box key={group.label}>
+        <Box key={group.labelKey}>
           {(idx === 0 ? showDividerBeforeOsm : true) && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
             <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-              {group.label}
+              {t(group.labelKey)}
             </Typography>
             <Box
               sx={{

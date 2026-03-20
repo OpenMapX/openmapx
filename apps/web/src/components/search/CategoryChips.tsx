@@ -18,11 +18,13 @@ import Chip from "@mui/material/Chip";
 import type { CategoryId } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
+  PANEL,
   useCategorySearchStore,
   useDataSourceStore,
   useDataSources,
   useDirectionsStore,
   useSearchStore,
+  useSidebarStore,
 } from "@openmapx/core";
 import type { ReactNode } from "react";
 
@@ -90,10 +92,12 @@ export function CategoryChips() {
                 if (isActive) {
                   toggleSource(source.id);
                   setQuery("");
+                  useSidebarStore.getState().closeSidebar();
                 } else {
                   clearCategory();
                   toggleSource(source.id);
                   setQuery(source.categoryChipLabel);
+                  useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
                 }
               }}
               variant={isActive ? "filled" : "outlined"}
@@ -137,10 +141,12 @@ export function CategoryChips() {
                 if (isActive) {
                   clearCategory();
                   setQuery("");
+                  useSidebarStore.getState().closeSidebar();
                 } else {
                   setActiveSource(null);
                   setActiveCategory(cat.id);
                   setQuery(cat.label);
+                  useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
                 }
               }}
               variant={isActive ? "filled" : "outlined"}

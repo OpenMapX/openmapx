@@ -16,20 +16,20 @@ import {
   useLinkedTransitDepartures,
   useProviders,
 } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { DepartureRow } from "./DepartureRow";
 
-const MODE_LABELS: Partial<Record<TransportMode, string>> = {
-  rail: "Trains",
-  subway: "Subway",
-  tram: "Trams",
-  bus: "Buses",
-  ferry: "Ferries",
-  gondola: "Gondola",
-  funicular: "Funicular",
-  cable_car: "Cable car",
-  monorail: "Monorail",
-  walking: "Walking",
+const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
+  rail: "trains",
+  subway: "subway",
+  tram: "trams",
+  bus: "buses",
+  ferry: "ferries",
+  gondola: "gondola",
+  funicular: "funicular",
+  cable_car: "cableCar",
+  monorail: "monorail",
 };
 
 interface PlaceDeparturesViewProps {
@@ -47,6 +47,8 @@ export function PlaceDeparturesView({
   modeFilter,
   onDepartureClick,
 }: PlaceDeparturesViewProps) {
+  const t = useTranslations("transit");
+  const tc = useTranslations("common");
   const { data: departures, isLoading: depsLoading } = useLinkedTransitDepartures(place);
   const { data: providers } = useProviders();
   const [tab, setTab] = useState<"departures" | "arrivals">("departures");
@@ -97,7 +99,7 @@ export function PlaceDeparturesView({
           borderColor: "divider",
         }}
       >
-        <IconButton onClick={onBack} size="small" aria-label="Back">
+        <IconButton onClick={onBack} size="small" aria-label={tc("back")}>
           <ArrowBackIcon sx={{ fontSize: 20 }} />
         </IconButton>
         <Box>
@@ -106,10 +108,8 @@ export function PlaceDeparturesView({
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {modeFilter
-              ? `${MODE_LABELS[modeFilter] ?? modeFilter} ${tab}`
-              : tab === "departures"
-                ? "Departures"
-                : "Arrivals"}
+              ? `${MODE_LABEL_KEYS[modeFilter] ? t(MODE_LABEL_KEYS[modeFilter] as string) : modeFilter} ${t(tab)}`
+              : t(tab)}
           </Typography>
         </Box>
       </Box>
@@ -123,10 +123,10 @@ export function PlaceDeparturesView({
             fullWidth
           >
             <ToggleButton value="departures" sx={{ textTransform: "none" }}>
-              Departures
+              {t("departures")}
             </ToggleButton>
             <ToggleButton value="arrivals" sx={{ textTransform: "none" }}>
-              Arrivals
+              {t("arrivals")}
             </ToggleButton>
           </ToggleButtonGroup>
         </Box>
@@ -216,8 +216,13 @@ export function PlaceDeparturesView({
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography variant="body2" color="text.secondary">
               {modeFilter
-                ? `No ${MODE_LABELS[modeFilter] ?? modeFilter} ${tab} found in the next 60 minutes.`
-                : `No ${tab} found in the next 60 minutes.`}
+                ? t("noDeparturesMode", {
+                    mode: MODE_LABEL_KEYS[modeFilter]
+                      ? t(MODE_LABEL_KEYS[modeFilter] as string)
+                      : modeFilter,
+                    tab: t(tab),
+                  })
+                : t("noDeparturesGeneric", { tab: t(tab) })}
             </Typography>
           </Box>
         )}

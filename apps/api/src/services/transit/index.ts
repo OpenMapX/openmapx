@@ -1,7 +1,7 @@
+import { cacheGet, cacheSet, hashKey, TTL } from "../../utils/cache.js";
 import { matchToRoads } from "../../utils/road-snap.js";
 import { motisProvider as motisLocal } from "../motis/index";
 import { getAdapter } from "./adapters/index";
-import { cacheGet, cacheKey, cacheSet, TTL } from "./cache";
 import { deduplicateStops, isTripNumber } from "./dedup";
 import { providerHealth } from "./health";
 import * as dbVendo from "./providers/db-vendo";
@@ -114,7 +114,7 @@ async function getRegionalStops(
 // Stops
 
 export async function getStopsInBbox(bbox: BBox, modes?: TransportMode[]): Promise<TransitStop[]> {
-  const key = cacheKey("stops", { bbox, modes });
+  const key = hashKey("transit:stops", { bbox, modes });
   const cached = await cacheGet<TransitStop[]>(key);
   if (cached) return cached;
 
@@ -183,7 +183,7 @@ export async function getStopsInBbox(bbox: BBox, modes?: TransportMode[]): Promi
   }
 
   const deduped = deduplicateStops(stops);
-  await cacheSet(key, deduped, TTL.stops);
+  await cacheSet(key, deduped, TTL.transit.stops);
   return deduped;
 }
 
@@ -243,18 +243,18 @@ export async function fetchStopsByNameRaw(
 }
 
 export async function searchStopsByName(query: string, limit = 5): Promise<TransitStop[]> {
-  const key = cacheKey("stop-search", { q: query.toLowerCase() });
+  const key = hashKey("transit:stop-search", { q: query.toLowerCase() });
   const cached = await cacheGet<TransitStop[]>(key);
   if (cached) return cached.slice(0, limit);
 
   const raw = await fetchStopsByNameRaw(query, limit);
   const deduped = deduplicateStops(raw).slice(0, limit);
-  await cacheSet(key, deduped, TTL.stops);
+  await cacheSet(key, deduped, TTL.transit.stops);
   return deduped;
 }
 
 export async function getStop(id: string): Promise<TransitStop | null> {
-  const key = cacheKey("stop", { id });
+  const key = hashKey("transit:stop", { id });
   const cached = await cacheGet<TransitStop>(key);
   if (cached) return cached;
 
@@ -304,7 +304,7 @@ export async function getStop(id: string): Promise<TransitStop | null> {
     }
   }
 
-  if (stop) await cacheSet(key, stop, TTL.stop);
+  if (stop) await cacheSet(key, stop, TTL.transit.stop);
   return stop;
 }
 
@@ -315,7 +315,7 @@ export async function getStop(id: string): Promise<TransitStop | null> {
  * Falls back to a full 24h departure window for providers that don't support date-based queries.
  */
 export async function getStopTimetable(stopId: string, date: string): Promise<Departure[]> {
-  const key = cacheKey("timetable", { stopId, date });
+  const key = hashKey("transit:timetable", { stopId, date });
   const cached = await cacheGet<Departure[]>(key);
   if (cached) return cached;
 
@@ -342,7 +342,7 @@ export async function getStopTimetable(stopId: string, date: string): Promise<De
 // Platform Stops (child stops of a parent station)
 
 export async function getStopPlatforms(stopId: string): Promise<TransitStop[]> {
-  const key = cacheKey("platforms", { stopId });
+  const key = hashKey("transit:platforms", { stopId });
   const cached = await cacheGet<TransitStop[]>(key);
   if (cached) return cached;
 
@@ -355,14 +355,14 @@ export async function getStopPlatforms(stopId: string): Promise<TransitStop[]> {
   }
   // Other providers don't expose platform-level child stops
 
-  await cacheSet(key, platforms, TTL.stops);
+  await cacheSet(key, platforms, TTL.transit.stops);
   return platforms;
 }
 
 // Departures
 
 export async function getStopDepartures(stopId: string, minutes: number): Promise<Departure[]> {
-  const key = cacheKey("departures", { stopId, minutes });
+  const key = hashKey("transit:departures", { stopId, minutes });
   const cached = await cacheGet<Departure[]>(key);
   if (cached) return cached;
 
@@ -423,14 +423,14 @@ export async function getStopDepartures(stopId: string, minutes: number): Promis
     }
   }
 
-  await cacheSet(key, departures, TTL.departures);
+  await cacheSet(key, departures, TTL.transit.departures);
   return departures;
 }
 
 // Arrivals
 
 export async function getStopArrivals(stopId: string, minutes: number): Promise<Departure[]> {
-  const key = cacheKey("arrivals", { stopId, minutes });
+  const key = hashKey("transit:arrivals", { stopId, minutes });
   const cached = await cacheGet<Departure[]>(key);
   if (cached) return cached;
 
@@ -491,24 +491,24 @@ export async function getStopArrivals(stopId: string, minutes: number): Promise<
     }
   }
 
-  await cacheSet(key, arrivals, 60);
+  await cacheSet(key, arrivals, TTL.transit.arrivals);
   return arrivals;
 }
 
 // Routes
 
 export async function getRoutesInBbox(bbox: BBox): Promise<TransitRoute[]> {
-  const key = cacheKey("routes_bbox", { bbox });
+  const key = hashKey("transit:routes_bbox", { bbox });
   const cached = await cacheGet<TransitRoute[]>(key);
   if (cached) return cached;
 
   const routes = await transitland.getRoutes({ bbox });
-  await cacheSet(key, routes, TTL.routes);
+  await cacheSet(key, routes, TTL.transit.routes);
   return routes;
 }
 
 export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> {
-  const key = cacheKey("routes_stop", { stopId });
+  const key = hashKey("transit:routes_stop", { stopId });
   const cached = await cacheGet<TransitRoute[]>(key);
   if (cached) return cached;
 
@@ -545,21 +545,21 @@ export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> 
     routes = Array.from(seen.values());
   }
 
-  await cacheSet(key, routes, TTL.routes);
+  await cacheSet(key, routes, TTL.transit.routes);
 
   // Also populate the individual route cache so getRoute(id) can find
   // routes that were derived from departures (db:, mo:, HAFAS, etc.)
   for (const route of routes) {
-    const routeKey = cacheKey("route", { id: route.id });
+    const routeKey = hashKey("transit:route", { id: route.id });
     const existing = await cacheGet<TransitRoute>(routeKey);
-    if (!existing) await cacheSet(routeKey, route, TTL.routes);
+    if (!existing) await cacheSet(routeKey, route, TTL.transit.routes);
   }
 
   return routes;
 }
 
 export async function getRoute(id: string): Promise<TransitRoute | null> {
-  const key = cacheKey("route", { id });
+  const key = hashKey("transit:route", { id });
   const cached = await cacheGet<TransitRoute>(key);
   if (cached) return cached;
 
@@ -584,13 +584,13 @@ export async function getRoute(id: string): Promise<TransitRoute | null> {
     }
   }
 
-  await cacheSet(key, route, route.geometry ? TTL.routeGeometry : TTL.routes);
+  await cacheSet(key, route, route.geometry ? TTL.transit.routeGeometry : TTL.transit.routes);
   return route;
 }
 
 export async function getRouteStops(routeId: string, hintStopId?: string): Promise<RouteStop[]> {
   // Include hintStopId in the cache key so a call without it doesn't poison the cache
-  const key = cacheKey("route_stops", { routeId, hintStopId: hintStopId ?? null });
+  const key = hashKey("transit:route_stops", { routeId, hintStopId: hintStopId ?? null });
   const cached = await cacheGet<RouteStop[]>(key);
   if (cached) return cached;
 
@@ -622,7 +622,7 @@ export async function getRouteStops(routeId: string, hintStopId?: string): Promi
   // Only cache non-empty results, or when we had a hintStopId (so the lookup was meaningful).
   // Don't cache empty results from calls without hintStopId — a retry with a hintStopId should work.
   if (stops.length > 0 || hintStopId) {
-    await cacheSet(key, stops, 3600);
+    await cacheSet(key, stops, TTL.transit.routeStops);
   }
   return stops;
 }
@@ -630,7 +630,7 @@ export async function getRouteStops(routeId: string, hintStopId?: string): Promi
 // Alerts
 
 export async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {
-  const key = cacheKey("alerts_bbox", { bbox });
+  const key = hashKey("transit:alerts_bbox", { bbox });
   const cached = await cacheGet<ServiceAlert[]>(key);
   if (cached) return cached;
 
@@ -646,12 +646,12 @@ export async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {
     if (result.status === "fulfilled") alerts.push(...result.value);
   }
 
-  await cacheSet(key, alerts, 60);
+  await cacheSet(key, alerts, TTL.transit.alerts);
   return alerts;
 }
 
 export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
-  const key = cacheKey("stop_alerts", { stopId });
+  const key = hashKey("transit:stop_alerts", { stopId });
   const cached = await cacheGet<ServiceAlert[]>(key);
   if (cached) return cached;
 
@@ -681,12 +681,12 @@ export async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
     }
   }
 
-  await cacheSet(key, alerts, 60);
+  await cacheSet(key, alerts, TTL.transit.alerts);
   return alerts;
 }
 
 export async function getRouteAlerts(routeId: string): Promise<ServiceAlert[]> {
-  const key = cacheKey("route_alerts", { routeId });
+  const key = hashKey("transit:route_alerts", { routeId });
   const cached = await cacheGet<ServiceAlert[]>(key);
   if (cached) return cached;
 
@@ -709,14 +709,14 @@ export async function getRouteAlerts(routeId: string): Promise<ServiceAlert[]> {
     }
   }
 
-  await cacheSet(key, alerts, 60);
+  await cacheSet(key, alerts, TTL.transit.alerts);
   return alerts;
 }
 
 // Vehicles & Radar
 
 export async function getVehiclePositions(routeId: string): Promise<VehiclePosition[]> {
-  const key = cacheKey("vehicles", { routeId });
+  const key = hashKey("transit:vehicles", { routeId });
   const cached = await cacheGet<VehiclePosition[]>(key);
   if (cached) return cached;
 
@@ -725,12 +725,12 @@ export async function getVehiclePositions(routeId: string): Promise<VehiclePosit
     vehicles = await mbta.getVehiclePositions(routeId.slice(3));
   }
 
-  await cacheSet(key, vehicles, 15);
+  await cacheSet(key, vehicles, TTL.transit.vehicles);
   return vehicles;
 }
 
 export async function getVehicleRadar(bbox: BBox): Promise<VehiclePosition[]> {
-  const key = cacheKey("radar", { bbox });
+  const key = hashKey("transit:radar", { bbox });
   const cached = await cacheGet<VehiclePosition[]>(key);
   if (cached) return cached;
 
@@ -772,7 +772,7 @@ export async function getVehicleRadar(bbox: BBox): Promise<VehiclePosition[]> {
     if (result.status === "fulfilled") vehicles.push(...result.value);
   }
 
-  await cacheSet(key, vehicles, 15);
+  await cacheSet(key, vehicles, TTL.transit.radar);
   return vehicles;
 }
 
@@ -831,7 +831,7 @@ export async function getVehicleJourney(
   vehicleId: string,
   fallbackIds?: string[],
 ): Promise<VehicleJourney | null> {
-  const key = cacheKey("vehicle_journey", { vehicleId });
+  const key = hashKey("transit:vehicle_journey", { vehicleId });
   const cached = await cacheGet<VehicleJourney>(key);
   if (cached) return cached;
 
@@ -846,14 +846,14 @@ export async function getVehicleJourney(
     }
   }
 
-  if (journey) await cacheSet(key, journey, 30);
+  if (journey) await cacheSet(key, journey, TTL.transit.vehicleJourney);
   return journey;
 }
 
 // Facilities
 
 export async function getFacilities(stopId: string): Promise<Facility[]> {
-  const key = cacheKey("facilities", { stopId });
+  const key = hashKey("transit:facilities", { stopId });
   const cached = await cacheGet<Facility[]>(key);
   if (cached) return cached;
 
@@ -862,7 +862,7 @@ export async function getFacilities(stopId: string): Promise<Facility[]> {
     facilities = await mbta.getFacilities(stopId.slice(3));
   }
 
-  await cacheSet(key, facilities, 300);
+  await cacheSet(key, facilities, TTL.transit.facilities);
   return facilities;
 }
 
@@ -905,7 +905,7 @@ async function snapPlanGeometries(plan: TripPlan): Promise<void> {
 // Trip Planning
 
 export async function planTrip(params: TripPlanParams): Promise<TripPlan | null> {
-  const key = cacheKey("plan", params);
+  const key = hashKey("transit:plan", params);
   const cached = await cacheGet<TripPlan>(key);
   if (cached) return cached;
 
@@ -913,7 +913,7 @@ export async function planTrip(params: TripPlanParams): Promise<TripPlan | null>
   if (plan) {
     plan.provider = "otp";
     await snapPlanGeometries(plan);
-    await cacheSet(key, plan, TTL.tripPlan);
+    await cacheSet(key, plan, TTL.transit.tripPlan);
     return plan;
   }
 
@@ -1036,7 +1036,7 @@ export async function planTrip(params: TripPlanParams): Promise<TripPlan | null>
 
   if (regionalPlan) {
     await snapPlanGeometries(regionalPlan);
-    await cacheSet(key, regionalPlan, TTL.tripPlan);
+    await cacheSet(key, regionalPlan, TTL.transit.tripPlan);
   }
   return regionalPlan;
 }

@@ -1,4 +1,4 @@
-import type { BoundingBox } from "../../overpass.service";
+import type { BoundingBox } from "@openmapx/core";
 import { AustriaService } from "./austria.service";
 import { FranceService } from "./france.service";
 import type { FuelPriceProvider } from "./price-provider";

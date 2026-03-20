@@ -47,14 +47,17 @@ interface NominatimReverseResult {
   };
 }
 
-async function fetchNominatim(params: Record<string, string>): Promise<NominatimResult[]> {
+async function fetchNominatim(
+  params: Record<string, string>,
+  lang?: string,
+): Promise<NominatimResult[]> {
   const url = new URL(`${NOMINATIM_URL}/search`);
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("addressdetails", "1");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const res = await fetch(url.toString(), {
-    headers: { "User-Agent": USER_AGENT, "Accept-Language": "en" },
+    headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
   });
   if (!res.ok) throw new Error(`Nominatim error ${res.status}`);
   return res.json() as Promise<NominatimResult[]>;
@@ -65,8 +68,8 @@ function makeId(r: NominatimResult): string {
 }
 
 export const nominatimService: GeocodingProvider = {
-  async geocode(query: string): Promise<SearchResult[]> {
-    const data = await fetchNominatim({ q: query, limit: "10" });
+  async geocode(query: string, lang?: string): Promise<SearchResult[]> {
+    const data = await fetchNominatim({ q: query, limit: "10" }, lang);
     return data.map((r) => ({
       id: makeId(r),
       label: r.display_name,
@@ -77,7 +80,11 @@ export const nominatimService: GeocodingProvider = {
     }));
   },
 
-  async reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodingResult | null> {
+  async reverseGeocode(
+    lat: number,
+    lng: number,
+    lang?: string,
+  ): Promise<ReverseGeocodingResult | null> {
     const url = new URL(`${NOMINATIM_URL}/reverse`);
     url.searchParams.set("format", "jsonv2");
     url.searchParams.set("addressdetails", "1");
@@ -85,7 +92,7 @@ export const nominatimService: GeocodingProvider = {
     url.searchParams.set("lon", String(lng));
 
     const res = await fetch(url.toString(), {
-      headers: { "User-Agent": USER_AGENT, "Accept-Language": "en" },
+      headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as NominatimReverseResult;
@@ -103,8 +110,8 @@ export const nominatimService: GeocodingProvider = {
     return { address, city };
   },
 
-  async autocomplete(query: string): Promise<AutocompleteResult[]> {
-    const data = await fetchNominatim({ q: query, limit: "6", dedupe: "1" });
+  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+    const data = await fetchNominatim({ q: query, limit: "6", dedupe: "1" }, lang);
     return data.map((r) => {
       const short = r.display_name.split(",")[0].trim();
       return {

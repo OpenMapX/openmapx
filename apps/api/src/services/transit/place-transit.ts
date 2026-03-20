@@ -1,4 +1,4 @@
-import { cacheGet, cacheKey, cacheSet, TTL } from "./cache";
+import { cacheGet, cacheSet, hashKey, TTL } from "../../utils/cache.js";
 import {
   bucketTimestamps,
   diceSimilarity,
@@ -45,7 +45,7 @@ export async function getLinkedStops(
 ): Promise<TransitStop[]> {
   const cacheId =
     placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
-  const key = cacheKey("place-stops", { id: cacheId });
+  const key = hashKey("transit:place-stops", { id: cacheId });
   const cached = await cacheGet<TransitStop[]>(key);
   if (cached) return cached;
 
@@ -62,7 +62,7 @@ export async function getLinkedStops(
     return diceSimilarity(normalizeName(stop.name), normPlace) >= MIN_NAME_DICE;
   });
 
-  await cacheSet(key, linked, TTL.placeStops);
+  await cacheSet(key, linked, TTL.transit.placeStops);
   return linked;
 }
 
@@ -83,13 +83,13 @@ export async function getMergedRoutes(
 ): Promise<MergedRoute[]> {
   const cacheId =
     placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
-  const key = cacheKey("place-routes", { id: cacheId });
+  const key = hashKey("transit:place-routes", { id: cacheId });
   const cached = await cacheGet<MergedRoute[]>(key);
   if (cached) return cached;
 
   const stops = await getLinkedStops(lat, lng, name, placeId);
   if (stops.length === 0) {
-    await cacheSet(key, [], TTL.placeRoutes);
+    await cacheSet(key, [], TTL.transit.placeRoutes);
     return [];
   }
 
@@ -133,7 +133,7 @@ export async function getMergedRoutes(
     return a.shortName.localeCompare(b.shortName);
   });
 
-  await cacheSet(key, merged, TTL.placeRoutes);
+  await cacheSet(key, merged, TTL.transit.placeRoutes);
   return merged;
 }
 
@@ -284,13 +284,13 @@ export async function getMergedAlerts(
 ): Promise<ServiceAlert[]> {
   const cacheId =
     placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
-  const key = cacheKey("place-alerts", { id: cacheId });
+  const key = hashKey("transit:place-alerts", { id: cacheId });
   const cached = await cacheGet<ServiceAlert[]>(key);
   if (cached) return cached;
 
   const stops = await getLinkedStops(lat, lng, name, placeId);
   if (stops.length === 0) {
-    await cacheSet(key, [], TTL.placeAlerts);
+    await cacheSet(key, [], TTL.transit.placeAlerts);
     return [];
   }
 
@@ -313,7 +313,7 @@ export async function getMergedAlerts(
   }
 
   const merged = Array.from(byId.values());
-  await cacheSet(key, merged, TTL.placeAlerts);
+  await cacheSet(key, merged, TTL.transit.placeAlerts);
   return merged;
 }
 
@@ -331,13 +331,13 @@ export async function getMergedFacilities(
 ): Promise<Facility[]> {
   const cacheId =
     placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
-  const key = cacheKey("place-facilities", { id: cacheId });
+  const key = hashKey("transit:place-facilities", { id: cacheId });
   const cached = await cacheGet<Facility[]>(key);
   if (cached) return cached;
 
   const stops = await getLinkedStops(lat, lng, name, placeId);
   if (stops.length === 0) {
-    await cacheSet(key, [], TTL.placeFacilities);
+    await cacheSet(key, [], TTL.transit.placeFacilities);
     return [];
   }
 
@@ -352,6 +352,6 @@ export async function getMergedFacilities(
   }
 
   const merged = Array.from(byId.values());
-  await cacheSet(key, merged, TTL.placeFacilities);
+  await cacheSet(key, merged, TTL.transit.placeFacilities);
   return merged;
 }

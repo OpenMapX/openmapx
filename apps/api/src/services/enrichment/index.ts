@@ -12,11 +12,11 @@ const SOURCES: EnrichmentSource[] = [wikidataEnricher, wikipediaEnricher, wikime
  * Photos and facts from all sources are concatenated.
  * Never throws — failures are silently dropped.
  */
-export async function enrichPlace(place: Place): Promise<EnrichmentResult> {
+export async function enrichPlace(place: Place, lang?: string): Promise<EnrichmentResult> {
   if (!place.osmTags) return {};
 
   const settled = await Promise.allSettled(
-    SOURCES.map((source) => source.enrich(place.osmTags as Record<string, string>)),
+    SOURCES.map((source) => source.enrich(place.osmTags as Record<string, string>, lang)),
   );
 
   const merged: EnrichmentResult = {};

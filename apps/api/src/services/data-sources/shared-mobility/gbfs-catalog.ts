@@ -4,13 +4,12 @@
  */
 
 import type { BoundingBox } from "@openmapx/core";
-import { withCache } from "../../../utils/cache.js";
+import { TTL, withCache } from "../../../utils/cache.js";
 import { fetchGbfsSystem } from "./gbfs-client.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types.js";
 
 const CATALOG_URL = "https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv";
 const CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog";
-const CATALOG_CACHE_TTL = 86_400; // 24h
 const SYSTEM_CACHE_TTL = 300; // 5min for system data
 
 let catalogEntries: GbfsCatalogEntry[] | null = null;
@@ -34,7 +33,7 @@ export async function loadCatalog(): Promise<GbfsCatalogEntry[]> {
 
   const entries = await withCache<GbfsCatalogEntry[]>(
     CATALOG_CACHE_KEY,
-    CATALOG_CACHE_TTL,
+    TTL.sharedMobility.catalog,
     async () => {
       const res = await fetch(CATALOG_URL, {
         headers: { "User-Agent": "OpenMapX/1.0" },
@@ -202,9 +201,14 @@ export function sortByRelevance(
   });
 }
 
+const inflightProbes = new Map<
+  string,
+  Promise<{ bbox: BoundingBox; vehicleTypes: Set<string> } | null>
+>();
+
 /**
  * Probe a GBFS system to determine its geographic coverage and vehicle types.
- * Results are cached in memory.
+ * Results are cached in memory. Concurrent probes for the same system are coalesced.
  */
 export async function probeSystem(
   entry: GbfsCatalogEntry,
@@ -214,6 +218,19 @@ export async function probeSystem(
     return { bbox: cached.bbox, vehicleTypes: cached.vehicleTypes };
   }
 
+  const existing = inflightProbes.get(entry.systemId);
+  if (existing) return existing;
+
+  const promise = probeSystemInner(entry).finally(() => {
+    inflightProbes.delete(entry.systemId);
+  });
+  inflightProbes.set(entry.systemId, promise);
+  return promise;
+}
+
+async function probeSystemInner(
+  entry: GbfsCatalogEntry,
+): Promise<{ bbox: BoundingBox; vehicleTypes: Set<string> } | null> {
   const system = await fetchGbfsSystem(entry.autoDiscoveryUrl);
   if (!system) return null;
 

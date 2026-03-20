@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Typography from "@mui/material/Typography";
 import { useRouteAlerts } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AlertCard, SEVERITY_PRIORITY } from "./AlertCard";
 
@@ -12,6 +13,7 @@ interface LegAlertsProps {
 }
 
 export function LegAlerts({ routeId }: LegAlertsProps) {
+  const t = useTranslations("transit");
   const [expanded, setExpanded] = useState(false);
   const { data: alerts } = useRouteAlerts(routeId ?? null);
 
@@ -38,7 +40,7 @@ export function LegAlerts({ routeId }: LegAlertsProps) {
               "&:hover": { textDecoration: "underline" },
             }}
           >
-            {expanded ? "Show less" : `+${hiddenCount} more alert${hiddenCount !== 1 ? "s" : ""}`}
+            {expanded ? t("showLess") : t("showMoreAlerts", { count: hiddenCount })}
           </Typography>
           <Collapse in={expanded}>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>

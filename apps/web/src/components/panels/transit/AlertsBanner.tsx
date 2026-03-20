@@ -5,6 +5,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { ServiceAlert } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AlertCard, SEVERITY_PRIORITY } from "./AlertCard";
 
@@ -13,6 +14,7 @@ interface AlertsBannerProps {
 }
 
 export function AlertsBanner({ alerts }: AlertsBannerProps) {
+  const t = useTranslations("transit");
   const [expanded, setExpanded] = useState(false);
 
   if (alerts.length === 0) return null;
@@ -48,9 +50,7 @@ export function AlertsBanner({ alerts }: AlertsBannerProps) {
             <ExpandMoreIcon sx={{ fontSize: 16 }} />
           )}
           <Typography variant="caption" color="text.secondary">
-            {expanded
-              ? "Show less"
-              : `${sorted.length - 2} more alert${sorted.length - 2 !== 1 ? "s" : ""}`}
+            {expanded ? t("showLess") : t("moreAlerts", { count: sorted.length - 2 })}
           </Typography>
         </Box>
       )}

@@ -7,16 +7,17 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Departure, TripRemark } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import { formatTime } from "@/lib/formatTime";
 import { REMARK_PRIORITY, RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
 
 const OCCUPANCY_COLOR = { low: "#2e7d32", medium: "#e65100", high: "#b71c1c" };
-const OCCUPANCY_LABEL = {
-  low: "Low occupancy",
-  medium: "Medium occupancy",
-  high: "High occupancy",
-};
+const OCCUPANCY_KEY = {
+  low: "lowOccupancy",
+  medium: "mediumOccupancy",
+  high: "highOccupancy",
+} as const;
 
 interface DepartureRowProps {
   departure: Departure;
@@ -36,6 +37,8 @@ export function DepartureRow({
   onClick,
   hasAlert = false,
 }: DepartureRowProps) {
+  const t = useTranslations("transit");
+  const locale = useLocale();
   const isDelayed = departure.delaySeconds != null && departure.delaySeconds > 60;
   const isCanceled = departure.canceled === true;
   const hasRemarks = departure.remarks && departure.remarks.length > 0;
@@ -61,18 +64,18 @@ export function DepartureRow({
             />
             {showPlatform && departure.platform && (
               <Typography variant="caption" color="text.secondary">
-                Pl. {departure.platform}
+                {t("platform")} {departure.platform}
               </Typography>
             )}
             {hasAlert && (
-              <Tooltip title="Active service alert for this route" placement="top" arrow>
+              <Tooltip title={t("activeServiceAlert")} placement="top" arrow>
                 <WarningAmberIcon sx={{ fontSize: 14, color: "#E65100" }} />
               </Tooltip>
             )}
           </Box>
         </Box>
         {departure.occupancy && (
-          <Tooltip title={OCCUPANCY_LABEL[departure.occupancy]} placement="left" arrow>
+          <Tooltip title={t(OCCUPANCY_KEY[departure.occupancy])} placement="left" arrow>
             <AirlineSeatReclineNormalIcon
               sx={{ fontSize: 16, color: OCCUPANCY_COLOR[departure.occupancy], flexShrink: 0 }}
             />
@@ -87,16 +90,16 @@ export function DepartureRow({
               color: isCanceled ? "text.disabled" : "text.primary",
             }}
           >
-            {formatTime(departure.scheduledAt)}
+            {formatTime(departure.scheduledAt, locale)}
           </Typography>
           {isDelayed && !isCanceled && departure.expectedAt && (
             <Typography variant="body2" fontWeight={600} color="error.main">
-              {formatTime(departure.expectedAt)}
+              {formatTime(departure.expectedAt, locale)}
             </Typography>
           )}
           {isCanceled && (
             <Typography variant="caption" color="error.main" fontWeight={600}>
-              Canceled
+              {t("canceled")}
             </Typography>
           )}
         </Box>

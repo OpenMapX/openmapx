@@ -9,14 +9,20 @@ import { autocompleteRoute } from "./routes/autocomplete";
 import { categorySearchRoute } from "./routes/category-search";
 import { dataSourcesRoute } from "./routes/data-sources";
 import { directionsRoute } from "./routes/directions";
+import { earthquakeRoute } from "./routes/earthquakes";
 import { geocodeRoute } from "./routes/geocode";
 import { gtfsRoute } from "./routes/gtfs";
+import { hikingRoute } from "./routes/hiking";
 import { mapillaryRoute } from "./routes/mapillary";
 import { motisRoute } from "./routes/motis";
+import { photosRoute } from "./routes/photos";
 import { placesRoute } from "./routes/places";
+import { savedRoute } from "./routes/saved";
 import { streetviewRoute } from "./routes/streetview";
+import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
+import { winterSportsRoute } from "./routes/winter-sports";
 import { evChargingProvider } from "./services/data-sources/ev-charging/provider";
 import { fuelProvider } from "./services/data-sources/fuel/provider";
 import { dataSourceRegistry } from "./services/data-sources/registry";
@@ -80,13 +86,19 @@ await server.register(placesRoute, { prefix: "/api" });
 await server.register(categorySearchRoute, { prefix: "/api" });
 await server.register(directionsRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
+await server.register(tilesRoute, { prefix: "/api" });
 await server.register(streetviewRoute, { prefix: "/api" });
 await server.register(airQualityRoute, { prefix: "/api" });
 await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(transitRoute, { prefix: "/api" });
 await server.register(gtfsRoute, { prefix: "/api" });
+await server.register(hikingRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
 await server.register(dataSourcesRoute, { prefix: "/api" });
+await server.register(photosRoute, { prefix: "/api" });
+await server.register(earthquakeRoute, { prefix: "/api" });
+await server.register(winterSportsRoute, { prefix: "/api" });
+await server.register(savedRoute, { prefix: "/api" });
 
 // Data source providers
 dataSourceRegistry.register(evChargingProvider);
@@ -134,11 +146,12 @@ registry
     registry.startRefresh();
   });
 
-// Debug endpoint: list loaded dynamic transit providers
-server.get("/api/transit/registry", async () => ({
-  entries: registry.listEntries(),
-  count: registry.entryCount,
-}));
+// Debug endpoint: list loaded dynamic transit providers (auth required)
+server.get("/api/transit/registry", async (req, reply) => {
+  const { requireAuth } = await import("./utils/require-auth.js");
+  if (!(await requireAuth(req, reply))) return;
+  return { entries: registry.listEntries(), count: registry.entryCount };
+});
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "0.0.0.0";

@@ -31,6 +31,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
 import { authClient, getInitials, oauthProviders } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 
@@ -41,6 +42,9 @@ interface AccountSettingsDialogProps {
 }
 
 export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDialogProps) {
+  const t = useTranslations("account");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const [name, setName] = useState(user.name);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
@@ -54,6 +58,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     [],
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
   const [confirmUnlinkProvider, setConfirmUnlinkProvider] = useState<string | null>(null);
 
   // Email change state
@@ -95,6 +100,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     setName(user.name);
     setMessage(null);
     setConfirmDelete(false);
+    setDeletePassword("");
     setConfirmUnlinkProvider(null);
     setChangingEmail(false);
     setNewEmail("");
@@ -138,12 +144,12 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     try {
       const { error } = await authClient.updateUser({ name });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Update failed" });
+        setMessage({ type: "error", text: error.message ?? t("updateFailed") });
       } else {
-        setMessage({ type: "success", text: "Profile updated" });
+        setMessage({ type: "success", text: t("profileUpdated") });
       }
     } catch {
-      setMessage({ type: "error", text: "An unexpected error occurred" });
+      setMessage({ type: "error", text: t("unexpectedError") });
     } finally {
       setSaving(false);
     }
@@ -157,13 +163,13 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         newEmail,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Failed to send verification code" });
+        setMessage({ type: "error", text: error.message ?? t("failedEmailChange") });
         return;
       }
       setEmailOtpSent(true);
-      setMessage({ type: "success", text: "Verification code sent to your new email" });
+      setMessage({ type: "success", text: t("verificationCodeSent") });
     } catch {
-      setMessage({ type: "error", text: "Failed to request email change" });
+      setMessage({ type: "error", text: t("failedChangeEmail") });
     }
   };
 
@@ -175,16 +181,16 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         otp: emailOtp,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Failed to change email" });
+        setMessage({ type: "error", text: error.message ?? t("failedChangeEmail") });
         return;
       }
-      setMessage({ type: "success", text: "Email address updated" });
+      setMessage({ type: "success", text: t("emailUpdated") });
       setChangingEmail(false);
       setNewEmail("");
       setEmailOtp("");
       setEmailOtpSent(false);
     } catch {
-      setMessage({ type: "error", text: "Failed to change email" });
+      setMessage({ type: "error", text: t("failedChangeEmail") });
     }
   };
 
@@ -197,15 +203,15 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         newPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Failed to change password" });
+        setMessage({ type: "error", text: error.message ?? t("failedChangePassword") });
         return;
       }
-      setMessage({ type: "success", text: "Password changed" });
+      setMessage({ type: "success", text: t("passwordChanged") });
       setChangingPassword(false);
       setCurrentPassword("");
       setNewPassword("");
     } catch {
-      setMessage({ type: "error", text: "Failed to change password" });
+      setMessage({ type: "error", text: t("failedChangePassword") });
     }
   };
 
@@ -217,7 +223,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         password: twoFactorPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Failed to enable 2FA" });
+        setMessage({ type: "error", text: error.message ?? t("failedEnable2FA") });
         return;
       }
       if (data) {
@@ -225,7 +231,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         setBackupCodes(data.backupCodes);
       }
     } catch {
-      setMessage({ type: "error", text: "Failed to enable 2FA" });
+      setMessage({ type: "error", text: t("failedEnable2FA") });
     }
   };
 
@@ -236,7 +242,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         code: totpVerifyCode,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Invalid code" });
+        setMessage({ type: "error", text: error.message ?? t("invalidCode") });
         return;
       }
       setTwoFactorEnabled(true);
@@ -244,9 +250,9 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       setTotpSetupUri(null);
       setTwoFactorPassword("");
       setTotpVerifyCode("");
-      setMessage({ type: "success", text: "Two-factor authentication enabled" });
+      setMessage({ type: "success", text: t("twoFAEnabled2") });
     } catch {
-      setMessage({ type: "error", text: "Failed to verify code" });
+      setMessage({ type: "error", text: t("failedVerifyCode") });
     }
   };
 
@@ -257,16 +263,16 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         password: twoFactorPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Failed to disable 2FA" });
+        setMessage({ type: "error", text: error.message ?? t("failedDisable2FA") });
         return;
       }
       setTwoFactorEnabled(false);
       setShowDisable2fa(false);
       setTwoFactorPassword("");
       setBackupCodes(null);
-      setMessage({ type: "success", text: "Two-factor authentication disabled" });
+      setMessage({ type: "success", text: t("twoFADisabled") });
     } catch {
-      setMessage({ type: "error", text: "Failed to disable 2FA" });
+      setMessage({ type: "error", text: t("failedDisable2FA") });
     }
   };
 
@@ -277,22 +283,22 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         password: twoFactorPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? "Failed to generate backup codes" });
+        setMessage({ type: "error", text: error.message ?? t("failedGenerateBackupCodes") });
         return;
       }
       if (data) {
         setBackupCodes(data.backupCodes);
-        setMessage({ type: "success", text: "New backup codes generated" });
+        setMessage({ type: "success", text: t("newBackupCodesGenerated") });
       }
     } catch {
-      setMessage({ type: "error", text: "Failed to generate backup codes" });
+      setMessage({ type: "error", text: t("failedGenerateBackupCodes") });
     }
   };
 
   const handleCopyBackupCodes = () => {
     if (backupCodes) {
       navigator.clipboard.writeText(backupCodes.join("\n"));
-      setMessage({ type: "success", text: "Backup codes copied to clipboard" });
+      setMessage({ type: "success", text: t("backupCodesCopied") });
     }
   };
 
@@ -315,15 +321,15 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       if (error) {
         setMessage({
           type: "error",
-          text: error.message ?? "Failed to add passkey",
+          text: error.message ?? t("failedAddPasskey"),
         });
         return;
       }
-      setMessage({ type: "success", text: "Passkey added" });
+      setMessage({ type: "success", text: t("passkeyAdded") });
       const { data } = await authClient.passkey.listUserPasskeys();
       if (data) setPasskeys(data);
     } catch {
-      setMessage({ type: "error", text: "Failed to add passkey" });
+      setMessage({ type: "error", text: t("failedAddPasskey") });
     }
   };
 
@@ -331,9 +337,9 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     try {
       await authClient.passkey.deletePasskey({ id });
       setPasskeys((prev) => prev.filter((p) => p.id !== id));
-      setMessage({ type: "success", text: "Passkey removed" });
+      setMessage({ type: "success", text: t("passkeyRemoved") });
     } catch {
-      setMessage({ type: "error", text: "Failed to remove passkey" });
+      setMessage({ type: "error", text: t("failedRemovePasskey") });
     }
   };
 
@@ -346,7 +352,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     } catch {
       setMessage({
         type: "error",
-        text: `Failed to link ${providerName} account`,
+        text: t("failedLink", { provider: providerName }),
       });
     }
   };
@@ -358,18 +364,26 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       await authClient.unlinkAccount({ providerId, accountId: account.accountId });
       setLinkedAccounts((prev) => prev.filter((a) => a.providerId !== providerId));
       setConfirmUnlinkProvider(null);
-      setMessage({ type: "success", text: `${providerName} account unlinked` });
+      setMessage({ type: "success", text: t("accountUnlinked", { provider: providerName }) });
     } catch {
-      setMessage({ type: "error", text: `Failed to unlink ${providerName} account` });
+      setMessage({ type: "error", text: t("failedUnlink", { provider: providerName }) });
     }
   };
 
+  const hasCredential = linkedAccounts.some((a) => a.providerId === "credential");
+
   const handleDeleteAccount = async () => {
     try {
-      await authClient.deleteUser();
+      const { error } = await authClient.deleteUser(
+        hasCredential ? { password: deletePassword } : { callbackURL: "/" },
+      );
+      if (error) {
+        setMessage({ type: "error", text: t("failedDeleteAccount") });
+        return;
+      }
       onClose();
     } catch {
-      setMessage({ type: "error", text: "Failed to delete account" });
+      setMessage({ type: "error", text: t("failedDeleteAccount") });
     }
   };
 
@@ -384,9 +398,9 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <PersonIcon />
         <Typography variant="h6" component="span" sx={{ flex: 1, fontWeight: 600 }}>
-          Account settings
+          {t("accountSettings")}
         </Typography>
-        <IconButton onClick={onClose} aria-label="Close" edge="end">
+        <IconButton onClick={onClose} aria-label={tc("close")} edge="end">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
@@ -398,9 +412,9 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           </Alert>
         )}
 
-        {/* ── Profile Section ─────────────────────────────────── */}
+        {/* Profile Section */}
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Profile
+          {t("profile")}
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
           <Avatar
@@ -412,7 +426,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           <Box sx={{ flex: 1 }}>
             <TextField
               fullWidth
-              label="Name"
+              label={t("name")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               size="small"
@@ -426,14 +440,14 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           disabled={saving || name === user.name}
           sx={{ mb: 3 }}
         >
-          Save changes
+          {t("saveChanges")}
         </Button>
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* ── Email Section ───────────────────────────────────── */}
+        {/* Email Section */}
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Email address
+          {t("emailAddress")}
         </Typography>
         {!changingEmail ? (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 3 }}>
@@ -441,14 +455,14 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
               {user.email}
             </Typography>
             <Button size="small" startIcon={<EditIcon />} onClick={() => setChangingEmail(true)}>
-              Change
+              {tc("change")}
             </Button>
           </Box>
         ) : (
           <Box sx={{ mb: 3 }}>
             <TextField
               fullWidth
-              label="New email address"
+              label={t("newEmailAddress")}
               type="email"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
@@ -458,12 +472,12 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
             {emailOtpSent && (
               <TextField
                 fullWidth
-                label="Verification code"
+                label={t("verificationCode")}
                 value={emailOtp}
                 onChange={(e) => setEmailOtp(e.target.value)}
                 size="small"
                 sx={{ mb: 1.5 }}
-                helperText="Enter the code sent to your new email"
+                helperText={t("verificationCodeHelper")}
               />
             )}
             <Box sx={{ display: "flex", gap: 1 }}>
@@ -474,7 +488,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   onClick={handleRequestEmailChange}
                   disabled={!newEmail}
                 >
-                  Send verification code
+                  {t("sendVerificationCode")}
                 </Button>
               ) : (
                 <Button
@@ -483,7 +497,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   onClick={handleConfirmEmailChange}
                   disabled={!emailOtp}
                 >
-                  Confirm change
+                  {t("confirmChange")}
                 </Button>
               )}
               <Button
@@ -496,7 +510,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   setEmailOtpSent(false);
                 }}
               >
-                Cancel
+                {tc("cancel")}
               </Button>
             </Box>
           </Box>
@@ -504,21 +518,21 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* ── Password Section ────────────────────────────────── */}
+        {/* Password Section */}
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Password
+          {t("password")}
         </Typography>
         {!changingPassword ? (
           <Box sx={{ mb: 3 }}>
             <Button size="small" startIcon={<LockIcon />} onClick={() => setChangingPassword(true)}>
-              Change password
+              {t("changePassword")}
             </Button>
           </Box>
         ) : (
           <Box sx={{ mb: 3 }}>
             <TextField
               fullWidth
-              label="Current password"
+              label={t("currentPassword")}
               type={showCurrentPassword ? "text" : "password"}
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -530,7 +544,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label="toggle current password visibility"
+                        aria-label={t("toggleCurrentPasswordVisibility")}
                         onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                         edge="end"
                         size="small"
@@ -544,7 +558,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
             />
             <TextField
               fullWidth
-              label="New password"
+              label={t("newPassword")}
               type={showNewPassword ? "text" : "password"}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -556,7 +570,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label="toggle new password visibility"
+                        aria-label={t("toggleNewPasswordVisibility")}
                         onClick={() => setShowNewPassword(!showNewPassword)}
                         edge="end"
                         size="small"
@@ -575,7 +589,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                 onClick={handleChangePassword}
                 disabled={!currentPassword || !newPassword}
               >
-                Update password
+                {t("updatePassword")}
               </Button>
               <Button
                 variant="outlined"
@@ -586,7 +600,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   setNewPassword("");
                 }}
               >
-                Cancel
+                {tc("cancel")}
               </Button>
             </Box>
           </Box>
@@ -594,20 +608,20 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* ── Two-Factor Authentication ───────────────────────── */}
+        {/* Two-Factor Authentication */}
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Two-factor authentication
+          {t("twoFactorAuth")}
         </Typography>
         {twoFactorEnabled ? (
           <Box sx={{ mb: 3 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
               <SecurityIcon fontSize="small" color="success" />
               <Typography variant="body2" color="success.main" sx={{ flex: 1 }}>
-                2FA is enabled
+                {t("twoFAEnabled")}
               </Typography>
             </Box>
 
-            {/* Action buttons — shown when neither sub-panel is open */}
+            {/* Action buttons -- shown when neither sub-panel is open */}
             {!showBackupCodes && !showDisable2fa && (
               <Box sx={{ display: "flex", gap: 1 }}>
                 <Button
@@ -621,7 +635,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     setBackupCodes(null);
                   }}
                 >
-                  Backup codes
+                  {t("backupCodes")}
                 </Button>
                 <Button
                   size="small"
@@ -633,7 +647,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     setBackupCodes(null);
                   }}
                 >
-                  Disable 2FA
+                  {t("disable2FA")}
                 </Button>
               </Box>
             )}
@@ -644,11 +658,11 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                 {!backupCodes ? (
                   <>
                     <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      Enter your password to view your backup codes.
+                      {t("enterPasswordToRegenerate")}
                     </Typography>
                     <TextField
                       fullWidth
-                      label="Password"
+                      label={t("password")}
                       type="password"
                       value={twoFactorPassword}
                       onChange={(e) => setTwoFactorPassword(e.target.value)}
@@ -660,10 +674,15 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                       <Button
                         variant="contained"
                         size="small"
-                        onClick={handleRegenerateBackupCodes}
+                        color="warning"
+                        onClick={() => {
+                          if (window.confirm(t("regenerateCodesConfirm"))) {
+                            handleRegenerateBackupCodes();
+                          }
+                        }}
                         disabled={!twoFactorPassword}
                       >
-                        View codes
+                        {t("regenerateCodes")}
                       </Button>
                       <Button
                         variant="outlined"
@@ -673,14 +692,14 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                           setTwoFactorPassword("");
                         }}
                       >
-                        Cancel
+                        {tc("cancel")}
                       </Button>
                     </Box>
                   </>
                 ) : (
                   <>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Save these backup codes in a safe place. Each code can only be used once.
+                      {t("saveBackupCodes")}
                     </Typography>
                     <Box
                       sx={{
@@ -702,14 +721,14 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                         startIcon={<ContentCopyIcon />}
                         onClick={handleCopyBackupCodes}
                       >
-                        Copy
+                        {tc("copy")}
                       </Button>
                       <Button
                         size="small"
                         startIcon={<DownloadIcon />}
                         onClick={handleDownloadBackupCodes}
                       >
-                        Download
+                        {tc("download")}
                       </Button>
                       <Button
                         size="small"
@@ -720,7 +739,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                           setTwoFactorPassword("");
                         }}
                       >
-                        Done
+                        {tc("done")}
                       </Button>
                     </Box>
                   </>
@@ -732,11 +751,11 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
             {showDisable2fa && (
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="error" sx={{ mb: 1 }}>
-                  Enter your password to disable two-factor authentication.
+                  {t("enterPasswordToDisable")}
                 </Typography>
                 <TextField
                   fullWidth
-                  label="Password"
+                  label={t("password")}
                   type="password"
                   value={twoFactorPassword}
                   onChange={(e) => setTwoFactorPassword(e.target.value)}
@@ -752,7 +771,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     onClick={handleDisable2FA}
                     disabled={!twoFactorPassword}
                   >
-                    Disable 2FA
+                    {t("disable2FA")}
                   </Button>
                   <Button
                     variant="outlined"
@@ -762,7 +781,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                       setTwoFactorPassword("");
                     }}
                   >
-                    Cancel
+                    {tc("cancel")}
                   </Button>
                 </Box>
               </Box>
@@ -771,14 +790,14 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         ) : !showTwoFactorSetup ? (
           <Box sx={{ mb: 3 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              Add an extra layer of security to your account with a TOTP authenticator app.
+              {t("twoFADescription")}
             </Typography>
             <Button
               size="small"
               startIcon={<SecurityIcon />}
               onClick={() => setShowTwoFactorSetup(true)}
             >
-              Set up 2FA
+              {t("setUp2FA")}
             </Button>
           </Box>
         ) : (
@@ -786,11 +805,11 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
             {!totpSetupUri ? (
               <>
                 <Typography variant="body2" sx={{ mb: 1.5 }}>
-                  Enter your password to set up two-factor authentication.
+                  {t("enterPasswordToSetup")}
                 </Typography>
                 <TextField
                   fullWidth
-                  label="Password"
+                  label={t("password")}
                   type="password"
                   value={twoFactorPassword}
                   onChange={(e) => setTwoFactorPassword(e.target.value)}
@@ -805,7 +824,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     onClick={handleEnable2FA}
                     disabled={!twoFactorPassword}
                   >
-                    Continue
+                    {tc("continue")}
                   </Button>
                   <Button
                     variant="outlined"
@@ -815,21 +834,21 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                       setTwoFactorPassword("");
                     }}
                   >
-                    Cancel
+                    {tc("cancel")}
                   </Button>
                 </Box>
               </>
             ) : (
               <>
                 <Typography variant="body2" sx={{ mb: 1.5 }}>
-                  Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):
+                  {t("scanQRCode")}
                 </Typography>
                 <Box sx={{ textAlign: "center", mb: 2 }}>
                   {qrDataUrl && (
                     <Box
                       component="img"
                       src={qrDataUrl}
-                      alt="TOTP QR Code"
+                      alt={t("totpQRCodeAlt")}
                       sx={{ width: 200, height: 200, borderRadius: 1 }}
                     />
                   )}
@@ -839,18 +858,17 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   color="text.secondary"
                   sx={{ display: "block", mb: 2, wordBreak: "break-all" }}
                 >
-                  Or enter manually: {totpSetupUri}
+                  {t("orEnterManually", { uri: totpSetupUri })}
                 </Typography>
 
                 {/* Show backup codes during setup */}
                 {backupCodes && (
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                      Backup codes
+                      {t("backupCodesTitle")}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
-                      Save these codes in a safe place. You can use them to sign in if you lose
-                      access to your authenticator app.
+                      {t("saveCodesDescription")}
                     </Typography>
                     <Box
                       sx={{
@@ -872,25 +890,25 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                         startIcon={<ContentCopyIcon />}
                         onClick={handleCopyBackupCodes}
                       >
-                        Copy codes
+                        {t("copyCodes")}
                       </Button>
                       <Button
                         size="small"
                         startIcon={<DownloadIcon />}
                         onClick={handleDownloadBackupCodes}
                       >
-                        Download
+                        {tc("download")}
                       </Button>
                     </Box>
                   </Box>
                 )}
 
                 <Typography variant="body2" sx={{ mb: 1 }}>
-                  Enter the 6-digit code from your authenticator app to verify:
+                  {t("enterCodeToVerify")}
                 </Typography>
                 <TextField
                   fullWidth
-                  label="Verification code"
+                  label={t("verificationCode")}
                   value={totpVerifyCode}
                   onChange={(e) => setTotpVerifyCode(e.target.value)}
                   size="small"
@@ -905,7 +923,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     onClick={handleVerifyTotpSetup}
                     disabled={totpVerifyCode.length < 6}
                   >
-                    Verify & enable
+                    {t("verifyAndEnable")}
                   </Button>
                   <Button
                     variant="outlined"
@@ -918,7 +936,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                       setTotpVerifyCode("");
                     }}
                   >
-                    Cancel
+                    {tc("cancel")}
                   </Button>
                 </Box>
               </>
@@ -928,9 +946,9 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* ── Connected Accounts ──────────────────────────────── */}
+        {/* Connected Accounts */}
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Connected accounts
+          {t("connectedAccounts")}
         </Typography>
         <List dense disablePadding>
           {oauthProviders.map((provider) => {
@@ -947,7 +965,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                 </ListItemIcon>
                 <ListItemText
                   primary={provider.name}
-                  secondary={isLinked ? "Connected" : "Not connected"}
+                  secondary={isLinked ? t("connected") : t("notConnected")}
                 />
                 {isLinked ? (
                   confirmUnlinkProvider === provider.providerId ? (
@@ -957,7 +975,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                         variant="outlined"
                         onClick={() => setConfirmUnlinkProvider(null)}
                       >
-                        Cancel
+                        {tc("cancel")}
                       </Button>
                       <Button
                         size="small"
@@ -965,7 +983,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                         color="error"
                         onClick={() => handleUnlinkProvider(provider.providerId, provider.name)}
                       >
-                        Confirm
+                        {tc("confirm")}
                       </Button>
                     </Box>
                   ) : (
@@ -974,7 +992,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                       color="error"
                       onClick={() => setConfirmUnlinkProvider(provider.providerId)}
                     >
-                      Unlink
+                      {t("unlink")}
                     </Button>
                   )
                 ) : (
@@ -983,7 +1001,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     startIcon={<LinkIcon />}
                     onClick={() => handleLinkProvider(provider.providerId, provider.name)}
                   >
-                    Connect
+                    {t("connect")}
                   </Button>
                 )}
               </ListItem>
@@ -993,9 +1011,9 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
 
         <Divider sx={{ my: 2 }} />
 
-        {/* ── Passkeys Section ────────────────────────────────── */}
+        {/* Passkeys Section */}
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Passkeys
+          {t("passkeys")}
         </Typography>
         {passkeys.length > 0 ? (
           <List dense disablePadding>
@@ -1005,7 +1023,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                 secondaryAction={
                   <IconButton
                     edge="end"
-                    aria-label="Remove passkey"
+                    aria-label={t("removePasskey")}
                     onClick={() => handleDeletePasskey(pk.id)}
                     size="small"
                   >
@@ -1017,10 +1035,10 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                   <FingerprintIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={pk.name ?? "Passkey"}
+                  primary={pk.name ?? t("passkey")}
                   secondary={
                     pk.createdAt
-                      ? `Added ${new Date(pk.createdAt).toLocaleDateString()}`
+                      ? t("addedDate", { date: new Date(pk.createdAt).toLocaleDateString(locale) })
                       : undefined
                   }
                 />
@@ -1029,7 +1047,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           </List>
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            No passkeys registered yet.
+            {t("noPasskeys")}
           </Typography>
         )}
         <Button
@@ -1038,14 +1056,14 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           onClick={handleAddPasskey}
           sx={{ mt: 1, mb: 3 }}
         >
-          Add a passkey
+          {t("addPasskey")}
         </Button>
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* ── Danger Zone ─────────────────────────────────────── */}
+        {/* Danger Zone */}
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, color: "error.main" }}>
-          Danger zone
+          {t("dangerZone")}
         </Typography>
         {!confirmDelete ? (
           <Button
@@ -1055,19 +1073,43 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
             startIcon={<DeleteIcon />}
             onClick={() => setConfirmDelete(true)}
           >
-            Delete account
+            {t("deleteAccount")}
           </Button>
         ) : (
           <Box>
             <Typography variant="body2" color="error" sx={{ mb: 1 }}>
-              This action is irreversible. All your data will be permanently deleted.
+              {t("deleteAccountWarning")}
             </Typography>
+            {hasCredential && (
+              <TextField
+                type="password"
+                size="small"
+                fullWidth
+                placeholder={t("password")}
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                sx={{ mb: 1 }}
+              />
+            )}
             <Box sx={{ display: "flex", gap: 1 }}>
-              <Button variant="contained" color="error" size="small" onClick={handleDeleteAccount}>
-                Confirm deletion
+              <Button
+                variant="contained"
+                color="error"
+                size="small"
+                disabled={hasCredential && !deletePassword}
+                onClick={handleDeleteAccount}
+              >
+                {t("confirmDeletion")}
               </Button>
-              <Button variant="outlined" size="small" onClick={() => setConfirmDelete(false)}>
-                Cancel
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  setConfirmDelete(false);
+                  setDeletePassword("");
+                }}
+              >
+                {tc("cancel")}
               </Button>
             </Box>
           </Box>

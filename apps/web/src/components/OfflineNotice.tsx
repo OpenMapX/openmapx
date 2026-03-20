@@ -2,9 +2,11 @@
 
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 export function OfflineNotice() {
+  const t = useTranslations("offline");
   const [isOffline, setIsOffline] = useState(false);
   const [showOnline, setShowOnline] = useState(false);
 
@@ -39,7 +41,7 @@ export function OfflineNotice() {
         sx={{ zIndex: 1400 }}
       >
         <Alert severity="warning" variant="filled" sx={{ width: "100%" }}>
-          You're offline — showing cached data
+          {t("youreOffline")}
         </Alert>
       </Snackbar>
 
@@ -52,7 +54,7 @@ export function OfflineNotice() {
         sx={{ zIndex: 1400 }}
       >
         <Alert severity="success" variant="filled" sx={{ width: "100%" }}>
-          Back online
+          {t("backOnline")}
         </Alert>
       </Snackbar>
     </>

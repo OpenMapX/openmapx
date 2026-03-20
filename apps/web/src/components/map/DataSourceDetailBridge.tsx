@@ -2,10 +2,12 @@
 
 import type { Place } from "@openmapx/core";
 import {
+  PANEL,
   useDataSourceDetail,
   useDataSourceStore,
   useDataSources,
   usePlaceStore,
+  useSidebarStore,
 } from "@openmapx/core";
 import { useEffect, useMemo } from "react";
 
@@ -50,6 +52,7 @@ export function DataSourceDetailBridge() {
     };
 
     setSelectedPlace(place);
+    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
   }, [detail, setSelectedPlace, sourceMeta]);
 
   return null;

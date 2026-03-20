@@ -12,3 +12,13 @@ export {
   userRelations,
   verification,
 } from "./auth-schema";
+
+// Saved places tables
+export {
+  labeledPlace,
+  labeledPlaceRelations,
+  savedList,
+  savedListRelations,
+  savedPlace,
+  savedPlaceRelations,
+} from "./saved-schema";

@@ -2,12 +2,15 @@
 
 import type { LngLat } from "@openmapx/core";
 import { useMapStore } from "@openmapx/core";
+import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
+import { maptilerStyleUrl } from "@/lib/map";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { mapRef, notifyMapReady } = useMap();
+  const { mapRef, mapReady, notifyMapReady } = useMap();
+  const locale = useLocale();
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
 
   useEffect(() => {
@@ -18,8 +21,7 @@ export function MapCanvas() {
     // be destroyed and re-created every time the user pans or zooms.
     const { center, zoom, bearing, pitch } = useMapStore.getState();
 
-    const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
-    const styleUrl = `https://api.maptiler.com/maps/bright-v2/style.json?key=${apiKey}`;
+    const styleUrl = maptilerStyleUrl();
     let destroyed = false;
 
     const initMap = (initialCenter: LngLat, initialZoom: number) => {
@@ -87,6 +89,37 @@ export function MapCanvas() {
       mapRef.current = null;
     };
   }, [mapRef, notifyMapReady, setBearing, setCenter, setPitch, setUserLocation, setZoom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update map label language when locale changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const setLabels = () => {
+      const style = map.getStyle();
+      if (!style?.layers) return;
+      for (const layer of style.layers) {
+        if (layer.type !== "symbol") continue;
+        const tf = layer.layout?.["text-field"];
+        if (!tf) continue;
+        // Only override layers whose text-field actually references "name".
+        // Skip road shields, route refs, house numbers, etc.
+        const serialized = JSON.stringify(tf);
+        if (!serialized.includes("name")) continue;
+        map.setLayoutProperty(layer.id, "text-field", [
+          "coalesce",
+          ["get", `name:${locale}`],
+          ["get", "name"],
+        ]);
+      }
+    };
+
+    setLabels();
+    map.on("styledata", setLabels);
+    return () => {
+      map.off("styledata", setLabels);
+    };
+  }, [locale, mapRef, mapReady]);
 
   // Outer div owns the absolute positioning.
   // MapLibre gets the inner div so its .maplibregl-map class (position: relative)

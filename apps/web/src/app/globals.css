@@ -26,30 +26,32 @@ main {
   display: none;
 }
 
-/* Air quality station popup */
-.aq-popup.maplibregl-popup .maplibregl-popup-content {
-  border-radius: 12px !important;
-  padding: 14px 16px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
-}
+/* Shared MapLibre popup styling */
+@layer base {
+  .omx-popup.maplibregl-popup .maplibregl-popup-content {
+    border-radius: 12px !important;
+    padding: 14px 16px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  }
 
-.aq-popup.maplibregl-popup .maplibregl-popup-close-button {
-  font-size: 18px !important;
-  color: #999 !important;
-  right: 6px !important;
-  top: 6px !important;
-  width: 28px !important;
-  height: 28px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 50% !important;
-  background: transparent !important;
-  padding: 0 0 5px 0 !important;
-  line-height: 1 !important;
-}
+  .omx-popup.maplibregl-popup .maplibregl-popup-close-button {
+    font-size: 18px !important;
+    color: #999 !important;
+    right: 6px !important;
+    top: 6px !important;
+    width: 28px !important;
+    height: 28px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    background: transparent !important;
+    padding: 0 0 5px 0 !important;
+    line-height: 1 !important;
+  }
 
-.aq-popup.maplibregl-popup .maplibregl-popup-close-button:hover {
-  background: #f0f0f0 !important;
-  color: #333 !important;
+  .omx-popup.maplibregl-popup .maplibregl-popup-close-button:hover {
+    background: #f0f0f0 !important;
+    color: #333 !important;
+  }
 }

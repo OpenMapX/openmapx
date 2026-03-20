@@ -5,6 +5,7 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import { useStreetViewStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 
@@ -20,7 +21,8 @@ const PIN_TIP_OFFSET = GHOST_SIZE * (20 / 24);
 
 export function Pegman() {
   const { mapRef, mapReady } = useMap();
-  const setCoverageVisible = useStreetViewStore((s) => s.setCoverageVisible);
+  const t = useTranslations("streetView");
+  const setLayerVisible = useStreetViewStore((s) => s.setLayerVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
 
   const [dragging, setDragging] = useState(false);
@@ -59,7 +61,7 @@ export function Pegman() {
     pegmanRef.current?.setPointerCapture(e.pointerId);
     setDragging(true);
     setGhostPos({ x: e.clientX, y: e.clientY });
-    setCoverageVisible(true);
+    setLayerVisible(true);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -73,16 +75,16 @@ export function Pegman() {
 
     const dot = findNearestDot(e.clientX, e.clientY);
     if (dot?.id != null) {
-      setCoverageVisible(false);
+      setLayerVisible(false);
       setActiveImageId(String(dot.id));
     } else {
-      setCoverageVisible(false);
+      setLayerVisible(false);
     }
   };
 
   return (
     <>
-      <Tooltip title="Street-level imagery" placement="left">
+      <Tooltip title={t("streetLevelImagery")} placement="left">
         <Paper
           ref={pegmanRef}
           component="div"

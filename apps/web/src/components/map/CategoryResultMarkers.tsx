@@ -3,9 +3,11 @@
 import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
+  PANEL,
   useCategorySearchStore,
   useFilteredCategoryResults,
   usePlaceStore,
+  useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
@@ -336,24 +338,27 @@ export function CategoryResultMarkers() {
         website: props.website || undefined,
         openingHours: props.openingHours || undefined,
       });
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     };
 
     clickHandlerRef.current = onClick;
     map.on("click", LAYER_ID, onClick);
 
-    const onEnter = (e: MapMouseEvent) => {
-      map.getCanvas().style.cursor = "pointer";
-      const features = map.queryRenderedFeatures(e.point, { layers: [LAYER_ID] });
-      if (features.length) {
-        setHoveredCategoryPlaceId((features[0].properties as { id: string }).id);
+    const onMouseMove = (e: MapMouseEvent) => {
+      const layers = [LAYER_ID, TRANSIT_LAYER_ID].filter((id) => !!map.getLayer(id));
+      if (layers.length === 0) return;
+      const features = map.queryRenderedFeatures(e.point, { layers });
+      if (features.length > 0) {
+        map.getCanvasContainer().style.cursor = "pointer";
+        const catFeatures = features.filter((f) => f.layer.id === LAYER_ID && f.properties?.id);
+        if (catFeatures.length) {
+          setHoveredCategoryPlaceId((catFeatures[0].properties as { id: string }).id);
+        }
+      } else {
+        map.getCanvasContainer().style.cursor = "";
+        setHoveredCategoryPlaceId(null);
       }
     };
-    const onLeave = () => {
-      map.getCanvas().style.cursor = "";
-      setHoveredCategoryPlaceId(null);
-    };
-    map.on("mouseenter", LAYER_ID, onEnter);
-    map.on("mouseleave", LAYER_ID, onLeave);
 
     // Transit layer click handler
     const onTransitClick = (e: MapMouseEvent) => {
@@ -380,27 +385,20 @@ export function CategoryResultMarkers() {
         parentStationId: props.parentStationId || undefined,
       };
       flyTo([stop.lng, stop.lat], 16);
-      void resolveStopAsPlace(stop).then(setSelectedPlace);
+      void resolveStopAsPlace(stop).then((place) => {
+        setSelectedPlace(place);
+        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      });
     };
 
-    const onTransitEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const onTransitLeave = () => {
-      map.getCanvas().style.cursor = "";
-    };
-
+    map.on("mousemove", onMouseMove);
     map.on("click", TRANSIT_LAYER_ID, onTransitClick);
-    map.on("mouseenter", TRANSIT_LAYER_ID, onTransitEnter);
-    map.on("mouseleave", TRANSIT_LAYER_ID, onTransitLeave);
 
     return () => {
       map.off("click", LAYER_ID, onClick);
-      map.off("mouseenter", LAYER_ID, onEnter);
-      map.off("mouseleave", LAYER_ID, onLeave);
       map.off("click", TRANSIT_LAYER_ID, onTransitClick);
-      map.off("mouseenter", TRANSIT_LAYER_ID, onTransitEnter);
-      map.off("mouseleave", TRANSIT_LAYER_ID, onTransitLeave);
+      map.off("mousemove", onMouseMove);
+      map.getCanvasContainer().style.cursor = "";
     };
   }, [mapReady, mapRef, setSelectedPlace, flyTo, setHoveredCategoryPlaceId]);
 

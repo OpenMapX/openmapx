@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { CATEGORY_FILTERS, searchByCategory } from "../services/overpass.service";
-import { hashKey, round, withCache } from "../utils/cache.js";
+import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 interface CategorySearchQuery {
   category: string;
@@ -8,6 +8,7 @@ interface CategorySearchQuery {
   west: string;
   north: string;
   east: string;
+  lang?: string;
 }
 
 export const categorySearchRoute: FastifyPluginAsync = async (fastify) => {
@@ -22,6 +23,7 @@ export const categorySearchRoute: FastifyPluginAsync = async (fastify) => {
           west: { type: "string" },
           north: { type: "string" },
           east: { type: "string" },
+          lang: { type: "string" },
         },
       },
     },
@@ -41,7 +43,7 @@ export const categorySearchRoute: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      const ttl = 1800;
+      const ttl = TTL.category;
 
       // Round bbox to 2dp (~1km) — queries within 1km share a cache entry
       const bboxRounded = {
