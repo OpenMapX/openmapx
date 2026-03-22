@@ -15,13 +15,14 @@ import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 
 export function MapClickHandler() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const { clickedLngLat, setClickedLngLat } = useMapClickStore();
   const { selectedPlace, setSelectedPlace } = usePlaceStore();
   const markerRef = useRef<maplibregl.Marker | null>(null);
 
   // Register plain-map click handler
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -46,7 +47,7 @@ export function MapClickHandler() {
     return () => {
       map.off("click", onClick);
     };
-  }, [mapRef, mapReady, setClickedLngLat, setSelectedPlace]);
+  }, [mapRef, mapReady, styleVersion, setClickedLngLat, setSelectedPlace]);
 
   // Clear clicked point when a place is selected externally (search, category click, etc.)
   useEffect(() => {

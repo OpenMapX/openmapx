@@ -201,7 +201,7 @@ export function TransitDetailsView({
                     height: 12,
                     borderRadius: "50%",
                     border: `3px solid ${legColor}`,
-                    bgcolor: i === 0 ? legColor : "#fff",
+                    bgcolor: i === 0 ? legColor : "background.paper",
                     flexShrink: 0,
                   }}
                 />

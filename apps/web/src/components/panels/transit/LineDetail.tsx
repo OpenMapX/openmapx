@@ -190,7 +190,7 @@ export function LineDetail({
                       width: isCurrent ? 14 : 10,
                       height: isCurrent ? 14 : 10,
                       borderRadius: "50%",
-                      bgcolor: isCurrent ? lineColor : "#fff",
+                      bgcolor: isCurrent ? lineColor : "background.paper",
                       border: `3px solid ${lineColor}`,
                       zIndex: 1,
                     }}

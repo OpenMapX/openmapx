@@ -52,7 +52,7 @@ function setOriginalBuildingLayersVisibility(map: maplibregl.Map, visible: boole
 }
 
 export function BuildingExtrusionLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useBuildingsStore((s) => s.layerVisible);
   useOverlayExclusion("3d-buildings", layerVisible);
   useLayerReanchor(LAYER_ID, layerVisible);
@@ -60,6 +60,7 @@ export function BuildingExtrusionLayer() {
   const prevVisibleRef = useRef(false);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -111,10 +112,11 @@ export function BuildingExtrusionLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible]);
 
   // Auto-pitch on enable, reset on disable
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -133,7 +135,7 @@ export function BuildingExtrusionLayer() {
     }
 
     prevVisibleRef.current = layerVisible;
-  }, [layerVisible, mapReady, mapRef]);
+  }, [layerVisible, mapReady, styleVersion, mapRef]);
 
   return null;
 }

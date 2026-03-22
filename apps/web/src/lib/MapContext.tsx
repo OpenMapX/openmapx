@@ -6,7 +6,10 @@ import { createContext, useCallback, useContext, useRef, useState } from "react"
 interface MapContextValue {
   mapRef: React.RefObject<maplibregl.Map | null>;
   mapReady: boolean;
+  /** Increments on each style.load — layer components should include this in effect deps to re-attach after style swap. */
+  styleVersion: number;
   notifyMapReady: () => void;
+  notifyStyleReload: () => void;
   flyTo: (center: [number, number], zoom?: number) => void;
   fitBounds: (bounds: [[number, number], [number, number]], padding?: number) => void;
   zoomIn: () => void;
@@ -19,6 +22,7 @@ const MapContext = createContext<MapContextValue | null>(null);
 export function MapProvider({ children }: { children: React.ReactNode }) {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [styleVersion, setStyleVersion] = useState(0);
   const pendingFlyTo = useRef<{ center: [number, number]; zoom?: number } | null>(null);
 
   const notifyMapReady = useCallback(() => {
@@ -29,6 +33,10 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
       pendingFlyTo.current = null;
     }
     setMapReady(true);
+  }, []);
+
+  const notifyStyleReload = useCallback(() => {
+    setStyleVersion((v) => v + 1);
   }, []);
 
   const flyTo = useCallback((center: [number, number], zoom?: number) => {
@@ -58,7 +66,18 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MapContext.Provider
-      value={{ mapRef, mapReady, notifyMapReady, flyTo, fitBounds, zoomIn, zoomOut, resetBearing }}
+      value={{
+        mapRef,
+        mapReady,
+        styleVersion,
+        notifyMapReady,
+        notifyStyleReload,
+        flyTo,
+        fitBounds,
+        zoomIn,
+        zoomOut,
+        resetBearing,
+      }}
     >
       {children}
     </MapContext.Provider>

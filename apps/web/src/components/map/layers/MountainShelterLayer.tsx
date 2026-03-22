@@ -31,7 +31,7 @@ const SHELTER_TYPE_KEYS: Record<string, string> = {
 };
 
 export function MountainShelterLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useLayerReanchor([CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const t = useTranslations("hiking");
@@ -65,6 +65,7 @@ export function MountainShelterLayer() {
 
   // Combined layer management + initial fetch
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -165,12 +166,13 @@ export function MountainShelterLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, layerVisible, fetchShelters]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, fetchShelters]);
 
   // Refetch on pan/zoom
   const debouncedFetch = useDebouncedCallback(() => fetchShelters(), 800);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -178,10 +180,11 @@ export function MountainShelterLayer() {
     return () => {
       map.off("moveend", debouncedFetch);
     };
-  }, [mapReady, mapRef, layerVisible, debouncedFetch]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, debouncedFetch]);
 
   // Click popup + cursor
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -236,7 +239,7 @@ export function MountainShelterLayer() {
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
     };
-  }, [mapReady, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible]);
 
   return null;
 }

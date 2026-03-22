@@ -16,7 +16,7 @@ const MLY_LAYERS = [MLY_SEQUENCE_LAYER, MLY_PHOTO_LAYER, MLY_PANO_LAYER] as cons
 const MLY_INTERACTIVE_LAYERS = [MLY_PHOTO_LAYER, MLY_PANO_LAYER] as const;
 
 export function StreetViewLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useStreetViewStore((s) => s.layerVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
   useOverlayExclusion("street-view", layerVisible);
@@ -24,6 +24,7 @@ export function StreetViewLayer() {
 
   // Manage coverage layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -124,10 +125,11 @@ export function StreetViewLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible]);
 
   // Click + cursor handlers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -159,7 +161,7 @@ export function StreetViewLayer() {
       map.off("mousemove", handleMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, mapRef, layerVisible, setActiveImageId]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, setActiveImageId]);
 
   return null;
 }

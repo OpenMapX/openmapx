@@ -117,14 +117,14 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos }: Pro
             position: "absolute",
             top: 8,
             right: 8,
-            bgcolor: "#fff",
+            bgcolor: "background.paper",
             borderRadius: "50%",
             boxShadow: 2,
             p: 0.75,
             "&:hover": { bgcolor: "grey.100" },
           }}
         >
-          <CloseIcon sx={{ fontSize: 24, color: "#000" }} />
+          <CloseIcon sx={{ fontSize: 24, color: "text.primary" }} />
         </IconButton>
       )}
     </Box>

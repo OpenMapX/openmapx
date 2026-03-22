@@ -541,8 +541,8 @@ export function DataSourceFilterContent() {
                     cursor: "pointer",
                     px: 2,
                     py: 1.5,
-                    bgcolor: hoveredItemId === result.id ? "rgba(0,0,0,0.06)" : "transparent",
-                    "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
+                    bgcolor: hoveredItemId === result.id ? "var(--omx-hover-bg)" : "transparent",
+                    "&:hover": { bgcolor: "var(--omx-hover-bg)" },
                   }}
                 >
                   <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
@@ -678,7 +678,7 @@ function ConnectorTypeSection({
                 ...(isSelected && {
                   bgcolor: TEAL,
                   color: "#fff",
-                  "&:hover": { bgcolor: "#006475" },
+                  "&:hover": { bgcolor: "var(--omx-teal-hover)" },
                 }),
               }}
             />
@@ -733,7 +733,7 @@ function ConnectorTypeSection({
                       ...(isSelected && {
                         bgcolor: TEAL,
                         color: "#fff",
-                        "&:hover": { bgcolor: "#006475" },
+                        "&:hover": { bgcolor: "var(--omx-teal-hover)" },
                       }),
                     }}
                   />
@@ -792,7 +792,7 @@ function ChipFilterSection({
                 ...(isSelected && {
                   bgcolor: TEAL,
                   color: "#fff",
-                  "&:hover": { bgcolor: "#006475" },
+                  "&:hover": { bgcolor: "var(--omx-teal-hover)" },
                 }),
               }}
             />
@@ -1047,7 +1047,7 @@ function OperatorSection({
             sx: {
               border: "1px solid",
               borderColor: "divider",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+              boxShadow: "0 2px 8px var(--omx-shadow-soft)",
               mt: 0.5,
             },
           },

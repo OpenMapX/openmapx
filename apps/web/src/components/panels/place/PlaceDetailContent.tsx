@@ -191,14 +191,14 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
               position: "absolute",
               top: clearSearchBar ? { xs: 8, sm: "72px" } : 8,
               right: 8,
-              bgcolor: "#fff",
+              bgcolor: "background.paper",
               borderRadius: "50%",
               boxShadow: 2,
               p: 0.75,
               "&:hover": { bgcolor: "grey.100" },
             }}
           >
-            <CloseIcon sx={{ fontSize: 24, color: "#000" }} />
+            <CloseIcon sx={{ fontSize: 24, color: "text.primary" }} />
           </IconButton>
         )}
 
@@ -228,7 +228,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         sx={{
           position: "sticky",
           top: 0,
-          bgcolor: "background.paper",
+          bgcolor: "inherit",
           zIndex: 1,
           minHeight: 48,
           "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },
@@ -238,9 +238,9 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             fontWeight: 500,
             minHeight: 48,
             minWidth: "auto",
-            color: "#5f6368",
+            color: "text.secondary",
           },
-          "& .Mui-selected": { color: "#007b8b !important" },
+          "& .Mui-selected": { color: `${TEAL} !important` },
           "& .MuiTabs-indicator": {
             height: 3,
             display: "flex",
@@ -254,7 +254,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
               borderRadius: "2px 2px 0 0",
             },
           },
-          borderBottom: "1px solid rgba(0,0,0,0.1)",
+          borderBottom: "1px solid var(--omx-border-light)",
         }}
       >
         <Tab label={t("overview")} />

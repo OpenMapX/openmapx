@@ -1,10 +1,12 @@
+import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-AppRouter";
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "mapillary-js/dist/mapillary.css";
-import "maplibre-gl/dist/maplibre-gl.css";
+import "maplibre-theme/icons.default.css";
+import "maplibre-theme/classic.css";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -25,8 +27,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={plusJakartaSans.variable}>
+    <html lang={locale} className={plusJakartaSans.variable} suppressHydrationWarning>
       <body className="h-dvh overflow-hidden antialiased">
+        <InitColorSchemeScript attribute="class" defaultMode="system" />
         <AppRouterCacheProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <Providers>{children}</Providers>

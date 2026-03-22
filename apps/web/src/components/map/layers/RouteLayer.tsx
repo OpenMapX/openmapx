@@ -4,7 +4,7 @@ import { useDirections, useDirectionsStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE } from "@/lib/theme";
+import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -15,7 +15,7 @@ const LAYER_ACTIVE_CASING = "route-active-casing";
 const LAYER_ACTIVE_LINE = "route-active-line";
 
 export function RouteLayer() {
-  const { mapRef, mapReady, fitBounds } = useMap();
+  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const {
     origin,
     destination,
@@ -40,6 +40,7 @@ export function RouteLayer() {
 
   // Add map source and layers — must wait for the style to finish loading
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -88,7 +89,7 @@ export function RouteLayer() {
         source: SOURCE_ID,
         filter: ["==", ["get", "type"], "active"],
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": PRIMARY_BLUE, "line-width": 7 },
+        paint: { "line-color": PRIMARY_BLUE_HEX, "line-width": 7 },
       });
 
       // Click on alt route to select it
@@ -124,7 +125,7 @@ export function RouteLayer() {
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapRef, mapReady, setActiveRouteIndex]);
+  }, [mapRef, mapReady, styleVersion, setActiveRouteIndex]);
 
   // Update source data whenever routes change
   useEffect(() => {

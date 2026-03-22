@@ -280,7 +280,7 @@ export function PlaceOverviewTab({
               "&:hover": { bgcolor: "action.hover" },
             }}
           >
-            <Typography variant="body2" sx={{ flex: 1, color: "rgba(0,0,0,0.87)" }}>
+            <Typography variant="body2" sx={{ flex: 1, color: "text.primary" }}>
               {place.description}
             </Typography>
             <ChevronRightIcon sx={{ fontSize: 20, color: "text.disabled", flexShrink: 0 }} />
@@ -297,7 +297,7 @@ export function PlaceOverviewTab({
             copyValue={place.address}
             copyLabel={t("copyAddress")}
           >
-            <Typography variant="body2" color="rgba(0,0,0,0.87)">
+            <Typography variant="body2" color="text.primary">
               {place.address}
             </Typography>
           </DetailRow>
@@ -313,7 +313,7 @@ export function PlaceOverviewTab({
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
-              sx={{ display: "block", color: "rgba(0,0,0,0.87)", typography: "body2" }}
+              sx={{ display: "block", color: "text.primary", typography: "body2" }}
             >
               {shortCodeDisplay ?? plusCode}
             </Link>
@@ -422,7 +422,7 @@ export function PlaceOverviewTab({
                   href={`tel:${place.phone}`}
                   variant="body2"
                   underline="hover"
-                  sx={{ color: "rgba(0,0,0,0.87)" }}
+                  sx={{ color: "text.primary" }}
                 >
                   {place.phone}
                 </Link>
@@ -453,7 +453,7 @@ export function PlaceOverviewTab({
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
-                    color: "rgba(0,0,0,0.87)",
+                    color: "text.primary",
                   }}
                 >
                   {place.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
@@ -471,7 +471,7 @@ export function PlaceOverviewTab({
                 rel="noopener noreferrer"
                 variant="body2"
                 underline="hover"
-                sx={{ color: "rgba(0,0,0,0.87)" }}
+                sx={{ color: "text.primary" }}
               >
                 {t("wikipedia")}
               </Link>
@@ -505,7 +505,7 @@ export function PlaceOverviewTab({
             </Box>
             {existingLabel ? (
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <Typography variant="body2" color="rgba(0,0,0,0.87)">
+                <Typography variant="body2" color="text.primary">
                   {tSaved("label")}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -513,7 +513,7 @@ export function PlaceOverviewTab({
                 </Typography>
               </Box>
             ) : (
-              <Typography variant="body2" color="rgba(0,0,0,0.87)">
+              <Typography variant="body2" color="text.primary">
                 {tSaved("addLabel")}
               </Typography>
             )}

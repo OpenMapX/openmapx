@@ -536,11 +536,11 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                   mb: 1.5,
                   py: 1,
                   fontWeight: 500,
-                  borderColor: "#666",
+                  borderColor: "var(--omx-border)",
                   color: "text.primary",
                   "&:hover": {
-                    borderColor: "#333",
-                    bgcolor: "rgba(0,0,0,0.04)",
+                    borderColor: "text.primary",
+                    bgcolor: "var(--omx-hover-bg)",
                   },
                 }}
                 startIcon={

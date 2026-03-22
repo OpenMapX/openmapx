@@ -134,7 +134,7 @@ export function MapClickFloatingCard() {
               width: 32,
               height: 32,
               borderRadius: "50%",
-              "&:hover": { bgcolor: "#00695c" },
+              "&:hover": { bgcolor: "var(--omx-teal-hover)" },
             }}
           >
             <DirectionsIcon sx={{ fontSize: 18 }} />

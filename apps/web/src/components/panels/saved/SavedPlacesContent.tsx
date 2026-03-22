@@ -33,7 +33,7 @@ export function SavedPlacesContent() {
             fontWeight: 500,
             minHeight: 48,
             minWidth: "auto",
-            color: "#5f6368",
+            color: "text.secondary",
           },
           "& .Mui-selected": { color: `${TEAL} !important` },
           "& .MuiTabs-indicator": {
@@ -49,7 +49,7 @@ export function SavedPlacesContent() {
               borderRadius: "2px 2px 0 0",
             },
           },
-          borderBottom: "1px solid rgba(0,0,0,0.1)",
+          borderBottom: "1px solid var(--omx-border-light)",
         }}
       >
         <Tab label={t("lists")} />

@@ -11,11 +11,12 @@ import { moveLayerBeforeFirstSymbol } from "./layerStyleUtils";
  * on top of custom overlay layers, visually hiding them.
  */
 export function useLayerReanchor(layerIds: string | readonly string[], visible: boolean) {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const activeLayer = useLayerStore((s) => s.activeLayer);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeLayer triggers layer re-ordering on base map switch
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !visible) return;
 
@@ -23,5 +24,5 @@ export function useLayerReanchor(layerIds: string | readonly string[], visible: 
     for (const id of ids) {
       moveLayerBeforeFirstSymbol(map, id);
     }
-  }, [activeLayer, mapReady, mapRef, visible, layerIds]);
+  }, [activeLayer, mapReady, styleVersion, mapRef, visible, layerIds]);
 }

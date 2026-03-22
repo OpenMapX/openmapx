@@ -3,7 +3,7 @@
 import { MODE_COLORS, useDirectionsStore } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE } from "@/lib/theme";
+import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 
 const SOURCE_ID = "transit-itinerary-source";
 const WALK_LAYER_ID = "transit-itinerary-walk";
@@ -12,10 +12,11 @@ const POINTS_SOURCE_ID = "transit-itinerary-points-source";
 const POINTS_LAYER_ID = "transit-itinerary-points";
 
 export function TransitItineraryLayer() {
-  const { mapRef, mapReady, fitBounds } = useMap();
+  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const { mode, transitItineraries, activeItineraryIndex } = useDirectionsStore();
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -44,7 +45,7 @@ export function TransitItineraryLayer() {
         ? "#757575"
         : leg.route?.color
           ? `#${leg.route.color.replace("#", "")}`
-          : (MODE_COLORS[leg.mode] ?? PRIMARY_BLUE);
+          : (MODE_COLORS[leg.mode] ?? PRIMARY_BLUE_HEX);
 
       return {
         type: "Feature" as const,
@@ -145,7 +146,7 @@ export function TransitItineraryLayer() {
     }
 
     return cleanup;
-  }, [mapRef, mapReady, mode, transitItineraries, activeItineraryIndex, fitBounds]);
+  }, [mapRef, mapReady, styleVersion, mode, transitItineraries, activeItineraryIndex, fitBounds]);
 
   return null;
 }

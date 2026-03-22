@@ -12,6 +12,7 @@ import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 import { useMap } from "@/lib/MapContext";
+import { TEAL } from "@/lib/theme";
 
 // Floating card: sidebar(400) + gap(24) + card(376) = 800px from left edge
 const FLOATING_CARD_RIGHT_EDGE = 800;
@@ -94,12 +95,12 @@ export function SearchInAreaChip() {
         fontSize: 13,
         bgcolor: "background.paper",
         color: "text.primary",
-        boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+        boxShadow: "0 2px 6px var(--omx-shadow-soft)",
         cursor: "pointer",
         userSelect: "none",
-        border: "1px solid rgba(0,0,0,0.15)",
+        border: "1px solid var(--omx-shadow-soft)",
         "& .MuiChip-icon": {
-          color: "#007b8b",
+          color: TEAL,
           ml: "10px",
           mr: "-4px",
         },

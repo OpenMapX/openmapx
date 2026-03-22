@@ -95,7 +95,7 @@ function buildPopupHtml(t: ParsedTrain): string {
 }
 
 export function LiveTrainsLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useLiveTrainsStore((s) => s.layerVisible);
   const selectTrain = useLiveTrainsStore((s) => s.selectTrain);
   useOverlayExclusion("live-trains", layerVisible);
@@ -175,6 +175,7 @@ export function LiveTrainsLayer() {
 
   // Layer setup — separate from data updates to avoid cleanup/recreation on poll
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -263,7 +264,7 @@ export function LiveTrainsLayer() {
       }
       layerInitRef.current = false;
     };
-  }, [mapRef, mapReady, layerVisible, handleClick]);
+  }, [mapRef, mapReady, styleVersion, layerVisible, handleClick]);
 
   // Data updates — just set source data, no layer recreation
   useEffect(() => {

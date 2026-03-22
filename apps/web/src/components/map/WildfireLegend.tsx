@@ -201,8 +201,8 @@ export function WildfireLegend() {
                     height: f.size,
                     borderRadius: "50%",
                     bgcolor: "#ef4444",
-                    border: "1.5px solid #fff",
-                    boxShadow: "0 0 0 0.5px rgba(0,0,0,0.15)",
+                    border: "1.5px solid var(--omx-overlay-bg)",
+                    boxShadow: "0 0 0 0.5px var(--omx-shadow-soft)",
                   }}
                 />
                 <Typography sx={{ fontSize: 9, lineHeight: 1.2 }}>{f.label}</Typography>

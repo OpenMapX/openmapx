@@ -30,7 +30,7 @@ export function LayerSelector() {
   const t = useTranslations("layers");
   const theme = useTheme();
   const desktopDock = useMediaQuery(theme.breakpoints.up("sm"));
-  const { mapReady, mapRef } = useMap();
+  const { mapReady, mapRef, styleVersion } = useMap();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [desktopExpanded, setDesktopExpanded] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number | null>(null);
@@ -103,6 +103,7 @@ export function LayerSelector() {
   }, [desktopDock]);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -115,7 +116,7 @@ export function LayerSelector() {
     return () => {
       map.off("zoom", syncZoom);
     };
-  }, [mapReady, mapRef]);
+  }, [mapReady, styleVersion, mapRef]);
 
   if (hiddenByFloatingCard) return null;
 
@@ -164,7 +165,7 @@ export function LayerSelector() {
                     borderRadius: "12px",
                     overflow: "hidden",
                     position: "relative",
-                    border: "2px solid #fff",
+                    border: "2px solid var(--omx-overlay-bg)",
                   }}
                 >
                   <Box sx={{ width: "100%", height: "100%" }}>{activeBaseOption.preview}</Box>
@@ -179,7 +180,7 @@ export function LayerSelector() {
                       justifyContent: "center",
                       gap: 0.3,
                       py: 0.3,
-                      background: "linear-gradient(transparent, rgba(255,255,255,0.85) 30%)",
+                      background: "linear-gradient(transparent, var(--omx-overlay-bg) 30%)",
                     }}
                   >
                     <LayersIcon sx={{ fontSize: 14, color: "text.secondary" }} />
@@ -259,7 +260,7 @@ export function LayerSelector() {
               width: desktopDock ? "auto" : 346,
               minWidth: desktopDock ? 0 : undefined,
               maxHeight: desktopDock ? "min(76vh, 700px)" : "none",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.15), 0 1px 6px rgba(0,0,0,0.1)",
+              boxShadow: "0 4px 20px var(--omx-shadow-soft), 0 1px 6px var(--omx-shadow-soft)",
               bgcolor: "background.paper",
               overflowY: desktopDock ? "auto" : "visible",
             },

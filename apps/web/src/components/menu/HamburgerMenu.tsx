@@ -3,10 +3,13 @@
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 import HistoryIcon from "@mui/icons-material/History";
 import ImageIcon from "@mui/icons-material/Image";
+import LightModeIcon from "@mui/icons-material/LightMode";
 import LinkIcon from "@mui/icons-material/Link";
 import PrintIcon from "@mui/icons-material/Print";
+import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
 import TranslateIcon from "@mui/icons-material/Translate";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
@@ -17,6 +20,7 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { PANEL, useMenuStore, useSidebarStore } from "@openmapx/core";
 import Link from "next/link";
@@ -38,7 +42,9 @@ export function HamburgerMenu() {
   const locale = useLocale();
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
+  const { mode, setMode } = useColorScheme();
   const [langOpen, setLangOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
 
   const handleSaved = () => {
     close();
@@ -174,6 +180,36 @@ export function HamburgerMenu() {
                   {l === locale ? <CheckIcon fontSize="small" /> : null}
                 </ListItemIcon>
                 <ListItemText primary={localeNames[l] ?? l} />
+              </ListItemButton>
+            ))}
+          </List>
+        </Collapse>
+
+        <ListItemButton sx={{ height: 48 }} onClick={() => setThemeOpen((prev) => !prev)}>
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            {mode === "dark" ? (
+              <DarkModeIcon />
+            ) : mode === "light" ? (
+              <LightModeIcon />
+            ) : (
+              <SettingsBrightnessIcon />
+            )}
+          </ListItemIcon>
+          <ListItemText primary={t("theme")} />
+        </ListItemButton>
+
+        <Collapse in={themeOpen}>
+          <List disablePadding>
+            {(["light", "dark", "system"] as const).map((m) => (
+              <ListItemButton key={m} sx={{ height: 44, pl: 4 }} onClick={() => setMode(m)}>
+                <ListItemIcon sx={{ minWidth: 28 }}>
+                  {m === mode ? <CheckIcon fontSize="small" /> : null}
+                </ListItemIcon>
+                <ListItemText
+                  primary={t(
+                    m === "light" ? "themeLight" : m === "dark" ? "themeDark" : "themeSystem",
+                  )}
+                />
               </ListItemButton>
             ))}
           </List>

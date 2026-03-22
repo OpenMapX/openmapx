@@ -57,7 +57,10 @@
     "resetBearingAriaLabel": "Reset bearing to north",
     "account": "Account",
     "signIn": "Sign in",
-    "language": "Language"
+    "language": "Language",
+    "themeLight": "Light mode (click for dark)",
+    "themeDark": "Dark mode (click for system)",
+    "themeSystem": "System theme (click for light)"
   },
   "footer": {
     "legalNotice": "Legal Notice",
@@ -419,6 +422,11 @@
     "language": "Language",
     "accountSettings": "Account settings",
     "signOut": "Sign out",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
+    "appearance": "Appearance",
     "profile": "Profile",
     "name": "Name",
     "saveChanges": "Save changes",
@@ -609,6 +617,10 @@
     "tips": "Tips and tricks",
     "help": "Help",
     "language": "Language",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System",
     "privacy": "Privacy",
     "terms": "Terms",
     "imprint": "Imprint"

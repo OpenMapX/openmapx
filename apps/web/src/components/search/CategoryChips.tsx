@@ -27,7 +27,8 @@ import {
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { type ReactNode, useCallback } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { TEAL } from "@/lib/theme";
 
 const CATEGORY_ICONS: Partial<Record<CategoryId, ReactNode>> = {
   restaurants: <RestaurantIcon sx={{ fontSize: 16 }} />,
@@ -87,10 +88,39 @@ export function CategoryChips() {
     [clearCategory, setQuery, setActiveSource, setActiveCategory],
   );
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollState();
+    const observer = new ResizeObserver(updateScrollState);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [updateScrollState]);
+
   if (directionsOpen || activeCategory || activeSource) return null;
+
+  const FADE = 24;
+  const leftStop = canScrollLeft ? `black ${FADE}px` : "black 0px";
+  const rightStop = canScrollRight ? `black calc(100% - ${FADE}px)` : "black 100%";
+  const leftEdge = canScrollLeft ? "transparent" : "black";
+  const rightEdge = canScrollRight ? "transparent" : "black";
+  const mask = `linear-gradient(to right, ${leftEdge}, ${leftStop}, ${rightStop}, ${rightEdge})`;
 
   return (
     <Box
+      ref={scrollRef}
+      onScroll={updateScrollState}
       sx={{
         position: "absolute",
         // Desktop: same level as search bar. Mobile: below search bar (12+48+12=72)
@@ -105,6 +135,8 @@ export function CategoryChips() {
         overflowY: "hidden",
         scrollbarWidth: "none",
         "&::-webkit-scrollbar": { display: "none" },
+        maskImage: mask,
+        WebkitMaskImage: mask,
         // Ensure chips don't get clipped visually
         py: "2px",
       }}
@@ -130,10 +162,10 @@ export function CategoryChips() {
                 borderRadius: "18px",
                 fontWeight: 500,
                 fontSize: 13,
-                bgcolor: isActive ? "#007b8b" : "background.paper",
+                bgcolor: isActive ? TEAL : "background.paper",
                 color: isActive ? "#fff" : "text.primary",
-                borderColor: isActive ? "#007b8b" : "rgba(0,0,0,0.23)",
-                boxShadow: isActive ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+                borderColor: isActive ? TEAL : "var(--omx-border)",
+                boxShadow: isActive ? "none" : "0 1px 3px var(--omx-shadow-soft)",
                 cursor: "pointer",
                 userSelect: "none",
                 flexShrink: 0,
@@ -143,7 +175,7 @@ export function CategoryChips() {
                   mr: "-4px",
                 },
                 "&&:hover": {
-                  bgcolor: isActive ? "#006475" : "grey.300",
+                  bgcolor: isActive ? "var(--omx-teal-hover)" : "grey.300",
                 },
               }}
             />
@@ -167,10 +199,10 @@ export function CategoryChips() {
                 borderRadius: "18px",
                 fontWeight: 500,
                 fontSize: 13,
-                bgcolor: isActive ? "#007b8b" : "background.paper",
+                bgcolor: isActive ? TEAL : "background.paper",
                 color: isActive ? "#fff" : "text.primary",
-                borderColor: isActive ? "#007b8b" : "rgba(0,0,0,0.23)",
-                boxShadow: isActive ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+                borderColor: isActive ? TEAL : "var(--omx-border)",
+                boxShadow: isActive ? "none" : "0 1px 3px var(--omx-shadow-soft)",
                 cursor: "pointer",
                 userSelect: "none",
                 flexShrink: 0,
@@ -180,7 +212,7 @@ export function CategoryChips() {
                   mr: "-4px",
                 },
                 "&&:hover": {
-                  bgcolor: isActive ? "#006475" : "grey.300",
+                  bgcolor: isActive ? "var(--omx-teal-hover)" : "grey.300",
                 },
               }}
             />

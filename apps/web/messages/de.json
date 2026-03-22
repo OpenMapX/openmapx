@@ -57,7 +57,10 @@
     "resetBearingAriaLabel": "Ausrichtung nach Norden zurücksetzen",
     "account": "Konto",
     "signIn": "Anmelden",
-    "language": "Sprache"
+    "language": "Sprache",
+    "themeLight": "Hellmodus (Klick für Dunkelmodus)",
+    "themeDark": "Dunkelmodus (Klick für Systemmodus)",
+    "themeSystem": "Systemmodus (Klick für Hellmodus)"
   },
   "footer": {
     "legalNotice": "Impressum",
@@ -419,6 +422,11 @@
     "language": "Sprache",
     "accountSettings": "Kontoeinstellungen",
     "signOut": "Abmelden",
+    "theme": "Design",
+    "themeLight": "Hell",
+    "themeDark": "Dunkel",
+    "themeSystem": "System",
+    "appearance": "Erscheinungsbild",
     "profile": "Profil",
     "name": "Name",
     "saveChanges": "Änderungen speichern",
@@ -609,6 +617,10 @@
     "tips": "Tipps und Tricks",
     "help": "Hilfe",
     "language": "Sprache",
+    "theme": "Design",
+    "themeLight": "Hell",
+    "themeDark": "Dunkel",
+    "themeSystem": "System",
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
     "imprint": "Impressum"

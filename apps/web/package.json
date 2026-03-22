@@ -30,6 +30,7 @@
     "framer-motion": "^12.38.0",
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "^5.21.0",
+    "maplibre-theme": "^1.0.0",
     "next": "16.2.1",
     "next-intl": "^4.8.3",
     "qrcode": "^1.5.4",

@@ -13,21 +13,21 @@ const REMARK_CONFIG: Record<
 > = {
   info: {
     icon: InfoOutlinedIcon,
-    bg: "#F5F5F5",
-    border: "#BDBDBD",
-    color: "#546e7a",
+    bg: "var(--omx-hover-bg)",
+    border: "var(--omx-border)",
+    color: "var(--omx-overlay-text)",
   },
   warning: {
     icon: ReportProblemOutlinedIcon,
-    bg: "#FFF8E1",
-    border: "#FFE082",
-    color: "#E65100",
+    bg: "var(--mui-palette-warning-light, #FFF8E1)",
+    border: "var(--mui-palette-warning-main, #FFE082)",
+    color: "var(--mui-palette-warning-dark, #E65100)",
   },
   cancellation: {
     icon: CancelOutlinedIcon,
-    bg: "#FFEBEE",
-    border: "#EF9A9A",
-    color: "#B71C1C",
+    bg: "var(--mui-palette-error-light, #FFEBEE)",
+    border: "var(--mui-palette-error-main, #EF9A9A)",
+    color: "var(--mui-palette-error-dark, #B71C1C)",
   },
 };
 

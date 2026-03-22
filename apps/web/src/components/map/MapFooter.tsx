@@ -18,11 +18,11 @@ export function MapFooter() {
         display: "flex",
         gap: "0.6em",
         pointerEvents: "auto",
-        bgcolor: "rgba(255, 255, 255, 0.5)",
+        bgcolor: "color-mix(in srgb, var(--omx-overlay-bg) 50%, transparent)",
         px: "5px",
         font: '12px/20px "Helvetica Neue", Arial, Helvetica, sans-serif',
         "& a": {
-          color: "rgba(0, 0, 0, 0.75)",
+          color: "text.secondary",
           textDecoration: "none",
           font: "inherit",
           "&:hover": { textDecoration: "underline" },

@@ -3,7 +3,7 @@
 import { useTransitStore } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE } from "@/lib/theme";
+import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 import {
   findVectorLineReference,
   getFirstSymbolLayerId,
@@ -23,11 +23,12 @@ const TRANSIT_LAYER_HINTS = [
 ] as const;
 
 export function TransitLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const showTransit = useTransitStore((s) => s.panelOpen && s.layerVisible);
   useLayerReanchor(TRANSIT_LAYER_ID, showTransit);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -50,7 +51,7 @@ export function TransitLayer() {
                   "match",
                   ["get", "class"],
                   "subway",
-                  PRIMARY_BLUE,
+                  PRIMARY_BLUE_HEX,
                   "tram",
                   "#0F9D58",
                   "rail",
@@ -86,7 +87,7 @@ export function TransitLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, mapRef, showTransit]);
+  }, [mapReady, mapRef, styleVersion, showTransit]);
 
   return null;
 }

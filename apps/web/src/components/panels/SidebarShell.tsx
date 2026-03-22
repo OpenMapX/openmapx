@@ -34,7 +34,7 @@ export function SidebarShell({ children, contentSx }: SidebarShellProps) {
             maxHeight: { xs: "60dvh", sm: "none" },
             overflowY: "auto",
             borderRadius: { xs: "16px 16px 0 0", sm: 0 },
-            boxShadow: { xs: 6, sm: "4px 0 12px rgba(0,0,0,0.15)" },
+            boxShadow: { xs: 6, sm: "4px 0 12px var(--omx-shadow-soft)" },
             zIndex: 9,
             transform: { sm: collapsed ? "translateX(-100%)" : "translateX(0)" },
             transition: { sm: "transform 0.25s ease" },

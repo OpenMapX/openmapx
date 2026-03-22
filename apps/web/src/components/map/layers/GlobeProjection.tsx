@@ -1,5 +1,6 @@
 "use client";
 
+import { useColorScheme } from "@mui/material/styles";
 import { useLayerStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
@@ -7,11 +8,21 @@ import { useMap } from "@/lib/MapContext";
 
 type SkySpecification = Parameters<maplibregl.Map["setSky"]>[0];
 
-const DEFAULT_SKY: SkySpecification = {
+const LIGHT_SKY: SkySpecification = {
   "sky-color": "#88C6FC",
   "horizon-color": "#d6e8f7",
   "fog-color": "#ffffff",
   "sky-horizon-blend": 0.5,
+  "horizon-fog-blend": 0.4,
+  "fog-ground-blend": 0.1,
+  "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 5, 0.6, 8, 0.25, 11, 0],
+};
+
+const DARK_SKY: SkySpecification = {
+  "sky-color": "#0a0a1a",
+  "horizon-color": "#101828",
+  "fog-color": "#0a0a0a",
+  "sky-horizon-blend": 0.6,
   "horizon-fog-blend": 0.4,
   "fog-ground-blend": 0.1,
   "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 5, 0.6, 8, 0.25, 11, 0],
@@ -27,7 +38,8 @@ const SATELLITE_SKY: SkySpecification = {
   "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.95, 5, 0.95, 8, 0],
 };
 
-const DEFAULT_BG = "#d6e8f7";
+const LIGHT_BG = "#d6e8f7";
+const DARK_BG = "#101828";
 
 const ZOOM_OUT_THRESHOLD = 11;
 const ZOOM_OUT_TARGET = 3;
@@ -40,8 +52,9 @@ const TILE = 512;
 const PARALLAX_NEAR = 5;
 const PARALLAX_FAR = 8;
 
-function getSky(activeLayer: string): SkySpecification {
-  return activeLayer === "satellite" ? SATELLITE_SKY : DEFAULT_SKY;
+function getSky(activeLayer: string, isDark: boolean): SkySpecification {
+  if (activeLayer === "satellite") return SATELLITE_SKY;
+  return isDark ? DARK_SKY : LIGHT_SKY;
 }
 
 function makeRng(initialSeed: number) {
@@ -157,9 +170,11 @@ function clearBackground(container: HTMLElement) {
 }
 
 export function GlobeProjection() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const globeView = useLayerStore((s) => s.globeView);
   const activeLayer = useLayerStore((s) => s.activeLayer);
+  const { mode, systemMode } = useColorScheme();
+  const isDark = (mode === "system" ? systemMode : mode) === "dark";
   // Initialise to false so the zoom-out animation also triggers on page
   // reload when globeView was persisted — otherwise the map would start at
   // a high zoom (e.g. geolocation zoom 14) where the globe preset already
@@ -167,6 +182,7 @@ export function GlobeProjection() {
   const prevGlobeRef = useRef(false);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -183,14 +199,14 @@ export function GlobeProjection() {
         applySpaceBackground(container, c.lng, c.lat);
       } else {
         clearBackground(container);
-        container.style.background = DEFAULT_BG;
+        container.style.background = isDark ? DARK_BG : LIGHT_BG;
       }
     };
 
     const apply = () => {
       if (globeView) {
         map.setProjection({ type: "globe" });
-        map.setSky(getSky(activeLayer));
+        map.setSky(getSky(activeLayer, isDark));
       } else {
         map.setProjection({ type: "mercator" });
         map.setSky({ "atmosphere-blend": 0 });
@@ -198,20 +214,15 @@ export function GlobeProjection() {
       applyBg();
     };
 
-    // Initial application: the map's "load" event guarantees the style is
-    // ready, so apply() can be called without a guard from that callback.
-    // When already loaded we can apply directly.
+    // Apply immediately only when the style is fully loaded. Otherwise wait
+    // for `style.load` — this avoids racing with setStyle() during theme
+    // swaps where setStyle() would reset the projection right after we set it.
     if (map.isStyleLoaded()) {
       apply();
-    } else {
-      map.once("load", apply);
     }
 
-    // Re-apply after style reloads (e.g. base-layer switch resets projection).
-    const onStyleData = () => {
-      if (map.isStyleLoaded()) apply();
-    };
-    map.on("styledata", onStyleData);
+    const onStyleLoad = () => apply();
+    map.on("style.load", onStyleLoad);
 
     // Parallax: shift the starfield as the user rotates the globe
     const onMove = isSatelliteGlobe
@@ -223,15 +234,15 @@ export function GlobeProjection() {
     if (onMove) map.on("move", onMove);
 
     return () => {
-      map.off("load", apply);
-      map.off("styledata", onStyleData);
+      map.off("style.load", onStyleLoad);
       if (onMove) map.off("move", onMove);
       clearBackground(container);
     };
-  }, [globeView, activeLayer, mapReady, mapRef]);
+  }, [globeView, activeLayer, isDark, mapReady, styleVersion, mapRef]);
 
   // Zoom out to showcase the globe when toggling on from a zoomed-in view
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -247,7 +258,7 @@ export function GlobeProjection() {
     } else {
       map.easeTo({ zoom: ZOOM_OUT_TARGET, duration: ZOOM_OUT_DURATION });
     }
-  }, [globeView, mapReady, mapRef]);
+  }, [globeView, mapReady, styleVersion, mapRef]);
 
   return null;
 }

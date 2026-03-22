@@ -76,16 +76,16 @@ function PickerButton({
         px: 1.5,
         py: 0.75,
         border: "1px solid",
-        borderColor: selected ? TEAL : "rgba(0,0,0,0.23)",
+        borderColor: selected ? TEAL : "var(--omx-border)",
         borderRadius: "20px",
-        bgcolor: selected ? "rgba(0,123,139,0.08)" : "transparent",
+        bgcolor: selected ? "var(--omx-hover-bg)" : "transparent",
         color: selected ? TEAL : "text.primary",
         fontWeight: selected ? 600 : 400,
         fontSize: 13,
         cursor: "pointer",
         textAlign: "center",
         transition: "border-color 0.15s, background 0.15s",
-        "&:hover": { borderColor: TEAL, bgcolor: "rgba(0,123,139,0.06)" },
+        "&:hover": { borderColor: TEAL, bgcolor: "var(--omx-hover-bg)" },
       }}
     >
       {label}
@@ -152,13 +152,13 @@ export function CategoryFilterBar() {
             fontSize: 13,
             bgcolor: isFiltered ? TEAL : "background.paper",
             color: isFiltered ? "#fff" : "text.primary",
-            borderColor: isFiltered ? TEAL : "rgba(0,0,0,0.23)",
-            boxShadow: isFiltered ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+            borderColor: isFiltered ? TEAL : "var(--omx-border)",
+            boxShadow: isFiltered ? "none" : "0 1px 3px var(--omx-shadow-soft)",
             cursor: "pointer",
             userSelect: "none",
             "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
             "& .MuiChip-label": { pr: "10px" },
-            "&&:hover": { bgcolor: isFiltered ? "#006475" : "grey.300" },
+            "&&:hover": { bgcolor: isFiltered ? "var(--omx-teal-hover)" : "grey.300" },
           }}
         />
       </Box>
@@ -232,13 +232,13 @@ export function CategoryFilterBar() {
           fontSize: 13,
           bgcolor: isFiltered ? TEAL : "background.paper",
           color: isFiltered ? "#fff" : "text.primary",
-          borderColor: isFiltered ? TEAL : "rgba(0,0,0,0.23)",
-          boxShadow: isFiltered ? "none" : "0 1px 3px rgba(0,0,0,0.15)",
+          borderColor: isFiltered ? TEAL : "var(--omx-border)",
+          boxShadow: isFiltered ? "none" : "0 1px 3px var(--omx-shadow-soft)",
           cursor: "pointer",
           userSelect: "none",
           "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
           "& .MuiChip-label": { pr: "10px" },
-          "&&:hover": { bgcolor: isFiltered ? "#006475" : "grey.300" },
+          "&&:hover": { bgcolor: isFiltered ? "var(--omx-teal-hover)" : "grey.300" },
         }}
       />
 

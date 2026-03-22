@@ -15,11 +15,12 @@ const TRAFFIC_SOURCE_ID = "openmapx-traffic-source";
 const TRAFFIC_LAYER_ID = "openmapx-traffic-layer";
 
 export function TrafficLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
   useLayerReanchor(TRAFFIC_LAYER_ID, showTraffic);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -65,7 +66,7 @@ export function TrafficLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, mapRef, showTraffic]);
+  }, [mapReady, styleVersion, mapRef, showTraffic]);
 
   return null;
 }

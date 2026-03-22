@@ -30,10 +30,11 @@ export function RasterBaseLayer({
   attribution,
   paint,
 }: RasterBaseLayerProps) {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const activeLayer = useLayerStore((s) => s.activeLayer);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -78,6 +79,7 @@ export function RasterBaseLayer({
     activeLayer,
     activeWhen,
     mapReady,
+    styleVersion,
     mapRef,
     sourceId,
     layerId,

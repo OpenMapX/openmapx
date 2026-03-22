@@ -165,6 +165,9 @@ importers:
       maplibre-gl:
         specifier: ^5.21.0
         version: 5.21.0
+      maplibre-theme:
+        specifier: ^1.0.0
+        version: 1.0.0
       next:
         specifier: 16.2.1
         version: 16.2.1(@opentelemetry/api@1.9.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -242,7 +245,7 @@ importers:
         specifier: ^19.2.14
         version: 19.2.14
       typescript:
-        specifier: 5.9.3
+        specifier: ^5.9.3
         version: 5.9.3
 
   packages/map-styles: {}
@@ -3478,6 +3481,9 @@ packages:
   maplibre-gl@5.21.0:
     resolution: {integrity: sha512-n0v4J/Ge0EG8ix/z3TY3ragtJYMqzbtSnj1riOC0OwQbzwp0lUF2maS1ve1z8HhitQCKtZZiZJhb8to36aMMfQ==}
     engines: {node: '>=16.14.0', npm: '>=8.1.0'}
+
+  maplibre-theme@1.0.0:
+    resolution: {integrity: sha512-SDoaMwQNOZReiQvrw2FVR0WsImpEqyg6Q7ps8ky4oKz+qEpHkquddozIWPJch/q1pWkrLOwwB20OZBx1aiQlgA==}
 
   martinez-polygon-clipping@0.7.4:
     resolution: {integrity: sha512-jBEwrKtA0jTagUZj2bnmb4Yg2s4KnJGRePStgI7bAVjtcipKiF39R4LZ2V/UT61jMYWrTcBhPazexeqd6JAVtw==}
@@ -7793,6 +7799,8 @@ snapshots:
       potpack: 2.1.0
       quickselect: 3.0.0
       tinyqueue: 3.0.0
+
+  maplibre-theme@1.0.0: {}
 
   martinez-polygon-clipping@0.7.4:
     dependencies:

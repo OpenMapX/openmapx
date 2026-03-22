@@ -186,7 +186,7 @@ describe("GET /transit/stops", () => {
   it("returns 400 without bbox params", async () => {
     const res = await app.inject({ method: "GET", url: "/transit/stops" });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/bbox/i);
+    expect(res.json().error).toMatch(/required property 'sw_lat'/i);
   });
 
   it("returns 400 with invalid bbox (sw_lat >= ne_lat)", async () => {
@@ -281,7 +281,7 @@ describe("GET /transit/stops/search", () => {
   it("returns 400 when q param missing", async () => {
     const res = await app.inject({ method: "GET", url: "/transit/stops/search" });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/at least 2/i);
+    expect(res.json().error).toMatch(/required property 'q'/i);
   });
 
   it("returns 400 when q param is too short (< 2 chars)", async () => {
@@ -638,7 +638,7 @@ describe("GET /transit/alerts", () => {
   it("returns 400 without bbox", async () => {
     const res = await app.inject({ method: "GET", url: "/transit/alerts" });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/bbox/i);
+    expect(res.json().error).toMatch(/required property 'sw_lat'/i);
   });
 
   it("returns 200 with valid bbox", async () => {
@@ -816,7 +816,7 @@ describe("GET /transit/plan", () => {
   it("returns 400 without required coords", async () => {
     const res = await app.inject({ method: "GET", url: "/transit/plan" });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/coordinate/i);
+    expect(res.json().error).toMatch(/required property 'from_lat'/i);
   });
 
   it("returns 400 with partial coords", async () => {

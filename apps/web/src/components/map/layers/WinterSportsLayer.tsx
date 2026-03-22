@@ -108,7 +108,7 @@ function liftPopupHtml(props: Record<string, string | number | boolean>): string
 }
 
 export function WinterSportsLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
   const setLoading = useWinterSportsStore((s) => s.setLoading);
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
@@ -207,6 +207,7 @@ export function WinterSportsLayer() {
 
   // Manage layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -390,12 +391,13 @@ export function WinterSportsLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, layerVisible, fetchFeatures]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, fetchFeatures]);
 
   // Refetch on move
   const debouncedFetch = useDebouncedCallback(() => fetchFeatures(), 800);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -403,10 +405,11 @@ export function WinterSportsLayer() {
     return () => {
       map.off("moveend", debouncedFetch);
     };
-  }, [mapReady, mapRef, layerVisible, debouncedFetch]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, debouncedFetch]);
 
   // Click + hover handlers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -471,7 +474,7 @@ export function WinterSportsLayer() {
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
     };
-  }, [mapReady, mapRef, layerVisible, selectFeature]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, selectFeature]);
 
   return null;
 }

@@ -129,15 +129,19 @@ describe("getLinkedStops", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("calls fetchStopsByNameRaw with name and limit 30", async () => {
+  it("calls fetchStopsByNameRaw for each query variant with limit 30", async () => {
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([]);
 
     await getLinkedStops(52.525, 13.369, "Berlin Hbf");
 
-    expect(fetchStopsByNameRaw).toHaveBeenCalledTimes(1);
-    const [name, limit] = vi.mocked(fetchStopsByNameRaw).mock.calls[0];
-    expect(name).toBe("Berlin Hbf");
-    expect(limit).toBe(30);
+    // "Berlin Hbf" expands to ["Berlin Hbf", "Berlin Hauptbahnhof"] via getQueryVariants
+    expect(fetchStopsByNameRaw).toHaveBeenCalledTimes(2);
+    const [name1, limit1] = vi.mocked(fetchStopsByNameRaw).mock.calls[0];
+    expect(name1).toBe("Berlin Hbf");
+    expect(limit1).toBe(30);
+    const [name2, limit2] = vi.mocked(fetchStopsByNameRaw).mock.calls[1];
+    expect(name2).toBe("Berlin Hauptbahnhof");
+    expect(limit2).toBe(30);
   });
 });
 

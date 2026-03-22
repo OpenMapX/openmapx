@@ -267,7 +267,7 @@ export function PlaceTransitSection({
           textTransform: "none",
           borderColor: TEAL,
           color: TEAL,
-          "&:hover": { borderColor: "#005f6b", bgcolor: "rgba(0,123,139,0.04)" },
+          "&:hover": { borderColor: "var(--omx-teal-hover)", bgcolor: "var(--omx-hover-bg)" },
         }}
       >
         {t("viewDeparturesArrivals")}

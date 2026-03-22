@@ -31,7 +31,7 @@ function computeOpacity(index: number, total: number): number {
 }
 
 export function TravelTimeLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const isActive = useTravelTimeStore((s) => s.isActive);
   const origin = useTravelTimeStore((s) => s.origin);
   const mode = useTravelTimeStore((s) => s.mode);
@@ -57,6 +57,7 @@ export function TravelTimeLayer() {
 
   // Set up sources and layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -131,10 +132,11 @@ export function TravelTimeLayer() {
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       if (map.getSource(ORIGIN_SOURCE)) map.removeSource(ORIGIN_SOURCE);
     };
-  }, [mapRef, mapReady, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive]);
 
   // Update isochrone polygons
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -163,10 +165,11 @@ export function TravelTimeLayer() {
       }));
 
     src.setData({ type: "FeatureCollection", features });
-  }, [mapRef, mapReady, isActive, isochroneData]);
+  }, [mapRef, mapReady, styleVersion, isActive, isochroneData]);
 
   // Update origin marker
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -189,10 +192,11 @@ export function TravelTimeLayer() {
         },
       ],
     });
-  }, [mapRef, mapReady, isActive, origin, mode]);
+  }, [mapRef, mapReady, styleVersion, isActive, origin, mode]);
 
   // Click handler to set origin
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -205,10 +209,11 @@ export function TravelTimeLayer() {
     return () => {
       map.off("click", onClick);
     };
-  }, [mapRef, mapReady, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive]);
 
   // Origin marker drag
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -253,7 +258,7 @@ export function TravelTimeLayer() {
         draggingRef.current = false;
       }
     };
-  }, [mapRef, mapReady, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive]);
 
   // Cursor management
   useEffect(() => {

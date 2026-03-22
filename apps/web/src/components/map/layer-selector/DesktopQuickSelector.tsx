@@ -247,7 +247,7 @@ export function DesktopQuickSelector({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              bgcolor: "rgba(60,64,67,0.06)",
+              bgcolor: "var(--omx-hover-bg)",
               mb: 0.3,
               color: "text.secondary",
             }}

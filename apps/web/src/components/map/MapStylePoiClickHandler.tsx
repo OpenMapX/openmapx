@@ -40,13 +40,14 @@ function getPoiLayerIds(map: import("maplibre-gl").Map): string[] {
  * Nominatim, followed by enrichment.
  */
 export function MapStylePoiClickHandler() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const { setSelectedPlace } = usePlaceStore();
   const poiLayerIdsRef = useRef<string[]>([]);
 
   // Discover POI layers from the style and keep the shared interactive-layer
   // registry in sync so MapClickHandler doesn't clear the selection on click.
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -79,10 +80,11 @@ export function MapStylePoiClickHandler() {
       for (const id of registeredIds) INTERACTIVE_LAYER_IDS.delete(id);
       poiLayerIdsRef.current = [];
     };
-  }, [mapRef, mapReady]);
+  }, [mapRef, mapReady, styleVersion]);
 
   // Click handler: open the place details panel for the topmost named POI.
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -126,10 +128,11 @@ export function MapStylePoiClickHandler() {
     return () => {
       map.off("click", onClick);
     };
-  }, [mapRef, mapReady, setSelectedPlace]);
+  }, [mapRef, mapReady, styleVersion, setSelectedPlace]);
 
   // Cursor: show pointer when hovering over any named style POI.
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -154,7 +157,7 @@ export function MapStylePoiClickHandler() {
       map.off("mousemove", onMouseMove);
       map.off("mouseleave", onMouseLeave);
     };
-  }, [mapRef, mapReady]);
+  }, [mapRef, mapReady, styleVersion]);
 
   return null;
 }

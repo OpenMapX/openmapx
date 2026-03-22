@@ -173,7 +173,7 @@ function buildGeoJSON(
 }
 
 export function MeasurementLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const isActive = useMeasurementStore((s) => s.isActive);
   const mode = useMeasurementStore((s) => s.mode);
   const points = useMeasurementStore((s) => s.points);
@@ -194,6 +194,7 @@ export function MeasurementLayer() {
 
   // Set up sources and layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -332,10 +333,11 @@ export function MeasurementLayer() {
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       if (map.getSource(RUBBERBAND_SOURCE)) map.removeSource(RUBBERBAND_SOURCE);
     };
-  }, [mapRef, mapReady, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive]);
 
   // Update GeoJSON data when points/mode/units change
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -358,7 +360,7 @@ export function MeasurementLayer() {
     ];
 
     src.setData({ type: "FeatureCollection", features: allFeatures });
-  }, [mapRef, mapReady, isActive, points, mode, unitSystem, isFinalized]);
+  }, [mapRef, mapReady, styleVersion, isActive, points, mode, unitSystem, isFinalized]);
 
   // Rubber band line following cursor
   const updateRubberBand = useCallback(
@@ -399,6 +401,7 @@ export function MeasurementLayer() {
 
   // Map click handler for adding points
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -442,10 +445,11 @@ export function MeasurementLayer() {
       map.off("click", onClick);
       map.off("dblclick", onDblClick);
     };
-  }, [mapRef, mapReady, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive]);
 
   // Mousemove handler for rubber band + cursor
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -470,10 +474,11 @@ export function MeasurementLayer() {
       map.off("mousemove", onMouseMove);
       map.getCanvas().style.cursor = "";
     };
-  }, [mapRef, mapReady, isActive, updateRubberBand]);
+  }, [mapRef, mapReady, styleVersion, isActive, updateRubberBand]);
 
   // Vertex dragging
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !isActive) return;
 
@@ -521,7 +526,7 @@ export function MeasurementLayer() {
         map.dragPan.enable();
       }
     };
-  }, [mapRef, mapReady, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -592,6 +597,7 @@ export function MeasurementLayer() {
 
   // Suppress double-tap zoom on mobile while active
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
     if (isActive) {
@@ -602,7 +608,7 @@ export function MeasurementLayer() {
     return () => {
       map.doubleClickZoom.enable();
     };
-  }, [mapRef, mapReady, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive]);
 
   return null;
 }

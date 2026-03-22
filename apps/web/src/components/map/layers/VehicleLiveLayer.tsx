@@ -3,18 +3,19 @@
 import { MODE_COLORS, usePlaceStore, useRouteLive, useTransitRoute } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE } from "@/lib/theme";
+import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 
 const SOURCE_ID = "vehicle-live-source";
 const LAYER_ID = "vehicle-live-layer";
 
 export function VehicleLiveLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const activeRouteId = usePlaceStore((s) => s.activeRouteId);
   const { data: liveData } = useRouteLive(activeRouteId);
   const { data: route } = useTransitRoute(activeRouteId);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -32,7 +33,7 @@ export function VehicleLiveLayer() {
       ? `#${route.color.replace("#", "")}`
       : route?.mode
         ? MODE_COLORS[route.mode]
-        : PRIMARY_BLUE;
+        : PRIMARY_BLUE_HEX;
 
     const geojson = {
       type: "FeatureCollection" as const,
@@ -65,7 +66,7 @@ export function VehicleLiveLayer() {
     });
 
     return cleanup;
-  }, [mapRef, mapReady, activeRouteId, liveData, route]);
+  }, [mapRef, mapReady, styleVersion, activeRouteId, liveData, route]);
 
   return null;
 }

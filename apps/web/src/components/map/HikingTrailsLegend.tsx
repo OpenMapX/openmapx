@@ -109,8 +109,8 @@ export function HikingTrailsLegend() {
                 height: 10,
                 borderRadius: "50%",
                 bgcolor: s.color,
-                border: "1.5px solid #fff",
-                boxShadow: "0 0 0 0.5px rgba(0,0,0,0.1)",
+                border: "1.5px solid var(--omx-overlay-bg)",
+                boxShadow: "0 0 0 0.5px var(--omx-border-light)",
                 flexShrink: 0,
               }}
             />

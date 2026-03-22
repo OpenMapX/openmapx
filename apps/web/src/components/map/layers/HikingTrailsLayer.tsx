@@ -10,12 +10,13 @@ const RASTER_SOURCE_ID = "openmapx-hiking-trails-source";
 const RASTER_LAYER_ID = "openmapx-hiking-trails-layer";
 
 export function HikingTrailsLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useOverlayExclusion("hiking", layerVisible);
   useLayerReanchor(RASTER_LAYER_ID, layerVisible);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -57,7 +58,7 @@ export function HikingTrailsLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible]);
 
   return null;
 }

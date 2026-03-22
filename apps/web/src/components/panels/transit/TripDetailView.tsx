@@ -159,7 +159,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 textTransform: "none",
                 borderColor: TEAL,
                 color: TEAL,
-                "&:hover": { borderColor: "#005f6b", bgcolor: "rgba(0,123,139,0.04)" },
+                "&:hover": { borderColor: "var(--omx-teal-hover)", bgcolor: "var(--omx-hover-bg)" },
               }}
             >
               {tc("retry")}
@@ -219,7 +219,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                         ? "error.main"
                         : isDeparted
                           ? "text.disabled"
-                          : "#fff",
+                          : "background.paper",
                       border: `2.5px solid ${isCanceledStop ? "#f44336" : isDeparted ? "#9e9e9e" : lineColor}`,
                       zIndex: 1,
                     }}

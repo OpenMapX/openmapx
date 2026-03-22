@@ -76,7 +76,7 @@ function confidenceLabel(conf: string): string {
 }
 
 export function WildfireLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useWildfireStore((s) => s.layerVisible);
   const dayRange = useWildfireStore((s) => s.dayRange);
   const source = useWildfireStore((s) => s.source);
@@ -116,6 +116,7 @@ export function WildfireLayer() {
 
   // Layer management
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -183,10 +184,11 @@ export function WildfireLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, layerVisible, fetchWildfires]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, fetchWildfires]);
 
   // Heatmap toggle
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible || !map.getSource(SOURCE_ID)) return;
 
@@ -262,7 +264,7 @@ export function WildfireLayer() {
     } catch {
       // Layer or source may not be ready
     }
-  }, [mapRef, mapReady, layerVisible, showHeatmap]);
+  }, [mapRef, mapReady, styleVersion, layerVisible, showHeatmap]);
 
   // Auto-refresh
   useEffect(() => {
@@ -283,6 +285,7 @@ export function WildfireLayer() {
 
   // Click popup + cursor
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -345,7 +348,7 @@ export function WildfireLayer() {
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
     };
-  }, [mapReady, mapRef, layerVisible, t]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, t]);
 
   return null;
 }

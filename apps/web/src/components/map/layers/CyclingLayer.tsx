@@ -58,7 +58,7 @@ function findPoiSource(map: maplibregl.Map): string | null {
 }
 
 export function CyclingLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useCyclingStore((s) => s.layerVisible);
   useOverlayExclusion("cycling", layerVisible);
   useLayerReanchor(REANCHOR_IDS, layerVisible);
@@ -94,6 +94,7 @@ export function CyclingLayer() {
   }, [directionsMode, directionsOpen]);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -360,10 +361,11 @@ export function CyclingLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible]);
 
   // Cursor interactivity for POI layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -386,7 +388,7 @@ export function CyclingLayer() {
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible]);
 
   return null;
 }

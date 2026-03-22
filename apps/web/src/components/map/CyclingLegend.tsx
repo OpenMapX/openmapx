@@ -110,8 +110,8 @@ export function CyclingLegend() {
                 height: 10,
                 borderRadius: "50%",
                 bgcolor: CYCLING_COLORS[item.colorKey],
-                border: "1.5px solid #ffffff",
-                boxShadow: "0 0 0 0.5px rgba(0,0,0,0.1)",
+                border: "1.5px solid var(--omx-overlay-bg)",
+                boxShadow: "0 0 0 0.5px var(--omx-border-light)",
                 flexShrink: 0,
               }}
             />

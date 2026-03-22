@@ -711,7 +711,7 @@ export function DirectionsPanelContent() {
               right: 0,
               bgcolor: "background.paper",
               zIndex: 2,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+              boxShadow: "0 4px 12px var(--omx-shadow-soft)",
             }}
           >
             <AutocompleteDropdown

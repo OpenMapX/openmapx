@@ -121,7 +121,7 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
 }
 
 export function DataSourceLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const filters = useDataSourceStore((s) => s.filters);
   const selectItem = useDataSourceStore((s) => s.selectItem);
@@ -271,6 +271,7 @@ export function DataSourceLayer() {
   }, [mapRef, setViewport, setSearchBbox, setMapMoved]);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !activeSource) return;
 
@@ -280,10 +281,11 @@ export function DataSourceLayer() {
     return () => {
       map.off("moveend", handleMoveEnd);
     };
-  }, [mapReady, mapRef, activeSource, handleMoveEnd]);
+  }, [mapReady, mapRef, styleVersion, activeSource, handleMoveEnd]);
 
   // Clean up layers when activeSource changes
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -292,10 +294,11 @@ export function DataSourceLayer() {
       removeLayers(map, prevSource);
     }
     prevSourceRef.current = activeSource;
-  }, [activeSource, mapReady, mapRef]);
+  }, [activeSource, mapReady, styleVersion, mapRef]);
 
   // Sync GeoJSON source + layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -430,12 +433,13 @@ export function DataSourceLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [activeSource, activeMeta, filteredResults, viewportZoom, mapReady, mapRef]);
+  }, [activeSource, activeMeta, filteredResults, viewportZoom, mapReady, styleVersion, mapRef]);
 
   const { setSelectedPlace } = usePlaceStore();
 
   // Click + cursor handlers — bind to both markers and labels layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !activeSource) return;
 
@@ -496,7 +500,16 @@ export function DataSourceLayer() {
       map.getCanvasContainer().style.cursor = "";
       setHoveredItemId(null);
     };
-  }, [activeSource, activeMeta, mapReady, mapRef, selectItem, setSelectedPlace, setHoveredItemId]);
+  }, [
+    activeSource,
+    activeMeta,
+    mapReady,
+    styleVersion,
+    mapRef,
+    selectItem,
+    setSelectedPlace,
+    setHoveredItemId,
+  ]);
 
   // Cleanup on unmount
   useEffect(() => {

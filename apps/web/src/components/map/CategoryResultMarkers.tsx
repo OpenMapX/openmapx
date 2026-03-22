@@ -122,7 +122,7 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 }
 
 export function CategoryResultMarkers() {
-  const { mapRef, mapReady, flyTo } = useMap();
+  const { mapRef, mapReady, styleVersion, flyTo } = useMap();
   const { activeCategory, searchBbox, hoveredCategoryPlaceId, setHoveredCategoryPlaceId } =
     useCategorySearchStore();
   const { setSelectedPlace } = usePlaceStore();
@@ -136,6 +136,7 @@ export function CategoryResultMarkers() {
 
   // Sync GeoJSON source + layers
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -277,7 +278,7 @@ export function CategoryResultMarkers() {
     return () => {
       map.off("styledata", sync);
     };
-  }, [results, activeCategory, isTransitCategory, transitStops, mapReady, mapRef]);
+  }, [results, activeCategory, isTransitCategory, transitStops, mapReady, styleVersion, mapRef]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -301,6 +302,7 @@ export function CategoryResultMarkers() {
   const clickHandlerRef = useRef<((e: MapMouseEvent) => void) | null>(null);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -395,7 +397,7 @@ export function CategoryResultMarkers() {
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, mapRef, setSelectedPlace, flyTo, setHoveredCategoryPlaceId]);
+  }, [mapReady, styleVersion, mapRef, setSelectedPlace, flyTo, setHoveredCategoryPlaceId]);
 
   return null;
 }

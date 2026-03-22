@@ -1,5 +1,6 @@
 "use client";
 
+import { useColorScheme } from "@mui/material/styles";
 import type { LngLat } from "@openmapx/core";
 import { useMapStore } from "@openmapx/core";
 import { useLocale } from "next-intl";
@@ -9,10 +10,14 @@ import { maptilerStyleUrl } from "@/lib/map";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { mapRef, mapReady, notifyMapReady } = useMap();
+  const { mapRef, mapReady, notifyMapReady, notifyStyleReload } = useMap();
   const locale = useLocale();
+  const { mode, systemMode } = useColorScheme();
+  const resolvedMode = mode === "system" ? systemMode : mode;
+  const mapStyle = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mapStyle intentionally excluded — style changes handled by the style-swap effect below
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -21,7 +26,7 @@ export function MapCanvas() {
     // be destroyed and re-created every time the user pans or zooms.
     const { center, zoom, bearing, pitch } = useMapStore.getState();
 
-    const styleUrl = maptilerStyleUrl();
+    const styleUrl = maptilerStyleUrl(mapStyle);
     let destroyed = false;
 
     const initMap = (initialCenter: LngLat, initialZoom: number) => {
@@ -89,7 +94,22 @@ export function MapCanvas() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [mapRef, notifyMapReady, setBearing, setCenter, setPitch, setUserLocation, setZoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapRef, notifyMapReady, setBearing, setCenter, setPitch, setUserLocation, setZoom]);
+
+  // Swap map tile style when dark/light mode changes
+  const initialStyleRef = useRef(mapStyle);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    // Skip on first render — the map was already created with this style
+    if (mapStyle === initialStyleRef.current) return;
+    initialStyleRef.current = mapStyle;
+
+    const newUrl = maptilerStyleUrl(mapStyle);
+    map.setStyle(newUrl);
+    // After style loads, bump styleVersion so child layers re-attach
+    map.once("style.load", () => notifyStyleReload());
+  }, [mapStyle, mapRef, mapReady, notifyStyleReload]);
 
   // Update map label language when locale changes
   useEffect(() => {

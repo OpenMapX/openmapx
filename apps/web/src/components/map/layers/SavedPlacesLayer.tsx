@@ -9,7 +9,7 @@ const SOURCE_ID = "saved-places-source";
 const LAYER_ID = "saved-places-layer";
 
 export function SavedPlacesLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const isPanelOpen = useSidebarStore((s) => s.activeSidebarId === PANEL.SAVED);
   const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
   const { data: places } = useSavedListPlaces(
@@ -17,6 +17,7 @@ export function SavedPlacesLayer() {
   );
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !places || places.length === 0) return;
 
@@ -58,7 +59,7 @@ export function SavedPlacesLayer() {
         // Source may already be torn down during style change
       }
     };
-  }, [mapRef, mapReady, places]);
+  }, [mapRef, mapReady, styleVersion, places]);
 
   // Clean up when panel closes or list deselected
   useEffect(() => {

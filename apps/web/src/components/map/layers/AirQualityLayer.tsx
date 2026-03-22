@@ -80,7 +80,7 @@ function buildGeoJson(stations: AQStation[]) {
 }
 
 export function AirQualityLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const setLoading = useAirQualityStore((s) => s.setLoading);
   useOverlayExclusion("air-quality", layerVisible);
@@ -115,6 +115,7 @@ export function AirQualityLayer() {
   }, [mapRef, setLoading]);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -183,11 +184,12 @@ export function AirQualityLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, mapRef, layerVisible, fetchStations]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, fetchStations]);
 
   const debouncedFetch = useDebouncedCallback(() => fetchStations(), 800);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -195,10 +197,11 @@ export function AirQualityLayer() {
     return () => {
       map.off("moveend", debouncedFetch);
     };
-  }, [mapReady, mapRef, layerVisible, debouncedFetch]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, debouncedFetch]);
 
   // Click popup with station info + attribution
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -267,7 +270,7 @@ export function AirQualityLayer() {
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
     };
-  }, [mapReady, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible]);
 
   return null;
 }

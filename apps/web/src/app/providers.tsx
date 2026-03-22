@@ -4,26 +4,33 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { TEAL } from "@/lib/theme";
 
 const theme = createTheme({
-  palette: {
-    primary: {
-      main: TEAL,
-      contrastText: "#ffffff",
+  cssVariables: {
+    colorSchemeSelector: "class",
+    disableCssColorScheme: true,
+  },
+  colorSchemes: {
+    light: {
+      palette: {
+        primary: { main: "#007b8b", contrastText: "#ffffff" },
+        secondary: { main: "#34A853" },
+        background: { default: "#f5f5f5", paper: "#ffffff" },
+        text: { primary: "#202124", secondary: "#5f6368" },
+        error: { main: "#d32f2f" },
+      },
     },
-    secondary: {
-      main: "#34A853",
-    },
-    background: {
-      default: "#f5f5f5",
-      paper: "#ffffff",
-    },
-    text: {
-      primary: "#202124",
-      secondary: "#5f6368",
+    dark: {
+      palette: {
+        primary: { main: "#4DB6AC", contrastText: "#000000" },
+        secondary: { main: "#81C995" },
+        background: { default: "#1C1C1C", paper: "#2D2D2D" },
+        text: { primary: "#E8EAED", secondary: "#9AA0A6" },
+        error: { main: "#F28B82" },
+      },
     },
   },
+  defaultColorScheme: "light",
   typography: {
     fontFamily: '"Plus Jakarta Sans", Arial, sans-serif',
     fontSize: 14,

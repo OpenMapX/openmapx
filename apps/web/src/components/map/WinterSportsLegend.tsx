@@ -74,7 +74,7 @@ export function WinterSportsLegend() {
                 height: 16,
                 borderRadius: "50%",
                 bgcolor: d.color,
-                border: d.key === "freeride" ? "1px solid #ccc" : "none",
+                border: d.key === "freeride" ? "1px solid var(--omx-border)" : "none",
               }}
             />
             <Typography

@@ -703,7 +703,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     </Typography>
                     <Box
                       sx={{
-                        bgcolor: "grey.100",
+                        bgcolor: "action.hover",
                         borderRadius: 1,
                         p: 2,
                         fontFamily: "monospace",
@@ -872,7 +872,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                     </Typography>
                     <Box
                       sx={{
-                        bgcolor: "grey.100",
+                        bgcolor: "action.hover",
                         borderRadius: 1,
                         p: 2,
                         fontFamily: "monospace",

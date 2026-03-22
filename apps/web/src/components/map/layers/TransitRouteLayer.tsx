@@ -3,7 +3,7 @@
 import { MODE_COLORS, usePlaceStore, useRouteStops, useTransitRoute } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE } from "@/lib/theme";
+import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 
 const SOURCE_ID = "transit-route-detail-source";
 const LINE_LAYER_ID = "transit-route-detail-line";
@@ -12,12 +12,13 @@ const STOPS_LAYER_ID = "transit-route-detail-stops";
 const CURRENT_STOP_LAYER_ID = "transit-route-detail-current-stop";
 
 export function TransitRouteLayer() {
-  const { mapRef, mapReady, fitBounds } = useMap();
+  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const { selectedPlace, activeRouteId } = usePlaceStore();
   const { data: route } = useTransitRoute(activeRouteId);
   const { data: stops } = useRouteStops(activeRouteId);
 
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -38,7 +39,7 @@ export function TransitRouteLayer() {
       ? `#${route.color.replace("#", "")}`
       : route?.mode
         ? MODE_COLORS[route.mode]
-        : PRIMARY_BLUE;
+        : PRIMARY_BLUE_HEX;
 
     // Use route geometry from the API (road-snapped) when available,
     // otherwise fall back to connecting stop coordinates with straight lines.
@@ -136,7 +137,7 @@ export function TransitRouteLayer() {
     }
 
     return cleanup;
-  }, [mapRef, mapReady, activeRouteId, route, stops, selectedPlace?.id, fitBounds]);
+  }, [mapRef, mapReady, styleVersion, activeRouteId, route, stops, selectedPlace?.id, fitBounds]);
 
   return null;
 }

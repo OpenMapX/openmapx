@@ -132,7 +132,7 @@ function depthLabel(depth: number): string {
 }
 
 export function EarthquakeLayer() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
   const timeRange = useEarthquakeStore((s) => s.timeRange);
   const minMagnitude = useEarthquakeStore((s) => s.minMagnitude);
@@ -175,6 +175,7 @@ export function EarthquakeLayer() {
   // Layer management
   // biome-ignore lint/correctness/useExhaustiveDependencies: startPulseAnimation only captures stable refs
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -271,10 +272,11 @@ export function EarthquakeLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, layerVisible, fetchEarthquakes]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, fetchEarthquakes]);
 
   // When colorMode changes, rebuild circle layer color expression
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible || !map.getLayer(CIRCLE_LAYER_ID)) return;
 
@@ -283,7 +285,7 @@ export function EarthquakeLayer() {
     } catch {
       // Layer may not exist yet
     }
-  }, [mapRef, mapReady, layerVisible, colorMode]);
+  }, [mapRef, mapReady, styleVersion, layerVisible, colorMode]);
 
   function startPulseAnimation(map: maplibregl.Map) {
     if (pulseAnimRef.current !== null) {
@@ -318,6 +320,7 @@ export function EarthquakeLayer() {
 
   // Heatmap toggle
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible || !map.getSource(SOURCE_ID)) return;
 
@@ -393,7 +396,7 @@ export function EarthquakeLayer() {
     } catch {
       // Layer or source may not be ready
     }
-  }, [mapRef, mapReady, layerVisible, showHeatmap]);
+  }, [mapRef, mapReady, styleVersion, layerVisible, showHeatmap]);
 
   // Auto-refresh
   useEffect(() => {
@@ -415,6 +418,7 @@ export function EarthquakeLayer() {
 
   // Click popup + cursor
   useEffect(() => {
+    void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
 
@@ -503,7 +507,7 @@ export function EarthquakeLayer() {
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
     };
-  }, [mapReady, mapRef, layerVisible, t]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, t]);
 
   // Cleanup pulse animation on unmount
   useEffect(() => {

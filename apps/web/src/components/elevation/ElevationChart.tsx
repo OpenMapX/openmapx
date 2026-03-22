@@ -262,7 +262,7 @@ export function ElevationChart({ points, mode, units }: ElevationChartProps) {
             strokeWidth={2}
             fill="url(#elevFill)"
             dot={false}
-            activeDot={{ r: 4, fill: "#007b8b", stroke: "#fff", strokeWidth: 2 }}
+            activeDot={{ r: 4, fill: "var(--omx-teal)", stroke: "#fff", strokeWidth: 2 }}
             isAnimationActive={false}
           />
         </AreaChart>
