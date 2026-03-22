@@ -28,7 +28,7 @@ const REANCHOR_IDS = [
 ] as const;
 
 function findTransportationSource(map: maplibregl.Map): string | null {
-  const layers = map.getStyle().layers;
+  const layers = map.getStyle()?.layers;
   if (!layers) return null;
 
   for (const layer of layers) {
@@ -43,7 +43,7 @@ function findTransportationSource(map: maplibregl.Map): string | null {
 }
 
 function findPoiSource(map: maplibregl.Map): string | null {
-  const layers = map.getStyle().layers;
+  const layers = map.getStyle()?.layers;
   if (!layers) return null;
 
   for (const layer of layers) {
@@ -99,8 +99,6 @@ export function CyclingLayer() {
     if (!map || !mapReady) return;
 
     const syncLayers = () => {
-      if (!map.isStyleLoaded()) return;
-
       const transportSource = findTransportationSource(map);
       const poiSource = findPoiSource(map);
 
@@ -346,18 +344,16 @@ export function CyclingLayer() {
         for (const layerId of Object.values(CYCLING_LAYER_IDS)) {
           moveLayerBeforeFirstSymbol(map, layerId);
         }
-        // Labels layer should be above other cycling layers, but it's a symbol
-        // so it naturally stays in the right position
-      }
-
-      // Toggle visibility
-      for (const layerId of Object.values(CYCLING_LAYER_IDS)) {
-        setLayerVisibility(map, layerId, layerVisible);
       }
     };
 
     syncLayers();
     map.on("styledata", syncLayers);
+
+    for (const layerId of Object.values(CYCLING_LAYER_IDS)) {
+      setLayerVisibility(map, layerId, layerVisible);
+    }
+
     return () => {
       map.off("styledata", syncLayers);
     };

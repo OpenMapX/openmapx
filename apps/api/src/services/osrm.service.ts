@@ -3,7 +3,7 @@
  * Default: public OSRM demo server. Override with OSRM_URL env var.
  */
 
-import type { DirectionsResult, Route, RouteStep, TravelMode } from "@openmapx/core";
+import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 
 const OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
 
@@ -42,6 +42,18 @@ interface OsrmResponse {
   routes: OsrmRoute[];
 }
 
+interface OsrmTripWaypoint {
+  waypoint_index: number;
+  trips_index: number;
+  location: [number, number];
+}
+
+interface OsrmTripResponse {
+  code: string;
+  trips: OsrmRoute[];
+  waypoints: OsrmTripWaypoint[];
+}
+
 function generateInstruction(maneuver: OsrmManeuver, name: string, ref?: string): string {
   const road = [name, ref ? `(${ref})` : ""].filter(Boolean).join(" ").trim() || "the road";
   switch (maneuver.type) {
@@ -71,15 +83,30 @@ function generateInstruction(maneuver: OsrmManeuver, name: string, ref?: string)
   }
 }
 
+function transformLeg(leg: OsrmLeg): RouteLeg {
+  const steps: RouteStep[] = leg.steps.map((step) => ({
+    instruction: generateInstruction(step.maneuver, step.name, step.ref),
+    distance: step.distance,
+    duration: step.duration,
+    coordinates: step.geometry.coordinates,
+  }));
+
+  const geometry: [number, number][] = leg.steps.flatMap((step) => step.geometry.coordinates);
+  const summary = leg.summary ? `via ${leg.summary}` : undefined;
+
+  return {
+    distance: leg.distance,
+    duration: leg.duration,
+    geometry,
+    steps,
+    summary,
+  };
+}
+
 function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
-  const steps: RouteStep[] = r.legs.flatMap((leg) =>
-    leg.steps.map((step) => ({
-      instruction: generateInstruction(step.maneuver, step.name, step.ref),
-      distance: step.distance,
-      duration: step.duration,
-      coordinates: step.geometry.coordinates,
-    })),
-  );
+  const legs = r.legs.map(transformLeg);
+
+  const steps: RouteStep[] = legs.flatMap((leg) => leg.steps);
 
   const legSummary = r.legs[0]?.summary ?? "";
   const summary = legSummary ? `via ${legSummary}` : undefined;
@@ -88,6 +115,7 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
     distance: r.distance,
     duration: r.duration,
     geometry: r.geometry.coordinates,
+    legs,
     steps,
     mode,
     summary,
@@ -102,11 +130,10 @@ export interface OsrmRouteOptions {
 
 export const osrmService = {
   async route(
-    origin: [number, number],
-    destination: [number, number],
+    waypoints: [number, number][],
     options: OsrmRouteOptions = {},
   ): Promise<DirectionsResult> {
-    const coords = `${origin[0]},${origin[1]};${destination[0]},${destination[1]}`;
+    const coords = waypoints.map((wp) => `${wp[0]},${wp[1]}`).join(";");
 
     const exclude: string[] = [];
     if (options.avoidHighways) exclude.push("motorway");
@@ -117,7 +144,10 @@ export const osrmService = {
     url.searchParams.set("overview", "full");
     url.searchParams.set("geometries", "geojson");
     url.searchParams.set("steps", "true");
-    url.searchParams.set("alternatives", "3");
+    // OSRM only supports alternatives with exactly 2 waypoints
+    if (waypoints.length === 2) {
+      url.searchParams.set("alternatives", "3");
+    }
     if (exclude.length > 0) url.searchParams.set("exclude", exclude.join(","));
 
     const res = await fetch(url.toString(), {
@@ -131,10 +161,50 @@ export const osrmService = {
     }
 
     return {
-      origin,
-      destination,
+      waypoints,
       routes: data.routes.map((r) => transformRoute(r, "driving")),
       activeRouteIndex: 0,
+    };
+  },
+
+  async optimizeRoute(
+    waypoints: [number, number][],
+    options: OsrmRouteOptions = {},
+  ): Promise<DirectionsResult> {
+    const coords = waypoints.map((wp) => `${wp[0]},${wp[1]}`).join(";");
+
+    const exclude: string[] = [];
+    if (options.avoidHighways) exclude.push("motorway");
+    if (options.avoidTolls) exclude.push("toll");
+    if (options.avoidFerries) exclude.push("ferry");
+
+    const url = new URL(`${OSRM_URL}/trip/v1/driving/${coords}`);
+    url.searchParams.set("overview", "full");
+    url.searchParams.set("geometries", "geojson");
+    url.searchParams.set("steps", "true");
+    url.searchParams.set("source", "first");
+    url.searchParams.set("destination", "last");
+    url.searchParams.set("roundtrip", "false");
+    if (exclude.length > 0) url.searchParams.set("exclude", exclude.join(","));
+
+    const res = await fetch(url.toString(), {
+      headers: { "User-Agent": "OpenMapX/1.0" },
+    });
+    if (!res.ok) throw new Error(`OSRM trip error ${res.status}`);
+
+    const data = (await res.json()) as OsrmTripResponse;
+    if (data.code !== "Ok" || data.trips.length === 0) {
+      throw new Error("OSRM returned no trips");
+    }
+
+    // Extract optimized waypoint order from the trip response
+    const optimizedOrder = data.waypoints.map((wp) => wp.waypoint_index);
+
+    return {
+      waypoints,
+      routes: data.trips.map((r) => transformRoute(r, "driving")),
+      activeRouteIndex: 0,
+      optimizedOrder,
     };
   },
 };

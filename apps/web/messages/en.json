@@ -235,7 +235,15 @@
     "departNow": "Depart now",
     "moreOptions": "More options",
     "fare": "Fare",
-    "fareApprox": "~{amount}"
+    "fareApprox": "~{amount}",
+    "removeStop": "Remove stop",
+    "optimizeStopOrder": "Optimize stop order",
+    "optimizing": "Optimizing...",
+    "routeOptimized": "Route optimized",
+    "multiStopTransitUnavailable": "Multi-stop directions are not available for transit.",
+    "via": "via {stops}",
+    "leg": "Leg {number}",
+    "maxStopsReached": "Maximum of {max} stops reached"
   },
   "place": {
     "overview": "Overview",

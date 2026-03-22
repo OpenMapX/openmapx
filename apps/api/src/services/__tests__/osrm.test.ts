@@ -90,6 +90,7 @@ function makeOsrmResponse(overrides: Record<string, unknown> = {}) {
 
 const origin: [number, number] = [13.388, 52.517];
 const destination: [number, number] = [13.405, 52.535];
+const waypoints: [number, number][] = [origin, destination];
 
 describe("osrmService", () => {
   describe("route()", () => {
@@ -97,10 +98,9 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      const result = await osrmService.route(origin, destination);
+      const result = await osrmService.route(waypoints);
 
-      expect(result.origin).toEqual(origin);
-      expect(result.destination).toEqual(destination);
+      expect(result.waypoints).toEqual(waypoints);
       expect(result.activeRouteIndex).toBe(0);
       expect(result.routes).toHaveLength(1);
     });
@@ -109,7 +109,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      const result = await osrmService.route(origin, destination);
+      const result = await osrmService.route(waypoints);
       const route = result.routes[0];
 
       expect(route.distance).toBe(12500);
@@ -126,7 +126,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      const result = await osrmService.route(origin, destination);
+      const result = await osrmService.route(waypoints);
 
       expect(result.routes[0].summary).toBe("via Friedrichstraße");
     });
@@ -146,7 +146,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(osrmResp));
 
       const { osrmService } = await loadModule();
-      const result = await osrmService.route(origin, destination);
+      const result = await osrmService.route(waypoints);
 
       expect(result.routes[0].summary).toBeUndefined();
     });
@@ -162,7 +162,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(resp));
 
       const { osrmService } = await loadModule();
-      const result = await osrmService.route(origin, destination);
+      const result = await osrmService.route(waypoints);
 
       expect(result.routes).toHaveLength(3);
       expect(result.routes[0].distance).toBe(12500);
@@ -174,7 +174,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      await osrmService.route(origin, destination, { avoidHighways: true });
+      await osrmService.route(waypoints, { avoidHighways: true });
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain("exclude=motorway");
@@ -184,7 +184,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      await osrmService.route(origin, destination, { avoidTolls: true });
+      await osrmService.route(waypoints, { avoidTolls: true });
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain("exclude=toll");
@@ -194,7 +194,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      await osrmService.route(origin, destination, { avoidFerries: true });
+      await osrmService.route(waypoints, { avoidFerries: true });
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain("exclude=ferry");
@@ -204,7 +204,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      await osrmService.route(origin, destination, {
+      await osrmService.route(waypoints, {
         avoidHighways: true,
         avoidTolls: true,
         avoidFerries: true,
@@ -219,7 +219,7 @@ describe("osrmService", () => {
 
       const { osrmService } = await loadModule();
 
-      await expect(osrmService.route(origin, destination)).rejects.toThrow("OSRM error 503");
+      await expect(osrmService.route(waypoints)).rejects.toThrow("OSRM error 503");
     });
 
     it("throws when code is not Ok", async () => {
@@ -227,9 +227,7 @@ describe("osrmService", () => {
 
       const { osrmService } = await loadModule();
 
-      await expect(osrmService.route(origin, destination)).rejects.toThrow(
-        "OSRM returned no routes",
-      );
+      await expect(osrmService.route(waypoints)).rejects.toThrow("OSRM returned no routes");
     });
 
     it("throws when routes array is empty", async () => {
@@ -237,9 +235,43 @@ describe("osrmService", () => {
 
       const { osrmService } = await loadModule();
 
-      await expect(osrmService.route(origin, destination)).rejects.toThrow(
-        "OSRM returned no routes",
-      );
+      await expect(osrmService.route(waypoints)).rejects.toThrow("OSRM returned no routes");
+    });
+
+    it("produces legs array with per-leg steps and geometry", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
+
+      const { osrmService } = await loadModule();
+      const result = await osrmService.route(waypoints);
+      const route = result.routes[0];
+
+      expect(route.legs).toHaveLength(1);
+      expect(route.legs[0].distance).toBe(12500);
+      expect(route.legs[0].duration).toBe(840);
+      expect(route.legs[0].summary).toBe("via Friedrichstraße");
+      expect(route.legs[0].steps.length).toBeGreaterThan(0);
+      expect(route.legs[0].geometry.length).toBeGreaterThan(0);
+    });
+
+    it("does not request alternatives with 3+ waypoints", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
+
+      const { osrmService } = await loadModule();
+      const threeWaypoints: [number, number][] = [origin, [13.395, 52.525], destination];
+      await osrmService.route(threeWaypoints);
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).not.toContain("alternatives");
+    });
+
+    it("requests alternatives=3 with exactly 2 waypoints", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
+
+      const { osrmService } = await loadModule();
+      await osrmService.route(waypoints);
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain("alternatives=3");
     });
   });
 
@@ -280,7 +312,7 @@ describe("osrmService", () => {
     async function getInstruction(step: Record<string, unknown>): Promise<string> {
       mockFetch.mockResolvedValueOnce(mockOk(buildResponseWithStep(step)));
       const { osrmService } = await loadModule();
-      const result = await osrmService.route(origin, destination);
+      const result = await osrmService.route(waypoints);
       return result.routes[0].steps[0].instruction;
     }
 
@@ -431,12 +463,104 @@ describe("osrmService", () => {
     });
   });
 
+  describe("optimizeRoute()", () => {
+    function makeOsrmTripResponse(overrides: Record<string, unknown> = {}) {
+      return {
+        code: "Ok",
+        trips: [makeOsrmRoute()],
+        waypoints: [
+          { waypoint_index: 0, trips_index: 0, location: origin },
+          { waypoint_index: 2, trips_index: 0, location: [13.395, 52.525] },
+          { waypoint_index: 1, trips_index: 0, location: [13.4, 52.53] },
+          { waypoint_index: 3, trips_index: 0, location: destination },
+        ],
+        ...overrides,
+      };
+    }
+
+    const fourWaypoints: [number, number][] = [
+      origin,
+      [13.395, 52.525],
+      [13.4, 52.53],
+      destination,
+    ];
+
+    it("calls /trip/v1/driving/ endpoint", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmTripResponse()));
+
+      const { osrmService } = await loadModule();
+      await osrmService.optimizeRoute(fourWaypoints);
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain("/trip/v1/driving/");
+    });
+
+    it("sets source=first, destination=last, roundtrip=false", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmTripResponse()));
+
+      const { osrmService } = await loadModule();
+      await osrmService.optimizeRoute(fourWaypoints);
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain("source=first");
+      expect(url).toContain("destination=last");
+      expect(url).toContain("roundtrip=false");
+    });
+
+    it("returns optimizedOrder from waypoint indices", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmTripResponse()));
+
+      const { osrmService } = await loadModule();
+      const result = await osrmService.optimizeRoute(fourWaypoints);
+
+      expect(result.optimizedOrder).toEqual([0, 2, 1, 3]);
+    });
+
+    it("returns routes from trips array", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmTripResponse()));
+
+      const { osrmService } = await loadModule();
+      const result = await osrmService.optimizeRoute(fourWaypoints);
+
+      expect(result.routes).toHaveLength(1);
+      expect(result.routes[0].mode).toBe("driving");
+    });
+
+    it("throws on HTTP error", async () => {
+      mockFetch.mockResolvedValueOnce(mockNotOk(503));
+
+      const { osrmService } = await loadModule();
+
+      await expect(osrmService.optimizeRoute(fourWaypoints)).rejects.toThrow("OSRM trip error 503");
+    });
+
+    it("throws when code is not Ok", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk({ code: "NoTrips", trips: [] }));
+
+      const { osrmService } = await loadModule();
+
+      await expect(osrmService.optimizeRoute(fourWaypoints)).rejects.toThrow(
+        "OSRM returned no trips",
+      );
+    });
+
+    it("passes exclude params from options", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOsrmTripResponse()));
+
+      const { osrmService } = await loadModule();
+      await osrmService.optimizeRoute(fourWaypoints, { avoidHighways: true, avoidTolls: true });
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain("exclude=motorway%2Ctoll");
+    });
+  });
+
   describe("request construction", () => {
     it("builds correct URL with coordinates and query params", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      await osrmService.route(origin, destination);
+      await osrmService.route(waypoints);
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain("/route/v1/driving/13.388,52.517;13.405,52.535");
@@ -450,7 +574,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      await osrmService.route(origin, destination);
+      await osrmService.route(waypoints);
 
       const options = mockFetch.mock.calls[0][1] as RequestInit;
       expect((options.headers as Record<string, string>)["User-Agent"]).toBe("OpenMapX/1.0");
@@ -460,7 +584,7 @@ describe("osrmService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeOsrmResponse()));
 
       const { osrmService } = await loadModule();
-      await osrmService.route(origin, destination);
+      await osrmService.route(waypoints);
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).not.toContain("exclude");

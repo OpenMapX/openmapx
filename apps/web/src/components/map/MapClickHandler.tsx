@@ -2,6 +2,7 @@
 
 import {
   PANEL,
+  useDirectionsStore,
   useMapClickStore,
   useMeasurementStore,
   usePlaceStore,
@@ -35,6 +36,22 @@ export function MapClickHandler() {
         const features = map.queryRenderedFeatures(e.point, { layers: activeLayers });
         if (features.length > 0) return;
       }
+
+      // When directions panel is open, fill the next empty waypoint
+      const dirStore = useDirectionsStore.getState();
+      if (dirStore.isOpen) {
+        const emptyIdx = dirStore.waypoints.findIndex((wp) => wp.coords === null);
+        if (emptyIdx !== -1) {
+          const coords: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+          dirStore.setWaypoint(
+            emptyIdx,
+            coords,
+            `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`,
+          );
+          return;
+        }
+      }
+
       setSelectedPlace(null);
       if (useSidebarStore.getState().activeSidebarId === PANEL.PLACE) {
         useSidebarStore.getState().closeSidebar();

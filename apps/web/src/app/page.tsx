@@ -4,7 +4,6 @@ import { AirQualityLegend } from "@/components/map/AirQualityLegend";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { CyclingLegend } from "@/components/map/CyclingLegend";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
-import { DirectionsDestinationMarker } from "@/components/map/DirectionsDestinationMarker";
 import { EarthquakeLegend } from "@/components/map/EarthquakeLegend";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
 import { HikingTrailsLegend } from "@/components/map/HikingTrailsLegend";
@@ -46,6 +45,7 @@ import { StreetViewViewer } from "@/components/map/StreetViewViewer";
 import { TopRightControls } from "@/components/map/TopRightControls";
 import { TravelTimeToolbar } from "@/components/map/TravelTimeToolbar";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
+import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { WildfireLegend } from "@/components/map/WildfireLegend";
 import { WinterSportsLegend } from "@/components/map/WinterSportsLegend";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
@@ -127,7 +127,7 @@ export default function HomePage() {
           <MapStylePoiClickHandler />
           <UserLocationMarker />
           <SelectedPlaceMarker />
-          <DirectionsDestinationMarker />
+          <WaypointMarkers />
           <ElevationHoverMarker />
           <HamburgerMenu />
           <SearchBar />

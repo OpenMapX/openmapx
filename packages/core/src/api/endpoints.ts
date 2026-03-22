@@ -4,6 +4,7 @@ export const API_ENDPOINTS = {
   geocodeReverse: "/api/geocode/reverse",
   autocomplete: "/api/autocomplete",
   directions: "/api/directions",
+  directionsOptimize: "/api/directions/optimize",
   elevation: "/api/elevation",
   isochrone: "/api/isochrone",
   places: "/api/places",

@@ -78,6 +78,7 @@ export { useIsochrone } from "./hooks/useIsochrone";
 export { useLiveTrains } from "./hooks/useLiveTrains";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
+export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { usePlacePhotos } from "./hooks/usePlacePhotos";
@@ -159,7 +160,14 @@ export type {
   DataSourceMeta,
   DataSourceResult,
 } from "./types/dataSource";
-export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
+export type {
+  DirectionsResult,
+  Route,
+  RouteLeg,
+  RouteStep,
+  TravelMode,
+  Waypoint,
+} from "./types/directions";
 export type {
   ElevationApiResponse,
   ElevationPoint,

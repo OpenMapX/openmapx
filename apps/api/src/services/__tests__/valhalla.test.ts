@@ -78,6 +78,7 @@ function makeValhallaResponse(overrides: Record<string, unknown> = {}) {
 
 const origin: [number, number] = [13.388, 52.517];
 const destination: [number, number] = [13.405, 52.535];
+const waypoints: [number, number][] = [origin, destination];
 
 describe("valhallaService", () => {
   describe("route()", () => {
@@ -85,7 +86,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking");
+      await valhallaService.route(waypoints, "walking");
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
       expect(body.costing).toBe("pedestrian");
@@ -95,7 +96,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "cycling");
+      await valhallaService.route(waypoints, "cycling");
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
       expect(body.costing).toBe("bicycle");
@@ -105,7 +106,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
       const route = result.routes[0];
 
       expect(route.distance).toBe(1200); // 1.2 * 1000
@@ -115,7 +116,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
       const route = result.routes[0];
 
       expect(route.duration).toBe(900);
@@ -130,7 +131,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(resp));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
       const route = result.routes[0];
 
       expect(route.elevation).toEqual([100, 105, 110, 110, 115, 120]);
@@ -141,7 +142,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
       const route = result.routes[0];
 
       expect(route.elevation).toBeUndefined();
@@ -152,7 +153,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
       const route = result.routes[0];
 
       // The second maneuver has street_names: ["Torstraße"]
@@ -174,7 +175,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(resp));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
 
       expect(result.routes[0].summary).toBeUndefined();
     });
@@ -189,7 +190,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(resp));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
 
       expect(result.routes).toHaveLength(3);
       expect(result.routes[0].distance).toBe(1200);
@@ -197,11 +198,11 @@ describe("valhallaService", () => {
       expect(result.routes[2].distance).toBe(2500);
     });
 
-    it("sets avoidHighways → use_highways=0 in costing_options", async () => {
+    it("sets avoidHighways -> use_highways=0 in costing_options", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "cycling", {
+      await valhallaService.route(waypoints, "cycling", {
         avoidHighways: true,
       });
 
@@ -209,11 +210,11 @@ describe("valhallaService", () => {
       expect(body.costing_options.bicycle.use_highways).toBe(0);
     });
 
-    it("sets avoidFerries → use_ferry=0 in costing_options", async () => {
+    it("sets avoidFerries -> use_ferry=0 in costing_options", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking", {
+      await valhallaService.route(waypoints, "walking", {
         avoidFerries: true,
       });
 
@@ -225,7 +226,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking", {
+      await valhallaService.route(waypoints, "walking", {
         units: "imperial",
       });
 
@@ -237,7 +238,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking", {
+      await valhallaService.route(waypoints, "walking", {
         units: "metric",
       });
 
@@ -249,7 +250,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
       const step = result.routes[0].steps[0];
 
       expect(step.distance).toBe(500); // 0.5 * 1000
@@ -259,9 +260,9 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
 
-      // First maneuver: begin=0, end=2 → slice(0, 3)
+      // First maneuver: begin=0, end=2 -> slice(0, 3)
       const step0 = result.routes[0].steps[0];
       expect(step0.coordinates).toEqual([
         [13.388, 52.517],
@@ -269,7 +270,7 @@ describe("valhallaService", () => {
         [13.397, 52.529],
       ]);
 
-      // Second maneuver: begin=2, end=3 → slice(2, 4)
+      // Second maneuver: begin=2, end=3 -> slice(2, 4)
       const step1 = result.routes[0].steps[1];
       expect(step1.coordinates).toEqual([
         [13.397, 52.529],
@@ -281,7 +282,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking");
+      await valhallaService.route(waypoints, "walking");
 
       const url = mockFetch.mock.calls[0][0] as string;
       expect(url).toContain("/route");
@@ -296,19 +297,18 @@ describe("valhallaService", () => {
 
       const { valhallaService } = await import("../valhalla.service.js");
 
-      await expect(valhallaService.route(origin, destination, "walking")).rejects.toThrow(
+      await expect(valhallaService.route(waypoints, "walking")).rejects.toThrow(
         "Valhalla error 503",
       );
     });
 
-    it("returns correct origin, destination, and activeRouteIndex", async () => {
+    it("returns correct waypoints and activeRouteIndex", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "walking");
+      const result = await valhallaService.route(waypoints, "walking");
 
-      expect(result.origin).toEqual(origin);
-      expect(result.destination).toEqual(destination);
+      expect(result.waypoints).toEqual(waypoints);
       expect(result.activeRouteIndex).toBe(0);
     });
 
@@ -316,7 +316,7 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking", {}, "de");
+      await valhallaService.route(waypoints, "walking", {}, "de");
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
       expect(body.directions_options.language).toBe("de");
@@ -326,33 +326,44 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking");
+      await valhallaService.route(waypoints, "walking");
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
       expect(body.directions_options.language).toBe("en");
     });
 
-    it("includes elevation_interval and alternates in request body", async () => {
+    it("includes elevation_interval and alternates in request body for 2 waypoints", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking");
+      await valhallaService.route(waypoints, "walking");
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
       expect(body.elevation_interval).toBe(30);
       expect(body.alternates).toBe(3);
     });
 
-    it("sets locations with correct lon/lat from origin and destination", async () => {
+    it("does not request alternates with 3+ waypoints", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      await valhallaService.route(origin, destination, "walking");
+      const threeWaypoints: [number, number][] = [origin, [13.395, 52.525], destination];
+      await valhallaService.route(threeWaypoints, "walking");
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.alternates).toBeUndefined();
+    });
+
+    it("sets locations with type 'break' and correct lon/lat from waypoints", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      await valhallaService.route(waypoints, "walking");
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
       expect(body.locations).toEqual([
-        { lon: 13.388, lat: 52.517 },
-        { lon: 13.405, lat: 52.535 },
+        { lon: 13.388, lat: 52.517, type: "break" },
+        { lon: 13.405, lat: 52.535, type: "break" },
       ]);
     });
 
@@ -360,9 +371,119 @@ describe("valhallaService", () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
       const { valhallaService } = await import("../valhalla.service.js");
-      const result = await valhallaService.route(origin, destination, "cycling");
+      const result = await valhallaService.route(waypoints, "cycling");
 
       expect(result.routes[0].mode).toBe("cycling");
+    });
+
+    it("produces legs array with per-leg data", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      const result = await valhallaService.route(waypoints, "walking");
+      const route = result.routes[0];
+
+      expect(route.legs).toHaveLength(1);
+      expect(route.legs[0].distance).toBe(1200);
+      expect(route.legs[0].duration).toBe(900);
+      expect(route.legs[0].steps.length).toBeGreaterThan(0);
+      expect(route.legs[0].geometry.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("optimizeRoute()", () => {
+    const fourWaypoints: [number, number][] = [
+      origin,
+      [13.395, 52.525],
+      [13.4, 52.53],
+      destination,
+    ];
+
+    function makeOptimizeResponse(overrides: Record<string, unknown> = {}) {
+      return makeValhallaResponse({
+        trip: makeTrip({
+          locations: [
+            { lat: 52.517, lon: 13.388, original_index: 0 },
+            { lat: 52.53, lon: 13.4, original_index: 2 },
+            { lat: 52.525, lon: 13.395, original_index: 1 },
+            { lat: 52.535, lon: 13.405, original_index: 3 },
+          ],
+          ...overrides,
+        }),
+      });
+    }
+
+    it("calls /optimized_route endpoint", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOptimizeResponse()));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      await valhallaService.optimizeRoute(fourWaypoints, "walking");
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toContain("/optimized_route");
+    });
+
+    it("extracts optimizedOrder from locations[].original_index", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOptimizeResponse()));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      const result = await valhallaService.optimizeRoute(fourWaypoints, "walking");
+
+      expect(result.optimizedOrder).toEqual([0, 2, 1, 3]);
+    });
+
+    it("falls back to sequential order when locations have no original_index", async () => {
+      const resp = makeValhallaResponse({
+        trip: makeTrip({ locations: undefined }),
+      });
+      mockFetch.mockResolvedValueOnce(mockOk(resp));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      const result = await valhallaService.optimizeRoute(fourWaypoints, "walking");
+
+      expect(result.optimizedOrder).toEqual([0, 1, 2, 3]);
+    });
+
+    it("returns routes from the trip", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOptimizeResponse()));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      const result = await valhallaService.optimizeRoute(fourWaypoints, "walking");
+
+      expect(result.routes).toHaveLength(1);
+      expect(result.routes[0].mode).toBe("walking");
+    });
+
+    it("uses correct costing for driving mode", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOptimizeResponse()));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      await valhallaService.optimizeRoute(fourWaypoints, "driving");
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.costing).toBe("auto");
+    });
+
+    it("throws on HTTP error", async () => {
+      mockFetch.mockResolvedValueOnce(mockNotOk(504));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+
+      await expect(valhallaService.optimizeRoute(fourWaypoints, "cycling")).rejects.toThrow(
+        "Valhalla optimized_route error 504",
+      );
+    });
+
+    it("sets all locations with type 'break'", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOptimizeResponse()));
+
+      const { valhallaService } = await import("../valhalla.service.js");
+      await valhallaService.optimizeRoute(fourWaypoints, "walking");
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      for (const loc of body.locations) {
+        expect(loc.type).toBe("break");
+      }
     });
   });
 });

@@ -235,7 +235,15 @@
     "departNow": "Jetzt abfahren",
     "moreOptions": "Mehr Optionen",
     "fare": "Fahrpreis",
-    "fareApprox": "~{amount}"
+    "fareApprox": "~{amount}",
+    "removeStop": "Stopp entfernen",
+    "optimizeStopOrder": "Reihenfolge optimieren",
+    "optimizing": "Optimiere...",
+    "routeOptimized": "Route optimiert",
+    "multiStopTransitUnavailable": "Mehrfachziele sind für den ÖPNV nicht verfügbar.",
+    "via": "über {stops}",
+    "leg": "Etappe {number}",
+    "maxStopsReached": "Maximal {max} Stopps erreicht"
   },
   "place": {
     "overview": "Übersicht",

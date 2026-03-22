@@ -1,8 +1,9 @@
 "use client";
 
+import type { LngLat } from "@openmapx/core";
 import { useDirections, useDirectionsStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 
@@ -17,8 +18,7 @@ const LAYER_ACTIVE_LINE = "route-active-line";
 export function RouteLayer() {
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const {
-    origin,
-    destination,
+    waypoints,
     mode,
     activeRouteIndex,
     setActiveRouteIndex,
@@ -28,9 +28,18 @@ export function RouteLayer() {
     units,
   } = useDirectionsStore();
 
+  const routeWaypoints = useMemo(
+    () =>
+      waypoints.reduce<LngLat[]>((acc, wp) => {
+        if (wp.coords) acc.push(wp.coords);
+        return acc;
+      }, []),
+    [waypoints],
+  );
+  const allFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
+
   const { data } = useDirections({
-    origin,
-    destination,
+    waypoints: mode === "transit" ? [] : allFilled ? routeWaypoints : [],
     mode,
     avoidHighways,
     avoidTolls,
@@ -38,7 +47,7 @@ export function RouteLayer() {
     units,
   });
 
-  // Add map source and layers — must wait for the style to finish loading
+  // Add map source and layers
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -52,7 +61,6 @@ export function RouteLayer() {
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // Alt routes — casing (white outline below)
       map.addLayer({
         id: LAYER_ALT_CASING,
         type: "line",
@@ -62,7 +70,6 @@ export function RouteLayer() {
         paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.6 },
       });
 
-      // Alt routes — colored line
       map.addLayer({
         id: LAYER_ALT_LINE,
         type: "line",
@@ -72,7 +79,6 @@ export function RouteLayer() {
         paint: { "line-color": "#93C5FD", "line-width": 5, "line-opacity": 0.75 },
       });
 
-      // Active route — casing
       map.addLayer({
         id: LAYER_ACTIVE_CASING,
         type: "line",
@@ -82,7 +88,6 @@ export function RouteLayer() {
         paint: { "line-color": "#ffffff", "line-width": 10 },
       });
 
-      // Active route — colored line (on top)
       map.addLayer({
         id: LAYER_ACTIVE_LINE,
         type: "line",
@@ -92,7 +97,6 @@ export function RouteLayer() {
         paint: { "line-color": PRIMARY_BLUE_HEX, "line-width": 7 },
       });
 
-      // Click on alt route to select it
       map.on("click", LAYER_ALT_LINE, onClick);
     };
 
@@ -134,7 +138,6 @@ export function RouteLayer() {
     if (!raw || raw.type !== "geojson") return;
     const source = raw as GeoJSONSource;
 
-    // Don't show driving/cycling/walking routes when in transit mode
     if (mode === "transit") {
       source.setData({ type: "FeatureCollection", features: [] });
       return;
@@ -157,12 +160,10 @@ export function RouteLayer() {
       },
     }));
 
-    // Put active route last so it renders on top
     features.sort((a) => (a.properties.type === "active" ? 1 : -1));
 
     (source as GeoJSONSource).setData({ type: "FeatureCollection", features });
 
-    // Fit map to active route bounds
     const activeGeom = data.routes[activeRouteIndex]?.geometry;
     if (activeGeom && activeGeom.length >= 2) {
       let minLng = activeGeom[0][0];
@@ -185,16 +186,17 @@ export function RouteLayer() {
     }
   }, [data, activeRouteIndex, mode, mapRef, fitBounds]);
 
-  // Clear routes when directions panel is closed
+  // Clear routes when all waypoints are empty (panel closed)
   useEffect(() => {
-    if (!origin && !destination) {
+    const hasAnyCoords = waypoints.some((wp) => wp.coords !== null);
+    if (!hasAnyCoords) {
       const map = mapRef.current;
       const raw = map?.getSource(SOURCE_ID);
       if (raw && raw.type === "geojson") {
         (raw as GeoJSONSource).setData({ type: "FeatureCollection", features: [] });
       }
     }
-  }, [origin, destination, mapRef]);
+  }, [waypoints, mapRef]);
 
   return null;
 }

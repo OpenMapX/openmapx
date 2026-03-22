@@ -1,20 +1,20 @@
 "use client";
 
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import LocationOnIcon from "@mui/icons-material/LocationOn";
 import MenuIcon from "@mui/icons-material/Menu";
+import RouteIcon from "@mui/icons-material/Route";
 import ScheduleIcon from "@mui/icons-material/Schedule";
-import SwapVertIcon from "@mui/icons-material/SwapVert";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
+import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
-import type { AutocompleteResult, DirectionsResult, TravelMode } from "@openmapx/core";
+import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
+  formatDistance,
   formatDuration,
   resolveProvider,
   useAutocomplete,
@@ -23,6 +23,7 @@ import {
   useDirectionsStore,
   useMapStore,
   useMenuStore,
+  useOptimizeRoute,
   useProviders,
   useSidebarStore,
   useTransitPlan,
@@ -30,18 +31,17 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import type { ChangeEvent } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
 import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
 import { TransitDetailsView } from "@/components/panels/directions/TransitDetailsView";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
-import { WaypointInput } from "@/components/panels/directions/WaypointInput";
+import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { TEAL } from "@/lib/theme";
 
-/** Formats a Date to the value expected by `<input type="datetime-local">`. */
 function toDateTimeLocalString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -52,6 +52,7 @@ export function DirectionsPanelContent() {
   const tc = useTranslations("common");
   const locale = useLocale();
   const {
+    waypoints,
     origin,
     originLabel,
     destination,
@@ -66,9 +67,12 @@ export function DirectionsPanelContent() {
     activeItineraryIndex,
     transitDepartureTime,
     transitArrivalTime,
+    setWaypoint,
+    addWaypoint,
+    removeWaypoint,
+    reorderWaypoints,
+    reverseWaypoints,
     setOrigin,
-    setDestination,
-    swapOriginDestination,
     setMode,
     setActiveRouteIndex,
     setTransitItineraries,
@@ -80,6 +84,7 @@ export function DirectionsPanelContent() {
   const { userLocation } = useMapStore();
   const { data: providers } = useProviders();
   const queryClient = useQueryClient();
+  const optimizeMutation = useOptimizeRoute();
 
   const [showOptions, setShowOptions] = useState(false);
   const [detailsRouteIndex, setDetailsRouteIndex] = useState<number | null>(null);
@@ -87,23 +92,32 @@ export function DirectionsPanelContent() {
   const [transitTimeMode, setTransitTimeMode] = useState<"now" | "depart" | "arrive">("now");
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [numItineraries, setNumItineraries] = useState(3);
-  const [originInput, setOriginInput] = useState(originLabel);
-  const [destInput, setDestInput] = useState(destinationLabel);
-  const [focusedField, setFocusedField] = useState<"origin" | "destination" | null>(null);
+  const [focusedField, setFocusedField] = useState<number | null>(null);
+  const [snackbar, setSnackbar] = useState<string | null>(null);
 
-  // Sync local inputs when store labels change (e.g. panel opened with pre-filled destination)
+  // Per-waypoint input text (synced from store labels)
+  const [inputValues, setInputValues] = useState<string[]>(() => waypoints.map((wp) => wp.label));
+
+  // Sync input values when waypoints change externally
   useEffect(() => {
-    setOriginInput(originLabel);
-  }, [originLabel]);
-  useEffect(() => {
-    setDestInput(destinationLabel);
-  }, [destinationLabel]);
+    setInputValues(waypoints.map((wp) => wp.label));
+  }, [waypoints]);
 
   const isTransitMode = mode === "transit";
 
+  // Collect all non-null coords for the route query
+  const routeWaypoints = useMemo(
+    () =>
+      waypoints.reduce<LngLat[]>((acc, wp) => {
+        if (wp.coords) acc.push(wp.coords);
+        return acc;
+      }, []),
+    [waypoints],
+  );
+  const allWaypointsFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
+
   const { data, isLoading, isError } = useDirections({
-    origin: isTransitMode ? null : origin,
-    destination: isTransitMode ? null : destination,
+    waypoints: isTransitMode ? [] : allWaypointsFilled ? routeWaypoints : [],
     mode,
     avoidHighways,
     avoidTolls,
@@ -111,7 +125,7 @@ export function DirectionsPanelContent() {
     units,
   });
 
-  // Transit plan query — debounce time inputs so rapid adjustments don't fire immediately
+  // Transit plan query
   const debouncedDepartureTime = useDebounce(transitDepartureTime, 500);
   const debouncedArrivalTime = useDebounce(transitArrivalTime, 500);
   const transitDepartAtStr =
@@ -135,21 +149,19 @@ export function DirectionsPanelContent() {
     numItineraries,
   });
 
-  // Sync transit itineraries to store
   useEffect(() => {
     if (transitPlanData?.itineraries) {
       setTransitItineraries(transitPlanData.itineraries);
     }
   }, [transitPlanData, setTransitItineraries]);
 
-  // Reset itinerary count when origin/destination change
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger deps
   useEffect(() => {
     setNumItineraries(3);
   }, [origin, destination]);
 
   // Autocomplete for the currently focused waypoint input
-  const activeQuery = focusedField === "origin" ? originInput : destInput;
+  const activeQuery = focusedField !== null ? (inputValues[focusedField] ?? "") : "";
   const debouncedActiveQuery = useDebounce(activeQuery, 300);
   const { data: wsSuggestions } = useAutocomplete(debouncedActiveQuery, locale);
   const showSuggestions = focusedField !== null && (wsSuggestions?.length ?? 0) > 0;
@@ -157,13 +169,12 @@ export function DirectionsPanelContent() {
   const detailsRoute =
     detailsRouteIndex !== null ? (data?.routes[detailsRouteIndex] ?? null) : null;
 
-  // Read cached result for any mode without triggering a new fetch
   const getCachedTime = (m: TravelMode): string | undefined => {
-    if (!origin || !destination) return undefined;
+    if (!allWaypointsFilled) return undefined;
+    const waypointsStr = routeWaypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
     const cached = queryClient.getQueryData<DirectionsResult>([
       "directions",
-      origin,
-      destination,
+      waypointsStr,
       m,
       avoidHighways,
       avoidTolls,
@@ -174,28 +185,114 @@ export function DirectionsPanelContent() {
     return duration !== undefined ? formatDuration(duration) : undefined;
   };
 
-  const handleUseMyLocation = () => {
+  const handleUseMyLocation = useCallback(() => {
     if (userLocation) {
       setOrigin(userLocation, t("myLocation"));
-      setOriginInput(t("myLocation"));
     }
-  };
+  }, [userLocation, setOrigin, t]);
 
-  // Delay blur so a click on a suggestion fires before the list closes
-  const handleWaypointBlur = () => setTimeout(() => setFocusedField(null), 150);
+  const handleWaypointBlur = useCallback(() => {
+    setTimeout(() => setFocusedField(null), 150);
+  }, []);
+
+  const handleInputChange = useCallback(
+    (index: number, value: string) => {
+      setInputValues((prev) => {
+        const next = [...prev];
+        next[index] = value;
+        return next;
+      });
+      if (!value) {
+        setWaypoint(index, null, "");
+      }
+    },
+    [setWaypoint],
+  );
 
   const handleSuggestionSelect = (result: AutocompleteResult) => {
-    if (!result.coordinates) return;
+    if (!result.coordinates || focusedField === null) return;
     const { label, coordinates } = result;
-    if (focusedField === "origin") {
-      setOriginInput(label);
-      setOrigin(coordinates, label);
-    } else {
-      setDestInput(label);
-      setDestination(coordinates, label);
-    }
+    setInputValues((prev) => {
+      const next = [...prev];
+      next[focusedField] = label;
+      return next;
+    });
+    setWaypoint(focusedField, coordinates, label);
     setFocusedField(null);
   };
+
+  const handleReverse = useCallback(() => {
+    reverseWaypoints();
+    setInputValues((prev) => [...prev].reverse());
+  }, [reverseWaypoints]);
+
+  const handleRemove = useCallback(
+    (index: number) => {
+      removeWaypoint(index);
+      setInputValues((prev) => {
+        const next = [...prev];
+        next.splice(index, 1);
+        return next;
+      });
+    },
+    [removeWaypoint],
+  );
+
+  const handleAdd = useCallback(
+    (afterIndex: number) => {
+      addWaypoint(afterIndex);
+      setInputValues((prev) => {
+        const next = [...prev];
+        next.splice(afterIndex + 1, 0, "");
+        return next;
+      });
+    },
+    [addWaypoint],
+  );
+
+  const handleOptimize = useCallback(() => {
+    if (routeWaypoints.length < 3) return;
+    optimizeMutation.mutate(
+      {
+        waypoints: routeWaypoints,
+        mode,
+        avoidHighways,
+        avoidTolls,
+        avoidFerries,
+        units,
+      },
+      {
+        onSuccess: (result) => {
+          if (result.optimizedOrder) {
+            const order = result.optimizedOrder;
+            const currentWps = useDirectionsStore.getState().waypoints;
+            const reordered = order.map((i) => currentWps[i]);
+            for (let i = 0; i < reordered.length; i++) {
+              const wp = reordered[i];
+              setWaypoint(i, wp.coords, wp.label);
+            }
+            setSnackbar(t("routeOptimized"));
+          }
+        },
+        onError: () => {
+          setSnackbar(t("noRoutesFound"));
+        },
+      },
+    );
+  }, [
+    routeWaypoints,
+    mode,
+    avoidHighways,
+    avoidTolls,
+    avoidFerries,
+    units,
+    optimizeMutation,
+    setWaypoint,
+    t,
+  ]);
+
+  const hasMultipleStops = waypoints.length > 2;
+  const showOptimize = hasMultipleStops && allWaypointsFilled && !isTransitMode;
 
   if (transitDetailsIndex !== null && transitItineraries[transitDetailsIndex]) {
     return (
@@ -215,6 +312,7 @@ export function DirectionsPanelContent() {
         route={detailsRoute}
         originLabel={originLabel}
         destinationLabel={destinationLabel}
+        waypointLabels={waypoints.map((wp) => wp.label)}
         units={units}
         onBack={() => setDetailsRouteIndex(null)}
       />
@@ -244,7 +342,6 @@ export function DirectionsPanelContent() {
           <MenuIcon sx={{ fontSize: 22 }} />
         </IconButton>
 
-        {/* Mode buttons */}
         <Box sx={{ display: "flex", flex: 1, justifyContent: "space-around" }}>
           {MODES.map(({ mode: m, icon, labelKey, disabled }) => {
             const isActive = mode === m;
@@ -291,135 +388,70 @@ export function DirectionsPanelContent() {
         </IconButton>
       </Box>
 
-      {/* Waypoint inputs */}
-      <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
-        <Box sx={{ display: "flex", alignItems: "stretch", gap: 1 }}>
-          {/* Dot / line / pin column */}
+      {/* Waypoint list with drag-and-drop */}
+      <WaypointList
+        waypoints={waypoints}
+        inputValues={inputValues}
+        onInputChange={handleInputChange}
+        onFocus={setFocusedField}
+        onBlur={handleWaypointBlur}
+        onReorder={reorderWaypoints}
+        onAdd={handleAdd}
+        onRemove={handleRemove}
+        onReverse={handleReverse}
+        onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
+        isTransitMode={isTransitMode}
+        t={t}
+      />
+
+      {/* Divider + content below */}
+      <Box sx={{ position: "relative" }}>
+        <Divider />
+
+        {/* Optimize button */}
+        {showOptimize && (
           <Box
             sx={{
               display: "flex",
-              flexDirection: "column",
               alignItems: "center",
-              justifyContent: "space-around",
-              pt: 1.25,
-              pb: 1.25,
-              flexShrink: 0,
+              gap: 1,
+              px: 2,
+              py: 0.75,
+              borderBottom: "1px solid",
+              borderColor: "divider",
             }}
           >
-            <Box
+            <Typography
+              variant="body2"
+              onClick={handleOptimize}
               sx={{
-                width: 12,
-                height: 12,
-                borderRadius: "50%",
-                border: "2px solid",
-                borderColor: "text.secondary",
-              }}
-            />
-            <Box sx={{ display: "flex", flexDirection: "column", gap: "3px", my: 0.5 }}>
-              {[0, 1, 2].map((i) => (
-                <Box
-                  key={i}
-                  sx={{ width: 3, height: 3, borderRadius: "50%", bgcolor: "text.disabled" }}
-                />
-              ))}
-            </Box>
-            <LocationOnIcon sx={{ fontSize: 18, color: "#EA4335" }} />
-          </Box>
-
-          {/* Input boxes */}
-          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 0.75, minWidth: 0 }}>
-            <Box
-              sx={{
-                border: "1px solid",
-                borderColor: "divider",
-                borderRadius: "8px",
-                bgcolor: "grey.50",
-                "&:focus-within": {
-                  borderColor: TEAL,
-                  bgcolor: "background.paper",
-                  boxShadow: `0 0 0 2px ${TEAL}22`,
-                },
-                transition: "box-shadow 0.15s",
+                color: TEAL,
+                cursor: "pointer",
+                fontWeight: 500,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.75,
+                px: 1.5,
+                py: 0.5,
+                borderRadius: 99,
+                "&:hover": { bgcolor: `${TEAL}18` },
+                transition: "background-color 0.15s",
               }}
             >
-              <WaypointInput
-                value={originInput}
-                placeholder={t("chooseOrigin")}
-                onChange={(v) => {
-                  setOriginInput(v);
-                  if (!v) setOrigin(null, "");
-                }}
-                onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
-                onFocus={() => setFocusedField("origin")}
-                onBlur={handleWaypointBlur}
-                useMyLocationLabel={t("useMyLocation")}
-              />
-            </Box>
-            <Box
-              sx={{
-                border: "1px solid",
-                borderColor: "divider",
-                borderRadius: "8px",
-                bgcolor: "grey.50",
-                "&:focus-within": {
-                  borderColor: TEAL,
-                  bgcolor: "background.paper",
-                  boxShadow: `0 0 0 2px ${TEAL}22`,
-                },
-                transition: "box-shadow 0.15s",
-              }}
-            >
-              <WaypointInput
-                value={destInput}
-                placeholder={t("chooseDestination")}
-                onChange={(v) => {
-                  setDestInput(v);
-                  if (!v) setDestination(null, "");
-                }}
-                onFocus={() => setFocusedField("destination")}
-                onBlur={handleWaypointBlur}
-              />
-            </Box>
+              {optimizeMutation.isPending ? (
+                <>
+                  <CircularProgress size={14} sx={{ color: TEAL }} />
+                  {t("optimizing")}
+                </>
+              ) : (
+                <>
+                  <RouteIcon sx={{ fontSize: 16 }} />
+                  {t("optimizeStopOrder")}
+                </>
+              )}
+            </Typography>
           </Box>
-
-          {/* Swap button */}
-          <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <IconButton
-              size="small"
-              onClick={() => {
-                swapOriginDestination();
-                const tmp = originInput;
-                setOriginInput(destInput);
-                setDestInput(tmp);
-              }}
-            >
-              <SwapVertIcon sx={{ fontSize: 22 }} />
-            </IconButton>
-          </Box>
-        </Box>
-
-        {/* Add destination */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1.5,
-            mt: 0.5,
-            py: 0.75,
-            px: 0.25,
-            cursor: "pointer",
-            color: "text.secondary",
-            "&:hover": { color: TEAL },
-          }}
-        >
-          <AddCircleOutlineIcon sx={{ fontSize: 18, ml: 0 }} />
-          <Typography variant="body2">{t("addStop")}</Typography>
-        </Box>
-      </Box>
-
-      {/* Divider + content below (suggestions overlay anchors here) */}
-      <Box sx={{ position: "relative" }}>
-        <Divider />
+        )}
 
         {/* Leave now / Depart at / Arrive by + Options */}
         <Box
@@ -431,7 +463,6 @@ export function DirectionsPanelContent() {
             py: 1,
           }}
         >
-          {/* Time mode pill */}
           <Box
             onClick={() => setTimePickerOpen((v) => !v)}
             sx={{
@@ -489,7 +520,6 @@ export function DirectionsPanelContent() {
         {/* Transit time picker dropdown */}
         {isTransitMode && timePickerOpen && (
           <Box sx={{ px: 2, pb: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
-            {/* Mode selector */}
             <Box sx={{ display: "flex", gap: 0.5 }}>
               {(["now", "depart", "arrive"] as const).map((m) => (
                 <Box
@@ -527,7 +557,6 @@ export function DirectionsPanelContent() {
                 </Box>
               ))}
             </Box>
-            {/* Date+time input */}
             {transitTimeMode !== "now" && (
               <Box
                 component="input"
@@ -575,14 +604,13 @@ export function DirectionsPanelContent() {
         <Divider />
 
         {/* Route results */}
-        {!origin || !destination ? (
+        {!allWaypointsFilled ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography variant="body2" color="text.secondary">
               {t("chooseOrigin")}
             </Typography>
           </Box>
         ) : isTransitMode ? (
-          // Transit itineraries
           transitLoading ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
               <CircularProgress size={28} sx={{ color: TEAL }} />
@@ -684,6 +712,82 @@ export function DirectionsPanelContent() {
               {t("noRoutesFound")}
             </Typography>
           </Box>
+        ) : hasMultipleStops && data?.routes[0] ? (
+          // Multi-stop: single route with leg summary
+          <Box>
+            <Box
+              sx={{
+                px: 2,
+                py: 1.5,
+                cursor: "pointer",
+                borderLeft: `4px solid ${TEAL}`,
+                bgcolor: "rgba(0,123,139,0.04)",
+                "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
+              }}
+              onClick={() => setDetailsRouteIndex(0)}
+            >
+              <Box
+                sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}
+              >
+                <Typography variant="body2" fontWeight={600} color="text.primary">
+                  {formatDuration(data.routes[0].duration)}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {units === "imperial"
+                    ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
+                    : formatDistance(data.routes[0].distance)}
+                </Typography>
+              </Box>
+              {data.routes[0].legs.length > 1 && (
+                <Box sx={{ mt: 1 }}>
+                  {data.routes[0].legs.map((leg, i) => {
+                    const fromLabel = waypoints[i]?.label || t("origin");
+                    const toLabel = waypoints[i + 1]?.label || t("destination");
+                    return (
+                      <Typography
+                        // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
+                        key={i}
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
+                        sx={{ lineHeight: 1.6 }}
+                      >
+                        {fromLabel} → {toLabel}
+                        {" · "}
+                        {formatDuration(leg.duration)}
+                        {" · "}
+                        {units === "imperial"
+                          ? `${(leg.distance / 1609.34).toFixed(1)} mi`
+                          : formatDistance(leg.distance)}
+                      </Typography>
+                    );
+                  })}
+                </Box>
+              )}
+              <Box sx={{ mt: 0.5, ml: -1.5 }}>
+                <Typography
+                  component="span"
+                  variant="caption"
+                  sx={{
+                    color: TEAL,
+                    cursor: "pointer",
+                    fontWeight: 500,
+                    px: 1.5,
+                    py: 0.75,
+                    borderRadius: 99,
+                    "&:hover": { bgcolor: `${TEAL}18` },
+                    transition: "background-color 0.15s",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDetailsRouteIndex(0);
+                  }}
+                >
+                  {tc("details")}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
         ) : (
           data?.routes.map((route, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
@@ -721,7 +825,13 @@ export function DirectionsPanelContent() {
           </Box>
         )}
       </Box>
-      {/* end position:relative wrapper */}
+
+      <Snackbar
+        open={snackbar !== null}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar(null)}
+        message={snackbar}
+      />
     </Box>
   );
 }

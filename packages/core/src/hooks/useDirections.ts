@@ -5,8 +5,7 @@ import type { DirectionsResult, TravelMode } from "../types/directions";
 import type { LngLat } from "../types/geometry";
 
 interface UseDirectionsParams {
-  origin: LngLat | null;
-  destination: LngLat | null;
+  waypoints: LngLat[];
   mode?: TravelMode;
   avoidHighways?: boolean;
   avoidTolls?: boolean;
@@ -16,8 +15,7 @@ interface UseDirectionsParams {
 }
 
 export function useDirections({
-  origin,
-  destination,
+  waypoints,
   mode = "driving",
   avoidHighways = false,
   avoidTolls = false,
@@ -25,11 +23,12 @@ export function useDirections({
   units = "metric",
   lang,
 }: UseDirectionsParams) {
+  const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
+
   return useQuery({
     queryKey: [
       "directions",
-      origin,
-      destination,
+      waypointsStr,
       mode,
       avoidHighways,
       avoidTolls,
@@ -39,10 +38,7 @@ export function useDirections({
     ],
     queryFn: () =>
       apiClient.get<DirectionsResult>(API_ENDPOINTS.directions, {
-        originLng: String(origin?.[0]),
-        originLat: String(origin?.[1]),
-        destLng: String(destination?.[0]),
-        destLat: String(destination?.[1]),
+        waypoints: waypointsStr,
         mode,
         avoidHighways: String(avoidHighways),
         avoidTolls: String(avoidTolls),
@@ -50,8 +46,8 @@ export function useDirections({
         units,
         ...(lang && { lang }),
       }),
-    enabled: origin !== null && destination !== null,
+    enabled: waypoints.length >= 2,
     staleTime: 120_000,
-    gcTime: 600_000, // Keep cached 10 min so switching back to a mode reuses data
+    gcTime: 600_000,
   });
 }

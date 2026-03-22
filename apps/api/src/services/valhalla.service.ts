@@ -3,12 +3,13 @@
  * Default: public FOSSGIS Valhalla instance. Override with VALHALLA_URL env var.
  */
 
-import type { DirectionsResult, Route, RouteStep, TravelMode } from "@openmapx/core";
+import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 import { decodePolyline } from "../utils/polyline.js";
 
 const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 
 const COSTING_MAP: Record<string, string> = {
+  driving: "auto",
   walking: "pedestrian",
   cycling: "bicycle",
 };
@@ -32,9 +33,16 @@ interface ValhallaLeg {
   elevation?: number[];
 }
 
+interface ValhallaLocation {
+  lat: number;
+  lon: number;
+  original_index?: number;
+}
+
 interface ValhallaTrip {
   summary: { length: number; time: number };
   legs: ValhallaLeg[];
+  locations?: ValhallaLocation[];
 }
 
 interface ValhallaResponse {
@@ -42,18 +50,32 @@ interface ValhallaResponse {
   alternates?: Array<{ trip: ValhallaTrip }>;
 }
 
-function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
-  const allCoords = trip.legs.flatMap((leg) => decodePolyline(leg.shape, 6));
+function transformLeg(leg: ValhallaLeg): RouteLeg {
+  const coords = decodePolyline(leg.shape, 6);
+  const steps: RouteStep[] = leg.maneuvers.map((m) => ({
+    instruction: m.instruction,
+    distance: m.length * 1000, // km -> metres
+    duration: m.time,
+    coordinates: coords.slice(m.begin_shape_index, m.end_shape_index + 1),
+  }));
 
-  const steps: RouteStep[] = trip.legs.flatMap((leg) => {
-    const coords = decodePolyline(leg.shape, 6);
-    return leg.maneuvers.map((m) => ({
-      instruction: m.instruction,
-      distance: m.length * 1000, // km → metres
-      duration: m.time,
-      coordinates: coords.slice(m.begin_shape_index, m.end_shape_index + 1),
-    }));
-  });
+  const firstNamed = leg.maneuvers.find((m) => m.street_names && m.street_names.length > 0);
+  const summary = firstNamed?.street_names?.[0] ? `via ${firstNamed.street_names[0]}` : undefined;
+
+  return {
+    distance: leg.summary.length * 1000, // km -> metres
+    duration: leg.summary.time,
+    geometry: coords,
+    steps,
+    summary,
+  };
+}
+
+function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
+  const legs = trip.legs.map(transformLeg);
+
+  const allCoords = legs.flatMap((leg) => leg.geometry);
+  const steps: RouteStep[] = legs.flatMap((leg) => leg.steps);
 
   // Build "via [primary road]" from first leg's first named maneuver
   const firstNamed = trip.legs[0]?.maneuvers.find(
@@ -66,9 +88,10 @@ function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
   const elevation = hasElevation ? trip.legs.flatMap((leg) => leg.elevation ?? []) : undefined;
 
   return {
-    distance: trip.summary.length * 1000, // km → metres
+    distance: trip.summary.length * 1000, // km -> metres
     duration: trip.summary.time,
     geometry: allCoords,
+    legs,
     steps,
     mode,
     summary,
@@ -84,8 +107,7 @@ export interface ValhallaRouteOptions {
 
 export const valhallaService = {
   async route(
-    origin: [number, number],
-    destination: [number, number],
+    waypoints: [number, number][],
     mode: "walking" | "cycling",
     options: ValhallaRouteOptions = {},
     lang?: string,
@@ -94,11 +116,10 @@ export const valhallaService = {
     if (options.avoidHighways) costingOptions.use_highways = 0;
     if (options.avoidFerries) costingOptions.use_ferry = 0;
 
+    const locations = waypoints.map((wp) => ({ lon: wp[0], lat: wp[1], type: "break" as const }));
+
     const body: Record<string, unknown> = {
-      locations: [
-        { lon: origin[0], lat: origin[1] },
-        { lon: destination[0], lat: destination[1] },
-      ],
+      locations,
       costing: COSTING_MAP[mode],
       costing_options: { [COSTING_MAP[mode]]: costingOptions },
       directions_options: {
@@ -106,8 +127,12 @@ export const valhallaService = {
         language: lang ?? "en",
       },
       elevation_interval: ELEVATION_INTERVAL,
-      alternates: 3,
     };
+
+    // Valhalla only supports alternates with exactly 2 waypoints
+    if (waypoints.length === 2) {
+      body.alternates = 3;
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
@@ -131,10 +156,64 @@ export const valhallaService = {
     }
 
     return {
-      origin,
-      destination,
+      waypoints,
       routes,
       activeRouteIndex: 0,
+    };
+  },
+
+  async optimizeRoute(
+    waypoints: [number, number][],
+    mode: "driving" | "walking" | "cycling",
+    options: ValhallaRouteOptions = {},
+    lang?: string,
+  ): Promise<DirectionsResult> {
+    const costingOptions: Record<string, unknown> = {};
+    if (options.avoidHighways) costingOptions.use_highways = 0;
+    if (options.avoidFerries) costingOptions.use_ferry = 0;
+
+    const locations = waypoints.map((wp) => ({
+      lon: wp[0],
+      lat: wp[1],
+      type: "break" as const,
+    }));
+
+    const body: Record<string, unknown> = {
+      locations,
+      costing: COSTING_MAP[mode],
+      costing_options: { [COSTING_MAP[mode]]: costingOptions },
+      directions_options: {
+        units: options.units === "imperial" ? "miles" : "km",
+        language: lang ?? "en",
+      },
+      elevation_interval: ELEVATION_INTERVAL,
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const res = await fetch(`${VALHALLA_URL}/optimized_route`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`Valhalla optimized_route error ${res.status}`);
+
+    const data = (await res.json()) as ValhallaResponse;
+    const travelMode = mode as TravelMode;
+
+    const routes: Route[] = [transformTrip(data.trip, travelMode)];
+
+    // Extract optimized order from trip.locations[].original_index
+    const optimizedOrder =
+      data.trip.locations?.map((loc) => loc.original_index ?? 0) ?? waypoints.map((_, i) => i);
+
+    return {
+      waypoints,
+      routes,
+      activeRouteIndex: 0,
+      optimizedOrder,
     };
   },
 };
