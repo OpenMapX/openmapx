@@ -18,8 +18,11 @@ import {
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { usePinMarker } from "@/hooks/usePinMarker";
 import { useMap } from "@/lib/MapContext";
+import { createMarkerSvg } from "@/lib/markerSvg";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 /** Filter IDs that are applied client-side instead of being sent to the API. */
 const CLIENT_SIDE_FILTER_IDS = new Set(["operator", "speed"]);
@@ -94,12 +97,6 @@ function buildVariantColorExpression(
 /**
  * Creates a 64x64 SVG (2x for retina): colored circle with white icon path.
  */
-function createMarkerSvg(iconPath: string, fill: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
-    <circle cx="32" cy="32" r="29" fill="${fill}" stroke="white" stroke-width="4"/>
-    <path d="${iconPath}" fill="white" transform="translate(13, 13) scale(1.583)"/>
-  </svg>`;
-}
 
 function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string, fill: string) {
   if (map.hasImage(imageId)) return;
@@ -133,6 +130,13 @@ export function DataSourceLayer() {
   const setViewport = useDataSourceStore((s) => s.setViewport);
   const setSearchBbox = useDataSourceStore((s) => s.setSearchBbox);
   const setMapMoved = useDataSourceStore((s) => s.setMapMoved);
+  const hoveredItemId = useDataSourceStore((s) => s.hoveredItemId);
+  const setHoveredItemId = useDataSourceStore((s) => s.setHoveredItemId);
+  const reanchorIds = useMemo(
+    () => (activeSource ? [markersLayerId(activeSource)] : []),
+    [activeSource],
+  );
+  useLayerReanchor(reanchorIds, activeSource !== null);
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
 
   const { data: sourcesData } = useDataSources();
@@ -173,27 +177,24 @@ export function DataSourceLayer() {
   const prevFiltersRef = useRef(serverFilters);
   const prevSearchBboxRef = useRef(searchBbox);
 
-  if (
-    prevActiveRef.current !== activeSource ||
-    prevFiltersRef.current !== serverFilters ||
-    prevSearchBboxRef.current !== searchBbox
-  ) {
-    if (prevSearchBboxRef.current !== searchBbox) {
+  useEffect(() => {
+    if (
+      prevActiveRef.current !== activeSource ||
+      prevFiltersRef.current !== serverFilters ||
+      prevSearchBboxRef.current !== searchBbox
+    ) {
       accumulatedRef.current = new Map();
+      prevActiveRef.current = activeSource;
+      prevFiltersRef.current = serverFilters;
+      prevSearchBboxRef.current = searchBbox;
     }
-    if (prevActiveRef.current !== activeSource || prevFiltersRef.current !== serverFilters) {
-      accumulatedRef.current = new Map();
-    }
-    prevActiveRef.current = activeSource;
-    prevFiltersRef.current = serverFilters;
-    prevSearchBboxRef.current = searchBbox;
-  }
 
-  if (searchResults) {
-    for (const r of searchResults) {
-      accumulatedRef.current.set(r.id, r);
+    if (searchResults) {
+      for (const r of searchResults) {
+        accumulatedRef.current.set(r.id, r);
+      }
     }
-  }
+  }, [activeSource, serverFilters, searchBbox, searchResults]);
 
   const allResults = Array.from(accumulatedRef.current.values());
 
@@ -232,6 +233,10 @@ export function DataSourceLayer() {
 
     return results;
   }, [allResults, filters.speed, filters.operator, openingHoursFilter]);
+
+  // Show pin marker for hovered item
+  const hoveredResult = filteredResults.find((r) => r.id === hoveredItemId) ?? null;
+  usePinMarker(hoveredResult?.coordinates ?? null, hoveredResult?.name ?? "");
 
   // Track whether we've set the initial searchBbox
   const initialBboxSetRef = useRef(false);
@@ -464,8 +469,15 @@ export function DataSourceLayer() {
       const features = map.queryRenderedFeatures(e.point, { layers });
       if (features.length > 0) {
         map.getCanvasContainer().style.cursor = "pointer";
+        const markerFeatures = features.filter(
+          (f) => f.layer.id === markersLid && f.properties?.id,
+        );
+        if (markerFeatures.length) {
+          setHoveredItemId((markerFeatures[0].properties as { id: string }).id);
+        }
       } else {
         map.getCanvasContainer().style.cursor = "";
+        setHoveredItemId(null);
       }
     };
 
@@ -482,8 +494,9 @@ export function DataSourceLayer() {
       map.off("click", labelsLid, onClick);
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
+      setHoveredItemId(null);
     };
-  }, [activeSource, activeMeta, mapReady, mapRef, selectItem, setSelectedPlace]);
+  }, [activeSource, activeMeta, mapReady, mapRef, selectItem, setSelectedPlace, setHoveredItemId]);
 
   // Cleanup on unmount
   useEffect(() => {

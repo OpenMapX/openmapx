@@ -56,9 +56,17 @@ async function fetchNominatim(
   url.searchParams.set("addressdetails", "1");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url.toString(), {
-    headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4_000);
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), {
+      headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`Nominatim error ${res.status}`);
   return res.json() as Promise<NominatimResult[]>;
 }
@@ -91,9 +99,17 @@ export const nominatimService: GeocodingProvider = {
     url.searchParams.set("lat", String(lat));
     url.searchParams.set("lon", String(lng));
 
-    const res = await fetch(url.toString(), {
-      headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4_000);
+    let res: Response;
+    try {
+      res = await fetch(url.toString(), {
+        headers: { "User-Agent": USER_AGENT, "Accept-Language": lang ?? "en" },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) return null;
     const data = (await res.json()) as NominatimReverseResult;
     if (data.error) return null;

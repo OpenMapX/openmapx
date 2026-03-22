@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayerStore } from "@openmapx/core";
+import { useTrafficStore } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import {
@@ -9,14 +9,15 @@ import {
   setLayerVisibility,
 } from "./layerStyleUtils";
 import { getTrafficTileTemplate, TRAFFIC_MIN_ZOOM } from "./trafficConfig";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const TRAFFIC_SOURCE_ID = "openmapx-traffic-source";
 const TRAFFIC_LAYER_ID = "openmapx-traffic-layer";
 
 export function TrafficLayer() {
   const { mapRef, mapReady } = useMap();
-  const showTraffic = useLayerStore((s) => s.showTraffic);
-  const activeLayer = useLayerStore((s) => s.activeLayer);
+  const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
+  useLayerReanchor(TRAFFIC_LAYER_ID, showTraffic);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -65,18 +66,6 @@ export function TrafficLayer() {
       map.off("styledata", syncLayer);
     };
   }, [mapReady, mapRef, showTraffic]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !showTraffic) return;
-
-    // Re-anchor after base map changes (default/satellite/terrain).
-    if (activeLayer !== "default" && activeLayer !== "satellite" && activeLayer !== "terrain") {
-      return;
-    }
-
-    moveLayerBeforeFirstSymbol(map, TRAFFIC_LAYER_ID);
-  }, [activeLayer, mapReady, mapRef, showTraffic]);
 
   return null;
 }

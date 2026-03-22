@@ -39,10 +39,51 @@ export const FPTF_PRODUCT_MODE: Readonly<Record<string, TransportMode>> = {
   cableCar: "cable_car",
 };
 
+/**
+ * Infer TransportMode from a product string that isn't in the exact-match table.
+ * Checks for common substrings in product IDs across HAFAS endpoints.
+ */
+function inferModeFromProduct(product: string): TransportMode | null {
+  const lower = product.toLowerCase();
+  if (
+    lower.includes("express") ||
+    lower.includes("train") ||
+    lower.includes("regional") ||
+    lower.includes("suburban") ||
+    lower.includes("bahn") ||
+    lower.includes("intercity")
+  )
+    return "rail";
+  if (lower.includes("subway") || lower.includes("metro") || lower.includes("underground"))
+    return "subway";
+  if (lower.includes("tram") || lower.includes("streetcar") || lower.includes("straßenbahn"))
+    return "tram";
+  if (lower.includes("ferry") || lower.includes("watercraft") || lower.includes("fähre"))
+    return "ferry";
+  if (lower.includes("funicular")) return "funicular";
+  if (lower.includes("gondola") || lower.includes("cable")) return "cable_car";
+  return null;
+}
+
+/**
+ * Infer TransportMode from a route/line name when product info is missing or wrong.
+ * Matches well-known European line name patterns.
+ */
+export function inferModeFromName(name: string): TransportMode | null {
+  const trimmed = name.trim();
+  if (/^(ICE|IC|EC|EN|TGV|THA|EIC|EX|CNL|NJ|RJ|RJX|EST|EUR|Thalys|Eurostar)\b/i.test(trimmed))
+    return "rail";
+  if (/^(RE|RB|IRE|MEX|FEX|HLB|AKN|ERB|WFB|NWB|RTB|VIA)\b/i.test(trimmed)) return "rail";
+  if (/^S\d/i.test(trimmed)) return "rail";
+  if (/^U\d/i.test(trimmed)) return "subway";
+  if (/^STR\s?\d/i.test(trimmed)) return "tram";
+  return null;
+}
+
 /** Resolve a single FPTF product string to a TransportMode. */
 export function productToMode(product: string | undefined): TransportMode {
   if (!product) return "bus";
-  return FPTF_PRODUCT_MODE[product] ?? "bus";
+  return FPTF_PRODUCT_MODE[product] ?? inferModeFromProduct(product) ?? "bus";
 }
 
 /** Derive the modes served by a stop from its FPTF products bitmask map. */
@@ -51,7 +92,7 @@ export function mapProducts(products: Record<string, boolean> | undefined): Tran
   const modes: TransportMode[] = [];
   for (const [key, enabled] of Object.entries(products)) {
     if (enabled) {
-      const mode = FPTF_PRODUCT_MODE[key] ?? "bus";
+      const mode = FPTF_PRODUCT_MODE[key] ?? inferModeFromProduct(key) ?? "bus";
       if (!modes.includes(mode)) modes.push(mode);
     }
   }
@@ -84,7 +125,13 @@ export function normalizeRemarks(raw: unknown[] | undefined): TripRemark[] | und
 // biome-ignore lint/suspicious/noExplicitAny: FPTF departure shape varies by provider
 export function normalizeFptfDeparture(d: any, prefix: string): Departure {
   const line = d.line ?? {};
-  const mode = productToMode(line.product);
+  let mode = productToMode(line.product);
+  // Safety net: if product mapping fell through to "bus" but the line name
+  // is clearly a train/subway/tram, override with the inferred mode.
+  if (mode === "bus") {
+    const nameMode = inferModeFromName(line.name ?? "");
+    if (nameMode) mode = nameMode;
+  }
   const scheduledAt = d.plannedWhen ?? d.when ?? new Date().toISOString();
   const delaySeconds: number | undefined = typeof d.delay === "number" ? d.delay : undefined;
   const expectedAt =

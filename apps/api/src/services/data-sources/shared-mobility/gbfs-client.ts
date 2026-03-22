@@ -4,6 +4,7 @@
  */
 
 import type {
+  GbfsPricingPlan,
   GbfsStationInfo,
   GbfsStationStatus,
   GbfsSystemInfo,
@@ -78,6 +79,7 @@ export interface GbfsSystemData {
   stationStatuses: Map<string, GbfsStationStatus>;
   vehicles: GbfsVehicleStatus[];
   vehicleTypes: Map<string, GbfsVehicleType>;
+  pricingPlans: Map<string, GbfsPricingPlan>;
 }
 
 /**
@@ -93,36 +95,42 @@ export async function fetchGbfsSystem(autoDiscoveryUrl: string): Promise<GbfsSys
   const vehicleStatusUrl =
     resolveFeedUrl(discovery, "vehicle_status") ?? resolveFeedUrl(discovery, "free_bike_status");
   const vehicleTypesUrl = resolveFeedUrl(discovery, "vehicle_types");
+  const pricingPlansUrl = resolveFeedUrl(discovery, "system_pricing_plans");
 
   // Fetch all feeds in parallel
-  const [sysInfoRes, stInfoRes, stStatusRes, vStatusRes, vTypesRes] = await Promise.all([
-    systemInfoUrl
-      ? fetchJson<
-          GbfsFeedResponse<{
-            system_id: string;
-            name: string;
-            operator?: string;
-            url?: string;
-            timezone: string;
-            opening_hours?: string;
-          }>
-        >(systemInfoUrl)
-      : null,
-    stationInfoUrl
-      ? fetchJson<GbfsFeedResponse<{ stations: RawStationInfo[] }>>(stationInfoUrl)
-      : null,
-    stationStatusUrl
-      ? fetchJson<GbfsFeedResponse<{ stations: RawStationStatus[] }>>(stationStatusUrl)
-      : null,
-    vehicleStatusUrl
-      ? fetchJson<GbfsFeedResponse<{ bikes?: RawVehicleStatus[]; vehicles?: RawVehicleStatus[] }>>(
-          vehicleStatusUrl,
-        )
-      : null,
-    vehicleTypesUrl
-      ? fetchJson<GbfsFeedResponse<{ vehicle_types: RawVehicleType[] }>>(vehicleTypesUrl)
-      : null,
-  ]);
+  const [sysInfoRes, stInfoRes, stStatusRes, vStatusRes, vTypesRes, pricingRes] = await Promise.all(
+    [
+      systemInfoUrl
+        ? fetchJson<
+            GbfsFeedResponse<{
+              system_id: string;
+              name: string;
+              operator?: string;
+              url?: string;
+              timezone: string;
+              opening_hours?: string;
+            }>
+          >(systemInfoUrl)
+        : null,
+      stationInfoUrl
+        ? fetchJson<GbfsFeedResponse<{ stations: RawStationInfo[] }>>(stationInfoUrl)
+        : null,
+      stationStatusUrl
+        ? fetchJson<GbfsFeedResponse<{ stations: RawStationStatus[] }>>(stationStatusUrl)
+        : null,
+      vehicleStatusUrl
+        ? fetchJson<
+            GbfsFeedResponse<{ bikes?: RawVehicleStatus[]; vehicles?: RawVehicleStatus[] }>
+          >(vehicleStatusUrl)
+        : null,
+      vehicleTypesUrl
+        ? fetchJson<GbfsFeedResponse<{ vehicle_types: RawVehicleType[] }>>(vehicleTypesUrl)
+        : null,
+      pricingPlansUrl
+        ? fetchJson<GbfsFeedResponse<{ plans: RawPricingPlan[] }>>(pricingPlansUrl)
+        : null,
+    ],
+  );
 
   const systemInfo: GbfsSystemInfo | null = sysInfoRes?.data
     ? {
@@ -144,6 +152,7 @@ export async function fetchGbfsSystem(autoDiscoveryUrl: string): Promise<GbfsSys
     vehicleTypesAvailable: s.vehicle_types_available?.map(
       (v: { vehicle_type_id: string }) => v.vehicle_type_id,
     ),
+    rentalUris: s.rental_uris,
   }));
 
   const stationStatuses = new Map<string, GbfsStationStatus>();
@@ -187,10 +196,39 @@ export async function fetchGbfsSystem(autoDiscoveryUrl: string): Promise<GbfsSys
       propulsionType: vt.propulsion_type ?? "human",
       name: typeof vt.name === "string" ? vt.name : localizedText(vt.name),
       maxRangeMeters: vt.max_range_meters,
+      make: typeof vt.make === "string" ? vt.make : vt.make ? localizedText(vt.make) : undefined,
+      model:
+        typeof vt.model === "string" ? vt.model : vt.model ? localizedText(vt.model) : undefined,
+      riderCapacity: vt.rider_capacity,
+      vehicleAccessories: vt.vehicle_accessories?.map((a) =>
+        typeof a === "string" ? a : localizedText(a),
+      ),
+      co2PerKm: vt.g_CO2_km,
+      returnConstraint: vt.return_constraint,
+      defaultPricingPlanId: vt.default_pricing_plan_id,
+      pricingPlanIds: vt.pricing_plan_ids,
     });
   }
 
-  return { systemInfo, stations, stationStatuses, vehicles, vehicleTypes };
+  const pricingPlans = new Map<string, GbfsPricingPlan>();
+  for (const pp of pricingRes?.data?.plans ?? []) {
+    pricingPlans.set(pp.plan_id, {
+      planId: pp.plan_id,
+      name: typeof pp.name === "string" ? pp.name : localizedText(pp.name),
+      currency: pp.currency ?? "EUR",
+      price: pp.price ?? 0,
+      isTaxable: pp.is_taxable ?? false,
+      description: pp.description
+        ? typeof pp.description === "string"
+          ? pp.description
+          : localizedText(pp.description)
+        : undefined,
+      perKmPricing: pp.per_km_pricing,
+      perMinPricing: pp.per_min_pricing,
+    });
+  }
+
+  return { systemInfo, stations, stationStatuses, vehicles, vehicleTypes, pricingPlans };
 }
 
 function localizedText(val: unknown): string {
@@ -209,6 +247,7 @@ interface RawStationInfo {
   lon: number;
   capacity?: number;
   vehicle_types_available?: { vehicle_type_id: string }[];
+  rental_uris?: { web?: string; android?: string; ios?: string };
 }
 
 interface RawStationStatus {
@@ -241,4 +280,23 @@ interface RawVehicleType {
   propulsion_type?: string;
   name?: string | { text: string }[];
   max_range_meters?: number;
+  make?: string | { text: string }[];
+  model?: string | { text: string }[];
+  rider_capacity?: number;
+  vehicle_accessories?: (string | { text: string }[])[];
+  g_CO2_km?: number;
+  return_constraint?: string;
+  default_pricing_plan_id?: string;
+  pricing_plan_ids?: string[];
+}
+
+interface RawPricingPlan {
+  plan_id: string;
+  name: string | { text: string }[];
+  currency?: string;
+  price?: number;
+  is_taxable?: boolean;
+  description?: string | { text: string }[];
+  per_km_pricing?: { start: number; rate: number; interval: number; end?: number }[];
+  per_min_pricing?: { start: number; rate: number; interval: number; end?: number }[];
 }

@@ -6,6 +6,7 @@
  */
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
+import { bboxContains } from "../../../utils/geo.js";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
 const BASE_URL = "https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de";
@@ -32,10 +33,6 @@ function getCredentials(): { clientId: string; apiKey: string } | null {
   const apiKey = process.env.DB_GBFS_API_KEY;
   if (!clientId || !apiKey) return null;
   return { clientId, apiKey };
-}
-
-function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
-  return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
 }
 
 async function fetchJson<T>(

@@ -605,3 +605,101 @@ export const measurePreview: ReactNode = (
 );
 
 export const standardMapPreview: ReactNode = defaultMapPreview;
+
+export const buildingsPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <rect width="80" height="80" fill="#e0e3e8" />
+    {/* ground plane */}
+    <path d="M0 62 L80 58 L80 80 L0 80Z" fill="#d0d4da" />
+    {/* tall building back */}
+    <path d="M20 18 L34 14 L34 52 L20 56Z" fill="#a8a6a8" />
+    <path d="M34 14 L48 18 L48 56 L34 52Z" fill="#c8c4c0" />
+    <path d="M20 18 L34 14 L48 18 L34 22Z" fill="#d4d0cc" />
+    {/* short building front */}
+    <path d="M44 38 L56 35 L56 58 L44 60Z" fill="#b8b4b2" />
+    <path d="M56 35 L68 38 L68 60 L56 58Z" fill="#d4d0cc" />
+    <path d="M44 38 L56 35 L68 38 L56 41Z" fill="#e0dcd8" />
+    {/* small building left */}
+    <path d="M6 44 L14 42 L14 58 L6 60Z" fill="#b8b4b2" />
+    <path d="M14 42 L22 44 L22 60 L14 58Z" fill="#d4d0cc" />
+    <path d="M6 44 L14 42 L22 44 L14 46Z" fill="#e0dcd8" />
+  </svg>
+);
+
+export const liveTrainsPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <rect width="80" height="80" fill="#e8eef4" />
+    {/* railway tracks */}
+    <line x1="10" y1="60" x2="70" y2="20" stroke="#999" strokeWidth="1.5" strokeDasharray="4,3" />
+    <line x1="5" y1="40" x2="75" y2="45" stroke="#999" strokeWidth="1.5" strokeDasharray="4,3" />
+    <line x1="30" y1="10" x2="50" y2="70" stroke="#999" strokeWidth="1" strokeDasharray="4,3" />
+    {/* train dots */}
+    <circle cx="28" cy="46" r="5" fill="#EC0016" />
+    <circle cx="52" cy="32" r="5" fill="#FF6600" />
+    <circle cx="60" cy="44" r="4" fill="#15A3DB" />
+    <circle cx="38" cy="22" r="3.5" fill="#059500" />
+    {/* labels */}
+    <text x="28" y="58" fontSize="6" fill="#333" fontFamily="sans-serif" textAnchor="middle">
+      ICE
+    </text>
+    <text x="52" y="27" fontSize="6" fill="#333" fontFamily="sans-serif" textAnchor="middle">
+      IC
+    </text>
+  </svg>
+);
+
+export const globePreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <rect width="80" height="80" fill="#0a1628" />
+    <circle cx="40" cy="40" r="28" fill="#2a6ab5" />
+    <ellipse
+      cx="40"
+      cy="40"
+      rx="14"
+      ry="28"
+      fill="none"
+      stroke="#4a90d9"
+      strokeWidth="0.8"
+      opacity="0.6"
+    />
+    <ellipse
+      cx="40"
+      cy="40"
+      rx="28"
+      ry="10"
+      fill="none"
+      stroke="#4a90d9"
+      strokeWidth="0.8"
+      opacity="0.6"
+    />
+    {/* land masses */}
+    <path d="M28 24 Q32 20 38 22 Q42 24 40 28 Q36 30 30 28Z" fill="#3d8c5c" opacity="0.85" />
+    <path d="M44 30 Q52 26 56 32 Q58 38 54 42 Q48 44 44 38Z" fill="#3d8c5c" opacity="0.85" />
+    <path d="M26 38 Q30 36 34 40 Q36 46 30 48 Q24 46 26 38Z" fill="#3d8c5c" opacity="0.85" />
+    <path d="M42 48 Q48 46 52 50 Q54 54 48 56 Q42 54 42 48Z" fill="#3d8c5c" opacity="0.85" />
+    {/* atmosphere glow */}
+    <circle cx="40" cy="40" r="28" fill="none" stroke="#88C6FC" strokeWidth="2" opacity="0.4" />
+    <circle cx="40" cy="40" r="30" fill="none" stroke="#88C6FC" strokeWidth="1" opacity="0.2" />
+  </svg>
+);

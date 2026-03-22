@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { escapeHtml } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const RASTER_SOURCE_ID = "openmapx-opensnowmap-source";
 const RASTER_LAYER_ID = "openmapx-opensnowmap-layer";
@@ -112,6 +113,17 @@ export function WinterSportsLayer() {
   const setLoading = useWinterSportsStore((s) => s.setLoading);
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
   useOverlayExclusion("winter-sports", layerVisible);
+  useLayerReanchor(
+    [
+      RASTER_LAYER_ID,
+      AREA_LAYER_ID,
+      PISTE_LAYER_ID,
+      PISTE_HIGHLIGHT_LAYER_ID,
+      LIFT_LAYER_ID,
+      LIFT_HIGHLIGHT_LAYER_ID,
+    ],
+    layerVisible,
+  );
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 

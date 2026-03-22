@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getGeocodingProvider } from "../services/geocoding.factory";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
+import { expandSearchQuery, fetchWithVariants } from "../utils/query-expansion.js";
 
 export const geocodeRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { q: string; lang?: string } }>("/geocode", {
@@ -17,13 +18,21 @@ export const geocodeRoute: FastifyPluginAsync = async (fastify) => {
     handler: async (req, reply) => {
       const { q, lang } = req.query;
       const effectiveLang = lang ?? "en";
-      const result = await withCache(
-        hashKey("cache:geocode", { q, lang: effectiveLang }),
-        TTL.geocoding.forward,
-        () => getGeocodingProvider().geocode(q, effectiveLang),
-      );
-      reply.header("Cache-Control", "public, max-age=86400");
-      return result;
+      const expandedQ = expandSearchQuery(q);
+      const normalizedQ = expandedQ.trim().toLowerCase();
+      try {
+        const result = await withCache(
+          hashKey("cache:geocode", { q: normalizedQ, lang: effectiveLang }),
+          TTL.geocoding.forward,
+          () => fetchWithVariants(q, (v) => getGeocodingProvider().geocode(v, effectiveLang)),
+        );
+        reply.header("Cache-Control", "public, max-age=86400");
+        return result;
+      } catch (err) {
+        req.log.error(err, "geocode upstream failed");
+        reply.header("Cache-Control", "no-cache");
+        return [];
+      }
     },
   });
 
@@ -49,11 +58,17 @@ export const geocodeRoute: FastifyPluginAsync = async (fastify) => {
       // Round to 4dp (~11m) to maximise cache hits for nearby queries
       const effectiveLang = lang ?? "en";
       const key = `cache:geocode:rev:${round(lat, 4)}:${round(lng, 4)}:${effectiveLang}`;
-      const result = await withCache(key, TTL.geocoding.reverse, () =>
-        getGeocodingProvider().reverseGeocode(lat, lng, effectiveLang),
-      );
-      reply.header("Cache-Control", "public, max-age=86400");
-      return result;
+      try {
+        const result = await withCache(key, TTL.geocoding.reverse, () =>
+          getGeocodingProvider().reverseGeocode(lat, lng, effectiveLang),
+        );
+        reply.header("Cache-Control", "public, max-age=86400");
+        return result;
+      } catch (err) {
+        req.log.error(err, "reverse geocode upstream failed");
+        reply.header("Cache-Control", "no-cache");
+        return null;
+      }
     },
   });
 };

@@ -14,6 +14,12 @@ export const STATIC_PROVIDER_ATTRIBUTION: Record<
     license: "CC BY 4.0",
     licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
   },
+  ris: {
+    label: "Deutsche Bahn",
+    url: "https://developers.deutschebahn.com",
+    license: "DB API Terms",
+    licenseUrl: "https://developers.deutschebahn.com",
+  },
   tfl: {
     label: "Powered by TfL Open Data",
     url: "https://tfl.gov.uk/info-for/open-data-users/",

@@ -13,6 +13,8 @@ const COSTING_MAP: Record<string, string> = {
   cycling: "bicycle",
 };
 
+const ELEVATION_INTERVAL = 30; // metres between elevation samples
+
 interface ValhallaManeuver {
   type: number;
   instruction: string;
@@ -27,6 +29,7 @@ interface ValhallaLeg {
   shape: string; // polyline6 encoded
   summary: { length: number; time: number };
   maneuvers: ValhallaManeuver[];
+  elevation?: number[];
 }
 
 interface ValhallaTrip {
@@ -58,6 +61,10 @@ function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
   );
   const summary = firstNamed?.street_names?.[0] ? `via ${firstNamed.street_names[0]}` : undefined;
 
+  // Concatenate elevation arrays from all legs (if present)
+  const hasElevation = trip.legs.some((leg) => leg.elevation && leg.elevation.length > 0);
+  const elevation = hasElevation ? trip.legs.flatMap((leg) => leg.elevation ?? []) : undefined;
+
   return {
     distance: trip.summary.length * 1000, // km → metres
     duration: trip.summary.time,
@@ -65,6 +72,7 @@ function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
     steps,
     mode,
     summary,
+    ...(elevation && { elevation, elevationInterval: ELEVATION_INTERVAL }),
   };
 }
 
@@ -97,6 +105,7 @@ export const valhallaService = {
         units: options.units === "imperial" ? "miles" : "km",
         language: lang ?? "en",
       },
+      elevation_interval: ELEVATION_INTERVAL,
       alternates: 3,
     };
 

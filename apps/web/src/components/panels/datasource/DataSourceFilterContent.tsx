@@ -39,7 +39,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { TEAL } from "@/lib/theme";
 
 /** Filter IDs that are applied client-side instead of being sent to the API. */
@@ -230,8 +230,11 @@ export function DataSourceFilterContent() {
   const setFilter = useDataSourceStore((s) => s.setFilter);
   const clearFilters = useDataSourceStore((s) => s.clearFilters);
   const selectItem = useDataSourceStore((s) => s.selectItem);
+  const hoveredItemId = useDataSourceStore((s) => s.hoveredItemId);
+  const setHoveredItemId = useDataSourceStore((s) => s.setHoveredItemId);
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
   const { setSelectedPlace } = usePlaceStore();
+  const onHoverEnd = useCallback(() => setHoveredItemId(null), [setHoveredItemId]);
   const [sortAsc, setSortAsc] = useState(true);
   const [activeSortKey, setActiveSortKey] = useState<string | null>(null);
 
@@ -299,6 +302,9 @@ export function DataSourceFilterContent() {
         { key: "range", labelKey: "range" as const },
         { key: "battery", labelKey: "battery" as const },
       ];
+    }
+    if (activeSource === "parking") {
+      return [{ key: "freeSpaces", labelKey: "freeSpaces" as const }];
     }
     return [{ key: "available", labelKey: "availability" as const }];
   }, [activeSource, filters.fuelType]);
@@ -515,8 +521,6 @@ export function DataSourceFilterContent() {
                   onClick={() => {
                     if (!activeSource) return;
                     selectItem(activeSource, result.id);
-                    // Set place directly from result data so the floating card
-                    // shows immediately with correct name/coordinates/summary
                     setSelectedPlace({
                       id: result.id,
                       name: result.name,
@@ -527,6 +531,8 @@ export function DataSourceFilterContent() {
                     });
                     useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
                   }}
+                  onMouseEnter={() => setHoveredItemId(result.id)}
+                  onMouseLeave={onHoverEnd}
                   sx={{
                     width: "100%",
                     textAlign: "left",
@@ -535,12 +541,18 @@ export function DataSourceFilterContent() {
                     cursor: "pointer",
                     px: 2,
                     py: 1.5,
+                    bgcolor: hoveredItemId === result.id ? "rgba(0,0,0,0.06)" : "transparent",
                     "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
                   }}
                 >
                   <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
                     {result.name}
                   </Typography>
+                  {result.operator && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.25 }}>
+                      {result.operator}
+                    </Typography>
+                  )}
                   <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
                     {result.summary && (
                       <Typography variant="caption" color="text.secondary">
@@ -554,7 +566,9 @@ export function DataSourceFilterContent() {
                           color:
                             result.status === "open" || result.status === "available"
                               ? "success.main"
-                              : result.status === "closed" || result.status === "empty"
+                              : result.status === "closed" ||
+                                  result.status === "empty" ||
+                                  result.status === "inactive"
                                 ? "error.main"
                                 : result.status === "full"
                                   ? "warning.main"
@@ -572,7 +586,9 @@ export function DataSourceFilterContent() {
                                 ? tc("empty")
                                 : result.status === "full"
                                   ? tc("full")
-                                  : null}
+                                  : result.status === "inactive"
+                                    ? tc("inactive")
+                                    : null}
                       </Typography>
                     )}
                   </Box>
@@ -733,14 +749,22 @@ function ConnectorTypeSection({
 
 /** Generic Chip Filter Section -- used for any unknown filter */
 
+const SPEED_COLORS: Record<string, string> = {
+  slow: "#4CAF50",
+  fast: "#FF9800",
+  "ultra-rapid": "#F44336",
+};
+
 function ChipFilterSection({
   filterDef,
   currentValue,
   onToggle,
+  renderIcon,
 }: {
   filterDef: DataSourceFilterDef;
   currentValue: unknown;
   onToggle: (filterId: string, optionId: string | number) => void;
+  renderIcon?: (optionId: string | number) => React.ReactElement | undefined;
 }) {
   if (filterDef.type !== "multi-select" || !filterDef.options) return null;
 
@@ -754,12 +778,14 @@ function ChipFilterSection({
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
         {filterDef.options.map((opt) => {
           const isSelected = selected.includes(opt.id);
+          const icon = renderIcon?.(opt.id);
           return (
             <Chip
               key={String(opt.id)}
               label={opt.label}
               size="small"
               variant={isSelected ? "filled" : "outlined"}
+              {...(icon ? { icon } : {})}
               onClick={() => onToggle(filterDef.id, opt.id)}
               sx={{
                 fontSize: 12,
@@ -777,69 +803,28 @@ function ChipFilterSection({
   );
 }
 
-/** Speed Filter Section -- chips with colored dots matching map markers */
-
-const SPEED_COLORS: Record<string, string> = {
-  slow: "#4CAF50",
-  fast: "#FF9800",
-  "ultra-rapid": "#F44336",
-};
-
-function SpeedFilterSection({
-  filterDef,
-  currentValue,
-  onToggle,
-}: {
+function SpeedFilterSection(props: {
   filterDef: DataSourceFilterDef;
   currentValue: unknown;
   onToggle: (filterId: string, optionId: string | number) => void;
 }) {
-  if (filterDef.type !== "multi-select" || !filterDef.options) return null;
-
-  const selected = (currentValue as (string | number)[] | undefined) ?? [];
-
   return (
-    <Box sx={{ mb: 2 }}>
-      <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
-        {filterDef.label}
-      </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-        {filterDef.options.map((opt) => {
-          const isSelected = selected.includes(opt.id);
-          const dotColor = SPEED_COLORS[String(opt.id)] ?? "#9E9E9E";
-          return (
-            <Chip
-              key={String(opt.id)}
-              label={opt.label}
-              size="small"
-              variant={isSelected ? "filled" : "outlined"}
-              icon={
-                <Box
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    bgcolor: dotColor,
-                    flexShrink: 0,
-                    ml: "8px !important",
-                    mr: "-2px !important",
-                  }}
-                />
-              }
-              onClick={() => onToggle(filterDef.id, opt.id)}
-              sx={{
-                fontSize: 12,
-                ...(isSelected && {
-                  bgcolor: TEAL,
-                  color: "#fff",
-                  "&:hover": { bgcolor: "#006475" },
-                }),
-              }}
-            />
-          );
-        })}
-      </Box>
-    </Box>
+    <ChipFilterSection
+      {...props}
+      renderIcon={(optionId) => (
+        <Box
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            bgcolor: SPEED_COLORS[String(optionId)] ?? "#9E9E9E",
+            flexShrink: 0,
+            ml: "8px !important",
+            mr: "-2px !important",
+          }}
+        />
+      )}
+    />
   );
 }
 

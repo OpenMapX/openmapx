@@ -1,7 +1,9 @@
 "use client";
 
+import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import DirectionsBoatIcon from "@mui/icons-material/DirectionsBoat";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
@@ -12,6 +14,7 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { MergedDeparture, Place, TripItinerary, TripLeg } from "@openmapx/core";
 import {
@@ -34,9 +37,12 @@ import { LegAlerts } from "@/components/panels/transit/LegAlerts";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
+import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { geocodeStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
+
+import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 
 function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture {
   return {
@@ -69,6 +75,7 @@ export function TransitDetailsView({
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
+  const tt = useTranslations("transit");
   const locale = useLocale();
   const { data: providers } = useProviders();
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
@@ -248,7 +255,7 @@ export function TransitDetailsView({
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                       <DirectionsWalkIcon sx={{ fontSize: 16, color: "text.secondary" }} />
                       <Typography variant="body2" color="text.secondary">
-                        {t("walkDuration", { minutes: Math.round(duration) })}
+                        {t("walkDuration", { duration: formatDuration(Math.round(duration) * 60) })}
                       </Typography>
                     </Box>
                   ) : (
@@ -297,13 +304,22 @@ export function TransitDetailsView({
                           </Typography>
                         </Box>
                         {leg.tripId && <TransitLiveBadge tripId={leg.tripId} />}
+                        {leg.occupancy && (
+                          <Tooltip title={tt(OCCUPANCY_KEY[leg.occupancy])} placement="top" arrow>
+                            <AirlineSeatReclineNormalIcon
+                              sx={{ fontSize: 14, color: OCCUPANCY_COLOR[leg.occupancy] }}
+                            />
+                          </Tooltip>
+                        )}
                       </Box>
                       <Typography
                         variant="caption"
                         color="text.secondary"
                         sx={{ mt: 0.25, display: "block" }}
                       >
-                        {t("transitDuration", { minutes: Math.round(duration) })}
+                        {t("transitDuration", {
+                          duration: formatDuration(Math.round(duration) * 60),
+                        })}
                       </Typography>
                       <TransitLegStops
                         tripId={leg.tripId}
@@ -359,6 +375,58 @@ export function TransitDetailsView({
           );
         })}
       </Box>
+
+      {/* Fare */}
+      {(() => {
+        const fareSummary = extractFareSummary(itinerary.fare);
+        if (!fareSummary) return null;
+        const mediaNames = [
+          ...new Set(
+            fareSummary.products.map((p) => p.media?.name).filter((n): n is string => Boolean(n)),
+          ),
+        ];
+        return (
+          <>
+            <Divider />
+            <Box sx={{ px: 2, py: 1.5 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <ConfirmationNumberOutlinedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+                <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+                  {t("fare")}
+                </Typography>
+                <Typography variant="body2" fontWeight={600}>
+                  {t("fareApprox", {
+                    amount: formatFare(fareSummary.amount, fareSummary.currency, locale),
+                  })}
+                </Typography>
+              </Box>
+              {fareSummary.byCategory.length > 1 && (
+                <Box sx={{ mt: 0.75, display: "flex", flexDirection: "column", gap: 0.25 }}>
+                  {fareSummary.byCategory.map((cat) => (
+                    <Box key={cat.name} sx={{ display: "flex", justifyContent: "space-between" }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {cat.name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatFare(cat.amount, fareSummary.currency, locale)}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+              {mediaNames.length > 0 && (
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ mt: 0.5, display: "block" }}
+                >
+                  {mediaNames.join(", ")}
+                </Typography>
+              )}
+            </Box>
+          </>
+        );
+      })()}
 
       {/* Data source attribution */}
       {provider &&

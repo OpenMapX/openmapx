@@ -3,20 +3,29 @@
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import BoltIcon from "@mui/icons-material/Bolt";
 import BusinessIcon from "@mui/icons-material/Business";
+import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
+import EnergySavingsLeafIcon from "@mui/icons-material/EnergySavingsLeaf";
 import EvStationIcon from "@mui/icons-material/EvStation";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoIcon from "@mui/icons-material/Info";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
+import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import PaymentsIcon from "@mui/icons-material/Payments";
 import PedalBikeIcon from "@mui/icons-material/PedalBike";
+import TrainIcon from "@mui/icons-material/Train";
 import Box from "@mui/material/Box";
+import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { DataSourceDetail, DataSourceDetailSection } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { TEAL } from "@/lib/theme";
 
 /** Section header config per data source type. */
@@ -24,7 +33,7 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // EV Charging
   "ev-charging": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   ocm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
-  osm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
+  "osm-ev": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   // Fuel
   fuel: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
   tankerkoenig: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
@@ -47,8 +56,19 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // Car Sharing
   "car-sharing": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   cambio: { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
+  stadtteilauto: { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
+  wuppertal: { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
+  bielefeld: { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   // GBFS can be any type — will be resolved by prefix
   gbfs: { icon: <InfoIcon sx={{ fontSize: 20 }} />, titleKey: "sharedMobility" },
+  // Parking
+  parking: { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "parkapi-v2": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "parkapi-v3": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "db-bahnpark": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "osm-parking": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  // DB Station (RIS::Stations)
+  "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
 };
 
 function resolveSourceHeader(detail: DataSourceDetail): {
@@ -82,6 +102,16 @@ function getSectionIcon(sectionIcon?: string): React.ReactNode {
       return <AccessTimeIcon />;
     case "info":
       return <InfoIcon />;
+    case "directions_bus":
+      return <DirectionsBusIcon />;
+    case "directions_car":
+      return <DirectionsCarIcon />;
+    case "payments":
+      return <PaymentsIcon />;
+    case "eco":
+      return <EnergySavingsLeafIcon />;
+    case "open_in_new":
+      return <OpenInNewIcon />;
     default:
       return <BoltIcon />;
   }
@@ -154,9 +184,20 @@ function FormattedValue({ value }: { value: string | number }) {
   return <>{value}</>;
 }
 
+/** Check if a string looks like a URL. */
+function isUrl(str: string): boolean {
+  return /^https?:\/\//.test(str) || /^[a-z][\w-]*:\/\//.test(str);
+}
+
 /** Simple key-value row: label on the left, value on the right. */
 function KeyValueRow({ row }: { row: (string | number)[] }) {
+  const t = useTranslations("dataSources");
   const [label, value] = row;
+  const labelStr = String(label);
+  const labelKey = ROW_LABEL_KEYS[labelStr];
+  const valueStr = String(value);
+  const valueKey = ROW_LABEL_KEYS[valueStr];
+  const isLink = typeof value === "string" && isUrl(value);
   return (
     <Box
       sx={{
@@ -167,12 +208,35 @@ function KeyValueRow({ row }: { row: (string | number)[] }) {
         "&:not(:last-child)": { borderBottom: 1, borderColor: "divider" },
       }}
     >
-      <Typography variant="body2" color="text.secondary">
-        {label}
+      <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+        {labelKey ? t(labelKey) : label}
       </Typography>
-      <Typography variant="body2" fontWeight={500} sx={{ ml: 1, flexShrink: 0 }}>
-        <FormattedValue value={value} />
-      </Typography>
+      {isLink ? (
+        <Link
+          href={valueStr}
+          target="_blank"
+          rel="noopener noreferrer"
+          underline="hover"
+          variant="body2"
+          sx={{
+            ml: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {valueStr.replace(/^https?:\/\//, "").split("?")[0]}
+        </Link>
+      ) : (
+        <Typography
+          variant="body2"
+          fontWeight={500}
+          sx={{ ml: 1, minWidth: 0, textAlign: "right" }}
+        >
+          <FormattedValue value={valueKey ? t(valueKey) : value} />
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -228,6 +292,130 @@ function SectionContent({ section }: { section: DataSourceDetailSection }) {
     default:
       return null;
   }
+}
+
+/** Map API section titles to i18n keys. */
+const SECTION_TITLE_KEYS: Record<string, string> = {
+  Availability: "sectionAvailability",
+  "Public Transit": "sectionPublicTransit",
+  "Vehicle Details": "sectionVehicleDetails",
+  "Vehicle Classes": "sectionVehicleClasses",
+  Pricing: "sectionPricing",
+  Book: "sectionBook",
+  Directions: "sectionDirections",
+  Notes: "sectionNotes",
+  Connectors: "sectionConnectors",
+  Usage: "sectionUsage",
+  Access: "sectionAccess",
+  Facility: "sectionFacility",
+  Fee: "sectionFee",
+  Payment: "sectionPayment",
+};
+
+/** Map API row labels (left column of key-value tables) to i18n keys. */
+const ROW_LABEL_KEYS: Record<string, string> = {
+  "Available Vehicles": "rowAvailableVehicles",
+  "Empty Slots": "rowEmptySlots",
+  "Total Capacity": "rowTotalCapacity",
+  Type: "rowType",
+  Pricing: "rowPricing",
+  Vehicle: "rowVehicle",
+  Propulsion: "rowPropulsion",
+  Seats: "rowSeats",
+  Features: "rowFeatures",
+  "CO₂": "rowCo2",
+  "Bus Lines": "rowBusLines",
+  "Nearest Stops": "rowNearestStops",
+  "Fixed Station": "fixedStation",
+  "Free-floating Zone": "freeFloatingZone",
+  "Zero emissions": "zeroEmissions",
+  "Free Spaces": "rowFreeSpaces",
+  Occupancy: "rowOccupancy",
+  "Max Height": "rowMaxHeight",
+  "Disabled Spaces": "rowDisabledSpaces",
+  "EV Charging": "rowEvCharging",
+  "Park & Ride": "rowParkAndRide",
+  Capacity: "rowCapacity",
+  Status: "rowStatus",
+  Access: "rowAccess",
+  "Nearest Station": "rowNearestStation",
+  // Parking type values
+  "Parking Garage": "parkingGarage",
+  "Underground Garage": "undergroundGarage",
+  "Surface Lot": "surfaceLot",
+  "On-Street": "onStreet",
+  // Fee values
+  "Free Parking": "freeParking",
+  "Paid Parking": "paidParking",
+  // Parking tariff durations
+  "20 min": "dur20min",
+  "30 min": "dur30min",
+  "1h": "dur1h",
+  "1 day": "dur1day",
+  "1 day (P-Card)": "dur1dayPCard",
+  "1 week": "dur1week",
+  "1 week (P-Card)": "dur1weekPCard",
+  "1 month": "dur1month",
+  "1 month (long-term)": "dur1monthLong",
+  "1 month (reserved)": "dur1monthReserved",
+  // Common values
+  Yes: "yes",
+  Open: "open",
+  Closed: "closed",
+  Customers: "customers",
+  Private: "private",
+  Permit: "permit",
+};
+
+function SectionWrapper({ section }: { section: DataSourceDetailSection }) {
+  const t = useTranslations("dataSources");
+  const [expanded, setExpanded] = useState(!section.collapsed);
+  const titleKey = SECTION_TITLE_KEYS[section.title];
+  const translatedTitle = titleKey ? t(titleKey) : section.title;
+
+  return (
+    <Box sx={{ px: 2, py: 1.25 }}>
+      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+        <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: 0.25 }}>
+          {getSectionIcon(section.sectionIcon)}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              mb: expanded ? 0.5 : 0,
+              ...(section.collapsed ? { cursor: "pointer" } : {}),
+            }}
+            onClick={section.collapsed ? () => setExpanded((v) => !v) : undefined}
+          >
+            <Typography variant="body2" fontWeight={600}>
+              {translatedTitle}
+            </Typography>
+            {section.collapsed && (
+              <IconButton size="small" sx={{ ml: 0.5, p: 0 }}>
+                <ExpandMoreIcon
+                  sx={{
+                    fontSize: 18,
+                    transform: expanded ? "rotate(180deg)" : "none",
+                    transition: "transform 0.2s",
+                  }}
+                />
+              </IconButton>
+            )}
+          </Box>
+          {section.collapsed ? (
+            <Collapse in={expanded}>
+              <SectionContent section={section} />
+            </Collapse>
+          ) : (
+            <SectionContent section={section} />
+          )}
+        </Box>
+      </Box>
+    </Box>
+  );
 }
 
 export function DataSourceSections({ detail }: Props) {
@@ -296,54 +484,47 @@ export function DataSourceSections({ detail }: Props) {
 
       {/* Dynamic sections (connectors, etc.) */}
       {detail.sections.length > 0 &&
-        detail.sections.map((section) => (
-          <Box key={section.title} sx={{ px: 2, py: 1.25 }}>
-            <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-              <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: 0.25 }}>
-                {getSectionIcon(section.sectionIcon)}
-              </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                  {section.title}
-                </Typography>
-                <SectionContent section={section} />
-              </Box>
-            </Box>
-          </Box>
-        ))}
+        detail.sections.map((section) => <SectionWrapper key={section.title} section={section} />)}
 
       {/* Attribution footer */}
       <Divider />
       <Box sx={{ px: 2, py: 1.25 }}>
         <Typography variant="caption" color="text.secondary">
           {tc("data")}:{" "}
-          <Link
-            href={detail.attribution.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            color="text.secondary"
-          >
-            {detail.attribution.text}
-          </Link>
-          {detail.attribution.license &&
-            (detail.attribution.licenseUrl ? (
-              <>
-                {" ("}
+          {(Array.isArray(detail.attribution) ? detail.attribution : [detail.attribution]).map(
+            (attr, i) => (
+              <span key={attr.text}>
+                {i > 0 && " · "}
                 <Link
-                  href={detail.attribution.licenseUrl}
+                  href={attr.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   underline="hover"
                   color="text.secondary"
                 >
-                  {detail.attribution.license}
+                  {attr.text}
                 </Link>
-                {")"}
-              </>
-            ) : (
-              ` (${detail.attribution.license})`
-            ))}
+                {attr.license &&
+                  (attr.licenseUrl ? (
+                    <>
+                      {" ("}
+                      <Link
+                        href={attr.licenseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        underline="hover"
+                        color="text.secondary"
+                      >
+                        {attr.license}
+                      </Link>
+                      {")"}
+                    </>
+                  ) : (
+                    ` (${attr.license})`
+                  ))}
+              </span>
+            ),
+          )}
         </Typography>
       </Box>
     </Box>

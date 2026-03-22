@@ -17,6 +17,10 @@ export interface Route {
   mode: TravelMode;
   /** Human-readable summary of the primary road, e.g. "via A57" */
   summary?: string;
+  /** Elevation values (metres) at regular intervals along the route */
+  elevation?: number[];
+  /** Distance in metres between elevation samples */
+  elevationInterval?: number;
 }
 
 export interface DirectionsResult {

@@ -4,6 +4,7 @@ import { useHikingStore, useOverlayExclusion } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId, setLayerVisibility } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const RASTER_SOURCE_ID = "openmapx-hiking-trails-source";
 const RASTER_LAYER_ID = "openmapx-hiking-trails-layer";
@@ -12,6 +13,7 @@ export function HikingTrailsLayer() {
   const { mapRef, mapReady } = useMap();
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useOverlayExclusion("hiking", layerVisible);
+  useLayerReanchor(RASTER_LAYER_ID, layerVisible);
 
   useEffect(() => {
     const map = mapRef.current;

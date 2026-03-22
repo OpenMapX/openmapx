@@ -11,10 +11,12 @@ import type { MapLayer, OverlayId } from "@openmapx/core";
 import type { ReactNode } from "react";
 import {
   airQualityPreview,
+  buildingsPreview,
   cyclingMapPreview,
   defaultMapPreview,
   earthquakesPreview,
   hikingPreview,
+  liveTrainsPreview,
   measurePreview,
   satellitePreview,
   standardMapPreview,
@@ -83,12 +85,14 @@ export const DETAIL_OPTIONS: DetailOption[] = [
     labelKey: "traffic",
     icon: <TrafficIcon sx={{ fontSize: 14 }} />,
     preview: trafficPreview,
+    overlayId: "traffic",
   },
   {
     key: "transit",
     labelKey: "transit",
     icon: <DirectionsTransitFilledIcon sx={{ fontSize: 14 }} />,
     preview: transitPreview,
+    overlayId: "transit",
   },
   {
     key: "hiking",
@@ -100,15 +104,24 @@ export const DETAIL_OPTIONS: DetailOption[] = [
 ];
 
 export const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
-  {
-    id: "public-transport",
-    labelKey: "publicTransport",
-    preview: transitPreview,
-  },
+  // Transport & Mobilität
   {
     id: "traffic",
     labelKey: "traffic",
     preview: trafficPreview,
+    overlayId: "traffic",
+  },
+  {
+    id: "public-transport",
+    labelKey: "publicTransport",
+    preview: transitPreview,
+    overlayId: "transit",
+  },
+  {
+    id: "live-trains",
+    labelKey: "liveTrains",
+    overlayId: "live-trains",
+    preview: liveTrainsPreview,
   },
   {
     id: "cycling",
@@ -116,11 +129,7 @@ export const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
     overlayId: "cycling",
     preview: cyclingMapPreview,
   },
-  {
-    id: "terrain",
-    labelKey: "terrain",
-    preview: terrainPreview,
-  },
+  // Kartenansichten
   {
     id: "street-view",
     labelKey: "streetLevelImagery",
@@ -128,16 +137,12 @@ export const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
     preview: streetViewPreview,
   },
   {
-    id: "wildfire",
-    labelKey: "wildfires",
-    preview: wildfirePreview,
+    id: "3d-buildings",
+    labelKey: "3dBuildings",
+    overlayId: "3d-buildings",
+    preview: buildingsPreview,
   },
-  {
-    id: "air-quality",
-    labelKey: "airQuality",
-    overlayId: "air-quality",
-    preview: airQualityPreview,
-  },
+  // Outdoor & Freizeit
   {
     id: "hiking",
     labelKey: "hiking",
@@ -149,6 +154,19 @@ export const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
     labelKey: "winterSports",
     overlayId: "winter-sports",
     preview: winterSportsPreview,
+  },
+  // Umwelt & Gefahren
+  {
+    id: "air-quality",
+    labelKey: "airQuality",
+    overlayId: "air-quality",
+    preview: airQualityPreview,
+  },
+  {
+    id: "wildfire",
+    labelKey: "wildfires",
+    overlayId: "wildfires",
+    preview: wildfirePreview,
   },
   {
     id: "earthquakes",
@@ -173,7 +191,7 @@ export const DESKTOP_MORE_MAP_TOOLS: readonly DesktopMoreOption[] = [
 
 export const DESKTOP_MORE_MAP_TYPES: readonly DesktopMoreOption[] = [
   {
-    id: "standard",
+    id: "default",
     labelKey: "standard",
     preview: standardMapPreview,
   },
@@ -181,5 +199,15 @@ export const DESKTOP_MORE_MAP_TYPES: readonly DesktopMoreOption[] = [
     id: "satellite",
     labelKey: "satellite",
     preview: satellitePreview,
+  },
+  {
+    id: "terrain",
+    labelKey: "terrain",
+    preview: terrainPreview,
+  },
+  {
+    id: "cycling",
+    labelKey: "cyclingMap",
+    preview: cyclingMapPreview,
   },
 ];

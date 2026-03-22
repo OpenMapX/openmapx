@@ -5,7 +5,7 @@ import type { AutocompleteResult } from "../types/search";
 import { usePrefixPlaceholder } from "./usePrefixPlaceholder";
 
 export function useAutocomplete(query: string, lang?: string) {
-  const placeholderData = usePrefixPlaceholder<AutocompleteResult[]>("autocomplete", query);
+  const placeholderData = usePrefixPlaceholder<AutocompleteResult[]>("autocomplete", query, lang);
   return useQuery({
     queryKey: ["autocomplete", query, lang],
     queryFn: () =>

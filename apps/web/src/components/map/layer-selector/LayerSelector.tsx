@@ -43,7 +43,8 @@ export function LayerSelector() {
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const activeLayer = useLayerStore((s) => s.activeLayer);
 
-  const hiddenByCategoryCard = activeCategory !== null && selectedPlace !== null;
+  const hiddenByFloatingCard =
+    (activeCategory !== null && selectedPlace !== null) || (hasSidePanel && selectedPlace !== null);
 
   const activeBaseOption =
     BASE_LAYER_OPTIONS.find((option) => option.id === activeLayer) ?? BASE_LAYER_OPTIONS[0];
@@ -116,7 +117,7 @@ export function LayerSelector() {
     };
   }, [mapReady, mapRef]);
 
-  if (hiddenByCategoryCard) return null;
+  if (hiddenByFloatingCard) return null;
 
   const open = Boolean(anchorEl);
   const trafficZoomTooLow = zoomLevel !== null && zoomLevel < TRAFFIC_MIN_ZOOM;
@@ -265,11 +266,7 @@ export function LayerSelector() {
           },
         }}
       >
-        {desktopDock ? (
-          <DesktopMorePanel onClose={handleClose} />
-        ) : (
-          <MobileLayerPanel trafficZoomTooLow={trafficZoomTooLow} />
-        )}
+        {desktopDock ? <DesktopMorePanel onClose={handleClose} /> : <MobileLayerPanel />}
       </Popover>
     </>
   );

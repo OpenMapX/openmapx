@@ -5,6 +5,8 @@
  */
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
+import { bboxContains } from "../../../utils/geo.js";
+import type { RegionalCarSharingClient } from "./regional-client-types.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const CAMBIO_BASE = "https://cwapi.cambio-carsharing.com/pub";
@@ -43,10 +45,6 @@ interface CambioStation {
     postalCode?: string;
   };
   vehicleClasses?: { id: string; displayName: string }[];
-}
-
-function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
-  return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
 }
 
 /** Find Cambio regions whose center is within ~50km of the bbox. */
@@ -125,3 +123,19 @@ export async function searchCambio(bbox: BoundingBox): Promise<SharedMobilitySta
   }
   return stations;
 }
+
+export const cambioClient: RegionalCarSharingClient = {
+  id: "cambio",
+  name: "Cambio",
+  regions: CAMBIO_REGIONS.map((r) => ({
+    center: [r.lng, r.lat] as LngLat,
+    radiusKm: 50,
+  })),
+  attribution: {
+    label: "Cambio",
+    url: "https://www.cambio-carsharing.de",
+    license: "ODbL",
+    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+  },
+  search: searchCambio,
+};

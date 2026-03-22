@@ -2,9 +2,11 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { stops } from "@motis-project/motis-client";
 import { cacheGet, cacheSet } from "../../utils/cache.js";
 import { validatePublicUrl } from "../../utils/validate-url";
 import type { BBox } from "../transit/types";
+import { motisLocalInstance } from "./instances.js";
 import type { MotisFeed, MotisStatus } from "./types";
 
 const execFileAsync = promisify(execFile);
@@ -13,7 +15,6 @@ const MOTIS_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
 const MOTIS_DATA_DIR =
   process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis");
 const STATE_FILE = "openmapx-feeds.json";
-const TIMEOUT_MS = 8_000;
 
 interface FeedState {
   feeds: MotisFeed[];
@@ -108,13 +109,12 @@ class MotisManager {
     if (cached !== null) return cached;
 
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-      const res = await fetch(`${MOTIS_URL}/api/v1/map/stops?min=0,0&max=0.01,0.01`, {
-        signal: controller.signal,
+      const { response } = await stops({
+        client: motisLocalInstance.client,
+        query: { min: "0,0", max: "0.01,0.01" },
       });
-      clearTimeout(timer);
-      const reachable = res.ok || res.status === 400;
+      // Both 2xx and 4xx mean MOTIS is running
+      const reachable = response.ok || (response.status >= 400 && response.status < 500);
       await cacheSet(cacheKey, reachable, 30);
       return reachable;
     } catch {

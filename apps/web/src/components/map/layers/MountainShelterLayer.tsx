@@ -6,6 +6,7 @@ import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const SOURCE_ID = "openmapx-shelters-source";
 const CIRCLE_LAYER_ID = "openmapx-shelters-circles";
@@ -32,6 +33,7 @@ const SHELTER_TYPE_KEYS: Record<string, string> = {
 export function MountainShelterLayer() {
   const { mapRef, mapReady } = useMap();
   const layerVisible = useHikingStore((s) => s.layerVisible);
+  useLayerReanchor([CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const t = useTranslations("hiking");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);

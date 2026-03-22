@@ -36,6 +36,7 @@ export function MapCanvas() {
           bearing,
           pitch,
           attributionControl: false,
+          canvasContextAttributes: { antialias: true },
         });
 
         map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right");

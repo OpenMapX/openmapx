@@ -64,11 +64,18 @@ async function fetchPhoton(
   const url = new URL(`${PHOTON_URL}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url.toString(), {
-    headers: { "Accept-Language": lang ?? "en" },
-  });
-  if (!res.ok) throw new Error(`Photon error ${res.status}`);
-  return res.json() as Promise<PhotonResponse>;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4_000);
+  try {
+    const res = await fetch(url.toString(), {
+      headers: { "Accept-Language": lang ?? "en" },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Photon error ${res.status}`);
+    return res.json() as Promise<PhotonResponse>;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const photonService: GeocodingProvider = {

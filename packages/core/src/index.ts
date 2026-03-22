@@ -52,6 +52,7 @@ export {
 } from "./hooks/transit/transitEligibility";
 // Hooks — General
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
+export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
 export { useAutocomplete } from "./hooks/useAutocomplete";
 export { useCategorySearch } from "./hooks/useCategorySearch";
 export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
@@ -63,6 +64,7 @@ export {
 } from "./hooks/useDataSources";
 export { useDebounce, useDebouncedCallback } from "./hooks/useDebounce";
 export { useDirections } from "./hooks/useDirections";
+export { useElevation } from "./hooks/useElevation";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
 export { useGeocoding } from "./hooks/useGeocoding";
 export {
@@ -72,6 +74,8 @@ export {
   useHikingSearch,
   useHikingShelters,
 } from "./hooks/useHikingTrails";
+export { useIsochrone } from "./hooks/useIsochrone";
+export { useLiveTrains } from "./hooks/useLiveTrains";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
@@ -99,6 +103,7 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 // Stores
 export { useAirQualityStore } from "./stores/airQualityStore";
+export { useBuildingsStore } from "./stores/buildingsStore";
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 // Overlay system
 export type { OverlayStoreBase } from "./stores/createOverlayStore";
@@ -110,8 +115,11 @@ export { useEarthquakeStore } from "./stores/earthquakeStore";
 export { useHikingStore } from "./stores/hikingStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
+export { useLiveTrainsStore } from "./stores/liveTrainsStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
+export type { MeasurementMode, MeasurementState, UnitSystem } from "./stores/measurementStore";
+export { useMeasurementStore } from "./stores/measurementStore";
 export { useMenuStore } from "./stores/menuStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
@@ -128,6 +136,11 @@ export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useSidebarStore } from "./stores/sidebarStore";
 export { useStreetViewStore } from "./stores/streetViewStore";
+export { useTrafficStore } from "./stores/trafficStore";
+export { useTransitStore } from "./stores/transitStore";
+export type { TravelTimeState } from "./stores/travelTimeStore";
+export { TRAVEL_TIME_PRESETS, useTravelTimeStore } from "./stores/travelTimeStore";
+export { useWildfireStore } from "./stores/wildfireStore";
 export { useWinterSportsStore } from "./stores/winterSportsStore";
 
 // Types
@@ -147,6 +160,12 @@ export type {
   DataSourceResult,
 } from "./types/dataSource";
 export type { DirectionsResult, Route, RouteStep, TravelMode } from "./types/directions";
+export type {
+  ElevationApiResponse,
+  ElevationPoint,
+  ElevationProfile,
+  ElevationStats,
+} from "./types/elevation";
 export type { BoundingBox, LngLat } from "./types/geometry";
 export type {
   HikingFeatureCollection,
@@ -158,6 +177,14 @@ export type {
   ShelterFeatureCollection,
 } from "./types/hiking";
 export { SAC_GRADES } from "./types/hiking";
+export type {
+  IsochroneContour,
+  IsochroneGeometry,
+  IsochroneMultiPolygon,
+  IsochronePolygon,
+  IsochroneResult,
+  IsochroneTravelMode,
+} from "./types/isochrone";
 export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";
 export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
 export type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "./types/search";
@@ -165,14 +192,17 @@ export type {
   AlertSeverity,
   Departure,
   Facility,
+  FareProduct,
   MergedDeparture,
   MergedRoute,
+  OccupancyLevel,
   RouteLive,
   RouteStop,
   ServiceAlert,
   TransitRoute,
   TransitStop,
   TransportMode,
+  TripFare,
   TripItinerary,
   TripLeg,
   TripPlan,
@@ -185,7 +215,20 @@ export type {
 // Utils
 export { applyHoursFilter } from "./utils/categoryFilter";
 export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";
-export { formatDistance, formatDuration, getInitials } from "./utils/formatting";
+export {
+  buildElevationProfile,
+  buildElevationProfileFromApi,
+  computeElevationStats,
+  computeGrades,
+  downsampleLTTB,
+} from "./utils/elevation";
+export {
+  formatArea,
+  formatDistance,
+  formatDuration,
+  formatMeasurementDistance,
+  getInitials,
+} from "./utils/formatting";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
 export type { DaySchedule, OpeningHoursStatus } from "./utils/openingHours";
 export { isOpenAt, parseOpeningHours } from "./utils/openingHours";

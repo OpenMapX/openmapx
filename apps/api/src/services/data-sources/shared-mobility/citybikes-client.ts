@@ -5,6 +5,7 @@
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import { TTL, withCache } from "../../../utils/cache.js";
+import { bboxContains } from "../../../utils/geo.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const CITYBIKES_BASE = "https://api.citybik.es";
@@ -75,10 +76,6 @@ async function getNetworkIndex(): Promise<CityBikesNetwork[]> {
       return data.networks;
     },
   );
-}
-
-function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
-  return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
 }
 
 /**

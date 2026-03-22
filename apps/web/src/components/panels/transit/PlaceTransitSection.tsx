@@ -231,7 +231,7 @@ export function PlaceTransitSection({
         <Box sx={{ mt: 0.5, mb: 0.5 }}>
           {departures.slice(0, 5).map((dep) => (
             <DepartureRow
-              key={`${dep.tripId}-${dep.scheduledAt}`}
+              key={`${dep.tripId}-${dep.scheduledAt}-${dep.route.id}`}
               departure={dep}
               onClick={
                 onOpenTripDetail ? (dep) => onOpenTripDetail(dep as MergedDeparture) : undefined

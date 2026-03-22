@@ -5,6 +5,7 @@ import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const MLY_SOURCE_ID = "mly1_public";
 const MLY_SEQUENCE_LAYER = "mapillary-sequence-layer";
@@ -19,6 +20,7 @@ export function StreetViewLayer() {
   const layerVisible = useStreetViewStore((s) => s.layerVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
   useOverlayExclusion("street-view", layerVisible);
+  useLayerReanchor(MLY_LAYERS, layerVisible);
 
   // Manage coverage layers
   useEffect(() => {

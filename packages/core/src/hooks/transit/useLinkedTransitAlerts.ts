@@ -11,7 +11,8 @@ export function useLinkedTransitAlerts(place: Place | null) {
   return useQuery({
     queryKey: ["linked-transit-alerts", place?.id ?? place?.coordinates?.join(","), place?.name],
     queryFn: () => {
-      const p = place as Place;
+      if (!place) throw new Error("invariant: place must be non-null");
+      const p = place;
       return apiClient.get<ServiceAlert[]>(API_ENDPOINTS.transitAlertsForPlace, {
         lat: String(p.coordinates[1]),
         lng: String(p.coordinates[0]),

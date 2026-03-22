@@ -5,6 +5,7 @@
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import { cacheGet, cacheSet, TTL } from "../../../utils/cache.js";
+import { bboxContains } from "../../../utils/geo.js";
 import { reverseGeocodeCity } from "../../nominatim-lookup.service.js";
 import {
   filterCatalogByBbox,
@@ -14,7 +15,13 @@ import {
   sortByRelevance,
 } from "./gbfs-catalog.js";
 import { fetchGbfsSystem } from "./gbfs-client.js";
-import type { SharedMobilityStation, SharedMobilityVehicle, VehicleFormFactor } from "./types.js";
+import type {
+  PricingDetail,
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+  VehicleFormFactor,
+  VehicleTypeDetail,
+} from "./types.js";
 
 const MAX_SYSTEMS_PER_SEARCH = 20;
 
@@ -22,8 +29,6 @@ const MAX_SYSTEMS_PER_SEARCH = 20;
 const EXCLUDED_GBFS_PREFIXES = [
   "bird-", // Shut down in Europe (2024)
 ];
-const _FETCH_TIMEOUT_MS = 15_000;
-
 // Redis cache key prefix and TTL for per-system station/vehicle data
 const SYSTEM_CACHE_PREFIX = "cache:gbfs:system:";
 const SYSTEM_CACHE_TTL = TTL.sharedMobility.stations; // 120s
@@ -31,10 +36,6 @@ const SYSTEM_CACHE_TTL = TTL.sharedMobility.stations; // 120s
 interface CachedSystemData {
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
-}
-
-function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
-  return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
 }
 
 /** Detect GBFS station names that are internal IDs rather than human-readable. */
@@ -74,7 +75,19 @@ export async function fetchGbfsData(
 
   // Sort: city-matching systems first, then scooter keywords, then rest
   const sorted = sortByRelevance(filtered, city);
-  const limited = sorted.slice(0, MAX_SYSTEMS_PER_SEARCH);
+  // When city is known, probe all city-matching systems + up to MAX_SYSTEMS_PER_SEARCH others.
+  // When city is unknown, fall back to the limit (avoids probing 500+ systems).
+  const cityLower = city?.toLowerCase() ?? null;
+  const cityMatchCount = cityLower
+    ? sorted.filter(
+        (e) =>
+          e.systemId.toLowerCase().includes(cityLower) ||
+          e.name.toLowerCase().includes(cityLower) ||
+          e.location.toLowerCase().includes(cityLower),
+      ).length
+    : 0;
+  const limit = Math.max(MAX_SYSTEMS_PER_SEARCH, cityMatchCount);
+  const limited = sorted.slice(0, limit);
 
   console.log(
     `[gbfs] Catalog: ${catalog.length} total, ${candidates.length} country, ${filtered.length} after exclusions, city="${city}"`,
@@ -149,6 +162,7 @@ async function fetchSystemData(
     stationStatuses,
     vehicles: rawVehicles,
     vehicleTypes,
+    pricingPlans,
   } = systemData;
   const operator = systemInfo?.operator ?? systemInfo?.name ?? systemName;
   const source = `gbfs/${systemId}`;
@@ -251,6 +265,71 @@ async function fetchSystemData(
 
     if (!stationVehicleTypes.some((vt) => targetFormFactors.has(vt))) continue;
 
+    // Collect vehicle type details for this station
+    const vtDetails: VehicleTypeDetail[] = [];
+    const pricingPlanIds = new Set<string>();
+    const vtIds =
+      status.vehicleTypesAvailable?.map((v) => v.vehicleTypeId) ??
+      stInfo.vehicleTypesAvailable ??
+      [];
+    for (const vtId of vtIds) {
+      const vt = vehicleTypes.get(vtId);
+      if (!vt || !targetFormFactors.has(normalizeFormFactor(vt.formFactor))) continue;
+      vtDetails.push({
+        name: vt.name ?? (`${vt.make ?? ""} ${vt.model ?? ""}`.trim() || "Vehicle"),
+        make: vt.make,
+        model: vt.model,
+        propulsion: vt.propulsionType,
+        accessories: vt.vehicleAccessories,
+        co2PerKm: vt.co2PerKm,
+        riderCapacity: vt.riderCapacity,
+        returnConstraint: vt.returnConstraint,
+      });
+      if (vt.defaultPricingPlanId) pricingPlanIds.add(vt.defaultPricingPlanId);
+      for (const pid of vt.pricingPlanIds ?? []) pricingPlanIds.add(pid);
+    }
+
+    // Collect pricing details
+    const pricingDetails: PricingDetail[] = [];
+    let cheapestPerKm: number | undefined;
+    let cheapestPerHour: number | undefined;
+    for (const pid of pricingPlanIds) {
+      const pp = pricingPlans.get(pid);
+      if (!pp) continue;
+      const perKmRate = pp.perKmPricing?.[0]?.rate;
+      // Normalize per_min_pricing to hourly: rate is per interval minutes
+      const minPricing = pp.perMinPricing?.[0];
+      const perHourRate =
+        minPricing && minPricing.interval > 0
+          ? (minPricing.rate / minPricing.interval) * 60
+          : undefined;
+      if (perKmRate !== undefined && (cheapestPerKm === undefined || perKmRate < cheapestPerKm))
+        cheapestPerKm = perKmRate;
+      if (
+        perHourRate !== undefined &&
+        perHourRate > 0 &&
+        (cheapestPerHour === undefined || perHourRate < cheapestPerHour)
+      )
+        cheapestPerHour = perHourRate;
+      pricingDetails.push({
+        name: pp.name,
+        description: pp.description,
+        currency: pp.currency,
+        perKmRate,
+        perHourRate: perHourRate && perHourRate > 0 ? perHourRate : undefined,
+        flatRate: pp.price > 0 ? pp.price : undefined,
+      });
+    }
+
+    // Build pricing summary
+    let pricingSummary: string | undefined;
+    if (cheapestPerKm !== undefined || cheapestPerHour !== undefined) {
+      const parts: string[] = [];
+      if (cheapestPerKm !== undefined) parts.push(`${cheapestPerKm.toFixed(2)} €/km`);
+      if (cheapestPerHour !== undefined) parts.push(`${cheapestPerHour.toFixed(2)} €/h`);
+      pricingSummary = `from ${parts.join(" + ")}`;
+    }
+
     stations.push({
       id: `${source}/${stInfo.stationId}`,
       name: isGarbageName(stInfo.name) ? `${operator} Station` : stInfo.name,
@@ -263,6 +342,11 @@ async function fetchSystemData(
       isActive: true,
       source,
       attribution,
+      website: stInfo.rentalUris?.web,
+      rentalUris: stInfo.rentalUris,
+      vehicleTypeDetails: vtDetails.length > 0 ? vtDetails : undefined,
+      pricingSummary,
+      pricingDetails: pricingDetails.length > 0 ? pricingDetails : undefined,
     });
   }
 

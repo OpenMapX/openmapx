@@ -47,9 +47,15 @@ async function fetchMaptiler(
   url.searchParams.set("language", lang ?? "en");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`MapTiler geocoding error ${res.status}`);
-  return res.json() as Promise<MaptilerResponse>;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4_000);
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (!res.ok) throw new Error(`MapTiler geocoding error ${res.status}`);
+    return res.json() as Promise<MaptilerResponse>;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function fetchMaptilerReverse(
@@ -65,9 +71,15 @@ async function fetchMaptilerReverse(
   url.searchParams.set("language", lang ?? "en");
   url.searchParams.set("limit", "1");
 
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`MapTiler reverse geocoding error ${res.status}`);
-  return res.json() as Promise<MaptilerResponse>;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4_000);
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (!res.ok) throw new Error(`MapTiler reverse geocoding error ${res.status}`);
+    return res.json() as Promise<MaptilerResponse>;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const maptilerGeocodingService: GeocodingProvider = {

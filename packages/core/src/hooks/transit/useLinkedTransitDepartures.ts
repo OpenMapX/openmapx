@@ -16,7 +16,8 @@ export function useLinkedTransitDepartures(place: Place | null, minutes = 60) {
       minutes,
     ],
     queryFn: () => {
-      const p = place as Place;
+      if (!place) throw new Error("invariant: place must be non-null");
+      const p = place;
       return apiClient.get<MergedDeparture[]>(API_ENDPOINTS.transitDeparturesForPlace, {
         lat: String(p.coordinates[1]),
         lng: String(p.coordinates[0]),

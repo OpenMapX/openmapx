@@ -122,6 +122,19 @@ const CATEGORY_BLOCKLIST = [
   "training",
   // "fuel" is a standalone keyword match
   "fuel",
+  // "railway" false positives — infrastructure, not passenger stops
+  "signal_box",
+  "crossing",
+  "level_crossing",
+  "rail_yard",
+  "workshop",
+  "roundhouse",
+  "turntable",
+  "abandoned",
+  "disused",
+  "razed",
+  "proposed",
+  "construction",
 ] as const;
 
 /** Returns true when rawCategory indicates a transit-infrastructure place. */

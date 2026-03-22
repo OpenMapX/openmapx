@@ -23,6 +23,7 @@ import {
   mapVehicleToDetail,
   mapVehicleToResult,
 } from "./mapper.js";
+import { fetchMotisRentals } from "./motis-rentals.js";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
 // In-memory cache for detail lookups
@@ -65,6 +66,7 @@ const META: DataSourceMeta = {
 
 const SCOOTER_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>([
   "scooter_standing",
+  "scooter_seated",
   "moped",
 ]);
 
@@ -79,42 +81,44 @@ class ScooterSharingProvider implements DataSourceProvider {
   }
 
   async search(bbox: BoundingBox): Promise<DataSourceResult[]> {
+    const bboxArray: [number, number, number, number] = [
+      bbox.west,
+      bbox.south,
+      bbox.east,
+      bbox.north,
+    ];
+
     // Fetch from all sources in parallel
-    const [gbfsResult, felyxResult, goSharingResult, linkResult] = await Promise.allSettled([
-      fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
-      searchFelyx(bbox),
-      searchGoSharing(bbox),
-      searchLink(bbox),
-    ]);
+    const [gbfsResult, felyxResult, goSharingResult, linkResult, motisResult] =
+      await Promise.allSettled([
+        fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
+        searchFelyx(bbox),
+        searchGoSharing(bbox),
+        searchLink(bbox),
+        fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
+      ]);
 
     const results: DataSourceResult[] = [];
 
-    // Log results for debugging
-    for (const [name, result] of [
-      ["GBFS", gbfsResult],
-      ["Felyx", felyxResult],
-      ["GO Sharing", goSharingResult],
-      ["Link", linkResult],
-    ] as const) {
-      if (result.status === "rejected") {
-        console.warn(`[scooter-sharing] ${name} failed:`, result.reason);
-      } else {
-        const count =
-          "stations" in result.value
-            ? (result.value as { stations: unknown[]; vehicles: unknown[] }).stations.length +
-              (result.value as { stations: unknown[]; vehicles: unknown[] }).vehicles.length
-            : (result.value as unknown[]).length;
-        console.log(`[scooter-sharing] ${name}: ${count} results`);
-      }
+    // Collect stations from all sources for deduplication
+    const allStations: SharedMobilityStation[] = [];
+    if (gbfsResult.status === "fulfilled") {
+      allStations.push(...gbfsResult.value.stations);
+    }
+    // MOTIS/Transitous stations (appended last so existing sources take dedup priority)
+    if (motisResult.status === "fulfilled") {
+      allStations.push(...motisResult.value.stations);
     }
 
-    // GBFS stations
+    // Dedup and map stations
+    const deduped = dedupStations(allStations);
+    for (const station of deduped) {
+      updateCache(station.id, station);
+      results.push(mapStationToResult(station));
+    }
+
+    // GBFS free-floating vehicles
     if (gbfsResult.status === "fulfilled") {
-      const deduped = dedupStations(gbfsResult.value.stations);
-      for (const station of deduped) {
-        updateCache(station.id, station);
-        results.push(mapStationToResult(station));
-      }
       for (const vehicle of gbfsResult.value.vehicles) {
         updateCache(vehicle.id, vehicle);
         results.push(mapVehicleToResult(vehicle));
@@ -140,6 +144,14 @@ class ScooterSharingProvider implements DataSourceProvider {
     // Link e-scooters
     if (linkResult.status === "fulfilled") {
       for (const vehicle of linkResult.value) {
+        updateCache(vehicle.id, vehicle);
+        results.push(mapVehicleToResult(vehicle));
+      }
+    }
+
+    // MOTIS/Transitous free-floating scooters
+    if (motisResult.status === "fulfilled") {
+      for (const vehicle of motisResult.value.vehicles) {
         updateCache(vehicle.id, vehicle);
         results.push(mapVehicleToResult(vehicle));
       }

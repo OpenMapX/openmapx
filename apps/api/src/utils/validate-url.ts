@@ -12,7 +12,12 @@ export function validatePublicUrl(url: string): void {
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error("Only HTTP(S) URLs are allowed");
   }
-  const hostname = parsed.hostname;
+  const rawHostname = parsed.hostname;
+  // Strip square brackets from IPv6 addresses (e.g. "[::1]" → "::1")
+  const hostname =
+    rawHostname.startsWith("[") && rawHostname.endsWith("]")
+      ? rawHostname.slice(1, -1)
+      : rawHostname;
   const privateRanges = [
     /^127\./,
     /^10\./,

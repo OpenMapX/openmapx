@@ -99,7 +99,7 @@ export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
 
   return {
     id: `osm:${station.id}`,
-    source: "osm",
+    source: "osm-ev",
     name,
     coordinates: [station.lon, station.lat],
     address: {
@@ -150,7 +150,7 @@ export function mapOsmToResult(station: OsmChargingStation): DataSourceResult {
     id: `osm:${station.id}`,
     name,
     coordinates: [station.lon, station.lat],
-    source: "osm",
+    source: "osm-ev",
     variant: inferVariant(station.tags),
     status:
       station.tags["disused:amenity"] === "charging_station" ? "not-operational" : "operational",

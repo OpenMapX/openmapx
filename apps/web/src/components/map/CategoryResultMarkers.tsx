@@ -15,6 +15,7 @@ import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
+import { createMarkerSvg } from "@/lib/markerSvg";
 
 const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";
@@ -24,12 +25,6 @@ const LABEL_LAYER_ID = "category-results-labels";
  * Creates a 64×64 SVG (2× for retina): red circle with a white MUI icon path.
  * The icon uses a 24×24 viewBox scaled and centered inside the circle.
  */
-function createMarkerSvg(iconPath: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
-    <circle cx="32" cy="32" r="29" fill="#E54033" stroke="white" stroke-width="4"/>
-    <path d="${iconPath}" fill="white" transform="translate(13, 13) scale(1.583)"/>
-  </svg>`;
-}
 
 function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): Promise<void> {
   return new Promise((resolve) => {

@@ -1,6 +1,6 @@
 /**
  * Car Sharing data source provider.
- * Combines GBFS car feeds + Cambio.
+ * Combines GBFS car feeds + registered regional car-sharing clients.
  */
 
 import type {
@@ -11,7 +11,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import type { DataSourceProvider } from "../types.js";
-import { searchCambio } from "./cambio-client.js";
+import { searchRegionalClients } from "./car-sharing-registry.js";
 import { dedupStations } from "./dedup.js";
 import { fetchGbfsData } from "./gbfs-provider-base.js";
 import {
@@ -20,6 +20,8 @@ import {
   mapVehicleToDetail,
   mapVehicleToResult,
 } from "./mapper.js";
+import { mergeRegionalStations } from "./merge-stations.js";
+import { fetchMotisRentals } from "./motis-rentals.js";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
 // In-memory cache for detail lookups
@@ -34,6 +36,24 @@ const META: DataSourceMeta = {
     {
       text: "Cambio",
       url: "https://www.cambio-carsharing.de",
+      license: "ODbL",
+      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+    },
+    {
+      text: "Stadtteilauto Münster",
+      url: "https://opendata.stadt-muenster.de",
+      license: "dl-de/by-2-0",
+      licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+    },
+    {
+      text: "Stadt Wuppertal",
+      url: "https://www.offenedaten-wuppertal.de",
+      license: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    },
+    {
+      text: "Stadt Bielefeld",
+      url: "https://open-data.bielefeld.de",
       license: "ODbL",
       licenseUrl: "https://opendatacommons.org/licenses/odbl/",
     },
@@ -71,31 +91,63 @@ class CarSharingProvider implements DataSourceProvider {
   }
 
   async search(bbox: BoundingBox): Promise<DataSourceResult[]> {
-    // Fetch from GBFS and Cambio in parallel
-    const [gbfsResult, cambioResult] = await Promise.allSettled([
+    const bboxArray: [number, number, number, number] = [
+      bbox.west,
+      bbox.south,
+      bbox.east,
+      bbox.north,
+    ];
+
+    // Fetch from registered regional clients and GBFS in parallel
+    const [regionalResult, gbfsResult, motisResult] = await Promise.allSettled([
+      searchRegionalClients(bbox),
       fetchGbfsData(bbox, CAR_FORM_FACTORS),
-      searchCambio(bbox),
+      fetchMotisRentals(bboxArray, ["car"]),
     ]);
 
+    const allStations: SharedMobilityStation[] = [];
     const results: DataSourceResult[] = [];
 
-    // Cambio stations first (known reliable source)
-    if (cambioResult.status === "fulfilled") {
-      const deduped = dedupStations(cambioResult.value);
-      for (const station of deduped) {
+    // Regional clients first (known reliable sources, higher priority for dedup).
+    // mergeRegionalStations keeps the first occurrence's live availability data
+    // but enriches it with extra fields (address, website, description) from
+    // later occurrences at the same coordinates.
+    if (regionalResult.status === "fulfilled") {
+      const merged = mergeRegionalStations(regionalResult.value);
+      for (const station of merged) {
         updateCache(station.id, station);
         results.push(mapStationToResult(station));
       }
     }
 
-    // GBFS stations and vehicles
+    // GBFS stations (collected for dedup with MOTIS)
     if (gbfsResult.status === "fulfilled") {
-      const deduped = dedupStations(gbfsResult.value.stations);
-      for (const station of deduped) {
-        updateCache(station.id, station);
-        results.push(mapStationToResult(station));
-      }
+      allStations.push(...gbfsResult.value.stations);
+    }
+
+    // MOTIS/Transitous stations (appended last so existing sources take dedup priority)
+    if (motisResult.status === "fulfilled") {
+      allStations.push(...motisResult.value.stations);
+    }
+
+    // Dedup and map GBFS + MOTIS stations
+    const deduped = dedupStations(allStations);
+    for (const station of deduped) {
+      updateCache(station.id, station);
+      results.push(mapStationToResult(station));
+    }
+
+    // GBFS free-floating vehicles
+    if (gbfsResult.status === "fulfilled") {
       for (const vehicle of gbfsResult.value.vehicles) {
+        updateCache(vehicle.id, vehicle);
+        results.push(mapVehicleToResult(vehicle));
+      }
+    }
+
+    // MOTIS/Transitous free-floating cars
+    if (motisResult.status === "fulfilled") {
+      for (const vehicle of motisResult.value.vehicles) {
         updateCache(vehicle.id, vehicle);
         results.push(mapVehicleToResult(vehicle));
       }

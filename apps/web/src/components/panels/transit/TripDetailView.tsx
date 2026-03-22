@@ -31,12 +31,7 @@ interface TripDetailViewProps {
   clearSearchBar?: boolean;
 }
 
-const OCCUPANCY_COLOR = { low: "#2e7d32", medium: "#e65100", high: "#b71c1c" } as const;
-const OCCUPANCY_KEY = {
-  low: "lowOccupancy",
-  medium: "mediumOccupancy",
-  high: "highOccupancy",
-} as const;
+import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 
 export function TripDetailView({ departure, onBack, clearSearchBar = false }: TripDetailViewProps) {
   const t = useTranslations("transit");

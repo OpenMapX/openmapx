@@ -1,18 +1,39 @@
 "use client";
 
+import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import Box from "@mui/material/Box";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { TripItinerary, TripLeg } from "@openmapx/core";
+import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/core";
 import { formatDistance, formatDuration, useVehicleJourney } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { formatTime } from "@/lib/formatTime";
 import { TEAL } from "@/lib/theme";
+import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+
+const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+  overcrowded: 3,
+};
+
+function worstOccupancy(itinerary: TripItinerary): OccupancyLevel | null {
+  let worst: OccupancyLevel | null = null;
+  for (const leg of itinerary.legs) {
+    if (leg.occupancy && (!worst || OCCUPANCY_RANK[leg.occupancy] > OCCUPANCY_RANK[worst])) {
+      worst = leg.occupancy;
+    }
+  }
+  return worst;
+}
 
 function LegBadge({ leg }: { leg: TripLeg }) {
   if (leg.mode === "walking") {
@@ -127,7 +148,10 @@ export function TransitItineraryCard({
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
+  const tt = useTranslations("transit");
   const locale = useLocale();
+  const fareSummary = extractFareSummary(itinerary.fare);
+  const occupancy = worstOccupancy(itinerary);
   const startTime = new Date(itinerary.startTime).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
@@ -157,20 +181,55 @@ export function TransitItineraryCard({
             {startTime} – {endTime}
           </Typography>
         </Box>
-        <Typography variant="body2" fontWeight={600} color={active ? TEAL : "text.primary"}>
-          {formatDuration(itinerary.duration)}
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          {occupancy && (
+            <Tooltip title={tt(OCCUPANCY_KEY[occupancy])} placement="left" arrow>
+              <AirlineSeatReclineNormalIcon
+                sx={{ fontSize: 16, color: OCCUPANCY_COLOR[occupancy], flexShrink: 0 }}
+              />
+            </Tooltip>
+          )}
+          <Typography variant="body2" fontWeight={600} color={active ? TEAL : "text.primary"}>
+            {formatDuration(itinerary.duration)}
+          </Typography>
+        </Box>
       </Box>
 
-      {/* Leg summary */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.75, flexWrap: "wrap" }}>
-        {itinerary.legs.map((leg, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-          <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            {i > 0 && <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />}
-            <LegBadge leg={leg} />
-          </Box>
-        ))}
+      {/* Leg summary + fare */}
+      <Box
+        sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 0.75 }}
+      >
+        <Box
+          sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap", minWidth: 0 }}
+        >
+          {itinerary.legs.map((leg, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
+            <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              {i > 0 && <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />}
+              <LegBadge leg={leg} />
+            </Box>
+          ))}
+        </Box>
+        {fareSummary && (
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              bgcolor: "action.hover",
+              px: 0.75,
+              py: 0.125,
+              borderRadius: 0.75,
+              fontSize: "0.7rem",
+              lineHeight: 1.4,
+              flexShrink: 0,
+              ml: 1,
+            }}
+          >
+            {t("fareApprox", {
+              amount: formatFare(fareSummary.amount, fareSummary.currency, locale),
+            })}
+          </Typography>
+        )}
       </Box>
 
       {itinerary.transfers > 0 && (
@@ -210,4 +269,4 @@ export function TransitItineraryCard({
 }
 
 // Re-export internal helpers needed by TransitDetailsView
-export { LegBadge, LegRemarks, TransitLiveBadge, LiveStopTime };
+export { LegBadge, LegRemarks, LiveStopTime, TransitLiveBadge };

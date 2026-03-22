@@ -9,15 +9,9 @@ import Typography from "@mui/material/Typography";
 import type { Departure, TripRemark } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { formatTime } from "@/lib/formatTime";
+import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { REMARK_PRIORITY, RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
-
-const OCCUPANCY_COLOR = { low: "#2e7d32", medium: "#e65100", high: "#b71c1c" };
-const OCCUPANCY_KEY = {
-  low: "lowOccupancy",
-  medium: "mediumOccupancy",
-  high: "highOccupancy",
-} as const;
 
 interface DepartureRowProps {
   departure: Departure;

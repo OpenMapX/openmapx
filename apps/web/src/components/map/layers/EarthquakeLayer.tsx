@@ -6,8 +6,10 @@ import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { escapeHtml, sanitizeUrl } from "@/lib/escapeHtml";
+import { relativeTime } from "@/lib/formatTime";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const SOURCE_ID = "openmapx-earthquakes-source";
 const CIRCLE_LAYER_ID = "openmapx-earthquakes-circles";
@@ -129,17 +131,6 @@ function depthLabel(depth: number): string {
   return "Deep";
 }
 
-function relativeTime(ms: number): string {
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const days = Math.floor(hr / 24);
-  return `${days}d ago`;
-}
-
 export function EarthquakeLayer() {
   const { mapRef, mapReady } = useMap();
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
@@ -150,6 +141,7 @@ export function EarthquakeLayer() {
   const setLoading = useEarthquakeStore((s) => s.setLoading);
   const setLastUpdated = useEarthquakeStore((s) => s.setLastUpdated);
   useOverlayExclusion("earthquakes", layerVisible);
+  useLayerReanchor([CIRCLE_LAYER_ID, PULSE_LAYER_ID, HEATMAP_LAYER_ID], layerVisible);
   const t = useTranslations("earthquakes");
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);

@@ -1,5 +1,12 @@
 import type { LngLat } from "@openmapx/core";
 
+export type StationAttribution = {
+  label: string;
+  url: string;
+  license?: string;
+  licenseUrl?: string;
+};
+
 export interface SharedMobilityStation {
   id: string;
   name: string;
@@ -17,7 +24,57 @@ export interface SharedMobilityStation {
   isActive: boolean;
   /** Source system identifier (e.g., "citybikes/velib", "gbfs/lime-paris"). */
   source: string;
-  attribution?: { label: string; url: string; license?: string; licenseUrl?: string };
+  attribution?: StationAttribution | StationAttribution[];
+  /** How to access the station (e.g., "App", "Chipkarte", "Bordcomputer"). */
+  accessMethod?: string;
+  /** Nearby public transit connections. */
+  transitInfo?: { lines?: string; stops?: string };
+  /** Human-readable location hint / directions to the station. */
+  locationHint?: string;
+  /** Station type: fixed dock or free-floating zone. */
+  stationType?: "fixed" | "free";
+  /** Human-readable vehicle class names available (e.g., "Mini - Elektro", "Kombi"). */
+  vehicleClassNames?: string[];
+  /** Station address. */
+  address?: {
+    street?: string;
+    city?: string;
+    postcode?: string;
+    country?: string;
+  };
+  /** Operator notes (e.g., "Always bring the charging cable!"). */
+  operatorNotes?: string;
+  /** Per-station website or booking URL. */
+  website?: string;
+  /** Structured vehicle type details from GBFS (make, model, accessories, CO2). */
+  vehicleTypeDetails?: VehicleTypeDetail[];
+  /** Human-readable pricing summary (e.g., "from 0.28 €/km + 1.90 €/h"). */
+  pricingSummary?: string;
+  /** Full pricing plan details for detail view. */
+  pricingDetails?: PricingDetail[];
+  /** App deep links for booking. */
+  rentalUris?: { web?: string; android?: string; ios?: string };
+}
+
+export interface VehicleTypeDetail {
+  name: string;
+  make?: string;
+  model?: string;
+  propulsion?: string;
+  accessories?: string[];
+  co2PerKm?: number;
+  riderCapacity?: number;
+  returnConstraint?: string;
+}
+
+export interface PricingDetail {
+  name: string;
+  description?: string;
+  currency: string;
+  perKmRate?: number;
+  /** Normalized hourly rate (computed from per_min_pricing rate/interval). */
+  perHourRate?: number;
+  flatRate?: number;
 }
 
 export interface SharedMobilityVehicle {
@@ -37,7 +94,7 @@ export interface SharedMobilityVehicle {
   isDisabled: boolean;
   operator?: string;
   source: string;
-  attribution?: { label: string; url: string; license?: string; licenseUrl?: string };
+  attribution?: StationAttribution | StationAttribution[];
 }
 
 export type VehicleFormFactor =
@@ -85,6 +142,7 @@ export interface GbfsStationInfo {
   lon: number;
   capacity?: number;
   vehicleTypesAvailable?: string[];
+  rentalUris?: { web?: string; android?: string; ios?: string };
 }
 
 export interface GbfsStationStatus {
@@ -103,6 +161,25 @@ export interface GbfsVehicleType {
   propulsionType: string;
   name?: string;
   maxRangeMeters?: number;
+  make?: string;
+  model?: string;
+  riderCapacity?: number;
+  vehicleAccessories?: string[];
+  co2PerKm?: number;
+  returnConstraint?: string;
+  defaultPricingPlanId?: string;
+  pricingPlanIds?: string[];
+}
+
+export interface GbfsPricingPlan {
+  planId: string;
+  name: string;
+  currency: string;
+  price: number;
+  isTaxable: boolean;
+  description?: string;
+  perKmPricing?: { start: number; rate: number; interval: number; end?: number }[];
+  perMinPricing?: { start: number; rate: number; interval: number; end?: number }[];
 }
 
 export interface GbfsVehicleStatus {

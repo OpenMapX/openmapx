@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { lookupDbStation } from "../services/db-ris/index";
 import { enrichPlace } from "../services/enrichment/index";
 import {
   lookupByCoords,
@@ -58,6 +59,16 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       // be cached because browsers can cache them when Cache-Control: public is present.
       try {
         const result = await withCache(cacheKey, TTL.places.detail, async () => {
+          // DB station lookup (RIS::Stations enrichment)
+          if (rawId.startsWith("db-")) {
+            const evaNumber = rawId.slice(3);
+            if (!/^\d+$/.test(evaNumber)) {
+              const err: CacheableError = { statusCode: 400, message: "Invalid EVA number" };
+              throw err;
+            }
+            return lookupDbStation(evaNumber, lang);
+          }
+
           const match = rawId.match(OSM_ID_RE);
 
           if (match) {

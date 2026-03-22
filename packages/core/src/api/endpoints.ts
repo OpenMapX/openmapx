@@ -4,6 +4,8 @@ export const API_ENDPOINTS = {
   geocodeReverse: "/api/geocode/reverse",
   autocomplete: "/api/autocomplete",
   directions: "/api/directions",
+  elevation: "/api/elevation",
+  isochrone: "/api/isochrone",
   places: "/api/places",
   traffic: "/api/traffic",
   streetViewImages: "/api/streetview/images",
@@ -36,8 +38,8 @@ export const API_ENDPOINTS = {
   motisStatus: "/api/motis/status",
   motisFeeds: "/api/motis/feeds",
   dataSources: "/api/data-sources",
-  dataSourceSearch: "/api/data-sources",
-  dataSourceDetail: "/api/data-sources",
+  dataSourceSearch: "/api/data-sources", // used as `${base}/${sourceId}/search`
+  dataSourceDetail: "/api/data-sources", // used as `${base}/${sourceId}/detail/${itemId}`
   photos: "/api/photos",
   hikingSearch: "/api/hiking/search",
   hikingArea: "/api/hiking/area",
@@ -48,4 +50,6 @@ export const API_ENDPOINTS = {
   savedPlaces: "/api/saved/places",
   savedLabels: "/api/saved/labels",
   savedCheck: "/api/saved/check",
+  risMapsPositions: "/api/ris-maps/positions",
+  risMapsGeometry: "/api/ris-maps/geometry",
 } as const;

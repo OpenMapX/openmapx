@@ -3,6 +3,7 @@ import {
   getAlerts,
   getFacilities,
   getProviderHealthStatus,
+  getReachableStops,
   getRoute,
   getRouteAlerts,
   getRouteLive,
@@ -33,6 +34,7 @@ import {
 import { registry } from "../services/transit/registry/index";
 import { STATIC_PROVIDER_ATTRIBUTION } from "../services/transit/static-providers";
 import type { BBox, TransportMode } from "../services/transit/types";
+import { hashKey, withCache } from "../utils/cache";
 
 interface BBoxQuery {
   sw_lat: string;
@@ -775,7 +777,8 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
         time = d.toISOString().slice(11, 19);
       } else {
         date = q.date ?? utcDate();
-        time = q.time ? `${q.time}:00` : utcTime();
+        // Normalize to HH:MM:SS — avoid double-appending :00 if seconds already present
+        time = q.time ? (q.time.split(":").length >= 3 ? q.time : `${q.time}:00`) : utcTime();
       }
       const numItineraries = Math.min(Math.max(Number(q.num_itineraries ?? 3), 1), 10);
       const plan = await planTrip({
@@ -792,10 +795,50 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       });
       if (!plan) {
         return reply.status(503).send({
-          error: "Trip planning unavailable — OTP is not running or has no GTFS data loaded",
+          error: "Trip planning unavailable — no transit provider could serve this route",
         });
       }
       return plan;
     },
   });
+
+  // GET /api/transit/reachable?lat=&lng=&maxTravelTime=30&modes=
+  server.get(
+    "/transit/reachable",
+    {
+      schema: {
+        querystring: {
+          type: "object",
+          required: ["lat", "lng"],
+          properties: {
+            lat: { type: "number" },
+            lng: { type: "number" },
+            maxTravelTime: { type: "integer", default: 30 },
+            modes: { type: "string" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const q = req.query as { lat: number; lng: number; maxTravelTime: number; modes?: string };
+      const lat = q.lat;
+      const lng = q.lng;
+      const maxTravelTime = Math.min(q.maxTravelTime, 120);
+      const modes = q.modes;
+
+      const cacheKey = hashKey("cache:transit:reachable", {
+        lat: lat.toFixed(3),
+        lng: lng.toFixed(3),
+        maxTravelTime: String(maxTravelTime),
+        modes: modes ?? "",
+      });
+
+      const results = await withCache(cacheKey, 300, () =>
+        getReachableStops(lat, lng, maxTravelTime, modes),
+      );
+
+      reply.header("Cache-Control", "public, max-age=300");
+      return results;
+    },
+  );
 }

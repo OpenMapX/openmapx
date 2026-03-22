@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayerStore } from "@openmapx/core";
+import { useTransitStore } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE } from "@/lib/theme";
@@ -10,6 +10,7 @@ import {
   moveLayerBeforeFirstSymbol,
   setLayerVisibility,
 } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const TRANSIT_LAYER_ID = "openmapx-transit-layer";
 const TRANSIT_LAYER_HINTS = [
@@ -23,8 +24,8 @@ const TRANSIT_LAYER_HINTS = [
 
 export function TransitLayer() {
   const { mapRef, mapReady } = useMap();
-  const showTransit = useLayerStore((s) => s.showTransit);
-  const activeLayer = useLayerStore((s) => s.activeLayer);
+  const showTransit = useTransitStore((s) => s.panelOpen && s.layerVisible);
+  useLayerReanchor(TRANSIT_LAYER_ID, showTransit);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -86,18 +87,6 @@ export function TransitLayer() {
       map.off("styledata", syncLayer);
     };
   }, [mapReady, mapRef, showTransit]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !showTransit) return;
-
-    // Re-anchor after base map changes (default/satellite/terrain).
-    if (activeLayer !== "default" && activeLayer !== "satellite" && activeLayer !== "terrain") {
-      return;
-    }
-
-    moveLayerBeforeFirstSymbol(map, TRANSIT_LAYER_ID);
-  }, [activeLayer, mapReady, mapRef, showTransit]);
 
   return null;
 }

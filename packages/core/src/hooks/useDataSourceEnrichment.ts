@@ -28,6 +28,12 @@ const RAW_CATEGORY_TO_DATA_SOURCE: Record<string, string> = {
   // Car sharing
   car_sharing: "car-sharing",
   "amenity/car_sharing": "car-sharing",
+  // Parking (MapTiler uses class=parking/parking_garage/parking_paid, no subclass)
+  parking: "parking",
+  parking_garage: "parking",
+  parking_paid: "parking",
+  "amenity/parking": "parking",
+  "car/parking": "parking",
 };
 
 // Also build mappings from CategoryDefinition entries that have dataSourceId
@@ -63,6 +69,7 @@ function resolveDataSourceId(place: Place): string | null {
   if (amenity === "fuel") return "fuel";
   if (amenity === "bicycle_rental") return "bike-sharing";
   if (amenity === "car_sharing") return "car-sharing";
+  if (amenity === "parking") return "parking";
   return null;
 }
 

@@ -19,11 +19,6 @@ export function StreetViewLegend() {
     <Paper
       elevation={3}
       sx={{
-        position: "absolute",
-        bottom: 16,
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 10,
         px: 2,
         py: 1.5,
         borderRadius: "12px",

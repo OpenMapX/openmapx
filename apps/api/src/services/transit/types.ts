@@ -47,6 +47,8 @@ export interface TripRemark {
   type: "info" | "warning" | "cancellation";
 }
 
+export type OccupancyLevel = "low" | "medium" | "high" | "overcrowded";
+
 export interface Departure {
   tripId: string;
   route: Pick<TransitRoute, "id" | "shortName" | "longName" | "mode" | "color">;
@@ -56,7 +58,7 @@ export interface Departure {
   delaySeconds?: number;
   platform?: string;
   canceled?: boolean;
-  occupancy?: "low" | "medium" | "high";
+  occupancy?: OccupancyLevel;
   remarks?: TripRemark[];
 }
 
@@ -74,6 +76,12 @@ export interface TripLeg {
   routeId?: string;
   /** @internal Number of intermediate stops (excluding from/to). Used to decide if geometry needs road-snapping. */
   _intermediateStopCount?: number;
+  /** Index into the fare transfer array (from MOTIS fare data). */
+  fareTransferIndex?: number;
+  /** Index into the effective fare leg products for this transfer. */
+  effectiveFareLegIndex?: number;
+  /** Occupancy level for this transit leg (e.g. from RIS::Transports or FPTF). */
+  occupancy?: OccupancyLevel;
 }
 
 export interface TripItinerary {
@@ -83,6 +91,23 @@ export interface TripItinerary {
   transfers: number;
   walkDistance: number; // meters
   legs: TripLeg[];
+  fare?: TripFare;
+}
+
+export interface FareProduct {
+  name: string;
+  amount: number;
+  currency: string;
+  riderCategory?: { name: string; isDefault: boolean };
+  media?: { name?: string; type: string };
+}
+
+export interface TripFare {
+  transfers: Array<{
+    rule?: string;
+    transferProducts?: FareProduct[];
+    legProducts: FareProduct[][][];
+  }>;
 }
 
 export interface TripPlan {
@@ -147,7 +172,7 @@ export interface VehicleJourney {
   id: string;
   name: string;
   provider: string;
-  occupancy?: "low" | "medium" | "high";
+  occupancy?: OccupancyLevel;
   remarks?: TripRemark[];
   stops: VehicleJourneyStop[];
 }

@@ -3,13 +3,19 @@
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CloseIcon from "@mui/icons-material/Close";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import Box from "@mui/material/Box";
+import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import type { MapLayer } from "@openmapx/core";
-import { OVERLAY_REGISTRY, toggleOverlay, useLayerStore } from "@openmapx/core";
+import type { MapLayer, OverlayId } from "@openmapx/core";
+import {
+  OVERLAY_REGISTRY,
+  toggleOverlay,
+  useLayerStore,
+  useMeasurementStore,
+  useTravelTimeStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { DesktopMoreTile } from "./DesktopMoreTile";
 import {
@@ -32,7 +38,7 @@ function OverlayDetailTile({
   onClose: () => void;
 }) {
   const entry = item.overlayId ? OVERLAY_REGISTRY.find((r) => r.id === item.overlayId) : undefined;
-  const active = entry?.useActive() ?? item.selected ?? false;
+  const active = entry?.useActive() ?? false;
 
   return (
     <DesktopMoreTile
@@ -42,7 +48,7 @@ function OverlayDetailTile({
       onClick={
         item.overlayId
           ? () => {
-              if (item.overlayId) toggleOverlay(item.overlayId);
+              toggleOverlay(item.overlayId as OverlayId);
               onClose();
             }
           : undefined
@@ -55,6 +61,10 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
   const t = useTranslations("layers");
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
+  const globeView = useLayerStore((s) => s.globeView);
+  const setGlobeView = useLayerStore((s) => s.setGlobeView);
+  const measureActive = useMeasurementStore((s) => s.isActive);
+  const travelTimeActive = useTravelTimeStore((s) => s.isActive);
 
   return (
     <Box
@@ -112,9 +122,43 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           rowGap: 0.4,
         }}
       >
-        {DESKTOP_MORE_MAP_TOOLS.map((item) => (
-          <DesktopMoreTile key={item.id} item={item} label={t(item.labelKey)} labelWidth={96} />
-        ))}
+        {DESKTOP_MORE_MAP_TOOLS.map((item) => {
+          const toolState: Record<string, { active: boolean; toggle: () => void }> = {
+            measure: {
+              active: measureActive,
+              toggle: () => {
+                const s = useMeasurementStore.getState();
+                if (s.isActive) s.deactivate();
+                else s.activate();
+              },
+            },
+            "travel-time": {
+              active: travelTimeActive,
+              toggle: () => {
+                const s = useTravelTimeStore.getState();
+                if (s.isActive) s.deactivate();
+                else s.activate();
+              },
+            },
+          };
+          const tool = toolState[item.id];
+          return (
+            <DesktopMoreTile
+              key={item.id}
+              item={{ ...item, selected: tool?.active }}
+              label={t(item.labelKey)}
+              labelWidth={96}
+              onClick={
+                tool
+                  ? () => {
+                      tool.toggle();
+                      onClose();
+                    }
+                  : undefined
+              }
+            />
+          );
+        })}
       </Box>
 
       <Divider sx={{ my: 0.8, borderColor: "rgba(60,64,67,0.12)" }} />
@@ -145,15 +189,17 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
         ))}
       </Box>
 
-      <Box sx={{ mt: 0.2, display: "flex", alignItems: "center", gap: 1.1 }}>
+      <Box sx={{ mt: 0.2, display: "flex", alignItems: "center" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.2 }}>
-          <CheckBoxOutlineBlankIcon sx={{ fontSize: 19, color: "#202124" }} />
+          <Checkbox
+            size="small"
+            checked={globeView}
+            onChange={() => setGlobeView(!globeView)}
+            icon={<CheckBoxOutlineBlankIcon sx={{ fontSize: 19, color: "#202124" }} />}
+            checkedIcon={<CheckBoxIcon sx={{ fontSize: 19, color: "#0b7d8b" }} />}
+            sx={{ p: 0.3 }}
+          />
           <Typography sx={{ fontSize: 12.5, color: "#202124" }}>{t("globeView")}</Typography>
-          <HelpOutlineIcon sx={{ fontSize: 14, color: "#3c4043" }} />
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.2 }}>
-          <CheckBoxIcon sx={{ fontSize: 19, color: "#0b7d8b" }} />
-          <Typography sx={{ fontSize: 12.5, color: "#202124" }}>{t("labels")}</Typography>
         </Box>
       </Box>
     </Box>

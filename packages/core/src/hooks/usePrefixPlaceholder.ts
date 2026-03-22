@@ -9,6 +9,7 @@ import { useEffect, useRef } from "react";
 export function usePrefixPlaceholder<T>(
   queryKeyPrefix: string,
   query: string,
+  ...extraKeyParts: unknown[]
 ): () => T | undefined {
   const queryClient = useQueryClient();
   const prevQueryRef = useRef(query);
@@ -24,7 +25,7 @@ export function usePrefixPlaceholder<T>(
     const prevNorm = prev.trim().toLowerCase();
     const nextNorm = query.trim().toLowerCase();
     if (nextNorm.startsWith(prevNorm) || prevNorm.startsWith(nextNorm)) {
-      return queryClient.getQueryData<T>([queryKeyPrefix, prev]);
+      return queryClient.getQueryData<T>([queryKeyPrefix, prev, ...extraKeyParts]);
     }
     return undefined;
   };

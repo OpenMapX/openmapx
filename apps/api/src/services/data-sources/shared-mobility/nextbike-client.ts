@@ -6,6 +6,7 @@
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import { TTL, withCache } from "../../../utils/cache.js";
+import { bboxContains } from "../../../utils/geo.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const NEXTBIKE_URL = "https://maps.nextbike.net/maps/nextbike-live.json";
@@ -45,10 +46,6 @@ interface NextbikeBike {
   number: string;
   bike_type: number;
   active: boolean;
-}
-
-function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
-  return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
 }
 
 /**

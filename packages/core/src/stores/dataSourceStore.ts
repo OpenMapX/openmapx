@@ -11,6 +11,7 @@ interface DataSourceState {
   searchBbox: BoundingBox | null;
   /** True when the map has moved since the last search. */
   mapMoved: boolean;
+  hoveredItemId: string | null;
 
   setActiveSource: (id: string | null) => void;
   toggleSource: (id: string) => void;
@@ -21,6 +22,7 @@ interface DataSourceState {
   setViewport: (bbox: BoundingBox, zoom: number) => void;
   setSearchBbox: (bbox: BoundingBox) => void;
   setMapMoved: (moved: boolean) => void;
+  setHoveredItemId: (id: string | null) => void;
 }
 
 export const useDataSourceStore = create<DataSourceState>((set) => ({
@@ -31,14 +33,36 @@ export const useDataSourceStore = create<DataSourceState>((set) => ({
   viewportZoom: 0,
   searchBbox: null,
   mapMoved: false,
+  hoveredItemId: null,
 
   setActiveSource: (id) =>
-    set({ activeSource: id, filters: {}, selectedItem: null, searchBbox: null, mapMoved: false }),
+    set({
+      activeSource: id,
+      filters: {},
+      selectedItem: null,
+      searchBbox: null,
+      mapMoved: false,
+      hoveredItemId: null,
+    }),
   toggleSource: (id) =>
     set((state) =>
       state.activeSource === id
-        ? { activeSource: null, filters: {}, selectedItem: null, searchBbox: null, mapMoved: false }
-        : { activeSource: id, filters: {}, selectedItem: null, searchBbox: null, mapMoved: false },
+        ? {
+            activeSource: null,
+            filters: {},
+            selectedItem: null,
+            searchBbox: null,
+            mapMoved: false,
+            hoveredItemId: null,
+          }
+        : {
+            activeSource: id,
+            filters: {},
+            selectedItem: null,
+            searchBbox: null,
+            mapMoved: false,
+            hoveredItemId: null,
+          },
     ),
   setFilter: (filterId, value) =>
     set((state) => ({ filters: { ...state.filters, [filterId]: value } })),
@@ -48,4 +72,5 @@ export const useDataSourceStore = create<DataSourceState>((set) => ({
   setViewport: (bbox, zoom) => set({ viewportBbox: bbox, viewportZoom: zoom }),
   setSearchBbox: (searchBbox) => set({ searchBbox }),
   setMapMoved: (mapMoved) => set({ mapMoved }),
+  setHoveredItemId: (hoveredItemId) => set({ hoveredItemId }),
 }));

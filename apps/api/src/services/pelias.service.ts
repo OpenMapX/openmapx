@@ -53,9 +53,15 @@ async function fetchPelias(path: string, params: Record<string, string>): Promis
   const url = new URL(`${PELIAS_URL}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`Pelias error ${res.status}: ${url.toString()}`);
-  return res.json() as Promise<PeliasResponse>;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4_000);
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (!res.ok) throw new Error(`Pelias error ${res.status}: ${url.toString()}`);
+    return res.json() as Promise<PeliasResponse>;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const peliasService: GeocodingProvider = {

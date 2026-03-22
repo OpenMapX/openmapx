@@ -26,6 +26,10 @@ export interface ProviderAttribution {
  * this is only a last-resort fallback when the map is unavailable.
  */
 export function providerAttribution(provider: string): ProviderAttribution {
+  if (provider === "ris")
+    return { label: "Deutsche Bahn", url: "https://developers.deutschebahn.com" };
+  if (provider === "db-ris")
+    return { label: "Deutsche Bahn", url: "https://developers.deutschebahn.com" };
   if (provider.startsWith("gtfs-")) return { label: `GTFS (${provider.slice(5)})`, url: "" };
   return { label: provider, url: "" };
 }

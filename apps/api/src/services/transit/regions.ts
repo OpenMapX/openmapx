@@ -2,7 +2,15 @@ import { registry } from "./registry/index";
 import type { RegistryEntry } from "./registry/types";
 import type { BBox } from "./types";
 
-export type RegionalProvider = "tfl" | "irail" | "mbta" | "opendata-ch" | "db" | "vbb" | "bvg";
+export type RegionalProvider =
+  | "tfl"
+  | "irail"
+  | "mbta"
+  | "opendata-ch"
+  | "db"
+  | "vbb"
+  | "bvg"
+  | "ris";
 
 interface RegionDef {
   provider: RegionalProvider;
@@ -18,6 +26,8 @@ const REGIONS: RegionDef[] = [
   // VBB is more specific than DB for Berlin/Brandenburg — listed first so
   // dedup logic can suppress DB when VBB already covers the query bbox.
   { provider: "vbb", bbox: [11.26, 51.36, 14.77, 53.56] },
+  // RIS::Routing is the official DB journey planner — preferred over db-vendo-client
+  { provider: "ris", bbox: [5.87, 47.27, 15.04, 55.06], envVar: "DB_RIS_CLIENT_ID" },
   { provider: "db", bbox: [5.87, 47.27, 15.04, 55.06] },
 ];
 
@@ -71,6 +81,7 @@ const PREFIX_MAP: Record<string, RegionalProvider> = {
   "mb:": "mbta",
   "ch:": "opendata-ch",
   "db:": "db",
+  "ris:": "ris",
   "vbb:": "vbb",
   "bvg:": "bvg",
 };

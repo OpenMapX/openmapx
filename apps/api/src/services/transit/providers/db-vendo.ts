@@ -159,10 +159,10 @@ function legToTripLeg(leg: any): TripLeg {
   // Walking legs must use "walking" mode, not "bus"
   const mode: TransportMode = isWalking ? "walking" : productToMode(line.product ?? "");
 
-  const fromLat: number = leg.origin?.location?.latitude ?? 0;
-  const fromLng: number = leg.origin?.location?.longitude ?? 0;
-  const toLat: number = leg.destination?.location?.latitude ?? 0;
-  const toLng: number = leg.destination?.location?.longitude ?? 0;
+  const fromLat: number = leg.origin?.location?.latitude ?? leg.origin?.latitude ?? 0;
+  const fromLng: number = leg.origin?.location?.longitude ?? leg.origin?.longitude ?? 0;
+  const toLat: number = leg.destination?.location?.latitude ?? leg.destination?.latitude ?? 0;
+  const toLng: number = leg.destination?.location?.longitude ?? leg.destination?.longitude ?? 0;
 
   let geometry: GeoJSONLineString = {
     type: "LineString",
@@ -225,8 +225,8 @@ export async function planJourney(
     const dt = new Date(`${date}T${time}`);
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const data: any = await client.journeys(
-      { type: "location", latitude: fromLat, longitude: fromLng },
-      { type: "location", latitude: toLat, longitude: toLng },
+      { type: "location", address: "Origin", latitude: fromLat, longitude: fromLng },
+      { type: "location", address: "Destination", latitude: toLat, longitude: toLng },
       {
         // db-vendo-client expects a Date, not a string
         ...(arriveBy ? { arrival: dt } : { departure: dt }),

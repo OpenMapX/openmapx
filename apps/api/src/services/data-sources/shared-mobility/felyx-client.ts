@@ -5,6 +5,7 @@
  */
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
+import { bboxContains } from "../../../utils/geo.js";
 import type { SharedMobilityVehicle } from "./types.js";
 
 const FELYX_URL = "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/map/cars/";
@@ -19,10 +20,6 @@ interface FelyxVehicle {
   fuelLevel?: number;
   vehicleTypeId?: number;
   isActivated?: boolean;
-}
-
-function bboxContains(bbox: BoundingBox, lat: number, lng: number): boolean {
-  return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
 }
 
 /**

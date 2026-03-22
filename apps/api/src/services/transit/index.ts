@@ -1,6 +1,16 @@
-import { cacheGet, cacheSet, hashKey, TTL } from "../../utils/cache.js";
+import { routes as motisRoutes, oneToAll } from "@motis-project/motis-client";
+import { cacheGet, cacheSet, hashKey, MemCache, TTL } from "../../utils/cache.js";
+import { decodePolyline } from "../../utils/polyline.js";
+import { expandSearchQuery, getQueryVariants } from "../../utils/query-expansion.js";
 import { matchToRoads } from "../../utils/road-snap.js";
-import { motisProvider as motisLocal } from "../motis/index";
+import { getJourneyOccupancy } from "../db-ris/transports-service.js";
+import {
+  motisAdapter as motis,
+  motisLocalInstance,
+  motisMode,
+  transitousInstance,
+  uniqueModes,
+} from "../motis/index.js";
 import { getAdapter } from "./adapters/index";
 import { deduplicateStops, isTripNumber } from "./dedup";
 import { providerHealth } from "./health";
@@ -12,9 +22,9 @@ import * as mbta from "./providers/mbta";
 import * as opendataCh from "./providers/opendata-ch";
 import * as otp from "./providers/otp";
 import * as overpass from "./providers/overpass";
+import * as risRouting from "./providers/ris-routing";
 import * as tfl from "./providers/tfl";
 import * as transitland from "./providers/transitland";
-import * as transitous from "./providers/transitous";
 import {
   bboxToCenter,
   dynamicEntryFromId,
@@ -102,12 +112,55 @@ async function getRegionalStops(
     case "opendata-ch":
       return opendataCh.getStops(lat, lng);
     case "db":
+    case "ris":
       return dbVendo.getStopsNearby(lat, lng, radiusMeters);
     case "vbb":
     case "bvg": {
       const inst = hafasInstanceForProvider(provider);
       return inst ? hafas.getStopsNearby(inst, lat, lng, radiusMeters) : [];
     }
+  }
+}
+
+async function fetchMotisRouteGeometries(bbox: BBox): Promise<TransitRoute[]> {
+  if (!providerHealth.isHealthy("transitous")) return [];
+  const [south, west, north, east] = [bbox[1], bbox[0], bbox[3], bbox[2]];
+  try {
+    const { data } = await motisRoutes({
+      client: transitousInstance.client,
+      query: { min: `${south},${west}`, max: `${north},${east}`, zoom: 12 },
+    });
+    if (!data?.routes || !data.polylines) return [];
+    const results: TransitRoute[] = [];
+    for (const routeInfo of data.routes) {
+      const firstTransitRoute = routeInfo.transitRoutes[0];
+      if (!firstTransitRoute) continue;
+      const allCoords: [number, number][] = [];
+      for (const seg of routeInfo.segments) {
+        const rp = data.polylines[seg.polyline];
+        if (rp?.polyline?.points) {
+          const decoded = decodePolyline(rp.polyline.points, rp.polyline.precision);
+          allCoords.push(...decoded);
+        }
+      }
+      const route: TransitRoute = {
+        id: `mo:${firstTransitRoute.id}`,
+        shortName: firstTransitRoute.shortName,
+        longName: firstTransitRoute.longName,
+        mode: motisMode(routeInfo.mode),
+        color: firstTransitRoute.color,
+        operatorName: "",
+      };
+      if (allCoords.length >= 2) {
+        route.geometry = { type: "LineString", coordinates: allCoords };
+      }
+      results.push(route);
+    }
+    providerHealth.recordSuccess("transitous");
+    return results;
+  } catch {
+    providerHealth.recordFailure("transitous");
+    return [];
   }
 }
 
@@ -159,7 +212,7 @@ export async function getStopsInBbox(bbox: BBox, modes?: TransportMode[]): Promi
   // Transitous (priority 3) — global coverage with real-time data
   if (stops.length === 0 && providerHealth.isHealthy("transitous")) {
     try {
-      stops = await transitous.getStops(bbox);
+      stops = await motis.getStops(transitousInstance, bbox);
       providerHealth.recordSuccess("transitous");
     } catch {
       providerHealth.recordFailure("transitous");
@@ -210,7 +263,9 @@ export async function fetchStopsByNameRaw(
   const tasks: Promise<TransitStop[]>[] = [
     ...hafas.HAFAS_INSTANCES.map((inst) => hafas.searchByName(inst, query, perProvider)),
     dbVendo.searchByName(query, perProvider),
-    transitous.searchByName(query, perProvider),
+    ...(providerHealth.isHealthy("transitous")
+      ? [motis.searchByName(transitousInstance, query, perProvider)]
+      : []),
     opendataCh.searchByName(query, perProvider),
     irail.searchByName(query, perProvider),
     gtfsLocal.searchByName(query, perProvider),
@@ -242,15 +297,56 @@ export async function fetchStopsByNameRaw(
   return allStops.filter((s) => s.lat !== 0 && s.lng !== 0 && s.name !== "Unknown");
 }
 
-export async function searchStopsByName(query: string, limit = 5): Promise<TransitStop[]> {
-  const key = hashKey("transit:stop-search", { q: query.toLowerCase() });
-  const cached = await cacheGet<TransitStop[]>(key);
-  if (cached) return cached.slice(0, limit);
+const stopSearchMem = new MemCache<TransitStop[]>(500);
+const STOP_SOFT_MS = 3 * 60_000;
+const STOP_HARD_MS = 60 * 60_000;
 
-  const raw = await fetchStopsByNameRaw(query, limit);
+export async function searchStopsByName(query: string, limit = 5): Promise<TransitStop[]> {
+  // Canonical cache key so "Hbf" and "Hauptbahnhof" share a slot
+  const canonicalQ = expandSearchQuery(query).toLowerCase();
+  const key = hashKey("transit:stop-search", { q: canonicalQ });
+
+  // L1: in-memory (sub-millisecond)
+  const mem = stopSearchMem.get(key);
+  if (mem) {
+    if (mem.stale) {
+      void (async () => {
+        const raw = await fetchStopVariants(query, limit);
+        const deduped = deduplicateStops(raw).slice(0, limit);
+        await cacheSet(key, deduped, TTL.transit.stops);
+        stopSearchMem.set(key, deduped, STOP_SOFT_MS, STOP_HARD_MS);
+      })();
+    }
+    return mem.data.slice(0, limit);
+  }
+
+  // L2: Redis
+  const cached = await cacheGet<TransitStop[]>(key);
+  if (cached) {
+    stopSearchMem.set(key, cached, STOP_SOFT_MS, STOP_HARD_MS);
+    return cached.slice(0, limit);
+  }
+
+  const raw = await fetchStopVariants(query, limit);
   const deduped = deduplicateStops(raw).slice(0, limit);
   await cacheSet(key, deduped, TTL.transit.stops);
+  stopSearchMem.set(key, deduped, STOP_SOFT_MS, STOP_HARD_MS);
   return deduped;
+}
+
+/** Fetch stops for all query synonym variants and deduplicate by id. */
+async function fetchStopVariants(query: string, limit: number): Promise<TransitStop[]> {
+  const variants = getQueryVariants(query);
+  if (variants.length === 1) {
+    return fetchStopsByNameRaw(variants[0], limit);
+  }
+  const results = await Promise.all(variants.map((v) => fetchStopsByNameRaw(v, limit)));
+  const seen = new Set<string>();
+  return results.flat().filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
 }
 
 export async function getStop(id: string): Promise<TransitStop | null> {
@@ -266,7 +362,8 @@ export async function getStop(id: string): Promise<TransitStop | null> {
     const regional = providerFromId(id);
     switch (regional) {
       case "db":
-        stop = await dbVendo.getStop(id);
+      case "ris":
+        stop = await dbVendo.getStop(id.replace("ris:", "db:"));
         break;
       case "tfl":
         stop = await tfl.getStop(id);
@@ -284,9 +381,9 @@ export async function getStop(id: string): Promise<TransitStop | null> {
         break;
       default:
         if (id.startsWith("mo:")) {
-          stop = await transitous.getStopById(id);
+          stop = await motis.getStopById(transitousInstance, id);
         } else if (id.startsWith("ms:")) {
-          stop = await motisLocal.getStopById(id);
+          stop = await motis.getStopById(motisLocalInstance, id);
         } else {
           // Try dynamic registry adapter (oebb:, zvv:, rsag: etc.)
           const dynEntry = dynamicEntryFromId(id);
@@ -326,7 +423,7 @@ export async function getStopTimetable(stopId: string, date: string): Promise<De
   } else {
     // For real-time providers, fetch a full-day window (1440 min) starting at midnight of the date.
     // We query departures normally and filter to the requested date.
-    const targetDate = new Date(`${date}T00:00:00`);
+    const targetDate = new Date(`${date}T00:00:00Z`);
     const now = new Date();
     const minutesFromNow =
       targetDate > now ? Math.round((targetDate.getTime() - now.getTime()) / 60000) + 1440 : 1440;
@@ -388,6 +485,9 @@ export async function getStopDepartures(stopId: string, minutes: number): Promis
       case "db":
         departures = await dbVendo.getDepartures(stopId, minutes);
         break;
+      case "ris":
+        departures = await dbVendo.getDepartures(stopId.replace("ris:", "db:"), minutes);
+        break;
       case "vbb":
       case "bvg": {
         const inst = hafasInstanceForProvider(regional);
@@ -396,9 +496,9 @@ export async function getStopDepartures(stopId: string, minutes: number): Promis
       }
       default: {
         if (stopId.startsWith("mo:")) {
-          departures = await transitous.getDepartures(stopId, minutes);
+          departures = await motis.getDepartures(transitousInstance, stopId, minutes);
         } else if (stopId.startsWith("ms:")) {
-          departures = await motisLocal.getDepartures(stopId, minutes);
+          departures = await motis.getDepartures(motisLocalInstance, stopId, minutes);
         } else {
           // Try dynamic registry provider
           const dynEntry = dynamicEntryFromId(stopId);
@@ -457,6 +557,9 @@ export async function getStopArrivals(stopId: string, minutes: number): Promise<
       case "db":
         arrivals = await dbVendo.getArrivals(stopId, minutes);
         break;
+      case "ris":
+        arrivals = await dbVendo.getArrivals(stopId.replace("ris:", "db:"), minutes);
+        break;
       case "vbb":
       case "bvg": {
         const inst = hafasInstanceForProvider(regional);
@@ -465,9 +568,9 @@ export async function getStopArrivals(stopId: string, minutes: number): Promise<
       }
       default: {
         if (stopId.startsWith("mo:")) {
-          arrivals = await transitous.getArrivals(stopId, minutes);
+          arrivals = await motis.getArrivals(transitousInstance, stopId, minutes);
         } else if (stopId.startsWith("ms:")) {
-          arrivals = await motisLocal.getArrivals(stopId, minutes);
+          arrivals = await motis.getArrivals(motisLocalInstance, stopId, minutes);
         } else {
           // Try dynamic registry provider
           const dynEntry = dynamicEntryFromId(stopId);
@@ -502,7 +605,21 @@ export async function getRoutesInBbox(bbox: BBox): Promise<TransitRoute[]> {
   const cached = await cacheGet<TransitRoute[]>(key);
   if (cached) return cached;
 
-  const routes = await transitland.getRoutes({ bbox });
+  const [transitlandResult, motisResult] = await Promise.allSettled([
+    transitland.getRoutes({ bbox }),
+    fetchMotisRouteGeometries(bbox),
+  ]);
+
+  const seen = new Map<string, TransitRoute>();
+  for (const result of [transitlandResult, motisResult]) {
+    if (result.status === "fulfilled") {
+      for (const route of result.value) {
+        if (!seen.has(route.id)) seen.set(route.id, route);
+      }
+    }
+  }
+  const routes = Array.from(seen.values());
+
   await cacheSet(key, routes, TTL.transit.routes);
   return routes;
 }
@@ -515,7 +632,7 @@ export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> 
   let routes: TransitRoute[] = [];
 
   if (stopId.startsWith("mo:")) {
-    routes = await transitous.getRoutesForStop(stopId);
+    routes = await motis.getRoutesForStop(transitousInstance, stopId);
   } else if (stopId.startsWith("tl:")) {
     // TransitLand Onestop IDs — pass directly
     routes = await transitland.getRoutes({ stopId });
@@ -764,7 +881,20 @@ export async function getVehicleRadar(bbox: BBox): Promise<VehiclePosition[]> {
   }
 
   // Transitous global vehicle radar
-  tasks.push(transitous.getVehicleRadar(bbox));
+  if (providerHealth.isHealthy("transitous")) {
+    tasks.push(
+      motis.getVehicleRadar(transitousInstance, bbox).then(
+        (r) => {
+          providerHealth.recordSuccess("transitous");
+          return r;
+        },
+        () => {
+          providerHealth.recordFailure("transitous");
+          return [] as VehiclePosition[];
+        },
+      ),
+    );
+  }
 
   const results = await Promise.allSettled(tasks);
   const vehicles: VehiclePosition[] = [];
@@ -794,11 +924,10 @@ async function fetchJourneyForId(vehicleId: string): Promise<VehicleJourney | nu
       return await dbVendo.getTrip(vehicleId);
     }
     if (vehicleId.startsWith("mo:")) {
-      return await transitous.getTrip(vehicleId);
+      return await motis.getTrip(transitousInstance, vehicleId);
     }
     if (vehicleId.startsWith("ms:")) {
-      // Self-hosted MOTIS uses the same trip API format as Transitous
-      return await transitous.getTrip(vehicleId.replace(/^ms:/, "mo:"));
+      return await motis.getTrip(motisLocalInstance, vehicleId);
     }
     if (vehicleId.startsWith("ir:")) {
       return await irail.getVehicleJourney(vehicleId.slice(3));
@@ -902,6 +1031,33 @@ async function snapPlanGeometries(plan: TripPlan): Promise<void> {
   await Promise.allSettled(tasks);
 }
 
+/** Enrich trip legs with occupancy data from RIS::Transports (best-effort). */
+async function enrichOccupancy(plan: TripPlan): Promise<void> {
+  // Collect all RIS journey IDs from transit legs
+  const risPrefix = "ris:";
+  const rawIds: string[] = [];
+  for (const itinerary of plan.itineraries) {
+    for (const leg of itinerary.legs) {
+      if (leg.tripId?.startsWith(risPrefix)) {
+        rawIds.push(leg.tripId.slice(risPrefix.length));
+      }
+    }
+  }
+  if (rawIds.length === 0) return;
+
+  const occupancyMap = await getJourneyOccupancy(rawIds);
+  if (occupancyMap.size === 0) return;
+
+  for (const itinerary of plan.itineraries) {
+    for (const leg of itinerary.legs) {
+      if (!leg.tripId?.startsWith(risPrefix)) continue;
+      const rawId = leg.tripId.slice(risPrefix.length);
+      const level = occupancyMap.get(rawId);
+      if (level) leg.occupancy = level;
+    }
+  }
+}
+
 // Trip Planning
 
 export async function planTrip(params: TripPlanParams): Promise<TripPlan | null> {
@@ -912,7 +1068,7 @@ export async function planTrip(params: TripPlanParams): Promise<TripPlan | null>
   const plan = await otp.plan(params);
   if (plan) {
     plan.provider = "otp";
-    await snapPlanGeometries(plan);
+    await Promise.allSettled([snapPlanGeometries(plan), enrichOccupancy(plan)]);
     await cacheSet(key, plan, TTL.transit.tripPlan);
     return plan;
   }
@@ -950,7 +1106,35 @@ export async function planTrip(params: TripPlanParams): Promise<TripPlan | null>
     }
   }
 
-  // Try DB via db-vendo-client (covers all Germany)
+  // Try RIS::Routing — DB's official journey planner (covers all Germany)
+  if (
+    !regionalPlan &&
+    providers.includes("ris") &&
+    risRouting.isConfigured() &&
+    providerHealth.isHealthy("ris")
+  ) {
+    try {
+      regionalPlan = await risRouting.planJourney(
+        fromLat,
+        fromLng,
+        toLat,
+        toLng,
+        date,
+        time,
+        arriveBy,
+        numItineraries,
+        params.lang,
+      );
+      if (regionalPlan) {
+        regionalPlan.provider = "ris";
+        providerHealth.recordSuccess("ris");
+      }
+    } catch {
+      providerHealth.recordFailure("ris");
+    }
+  }
+
+  // Try DB via db-vendo-client (covers all Germany, fallback when RIS unavailable)
   if (!regionalPlan && providers.includes("db")) {
     regionalPlan = await dbVendo.planJourney(
       fromLat,
@@ -1026,7 +1210,17 @@ export async function planTrip(params: TripPlanParams): Promise<TripPlan | null>
   // Transitous global fallback (MOTIS 2 — covers 117 regions with real-time data)
   if (!regionalPlan && providerHealth.isHealthy("transitous")) {
     try {
-      regionalPlan = await transitous.planTrip(fromLat, fromLng, toLat, toLng, date, time);
+      regionalPlan = await motis.planTrip(
+        transitousInstance,
+        fromLat,
+        fromLng,
+        toLat,
+        toLng,
+        date,
+        time,
+        arriveBy,
+        numItineraries,
+      );
       if (regionalPlan) regionalPlan.provider = "transitous";
       providerHealth.recordSuccess("transitous");
     } catch {
@@ -1035,10 +1229,55 @@ export async function planTrip(params: TripPlanParams): Promise<TripPlan | null>
   }
 
   if (regionalPlan) {
-    await snapPlanGeometries(regionalPlan);
+    await Promise.allSettled([snapPlanGeometries(regionalPlan), enrichOccupancy(regionalPlan)]);
     await cacheSet(key, regionalPlan, TTL.transit.tripPlan);
   }
   return regionalPlan;
+}
+
+// Reachable Stops (Isochrone)
+
+export async function getReachableStops(
+  lat: number,
+  lng: number,
+  maxTravelTimeMinutes: number,
+  modes?: string,
+): Promise<Array<{ stop: TransitStop; durationSeconds: number; transfers: number }>> {
+  try {
+    const transitModes = modes
+      ? (modes.split(",").map((m) => m.trim()) as import("@motis-project/motis-client").Mode[])
+      : undefined;
+    const { data } = await oneToAll({
+      client: transitousInstance.client,
+      query: {
+        one: `${lat},${lng}`,
+        time: new Date().toISOString(),
+        maxTravelTime: maxTravelTimeMinutes,
+        ...(transitModes ? { transitModes } : {}),
+      },
+    });
+    if (!data?.all) return [];
+    return data.all
+      .filter((r) => r.place?.stopId != null && r.duration != null)
+      .map((r) => {
+        const place = r.place as NonNullable<typeof r.place>;
+        return {
+          stop: {
+            id: `mo:${place.stopId}`,
+            name: place.name ?? "",
+            lat: place.lat ?? 0,
+            lng: place.lon ?? 0,
+            modes: place.modes ? uniqueModes(place.modes) : [],
+            provider: "transitous",
+          } satisfies TransitStop,
+          durationSeconds: (r.duration ?? 0) * 60,
+          transfers: Math.max(0, (r.k ?? 1) - 1),
+        };
+      })
+      .sort((a, b) => a.durationSeconds - b.durationSeconds);
+  } catch {
+    return [];
+  }
 }
 
 // Health Status

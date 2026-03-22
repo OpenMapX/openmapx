@@ -1,4 +1,5 @@
 import { cacheGet, cacheSet, hashKey, TTL } from "../../utils/cache.js";
+import { expandSearchQuery, getQueryVariants } from "../../utils/query-expansion.js";
 import {
   bucketTimestamps,
   diceSimilarity,
@@ -29,6 +30,13 @@ import type {
 const LINK_RADIUS_M = 1000; // 1 km
 const MIN_NAME_DICE = 0.4;
 
+/** Canonical cache id from place coordinates + name (synonyms normalised). */
+function placeCacheId(lat: number, lng: number, name: string, placeId?: string): string {
+  if (placeId) return placeId;
+  const canonicalName = expandSearchQuery(name).toLowerCase().replace(/\s+/g, "-");
+  return `${lat.toFixed(5)}_${lng.toFixed(5)}_${canonicalName}`;
+}
+
 // Linked stops
 
 /**
@@ -43,9 +51,7 @@ export async function getLinkedStops(
   name: string,
   placeId?: string,
 ): Promise<TransitStop[]> {
-  const cacheId =
-    placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
-  const key = hashKey("transit:place-stops", { id: cacheId });
+  const key = hashKey("transit:place-stops", { id: placeCacheId(lat, lng, name, placeId) });
   const cached = await cacheGet<TransitStop[]>(key);
   if (cached) return cached;
 
@@ -54,7 +60,18 @@ export async function getLinkedStops(
   // IDs but would then return their own regional routes via getRoutesForStop.
   const buf = 1.0;
   const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
-  const raw = await fetchStopsByNameRaw(name, 30, placeBbox);
+  // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
+  // providers indexing either form are found, then deduplicate by stop id.
+  const variants = getQueryVariants(name);
+  const variantResults = await Promise.all(
+    variants.map((v) => fetchStopsByNameRaw(v, 30, placeBbox)),
+  );
+  const seen = new Set<string>();
+  const raw = variantResults.flat().filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
   const normPlace = normalizeName(name);
 
   const linked = raw.filter((stop) => {
@@ -81,8 +98,7 @@ export async function getMergedRoutes(
   name: string,
   placeId?: string,
 ): Promise<MergedRoute[]> {
-  const cacheId =
-    placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
+  const cacheId = placeCacheId(lat, lng, name, placeId);
   const key = hashKey("transit:place-routes", { id: cacheId });
   const cached = await cacheGet<MergedRoute[]>(key);
   if (cached) return cached;
@@ -282,8 +298,7 @@ export async function getMergedAlerts(
   name: string,
   placeId?: string,
 ): Promise<ServiceAlert[]> {
-  const cacheId =
-    placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
+  const cacheId = placeCacheId(lat, lng, name, placeId);
   const key = hashKey("transit:place-alerts", { id: cacheId });
   const cached = await cacheGet<ServiceAlert[]>(key);
   if (cached) return cached;
@@ -329,8 +344,7 @@ export async function getMergedFacilities(
   name: string,
   placeId?: string,
 ): Promise<Facility[]> {
-  const cacheId =
-    placeId ?? `${lat.toFixed(5)}_${lng.toFixed(5)}_${name.toLowerCase().replace(/\s+/g, "-")}`;
+  const cacheId = placeCacheId(lat, lng, name, placeId);
   const key = hashKey("transit:place-facilities", { id: cacheId });
   const cached = await cacheGet<Facility[]>(key);
   if (cached) return cached;

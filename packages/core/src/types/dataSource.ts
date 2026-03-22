@@ -59,7 +59,18 @@ export interface DataSourceDetailSection {
   items?: string[];
   content?: string;
   /** Icon type for the section header. Defaults to "bolt" for backward compatibility. */
-  sectionIcon?: "bolt" | "fuel" | "access_time" | "info";
+  sectionIcon?:
+    | "bolt"
+    | "fuel"
+    | "access_time"
+    | "info"
+    | "directions_bus"
+    | "directions_car"
+    | "payments"
+    | "eco"
+    | "open_in_new";
+  /** When true, the section renders collapsed by default with a toggle to expand. */
+  collapsed?: boolean;
 }
 
 export interface DataSourceDetail {
@@ -78,7 +89,7 @@ export interface DataSourceDetail {
   usageInfo?: { type: string; cost?: string; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
-  attribution: DataSourceAttribution;
+  attribution: DataSourceAttribution | DataSourceAttribution[];
   sections: DataSourceDetailSection[];
   osmTags?: Record<string, string>;
 }

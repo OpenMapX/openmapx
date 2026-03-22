@@ -15,7 +15,8 @@ export function useLinkedTransitFacilities(place: Place | null) {
       place?.name,
     ],
     queryFn: () => {
-      const p = place as Place;
+      if (!place) throw new Error("invariant: place must be non-null");
+      const p = place;
       return apiClient.get<Facility[]>(API_ENDPOINTS.transitFacilitiesForPlace, {
         lat: String(p.coordinates[1]),
         lng: String(p.coordinates[0]),

@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import type { Route } from "@openmapx/core";
 import { formatDistance, formatDuration } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { ElevationProfile } from "@/components/elevation/ElevationProfile";
 import { StepRow } from "@/components/panels/directions/StepRow";
 
 export function DetailsView({
@@ -86,6 +87,7 @@ export function DetailsView({
           {destinationLabel || t("destination")}
         </Typography>
       </Box>
+      {route.mode !== "transit" && <ElevationProfile route={route} units={units} />}
     </Box>
   );
 }

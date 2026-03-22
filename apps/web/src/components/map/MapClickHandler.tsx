@@ -1,6 +1,13 @@
 "use client";
 
-import { PANEL, useMapClickStore, usePlaceStore, useSidebarStore } from "@openmapx/core";
+import {
+  PANEL,
+  useMapClickStore,
+  useMeasurementStore,
+  usePlaceStore,
+  useSidebarStore,
+  useTravelTimeStore,
+} from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
@@ -19,6 +26,9 @@ export function MapClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
+      if (useMeasurementStore.getState().isActive) return;
+      if (useTravelTimeStore.getState().isActive) return;
+
       const activeLayers = [...INTERACTIVE_LAYER_IDS].filter((id) => !!map.getLayer(id));
       if (activeLayers.length > 0) {
         const features = map.queryRenderedFeatures(e.point, { layers: activeLayers });

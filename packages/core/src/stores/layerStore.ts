@@ -2,20 +2,28 @@ import { create } from "zustand";
 
 export type MapLayer = "default" | "satellite" | "terrain" | "cycling";
 
+const GLOBE_STORAGE_KEY = "openmapx:globeView";
+
+function readGlobePreference(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(GLOBE_STORAGE_KEY) === "true";
+}
+
 interface LayerState {
   activeLayer: MapLayer;
-  showTraffic: boolean;
-  showTransit: boolean;
   setActiveLayer: (layer: MapLayer) => void;
-  setShowTraffic: (show: boolean) => void;
-  setShowTransit: (show: boolean) => void;
+  globeView: boolean;
+  setGlobeView: (enabled: boolean) => void;
 }
 
 export const useLayerStore = create<LayerState>((set) => ({
   activeLayer: "default",
-  showTraffic: false,
-  showTransit: false,
   setActiveLayer: (activeLayer) => set({ activeLayer }),
-  setShowTraffic: (showTraffic) => set({ showTraffic }),
-  setShowTransit: (showTransit) => set({ showTransit }),
+  globeView: readGlobePreference(),
+  setGlobeView: (globeView) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(GLOBE_STORAGE_KEY, String(globeView));
+    }
+    set({ globeView });
+  },
 }));

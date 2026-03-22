@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useCyclingStore,
-  useDirectionsStore,
-  useLayerStore,
-  useOverlayExclusion,
-} from "@openmapx/core";
+import { useCyclingStore, useDirectionsStore, useOverlayExclusion } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -21,6 +16,16 @@ import {
   moveLayerBeforeFirstSymbol,
   setLayerVisibility,
 } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
+
+const REANCHOR_IDS = [
+  CYCLING_LAYER_IDS.tracks,
+  CYCLING_LAYER_IDS.lanes,
+  CYCLING_LAYER_IDS.designated,
+  CYCLING_LAYER_IDS.permitted,
+  CYCLING_LAYER_IDS.parking,
+  CYCLING_LAYER_IDS.shops,
+] as const;
 
 function findTransportationSource(map: maplibregl.Map): string | null {
   const layers = map.getStyle().layers;
@@ -56,7 +61,7 @@ export function CyclingLayer() {
   const { mapRef, mapReady } = useMap();
   const layerVisible = useCyclingStore((s) => s.layerVisible);
   useOverlayExclusion("cycling", layerVisible);
-  const activeLayer = useLayerStore((s) => s.activeLayer);
+  useLayerReanchor(REANCHOR_IDS, layerVisible);
   const directionsMode = useDirectionsStore((s) => s.mode);
   const directionsOpen = useDirectionsStore((s) => s.isOpen);
   const prevModeRef = useRef(directionsMode);
@@ -356,18 +361,6 @@ export function CyclingLayer() {
       map.off("styledata", syncLayers);
     };
   }, [mapReady, mapRef, layerVisible]);
-
-  // Re-anchor after base map changes (activeLayer triggers re-ordering)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: activeLayer triggers layer re-ordering on base map switch
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible) return;
-
-    for (const layerId of Object.values(CYCLING_LAYER_IDS)) {
-      if (layerId === CYCLING_LAYER_IDS.labels) continue;
-      moveLayerBeforeFirstSymbol(map, layerId);
-    }
-  }, [activeLayer, mapReady, mapRef, layerVisible]);
 
   // Cursor interactivity for POI layers
   useEffect(() => {

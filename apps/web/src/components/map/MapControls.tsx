@@ -17,6 +17,7 @@ export function MapControls() {
   const t = useTranslations("map");
   const { zoomIn, zoomOut, resetBearing, flyTo } = useMap();
   const bearing = useMapStore((s) => s.bearing);
+  const pitch = useMapStore((s) => s.pitch);
   const setUserLocation = useMapStore((s) => s.setUserLocation);
 
   const handleMyLocation = () => {
@@ -88,7 +89,7 @@ export function MapControls() {
       <Pegman />
 
       {/* Compass — only visible when map is rotated */}
-      {Math.abs(bearing) > 0.5 && (
+      {(Math.abs(bearing) > 0.5 || pitch > 0.5) && (
         <Tooltip title={t("resetBearing")} placement="left">
           <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
             <IconButton

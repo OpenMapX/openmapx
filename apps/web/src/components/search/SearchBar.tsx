@@ -25,12 +25,14 @@ import {
   parseDMSCoordinateInput,
   parsePlusCodeInput,
   useActiveSidePanel,
+  useAdaptiveDebounce,
   useAutocomplete,
   useCategorySearchStore,
   useDataSourceStore,
   useDebounce,
   useDirectionsStore,
   useGeocoding,
+  useLabeledPlaces,
   useMenuStore,
   usePlaceStore,
   useSavedPlacesStore,
@@ -40,7 +42,7 @@ import {
 } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
@@ -91,6 +93,9 @@ function searchRelevance(result: AutocompleteResult, query: string): number {
     if (sub.includes(q)) score += 0.05;
   }
 
+  // Labeled places (Home, Work, custom) get a strong boost to appear near the top
+  if (result.type === "labeled_place") score += 0.5;
+
   return score;
 }
 
@@ -110,6 +115,7 @@ const MODE_LABEL_KEYS: Record<string, string> = {
 export function SearchBar() {
   const t = useTranslations("search");
   const tModes = useTranslations("searchModes");
+  const tSaved = useTranslations("saved");
   const locale = useLocale();
   const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
     useSearchStore();
@@ -125,7 +131,8 @@ export function SearchBar() {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debouncedQuery = useDebounce(query, 300);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
   const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
   const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale);
@@ -134,6 +141,9 @@ export function SearchBar() {
   const rawStopQuery = query.trim().length >= 2 ? query.trim() : "";
   const debouncedStopQuery = useDebounce(rawStopQuery, 750);
   const { data: stopSearchData } = useStopSearch(debouncedStopQuery);
+
+  // Labeled places (Home, Work, custom) for search suggestions
+  const { data: labeledPlaces } = useLabeledPlaces();
 
   // Clean up blur timeout on unmount
   useEffect(() => {
@@ -159,13 +169,12 @@ export function SearchBar() {
     } else {
       setSuggestions(autocompleteData ?? []);
     }
+    setHighlightedIndex(-1);
   }, [autocompleteData, query, queryClient, setSuggestions]);
 
   useEffect(() => {
     setResults(geocodeData ?? []);
   }, [geocodeData, setResults]);
-
-  if (directionsOpen) return null;
 
   // Detect coordinate / plus-code input and create a synthetic suggestion
   const q = query.trim();
@@ -199,37 +208,106 @@ export function SearchBar() {
   }
 
   // Inject matching category suggestions at the top of the dropdown
-  const categorySuggestions: AutocompleteResult[] =
-    q.length >= 1
-      ? CATEGORY_DEFINITIONS.filter((cat) => cat.label.toLowerCase().includes(q.toLowerCase())).map(
-          (cat) => ({
+  const categorySuggestions = useMemo<AutocompleteResult[]>(
+    () =>
+      q.length >= 1
+        ? CATEGORY_DEFINITIONS.filter((cat) =>
+            cat.label.toLowerCase().includes(q.toLowerCase()),
+          ).map((cat) => ({
             id: `category-${cat.id}`,
             label: cat.label,
             sublabel: t("searchCategory"),
             type: "category" as const,
             iconPath: cat.iconPath,
-          }),
-        )
-      : [];
-
-  const stopSuggestions: AutocompleteResult[] = (stopSearchData ?? []).map(
-    (stop): AutocompleteResult => ({
-      id: `stop-${stop.id}`,
-      label: stop.name,
-      sublabel: stop.modes
-        .map((m) => (MODE_LABEL_KEYS[m] ? tModes(MODE_LABEL_KEYS[m]) : m))
-        .join(", "),
-      coordinates: [stop.lng, stop.lat],
-      type: "transit_stop",
-      transitStop: stop,
-    }),
+          }))
+        : [],
+    [q, t],
   );
 
-  const displaySuggestions = syntheticResult
-    ? [syntheticResult]
-    : [...categorySuggestions, ...suggestions, ...stopSuggestions.slice(0, 3)].sort(
-        (a, b) => searchRelevance(b, q) - searchRelevance(a, q),
-      );
+  const stopSuggestions = useMemo<AutocompleteResult[]>(
+    () =>
+      (stopSearchData ?? []).map(
+        (stop): AutocompleteResult => ({
+          id: `stop-${stop.id}`,
+          label: stop.name,
+          sublabel: stop.modes
+            .map((m) => (MODE_LABEL_KEYS[m] ? tModes(MODE_LABEL_KEYS[m]) : m))
+            .join(", "),
+          coordinates: [stop.lng, stop.lat],
+          type: "transit_stop",
+          transitStop: stop,
+        }),
+      ),
+    [stopSearchData, tModes],
+  );
+
+  // Labeled places — match against translated label name, place name, and address
+  const labeledSuggestions = useMemo<AutocompleteResult[]>(
+    () =>
+      (labeledPlaces ?? [])
+        .filter((lp) => {
+          if (q.length === 0) return false;
+          const ql = q.toLowerCase();
+          const translatedLabel =
+            lp.label === "home" || lp.label === "work" ? tSaved(lp.label) : lp.label;
+          return (
+            translatedLabel.toLowerCase().includes(ql) ||
+            lp.name.toLowerCase().includes(ql) ||
+            (lp.address?.toLowerCase().includes(ql) ?? false)
+          );
+        })
+        .map((lp): AutocompleteResult => {
+          const translatedLabel =
+            lp.label === "home" || lp.label === "work" ? tSaved(lp.label) : lp.label;
+          return {
+            id: `labeled-${lp.id}`,
+            label: translatedLabel,
+            sublabel: lp.name + (lp.address ? ` — ${lp.address}` : ""),
+            coordinates: [lp.lng, lp.lat],
+            type: "labeled_place",
+            labelKey: lp.label,
+          };
+        }),
+    [q, labeledPlaces, tSaved],
+  );
+
+  const displaySuggestions = useMemo(() => {
+    // Client-side prefix narrowing
+    const narrowResults = (items: AutocompleteResult[]): AutocompleteResult[] => {
+      if (q.length < 2 || items.length === 0) return items;
+      const ql = q.toLowerCase();
+      const filtered = items.filter((s) => {
+        const label = s.label.toLowerCase();
+        const sub = (s.sublabel ?? "").toLowerCase();
+        return label.includes(ql) || sub.includes(ql);
+      });
+      return filtered.length > 0 ? filtered : items;
+    };
+
+    return (
+      syntheticResult
+        ? [syntheticResult]
+        : [
+            ...labeledSuggestions,
+            ...categorySuggestions,
+            ...narrowResults(suggestions),
+            ...narrowResults(stopSuggestions).slice(0, 3),
+          ].sort((a, b) => searchRelevance(b, q) - searchRelevance(a, q))
+    ).filter(
+      (s, i, arr) =>
+        arr.findIndex((x) => {
+          if (x.label !== s.label || (x.sublabel ?? "") !== (s.sublabel ?? "")) return false;
+          if (!x.coordinates || !s.coordinates) return x.id === s.id;
+          const dlng = x.coordinates[0] - s.coordinates[0];
+          const dlat = x.coordinates[1] - s.coordinates[1];
+          return dlng * dlng + dlat * dlat < 0.0001; // ~1 km
+        }) === i,
+    );
+  }, [q, syntheticResult, labeledSuggestions, categorySuggestions, suggestions, stopSuggestions]);
+
+  if (directionsOpen) return null;
+
+  const showDropdown = isFocused && displaySuggestions.length > 0;
 
   const tryOpenTransitStop = async (coords: LngLat, name: string): Promise<boolean> => {
     try {
@@ -260,6 +338,24 @@ export function SearchBar() {
       // Silently fall back to place panel
     }
     return false;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown) return;
+    const count = displaySuggestions.length;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev < count - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : count - 1));
+    } else if (e.key === "Enter" && highlightedIndex >= 0) {
+      e.preventDefault();
+      handleSelect(displaySuggestions[highlightedIndex]);
+    } else if (e.key === "Escape") {
+      setIsFocused(false);
+      setHighlightedIndex(-1);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,6 +410,20 @@ export function SearchBar() {
   };
 
   const handleSelect = (result: AutocompleteResult) => {
+    if (result.type === "labeled_place" && result.coordinates) {
+      setQuery(result.label);
+      setIsFocused(false);
+      flyTo(result.coordinates, 15);
+      setSelectedPlace({
+        id: result.id,
+        name: result.sublabel?.split(" — ")[0] ?? result.label,
+        address: result.sublabel?.split(" — ")[1] ?? result.sublabel ?? result.label,
+        coordinates: result.coordinates,
+      });
+      useSidebarStore.getState().openSidebar(PANEL.PLACE);
+      return;
+    }
+
     if (result.type === "transit_stop" && result.transitStop) {
       setQuery(result.label);
       setIsFocused(false);
@@ -378,7 +488,6 @@ export function SearchBar() {
     }
   };
 
-  const showDropdown = isFocused && displaySuggestions.length > 0;
   const showSkeleton =
     isFocused && query.trim().length >= 2 && isFetching && !showDropdown && !syntheticResult;
 
@@ -427,6 +536,7 @@ export function SearchBar() {
             inputRef={inputRef}
             value={query}
             onChange={handleChange}
+            onKeyDown={handleKeyDown}
             onFocus={() => setIsFocused(true)}
             onBlur={handleBlur}
             placeholder={t("placeholder")}
@@ -480,7 +590,11 @@ export function SearchBar() {
           <>
             <Divider />
             <Box sx={{ maxHeight: 320, overflowY: "auto" }}>
-              <AutocompleteDropdown suggestions={displaySuggestions} onSelect={handleSelect} />
+              <AutocompleteDropdown
+                suggestions={displaySuggestions}
+                onSelect={handleSelect}
+                highlightedIndex={highlightedIndex}
+              />
             </Box>
           </>
         )}

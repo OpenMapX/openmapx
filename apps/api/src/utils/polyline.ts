@@ -1,3 +1,31 @@
+/** Encode [lng, lat] coordinate pairs into a Google-encoded polyline string. */
+export function encodePolyline(coords: [number, number][], precision = 5): string {
+  const factor = 10 ** precision;
+  let prevLat = 0;
+  let prevLng = 0;
+  let result = "";
+  for (const [lng, lat] of coords) {
+    const latRound = Math.round(lat * factor);
+    const lngRound = Math.round(lng * factor);
+    result += encodeSignedValue(latRound - prevLat);
+    result += encodeSignedValue(lngRound - prevLng);
+    prevLat = latRound;
+    prevLng = lngRound;
+  }
+  return result;
+}
+
+function encodeSignedValue(value: number): string {
+  let v = value < 0 ? ~(value << 1) : value << 1;
+  let out = "";
+  while (v >= 0x20) {
+    out += String.fromCharCode((0x20 | (v & 0x1f)) + 63);
+    v >>= 5;
+  }
+  out += String.fromCharCode(v + 63);
+  return out;
+}
+
 /** Decode a Google-encoded polyline into [lng, lat] coordinate pairs (GeoJSON order). */
 export function decodePolyline(encoded: string, precision = 5): [number, number][] {
   const factor = 10 ** precision;

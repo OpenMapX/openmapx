@@ -22,6 +22,7 @@ import {
   mapVehicleToDetail,
   mapVehicleToResult,
 } from "./mapper.js";
+import { fetchMotisRentals } from "./motis-rentals.js";
 import { searchNextbike } from "./nextbike-client.js";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
@@ -93,14 +94,22 @@ class BikeSharingProvider implements DataSourceProvider {
   }
 
   async search(bbox: BoundingBox): Promise<DataSourceResult[]> {
+    const bboxArray: [number, number, number, number] = [
+      bbox.west,
+      bbox.south,
+      bbox.east,
+      bbox.north,
+    ];
+
     // Fetch from all sources in parallel
-    const [nextbikeResult, cityBikesResult, donkeyResult, gbfsResult, dbBikeResult] =
+    const [nextbikeResult, cityBikesResult, donkeyResult, gbfsResult, dbBikeResult, motisResult] =
       await Promise.allSettled([
         searchNextbike(bbox),
         searchCityBikes(bbox),
         searchDonkey(bbox),
         fetchGbfsData(bbox, BIKE_FORM_FACTORS),
         searchDbBikes(bbox),
+        fetchMotisRentals(bboxArray, ["bicycle", "cargo_bicycle"]),
       ]);
 
     const allStations: SharedMobilityStation[] = [];
@@ -131,6 +140,11 @@ class BikeSharingProvider implements DataSourceProvider {
       allStations.push(...dbBikeResult.value.stations);
     }
 
+    // MOTIS/Transitous stations (appended last so existing sources take dedup priority)
+    if (motisResult.status === "fulfilled") {
+      allStations.push(...motisResult.value.stations);
+    }
+
     // Dedup and map stations
     const deduped = dedupStations(allStations);
     for (const s of deduped) {
@@ -141,6 +155,14 @@ class BikeSharingProvider implements DataSourceProvider {
     // DB free-floating bikes
     if (dbBikeResult.status === "fulfilled") {
       for (const v of dbBikeResult.value.vehicles) {
+        updateCache(v.id, v);
+        results.push(mapVehicleToResult(v));
+      }
+    }
+
+    // MOTIS/Transitous free-floating bikes
+    if (motisResult.status === "fulfilled") {
+      for (const v of motisResult.value.vehicles) {
         updateCache(v.id, v);
         results.push(mapVehicleToResult(v));
       }

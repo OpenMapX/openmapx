@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { escapeHtml, sanitizeUrl } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
+import { useLayerReanchor } from "./useLayerReanchor";
 
 const AQ_SOURCE_ID = "openaq-air-quality";
 const AQ_LAYER_ID = "air-quality-layer";
@@ -83,6 +84,7 @@ export function AirQualityLayer() {
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const setLoading = useAirQualityStore((s) => s.setLoading);
   useOverlayExclusion("air-quality", layerVisible);
+  useLayerReanchor(AQ_LAYER_ID, layerVisible);
   const fetchedRef = useRef(false);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 

@@ -10,6 +10,7 @@ import HotelIcon from "@mui/icons-material/Hotel";
 import LocalActivityIcon from "@mui/icons-material/LocalActivity";
 import LocalAtmIcon from "@mui/icons-material/LocalAtm";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
+import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
 import PedalBikeIcon from "@mui/icons-material/PedalBike";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
@@ -26,7 +27,7 @@ import {
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback } from "react";
 
 const CATEGORY_ICONS: Partial<Record<CategoryId, ReactNode>> = {
   restaurants: <RestaurantIcon sx={{ fontSize: 16 }} />,
@@ -41,6 +42,7 @@ const CATEGORY_ICONS: Partial<Record<CategoryId, ReactNode>> = {
 const DATA_SOURCE_ICONS: Record<string, SvgIconComponent> = {
   "ev-charging": EvStationIcon,
   fuel: LocalGasStationIcon,
+  parking: LocalParkingIcon,
   "bike-sharing": PedalBikeIcon,
   "scooter-sharing": ElectricScooterIcon,
   "car-sharing": DirectionsCarIcon,
@@ -52,6 +54,38 @@ export function CategoryChips() {
   const { isOpen: directionsOpen } = useDirectionsStore();
   const { activeSource, toggleSource, setActiveSource } = useDataSourceStore();
   const { data: sourcesData } = useDataSources();
+
+  const handleSourceClick = useCallback(
+    (sourceId: string, label: string, isActive: boolean) => {
+      if (isActive) {
+        toggleSource(sourceId);
+        setQuery("");
+        useSidebarStore.getState().closeSidebar();
+      } else {
+        clearCategory();
+        toggleSource(sourceId);
+        setQuery(label);
+        useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
+      }
+    },
+    [toggleSource, setQuery, clearCategory],
+  );
+
+  const handleCategoryClick = useCallback(
+    (catId: CategoryId, label: string, isActive: boolean) => {
+      if (isActive) {
+        clearCategory();
+        setQuery("");
+        useSidebarStore.getState().closeSidebar();
+      } else {
+        setActiveSource(null);
+        setActiveCategory(catId);
+        setQuery(label);
+        useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+      }
+    },
+    [clearCategory, setQuery, setActiveSource, setActiveCategory],
+  );
 
   if (directionsOpen || activeCategory || activeSource) return null;
 
@@ -88,18 +122,7 @@ export function CategoryChips() {
                 </Box>
               }
               label={source.categoryChipLabel}
-              onClick={() => {
-                if (isActive) {
-                  toggleSource(source.id);
-                  setQuery("");
-                  useSidebarStore.getState().closeSidebar();
-                } else {
-                  clearCategory();
-                  toggleSource(source.id);
-                  setQuery(source.categoryChipLabel);
-                  useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
-                }
-              }}
+              onClick={() => handleSourceClick(source.id, source.categoryChipLabel, isActive)}
               variant={isActive ? "filled" : "outlined"}
               color={isActive ? "primary" : "default"}
               sx={{
@@ -137,18 +160,7 @@ export function CategoryChips() {
                   {CATEGORY_ICONS[cat.id]}
                 </Box>
               }
-              onClick={() => {
-                if (isActive) {
-                  clearCategory();
-                  setQuery("");
-                  useSidebarStore.getState().closeSidebar();
-                } else {
-                  setActiveSource(null);
-                  setActiveCategory(cat.id);
-                  setQuery(cat.label);
-                  useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
-                }
-              }}
+              onClick={() => handleCategoryClick(cat.id, cat.label, isActive)}
               variant={isActive ? "filled" : "outlined"}
               sx={{
                 height: 36,

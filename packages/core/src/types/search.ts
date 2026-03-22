@@ -21,11 +21,13 @@ export interface AutocompleteResult {
   label: string;
   sublabel?: string;
   coordinates?: LngLat;
-  type: "address" | "poi" | "street" | "region" | "category" | "transit_stop";
+  type: "address" | "poi" | "street" | "region" | "category" | "transit_stop" | "labeled_place";
   /** SVG path `d` attribute for the icon (used for category suggestions). */
   iconPath?: string;
   /** Full transit stop data (only when type is "transit_stop"). */
   transitStop?: TransitStop;
   /** Raw category string from the geocoding provider (e.g. "railway/station", "highway/bus_stop"). */
   rawCategory?: string;
+  /** Label key for labeled places (e.g. "home", "work", or custom). */
+  labelKey?: string;
 }
