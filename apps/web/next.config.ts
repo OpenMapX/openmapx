@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
@@ -8,7 +9,7 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@openmapx/core"],
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   turbopack: {
-    root: "../../",
+    root: resolve(import.meta.dirname, "../.."),
   },
 };
 

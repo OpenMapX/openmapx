@@ -5,9 +5,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/config/package.json packages/config/
 COPY packages/core/package.json packages/core/
-COPY packages/map-styles/package.json packages/map-styles/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 
@@ -18,7 +16,6 @@ WORKDIR /app
 
 COPY --from=deps /app ./
 
-COPY packages/config/ packages/config/
 COPY packages/core/ packages/core/
 COPY apps/web/ apps/web/
 COPY turbo.json ./

@@ -5,9 +5,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/config/package.json packages/config/
 COPY packages/core/package.json packages/core/
-COPY packages/map-styles/package.json packages/map-styles/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile
 
@@ -15,9 +13,7 @@ RUN pnpm install --frozen-lockfile
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/config/package.json packages/config/
 COPY packages/core/package.json packages/core/
-COPY packages/map-styles/package.json packages/map-styles/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     cd node_modules/.pnpm && \
@@ -31,7 +27,6 @@ WORKDIR /app
 
 COPY --from=deps /app ./
 
-COPY packages/config/ packages/config/
 COPY packages/core/ packages/core/
 COPY apps/api/ apps/api/
 COPY turbo.json ./

@@ -67,9 +67,7 @@ services:
   # ── Application ─────────────────────────────────────────────────────────
 
   api:
-    build:
-      context: ../../
-      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/medformatik/openmapx-api:latest
     profiles: [app]
     env_file: ../../apps/api/.env
     environment:
@@ -114,14 +112,7 @@ services:
           memory: 1g
 
   web:
-    build:
-      context: ../../
-      dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: https://${DOMAIN:-localhost}
-        NEXT_PUBLIC_MAPTILER_KEY: ${MAPTILER_KEY:-}
-        NEXT_PUBLIC_MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
-        NEXT_PUBLIC_MAP_STYLE_URL: https://${DOMAIN:-localhost}/tiles
+    image: ghcr.io/medformatik/openmapx-web:latest
     profiles: [app]
     labels:
       traefik.enable: "true"
