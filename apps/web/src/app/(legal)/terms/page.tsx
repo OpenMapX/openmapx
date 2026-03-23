@@ -15,10 +15,10 @@ const sectionsEn: LegalSection[] = [
   { id: sectionSlug("9. Privacy"), label: "Privacy" },
   { id: "data-sources", label: "Data Sources" },
   { id: sectionSlug("11. Third-Party Terms"), label: "Third-Party Terms" },
-  { id: sectionSlug("12. Indemnification"), label: "Indemnification" },
-  { id: sectionSlug("13. Severability"), label: "Severability" },
-  { id: sectionSlug("14. Governing Law and Jurisdiction"), label: "Governing Law" },
-  { id: sectionSlug("15. Changes to These Terms"), label: "Changes" },
+  { id: sectionSlug("12. Severability"), label: "Severability" },
+  { id: sectionSlug("13. Governing Law and Jurisdiction"), label: "Governing Law" },
+  { id: sectionSlug("14. Changes to These Terms"), label: "Changes" },
+  { id: sectionSlug("15. Language"), label: "Language" },
   { id: sectionSlug("16. Contact"), label: "Contact" },
 ];
 
@@ -58,19 +58,19 @@ const sectionsDe: LegalSection[] = [
     id: sectionSlug("11. Drittanbieter-Bedingungen"),
     label: "Drittanbieter",
   },
-  { id: sectionSlug("12. Freistellung"), label: "Freistellung" },
   {
-    id: sectionSlug("13. Salvatorische Klausel"),
+    id: sectionSlug("12. Salvatorische Klausel"),
     label: "Salvatorische Klausel",
   },
   {
-    id: sectionSlug("14. Anwendbares Recht und Gerichtsstand"),
+    id: sectionSlug("13. Anwendbares Recht und Gerichtsstand"),
     label: "Anwendbares Recht",
   },
   {
-    id: sectionSlug("15. \u00c4nderungen dieser Bedingungen"),
+    id: sectionSlug("14. \u00c4nderungen dieser Bedingungen"),
     label: "\u00c4nderungen",
   },
+  { id: sectionSlug("15. Sprache"), label: "Sprache" },
   { id: sectionSlug("16. Kontakt"), label: "Kontakt" },
 ];
 

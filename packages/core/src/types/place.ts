@@ -31,6 +31,8 @@ export interface Place {
   name: string;
   address: string;
   city?: string;
+  /** ISO 3166-1 alpha-2 country code (e.g. "de", "us"). */
+  countryCode?: string;
   coordinates: LngLat;
   category?: string;
   /** Raw category string from the geocoding provider (e.g. "railway/station", "highway/bus_stop"). */

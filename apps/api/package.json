@@ -6,8 +6,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "node --env-file=.env --watch --import tsx/esm src/server.ts",
-    "build": "tsc --noEmit && esbuild src/server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
-    "start": "node --env-file=.env dist/server.js",
+    "build": "tsc --noEmit && node esbuild.config.mjs",
+    "start": "node dist/server.js",
     "check-types": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
@@ -26,7 +26,6 @@
     "@fastify/helmet": "^13.0.2",
     "@hey-api/client-fetch": "0.4.4",
     "@motis-project/motis-client": "^2.9.1",
-    "@openmapx/core": "workspace:^",
     "@openstreetmap/id-tagging-schema": "^6.15.0",
     "better-auth": "^1.5.5",
     "cached-hafas-client": "^5.1.9",
@@ -36,9 +35,11 @@
     "hafas-client": "^6.3.6",
     "ioredis": "^5.10.1",
     "nodemailer": "^8.0.3",
+    "opening_hours": "^3.12.0",
     "postgres": "^3.4.8"
   },
   "devDependencies": {
+    "@openmapx/core": "workspace:^",
     "@types/node": "^25.5.0",
     "@types/nodemailer": "^7.0.11",
     "@vitest/coverage-v8": "^4.1.0",

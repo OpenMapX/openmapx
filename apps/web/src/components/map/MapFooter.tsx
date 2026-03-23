@@ -22,7 +22,7 @@ export function MapFooter() {
         px: "5px",
         font: '12px/20px "Helvetica Neue", Arial, Helvetica, sans-serif',
         "& a": {
-          color: "text.secondary",
+          color: "text.primary",
           textDecoration: "none",
           font: "inherit",
           "&:hover": { textDecoration: "underline" },

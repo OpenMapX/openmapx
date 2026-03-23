@@ -136,7 +136,11 @@ export function PlaceOverviewTab({
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const tSaved = useTranslations("saved");
-  const hours = parseOpeningHours(place.openingHours);
+  const hours = parseOpeningHours(place.openingHours, {
+    lat: place.coordinates[1],
+    lon: place.coordinates[0],
+    countryCode: place.countryCode,
+  });
   const plusCode = computePlusCode(place.coordinates);
   const shortCode = shortenPlusCode(plusCode);
   const city = place.city ?? null;

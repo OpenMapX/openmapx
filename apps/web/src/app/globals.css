@@ -10,6 +10,7 @@
   --omx-border: rgba(0, 0, 0, 0.23);
   --omx-border-light: rgba(0, 0, 0, 0.1);
   --omx-hover-bg: rgba(0, 0, 0, 0.06);
+  --omx-chip-hover: #e0e0e0;
   --omx-shadow-soft: rgba(0, 0, 0, 0.15);
   --omx-overlay-bg: #fff;
   --omx-overlay-text: #000;
@@ -23,6 +24,7 @@
   --omx-border: rgba(255, 255, 255, 0.2);
   --omx-border-light: rgba(255, 255, 255, 0.08);
   --omx-hover-bg: rgba(255, 255, 255, 0.08);
+  --omx-chip-hover: #424242;
   --omx-shadow-soft: rgba(0, 0, 0, 0.4);
   --omx-overlay-bg: #2D2D2D;
   --omx-overlay-text: #E8EAED;

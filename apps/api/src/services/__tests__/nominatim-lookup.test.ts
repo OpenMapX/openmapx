@@ -272,7 +272,7 @@ describe("lookupByNameAndCoords", () => {
     const viewbox = url.searchParams.get("viewbox");
     expect(viewbox).not.toBeNull();
 
-    const parts = viewbox?.split(",").map(Number);
+    const parts = viewbox?.split(",").map(Number) ?? [];
     expect(parts[0]).toBeCloseTo(13.37 - 0.015, 3); // left = lng - BBOX_DEGREES
     expect(parts[1]).toBeCloseTo(52.52 + 0.015, 3); // top = lat + BBOX_DEGREES
     expect(parts[2]).toBeCloseTo(13.37 + 0.015, 3); // right = lng + BBOX_DEGREES

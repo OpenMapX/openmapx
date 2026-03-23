@@ -3,6 +3,9 @@
     "tile_dir": "/custom_files/valhalla_tiles",
     "concurrency": 8
   },
+  "additional_data": {
+    "elevation": "/custom_files/elevation_data"
+  },
   "httpd": {
     "service": {
       "listen": "tcp://*:8002",

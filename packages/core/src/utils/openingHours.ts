@@ -1,3 +1,6 @@
+import type { nominatim_object } from "opening_hours";
+import opening_hours from "opening_hours";
+
 export interface DaySchedule {
   day: string;
   /** e.g. "09:00–17:00", "Closed", or "Open 24 hours" */
@@ -14,18 +17,18 @@ export interface OpeningHoursStatus {
   todayHours?: string;
   /** Per-day schedule starting from today, used for the expandable hours row. */
   weekSchedule?: DaySchedule[];
+  /** Comment from the opening_hours value, e.g. "by appointment" or a holiday name. */
+  comment?: string;
+  /** True if the schedule is the same every week (no seasonal or date-specific rules). */
+  isWeekStable?: boolean;
 }
 
-// Maps OSM day abbreviations to JS getDay() values (0 = Sunday)
-const DAY_INDEX: Record<string, number> = {
-  Su: 0,
-  Mo: 1,
-  Tu: 2,
-  We: 3,
-  Th: 4,
-  Fr: 5,
-  Sa: 6,
-};
+export interface LocationContext {
+  lat: number;
+  lon: number;
+  countryCode?: string;
+  state?: string;
+}
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = [
@@ -38,214 +41,164 @@ const FULL_DAY_NAMES = [
   "Saturday",
 ];
 
-/** Expands "Mo-Fr" or "Mo" into a Set of JS day indices. */
-function expandDays(spec: string): Set<number> {
-  const days = new Set<number>();
-  for (const part of spec.split(",")) {
-    const trimmed = part.trim();
-    const range = trimmed.match(/^([A-Z][a-z])-([A-Z][a-z])$/);
-    if (range) {
-      const start = DAY_INDEX[range[1]];
-      const end = DAY_INDEX[range[2]];
-      if (start !== undefined && end !== undefined) {
-        let d = start;
-        while (true) {
-          days.add(d);
-          if (d === end) break;
-          d = (d + 1) % 7;
-        }
-      }
-    } else {
-      const idx = DAY_INDEX[trimmed];
-      if (idx !== undefined) days.add(idx);
-    }
-  }
-  return days;
+function buildNominatim(loc?: LocationContext): nominatim_object | undefined {
+  if (!loc?.countryCode) return undefined;
+  return {
+    lat: loc.lat,
+    lon: loc.lon,
+    address: {
+      country_code: loc.countryCode,
+      state: loc.state ?? "",
+    },
+  };
 }
 
-/** Compares two "HH:MM" strings. Returns negative/zero/positive. */
-function cmpTime(a: string, b: string): number {
-  return a.localeCompare(b);
-}
-
-interface Segment {
-  days: Set<number>;
-  open: string;
-  close: string;
-}
-
-/** Parses an OSM opening_hours string into time segments. */
-function parseSegments(raw: string): Segment[] {
-  const ALL_DAYS = new Set([0, 1, 2, 3, 4, 5, 6]);
-  const segments: Segment[] = [];
-
-  // Normalize comma-separated rules to semicolon-separated.
-  // Only split on commas followed by a day abbreviation (e.g., ", Mo" or ",Mo")
-  // to avoid splitting day lists like "Mo,We,Fr".
-  const normalized = raw.replace(/,\s*(?=[A-Z][a-z](?:[-,]|\s+\d))/g, "; ");
-  for (const part of normalized.split(";")) {
-    const trimmed = part.trim();
-    // "Mo-Fr 10:00-19:00" (trailing + means "or later", ignored)
-    const withDays = trimmed.match(/^([\w,\s-]+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})\+?$/);
-    if (withDays) {
-      const [, daySpec, open, close] = withDays;
-      segments.push({
-        days: expandDays(daySpec.trim()),
-        open,
-        close: close === "00:00" ? "24:00" : close,
-      });
-      continue;
-    }
-    // "10:00-19:00" with no day spec — every day
-    const timeOnly = trimmed.match(/^(\d{2}:\d{2})-(\d{2}:\d{2})\+?$/);
-    if (timeOnly) {
-      const [, open, close] = timeOnly;
-      segments.push({
-        days: ALL_DAYS,
-        open,
-        close: close === "00:00" ? "24:00" : close,
-      });
-    }
-  }
-
-  return segments;
+function fmt(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 /**
- * Returns whether a place is open on a specific day at a specific hour.
- * Pass null for dayIdx or hour to mean "any day" / "any time".
+ * Builds a 7-day schedule starting from today using the library's interval API.
  */
-export function isOpenAt(
-  raw: string | undefined,
-  dayIdx: number | null,
-  hour: number | null,
-): boolean {
-  if (!raw) return false;
-  if (dayIdx === null && hour === null) return true;
-  if (raw === "24/7") return true;
+function buildWeekSchedule(oh: opening_hours, now: Date): DaySchedule[] {
+  const schedule: DaySchedule[] = [];
 
-  const segments = parseSegments(raw);
-  const timeStr = hour !== null ? `${String(hour).padStart(2, "0")}:00` : null;
+  for (let i = 0; i < 7; i++) {
+    const dayStart = new Date(now);
+    dayStart.setDate(now.getDate() + i);
+    dayStart.setHours(0, 0, 0, 0);
 
-  if (dayIdx !== null && timeStr !== null) {
-    // Specific day + time
-    const seg = segments.find((s) => s.days.has(dayIdx));
-    if (!seg) return false;
-    return cmpTime(timeStr, seg.open) >= 0 && cmpTime(timeStr, seg.close) < 0;
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayStart.getDate() + 1);
+
+    const intervals = oh.getOpenIntervals(dayStart, dayEnd);
+    const dayIdx = dayStart.getDay();
+
+    let hours: string;
+    if (intervals.length === 0) {
+      hours = "Closed";
+    } else {
+      const parts = intervals.map(([start, end]) => {
+        const s = start < dayStart ? "00:00" : fmt(start);
+        const e = end >= dayEnd ? "24:00" : fmt(end);
+        if (s === "00:00" && e === "24:00") return "Open 24 hours";
+        return `${s}–${e}`;
+      });
+      hours = parts.includes("Open 24 hours") ? "Open 24 hours" : parts.join(", ");
+    }
+
+    schedule.push({
+      day: FULL_DAY_NAMES[dayIdx],
+      hours,
+      isToday: i === 0,
+    });
   }
 
-  if (dayIdx !== null) {
-    // Open on this day at any time
-    return segments.some((s) => s.days.has(dayIdx));
-  }
-
-  // Open at this time on any day
-  if (!timeStr) return false;
-  return segments.some((seg) => cmpTime(timeStr, seg.open) >= 0 && cmpTime(timeStr, seg.close) < 0);
+  return schedule;
 }
 
 /**
  * Parses an OSM `opening_hours` string and returns current open/closed status.
- * Handles the common `Mo-Fr 09:00-17:00; Sa 10:00-14:00` patterns.
- * Falls back to showing the raw string on any parse failure.
+ * Uses the `opening_hours` library for full OSM spec support including
+ * public holidays, seasonal hours, sunrise/sunset, comments, and more.
  */
-export function parseOpeningHours(raw: string | undefined): OpeningHoursStatus | null {
+export function parseOpeningHours(
+  raw: string | undefined,
+  location?: LocationContext,
+): OpeningHoursStatus | null {
   if (!raw) return null;
 
-  const now = new Date();
-  const todayIdx = now.getDay();
-  const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  try {
+    const oh = new opening_hours(raw, buildNominatim(location));
+    const now = new Date();
+    const isOpen = oh.getState(now);
+    const isUnknown = oh.getUnknown(now);
+    const comment = oh.getComment(now);
+    const nextChange = oh.getNextChange(now);
 
-  if (raw === "24/7") {
-    const weekSchedule: DaySchedule[] = Array.from({ length: 7 }, (_, i) => ({
-      day: FULL_DAY_NAMES[(todayIdx + i) % 7],
-      hours: "Open 24 hours",
-      isToday: i === 0,
-    }));
+    const effectiveOpen = isOpen && !isUnknown;
+
+    // Build detail string based on next state change
+    let detail: string;
+    if (nextChange) {
+      const changeDay = nextChange.getDay();
+      const todayIdx = now.getDay();
+      const tomorrowIdx = (todayIdx + 1) % 7;
+      const timeStr = fmt(nextChange);
+
+      if (effectiveOpen) {
+        if (changeDay === todayIdx) {
+          detail = `Closes at ${timeStr}`;
+        } else if (changeDay === tomorrowIdx) {
+          detail = `Closes tomorrow at ${timeStr}`;
+        } else {
+          detail = `Closes ${DAY_NAMES[changeDay]} at ${timeStr}`;
+        }
+      } else {
+        if (changeDay === todayIdx) {
+          detail = `Opens at ${timeStr}`;
+        } else if (changeDay === tomorrowIdx) {
+          detail = `Opens tomorrow at ${timeStr}`;
+        } else {
+          detail = `Opens ${DAY_NAMES[changeDay]} at ${timeStr}`;
+        }
+      }
+    } else {
+      // No next change — either always open or permanently closed
+      detail = effectiveOpen ? "Open 24 hours" : "Closed";
+    }
+
+    // Append comment if present
+    if (comment) {
+      detail = `${detail} (${comment})`;
+    }
+
+    const label = effectiveOpen ? `Open now · ${detail}` : `Closed · ${detail}`;
+
+    // Build week schedule
+    const weekSchedule = buildWeekSchedule(oh, now);
+
+    // Today's hours summary
+    const todayEntry = weekSchedule[0];
+    const todayHours = todayEntry?.hours === "Closed" ? "Closed today" : todayEntry?.hours;
+
     return {
-      isOpen: true,
-      label: "Open 24 hours",
-      detail: "Open 24 hours",
-      todayHours: "24/7",
+      isOpen: effectiveOpen,
+      label,
+      detail,
+      todayHours,
       weekSchedule,
+      comment: comment ?? undefined,
+      isWeekStable: oh.isWeekStable(),
     };
-  }
-
-  const segments = parseSegments(raw);
-
-  if (segments.length === 0) {
+  } catch {
+    // Malformed opening_hours string — fall back to displaying raw value
     return { isOpen: false, label: raw, detail: raw };
   }
+}
 
-  // Per-day schedule starting from today (for the expandable row)
-  const weekSchedule: DaySchedule[] = Array.from({ length: 7 }, (_, i) => {
-    const dayIdx = (todayIdx + i) % 7;
-    const seg = segments.find((s) => s.days.has(dayIdx));
-    return {
-      day: FULL_DAY_NAMES[dayIdx],
-      hours: seg ? `${seg.open}–${seg.close}` : "Closed",
-      isToday: i === 0,
-    };
-  });
-
-  const todaySeg = segments.find((s) => s.days.has(todayIdx));
-
-  if (todaySeg) {
-    const isOpen =
-      cmpTime(currentTime, todaySeg.open) >= 0 && cmpTime(currentTime, todaySeg.close) < 0;
-
-    if (isOpen) {
-      const detail = `Closes at ${todaySeg.close}`;
-      return {
-        isOpen: true,
-        label: `Open now · ${detail}`,
-        detail,
-        todayHours: `${todaySeg.open}–${todaySeg.close}`,
-        weekSchedule,
-      };
-    }
-
-    if (cmpTime(currentTime, todaySeg.open) < 0) {
-      const detail = `Opens at ${todaySeg.open}`;
-      return {
-        isOpen: false,
-        label: `Closed · ${detail}`,
-        detail,
-        todayHours: `${todaySeg.open}–${todaySeg.close}`,
-        weekSchedule,
-      };
-    }
-
-    for (let i = 1; i <= 7; i++) {
-      const nextIdx = (todayIdx + i) % 7;
-      const nextSeg = segments.find((s) => s.days.has(nextIdx));
-      if (nextSeg) {
-        const detail = `Opens ${DAY_NAMES[nextIdx]} at ${nextSeg.open}`;
-        return {
-          isOpen: false,
-          label: `Closed · ${detail}`,
-          detail,
-          todayHours: `${todaySeg.open}–${todaySeg.close}`,
-          weekSchedule,
-        };
-      }
-    }
+/**
+ * Returns whether a place is open at a specific date/time.
+ */
+export function isOpenAt(raw: string | undefined, date: Date, location?: LocationContext): boolean {
+  if (!raw) return false;
+  try {
+    const oh = new opening_hours(raw, buildNominatim(location));
+    return oh.getState(date) && !oh.getUnknown(date);
+  } catch {
+    return false;
   }
+}
 
-  for (let i = 1; i <= 7; i++) {
-    const nextIdx = (todayIdx + i) % 7;
-    const nextSeg = segments.find((s) => s.days.has(nextIdx));
-    if (nextSeg) {
-      const detail = `Opens ${DAY_NAMES[nextIdx]} at ${nextSeg.open}`;
-      return {
-        isOpen: false,
-        label: `Closed · ${detail}`,
-        detail,
-        todayHours: "Closed today",
-        weekSchedule,
-      };
-    }
+/**
+ * Returns whether a place is always open (24/7 or semantically equivalent).
+ */
+export function isAlwaysOpen(raw: string | undefined, location?: LocationContext): boolean {
+  if (!raw) return false;
+  try {
+    const oh = new opening_hours(raw, buildNominatim(location));
+    return oh.getState() && oh.getNextChange() === undefined;
+  } catch {
+    return false;
   }
-
-  return { isOpen: false, label: raw, detail: raw };
 }

@@ -11,7 +11,10 @@
 #   routing   Valhalla + OSRM (Valhalla handles planet, OSRM region-only)
 #   transit   MOTIS + OTP (MOTIS handles planet, OTP region-only)
 #   pelias    Elasticsearch + Pelias (self-hosted geocoding)
-#   tiles     TileServer GL (self-hosted map tiles)
+#   nominatim Nominatim (self-hosted geocoding, alternative to Pelias)
+#   photon    Photon (lightweight self-hosted geocoder)
+#   overpass  Overpass API (self-hosted OSM query service)
+#   tiles     TileServer GL (self-hosted map tiles + styles)
 #   martin    Martin vector tile server (from PostGIS)
 #   build     One-shot build containers (OSRM, OTP, Pelias importers)
 #
@@ -24,15 +27,18 @@
 #   cp .env.example .env && vim .env                   # configure domain, keys
 #   ./manage.sh download-osm planet                    # ~70 GB
 #   ./manage.sh download-all-feeds                     # ~500+ GTFS feeds
+#   ./manage.sh download-style                         # map style, fonts, sprites
 #   ./manage.sh link && ./manage.sh build-all          # build service data
 #   docker compose --profile proxy --profile app \
 #     --profile routing --profile transit \
-#     --profile tiles up -d
+#     --profile nominatim --profile photon \
+#     --profile overpass --profile tiles up -d
 #
 # Planet-scale notes:
 #   OSRM is skipped (needs ~200 GB RAM) — Valhalla covers routing.
 #   OTP is skipped (can't handle planet + all feeds) — MOTIS covers transit.
-#   Recommended server: 32+ GB RAM, 500+ GB SSD.
+#   Nominatim planet import needs ~64 GB RAM (peak), ~2 GB runtime.
+#   Recommended server: 64+ GB RAM, 1+ TB SSD for full planet setup.
 # ─────────────────────────────────────────────────────────────────────────
 
 services:
@@ -76,6 +82,9 @@ services:
       OTP_URL: http://otp:8080
       MOTIS_URL: http://motis:8080
       PELIAS_URL: http://pelias-api:4000
+      NOMINATIM_URL: http://nominatim:8080
+      PHOTON_URL: http://photon:2322
+      OVERPASS_URL: http://overpass:80
       CORS_ORIGIN: https://${DOMAIN:-localhost},http://localhost:3000
       BETTER_AUTH_URL: https://${DOMAIN:-localhost}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
@@ -112,6 +121,7 @@ services:
         NEXT_PUBLIC_API_URL: https://${DOMAIN:-localhost}
         NEXT_PUBLIC_MAPTILER_KEY: ${MAPTILER_KEY:-}
         NEXT_PUBLIC_MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
+        NEXT_PUBLIC_MAP_STYLE_URL: https://${DOMAIN:-localhost}/tiles
     profiles: [app]
     labels:
       traefik.enable: "true"
@@ -177,7 +187,10 @@ services:
       - ./services/valhalla/valhalla.json:/custom_files/valhalla.json:ro
     environment:
       serve_tiles: "True"
-      build_elevation: "False"
+      build_elevation: "True"
+      build_admins: "True"
+      build_time_zones: "True"
+      use_tiles_ignore_no_data: "True"
     profiles: [routing]
     networks: [openmapx]
     deploy:
@@ -291,6 +304,112 @@ services:
       PELIAS_CONFIG: /code/pelias.json
     profiles: [pelias]
     networks: [openmapx]
+    restart: unless-stopped
+
+  # ── Geocoding (Nominatim) ──────────────────────────────────────────────
+  # Full-featured geocoder. Bundles its own PostgreSQL internally.
+  # Planet import: ~64 GB RAM peak, ~1.5 TB disk, ~48h on fast hardware.
+  # After import: ~2 GB RAM runtime, ~1 TB disk.
+  # Shares OSM PBF via data/nominatim/ (hardlinked from data/osm/).
+
+  nominatim:
+    image: mediagis/nominatim:5.2
+    ports: ["127.0.0.1:8088:8080"]
+    volumes:
+      - nominatim-data:/var/lib/postgresql/16/main
+      - nominatim-flatnode:/nominatim/flatnode
+      - ./data/nominatim:/nominatim/data
+    environment:
+      PBF_PATH: /nominatim/data/data.osm.pbf
+      REPLICATION_URL: https://planet.openstreetmap.org/replication/day
+      REPLICATION_UPDATE_INTERVAL: "86400"
+      NOMINATIM_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      THREADS: ${NOMINATIM_THREADS:-8}
+      IMPORT_STYLE: full
+      REVERSE_ONLY: "false"
+      IMPORT_WIKIPEDIA: "true"
+      IMPORT_US_POSTCODES: "true"
+      IMPORT_GB_POSTCODES: "true"
+    profiles: [nominatim]
+    networks: [openmapx]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+    shm_size: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 64g
+    restart: unless-stopped
+
+  # ── Geocoding (Photon) ───────────────────────────────────────────────
+  # Lightweight geocoder with search-as-you-type support.
+  # Auto-downloads pre-built worldwide search index on first start.
+  # Planet index: ~8 GB RAM runtime, ~200 GB disk.
+
+  photon:
+    image: rtuszik/photon-docker:latest
+    ports: ["127.0.0.1:2322:2322"]
+    volumes:
+      - ./data/photon:/photon/data
+    environment:
+      REGION: planet
+      UPDATE_STRATEGY: PARALLEL
+      UPDATE_INTERVAL: 720h
+      LOG_LEVEL: INFO
+    profiles: [photon]
+    networks: [openmapx]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:2322/api?q=test || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+    restart: unless-stopped
+
+  # ── Overpass API ──────────────────────────────────────────────────────
+  # Self-hosted OSM query service for transit stops, POIs, trails, etc.
+  # Planet import: ~24h, ~200 GB disk, ~4 GB RAM.
+  # Shares OSM PBF via data/overpass/ (hardlinked from data/osm/).
+
+  overpass:
+    image: wiktorn/overpass-api:latest
+    ports: ["127.0.0.1:8082:80"]
+    volumes:
+      - ./data/overpass/db:/db
+      - ./data/overpass/osm:/osm:ro
+    environment:
+      OVERPASS_META: "yes"
+      OVERPASS_MODE: init
+      OVERPASS_PLANET_URL: "file:///osm/data.osm.pbf"
+      OVERPASS_PLANET_PREPROCESS: "mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf && rm /db/planet.osm.pbf"
+      OVERPASS_DIFF_URL: https://planet.openstreetmap.org/replication/day/
+      OVERPASS_COMPRESSION: lz4
+      OVERPASS_RULES_LOAD: "10"
+      OVERPASS_SPACE: ${OVERPASS_SPACE:-107374182400}
+      OVERPASS_UPDATE_SLEEP: "86400"
+      OVERPASS_FASTCGI_PROCESSES: ${OVERPASS_FASTCGI_PROCESSES:-4}
+      OVERPASS_STOP_AFTER_INIT: "false"
+      OVERPASS_MAX_TIMEOUT: "300s"
+    profiles: [overpass]
+    networks: [openmapx]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -qfs 'http://localhost/api/interpreter?data=[out:json];node(1);out;' | grep -q Overpass || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 172800s
+    deploy:
+      resources:
+        limits:
+          memory: 32g
     restart: unless-stopped
 
   # ── Tile Serving ────────────────────────────────────────────────────────
@@ -417,6 +536,8 @@ volumes:
   esdata:
   redisdata:
   traefik-acme:
+  nominatim-data:
+  nominatim-flatnode:
 
 networks:
   openmapx:

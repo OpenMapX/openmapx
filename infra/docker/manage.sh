@@ -58,9 +58,16 @@ ensure_dirs() {
     "${DATA_DIR}/otp" \
     "${DATA_DIR}/motis" \
     "${DATA_DIR}/tileserver" \
+    "${DATA_DIR}/tileserver/fonts" \
+    "${DATA_DIR}/tileserver/sprites" \
+    "${DATA_DIR}/tileserver/styles" \
     "${DATA_DIR}/pelias/openstreetmap" \
     "${DATA_DIR}/pelias/whosonfirst" \
-    "${DATA_DIR}/pelias/placeholder"
+    "${DATA_DIR}/pelias/placeholder" \
+    "${DATA_DIR}/nominatim" \
+    "${DATA_DIR}/photon" \
+    "${DATA_DIR}/overpass/db" \
+    "${DATA_DIR}/overpass/osm"
 }
 
 find_pbf() {
@@ -313,6 +320,116 @@ cmd_download_all_feeds() {
   log "Total GTFS data: ${gtfs_size}"
 }
 
+# ── Download Map Style, Fonts, Sprites ─────────────────────────────────
+
+cmd_download_style() {
+  require_cmd curl unzip
+  ensure_dirs
+
+  local style_dir="${DATA_DIR}/tileserver/styles"
+  local fonts_dir="${DATA_DIR}/tileserver/fonts"
+  local sprites_dir="${DATA_DIR}/tileserver/sprites"
+
+  # Download OpenMapTiles fonts (PBF glyphs for map label rendering)
+  if [ -d "${fonts_dir}/Noto Sans Regular" ]; then
+    ok "Fonts already downloaded"
+  else
+    log "Downloading OpenMapTiles fonts (PBF glyphs)..."
+    log "  Building from openmaptiles/fonts repo (requires Node.js)..."
+
+    if ! command -v node &>/dev/null; then
+      warn "Node.js not found. Downloading pre-built font glyphs instead..."
+      local fonts_url="https://github.com/openmaptiles/fonts/releases/download/v3.0/v3.0.zip"
+      local fonts_tmp="${DATA_DIR}/.fonts-tmp.zip"
+      if curl -fSL --progress-bar -o "$fonts_tmp" "$fonts_url" 2>/dev/null; then
+        unzip -qo "$fonts_tmp" -d "$fonts_dir"
+        rm -f "$fonts_tmp"
+        ok "Fonts downloaded from release"
+      else
+        err "Could not download fonts. Install Node.js or download manually."
+        return 1
+      fi
+    else
+      local font_build_dir="${DATA_DIR}/.font-build"
+      rm -rf "$font_build_dir"
+      git clone --depth 1 -q https://github.com/openmaptiles/fonts.git "$font_build_dir"
+      (cd "$font_build_dir" && npm install --silent && node generate.js)
+      cp -r "${font_build_dir}/_output/"* "$fonts_dir/"
+      rm -rf "$font_build_dir"
+      ok "Fonts generated"
+    fi
+  fi
+
+  # Download map styles and their sprites
+  download_style_and_sprites() {
+    local name="$1"     # e.g. "osm-bright"
+    local repo="$2"     # e.g. "openmaptiles/osm-bright-gl-style"
+    local branch="${3:-master}"
+
+    if [ -f "${style_dir}/${name}/style.json" ]; then
+      ok "${name} style already exists"
+      return 0
+    fi
+
+    log "Downloading ${name} style..."
+    mkdir -p "${style_dir}/${name}"
+
+    # Download style.json from raw GitHub
+    curl -fsSL -o "${style_dir}/${name}/style.json" \
+      "https://raw.githubusercontent.com/${repo}/${branch}/style.json"
+
+    # Download sprite files from GitHub Pages
+    local gh_pages_base="https://${repo%%/*}.github.io/${repo##*/}"
+    for file in sprite.json sprite.png sprite@2x.json sprite@2x.png; do
+      curl -fsSL -o "${style_dir}/${name}/${file}" \
+        "${gh_pages_base}/${file}" 2>/dev/null || true
+    done
+
+    # Patch style.json for local TileServer GL serving
+    patch_style "${style_dir}/${name}/style.json"
+    ok "${name} style downloaded"
+  }
+
+  download_style_and_sprites "osm-bright" "openmaptiles/osm-bright-gl-style"
+  download_style_and_sprites "dark-matter" "openmaptiles/dark-matter-gl-style"
+  download_style_and_sprites "positron" "openmaptiles/positron-gl-style"
+  download_style_and_sprites "osm-liberty" "maputnik/osm-liberty" "gh-pages"
+
+  ok "Map styles, fonts, and sprites ready for TileServer GL"
+}
+
+# Patch a style.json to use TileServer GL local serving placeholders.
+# TileServer GL auto-resolves these to absolute URLs when serving:
+#   mbtiles://{openmapx}  → local MBTiles data source
+#   {fontstack}/{range}.pbf → local font glyphs
+#   {styleJsonFolder}/sprite → sprite files next to style.json
+patch_style() {
+  local style_file="$1"
+  [ -f "$style_file" ] || return 0
+
+  if command -v python3 &>/dev/null; then
+    python3 -c "
+import json
+with open('$style_file') as f:
+    style = json.load(f)
+
+for src_name, src in style.get('sources', {}).items():
+    if src.get('type') == 'vector':
+        src.clear()
+        src['type'] = 'vector'
+        src['url'] = 'mbtiles://{openmapx}'
+
+style['glyphs'] = '{fontstack}/{range}.pbf'
+style['sprite'] = '{styleJsonFolder}/sprite'
+
+with open('$style_file', 'w') as f:
+    json.dump(style, f, indent=2, ensure_ascii=False)
+" 2>/dev/null && return 0
+  fi
+
+  warn "Python3 not available, skipping style patching. Manual editing may be needed."
+}
+
 # ── Remove GTFS Feed ────────────────────────────────────────────────────
 
 cmd_remove_feed() {
@@ -369,6 +486,14 @@ cmd_link() {
     ln -f "$pbf" "${DATA_DIR}/pelias/openstreetmap/data.osm.pbf" && ok "  -> pelias/openstreetmap/data.osm.pbf"
     linked=$((linked + 1))
 
+    # Nominatim — for geocoding import
+    ln -f "$pbf" "${DATA_DIR}/nominatim/data.osm.pbf" && ok "  -> nominatim/data.osm.pbf"
+    linked=$((linked + 1))
+
+    # Overpass — for OSM query service
+    ln -f "$pbf" "${DATA_DIR}/overpass/osm/data.osm.pbf" && ok "  -> overpass/osm/data.osm.pbf"
+    linked=$((linked + 1))
+
     if [ "$planet" = true ]; then
       warn "Skipping OSRM link (planet PBF needs ~200 GB RAM for OSRM — use Valhalla instead)"
       warn "Skipping OTP link (planet PBF too large for OTP — use MOTIS instead)"
@@ -423,18 +548,21 @@ cmd_link() {
 cmd_build() {
   local service="${1:-}"
   if [ -z "$service" ]; then
-    err "Usage: manage.sh build <valhalla|osrm|otp|motis|tiles>"
+    err "Usage: manage.sh build <valhalla|osrm|otp|motis|tiles|pelias|nominatim|photon|overpass>"
     return 1
   fi
 
   case "$service" in
-    valhalla) build_valhalla ;;
-    osrm)     build_osrm ;;
-    otp)      build_otp ;;
-    motis)    build_motis ;;
-    tiles)    build_tiles ;;
-    pelias)   build_pelias ;;
-    *)        err "Unknown service: $service"; return 1 ;;
+    valhalla)  build_valhalla ;;
+    osrm)      build_osrm ;;
+    otp)       build_otp ;;
+    motis)     build_motis ;;
+    tiles)     build_tiles ;;
+    pelias)    build_pelias ;;
+    nominatim) build_nominatim ;;
+    photon)    build_photon ;;
+    overpass)  build_overpass ;;
+    *)         err "Unknown service: $service"; return 1 ;;
   esac
 }
 
@@ -486,6 +614,21 @@ cmd_build_all() {
   # Build tiles
   log "── Building tiles ──"
   build_tiles || warn "Tile generation failed, continuing..."
+  echo ""
+
+  # Build Nominatim (starts container which auto-imports)
+  log "── Building nominatim ──"
+  build_nominatim || warn "Nominatim build failed, continuing..."
+  echo ""
+
+  # Build Photon (downloads pre-built index)
+  log "── Building photon ──"
+  build_photon || warn "Photon build failed, continuing..."
+  echo ""
+
+  # Build Overpass (starts container which auto-imports)
+  log "── Building overpass ──"
+  build_overpass || warn "Overpass build failed, continuing..."
   echo ""
 
   ok "All builds complete"
@@ -640,6 +783,62 @@ build_pelias() {
   ok "Pelias geocoding index built. Start with: docker compose --profile pelias up -d"
 }
 
+build_nominatim() {
+  if [ ! -f "${DATA_DIR}/nominatim/data.osm.pbf" ]; then
+    err "No OSM PBF linked for Nominatim. Run: ./manage.sh link"
+    return 1
+  fi
+
+  if is_planet; then
+    log "Starting Nominatim planet import..."
+    log "  This needs ~64 GB RAM (peak) and takes ~48 hours on a fast server."
+    log "  After import, runtime needs ~2 GB RAM and ~1 TB disk."
+  else
+    log "Starting Nominatim import..."
+  fi
+
+  log "Nominatim auto-imports on first start. Starting the container..."
+  docker compose -f "$COMPOSE_FILE" --profile nominatim up -d nominatim
+  log "Nominatim is importing in the background."
+  log "Monitor progress with: docker compose logs -f nominatim"
+  log "Import is complete when you see 'Using project directory: /nominatim'"
+  ok "Nominatim container started (importing)"
+}
+
+build_photon() {
+  ensure_dirs
+
+  log "Starting Photon geocoder..."
+  log "  On first start, it auto-downloads the worldwide search index (~200 GB)."
+  log "  This can take several hours depending on bandwidth."
+  log "  Subsequent starts use the cached index."
+
+  docker compose -f "$COMPOSE_FILE" --profile photon up -d photon
+  log "Photon is downloading its index in the background."
+  log "Monitor progress with: docker compose logs -f photon"
+  ok "Photon container started"
+}
+
+build_overpass() {
+  if [ ! -f "${DATA_DIR}/overpass/osm/data.osm.pbf" ]; then
+    err "No OSM PBF linked for Overpass. Run: ./manage.sh link"
+    return 1
+  fi
+
+  if is_planet; then
+    log "Starting Overpass API planet import..."
+    log "  This takes ~24 hours and needs ~200 GB disk."
+  else
+    log "Starting Overpass API import..."
+  fi
+
+  log "Overpass auto-imports on first start. Starting the container..."
+  docker compose -f "$COMPOSE_FILE" --profile overpass up -d overpass
+  log "Overpass is importing in the background."
+  log "Monitor progress with: docker compose logs -f overpass"
+  ok "Overpass container started (importing)"
+}
+
 # ── Status ───────────────────────────────────────────────────────────────
 
 cmd_status() {
@@ -702,7 +901,7 @@ cmd_status() {
   # Service workspaces
   echo ""
   _bold "Service Workspaces:"
-  for svc in valhalla osrm otp motis tileserver pelias; do
+  for svc in valhalla osrm otp motis tileserver pelias nominatim photon overpass; do
     local dir="${DATA_DIR}/${svc}"
     if [ -d "$dir" ]; then
       local count
@@ -716,7 +915,7 @@ cmd_status() {
   # Disk usage
   echo ""
   _bold "Disk Usage:"
-  for sub in osm gtfs osrm valhalla otp motis tileserver pelias; do
+  for sub in osm gtfs osrm valhalla otp motis tileserver pelias nominatim photon overpass; do
     local dir="${DATA_DIR}/${sub}"
     if [ -d "$dir" ]; then
       local size
@@ -747,6 +946,7 @@ cmd_update() {
   log "Updating all data..."
   cmd_download_osm
   cmd_download_all_feeds
+  cmd_download_style
   cmd_link
   cmd_build_all
   ok "Update complete"
@@ -758,7 +958,7 @@ cmd_clean() {
   local target="${1:-}"
 
   if [ -z "$target" ]; then
-    err "Usage: manage.sh clean <valhalla|osrm|otp|motis|tiles|feeds|compiled|all>"
+    err "Usage: manage.sh clean <valhalla|osrm|otp|motis|tiles|pelias|nominatim|photon|overpass|styles|feeds|compiled|all>"
     return 1
   fi
 
@@ -789,6 +989,24 @@ cmd_clean() {
       rm -f "${DATA_DIR}/pelias/openstreetmap/data.osm.pbf"
       ok "Cleaned Pelias data (Elasticsearch index preserved in Docker volume)"
       ;;
+    nominatim)
+      rm -f "${DATA_DIR}/nominatim/data.osm.pbf"
+      ok "Cleaned Nominatim data (database preserved in Docker volume)"
+      warn "To fully reset: docker volume rm openmapx_nominatim-data"
+      ;;
+    photon)
+      rm -rf "${DATA_DIR}/photon/"*
+      ok "Cleaned Photon search index"
+      ;;
+    overpass)
+      rm -rf "${DATA_DIR}/overpass/db/"*
+      rm -f "${DATA_DIR}/overpass/osm/data.osm.pbf"
+      ok "Cleaned Overpass database"
+      ;;
+    styles)
+      rm -rf "${DATA_DIR}/tileserver/fonts" "${DATA_DIR}/tileserver/sprites" "${DATA_DIR}/tileserver/styles"
+      ok "Cleaned map styles, fonts, and sprites"
+      ;;
     feeds)
       rm -f "${DATA_DIR}/gtfs/"*.zip
       rm -rf "${DATA_DIR}/.transitous-catalog"
@@ -802,6 +1020,10 @@ cmd_clean() {
       cmd_clean motis
       cmd_clean tiles
       cmd_clean pelias
+      cmd_clean nominatim
+      cmd_clean photon
+      cmd_clean overpass
+      cmd_clean styles
       ;;
     all)
       rm -rf "${DATA_DIR:?}"
@@ -820,8 +1042,9 @@ cmd_help() {
   cat <<'HELP'
 OpenMapX Data Manager
 
-Manages OSM and GTFS data for self-hosted services. Downloads source data
-once and hardlinks it into each service's workspace for zero-copy sharing.
+Manages OSM, GTFS, and map style data for all self-hosted services.
+Downloads source data once and hardlinks it into each service's workspace
+for zero-copy sharing.
 
 COMMANDS:
   download-osm [region]       Download OSM PBF from Geofabrik
@@ -837,16 +1060,23 @@ COMMANDS:
 
   remove-feed <slug>          Remove a GTFS feed and its links
 
+  download-style              Download map styles, fonts, and sprites
+                               OSM Bright, OSM Liberty, Positron, Dark Matter
+                               + OpenMapTiles font glyphs for label rendering
+
   link                        Hard-link source data into service directories
                                Detects planet-scale and skips OSRM/OTP.
 
   build <service>             Build data for a service:
-                               valhalla - Routing tiles (planet-capable)
-                               osrm     - Routing graph (region-only)
-                               otp      - Transit graph (region-only)
-                               motis    - Auto-builds on container start
-                               tiles    - Vector MBTiles via Planetiler
-                               pelias   - Geocoding index (ES + WOF + OSM)
+                               valhalla  - Routing tiles + elevation
+                               osrm      - Routing graph (region-only)
+                               otp       - Transit graph (region-only)
+                               motis     - Auto-builds on container start
+                               tiles     - Vector MBTiles via Planetiler
+                               pelias    - Geocoding index (ES + WOF + OSM)
+                               nominatim - Geocoder (auto-imports on start)
+                               photon    - Download pre-built search index
+                               overpass  - OSM query API (auto-imports)
 
   build-all                   Build all applicable services
 
@@ -856,33 +1086,56 @@ COMMANDS:
 
   clean <target>              Remove data:
                                valhalla|osrm|otp|motis|tiles|pelias
+                               nominatim|photon|overpass|styles
                                feeds    - all GTFS feeds
                                compiled - all compiled, keep sources
                                all      - everything
+
+SELF-HOSTED SERVICES:
+  Routing     Valhalla (planet-capable), OSRM (region-only)
+  Transit     MOTIS (planet-capable), OTP (region-only)
+  Geocoding   Pelias (ES-based), Nominatim (full OSM), Photon (lightweight)
+  OSM Query   Overpass API (transit stops, POIs, trails)
+  Map Tiles   Planetiler (vector MBTiles) + TileServer GL (styles)
+  Elevation   Valhalla (SRTM data, auto-downloaded during build)
+  Database    PostgreSQL + PostGIS, Redis, Elasticsearch
 
 PLANET-SCALE NOTES:
   When using planet PBF (~70 GB), the manager automatically:
   - Skips OSRM (needs ~200 GB RAM) → use Valhalla instead
   - Skips OTP (needs ~100 GB RAM)  → use MOTIS instead
-  - Builds Valhalla (~16 GB RAM, ~8 hours)
+  - Builds Valhalla with elevation (~16 GB RAM, ~8 hours)
   - Builds Planetiler tiles (~30 GB RAM, ~1 hour, ~80 GB output)
+  - Starts Nominatim import (~64 GB RAM peak, ~48 hours)
+  - Downloads Photon index (~75 GB compressed)
+  - Starts Overpass import (~24 hours, ~200 GB disk)
   - Links GTFS feeds to MOTIS only (not OTP)
+  - Recommended: 64+ GB RAM, 2+ TB SSD
 
 EXAMPLES:
-  # --- Worldwide setup ---
+  # --- Full worldwide self-hosted setup ---
   ./manage.sh download-osm planet
   ./manage.sh download-all-feeds
+  ./manage.sh download-style
   ./manage.sh link
   ./manage.sh build-all
-  docker compose --profile routing --profile transit --profile tiles up -d
+  docker compose --profile proxy --profile app \
+    --profile routing --profile transit \
+    --profile nominatim --profile photon \
+    --profile overpass --profile tiles up -d
 
-  # --- Single country ---
+  # --- Single country (lighter) ---
   ./manage.sh download-osm europe/germany
   ./manage.sh download-all-feeds de
+  ./manage.sh download-style
   ./manage.sh link && ./manage.sh build-all
 
-  # --- Add feeds for a specific country ---
-  ./manage.sh download-all-feeds ch
+  # --- Just routing + tiles (minimal) ---
+  ./manage.sh download-osm europe/germany
+  ./manage.sh download-style
+  ./manage.sh link
+  ./manage.sh build valhalla && ./manage.sh build tiles
+  docker compose --profile routing --profile tiles up -d
 
   # --- Weekly update (cron-friendly) ---
   0 3 * * 0 cd /path/to/infra/docker && ./manage.sh update
@@ -891,6 +1144,7 @@ ENVIRONMENT:
   DATA_DIR                  Data directory (default: ./data)
   REGION                    Default OSM region (default from data.conf)
   MAX_CONCURRENT_DOWNLOADS  Parallel feed downloads (default: 5)
+  NOMINATIM_THREADS         Nominatim import threads (default: 8)
 
 HELP
 }
@@ -903,6 +1157,7 @@ main() {
     add-feed|download-gtfs)  shift; cmd_download_gtfs "$@" ;;
     download-all-feeds)      shift; cmd_download_all_feeds "$@" ;;
     remove-feed)             shift; cmd_remove_feed "$@" ;;
+    download-style)          cmd_download_style ;;
     link)                    cmd_link ;;
     build)                   shift; cmd_build "$@" ;;
     build-all)               cmd_build_all ;;

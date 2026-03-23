@@ -17,7 +17,7 @@ import {
 } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -171,8 +171,8 @@ export function DataSourceLayer() {
     serverFilters,
   );
 
-  // Accumulate results across searches
-  const accumulatedRef = useRef(new Map<string, DataSourceResult>());
+  // Accumulate results across searches (useState so map re-renders on new data)
+  const [accumulatedMap, setAccumulatedMap] = useState(() => new Map<string, DataSourceResult>());
   const prevActiveRef = useRef(activeSource);
   const prevFiltersRef = useRef(serverFilters);
   const prevSearchBboxRef = useRef(searchBbox);
@@ -183,20 +183,23 @@ export function DataSourceLayer() {
       prevFiltersRef.current !== serverFilters ||
       prevSearchBboxRef.current !== searchBbox
     ) {
-      accumulatedRef.current = new Map();
+      setAccumulatedMap(new Map());
       prevActiveRef.current = activeSource;
       prevFiltersRef.current = serverFilters;
       prevSearchBboxRef.current = searchBbox;
+      return;
     }
 
     if (searchResults) {
-      for (const r of searchResults) {
-        accumulatedRef.current.set(r.id, r);
-      }
+      setAccumulatedMap((prev) => {
+        const next = new Map(prev);
+        for (const r of searchResults) next.set(r.id, r);
+        return next;
+      });
     }
   }, [activeSource, serverFilters, searchBbox, searchResults]);
 
-  const allResults = Array.from(accumulatedRef.current.values());
+  const allResults = useMemo(() => Array.from(accumulatedMap.values()), [accumulatedMap]);
 
   // Apply client-side operator/speed filters
   const filteredResults = useMemo(() => {

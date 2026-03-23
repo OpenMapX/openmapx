@@ -3,10 +3,11 @@
 import { useColorScheme } from "@mui/material/styles";
 import type { LngLat } from "@openmapx/core";
 import { useMapStore } from "@openmapx/core";
+import type maplibregl from "maplibre-gl";
 import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
-import { maptilerStyleUrl } from "@/lib/map";
+import { loadOpenMapXStyle, maptilerStyleUrl, STYLE_PROVIDER } from "@/lib/map";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,37 +27,40 @@ export function MapCanvas() {
     // be destroyed and re-created every time the user pans or zooms.
     const { center, zoom, bearing, pitch } = useMapStore.getState();
 
-    const styleUrl = maptilerStyleUrl(mapStyle);
     let destroyed = false;
 
-    const initMap = (initialCenter: LngLat, initialZoom: number) => {
-      import("maplibre-gl").then(({ default: maplibregl }) => {
-        if (destroyed || !containerRef.current) return;
+    const initMap = async (initialCenter: LngLat, initialZoom: number) => {
+      const maplibregl = (await import("maplibre-gl")).default;
+      if (destroyed || !containerRef.current) return;
 
-        const map = new maplibregl.Map({
-          container: containerRef.current,
-          style: styleUrl,
-          center: initialCenter,
-          zoom: initialZoom,
-          bearing,
-          pitch,
-          attributionControl: false,
-          canvasContextAttributes: { antialias: true },
-        });
+      const style =
+        STYLE_PROVIDER === "openmapx" ? await loadOpenMapXStyle() : maptilerStyleUrl(mapStyle);
 
-        map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right");
+      if (destroyed || !containerRef.current) return;
 
-        map.on("moveend", () => {
-          const c = map.getCenter();
-          setCenter([c.lng, c.lat]);
-          setZoom(map.getZoom());
-          setBearing(map.getBearing());
-          setPitch(map.getPitch());
-        });
-
-        mapRef.current = map;
-        notifyMapReady();
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: style as string | maplibregl.StyleSpecification,
+        center: initialCenter,
+        zoom: initialZoom,
+        bearing,
+        pitch,
+        attributionControl: false,
+        canvasContextAttributes: { antialias: true },
       });
+
+      map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right");
+
+      map.on("moveend", () => {
+        const c = map.getCenter();
+        setCenter([c.lng, c.lat]);
+        setZoom(map.getZoom());
+        setBearing(map.getBearing());
+        setPitch(map.getPitch());
+      });
+
+      mapRef.current = map;
+      notifyMapReady();
     };
 
     // If geolocation permission is already granted, initialize the map centered
@@ -105,10 +109,16 @@ export function MapCanvas() {
     if (mapStyle === initialStyleRef.current) return;
     initialStyleRef.current = mapStyle;
 
-    const newUrl = maptilerStyleUrl(mapStyle);
-    map.setStyle(newUrl);
-    // After style loads, bump styleVersion so child layers re-attach
-    map.once("style.load", () => notifyStyleReload());
+    if (STYLE_PROVIDER === "openmapx") {
+      loadOpenMapXStyle().then((s) => {
+        map.setStyle(s as maplibregl.StyleSpecification);
+        map.once("style.load", () => notifyStyleReload());
+      });
+    } else {
+      const newUrl = maptilerStyleUrl(mapStyle);
+      map.setStyle(newUrl);
+      map.once("style.load", () => notifyStyleReload());
+    }
   }, [mapStyle, mapRef, mapReady, notifyStyleReload]);
 
   // Update map label language when locale changes

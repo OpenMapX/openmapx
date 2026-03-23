@@ -27,6 +27,7 @@ interface NominatimAddress {
   county?: string;
   state?: string;
   country?: string;
+  country_code?: string;
   postcode?: string;
 }
 
@@ -67,6 +68,7 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
     name,
     address,
     city,
+    countryCode: r.address.country_code ?? undefined,
     coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
     category: resolveOsmLabel(r.class, r.type),
     phone,

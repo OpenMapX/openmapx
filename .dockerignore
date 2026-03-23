@@ -1,6 +1,6 @@
-node_modules
-.next
-.turbo
+**/node_modules
+**/.next
+**/.turbo
 .git
 .gitignore
 *.md
@@ -10,3 +10,4 @@ LICENSE
 infra/docker/data
 **/.DS_Store
 **/tsconfig.tsbuildinfo
+docs/

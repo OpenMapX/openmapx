@@ -1,4 +1,5 @@
 import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
+import opening_hours from "opening_hours";
 import type { FuelStation } from "./types.js";
 
 interface OpeningTime {
@@ -167,7 +168,15 @@ function tankerkoenigToOsmHours(raw: TankerkoenigRaw): string | undefined {
   for (const [hours, days] of byHours) {
     parts.push(`${days.join(",")} ${hours}`);
   }
-  return parts.join("; ");
+  const result = parts.join("; ");
+
+  // Validate and normalize using the opening_hours library
+  try {
+    const oh = new opening_hours(result);
+    return oh.prettifyValue();
+  } catch {
+    return result;
+  }
 }
 
 export function buildTankerkoenigDetail(

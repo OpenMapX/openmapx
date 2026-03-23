@@ -31,7 +31,7 @@ export default function ImprintContent() {
 
       <Section title="Contact">
         <Typography>
-          Email: {email}
+          Email: <Link href={`mailto:${email}`}>{email}</Link>
           {phone && (
             <>
               <br />
@@ -54,21 +54,11 @@ export default function ImprintContent() {
         </Typography>
       </Section>
 
-      <Section title="EU Dispute Resolution">
+      <Section title="Consumer Dispute Resolution">
         <Typography>
-          The European Commission provides an online dispute resolution (ODR) platform:{" "}
-          <Link
-            href="https://ec.europa.eu/consumers/odr/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            https://ec.europa.eu/consumers/odr/
-          </Link>
-          .
-        </Typography>
-        <Typography sx={{ mt: 1 }}>
-          We are neither obligated nor willing to participate in dispute resolution proceedings
-          before a consumer arbitration board.
+          As a business with fewer than 11 employees, we are exempt from the information
+          requirements of &sect;&nbsp;36 VSBG. We are nevertheless neither obligated nor willing to
+          participate in dispute resolution proceedings before a consumer arbitration board.
         </Typography>
       </Section>
 

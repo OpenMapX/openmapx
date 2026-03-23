@@ -21,6 +21,9 @@ function makeProvider(id: string): DataSourceProvider {
       attribution: { text: id, url: `https://${id}.example` },
       categoryChipLabel: id,
       minZoom: 10,
+      markerStyle: { variantColors: {}, defaultColor: "#000", inactiveOpacity: 0.4, iconPath: "" },
+      placeCategory: `Test ${id}`,
+      placeCategoryRaw: id,
     },
     async getFilters() {
       return [];

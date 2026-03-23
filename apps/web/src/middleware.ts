@@ -1,28 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { defaultLocale, type Locale, locales } from "./i18n/config";
+import { type Locale, locales } from "./i18n/config";
 
 export function middleware(request: NextRequest) {
+  // If the user has explicitly chosen a language, respect it.
   const cookieLocale = request.cookies.get("NEXT_LOCALE")?.value;
 
   if (cookieLocale && locales.includes(cookieLocale as Locale)) {
     return NextResponse.next();
   }
 
-  const acceptLang = request.headers.get("accept-language") ?? "";
-  const preferred = acceptLang
-    .split(",")
-    .map((part) => part.split(";")[0].trim().split("-")[0])
-    .find((lang) => locales.includes(lang as Locale));
-
-  const locale = preferred ?? defaultLocale;
-
-  const response = NextResponse.next();
-  response.cookies.set("NEXT_LOCALE", locale, {
-    path: "/",
-    maxAge: 365 * 24 * 60 * 60,
-    sameSite: "lax",
-  });
-  return response;
+  // Otherwise detect from Accept-Language header without setting a cookie.
+  // The cookie is only set when the user explicitly switches language
+  // (see setLocale.ts), keeping us compliant with TDDDG §25(2).
+  return NextResponse.next();
 }
 
 export const config = {

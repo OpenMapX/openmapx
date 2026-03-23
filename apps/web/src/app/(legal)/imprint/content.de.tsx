@@ -31,7 +31,7 @@ export default function ImprintContentDe() {
 
       <Section title="Kontakt">
         <Typography>
-          E-Mail: {email}
+          E-Mail: <Link href={`mailto:${email}`}>{email}</Link>
           {phone && (
             <>
               <br />
@@ -55,21 +55,11 @@ export default function ImprintContentDe() {
         </Typography>
       </Section>
 
-      <Section title="EU-Streitschlichtung">
+      <Section title="Verbraucherstreitbeilegung">
         <Typography>
-          Die Europ&auml;ische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS)
-          bereit:{" "}
-          <Link
-            href="https://ec.europa.eu/consumers/odr/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            https://ec.europa.eu/consumers/odr/
-          </Link>
-          .
-        </Typography>
-        <Typography sx={{ mt: 1 }}>
-          Wir sind weder verpflichtet noch bereit, an Streitbeilegungsverfahren vor einer
+          Als Unternehmen mit weniger als 11 Besch&auml;ftigten sind wir von den
+          Informationspflichten nach &sect;&nbsp;36 VSBG befreit. Wir sind gleichwohl weder
+          verpflichtet noch bereit, an Streitbeilegungsverfahren vor einer
           Verbraucherschlichtungsstelle teilzunehmen.
         </Typography>
       </Section>

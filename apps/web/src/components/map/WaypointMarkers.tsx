@@ -109,9 +109,12 @@ export function WaypointMarkers() {
           el = createWaypointElement(i);
         }
 
+        const map = mapRef.current;
+        if (!map) return;
+
         const marker = new maplibregl.Marker({ element: el, anchor, draggable: true })
           .setLngLat(wp.coords)
-          .addTo(mapRef.current);
+          .addTo(map);
 
         marker.on("dragend", () => {
           const lngLat = marker.getLngLat();

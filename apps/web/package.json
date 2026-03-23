@@ -7,7 +7,8 @@
     "build": "next build && pnpm build:sw && pnpm build:copy-assets",
     "build:sw": "esbuild src/sw.ts --bundle --outfile=public/sw.js --format=iife --platform=browser --define:process.env.NODE_ENV='\"production\"'",
     "build:copy-assets": "rsync -a public/ .next/standalone/apps/web/public/ && rsync -a .next/static/ .next/standalone/apps/web/.next/static/",
-    "start": "node .next/standalone/apps/web/server.js"
+    "start": "node .next/standalone/apps/web/server.js",
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.5.5",

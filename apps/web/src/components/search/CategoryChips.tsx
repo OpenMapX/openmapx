@@ -24,6 +24,7 @@ import {
   useDataSourceStore,
   useDataSources,
   useDirectionsStore,
+  useMapStore,
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
@@ -53,6 +54,7 @@ export function CategoryChips() {
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
   const { setQuery } = useSearchStore();
   const { isOpen: directionsOpen } = useDirectionsStore();
+  const zoom = useMapStore((s) => s.zoom);
   const { activeSource, toggleSource, setActiveSource } = useDataSourceStore();
   const { data: sourcesData } = useDataSources();
 
@@ -90,37 +92,34 @@ export function CategoryChips() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 0);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
   }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     updateScrollState();
-    const observer = new ResizeObserver(updateScrollState);
-    observer.observe(el);
-    return () => observer.disconnect();
+    el.addEventListener("scroll", updateScrollState, { passive: true });
+    return () => el.removeEventListener("scroll", updateScrollState);
   }, [updateScrollState]);
 
-  if (directionsOpen || activeCategory || activeSource) return null;
+  const hidden = directionsOpen || activeCategory || activeSource;
+  const zoomedOut = zoom < 9;
+
+  if (hidden) return null;
 
   const FADE = 24;
-  const leftStop = canScrollLeft ? `black ${FADE}px` : "black 0px";
-  const rightStop = canScrollRight ? `black calc(100% - ${FADE}px)` : "black 100%";
   const leftEdge = canScrollLeft ? "transparent" : "black";
-  const rightEdge = canScrollRight ? "transparent" : "black";
-  const mask = `linear-gradient(to right, ${leftEdge}, ${leftStop}, ${rightStop}, ${rightEdge})`;
+  const leftStop = canScrollLeft ? `black ${FADE}px` : "black 0px";
+  const mask = `linear-gradient(to right, ${leftEdge}, ${leftStop}, black calc(100% - ${FADE}px), transparent)`;
 
   return (
     <Box
       ref={scrollRef}
-      onScroll={updateScrollState}
       sx={{
         position: "absolute",
         // Desktop: same level as search bar. Mobile: below search bar (12+48+12=72)
@@ -139,6 +138,9 @@ export function CategoryChips() {
         WebkitMaskImage: mask,
         // Ensure chips don't get clipped visually
         py: "2px",
+        opacity: zoomedOut ? 0 : 1,
+        pointerEvents: zoomedOut ? "none" : "auto",
+        transition: "opacity 0.2s ease",
       }}
     >
       <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
@@ -175,7 +177,7 @@ export function CategoryChips() {
                   mr: "-4px",
                 },
                 "&&:hover": {
-                  bgcolor: isActive ? "var(--omx-teal-hover)" : "grey.300",
+                  bgcolor: isActive ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
                 },
               }}
             />
@@ -212,7 +214,7 @@ export function CategoryChips() {
                   mr: "-4px",
                 },
                 "&&:hover": {
-                  bgcolor: isActive ? "var(--omx-teal-hover)" : "grey.300",
+                  bgcolor: isActive ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
                 },
               }}
             />

@@ -1,5 +1,11 @@
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { legalConfig } from "@/lib/legalConfig";
 import { sectionSlug } from "@/lib/sectionSlug";
@@ -28,7 +34,7 @@ export default function TermsContentDe() {
           <br />
           {postalCode} {city}, {country}
           <br />
-          E-Mail: {email}
+          E-Mail: <Link href={`mailto:${email}`}>{email}</Link>
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Durch den Zugriff auf oder die Nutzung von OpenMapX stimmen Sie diesen Bedingungen zu.
@@ -39,10 +45,13 @@ export default function TermsContentDe() {
       <Section title="2. Beschreibung des Dienstes">
         <Typography>
           OpenMapX ist ein kostenloser Open-Data-Kartendienst, der Kartenansicht, Adresssuche,
-          Routenplanung, Nahverkehrsinformationen, Stra&szlig;enansicht, Luftqualit&auml;tsdaten,
-          E-Ladestation-Standorte, Kraftstoffpreise, geteilte Mobilit&auml;tsdaten und
-          Ortsinformationen bietet. Der Dienst aggregiert Daten aus mehreren offenen Datenquellen
-          und Drittanbieter-APIs.
+          Routenplanung (einschlie&szlig;lich Isochronen und H&ouml;henprofilen),
+          Nahverkehrsinformationen, Stra&szlig;enansicht, Ortsfotos und Anreicherungsdaten,
+          Live-Verkehrs-Overlays, Luftqualit&auml;tsdaten, Waldbrand- und Erdbeben&uuml;berwachung,
+          Wander- und Outdoor-Informationen, Parkplatzverf&uuml;gbarkeit, E-Ladestation-Standorte,
+          Kraftstoffpreise, geteilte Mobilit&auml;tsdaten (Bike-Sharing, E-Scooter, Carsharing) und
+          allgemeine Ortsinformationen bietet. Der Dienst aggregiert Daten aus mehreren offenen
+          Datenquellen und Drittanbieter-APIs wie in Abschnitt&nbsp;10 aufgef&uuml;hrt.
         </Typography>
       </Section>
 
@@ -89,6 +98,11 @@ export default function TermsContentDe() {
           </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
+          Sie m&uuml;ssen mindestens 16&nbsp;Jahre alt sein, um ein Konto zu erstellen. Mit der
+          Erstellung eines Kontos best&auml;tigen Sie, dass Sie diese Altersanforderung
+          erf&uuml;llen.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           Wir behalten uns das Recht vor, Konten, die gegen diese Bedingungen versto&szlig;en, zu
           sperren oder zu l&ouml;schen.
         </Typography>
@@ -123,14 +137,20 @@ export default function TermsContentDe() {
           </li>
           <li>
             <Typography>
-              Reverse Engineering, Dekompilierung oder den Versuch, den Quellcode des Dienstes
-              &uuml;ber das hinaus zu extrahieren, was die Open-Source-Lizenz erlaubt.
+              Reverse Engineering, Dekompilierung oder den Versuch, den Quellcode des Dienstes zu
+              extrahieren.
             </Typography>
           </li>
           <li>
             <Typography>
               Sich als eine andere Person oder Organisation auszugeben oder Ihre Zugeh&ouml;rigkeit
               falsch darzustellen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Rate-Limits, Zugriffskontrollen oder andere Sicherheitsma&szlig;nahmen des Dienstes
+              oder seiner vorgelagerten Datenanbieter zu umgehen.
             </Typography>
           </li>
         </ul>
@@ -151,16 +171,39 @@ export default function TermsContentDe() {
             <Typography>Routenberechnungen, Reisezeiten und Entfernungen</Typography>
           </li>
           <li>
-            <Typography>Nahverkehrsfahrpl&auml;ne und Echtzeitank&uuml;nfte</Typography>
+            <Typography>Isochrone Gebiete und H&ouml;henprofile</Typography>
+          </li>
+          <li>
+            <Typography>
+              Nahverkehrsfahrpl&auml;ne, Echtzeitank&uuml;nfte und Betriebsmeldungen
+            </Typography>
           </li>
           <li>
             <Typography>Kraftstoffpreise, E-Ladestation-Verf&uuml;gbarkeit und Preise</Typography>
           </li>
           <li>
-            <Typography>Luftqualit&auml;tsmessungen</Typography>
+            <Typography>Luftqualit&auml;tsmessungen und Umweltindizes</Typography>
           </li>
           <li>
-            <Typography>Verf&uuml;gbarkeit geteilter Mobilit&auml;tsfahrzeuge</Typography>
+            <Typography>
+              Waldbranderkennungen, Erdbebendaten und andere Naturkatastrophen-Informationen
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Wanderweg-Informationen, Schwierigkeitsgrade und H&uuml;ttenverf&uuml;gbarkeit
+            </Typography>
+          </li>
+          <li>
+            <Typography>Parkplatzauslastung und Kapazit&auml;tsdaten</Typography>
+          </li>
+          <li>
+            <Typography>
+              Verf&uuml;gbarkeit und Standorte von Fahrzeugen geteilter Mobilit&auml;t
+            </Typography>
+          </li>
+          <li>
+            <Typography>Stra&szlig;enansicht und Ortsfotos</Typography>
           </li>
           <li>
             <Typography>&Ouml;ffnungszeiten, Kontaktinformationen und Ortsdetails</Typography>
@@ -169,51 +212,58 @@ export default function TermsContentDe() {
         <Typography sx={{ mt: 1 }}>
           <strong>
             Verlassen Sie sich nicht auf OpenMapX f&uuml;r sicherheitskritische Entscheidungen,
-            Notfallnavigation oder Situationen, in denen ungenaue Informationen zu Sch&auml;den
-            f&uuml;hren k&ouml;nnten.
+            Notfallnavigation, Katastrophenbew&auml;ltigung oder Situationen, in denen ungenaue
+            Informationen zu Sch&auml;den f&uuml;hren k&ouml;nnten. Insbesondere k&ouml;nnen
+            Waldbrand- und Erdbebendaten verz&ouml;gert oder unvollst&auml;ndig sein und d&uuml;rfen
+            nicht als Ersatz f&uuml;r offizielle Katastrophenwarnungen verwendet werden.
           </strong>
         </Typography>
         <Typography sx={{ mt: 1 }}>
-          Soweit nach geltendem Recht zul&auml;ssig, wird der Dienst ohne jegliche
-          Gew&auml;hrleistung gleich welcher Art bereitgestellt, sei es ausdr&uuml;cklich,
-          stillschweigend oder gesetzlich, einschlie&szlig;lich, aber nicht beschr&auml;nkt auf
-          stillschweigende Gew&auml;hrleistungen der Marktg&auml;ngigkeit, Eignung f&uuml;r einen
-          bestimmten Zweck und Nichtverletzung von Rechten Dritter.
+          OpenMapX ist ein kostenloser Dienst, der vollst&auml;ndig auf Drittanbieter-Datenquellen
+          beruht, die au&szlig;erhalb der Kontrolle des Betreibers liegen. Der Betreiber garantiert
+          weder eine ununterbrochene Verf&uuml;gbarkeit noch einen fehlerfreien Betrieb oder die
+          Richtigkeit der angezeigten Daten. Ihre gesetzlichen Rechte bleiben unber&uuml;hrt.
         </Typography>
       </Section>
 
       <Section title="7. Haftungsbeschr&auml;nkung">
-        <Typography>
-          Soweit nach geltendem Recht zul&auml;ssig, haftet der Betreiber nicht f&uuml;r mittelbare,
-          beil&auml;ufige, besondere, Folge- oder Strafsch&auml;den oder entgangene Gewinne oder
-          Einnahmen, die direkt oder indirekt entstehen, oder f&uuml;r Datenverlust,
-          Nutzungsausfall, Gesch&auml;ftswertminderung oder andere immaterielle Verluste, die sich
-          ergeben aus:
-        </Typography>
+        <Typography>Die Haftung des Betreibers bestimmt sich wie folgt:</Typography>
         <ul>
           <li>
-            <Typography>Ihrer Nutzung oder Unf&auml;higkeit zur Nutzung des Dienstes.</Typography>
-          </li>
-          <li>
             <Typography>
-              Ungenauigkeiten oder Unvollst&auml;ndigkeit der vom Dienst bereitgestellten Daten.
+              <strong>Unbeschr&auml;nkte Haftung.</strong> Der Betreiber haftet unbeschr&auml;nkt
+              f&uuml;r Sch&auml;den, die durch Vorsatz oder grobe Fahrl&auml;ssigkeit verursacht
+              wurden, f&uuml;r Sch&auml;den aus der Verletzung des Lebens, des K&ouml;rpers oder der
+              Gesundheit sowie f&uuml;r jede sonstige Haftung, die nach geltendem Recht nicht
+              ausgeschlossen oder beschr&auml;nkt werden kann.
             </Typography>
           </li>
           <li>
             <Typography>
-              Unbefugtem Zugriff auf oder &Auml;nderung Ihrer Daten oder &Uuml;bertragungen.
+              <strong>Wesentliche Vertragspflichten.</strong> Bei einfacher Fahrl&auml;ssigkeit
+              haftet der Betreiber nur f&uuml;r die Verletzung wesentlicher Vertragspflichten
+              (Pflichten, deren Erf&uuml;llung die ordnungsgem&auml;&szlig;e Durchf&uuml;hrung des
+              Vertrags &uuml;berhaupt erst erm&ouml;glicht und auf deren Einhaltung der Nutzer
+              regelm&auml;&szlig;ig vertrauen darf). In diesen F&auml;llen ist die Haftung auf den
+              vorhersehbaren, vertragstypischen Schaden begrenzt.
             </Typography>
           </li>
           <li>
-            <Typography>Verhalten oder Inhalten Dritter im Rahmen des Dienstes.</Typography>
+            <Typography>
+              <strong>Sonstige Fahrl&auml;ssigkeit.</strong> Die Haftung f&uuml;r einfache
+              Fahrl&auml;ssigkeit ist im &Uuml;brigen ausgeschlossen.
+            </Typography>
           </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
-          Nichts in diesen Bedingungen schlie&szlig;t die Haftung f&uuml;r Vorsatz oder grobe
-          Fahrl&auml;ssigkeit aus oder beschr&auml;nkt sie, ebenso wenig wie die Haftung f&uuml;r
-          Sch&auml;den aus der Verletzung des Lebens, des K&ouml;rpers oder der Gesundheit oder
-          sonstige Haftung, die nach geltendem deutschen Recht nicht ausgeschlossen oder
-          beschr&auml;nkt werden kann.
+          Die vorstehenden Haftungsbeschr&auml;nkungen gelten auch zugunsten der Mitarbeiter,
+          Vertreter und Erf&uuml;llungsgehilfen des Betreibers.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          OpenMapX aggregiert Daten aus Drittanbieterquellen. Da der Dienst kostenlos bereitgestellt
+          wird und auf externen Daten beruht, die au&szlig;erhalb der Kontrolle des Betreibers
+          liegen, &uuml;bernimmt der Betreiber keine Gew&auml;hr f&uuml;r die Richtigkeit,
+          Vollst&auml;ndigkeit oder Aktualit&auml;t der angezeigten Daten.
         </Typography>
       </Section>
 
@@ -241,263 +291,397 @@ export default function TermsContentDe() {
       <Section title="10. Datenquellen und Quellenangaben" id="data-sources">
         <Typography>
           OpenMapX basiert auf offenen Daten. Wir danken den folgenden Datenquellen und ihren
-          jeweiligen Lizenzen:
+          jeweiligen Lizenzen. Sofern eine Lizenz gilt, f&uuml;hrt ein Klick auf den Lizenznamen zum
+          vollst&auml;ndigen Lizenztext.
         </Typography>
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Kartendaten
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>OpenStreetMap</strong> &mdash; Kartendaten &copy; OpenStreetMap-Mitwirkende,
-              verf&uuml;gbar unter der{" "}
-              <Link
-                href="https://opendatacommons.org/licenses/odbl/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open Data Commons Open Database License (ODbL)
-              </Link>
-              .
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>MapTiler</strong> &mdash; Kartenkacheln und Geokodierung von{" "}
-              <Link href="https://www.maptiler.com/" target="_blank" rel="noopener noreferrer">
-                MapTiler
-              </Link>
-              .
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Kartendaten und Geokodierung"
+          rows={[
+            {
+              source: "OpenStreetMap",
+              desc: "Kartendaten \u00a9 OpenStreetMap-Mitwirkende",
+              license: "ODbL",
+              licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+              url: "https://www.openstreetmap.org/",
+            },
+            {
+              source: "MapTiler",
+              desc: "Kartenkacheln, Stile und Geokodierung",
+              license: "Propriet\u00e4r",
+              url: "https://www.maptiler.com/",
+            },
+            {
+              source: "OpenTopoMap",
+              desc: "Topografische Kartenkacheln (OSM + SRTM-Daten)",
+              license: "CC BY-SA 3.0",
+              licenseUrl: "https://creativecommons.org/licenses/by-sa/3.0/",
+              url: "https://opentopomap.org/",
+            },
+            {
+              source: "CyclOSM",
+              desc: "Fahrrad-fokussierte Kartenkacheln",
+              license: "ODbL (OSM-Daten)",
+              licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+              url: "https://www.cyclosm.org/",
+            },
+            {
+              source: "Nominatim",
+              desc: "Geokodierung und Reverse Geocoding",
+              license: "ODbL (OSM-Daten)",
+              licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+              url: "https://nominatim.openstreetmap.org/",
+            },
+            {
+              source: "Photon (Komoot)",
+              desc: "Alternativer Geokoder",
+              license: "ODbL (OSM-Daten)",
+              licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+              url: "https://photon.komoot.io/",
+            },
+            {
+              source: "Overpass API",
+              desc: "OSM-Datenabfragen f\u00fcr POIs, Wege, Haltestellen",
+              license: "ODbL (OSM-Daten)",
+              licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+              url: "https://overpass-api.de/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Routenplanung
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>OSRM</strong> &mdash; Open Source Routing Machine, basierend auf
-              OpenStreetMap-Daten.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>Valhalla</strong> &mdash; Open-Source-Routing-Engine von Mapzen /
-              Valhalla-Mitwirkenden, gehostet von{" "}
-              <Link href="https://fossgis.de/" target="_blank" rel="noopener noreferrer">
-                FOSSGIS e.V.
-              </Link>
-              .
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Routenplanung"
+          rows={[
+            {
+              source: "OSRM",
+              desc: "Autorouten-Berechnung und -Optimierung",
+              license: "BSD 2-Clause",
+              licenseUrl: "https://github.com/Project-OSRM/osrm-backend/blob/master/LICENSE.TXT",
+              url: "https://project-osrm.org/",
+            },
+            {
+              source: "Valhalla (FOSSGIS e.V.)",
+              desc: "Fu\u00dfg\u00e4nger-, Rad-, Autorouten; Isochronen; H\u00f6henprofile",
+              license: "MIT",
+              licenseUrl: "https://github.com/valhalla/valhalla/blob/master/LICENSE.md",
+              url: "https://fossgis.de/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Stra&szlig;enansicht
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>Mapillary</strong> &mdash; Stra&szlig;enfotos &copy;{" "}
-              <Link href="https://www.mapillary.com/" target="_blank" rel="noopener noreferrer">
-                Mapillary
-              </Link>
-              -Mitwirkende, verf&uuml;gbar unter CC-BY-SA.
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Stra\u00dfenansicht"
+          rows={[
+            {
+              source: "Mapillary",
+              desc: "Stra\u00dfenfotos und Panoramen \u00a9 Mapillary-Mitwirkende",
+              license: "CC BY-SA 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+              url: "https://www.mapillary.com/",
+            },
+            {
+              source: "Panoramax (IGN Frankreich)",
+              desc: "Offene Stra\u00dfenpanoramen",
+              license: "CC BY-SA 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+              url: "https://panoramax.fr/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Verkehr
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>TomTom</strong> &mdash; Verkehrsflussdaten &copy;{" "}
-              <Link href="https://www.tomtom.com/" target="_blank" rel="noopener noreferrer">
-                TomTom International BV
-              </Link>
-              .
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Ortsfotos"
+          rows={[
+            {
+              source: "Flickr (SmugMug)",
+              desc: "CC-lizenzierte Ortsfotos (nur CC-Bilder angezeigt)",
+              license: "Verschiedene CC",
+              licenseUrl: "https://creativecommons.org/licenses/",
+              url: "https://www.flickr.com/",
+            },
+            {
+              source: "Wikimedia Commons",
+              desc: "Geo-getaggte, frei lizenzierte Bilder",
+              license: "Verschiedene freie Lizenzen",
+              url: "https://commons.wikimedia.org/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          &Ouml;ffentlicher Nahverkehr
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>Transitous</strong> &mdash; Offenes multimodales Routing, basierend auf MOTIS.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>TransitLand</strong> &mdash; Nahverkehrsdatenaggregation von{" "}
-              <Link href="https://www.transit.land/" target="_blank" rel="noopener noreferrer">
-                Interline Technologies
-              </Link>
-              .
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>transport.rest</strong> &mdash; Deutsche Nahverkehrs-APIs von Jannis R,
-              verf&uuml;gbar unter ISC-Lizenz.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>iRail</strong> &mdash; Belgische Bahndaten, Open Source.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>transport.opendata.ch</strong> &mdash; Schweizer &ouml;ffentliche
-              Verkehrsdaten.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>TfL</strong> &mdash; Erm&ouml;glicht durch TfL Open Data. Enth&auml;lt
-              OS-Daten &copy; Crown Copyright und Datenbankrechte.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>MBTA</strong> &mdash; Daten bereitgestellt von der Massachusetts Bay
-              Transportation Authority.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>GTFS-Feeds</strong> &mdash; Verschiedene Verkehrsunternehmen. Siehe den{" "}
-              <Link
-                href="https://github.com/transitous/transitous"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Transitous-Katalog
-              </Link>{" "}
-              f&uuml;r einzelne Feed-Zuordnungen.
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Verkehr"
+          rows={[
+            {
+              source: "TomTom",
+              desc: "Verkehrsflussdaten \u00a9 TomTom International BV",
+              license: "Propriet\u00e4r",
+              url: "https://www.tomtom.com/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Luftqualit&auml;t
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>OpenAQ</strong> &mdash; Luftqualit&auml;tsdaten von der{" "}
-              <Link href="https://openaq.org/" target="_blank" rel="noopener noreferrer">
-                OpenAQ
-              </Link>
-              -Plattform, bezogen von staatlichen Messnetzen weltweit.
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="\u00d6ffentlicher Nahverkehr"
+          rows={[
+            {
+              source: "Transitous (MOTIS)",
+              desc: "Offenes multimodales Nahverkehrsrouting",
+              license: "MIT",
+              licenseUrl: "https://github.com/motis-project/motis/blob/master/LICENSE",
+              url: "https://transitous.org/",
+            },
+            {
+              source: "Deutsche Bahn RIS",
+              desc: "Bahndaten \u00a9 DB InfraGO AG / DB Fernverkehr AG",
+              license: "CC BY 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+              url: "https://developers.deutschebahn.com/",
+            },
+            {
+              source: "TransitLand",
+              desc: "Nahverkehrsdatenaggregation von Interline Technologies",
+              license: "Verschiedene je Feed",
+              url: "https://www.transit.land/",
+            },
+            {
+              source: "TfL",
+              desc: "TfL Open Data; enth\u00e4lt OS-Daten \u00a9 Crown Copyright",
+              license: "OGL v3.0",
+              licenseUrl:
+                "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+              url: "https://tfl.gov.uk/",
+            },
+            {
+              source: "MBTA",
+              desc: "Massachusetts Bay Transportation Authority",
+              license: "MassDOT Open Data",
+              url: "https://www.mbta.com/",
+            },
+            {
+              source: "iRail",
+              desc: "Belgische Bahndaten (Open Knowledge Belgium)",
+              license: "Offene Daten",
+              url: "https://docs.irail.be/",
+            },
+            {
+              source: "transport.opendata.ch",
+              desc: "Schweizer \u00f6ffentliche Verkehrsdaten",
+              license: "Offene Daten",
+              url: "https://transport.opendata.ch/",
+            },
+            {
+              source: "GTFS-Feeds",
+              desc: "Verschiedene Verkehrsunternehmen via Transitous-Katalog",
+              license: "Verschiedene je Feed",
+              url: "https://github.com/transitous/transitous",
+            },
+            {
+              source: "Dynamische Nahverkehrsanbieter",
+              desc: "~85 regionale APIs via offenem Verzeichnis",
+              license: "Verschiedene je Anbieter",
+              url: "https://github.com/public-transport/transport-apis",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          E-Ladestationen
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>OpenChargeMap</strong> &mdash; E-Ladedaten von{" "}
-              <Link href="https://openchargemap.org/" target="_blank" rel="noopener noreferrer">
-                OpenChargeMap
-              </Link>
-              , verf&uuml;gbar unter CC-BY-SA.
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Luftqualit\u00e4t und Naturkatastrophen"
+          rows={[
+            {
+              source: "OpenAQ",
+              desc: "Luftqualit\u00e4tsmessungen staatlicher Messnetze weltweit",
+              license: "CC BY 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+              url: "https://openaq.org/",
+            },
+            {
+              source: "NASA FIRMS",
+              desc: "Waldbrand-/Hotspot-Erkennungen (VIIRS, MODIS)",
+              license: "Public Domain (US Gov)",
+              url: "https://firms.modaps.eosdis.nasa.gov/",
+            },
+            {
+              source: "USGS",
+              desc: "Erdbebenstandorte, Magnituden und Tiefen",
+              license: "Public Domain (US Gov)",
+              url: "https://earthquake.usgs.gov/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Kraftstoffpreise
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>Tankerkoenig</strong> &mdash; Deutsche Kraftstoffpreisdaten unter CC BY 4.0,
-              basierend auf Daten der Markttransparenzstelle f&uuml;r Kraftstoffe (MTS-K).
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>Staatliche Open Data</strong> &mdash; Franz&ouml;sische, spanische und
-              &ouml;sterreichische Kraftstoffpreise aus offiziellen staatlichen Datenportalen.
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Wandern und Outdoor"
+          rows={[
+            {
+              source: "Waymarked Trails",
+              desc: "Wander- und Radweg-Daten und Overlay-Kacheln",
+              license: "ODbL (OSM-Daten)",
+              licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+              url: "https://waymarkedtrails.org/",
+            },
+            {
+              source: "Refuges.info",
+              desc: "Bergh\u00fctten und Schutzh\u00e4user (Community-Datenbank)",
+              license: "CC BY-SA 2.0",
+              licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
+              url: "https://www.refuges.info/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Geteilte Mobilit&auml;t
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>Citybikes</strong> &mdash; Globale Bike-Sharing-Daten via{" "}
-              <Link href="https://citybik.es/" target="_blank" rel="noopener noreferrer">
-                citybik.es
-              </Link>
-              .
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>Deutsche Bahn</strong> &mdash; Geteilte Mobilit&auml;tsdaten via DB Open Data.
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>Nextbike, Cambio, Donkey Republic, Felyx, Link, GO Sharing</strong> &mdash;
-              Fahrzeugverf&uuml;gbarkeitsdaten der jeweiligen Betreiber.
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="E-Ladestationen, Kraftstoffpreise und Parken"
+          rows={[
+            {
+              source: "OpenChargeMap",
+              desc: "E-Ladestationen: Standorte und Details",
+              license: "CC BY-SA 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+              url: "https://openchargemap.org/",
+            },
+            {
+              source: "Tankerkoenig (MTS-K)",
+              desc: "Deutsche Tankstellenpreise",
+              license: "CC BY 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+              url: "https://creativecommons.tankerkoenig.de/",
+            },
+            {
+              source: "E-Control",
+              desc: "\u00d6sterreichische Kraftstoffpreise",
+              license: "\u00d6ffentliche Daten",
+              url: "https://www.e-control.at/",
+            },
+            {
+              source: "Franz\u00f6sische Regierung",
+              desc: "Franz\u00f6sische Kraftstoffpreise",
+              license: "Licence Ouverte v2.0",
+              licenseUrl: "https://github.com/etalab/licence-ouverte/blob/master/LO.md",
+              url: "https://www.prix-carburants.gouv.fr/",
+            },
+            {
+              source: "Spanische Regierung",
+              desc: "Spanische Kraftstoffpreise",
+              license: "Staatliche Open Data",
+              url: "https://datos.gob.es/",
+            },
+            {
+              source: "DB BahnPark",
+              desc: "Parken an deutschen Bahnh\u00f6fen",
+              license: "CC BY 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+              url: "https://www.dbbahnpark.de/",
+            },
+            {
+              source: "ParkAPI / ParkenDD",
+              desc: "Verf\u00fcgbarkeit \u00f6ffentlicher Parkpl\u00e4tze",
+              license: "Verschiedene",
+              url: "https://parkendd.de/",
+            },
+            {
+              source: "MobiData BW",
+              desc: "Parkdaten (Baden-W\u00fcrttemberg)",
+              license: "CC BY 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+              url: "https://mobidata-bw.de/",
+            },
+          ]}
+        />
 
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
-          Ortsinformationen
-        </Typography>
-        <ul>
-          <li>
-            <Typography>
-              <strong>Wikidata</strong> &mdash; Strukturierte Daten unter{" "}
-              <Link
-                href="https://creativecommons.org/publicdomain/zero/1.0/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                CC0
-              </Link>
-              .
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>Wikipedia</strong> &mdash; Artikelzusammenfassungen unter{" "}
-              <Link
-                href="https://creativecommons.org/licenses/by-sa/4.0/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                CC BY-SA 4.0
-              </Link>
-              .
-            </Typography>
-          </li>
-          <li>
-            <Typography>
-              <strong>Wikimedia Commons</strong> &mdash; Bilder unter ihren jeweiligen freien
-              Lizenzen.
-            </Typography>
-          </li>
-        </ul>
+        <AttributionTable
+          heading="Geteilte Mobilit\u00e4t"
+          rows={[
+            {
+              source: "Deutsche Bahn GBFS",
+              desc: "Call-a-Bike / StadtRad",
+              license: "CC BY 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+              url: "https://data.deutschebahn.com/",
+            },
+            {
+              source: "Citybikes API",
+              desc: "Globale Bike-Sharing-Daten",
+              license: "Eigene Nutzungsbed.",
+              url: "https://citybik.es/",
+            },
+            {
+              source: "Nextbike",
+              desc: "Bike-Sharing-Standorte",
+              license: "Propriet\u00e4r",
+              url: "https://www.nextbike.net/",
+            },
+            {
+              source: "Cambio CarSharing",
+              desc: "Carsharing-Verf\u00fcgbarkeit",
+              license: "ODbL",
+              licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+              url: "https://www.cambio-carsharing.de/",
+            },
+            {
+              source: "Donkey Republic",
+              desc: "Bike-Sharing-Stationen",
+              license: "Propriet\u00e4r",
+              url: "https://www.donkey.bike/",
+            },
+            {
+              source: "Felyx",
+              desc: "E-Moped-Sharing",
+              license: "Propriet\u00e4r",
+              url: "https://www.felyx.com/",
+            },
+            {
+              source: "GO Sharing",
+              desc: "E-Scooter- und E-Bike-Sharing",
+              license: "Propriet\u00e4r",
+              url: "https://go-sharing.com/",
+            },
+            {
+              source: "Link (Superpedestrian)",
+              desc: "E-Scooter-Sharing",
+              license: "Propriet\u00e4r",
+              url: "https://www.linkyour.city/",
+            },
+            {
+              source: "Stadtteilauto (M\u00fcnster)",
+              desc: "Regionales Carsharing",
+              license: "dl-de/by-2-0",
+              licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+              url: "https://www.stadtteilauto.com/",
+            },
+            {
+              source: "GBFS-Katalog (MobilityData)",
+              desc: "Verzeichnis geteilter Mobilit\u00e4tssysteme",
+              license: "MobilityData-Lizenz",
+              url: "https://mobilitydata.org/",
+            },
+          ]}
+        />
+
+        <AttributionTable
+          heading="Ortsinformationen"
+          rows={[
+            {
+              source: "Wikidata",
+              desc: "Strukturierte Fakten (Einwohnerzahl, Daten usw.)",
+              license: "CC0 1.0",
+              licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+              url: "https://www.wikidata.org/",
+            },
+            {
+              source: "Wikipedia",
+              desc: "Artikelzusammenfassungen und Vorschaubilder",
+              license: "CC BY-SA 4.0",
+              licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+              url: "https://www.wikipedia.org/",
+            },
+            {
+              source: "Wikimedia Commons",
+              desc: "Bilder und Metadaten",
+              license: "Verschiedene freie Lizenzen",
+              url: "https://commons.wikimedia.org/",
+            },
+          ]}
+        />
       </Section>
 
       <Section title="11. Drittanbieter-Bedingungen">
@@ -505,20 +689,13 @@ export default function TermsContentDe() {
           Ihre Nutzung der &uuml;ber OpenMapX angezeigten Daten kann den Nutzungsbedingungen der
           jeweiligen oben aufgef&uuml;hrten Drittanbieter-Datenquellen unterliegen. Durch die
           Nutzung von Funktionen, die von diesen Anbietern bereitgestellt werden, stimmen Sie auch
-          deren Nutzungsbedingungen zu, soweit anwendbar.
+          deren Nutzungsbedingungen zu, soweit anwendbar. Insbesondere sind aus OpenStreetMap
+          stammende Daten unter der ODbL verf&uuml;gbar, die Namensnennung und Share-Alike f&uuml;r
+          abgeleitete Datenbanken erfordert.
         </Typography>
       </Section>
 
-      <Section title="12. Freistellung">
-        <Typography>
-          Sie erkl&auml;ren sich bereit, den Betreiber von allen Anspr&uuml;chen, Verlusten,
-          Sch&auml;den, Verbindlichkeiten und Kosten (einschlie&szlig;lich angemessener
-          Anwaltskosten) freizustellen, die aus Ihrem Versto&szlig; gegen diese Bedingungen oder
-          Ihrem Missbrauch des Dienstes resultieren.
-        </Typography>
-      </Section>
-
-      <Section title="13. Salvatorische Klausel">
+      <Section title="12. Salvatorische Klausel">
         <Typography>
           Sollte eine Bestimmung dieser Bedingungen f&uuml;r unwirksam oder undurchsetzbar befunden
           werden, bleiben die &uuml;brigen Bestimmungen in vollem Umfang g&uuml;ltig und wirksam.
@@ -527,7 +704,7 @@ export default function TermsContentDe() {
         </Typography>
       </Section>
 
-      <Section title="14. Anwendbares Recht und Gerichtsstand">
+      <Section title="13. Anwendbares Recht und Gerichtsstand">
         <Typography>
           Diese Bedingungen unterliegen dem Recht der Bundesrepublik Deutschland unter Ausschluss
           des UN-Kaufrechts (CISG). Sind Sie Verbraucher innerhalb der EU, genie&szlig;en Sie
@@ -538,18 +715,29 @@ export default function TermsContentDe() {
         </Typography>
       </Section>
 
-      <Section title="15. &Auml;nderungen dieser Bedingungen">
+      <Section title="14. &Auml;nderungen dieser Bedingungen">
         <Typography>
           Wir behalten uns das Recht vor, diese Bedingungen jederzeit zu aktualisieren. Die aktuelle
-          Version ist stets unter <Link href="/terms">/terms</Link> verf&uuml;gbar. Die fortgesetzte
-          Nutzung des Dienstes nach &Auml;nderungen gilt als Annahme der ge&auml;nderten
-          Bedingungen.
+          Version ist stets unter <Link href="/terms">/terms</Link> verf&uuml;gbar. Wir werden
+          registrierte Nutzer &uuml;ber wesentliche &Auml;nderungen mindestens 30&nbsp;Tage vor
+          deren Inkrafttreten per E-Mail benachrichtigen. Wenn Sie mit den &Auml;nderungen nicht
+          einverstanden sind, k&ouml;nnen Sie die Nutzung des Dienstes einstellen und Ihr Konto vor
+          dem Inkrafttretungsdatum l&ouml;schen. Die fortgesetzte Nutzung des Dienstes nach dem
+          mitgeteilten Inkrafttretungsdatum gilt als Zustimmung zu den ge&auml;nderten Bedingungen.
+        </Typography>
+      </Section>
+
+      <Section title="15. Sprache">
+        <Typography>
+          Diese Bedingungen sind in deutscher und englischer Sprache verf&uuml;gbar. Bei
+          Abweichungen zwischen den beiden Fassungen hat die deutsche Fassung Vorrang.
         </Typography>
       </Section>
 
       <Section title="16. Kontakt">
         <Typography>
-          Wenn Sie Fragen zu diesen Bedingungen haben, kontaktieren Sie uns bitte unter {email}.
+          Wenn Sie Fragen zu diesen Bedingungen haben, kontaktieren Sie uns bitte unter{" "}
+          <Link href={`mailto:${email}`}>{email}</Link>.
         </Typography>
       </Section>
     </Box>
@@ -572,5 +760,59 @@ function Section({
       </Typography>
       {children}
     </Box>
+  );
+}
+
+interface AttributionRow {
+  source: string;
+  desc: string;
+  license: string;
+  licenseUrl?: string;
+  url?: string;
+}
+
+function AttributionTable({ heading, rows }: { heading: string; rows: AttributionRow[] }) {
+  return (
+    <>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
+        {heading}
+      </Typography>
+      <TableContainer sx={{ mb: 1 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 600 }}>Quelle</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Beschreibung</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>Lizenz</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.source}>
+                <TableCell>
+                  {row.url ? (
+                    <Link href={row.url} target="_blank" rel="noopener noreferrer">
+                      {row.source}
+                    </Link>
+                  ) : (
+                    row.source
+                  )}
+                </TableCell>
+                <TableCell>{row.desc}</TableCell>
+                <TableCell>
+                  {row.licenseUrl ? (
+                    <Link href={row.licenseUrl} target="_blank" rel="noopener noreferrer">
+                      {row.license}
+                    </Link>
+                  ) : (
+                    row.license
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </>
   );
 }

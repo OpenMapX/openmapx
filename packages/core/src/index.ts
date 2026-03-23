@@ -238,8 +238,12 @@ export {
   getInitials,
 } from "./utils/formatting";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
-export type { DaySchedule, OpeningHoursStatus } from "./utils/openingHours";
-export { isOpenAt, parseOpeningHours } from "./utils/openingHours";
+export type {
+  DaySchedule,
+  LocationContext,
+  OpeningHoursStatus,
+} from "./utils/openingHours";
+export { isAlwaysOpen, isOpenAt, parseOpeningHours } from "./utils/openingHours";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,

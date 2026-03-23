@@ -1,6 +1,8 @@
 import type { OverpassResponse } from "./types";
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_URL = process.env.OVERPASS_URL
+  ? `${process.env.OVERPASS_URL.replace(/\/$/, "")}/api/interpreter`
+  : "https://overpass-api.de/api/interpreter";
 const USER_AGENT = "OpenMapX/1.0 (+https://openmapx.org)";
 
 export class OverpassRateLimitError extends Error {

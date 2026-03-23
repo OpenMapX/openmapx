@@ -37,7 +37,7 @@ export function SidebarCollapseToggle({ collapsed, onToggle, zIndex = 9 }: Props
           width: 20,
           height: 48,
           padding: 0,
-          "&:hover": { bgcolor: "action.hover" },
+          "&:hover": { filter: "brightness(0.92)" },
         }}
         aria-label={collapsed ? t("showSidebar") : t("hideSidebar")}
       >

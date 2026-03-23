@@ -104,8 +104,10 @@ describe("GET /directions", () => {
     });
 
     expect(mockOsrmRoute).toHaveBeenCalledWith(
-      [13.37, 52.52],
-      [9.99, 53.55],
+      [
+        [13.37, 52.52],
+        [9.99, 53.55],
+      ],
       expect.objectContaining({
         avoidHighways: false,
         avoidTolls: false,
@@ -137,8 +139,10 @@ describe("GET /directions", () => {
     });
 
     expect(mockValhallaRoute).toHaveBeenCalledWith(
-      [13.37, 52.52],
-      [9.99, 53.55],
+      [
+        [13.37, 52.52],
+        [9.99, 53.55],
+      ],
       "walking",
       expect.objectContaining({ units: "metric" }),
       undefined,
@@ -155,8 +159,10 @@ describe("GET /directions", () => {
     });
 
     expect(mockValhallaRoute).toHaveBeenCalledWith(
-      [13.37, 52.52],
-      [9.99, 53.55],
+      [
+        [13.37, 52.52],
+        [9.99, 53.55],
+      ],
       "cycling",
       expect.objectContaining({ units: "metric" }),
       undefined,
@@ -239,7 +245,6 @@ describe("GET /directions", () => {
 
     expect(mockOsrmRoute).toHaveBeenCalledWith(
       expect.anything(),
-      expect.anything(),
       expect.objectContaining({
         avoidHighways: true,
         avoidTolls: true,
@@ -257,7 +262,6 @@ describe("GET /directions", () => {
     });
 
     expect(mockValhallaRoute).toHaveBeenCalledWith(
-      expect.anything(),
       expect.anything(),
       "walking",
       expect.anything(),

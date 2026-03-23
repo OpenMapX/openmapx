@@ -1,6 +1,20 @@
 import type { OpeningHoursFilter } from "../stores/openingHoursStore";
 import type { CategoryPlace } from "../types/category";
-import { isOpenAt, parseOpeningHours } from "./openingHours";
+import { isAlwaysOpen, isOpenAt, parseOpeningHours } from "./openingHours";
+
+/** Builds a Date for a specific day index (0=Sun) and hour in the current week. */
+function buildDateForDayHour(dayIdx: number | null, hour: number | null): Date {
+  const now = new Date();
+  if (dayIdx !== null) {
+    const todayIdx = now.getDay();
+    const diff = (dayIdx - todayIdx + 7) % 7;
+    now.setDate(now.getDate() + diff);
+  }
+  if (hour !== null) {
+    now.setHours(hour, 0, 0, 0);
+  }
+  return now;
+}
 
 /** Filters category search results by the active opening-hours filter. */
 export function applyHoursFilter(
@@ -10,7 +24,7 @@ export function applyHoursFilter(
   openAtHour: number | null,
 ): CategoryPlace[] {
   if (filter === "any") return results;
-  if (filter === "open_24h") return results.filter((p) => p.openingHours === "24/7");
+  if (filter === "open_24h") return results.filter((p) => isAlwaysOpen(p.openingHours));
   if (filter === "open_now")
     return results.filter((p) => {
       if (p.isOpen !== undefined) return p.isOpen;
@@ -18,7 +32,8 @@ export function applyHoursFilter(
     });
   if (filter === "open_at") {
     if (openAtDay === null && openAtHour === null) return results;
-    return results.filter((p) => isOpenAt(p.openingHours, openAtDay, openAtHour));
+    const date = buildDateForDayHour(openAtDay, openAtHour);
+    return results.filter((p) => isOpenAt(p.openingHours, date));
   }
   return results;
 }

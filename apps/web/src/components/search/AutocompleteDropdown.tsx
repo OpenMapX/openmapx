@@ -88,7 +88,7 @@ export function AutocompleteDropdown({
     <List dense disablePadding>
       {suggestions.map((s, i) => (
         <li
-          key={`${s.id}-${s.label}`}
+          key={`${s.id}-${s.type}-${s.sublabel ?? i}`}
           ref={i === highlightedIndex ? activeRef : undefined}
           style={{ listStyle: "none" }}
         >

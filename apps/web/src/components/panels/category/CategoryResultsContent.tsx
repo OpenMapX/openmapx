@@ -171,7 +171,10 @@ function CategoryPlaceCard({
       </Box>
 
       {(() => {
-        const hours = parseOpeningHours(place.openingHours);
+        const hours = parseOpeningHours(place.openingHours, {
+          lat: place.coordinates[1],
+          lon: place.coordinates[0],
+        });
         if (hours) {
           return (
             <Typography variant="caption" color={hours.isOpen ? "success.main" : "error.main"}>
