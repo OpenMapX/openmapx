@@ -220,7 +220,7 @@ services:
     restart: unless-stopped
 
   otp:
-    image: opentripplanner/opentripplanner:2.7_2025-04-24T13-13
+    image: opentripplanner/opentripplanner:latest
     ports: ["127.0.0.1:8090:8080"]
     volumes:
       - ./data/otp:/var/opentripplanner
@@ -462,7 +462,7 @@ services:
         osrm-customize /data/region.osrm
 
   otp-build:
-    image: opentripplanner/opentripplanner:2.7_2025-04-24T13-13
+    image: opentripplanner/opentripplanner:latest
     volumes:
       - ./data/otp:/var/opentripplanner
       - ./services/otp/build-config.json:/var/opentripplanner/build-config.json:ro
