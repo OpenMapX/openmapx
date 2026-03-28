@@ -171,7 +171,7 @@ services:
   # OSRM: region-only alternative (~4 GB RAM for single country)
 
   valhalla:
-    image: ghcr.io/gis-ops/valhalla:latest
+    image: ghcr.io/valhalla/valhalla-scripted:latest
     ports: ["127.0.0.1:8002:8002"]
     volumes:
       - ./data/valhalla:/custom_files
@@ -181,7 +181,7 @@ services:
       build_elevation: "True"
       build_admins: "True"
       build_time_zones: "True"
-      use_tiles_ignore_no_data: "True"
+      use_tiles_ignore_pbf: "False"
     profiles: [routing]
     networks: [openmapx]
     deploy:

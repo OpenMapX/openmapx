@@ -674,10 +674,15 @@ build_valhalla() {
     log "Building Valhalla routing tiles..."
   fi
 
-  docker compose -f "$COMPOSE_FILE" \
-    run --rm --no-deps valhalla \
-    valhalla_build_tiles -c /custom_files/valhalla.json /custom_files/*.osm.pbf
-  ok "Valhalla build complete"
+  log "Valhalla auto-builds tiles on startup when PBF files are present."
+  log "Starting the container (set use_tiles_ignore_pbf=False to force rebuild)..."
+  if ! docker compose -f "$COMPOSE_FILE" --profile routing up -d valhalla; then
+    err "Failed to start Valhalla container"
+    return 1
+  fi
+  log "Valhalla is building in the background."
+  log "Monitor progress with: docker compose logs -f valhalla"
+  ok "Valhalla container started (building tiles)"
 }
 
 build_osrm() {
@@ -693,7 +698,10 @@ build_osrm() {
   fi
 
   log "Building OSRM routing data..."
-  docker compose -f "$COMPOSE_FILE" run --rm osrm-build
+  if ! docker compose -f "$COMPOSE_FILE" run --rm osrm-build; then
+    err "OSRM build failed"
+    return 1
+  fi
   ok "OSRM build complete"
 }
 
@@ -714,7 +722,10 @@ build_otp() {
   fi
 
   log "Building OTP transit graph..."
-  docker compose -f "$COMPOSE_FILE" run --rm otp-build
+  if ! docker compose -f "$COMPOSE_FILE" run --rm otp-build; then
+    err "OTP build failed"
+    return 1
+  fi
   ok "OTP build complete"
 }
 
@@ -750,7 +761,7 @@ build_tiles() {
     log "Generating vector tiles with Planetiler..."
   fi
 
-  docker run --rm \
+  if ! docker run --rm \
     -e JAVA_TOOL_OPTIONS="-Xmx30g" \
     -v "${DATA_DIR}/osm:/osm:ro" \
     -v "${DATA_DIR}/tileserver:/output" \
@@ -758,7 +769,10 @@ build_tiles() {
     --osm-path="/osm/${pbf_name}" \
     --output="/output/tiles.mbtiles" \
     --nodemap-type=array \
-    --force
+    --force; then
+    err "Tile generation failed"
+    return 1
+  fi
   ok "Tile generation complete: data/tileserver/tiles.mbtiles"
 }
 
@@ -774,7 +788,10 @@ build_pelias() {
 
   # Start Elasticsearch
   log "Starting Elasticsearch..."
-  docker compose -f "$COMPOSE_FILE" --profile pelias up -d elasticsearch
+  if ! docker compose -f "$COMPOSE_FILE" --profile pelias up -d elasticsearch; then
+    err "Failed to start Elasticsearch"
+    return 1
+  fi
   log "Waiting for Elasticsearch to be ready..."
   local retries=0
   while ! docker compose -f "$COMPOSE_FILE" exec elasticsearch curl -fs http://localhost:9200/_cluster/health &>/dev/null; do
@@ -789,22 +806,34 @@ build_pelias() {
 
   # Create schema
   log "Creating Pelias schema..."
-  docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-schema
+  if ! docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-schema; then
+    err "Pelias schema creation failed"
+    return 1
+  fi
   ok "Schema created"
 
   # Download and import Who's on First
   log "Downloading and importing Who's on First administrative data..."
-  docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-whosonfirst-import
+  if ! docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-whosonfirst-import; then
+    err "Who's on First import failed"
+    return 1
+  fi
   ok "Who's on First import complete"
 
   # Import OpenStreetMap
   log "Importing OpenStreetMap data..."
-  docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-openstreetmap-import
+  if ! docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-openstreetmap-import; then
+    err "OpenStreetMap import failed"
+    return 1
+  fi
   ok "OpenStreetMap import complete"
 
   # Build placeholder
   log "Building placeholder (coarse geocoding) data..."
-  docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-placeholder-build
+  if ! docker compose -f "$COMPOSE_FILE" --profile build run --rm pelias-placeholder-build; then
+    err "Placeholder build failed"
+    return 1
+  fi
   ok "Placeholder build complete"
 
   ok "Pelias geocoding index built. Start with: docker compose --profile pelias up -d"
@@ -825,7 +854,10 @@ build_nominatim() {
   fi
 
   log "Nominatim auto-imports on first start. Starting the container..."
-  docker compose -f "$COMPOSE_FILE" --profile nominatim up -d nominatim
+  if ! docker compose -f "$COMPOSE_FILE" --profile nominatim up -d nominatim; then
+    err "Failed to start Nominatim container"
+    return 1
+  fi
   log "Nominatim is importing in the background."
   log "Monitor progress with: docker compose logs -f nominatim"
   log "Import is complete when you see 'Using project directory: /nominatim'"
@@ -840,7 +872,10 @@ build_photon() {
   log "  This can take several hours depending on bandwidth."
   log "  Subsequent starts use the cached index."
 
-  docker compose -f "$COMPOSE_FILE" --profile photon up -d photon
+  if ! docker compose -f "$COMPOSE_FILE" --profile photon up -d photon; then
+    err "Failed to start Photon container"
+    return 1
+  fi
   log "Photon is downloading its index in the background."
   log "Monitor progress with: docker compose logs -f photon"
   ok "Photon container started"
@@ -860,7 +895,10 @@ build_overpass() {
   fi
 
   log "Overpass auto-imports on first start. Starting the container..."
-  docker compose -f "$COMPOSE_FILE" --profile overpass up -d overpass
+  if ! docker compose -f "$COMPOSE_FILE" --profile overpass up -d overpass; then
+    err "Failed to start Overpass container"
+    return 1
+  fi
   log "Overpass is importing in the background."
   log "Monitor progress with: docker compose logs -f overpass"
   ok "Overpass container started (importing)"
