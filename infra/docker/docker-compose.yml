@@ -175,7 +175,7 @@ services:
     ports: ["127.0.0.1:8002:8002"]
     volumes:
       - ./data/valhalla:/custom_files
-      - ./services/valhalla/valhalla.json:/custom_files/valhalla.json:ro
+      - ./services/valhalla/valhalla.json:/custom_files/valhalla.json
     environment:
       serve_tiles: "True"
       build_elevation: "True"
