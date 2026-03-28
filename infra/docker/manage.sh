@@ -766,6 +766,7 @@ build_tiles() {
     -v "${DATA_DIR}/osm:/osm:ro" \
     -v "${DATA_DIR}/tileserver:/output" \
     ghcr.io/onthegomap/planetiler:latest \
+    --download \
     --osm-path="/osm/${pbf_name}" \
     --output="/output/tiles.mbtiles" \
     --nodemap-type=array \
