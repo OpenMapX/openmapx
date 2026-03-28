@@ -22,6 +22,24 @@ fi
 REGION="${REGION:-planet}"
 GEOFABRIK_BASE="https://download.geofabrik.de"
 PLANET_URL="https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf"
+_GITHUB_SSH=""
+github_url() {
+  # Convert a GitHub HTTPS URL to SSH if the server has SSH access
+  local url="$1"
+  if [ -z "$_GITHUB_SSH" ]; then
+    if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -T git@github.com 2>&1 | grep -qi "successfully authenticated"; then
+      _GITHUB_SSH=yes
+    else
+      _GITHUB_SSH=no
+    fi
+  fi
+  if [ "$_GITHUB_SSH" = "yes" ]; then
+    echo "$url" | sed 's|https://github.com/|git@github.com:|'
+  else
+    echo "$url"
+  fi
+}
+
 TRANSITOUS_REPO="https://github.com/transitous/transitous.git"
 MAX_CONCURRENT_DOWNLOADS="${MAX_CONCURRENT_DOWNLOADS:-5}"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
@@ -47,6 +65,15 @@ require_cmd() {
       exit 1
     fi
   done
+}
+
+# Hardlink $1 -> $2, skipping if already the same inode
+safe_link() {
+  local src="$1" dest="$2"
+  if [ -f "$dest" ] && [ "$(stat -c%i "$src" 2>/dev/null || stat -f%i "$src")" = "$(stat -c%i "$dest" 2>/dev/null || stat -f%i "$dest")" ]; then
+    return 0
+  fi
+  ln -f "$src" "$dest"
 }
 
 ensure_dirs() {
@@ -193,7 +220,7 @@ cmd_download_all_feeds() {
   else
     log "Cloning Transitous feed catalog (one-time, ~50 MB)..."
     rm -rf "$catalog_dir"
-    git clone --depth 1 -q "$TRANSITOUS_REPO" "$catalog_dir"
+    git clone --depth 1 -q "$(github_url "$TRANSITOUS_REPO")" "$catalog_dir"
   fi
 
   # Parse all feed files and extract GTFS HTTP URLs
@@ -339,7 +366,7 @@ cmd_download_style() {
 
     if ! command -v node &>/dev/null; then
       warn "Node.js not found. Downloading pre-built font glyphs instead..."
-      local fonts_url="https://github.com/openmaptiles/fonts/releases/download/v3.0/v3.0.zip"
+      local fonts_url="https://github.com/openmaptiles/fonts/releases/download/v2.0/v2.0.zip"
       local fonts_tmp="${DATA_DIR}/.fonts-tmp.zip"
       if curl -fSL --progress-bar -o "$fonts_tmp" "$fonts_url" 2>/dev/null; then
         unzip -qo "$fonts_tmp" -d "$fonts_dir"
@@ -352,7 +379,7 @@ cmd_download_style() {
     else
       local font_build_dir="${DATA_DIR}/.font-build"
       rm -rf "$font_build_dir"
-      git clone --depth 1 -q https://github.com/openmaptiles/fonts.git "$font_build_dir"
+      git clone --depth 1 -q "$(github_url "https://github.com/openmaptiles/fonts.git")" "$font_build_dir"
       (cd "$font_build_dir" && npm install --silent && node generate.js)
       cp -r "${font_build_dir}/_output/"* "$fonts_dir/"
       rm -rf "$font_build_dir"
@@ -475,23 +502,23 @@ cmd_link() {
     fi
 
     # Valhalla — handles planet well (~16 GB RAM, ~8h build)
-    ln -f "$pbf" "${DATA_DIR}/valhalla/${pbf_name}" && ok "  -> valhalla/${pbf_name}"
+    safe_link "$pbf" "${DATA_DIR}/valhalla/${pbf_name}" && ok "  -> valhalla/${pbf_name}"
     linked=$((linked + 1))
 
     # MOTIS — optional OSM for street routing
-    ln -f "$pbf" "${DATA_DIR}/motis/${pbf_name}" && ok "  -> motis/${pbf_name}"
+    safe_link "$pbf" "${DATA_DIR}/motis/${pbf_name}" && ok "  -> motis/${pbf_name}"
     linked=$((linked + 1))
 
     # Pelias — for geocoding import
-    ln -f "$pbf" "${DATA_DIR}/pelias/openstreetmap/data.osm.pbf" && ok "  -> pelias/openstreetmap/data.osm.pbf"
+    safe_link "$pbf" "${DATA_DIR}/pelias/openstreetmap/data.osm.pbf" && ok "  -> pelias/openstreetmap/data.osm.pbf"
     linked=$((linked + 1))
 
     # Nominatim — for geocoding import
-    ln -f "$pbf" "${DATA_DIR}/nominatim/data.osm.pbf" && ok "  -> nominatim/data.osm.pbf"
+    safe_link "$pbf" "${DATA_DIR}/nominatim/data.osm.pbf" && ok "  -> nominatim/data.osm.pbf"
     linked=$((linked + 1))
 
     # Overpass — for OSM query service
-    ln -f "$pbf" "${DATA_DIR}/overpass/osm/data.osm.pbf" && ok "  -> overpass/osm/data.osm.pbf"
+    safe_link "$pbf" "${DATA_DIR}/overpass/osm/data.osm.pbf" && ok "  -> overpass/osm/data.osm.pbf"
     linked=$((linked + 1))
 
     if [ "$planet" = true ]; then
@@ -499,11 +526,11 @@ cmd_link() {
       warn "Skipping OTP link (planet PBF too large for OTP — use MOTIS instead)"
     else
       # OSRM — region-scale only
-      ln -f "$pbf" "${DATA_DIR}/osrm/region.osm.pbf" && ok "  -> osrm/region.osm.pbf"
+      safe_link "$pbf" "${DATA_DIR}/osrm/region.osm.pbf" && ok "  -> osrm/region.osm.pbf"
       linked=$((linked + 1))
 
       # OTP — region-scale only
-      ln -f "$pbf" "${DATA_DIR}/otp/${pbf_name}" && ok "  -> otp/${pbf_name}"
+      safe_link "$pbf" "${DATA_DIR}/otp/${pbf_name}" && ok "  -> otp/${pbf_name}"
       linked=$((linked + 1))
     fi
   else
@@ -517,11 +544,11 @@ cmd_link() {
     local feed_name
     feed_name=$(basename "$feed")
 
-    ln -f "$feed" "${DATA_DIR}/motis/${feed_name}"
+    safe_link "$feed" "${DATA_DIR}/motis/${feed_name}"
     linked=$((linked + 1))
 
     if [ "$planet" = false ]; then
-      ln -f "$feed" "${DATA_DIR}/otp/${feed_name}"
+      safe_link "$feed" "${DATA_DIR}/otp/${feed_name}"
       linked=$((linked + 1))
     fi
 
