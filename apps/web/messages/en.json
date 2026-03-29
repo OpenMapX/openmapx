@@ -555,7 +555,8 @@
     "passkeySignInFailed": "Passkey sign-in failed",
     "passkeyAuthFailed": "Passkey authentication failed",
     "oauthSignInFailed": "{provider} sign-in failed",
-    "togglePasswordVisibility": "Toggle password visibility"
+    "togglePasswordVisibility": "Toggle password visibility",
+    "checkYourEmail": "Check your email to verify your account before signing in."
   },
   "legal": {
     "legal": "Legal",

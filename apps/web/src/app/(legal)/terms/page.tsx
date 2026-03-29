@@ -1,7 +1,7 @@
+import { sectionSlug } from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
-import { sectionSlug } from "@/lib/sectionSlug";
 
 const sectionsEn: LegalSection[] = [
   { id: sectionSlug("1. Scope and Provider"), label: "Scope and Provider" },
@@ -82,6 +82,19 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
+async function fetchTransitAttribution(): Promise<unknown[]> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+  try {
+    const res = await fetch(`${apiUrl}/api/transit/attribution`, {
+      next: { revalidate: 86400 },
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 export default async function TermsPage() {
   const locale = await getLocale();
   const sections = locale === "de" ? sectionsDe : sectionsEn;
@@ -90,9 +103,11 @@ export default async function TermsPage() {
       ? (await import("./content.de")).default
       : (await import("./content.en")).default;
 
+  const transitAttribution = await fetchTransitAttribution();
+
   return (
     <LegalPageShell sections={sections}>
-      <Content />
+      <Content transitAttribution={transitAttribution} />
     </LegalPageShell>
   );
 }

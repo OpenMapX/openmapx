@@ -19,6 +19,7 @@ import Typography from "@mui/material/Typography";
 import type { MergedDeparture, Place, TripItinerary, TripLeg } from "@openmapx/core";
 import {
   formatDuration,
+  geocodeStopAsPlace,
   PANEL,
   resolveProvider,
   usePlaceStore,
@@ -38,7 +39,6 @@ import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
-import { geocodeStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 

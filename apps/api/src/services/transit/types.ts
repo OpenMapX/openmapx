@@ -60,6 +60,8 @@ export interface Departure {
   canceled?: boolean;
   occupancy?: OccupancyLevel;
   remarks?: TripRemark[];
+  /** GTFS feed tag extracted from MOTIS source field (e.g. "de_DELFI"). */
+  feedTag?: string;
 }
 
 export interface TripLeg {
@@ -82,6 +84,8 @@ export interface TripLeg {
   effectiveFareLegIndex?: number;
   /** Occupancy level for this transit leg (e.g. from RIS::Transports or FPTF). */
   occupancy?: OccupancyLevel;
+  /** GTFS feed tag extracted from MOTIS source field (e.g. "de_DELFI"). */
+  feedTag?: string;
 }
 
 export interface TripItinerary {

@@ -44,6 +44,20 @@ export function rawId(instance: MotisInstance, stopId: string): string {
   return stopId.startsWith(instance.prefix) ? stopId.slice(instance.prefix.length) : stopId;
 }
 
+/**
+ * Extract the GTFS feed tag from a MOTIS `source` field.
+ * Format: "de_DELFI.gtfs.zip/stop_times.txt:123:456" → "de_DELFI"
+ * Returns undefined if the source field is missing or unparseable.
+ */
+export function feedTagFromSource(source: string | undefined): string | undefined {
+  if (!source) return undefined;
+  const dotIdx = source.indexOf(".gtfs.zip");
+  if (dotIdx > 0) return source.slice(0, dotIdx);
+  const slashIdx = source.indexOf("/");
+  if (slashIdx > 0) return source.slice(0, slashIdx).replace(/\.\w+$/, "");
+  return undefined;
+}
+
 /** Convert a MOTIS Place to our TransitStop. */
 export function normalizeStop(instance: MotisInstance, place: Place): TransitStop {
   return {
@@ -172,6 +186,7 @@ export function normalizeStoptime(
     delaySeconds,
     platform,
     canceled: st.cancelled || st.tripCancelled || false,
+    feedTag: feedTagFromSource(st.source),
   };
 }
 
@@ -346,6 +361,7 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
       : undefined,
     fareTransferIndex: leg.fareTransferIndex,
     effectiveFareLegIndex: leg.effectiveFareLegIndex,
+    feedTag: isTransit ? feedTagFromSource(leg.source) : undefined,
   };
 }
 

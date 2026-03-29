@@ -35,6 +35,7 @@ import { registry } from "../services/transit/registry/index";
 import { STATIC_PROVIDER_ATTRIBUTION } from "../services/transit/static-providers";
 import type { BBox, TransportMode } from "../services/transit/types";
 import { hashKey, withCache } from "../utils/cache";
+import { getFeedProviders } from "./transit-attribution";
 
 interface BBoxQuery {
   sw_lat: string;
@@ -717,6 +718,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       { label: string; url: string; license?: string; licenseUrl?: string }
     > = {
       ...STATIC_PROVIDER_ATTRIBUTION,
+      ...getFeedProviders(),
     };
     for (const { slug, label, url } of registry.listProviders()) {
       if (!result[slug]) result[slug] = { label, url };

@@ -1,14 +1,14 @@
-// API
-export { ApiClient, apiClient } from "./api/client";
-export { API_ENDPOINTS } from "./api/endpoints";
+// Platform
 
+// API
+export { ApiClient, type ApiClientConfig, apiClient, configureApiClient } from "./api/client";
+export { API_ENDPOINTS } from "./api/endpoints";
 // Auth
 export type { Session, User } from "./auth/client";
-export { authClient } from "./auth/client";
+export { type AuthConfig, authClient, initAuth } from "./auth/client";
 export type { OAuthProviderMeta } from "./auth/oauth-providers";
 export { oauthProviders } from "./auth/oauth-providers";
 export { useSession } from "./auth/useSession";
-
 // Constants
 export type { ProviderAttribution } from "./constants/transit";
 export {
@@ -17,7 +17,6 @@ export {
   providerLabel,
   resolveProvider,
 } from "./constants/transit";
-
 // Hooks — Transit
 export {
   useArrivals,
@@ -102,6 +101,7 @@ export { PANEL } from "./panels/ids";
 export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
+export { configureStorage, getStorage, type StorageAdapter } from "./platform";
 // Stores
 export { useAirQualityStore } from "./stores/airQualityStore";
 export { useBuildingsStore } from "./stores/buildingsStore";
@@ -238,6 +238,12 @@ export {
   getInitials,
 } from "./utils/formatting";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
+export {
+  geocodeStopAsPlace,
+  makeSyntheticStopPlace,
+  resolveStopAsPlace,
+} from "./utils/geocodeStopAsPlace";
+export { formatAddress, legalConfig } from "./utils/legalConfig";
 export type {
   DaySchedule,
   LocationContext,
@@ -258,3 +264,4 @@ export {
   shortenPlusCode,
 } from "./utils/plusCode";
 export { resolvePoiIconPath } from "./utils/poi-icon";
+export { sectionSlug } from "./utils/sectionSlug";

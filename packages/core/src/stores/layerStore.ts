@@ -1,12 +1,12 @@
 import { create } from "zustand";
+import { getStorage } from "../platform/storage";
 
 export type MapLayer = "default" | "satellite" | "terrain" | "cycling";
 
 const GLOBE_STORAGE_KEY = "openmapx:globeView";
 
 function readGlobePreference(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(GLOBE_STORAGE_KEY) === "true";
+  return getStorage().getString(GLOBE_STORAGE_KEY) === "true";
 }
 
 interface LayerState {
@@ -21,9 +21,7 @@ export const useLayerStore = create<LayerState>((set) => ({
   setActiveLayer: (activeLayer) => set({ activeLayer }),
   globeView: readGlobePreference(),
   setGlobeView: (globeView) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(GLOBE_STORAGE_KEY, String(globeView));
-    }
+    getStorage().setString(GLOBE_STORAGE_KEY, String(globeView));
     set({ globeView });
   },
 }));

@@ -4,27 +4,45 @@
  * to Pelias / OSRM / Valhalla.
  */
 
-const DEFAULT_BASE_URL =
-  typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001")
-    : "http://localhost:3001";
+export interface ApiClientConfig {
+  baseUrl: string;
+  credentials?: RequestCredentials;
+  headerInterceptor?: () => Record<string, string>;
+}
+
+let _config: ApiClientConfig | null = null;
+
+export function configureApiClient(config: ApiClientConfig): void {
+  _config = config;
+}
+
+function getConfig(): ApiClientConfig {
+  if (!_config) {
+    return {
+      baseUrl:
+        typeof window !== "undefined"
+          ? (process.env.NEXT_PUBLIC_API_URL ??
+            process.env.EXPO_PUBLIC_API_URL ??
+            "http://localhost:3001")
+          : "http://localhost:3001",
+      credentials: "include",
+    };
+  }
+  return _config;
+}
 
 export class ApiClient {
-  private readonly baseUrl: string;
-  constructor(baseUrl: string = DEFAULT_BASE_URL) {
-    this.baseUrl = baseUrl;
-  }
-
   async get<T>(path: string, params?: Record<string, string>): Promise<T> {
-    const url = new URL(path, this.baseUrl);
+    const cfg = getConfig();
+    const url = new URL(path, cfg.baseUrl);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, value);
       }
     }
     const res = await fetch(url.toString(), {
-      headers: { Accept: "application/json" },
-      credentials: "include",
+      headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
+      credentials: cfg.credentials ?? "omit",
     });
     if (!res.ok) {
       throw new Error(`API error ${res.status}: ${await res.text()}`);
@@ -45,11 +63,12 @@ export class ApiClient {
   }
 
   async delete<T = void>(path: string): Promise<T> {
-    const url = new URL(path, this.baseUrl);
+    const cfg = getConfig();
+    const url = new URL(path, cfg.baseUrl);
     const res = await fetch(url.toString(), {
       method: "DELETE",
-      headers: { Accept: "application/json" },
-      credentials: "include",
+      headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
+      credentials: cfg.credentials ?? "omit",
     });
     if (!res.ok) {
       throw new Error(`API error ${res.status}: ${await res.text()}`);
@@ -59,11 +78,16 @@ export class ApiClient {
   }
 
   private async mutate<T>(method: string, path: string, body: unknown): Promise<T> {
-    const url = new URL(path, this.baseUrl);
+    const cfg = getConfig();
+    const url = new URL(path, cfg.baseUrl);
     const res = await fetch(url.toString(), {
       method,
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...cfg.headerInterceptor?.(),
+      },
+      credentials: cfg.credentials ?? "omit",
       body: JSON.stringify(body),
     });
     if (!res.ok) {

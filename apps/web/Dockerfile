@@ -20,15 +20,16 @@ COPY packages/core/ packages/core/
 COPY apps/web/ apps/web/
 COPY turbo.json ./
 
-ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_MAPTILER_KEY
-ARG NEXT_PUBLIC_MAPILLARY_TOKEN
-ARG NEXT_PUBLIC_MAP_STYLE_URL
-
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-ENV NEXT_PUBLIC_MAPTILER_KEY=${NEXT_PUBLIC_MAPTILER_KEY}
-ENV NEXT_PUBLIC_MAPILLARY_TOKEN=${NEXT_PUBLIC_MAPILLARY_TOKEN}
-ENV NEXT_PUBLIC_MAP_STYLE_URL=${NEXT_PUBLIC_MAP_STYLE_URL}
+# Build with placeholders — replaced at runtime by docker-entrypoint.sh
+ENV NEXT_PUBLIC_API_URL=__NEXT_PUBLIC_API_URL__
+ENV NEXT_PUBLIC_MAPTILER_KEY=__NEXT_PUBLIC_MAPTILER_KEY__
+ENV NEXT_PUBLIC_MAPILLARY_TOKEN=__NEXT_PUBLIC_MAPILLARY_TOKEN__
+ENV NEXT_PUBLIC_MAP_STYLE_URL=__NEXT_PUBLIC_MAP_STYLE_URL__
+ENV NEXT_PUBLIC_TILES_URL=__NEXT_PUBLIC_TILES_URL__
+ENV NEXT_PUBLIC_STYLE_PROVIDER=__NEXT_PUBLIC_STYLE_PROVIDER__
+ENV NEXT_PUBLIC_TRAFFIC_MIN_ZOOM=__NEXT_PUBLIC_TRAFFIC_MIN_ZOOM__
+ENV NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE=__NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE__
+ENV NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE=__NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE__
 ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app/apps/web
@@ -47,9 +48,12 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "apps/web/server.js"]

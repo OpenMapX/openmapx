@@ -7,10 +7,14 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { legalConfig } from "@/lib/legalConfig";
-import { sectionSlug } from "@/lib/sectionSlug";
+import { legalConfig, sectionSlug } from "@openmapx/core/server";
+import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 
-export default function TermsContentDe() {
+export default function TermsContentDe({
+  transitAttribution = [],
+}: {
+  transitAttribution?: unknown[];
+}) {
   const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
 
   return (
@@ -470,18 +474,39 @@ export default function TermsContentDe() {
               url: "https://transport.opendata.ch/",
             },
             {
-              source: "GTFS-Feeds",
-              desc: "Verschiedene Verkehrsunternehmen via Transitous-Katalog",
-              license: "Verschiedene je Feed",
-              url: "https://github.com/transitous/transitous",
-            },
-            {
               source: "Dynamische Nahverkehrsanbieter",
               desc: "~85 regionale APIs via offenem Verzeichnis",
               license: "Verschiedene je Anbieter",
               url: "https://github.com/public-transport/transport-apis",
             },
           ]}
+        />
+
+        <TransitFeedAttribution
+          feeds={transitAttribution as never[]}
+          labels={{
+            heading: "GTFS-Nahverkehrsfeeds",
+            description:
+              "Daten aus {count} Nahverkehrsfeeds aus {countries} L\u00e4ndern, bezogen \u00fcber den Transitous-Katalog.",
+            fallback: (
+              <>
+                Verschiedene Verkehrsunternehmen via{" "}
+                <Link
+                  href="https://transitous.org/sources/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Transitous-Katalog
+                </Link>
+                . Lizenz variiert je Feed.
+              </>
+            ),
+            source: "Quelle",
+            feedName: "Feed",
+            license: "Lizenz",
+            operators: "Betreiber",
+            feeds: "Feeds",
+          }}
         />
 
         <AttributionTable

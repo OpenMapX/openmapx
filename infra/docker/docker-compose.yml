@@ -69,8 +69,9 @@ services:
   api:
     image: ghcr.io/medformatik/openmapx-api:latest
     profiles: [app]
-    env_file: ../../apps/api/.env
+    env_file: .env
     environment:
+      # Overrides: internal service names + computed values
       PORT: "3001"
       HOST: "0.0.0.0"
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgis:5432/openmapx
@@ -85,7 +86,6 @@ services:
       OVERPASS_URL: http://overpass:80
       CORS_ORIGIN: https://${DOMAIN:-localhost},http://localhost:3000
       BETTER_AUTH_URL: https://${DOMAIN:-localhost}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       PASSKEY_RP_ID: ${DOMAIN:-localhost}
       PASSKEY_ORIGIN: https://${DOMAIN:-localhost}
     depends_on:
@@ -114,6 +114,13 @@ services:
   web:
     image: ghcr.io/medformatik/openmapx-web:latest
     profiles: [app]
+    environment:
+      NEXT_PUBLIC_API_URL: https://${DOMAIN:-localhost}
+      NEXT_PUBLIC_MAPTILER_KEY: ${MAPTILER_KEY:-}
+      NEXT_PUBLIC_MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
+      NEXT_PUBLIC_MAP_STYLE_URL: ${NEXT_PUBLIC_MAP_STYLE_URL:-}
+      NEXT_PUBLIC_TILES_URL: ${NEXT_PUBLIC_TILES_URL:-}
+      NEXT_PUBLIC_STYLE_PROVIDER: ${NEXT_PUBLIC_STYLE_PROVIDER:-maptiler}
     labels:
       traefik.enable: "true"
       traefik.http.routers.web.rule: Host(`${DOMAIN:-localhost}`)

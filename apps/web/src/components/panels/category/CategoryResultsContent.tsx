@@ -15,6 +15,7 @@ import {
   PANEL,
   parseOpeningHours,
   resolveProvider,
+  resolveStopAsPlace,
   useCategorySearchStore,
   useFilteredCategoryResults,
   usePlaceStore,
@@ -24,7 +25,6 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
-import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {

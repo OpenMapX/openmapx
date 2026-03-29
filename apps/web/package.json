@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=16384' next dev",
     "build": "next build && pnpm build:sw && pnpm build:copy-assets",
     "build:sw": "esbuild src/sw.ts --bundle --outfile=public/sw.js --format=iife --platform=browser --define:process.env.NODE_ENV='\"production\"'",
     "build:copy-assets": "rsync -a public/ .next/standalone/apps/web/public/ && rsync -a .next/static/ .next/standalone/apps/web/.next/static/",
@@ -24,6 +24,7 @@
     "@mui/material": "^7.3.9",
     "@mui/material-nextjs": "^7.3.9",
     "@openmapx/core": "workspace:^",
+    "@openmapx/i18n": "workspace:*",
     "@serwist/next": "^9.5.7",
     "@serwist/window": "^9.5.7",
     "@tanstack/react-query": "^5.91.3",

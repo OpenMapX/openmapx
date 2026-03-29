@@ -1,5 +1,11 @@
-import type { LngLat, Place, SearchResult, TransitStop } from "@openmapx/core";
-import { API_ENDPOINTS, apiClient, haversineDistance, isTransitRawCategory } from "@openmapx/core";
+import { apiClient } from "../api/client";
+import { API_ENDPOINTS } from "../api/endpoints";
+import { isTransitRawCategory } from "../hooks/transit/transitEligibility";
+import type { LngLat } from "../types/geometry";
+import type { Place } from "../types/place";
+import type { SearchResult } from "../types/search";
+import type { TransitStop } from "../types/transit";
+import { haversineDistance } from "./coordinates";
 
 /** Builds a minimal synthetic Place for a transit stop (used when geocoding finds no match). */
 export function makeSyntheticStopPlace(stop: TransitStop): Place {

@@ -24,6 +24,7 @@ import {
   parseCoordinateInput,
   parseDMSCoordinateInput,
   parsePlusCodeInput,
+  resolveStopAsPlace,
   useActiveSidePanel,
   useAdaptiveDebounce,
   useAutocomplete,
@@ -43,7 +44,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";

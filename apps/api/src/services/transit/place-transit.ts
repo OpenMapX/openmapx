@@ -175,8 +175,10 @@ async function buildMergedTimetable(
   const results = await Promise.allSettled(stops.map((s) => fetchFn(s.id, minutes)));
   const byKey = new Map<string, MergedDeparture>();
 
-  function mergeInto(existing: MergedDeparture, dep: Departure, providerName: string): void {
-    if (!existing.providers.includes(providerName)) existing.providers.push(providerName);
+  function mergeInto(existing: MergedDeparture, dep: Departure, providerNames: string[]): void {
+    for (const p of providerNames) {
+      if (!existing.providers.includes(p)) existing.providers.push(p);
+    }
     if (dep.tripId) {
       if (!existing.tripId) existing.tripId = dep.tripId;
       // Collect all non-empty tripIds for fallback lookups
@@ -208,9 +210,14 @@ async function buildMergedTimetable(
   for (let i = 0; i < stops.length; i++) {
     const result = results[i];
     if (result.status !== "fulfilled") continue;
-    const providerName = stops[i].provider;
+    const stopProvider = stops[i].provider;
 
     for (const dep of result.value) {
+      // Include both feed-level tag (e.g. "de_DELFI") and instance provider (e.g. "transitous")
+      const feedProviders: string[] = [];
+      if (dep.feedTag) feedProviders.push(dep.feedTag);
+      if (stopProvider && stopProvider !== dep.feedTag) feedProviders.push(stopProvider);
+      const providerName = feedProviders[0] ?? stopProvider;
       // Two adjacent 2-min buckets eliminate boundary issues (e.g. 22:41 vs 22:42)
       const [bucket0, bucket1] = bucketTimestamps(dep.scheduledAt);
       const normShort = normalizeShortName(dep.route.shortName);
@@ -238,7 +245,7 @@ async function buildMergedTimetable(
       if (!existing) {
         const entry: MergedDeparture = {
           ...dep,
-          providers: [providerName],
+          providers: feedProviders.length ? [...feedProviders] : [providerName],
           tripIds: dep.tripId ? [dep.tripId] : [],
         };
         // Register under primary bucket keys only (neighbor is for lookup, not storage)
@@ -253,7 +260,7 @@ async function buildMergedTimetable(
         if (k2b && !byKey.has(k2b)) byKey.set(k2b, existing);
         if (k3a && !byKey.has(k3a)) byKey.set(k3a, existing);
         if (k3b && !byKey.has(k3b)) byKey.set(k3b, existing);
-        mergeInto(existing, dep, providerName);
+        mergeInto(existing, dep, feedProviders.length ? feedProviders : [providerName]);
       }
     }
   }

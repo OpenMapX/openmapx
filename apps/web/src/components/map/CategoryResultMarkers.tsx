@@ -4,6 +4,7 @@ import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
   PANEL,
+  resolveStopAsPlace,
   useCategorySearchStore,
   useFilteredCategoryResults,
   usePlaceStore,
@@ -13,7 +14,6 @@ import {
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
-import { resolveStopAsPlace } from "@/lib/geocodeStopAsPlace";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 

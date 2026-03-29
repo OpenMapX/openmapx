@@ -81,11 +81,15 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
           email,
           password,
           name,
+          callbackURL: window.location.origin,
         });
         if (signUpError) {
           setError(signUpError.message ?? t("signUpFailed"));
           return;
         }
+        setSuccessMessage(t("checkYourEmail"));
+        setLoading(false);
+        return;
       } else {
         const { data, error: signInError } = await authClient.signIn.email({
           email,

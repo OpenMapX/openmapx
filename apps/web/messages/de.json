@@ -555,7 +555,8 @@
     "passkeySignInFailed": "Passkey-Anmeldung fehlgeschlagen",
     "passkeyAuthFailed": "Passkey-Authentifizierung fehlgeschlagen",
     "oauthSignInFailed": "{provider}-Anmeldung fehlgeschlagen",
-    "togglePasswordVisibility": "Passwort-Sichtbarkeit umschalten"
+    "togglePasswordVisibility": "Passwort-Sichtbarkeit umschalten",
+    "checkYourEmail": "Überprüfen Sie Ihre E-Mails, um Ihr Konto vor der Anmeldung zu bestätigen."
   },
   "legal": {
     "legal": "Recht",

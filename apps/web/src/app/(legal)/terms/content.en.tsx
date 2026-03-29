@@ -7,10 +7,14 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { legalConfig } from "@/lib/legalConfig";
-import { sectionSlug } from "@/lib/sectionSlug";
+import { legalConfig, sectionSlug } from "@openmapx/core/server";
+import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 
-export default function TermsContent() {
+export default function TermsContent({
+  transitAttribution = [],
+}: {
+  transitAttribution?: unknown[];
+}) {
   const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
 
   return (
@@ -453,18 +457,39 @@ export default function TermsContent() {
               url: "https://transport.opendata.ch/",
             },
             {
-              source: "GTFS feeds",
-              desc: "Various transit authorities via Transitous catalog",
-              license: "Various per feed",
-              url: "https://github.com/transitous/transitous",
-            },
-            {
               source: "Dynamic transit providers",
               desc: "~85 regional APIs via open registry",
               license: "Various per provider",
               url: "https://github.com/public-transport/transport-apis",
             },
           ]}
+        />
+
+        <TransitFeedAttribution
+          feeds={transitAttribution as never[]}
+          labels={{
+            heading: "GTFS Transit Feeds",
+            description:
+              "Data from {count} transit feeds across {countries} countries, sourced via the Transitous catalog.",
+            fallback: (
+              <>
+                Various transit authorities via the{" "}
+                <Link
+                  href="https://transitous.org/sources/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Transitous catalog
+                </Link>
+                . License varies per feed.
+              </>
+            ),
+            source: "Source",
+            feedName: "Feed",
+            license: "License",
+            operators: "Operators",
+            feeds: "feeds",
+          }}
         />
 
         <AttributionTable

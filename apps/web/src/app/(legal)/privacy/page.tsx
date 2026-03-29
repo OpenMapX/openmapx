@@ -1,7 +1,7 @@
+import { sectionSlug } from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
-import { sectionSlug } from "@/lib/sectionSlug";
 
 const sectionsEn: LegalSection[] = [
   { full: "1. Controller and Contact", label: "Controller and Contact" },

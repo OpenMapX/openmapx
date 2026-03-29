@@ -1,3 +1,4 @@
+import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -6,6 +7,12 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
 import { sendMail } from "./utils/email";
+import {
+  emailOtpEmail,
+  resetPasswordEmail,
+  twoFactorOtpEmail,
+  verifyEmailEmail,
+} from "./utils/emailTemplates";
 
 const secret = process.env.BETTER_AUTH_SECRET;
 if (!secret) throw new Error("BETTER_AUTH_SECRET env var is required");
@@ -38,9 +45,13 @@ export const auth = betterAuth({
   }),
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3001",
   secret,
-  trustedOrigins: (process.env.CORS_ORIGIN ?? "http://localhost:3000")
-    .split(",")
-    .map((o) => o.trim()),
+  trustedOrigins: [
+    ...(process.env.CORS_ORIGIN ?? "http://localhost:3000").split(",").map((o) => o.trim()),
+    "openmapx://",
+    ...(process.env.NODE_ENV === "development"
+      ? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
+      : []),
+  ],
   appName: "OpenMapX",
   user: {
     deleteUser: {
@@ -49,23 +60,19 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
-    autoSignIn: true,
+    autoSignIn: false,
+    requireEmailVerification: true,
     async sendResetPassword({ user, url }) {
-      await sendMail({
-        to: user.email,
-        subject: "Reset your password — OpenMapX",
-        text: `Click the link below to reset your password:\n\n${url}\n\nIf you didn't request this, you can safely ignore this email.`,
-      });
+      const mail = resetPasswordEmail(url);
+      await sendMail({ to: user.email, ...mail });
     },
   },
   emailVerification: {
     sendOnSignUp: true,
+    autoSignInAfterVerification: true,
     async sendVerificationEmail({ user, url }) {
-      await sendMail({
-        to: user.email,
-        subject: "Verify your email — OpenMapX",
-        text: `Welcome to OpenMapX! Please verify your email by clicking the link below:\n\n${url}`,
-      });
+      const mail = verifyEmailEmail(url);
+      await sendMail({ to: user.email, ...mail });
     },
   },
   account: {
@@ -127,6 +134,7 @@ export const auth = betterAuth({
   },
   plugins: [
     admin(),
+    expo(),
     passkey({
       rpID: process.env.PASSKEY_RP_ID ?? "localhost",
       rpName: "OpenMapX",
@@ -214,26 +222,15 @@ export const auth = betterAuth({
       issuer: "OpenMapX",
       otpOptions: {
         async sendOTP({ user, otp }) {
-          await sendMail({
-            to: user.email,
-            subject: "Your OpenMapX verification code",
-            text: `Your verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
-          });
+          const mail = twoFactorOtpEmail(otp);
+          await sendMail({ to: user.email, ...mail });
         },
       },
     }),
     emailOTP({
       async sendVerificationOTP({ email, otp, type }) {
-        const subjects: Record<string, string> = {
-          "sign-in": "Sign in to OpenMapX",
-          "email-verification": "Verify your email — OpenMapX",
-          "forget-password": "Reset your password — OpenMapX",
-        };
-        await sendMail({
-          to: email,
-          subject: subjects[type] ?? "OpenMapX verification code",
-          text: `Your verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
-        });
+        const mail = emailOtpEmail(otp, type);
+        await sendMail({ to: email, ...mail });
       },
       changeEmail: {
         enabled: true,

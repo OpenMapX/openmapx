@@ -31,6 +31,14 @@ export function providerAttribution(provider: string): ProviderAttribution {
   if (provider === "db-ris")
     return { label: "Deutsche Bahn", url: "https://developers.deutschebahn.com" };
   if (provider.startsWith("gtfs-")) return { label: `GTFS (${provider.slice(5)})`, url: "" };
+  // Feed tags from MOTIS source field: "de_DELFI" → "DELFI", "ch_sbb" → "SBB"
+  if (/^[a-z]{2}[_-]/.test(provider)) {
+    const name = provider
+      .slice(3)
+      .replace(/[_-]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    return { label: name, url: "" };
+  }
   return { label: provider, url: "" };
 }
 

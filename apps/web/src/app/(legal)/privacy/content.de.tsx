@@ -7,8 +7,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import { legalConfig } from "@/lib/legalConfig";
-import { sectionSlug } from "@/lib/sectionSlug";
+import { legalConfig, sectionSlug } from "@openmapx/core/server";
 
 export default function PrivacyContentDe() {
   const { name, street, postalCode, city, country, email } = legalConfig;
