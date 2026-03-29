@@ -17,73 +17,78 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import type { OverlayId } from "@openmapx/core";
-import { OVERLAY_REGISTRY, toggleOverlay, useLayerStore } from "@openmapx/core";
+import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
 
-const OVERLAY_SWITCHES: { id: OverlayId; labelKey: string; icon: ReactNode }[] = [
-  {
-    id: "traffic",
-    labelKey: "traffic",
-    icon: <TrafficIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  {
-    id: "transit",
-    labelKey: "transit",
-    icon: <DirectionsTransitFilledIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  {
-    id: "live-trains",
-    labelKey: "liveTrains",
-    icon: <TrainIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  {
-    id: "cycling",
-    labelKey: "cycling",
-    icon: <PedalBikeIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  // Kartenansichten
-  {
-    id: "street-view",
-    labelKey: "streetLevelImagery",
-    icon: <StreetviewIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  {
-    id: "3d-buildings",
-    labelKey: "3dBuildings",
-    icon: <ViewInArIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  // Outdoor & Freizeit
-  {
-    id: "hiking",
-    labelKey: "hiking",
-    icon: <HikingIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  {
-    id: "winter-sports",
-    labelKey: "winterSports",
-    icon: <AcUnitIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  // Umwelt & Gefahren
-  {
-    id: "air-quality",
-    labelKey: "airQuality",
-    icon: <AirIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  {
-    id: "wildfires",
-    labelKey: "wildfires",
-    icon: <LocalFireDepartmentIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-  {
-    id: "earthquakes",
-    labelKey: "earthquakes",
-    icon: <PublicIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-  },
-];
+const OVERLAY_SWITCHES: { id: OverlayId; labelKey: string; icon: ReactNode; serviceId?: string }[] =
+  [
+    {
+      id: "traffic",
+      labelKey: "traffic",
+      icon: <TrafficIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+      serviceId: "tomtom-traffic",
+    },
+    {
+      id: "transit",
+      labelKey: "transit",
+      icon: <DirectionsTransitFilledIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+    },
+    {
+      id: "live-trains",
+      labelKey: "liveTrains",
+      icon: <TrainIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+    },
+    {
+      id: "cycling",
+      labelKey: "cycling",
+      icon: <PedalBikeIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+    },
+    // Kartenansichten
+    {
+      id: "street-view",
+      labelKey: "streetLevelImagery",
+      icon: <StreetviewIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+      serviceId: "mapillary",
+    },
+    {
+      id: "3d-buildings",
+      labelKey: "3dBuildings",
+      icon: <ViewInArIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+    },
+    // Outdoor & Freizeit
+    {
+      id: "hiking",
+      labelKey: "hiking",
+      icon: <HikingIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+    },
+    {
+      id: "winter-sports",
+      labelKey: "winterSports",
+      icon: <AcUnitIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+    },
+    // Umwelt & Gefahren
+    {
+      id: "air-quality",
+      labelKey: "airQuality",
+      icon: <AirIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+      serviceId: "openaq",
+    },
+    {
+      id: "wildfires",
+      labelKey: "wildfires",
+      icon: <LocalFireDepartmentIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+      serviceId: "firms-wildfires",
+    },
+    {
+      id: "earthquakes",
+      labelKey: "earthquakes",
+      icon: <PublicIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
+    },
+  ];
 
 function OverlaySwitchRow({ entry }: { entry: (typeof OVERLAY_SWITCHES)[number] }) {
   const t = useTranslations("layers");
@@ -141,6 +146,7 @@ export function MobileLayerPanel() {
   const t = useTranslations("layers");
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
+  const { isAvailable } = useCapabilities();
 
   return (
     <Box sx={{ p: 1.5 }}>
@@ -171,7 +177,7 @@ export function MobileLayerPanel() {
         {t("mapDetails")}
       </Typography>
 
-      {OVERLAY_SWITCHES.map((entry) => (
+      {OVERLAY_SWITCHES.filter((entry) => isAvailable(entry.serviceId)).map((entry) => (
         <OverlaySwitchRow key={entry.id} entry={entry} />
       ))}
       <GlobeSwitchRow />

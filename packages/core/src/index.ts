@@ -1,5 +1,6 @@
 // Platform
 
+export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
 // API
 export { ApiClient, type ApiClientConfig, apiClient, configureApiClient } from "./api/client";
 export { API_ENDPOINTS } from "./api/endpoints";
@@ -53,6 +54,7 @@ export {
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
 export { useAutocomplete } from "./hooks/useAutocomplete";
+export { useCapabilities } from "./hooks/useCapabilities";
 export { useCategorySearch } from "./hooks/useCategorySearch";
 export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
 // Hooks — Data Sources

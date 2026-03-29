@@ -1,4 +1,4 @@
-import { sectionSlug } from "@openmapx/core/server";
+import { fetchCapabilities, sectionSlug } from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
@@ -103,11 +103,14 @@ export default async function TermsPage() {
       ? (await import("./content.de")).default
       : (await import("./content.en")).default;
 
-  const transitAttribution = await fetchTransitAttribution();
+  const [transitAttribution, capabilities] = await Promise.all([
+    fetchTransitAttribution(),
+    fetchCapabilities(),
+  ]);
 
   return (
     <LegalPageShell sections={sections}>
-      <Content transitAttribution={transitAttribution} />
+      <Content transitAttribution={transitAttribution} capabilities={capabilities} />
     </LegalPageShell>
   );
 }

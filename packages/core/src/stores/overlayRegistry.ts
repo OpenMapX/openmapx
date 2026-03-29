@@ -26,6 +26,7 @@ export type OverlayId =
 
 export interface OverlayEntry {
   id: OverlayId;
+  serviceId?: string;
   getState: () => OverlayStoreBase;
   useActive: () => boolean;
   excludes: OverlayId[];
@@ -34,6 +35,7 @@ export interface OverlayEntry {
 export const OVERLAY_REGISTRY: readonly OverlayEntry[] = [
   {
     id: "traffic",
+    serviceId: "tomtom-traffic",
     getState: () => useTrafficStore.getState(),
     useActive: () => useTrafficStore((s) => s.panelOpen && s.layerVisible),
     excludes: [],
@@ -46,12 +48,14 @@ export const OVERLAY_REGISTRY: readonly OverlayEntry[] = [
   },
   {
     id: "street-view",
+    serviceId: "mapillary",
     getState: () => useStreetViewStore.getState(),
     useActive: () => useStreetViewStore((s) => s.panelOpen && s.layerVisible),
     excludes: ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"],
   },
   {
     id: "air-quality",
+    serviceId: "openaq",
     getState: () => useAirQualityStore.getState(),
     useActive: () => useAirQualityStore((s) => s.panelOpen && s.layerVisible),
     excludes: ["street-view", "earthquakes", "wildfires"],
@@ -64,6 +68,7 @@ export const OVERLAY_REGISTRY: readonly OverlayEntry[] = [
   },
   {
     id: "wildfires",
+    serviceId: "firms-wildfires",
     getState: () => useWildfireStore.getState(),
     useActive: () => useWildfireStore((s) => s.panelOpen && s.layerVisible),
     excludes: ["street-view", "air-quality", "earthquakes"],

@@ -7,7 +7,7 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import { OVERLAY_REGISTRY, toggleOverlay, useLayerStore } from "@openmapx/core";
+import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
 import { TRAFFIC_MIN_ZOOM } from "../layers/trafficConfig";
@@ -84,6 +84,7 @@ export function DesktopQuickSelector({
   const t = useTranslations("layers");
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
+  const { isAvailable } = useCapabilities();
 
   return (
     <Paper
@@ -119,7 +120,7 @@ export function DesktopQuickSelector({
 
       <Divider orientation="vertical" flexItem sx={{ my: 0.4 }} />
 
-      {DETAIL_OPTIONS.map((option) => (
+      {DETAIL_OPTIONS.filter((option) => isAvailable(option.serviceId)).map((option) => (
         <DetailOptionTile key={option.key} option={option} trafficZoomTooLow={trafficZoomTooLow} />
       ))}
 

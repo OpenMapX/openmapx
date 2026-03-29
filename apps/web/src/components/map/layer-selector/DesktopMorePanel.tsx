@@ -12,6 +12,7 @@ import type { MapLayer, OverlayId } from "@openmapx/core";
 import {
   OVERLAY_REGISTRY,
   toggleOverlay,
+  useCapabilities,
   useLayerStore,
   useMeasurementStore,
   useTravelTimeStore,
@@ -65,6 +66,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
   const setGlobeView = useLayerStore((s) => s.setGlobeView);
   const measureActive = useMeasurementStore((s) => s.isActive);
   const travelTimeActive = useTravelTimeStore((s) => s.isActive);
+  const { isAvailable } = useCapabilities();
 
   return (
     <Box
@@ -103,7 +105,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           rowGap: 0.4,
         }}
       >
-        {DESKTOP_MORE_MAP_DETAILS.map((item) => (
+        {DESKTOP_MORE_MAP_DETAILS.filter((item) => isAvailable(item.serviceId)).map((item) => (
           <OverlayDetailTile key={item.id} item={item} label={t(item.labelKey)} onClose={onClose} />
         ))}
       </Box>

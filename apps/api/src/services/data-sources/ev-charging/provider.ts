@@ -50,6 +50,7 @@ const META: DataSourceMeta = {
 class EvChargingProvider implements DataSourceProvider {
   readonly id = META.id;
   readonly meta = META;
+  readonly serviceIds = [];
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return getEvChargingFilters();

@@ -9,6 +9,8 @@ import type {
 export interface DataSourceProvider {
   readonly id: string;
   readonly meta: DataSourceMeta;
+  /** Service registry IDs this provider depends on. Used to filter unavailable sources. */
+  readonly serviceIds?: string[];
   /** Redis cache TTL in seconds for search results. Default: 21600 (6h). */
   readonly searchCacheTtl?: number;
   /** Redis cache TTL in seconds for detail results. Default: 21600 (6h). */

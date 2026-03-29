@@ -92,6 +92,7 @@ const MAX_CACHE_SIZE = 2000;
 class FuelDataSourceProvider implements DataSourceProvider {
   readonly id = META.id;
   readonly meta = META;
+  readonly serviceIds = [];
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
 

@@ -9,6 +9,7 @@ import { db, sql } from "./db/index";
 import { redis } from "./redis";
 import { airQualityRoute } from "./routes/air-quality";
 import { autocompleteRoute } from "./routes/autocomplete";
+import { capabilitiesRoute } from "./routes/capabilities";
 import { categorySearchRoute } from "./routes/category-search";
 import { dataSourcesRoute } from "./routes/data-sources";
 import { directionsRoute } from "./routes/directions";
@@ -103,6 +104,9 @@ server.route({
 
 // Health check
 server.get("/health", async () => ({ status: "ok" }));
+
+// Capabilities (service availability)
+await server.register(capabilitiesRoute, { prefix: "/api" });
 
 // Routes
 await server.register(geocodeRoute, { prefix: "/api" });

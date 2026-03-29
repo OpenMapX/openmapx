@@ -111,6 +111,7 @@ const MAX_CACHE_SIZE = 3000;
 class ParkingDataSourceProvider implements DataSourceProvider {
   readonly id = META.id;
   readonly meta = META;
+  readonly serviceIds = [];
   readonly searchCacheTtl = 60;
   readonly detailCacheTtl = 60;
 

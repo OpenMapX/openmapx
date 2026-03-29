@@ -53,4 +53,5 @@ export const API_ENDPOINTS = {
   savedCheck: "/api/saved/check",
   risMapsPositions: "/api/ris-maps/positions",
   risMapsGeometry: "/api/ris-maps/geometry",
+  capabilities: "/api/capabilities",
 } as const;

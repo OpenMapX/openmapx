@@ -2,12 +2,16 @@ import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { ApiKeyMissingError } from "../services/data-sources/ev-charging/ocm.js";
 import { dataSourceRegistry } from "../services/data-sources/registry.js";
+import { serviceRegistry } from "../services/service-registry.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
   // List available data sources with filter definitions
   fastify.get("/data-sources", async (_req, reply) => {
-    const providers = dataSourceRegistry.getAll();
+    const providers = dataSourceRegistry.getAll().filter((p) => {
+      if (!p.serviceIds || p.serviceIds.length === 0) return true;
+      return p.serviceIds.some((id) => serviceRegistry.isAvailable(id));
+    });
     const sources = await Promise.all(
       providers.map(async (p) => {
         const filters = await withCache(`cache:ds:filters:${p.id}`, TTL.dataSources.filters, () =>

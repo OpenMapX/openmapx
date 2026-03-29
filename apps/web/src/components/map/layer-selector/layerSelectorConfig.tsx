@@ -42,6 +42,7 @@ export interface DetailOption {
   icon: ReactNode;
   preview: ReactNode;
   overlayId?: OverlayId;
+  serviceId?: string;
 }
 
 export interface DesktopMoreOption {
@@ -50,6 +51,7 @@ export interface DesktopMoreOption {
   preview: ReactNode;
   selected?: boolean;
   overlayId?: OverlayId;
+  serviceId?: string;
 }
 
 export const BASE_LAYER_OPTIONS: BaseLayerOption[] = [
@@ -86,6 +88,7 @@ export const DETAIL_OPTIONS: DetailOption[] = [
     icon: <TrafficIcon sx={{ fontSize: 14 }} />,
     preview: trafficPreview,
     overlayId: "traffic",
+    serviceId: "tomtom-traffic",
   },
   {
     key: "transit",
@@ -110,6 +113,7 @@ export const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
     labelKey: "traffic",
     preview: trafficPreview,
     overlayId: "traffic",
+    serviceId: "tomtom-traffic",
   },
   {
     id: "public-transport",
@@ -134,6 +138,7 @@ export const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
     id: "street-view",
     labelKey: "streetLevelImagery",
     overlayId: "street-view",
+    serviceId: "mapillary",
     preview: streetViewPreview,
   },
   {
@@ -160,12 +165,14 @@ export const DESKTOP_MORE_MAP_DETAILS: readonly DesktopMoreOption[] = [
     id: "air-quality",
     labelKey: "airQuality",
     overlayId: "air-quality",
+    serviceId: "openaq",
     preview: airQualityPreview,
   },
   {
     id: "wildfire",
     labelKey: "wildfires",
     overlayId: "wildfires",
+    serviceId: "firms-wildfires",
     preview: wildfirePreview,
   },
   {
