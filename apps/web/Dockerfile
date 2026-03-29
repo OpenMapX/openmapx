@@ -6,6 +6,7 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/
+COPY packages/i18n/package.json packages/i18n/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 
@@ -17,6 +18,7 @@ WORKDIR /app
 COPY --from=deps /app ./
 
 COPY packages/core/ packages/core/
+COPY packages/i18n/ packages/i18n/
 COPY apps/web/ apps/web/
 COPY turbo.json ./
 
