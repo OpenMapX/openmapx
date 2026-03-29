@@ -1248,7 +1248,7 @@ cmd_check() {
 
   echo ""
   _bold "Transit:"
-  check_http "motis" "http://localhost:8081/api/v1/geocode?text=test" "matches"
+  check_http "motis" "http://localhost:8081/api/v1/geocode?text=test" "name"
   check_http "otp" "http://localhost:8090/otp/routers" ""
 
   echo ""
