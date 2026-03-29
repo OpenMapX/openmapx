@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# OpenMapX Data Manager
-# Manages OSM and GTFS data for all self-hosted services.
-# Downloads source data once and hardlinks it into each service's workspace,
-# so multiple services share the same files with zero extra storage.
+# OpenMapX Infrastructure Manager
+# Central CLI for the self-hosted stack: downloads source data (OSM, GTFS,
+# map styles), builds service indexes, and manages the Docker Compose
+# services (start/stop/restart/recreate/logs/health checks).
 #
 # Requirements: curl, jq, docker (with compose plugin)
 
@@ -76,6 +76,107 @@ safe_link() {
     return 0
   fi
   ln -f "$src" "$dest"
+}
+
+# Profile/Service Mapping
+# Maps between service names, profiles, and docker compose flags.
+
+ALL_PROFILES=(proxy app routing transit pelias nominatim photon overpass tiles martin)
+
+service_to_profile() {
+  case "$1" in
+    traefik)                                                    echo "proxy" ;;
+    api|web)                                                    echo "app" ;;
+    valhalla|osrm)                                              echo "routing" ;;
+    motis|otp)                                                  echo "transit" ;;
+    elasticsearch|pelias-api|pelias-placeholder|pelias-pip)     echo "pelias" ;;
+    nominatim)                                                  echo "nominatim" ;;
+    photon)                                                     echo "photon" ;;
+    overpass)                                                   echo "overpass" ;;
+    tileserver)                                                 echo "tiles" ;;
+    martin)                                                     echo "martin" ;;
+    postgis|redis)                                              echo "" ;;
+    *)                                                          echo "" ;;
+  esac
+}
+
+profile_to_services() {
+  case "$1" in
+    core)       echo "postgis redis" ;;
+    proxy)      echo "traefik" ;;
+    app)        echo "api web" ;;
+    routing)    echo "valhalla osrm" ;;
+    transit)    echo "motis otp" ;;
+    pelias)     echo "elasticsearch pelias-api pelias-placeholder pelias-pip" ;;
+    nominatim)  echo "nominatim" ;;
+    photon)     echo "photon" ;;
+    overpass)   echo "overpass" ;;
+    tiles)      echo "tileserver" ;;
+    martin)     echo "martin" ;;
+    *)          echo "" ;;
+  esac
+}
+
+is_profile() {
+  case "$1" in
+    core|proxy|app|routing|transit|pelias|nominatim|photon|overpass|tiles|martin) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_service() {
+  case "$1" in
+    postgis|redis|traefik|api|web|valhalla|osrm|motis|otp) return 0 ;;
+    elasticsearch|pelias-api|pelias-placeholder|pelias-pip) return 0 ;;
+    nominatim|photon|overpass|tileserver|martin)            return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Resolve targets (service names, profile names, or "all") into
+# two arrays: _PROFILES (for --profile flags) and _SERVICES (explicit service names).
+# When a profile is given, _SERVICES stays empty so compose starts the whole profile.
+# When a service is given, its profile is added to _PROFILES and the service to _SERVICES.
+resolve_targets() {
+  _PROFILES=()
+  _SERVICES=()
+
+  for target in "$@"; do
+    if [ "$target" = "all" ]; then
+      _PROFILES=("${ALL_PROFILES[@]}")
+      _SERVICES=()
+      return 0
+    elif is_profile "$target"; then
+      if [ "$target" = "core" ]; then
+        _SERVICES+=(postgis redis)
+      else
+        local dup=false
+        for p in "${_PROFILES[@]}"; do [ "$p" = "$target" ] && dup=true; done
+        $dup || _PROFILES+=("$target")
+      fi
+    elif is_service "$target"; then
+      _SERVICES+=("$target")
+      local profile
+      profile=$(service_to_profile "$target")
+      if [ -n "$profile" ]; then
+        local dup=false
+        for p in "${_PROFILES[@]}"; do [ "$p" = "$profile" ] && dup=true; done
+        $dup || _PROFILES+=("$profile")
+      fi
+    else
+      err "Unknown service or profile: $target"
+      return 1
+    fi
+  done
+}
+
+# Build a docker compose command string with the resolved --profile flags
+compose_with_profiles() {
+  local cmd="docker compose -f $COMPOSE_FILE"
+  for p in "${_PROFILES[@]}"; do
+    cmd+=" --profile $p"
+  done
+  echo "$cmd"
 }
 
 ensure_dirs() {
@@ -1018,6 +1119,183 @@ build_overpass() {
   ok "Overpass container started (importing)"
 }
 
+# Service Management
+
+cmd_start() {
+  if [ $# -eq 0 ]; then
+    err "Usage: manage.sh start <service|profile|all> [...]"
+    err ""
+    err "Services: postgis redis traefik api web valhalla osrm motis otp"
+    err "          elasticsearch pelias-api nominatim photon overpass tileserver martin"
+    err "Profiles: core proxy app routing transit pelias nominatim photon overpass tiles martin"
+    err "      all — start core + all profiles"
+    return 1
+  fi
+
+  resolve_targets "$@"
+  local cmd
+  cmd=$(compose_with_profiles)
+
+  log "Starting: $*"
+  $cmd up -d "${_SERVICES[@]}"
+  ok "Started: $*"
+}
+
+cmd_stop() {
+  if [ $# -eq 0 ]; then
+    err "Usage: manage.sh stop <service|profile|all> [...]"
+    return 1
+  fi
+
+  resolve_targets "$@"
+
+  # For stop, expand profiles to service names so compose can find them
+  # without needing --profile flags (containers are already running)
+  local services=("${_SERVICES[@]}")
+  if [ "$1" = "all" ]; then
+    # Stop all compose services
+    log "Stopping all services..."
+    docker compose -f "$COMPOSE_FILE" stop
+    ok "All services stopped"
+    return 0
+  fi
+
+  for p in "${_PROFILES[@]}"; do
+    for svc in $(profile_to_services "$p"); do
+      local dup=false
+      for s in "${services[@]}"; do [ "$s" = "$svc" ] && dup=true; done
+      $dup || services+=("$svc")
+    done
+  done
+
+  log "Stopping: $*"
+  docker compose -f "$COMPOSE_FILE" stop "${services[@]}"
+  ok "Stopped: $*"
+}
+
+cmd_restart() {
+  if [ $# -eq 0 ]; then
+    err "Usage: manage.sh restart <service|profile|all> [...]"
+    return 1
+  fi
+
+  resolve_targets "$@"
+  local cmd
+  cmd=$(compose_with_profiles)
+
+  # Use stop + up -d to ensure containers are started even if they weren't running
+  log "Restarting: $*"
+
+  # Stop first (expand profiles to service names for stop)
+  local services=("${_SERVICES[@]}")
+  for p in "${_PROFILES[@]}"; do
+    for svc in $(profile_to_services "$p"); do
+      local dup=false
+      for s in "${services[@]}"; do [ "$s" = "$svc" ] && dup=true; done
+      $dup || services+=("$svc")
+    done
+  done
+
+  if [ ${#services[@]} -gt 0 ]; then
+    docker compose -f "$COMPOSE_FILE" stop "${services[@]}" 2>/dev/null || true
+  fi
+
+  $cmd up -d "${_SERVICES[@]}"
+  ok "Restarted: $*"
+}
+
+cmd_recreate() {
+  if [ $# -eq 0 ]; then
+    err "Usage: manage.sh recreate <service|profile|all> [...]"
+    return 1
+  fi
+
+  resolve_targets "$@"
+  local cmd
+  cmd=$(compose_with_profiles)
+
+  log "Recreating: $* (pull + force-recreate)"
+  $cmd pull "${_SERVICES[@]}" 2>/dev/null || warn "Some images could not be pulled (local builds?)"
+  $cmd up -d --force-recreate "${_SERVICES[@]}"
+  ok "Recreated: $*"
+}
+
+cmd_down() {
+  if [ $# -eq 0 ]; then
+    log "Stopping and removing all containers..."
+    local profile_args=""
+    for p in "${ALL_PROFILES[@]}"; do
+      profile_args+=" --profile $p"
+    done
+    docker compose -f "$COMPOSE_FILE" $profile_args down
+    ok "All containers stopped and removed"
+    return 0
+  fi
+
+  resolve_targets "$@"
+
+  # Expand profiles to service names
+  local services=("${_SERVICES[@]}")
+  for p in "${_PROFILES[@]}"; do
+    for svc in $(profile_to_services "$p"); do
+      local dup=false
+      for s in "${services[@]}"; do [ "$s" = "$svc" ] && dup=true; done
+      $dup || services+=("$svc")
+    done
+  done
+
+  log "Stopping and removing: $*"
+  docker compose -f "$COMPOSE_FILE" rm -sf "${services[@]}"
+  ok "Removed: $*"
+}
+
+cmd_logs() {
+  if [ $# -eq 0 ]; then
+    err "Usage: manage.sh logs <service> [--tail N]"
+    err "  Follows logs by default. Press Ctrl+C to stop."
+    return 1
+  fi
+
+  local service="$1"
+  shift
+
+  if ! is_service "$service"; then
+    err "Unknown service: $service"
+    return 1
+  fi
+
+  docker compose -f "$COMPOSE_FILE" logs -f "$@" "$service"
+}
+
+cmd_pull() {
+  if [ $# -eq 0 ]; then
+    log "Pulling latest images for all profiles..."
+    local profile_args=""
+    for p in "${ALL_PROFILES[@]}"; do
+      profile_args+=" --profile $p"
+    done
+    docker compose -f "$COMPOSE_FILE" $profile_args pull
+    ok "All images pulled"
+    return 0
+  fi
+
+  resolve_targets "$@"
+  local cmd
+  cmd=$(compose_with_profiles)
+
+  log "Pulling: $*"
+  $cmd pull "${_SERVICES[@]}"
+  ok "Pulled: $*"
+}
+
+cmd_ps() {
+  local profile_args=""
+  for p in "${ALL_PROFILES[@]}"; do
+    profile_args+=" --profile $p"
+  done
+  docker compose -f "$COMPOSE_FILE" $profile_args ps "$@"
+}
+
 # Status
 
 cmd_status() {
@@ -1376,13 +1654,14 @@ cmd_clean() {
 
 cmd_help() {
   cat <<'HELP'
-OpenMapX Data Manager
+OpenMapX Infrastructure Manager
 
-Manages OSM, GTFS, and map style data for all self-hosted services.
-Downloads source data once and hardlinks it into each service's workspace
-for zero-copy sharing.
+Central CLI for the OpenMapX self-hosted stack. Handles the full lifecycle:
+download source data (OSM, GTFS, map styles), build service indexes, and
+start/stop/restart/monitor the 15+ Docker Compose services that make up
+routing, transit, geocoding, tile serving, and the application layer.
 
-COMMANDS:
+DATA COMMANDS:
   download-osm [region]       Download OSM PBF from Geofabrik
                                Use "planet" for worldwide (~70 GB).
                                Default region from data.conf.
@@ -1407,6 +1686,23 @@ COMMANDS:
                                OSM Bright, OSM Liberty, Positron, Dark Matter
                                + OpenMapTiles font glyphs for label rendering
 
+  link                        Hard-link source data into service directories
+                               Detects planet-scale and skips OSRM/OTP.
+
+BUILD COMMANDS:
+  build <service>             Build data for a service:
+                               valhalla  - Routing tiles + elevation
+                               osrm      - Routing graph (region-only)
+                               otp       - Transit graph (region-only)
+                               motis     - Auto-builds on container start
+                               tiles     - Vector MBTiles via Planetiler
+                               pelias    - Geocoding index (ES + WOF + OSM)
+                               nominatim - Geocoder (auto-imports on start)
+                               photon    - Download pre-built search index
+                               overpass  - OSM query API (auto-imports)
+
+  build-all                   Build all applicable services
+
   generate-motis-config       Generate MOTIS config.yml with GTFS-RT feeds
                                Uses Transitous's config generator for RT
                                feed matching, Lua scripts, and GBFS feeds.
@@ -1421,29 +1717,24 @@ COMMANDS:
                                from GTFS feeds. Output: data/motis/license.json
                                Auto-run by 'build motis'.
 
-  link                        Hard-link source data into service directories
-                               Detects planet-scale and skips OSRM/OTP.
+SERVICE MANAGEMENT:
+  start <target> [...]        Start services or profiles
+  stop <target> [...]         Stop services or profiles
+  restart <target> [...]      Restart services or profiles (stop + start)
+  recreate <target> [...]     Pull latest images and force-recreate containers
+  down [target...]            Stop and remove containers (default: all)
+  logs <service> [--tail N]   Follow logs for a service (Ctrl+C to stop)
+  pull [target...]            Pull latest images (default: all)
+  ps                          Show container status for all services
 
-  build <service>             Build data for a service:
-                               valhalla  - Routing tiles + elevation
-                               osrm      - Routing graph (region-only)
-                               otp       - Transit graph (region-only)
-                               motis     - Auto-builds on container start
-                               tiles     - Vector MBTiles via Planetiler
-                               pelias    - Geocoding index (ES + WOF + OSM)
-                               nominatim - Geocoder (auto-imports on start)
-                               photon    - Download pre-built search index
-                               overpass  - OSM query API (auto-imports)
-
-  build-all                   Build all applicable services
-
-  status                      Show data inventory and disk usage
-
-  check                       Test all running services for health
-                               Checks HTTP endpoints, DB connections,
+MONITORING:
+  status                      Show data inventory, disk usage, and containers
+  check                       Health-check all running services
+                               Tests HTTP endpoints, DB connections,
                                and reports pass/fail/skip for each.
 
-  update                      Re-download all data and rebuild
+MAINTENANCE:
+  update                      Re-download all data and rebuild everything
 
   clean <target>              Remove data:
                                valhalla|osrm|otp|motis|tiles|pelias
@@ -1452,7 +1743,16 @@ COMMANDS:
                                compiled - all compiled, keep sources
                                all      - everything
 
-SELF-HOSTED SERVICES:
+TARGETS (for start/stop/restart/recreate/down/pull):
+  Services:  postgis redis traefik api web valhalla osrm motis otp
+             elasticsearch pelias-api pelias-placeholder pelias-pip
+             nominatim photon overpass tileserver martin
+  Profiles:  core (postgis+redis)  proxy  app  routing  transit
+             pelias  nominatim  photon  overpass  tiles  martin
+  Special:   all — all profiles + core
+  Multiple targets can be combined: ./manage.sh start routing transit nominatim
+
+SERVICES:
   Routing     Valhalla (planet-capable), OSRM (region-only)
   Transit     MOTIS (planet-capable), OTP (region-only)
   Geocoding   Pelias (ES-based), Nominatim (full OSM), Photon (lightweight)
@@ -1460,6 +1760,7 @@ SELF-HOSTED SERVICES:
   Map Tiles   Planetiler (vector MBTiles) + TileServer GL (styles)
   Elevation   Valhalla (SRTM data, auto-downloaded during build)
   Database    PostgreSQL + PostGIS, Redis, Elasticsearch
+  App         Fastify API + Next.js Web, Traefik reverse proxy
 
 PLANET-SCALE NOTES:
   When using planet PBF (~70 GB), the manager automatically:
@@ -1474,31 +1775,36 @@ PLANET-SCALE NOTES:
   - Recommended: 64+ GB RAM, 2+ TB SSD
 
 EXAMPLES:
-  # --- Full worldwide self-hosted setup ---
+  # Full worldwide self-hosted setup
   ./manage.sh download-osm planet
   ./manage.sh download-all-feeds
   ./manage.sh download-style
-  ./manage.sh link
-  ./manage.sh build-all
-  docker compose --profile proxy --profile app \
-    --profile routing --profile transit \
-    --profile nominatim --profile photon \
-    --profile overpass --profile tiles up -d
+  ./manage.sh link && ./manage.sh build-all
+  ./manage.sh start all
 
-  # --- Single country (lighter) ---
+  # Single country (lighter)
   ./manage.sh download-osm europe/germany
   ./manage.sh download-all-feeds de
   ./manage.sh download-style
   ./manage.sh link && ./manage.sh build-all
+  ./manage.sh start routing transit nominatim tiles
 
-  # --- Just routing + tiles (minimal) ---
+  # Just routing + tiles (minimal)
   ./manage.sh download-osm europe/germany
   ./manage.sh download-style
   ./manage.sh link
   ./manage.sh build valhalla && ./manage.sh build tiles
-  docker compose --profile routing --profile tiles up -d
+  ./manage.sh start routing tiles
 
-  # --- Weekly update (cron-friendly) ---
+  # Day-to-day operations
+  ./manage.sh restart motis              # restart a single service
+  ./manage.sh recreate transit           # pull + recreate a whole profile
+  ./manage.sh logs valhalla              # follow logs
+  ./manage.sh stop routing               # stop all routing services
+  ./manage.sh ps                         # overview of running containers
+  ./manage.sh check                      # health-check everything
+
+  # Weekly update (cron-friendly)
   0 3 * * 0 cd /path/to/infra/docker && ./manage.sh update
 
 ENVIRONMENT:
@@ -1526,6 +1832,14 @@ main() {
     link)                    cmd_link ;;
     build)                   shift; cmd_build "$@" ;;
     build-all)               cmd_build_all ;;
+    start|up)                shift; cmd_start "$@" ;;
+    stop)                    shift; cmd_stop "$@" ;;
+    restart)                 shift; cmd_restart "$@" ;;
+    recreate)                shift; cmd_recreate "$@" ;;
+    down)                    shift; cmd_down "$@" ;;
+    logs)                    shift; cmd_logs "$@" ;;
+    pull)                    shift; cmd_pull "$@" ;;
+    ps)                      shift; cmd_ps "$@" ;;
     status)                  cmd_status ;;
     check)                   cmd_check ;;
     update)                  cmd_update ;;
