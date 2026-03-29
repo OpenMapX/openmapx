@@ -2,18 +2,5 @@
   "areaVisibility": true,
   "platformEntriesLinking": true,
   "transitServiceStart": "-P1Y",
-  "transitServiceEnd": "P2Y",
-  "osm": [
-    {
-      "source": "osm",
-      "osmTagMapping": "default"
-    }
-  ],
-  "transitFeeds": [
-    {
-      "type": "gtfs",
-      "source": "gtfs",
-      "feedId": "gtfs"
-    }
-  ]
+  "transitServiceEnd": "P2Y"
 }

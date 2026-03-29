@@ -86,8 +86,6 @@ ensure_dirs() {
     "${DATA_DIR}/osrm" \
     "${DATA_DIR}/valhalla" \
     "${DATA_DIR}/otp" \
-    "${DATA_DIR}/otp/osm" \
-    "${DATA_DIR}/otp/gtfs" \
     "${DATA_DIR}/motis" \
     "${DATA_DIR}/tileserver" \
     "${DATA_DIR}/tileserver/fonts" \
@@ -474,7 +472,7 @@ cmd_link() {
       linked=$((linked + 1))
 
       # OTP — region-scale only
-      safe_link "$pbf" "${DATA_DIR}/otp/osm/${pbf_name}" && ok "  -> otp/osm/${pbf_name}"
+      safe_link "$pbf" "${DATA_DIR}/otp/${pbf_name}" && ok "  -> otp/${pbf_name}"
       linked=$((linked + 1))
     fi
   else
@@ -492,7 +490,7 @@ cmd_link() {
     linked=$((linked + 1))
 
     if [ "$planet" = false ]; then
-      safe_link "$feed" "${DATA_DIR}/otp/gtfs/${feed_name}"
+      safe_link "$feed" "${DATA_DIR}/otp/${feed_name}"
       linked=$((linked + 1))
     fi
 
@@ -1220,6 +1218,27 @@ cmd_check() {
     fi
   }
 
+  check_overpass() {
+    local name="$1"
+    if ! is_running "$name"; then
+      printf "  %-14s %s\n" "$name" "$(_skip) (not running)"
+      skipped=$((skipped + 1))
+      return
+    fi
+    local response
+    response=$(curl -sf --max-time 10 -G --data-urlencode 'data=[out:json];node(1);out;' "http://localhost:8082/api/interpreter" 2>/dev/null || echo "")
+    if echo "$response" | grep -qi "elements"; then
+      printf "  %-14s %s\n" "$name" "$(_pass)"
+      passed=$((passed + 1))
+    elif docker compose ps 2>/dev/null | grep -i "$name" | grep -qi "starting\|Restarting"; then
+      printf "  %-14s %s\n" "$name" "$(_importing)"
+      skipped=$((skipped + 1))
+    else
+      printf "  %-14s %s\n" "$name" "$(_fail)"
+      failed=$((failed + 1))
+    fi
+  }
+
   _bold "Infrastructure:"
   check_docker "postgis" "pg_isready -U postgres" "accepting"
   check_docker "redis" "redis-cli ping" "PONG"
@@ -1241,7 +1260,7 @@ cmd_check() {
 
   echo ""
   _bold "Data Services:"
-  check_http "overpass" "http://localhost:8082/api/interpreter?data=[out:json];node(1);out;" "Overpass"
+  check_overpass "overpass"
   check_http "tileserver" "http://localhost:8080/health" ""
 
   echo ""
