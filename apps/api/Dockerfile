@@ -44,6 +44,7 @@ ENV PORT=3001
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/src/db/migrations ./apps/api/dist/db/migrations
 COPY apps/api/package.json ./apps/api/
 
 WORKDIR /app/apps/api

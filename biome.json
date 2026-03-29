@@ -7,7 +7,15 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!node_modules", "!.next", "!dist", "!.turbo", "!apps/web/public/sw.js"]
+    "includes": [
+      "**",
+      "!node_modules",
+      "!.next",
+      "!dist",
+      "!.turbo",
+      "!apps/web/public/sw.js",
+      "!**/db/migrations"
+    ]
   },
   "formatter": {
     "enabled": true,

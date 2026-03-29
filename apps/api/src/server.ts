@@ -1,8 +1,11 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
-import { sql } from "./db/index";
+import { db, sql } from "./db/index";
 import { redis } from "./redis";
 import { airQualityRoute } from "./routes/air-quality";
 import { autocompleteRoute } from "./routes/autocomplete";
@@ -51,6 +54,17 @@ const server = Fastify({
     maxParamLength: 500,
   },
 });
+
+// Run database migrations on startup (idempotent — skips already-applied migrations)
+const migrationsDir = join(import.meta.dirname ?? ".", "db", "migrations");
+if (existsSync(migrationsDir)) {
+  try {
+    await migrate(db, { migrationsFolder: migrationsDir });
+    server.log.info("Database migrations applied");
+  } catch (err) {
+    server.log.error(err, "Database migration failed");
+  }
+}
 
 await server.register(helmet);
 await server.register(cors, {
