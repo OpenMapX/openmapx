@@ -247,7 +247,7 @@ services:
       - xpack.security.enabled=false
     ports: ["127.0.0.1:9200:9200"]
     volumes: ["esdata:/usr/share/elasticsearch/data"]
-    profiles: [pelias]
+    profiles: [pelias, build]
     networks: [openmapx]
     healthcheck:
       test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
@@ -318,9 +318,9 @@ services:
       THREADS: ${NOMINATIM_THREADS:-8}
       IMPORT_STYLE: full
       REVERSE_ONLY: "false"
-      IMPORT_WIKIPEDIA: "true"
-      IMPORT_US_POSTCODES: "true"
-      IMPORT_GB_POSTCODES: "true"
+      IMPORT_WIKIPEDIA: "${NOMINATIM_IMPORT_WIKIPEDIA:-true}"
+      IMPORT_US_POSTCODES: "${NOMINATIM_IMPORT_US_POSTCODES:-false}"
+      IMPORT_GB_POSTCODES: "${NOMINATIM_IMPORT_GB_POSTCODES:-false}"
     profiles: [nominatim]
     networks: [openmapx]
     healthcheck:
@@ -347,7 +347,7 @@ services:
     volumes:
       - ./data/photon:/photon/data
     environment:
-      REGION: planet
+      REGION: ${PHOTON_REGION:-planet}
       UPDATE_STRATEGY: PARALLEL
       UPDATE_INTERVAL: 720h
       LOG_LEVEL: INFO
