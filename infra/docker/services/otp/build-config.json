@@ -1,7 +1,6 @@
 {
   "areaVisibility": true,
   "platformEntriesLinking": true,
-  "parentStopLinking": true,
   "transitServiceStart": "-P1Y",
   "transitServiceEnd": "P2Y",
   "osm": [

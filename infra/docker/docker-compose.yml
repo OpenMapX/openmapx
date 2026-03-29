@@ -210,7 +210,8 @@ services:
   motis:
     image: ghcr.io/motis-project/motis:latest
     ports: ["127.0.0.1:8081:8080"]
-    volumes: ["./data/motis:/data:ro"]
+    volumes:
+      - ./data/motis:/data
     profiles: [transit]
     networks: [openmapx]
     deploy:
@@ -368,7 +369,7 @@ services:
   # ── Overpass API ──────────────────────────────────────────────────────
   # Self-hosted OSM query service for transit stops, POIs, trails, etc.
   # Planet import: ~24h, ~200 GB disk, ~4 GB RAM.
-  # Shares OSM PBF via data/overpass/ (hardlinked from data/osm/).
+  # Uses pre-converted bz2 in data/overpass/osm/ (created by manage.sh link).
 
   overpass:
     image: wiktorn/overpass-api:latest
@@ -379,8 +380,8 @@ services:
     environment:
       OVERPASS_META: "yes"
       OVERPASS_MODE: init
-      OVERPASS_PLANET_URL: "file:///osm/data.osm.pbf"
-      OVERPASS_PLANET_PREPROCESS: "mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf && rm /db/planet.osm.pbf"
+      OVERPASS_PLANET_URL: "file:///osm/data.osm.bz2"
+      OVERPASS_PLANET_PREPROCESS: "rm -f /db/planet.osm.bz2 && ln -s /osm/data.osm.bz2 /db/planet.osm.bz2"
       OVERPASS_DIFF_URL: https://planet.openstreetmap.org/replication/day/
       OVERPASS_COMPRESSION: lz4
       OVERPASS_RULES_LOAD: "10"
@@ -448,6 +449,21 @@ services:
     restart: unless-stopped
 
   # ── Build Services (one-shot, used by manage.sh) ────────────────────────
+
+  # Transitous import tools: fetches GTFS feeds, cleans with gtfsclean,
+  # resolves Transitland/MDB references, generates MOTIS config + Lua scripts.
+  transitous-import:
+    build:
+      context: ./services/transitous
+      dockerfile: Dockerfile
+    volumes:
+      - ./data/.transitous-catalog:/transitous
+      - ./data/gtfs:/transitous/out
+      - ./data/.transitous-downloads:/transitous/downloads
+      - ./services/transitous/fetch-and-configure.sh:/run.sh:ro
+    profiles: [build]
+    networks: [openmapx]
+    entrypoint: ["/bin/bash"]
 
   osrm-build:
     image: ghcr.io/project-osrm/osrm-backend:latest

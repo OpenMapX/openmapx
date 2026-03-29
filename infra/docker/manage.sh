@@ -86,6 +86,8 @@ ensure_dirs() {
     "${DATA_DIR}/osrm" \
     "${DATA_DIR}/valhalla" \
     "${DATA_DIR}/otp" \
+    "${DATA_DIR}/otp/osm" \
+    "${DATA_DIR}/otp/gtfs" \
     "${DATA_DIR}/motis" \
     "${DATA_DIR}/tileserver" \
     "${DATA_DIR}/tileserver/fonts" \
@@ -171,6 +173,33 @@ cmd_download_osm() {
     err "Download failed"
     return 1
   fi
+
+  cmd_convert_overpass
+}
+
+cmd_convert_overpass() {
+  ensure_dirs
+  local pbf
+  pbf=$(find_pbf)
+  if [ -z "$pbf" ]; then
+    err "No OSM PBF found. Run: ./manage.sh download-osm"
+    return 1
+  fi
+
+  if ! command -v osmium >/dev/null 2>&1; then
+    err "osmium-tool not installed. Install with: sudo apt install osmium-tool"
+    return 1
+  fi
+
+  local bz2_dest="${DATA_DIR}/overpass/osm/data.osm.bz2"
+  log "Converting PBF → bz2 for Overpass..."
+  if osmium cat -o "$bz2_dest" "$pbf"; then
+    ok "Converted: data.osm.bz2 ($(human_size "$(file_size "$bz2_dest")"))"
+  else
+    err "bz2 conversion failed"
+    rm -f "$bz2_dest" 2>/dev/null
+    return 1
+  fi
 }
 
 # ── Download GTFS Feeds ──────────────────────────────────────────────────
@@ -208,146 +237,48 @@ cmd_download_gtfs() {
   fi
 }
 
-cmd_download_all_feeds() {
-  require_cmd jq git
-
-  local country_filter="${1:-}"
-  ensure_dirs
-
+update_transitous_catalog() {
   local catalog_dir="${DATA_DIR}/.transitous-catalog"
 
-  # Clone or update the Transitous catalog
   if [ -d "$catalog_dir/.git" ]; then
     log "Updating Transitous catalog..."
     git -C "$catalog_dir" pull --ff-only -q 2>/dev/null || warn "Could not update Transitous catalog — using cached version"
   else
-    log "Cloning Transitous feed catalog (one-time, ~50 MB)..."
+    log "Cloning Transitous feed catalog..."
     rm -rf "$catalog_dir"
     git clone --depth 1 -q "$(github_url "$TRANSITOUS_REPO")" "$catalog_dir"
   fi
+}
 
-  # Parse all feed files and extract GTFS HTTP URLs
-  local feed_list="${DATA_DIR}/.feed-urls.txt"
-  : > "$feed_list"
+cmd_download_all_feeds() {
+  local country_filter="${1:-}"
+  ensure_dirs
+  mkdir -p "${DATA_DIR}/.transitous-downloads"
 
-  local feed_files
-  feed_files=$(find "$catalog_dir/feeds" -name "*.json" -type f 2>/dev/null | sort)
+  # Clone or update the Transitous catalog
+  update_transitous_catalog
 
-  if [ -z "$feed_files" ]; then
-    err "No feed files found in catalog"
+  # Build the Transitous import image if needed
+  log "Preparing Transitous import tools..."
+  if ! docker compose -f "$COMPOSE_FILE" --profile build build transitous-import 2>/dev/null; then
+    err "Failed to build Transitous import image"
     return 1
   fi
 
-  local total_feeds=0
-  for feed_file in $feed_files; do
-    local filename
-    filename=$(basename "$feed_file" .json)
-    # Extract country code from filename (e.g., "de" from "de.json" or "de-by" from "de-by.json")
-    local cc
-    cc=$(echo "$filename" | sed 's/[.-].*//' | tr '[:upper:]' '[:lower:]')
-
-    # Apply country filter if specified
-    if [ -n "$country_filter" ] && [ "$cc" != "$country_filter" ]; then
-      continue
-    fi
-
-    # Extract all HTTP GTFS sources from this feed file using jq
-    local sources
-    sources=$(jq -r '
-      .sources[]
-      | select(.type == "http")
-      | select((.spec // "gtfs") == "gtfs")
-      | select((.skip // false) == false)
-      | select(.url != null)
-      | "\(.name)\t\(.url)"
-    ' "$feed_file" 2>/dev/null || true)
-
-    while IFS=$'\t' read -r name url; do
-      [ -z "$url" ] && continue
-      # Generate slug from country code + name
-      local slug
-      slug=$(echo "${cc}_${name}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | sed 's/__*/_/g' | sed 's/^_\|_$//g')
-      echo "${slug}|${url}" >> "$feed_list"
-      total_feeds=$((total_feeds + 1))
-    done <<< "$sources"
-  done
-
-  if [ "$total_feeds" -eq 0 ]; then
-    if [ -n "$country_filter" ]; then
-      err "No feeds found for country: $country_filter"
-    else
-      err "No feeds found in catalog"
-    fi
-    return 1
+  # Run the Transitous fetch pipeline (resolves Transitland/MDB references,
+  # downloads feeds, validates, runs gtfsclean)
+  log "Fetching GTFS feeds via Transitous pipeline..."
+  if ! docker compose -f "$COMPOSE_FILE" --profile build \
+    run --rm transitous-import /run.sh fetch "$country_filter"; then
+    warn "Some feeds failed to download — check output above"
   fi
-
-  # Count how many are already downloaded
-  local existing=0
-  while IFS='|' read -r slug url; do
-    [ -f "${DATA_DIR}/gtfs/${slug}.gtfs.zip" ] && existing=$((existing + 1))
-  done < "$feed_list"
-
-  if [ -n "$country_filter" ]; then
-    log "Found ${total_feeds} GTFS feeds for country '${country_filter}' (${existing} already downloaded)"
-  else
-    log "Found ${total_feeds} GTFS feeds worldwide (${existing} already downloaded)"
-  fi
-
-  # Download missing feeds with concurrency control
-  local downloaded=0
-  local failed=0
-  local skipped=0
-  local running=0
-
-  while IFS='|' read -r slug url; do
-    local dest="${DATA_DIR}/gtfs/${slug}.gtfs.zip"
-
-    # Skip if already downloaded
-    if [ -f "$dest" ] && [ "$(file_size "$dest")" -gt 100 ]; then
-      skipped=$((skipped + 1))
-      continue
-    fi
-
-    # Concurrency control: wait if too many background jobs
-    while [ "$running" -ge "$MAX_CONCURRENT_DOWNLOADS" ]; do
-      wait -n 2>/dev/null || true
-      running=$((running - 1))
-    done
-
-    # Download in background
-    (
-      if curl -fsSL --max-time 600 -o "$dest" "$url" 2>/dev/null; then
-        if [ -f "$dest" ] && [ "$(file_size "$dest")" -gt 100 ]; then
-          ok "  ${slug} ($(human_size "$(file_size "$dest")"))"
-        else
-          rm -f "$dest"
-        fi
-      else
-        rm -f "$dest"
-      fi
-    ) &
-    running=$((running + 1))
-    downloaded=$((downloaded + 1))
-
-  done < "$feed_list"
-
-  # Wait for remaining background downloads
-  wait
-
-  # Count successful downloads
-  local success=0
-  while IFS='|' read -r slug url; do
-    [ -f "${DATA_DIR}/gtfs/${slug}.gtfs.zip" ] && success=$((success + 1))
-  done < "$feed_list"
-  failed=$((total_feeds - success))
-
-  echo ""
-  ok "GTFS download complete: ${success}/${total_feeds} feeds available (${skipped} cached, ${failed} failed)"
 
   # Show total GTFS size
+  local feed_count
+  feed_count=$(find "${DATA_DIR}/gtfs" -name "*.gtfs.zip" -o -name "*.netex.zip" 2>/dev/null | wc -l | tr -d ' ')
   local gtfs_size
   gtfs_size=$(du -sh "${DATA_DIR}/gtfs" 2>/dev/null | cut -f1 || echo "0")
-  log "Total GTFS data: ${gtfs_size}"
+  ok "GTFS feeds: ${feed_count} feeds, ${gtfs_size} total"
 }
 
 # ── Download Map Style, Fonts, Sprites ─────────────────────────────────
@@ -520,8 +451,13 @@ cmd_link() {
     safe_link "$pbf" "${DATA_DIR}/nominatim/data.osm.pbf" && ok "  -> nominatim/data.osm.pbf"
     linked=$((linked + 1))
 
-    # Overpass — for OSM query service
-    safe_link "$pbf" "${DATA_DIR}/overpass/osm/data.osm.pbf" && ok "  -> overpass/osm/data.osm.pbf"
+    # Overpass — uses pre-converted bz2 (created by download-osm)
+    local overpass_bz2="${DATA_DIR}/overpass/osm/data.osm.bz2"
+    if [ -f "$overpass_bz2" ]; then
+      ok "  -> overpass/osm/data.osm.bz2 (already exists)"
+    else
+      warn "  No bz2 found for Overpass. Run: ./manage.sh convert-overpass"
+    fi
     linked=$((linked + 1))
 
     if [ "$planet" = true ]; then
@@ -533,7 +469,7 @@ cmd_link() {
       linked=$((linked + 1))
 
       # OTP — region-scale only
-      safe_link "$pbf" "${DATA_DIR}/otp/${pbf_name}" && ok "  -> otp/${pbf_name}"
+      safe_link "$pbf" "${DATA_DIR}/otp/osm/${pbf_name}" && ok "  -> otp/osm/${pbf_name}"
       linked=$((linked + 1))
     fi
   else
@@ -551,7 +487,7 @@ cmd_link() {
     linked=$((linked + 1))
 
     if [ "$planet" = false ]; then
-      safe_link "$feed" "${DATA_DIR}/otp/${feed_name}"
+      safe_link "$feed" "${DATA_DIR}/otp/gtfs/${feed_name}"
       linked=$((linked + 1))
     fi
 
@@ -742,10 +678,76 @@ build_otp() {
   ok "OTP build complete"
 }
 
+cmd_generate_motis_config() {
+  local catalog_dir="${DATA_DIR}/.transitous-catalog"
+
+  if [ ! -d "$catalog_dir/feeds" ]; then
+    err "Transitous catalog not found. Run: ./manage.sh download-all-feeds first"
+    return 1
+  fi
+
+  ensure_dirs
+  mkdir -p "${DATA_DIR}/.transitous-downloads"
+
+  log "Generating MOTIS config with GTFS-RT feeds and Lua scripts..."
+
+  # Run Transitous's generate-motis-config.py (handles RT feed matching,
+  # protocol mapping, Lua script references, GBFS feeds, etc.)
+  if ! docker compose -f "$COMPOSE_FILE" --profile build \
+    run --rm transitous-import /run.sh generate-config; then
+    err "Failed to generate MOTIS config"
+    return 1
+  fi
+
+  # Copy generated config and scripts from gtfs output dir to motis dir
+  if [ -f "${DATA_DIR}/gtfs/config.yml" ]; then
+    cp "${DATA_DIR}/gtfs/config.yml" "${DATA_DIR}/motis/config.yml"
+    ok "Copied config.yml to motis/"
+  fi
+
+  if [ -d "${DATA_DIR}/gtfs/scripts" ]; then
+    mkdir -p "${DATA_DIR}/motis/scripts"
+    cp -r "${DATA_DIR}/gtfs/scripts/"* "${DATA_DIR}/motis/scripts/" 2>/dev/null || true
+    local lua_count
+    lua_count=$(find "${DATA_DIR}/motis/scripts" -name "*.lua" 2>/dev/null | wc -l | tr -d ' ')
+    ok "Copied ${lua_count} Lua import script(s) to motis/scripts/"
+  fi
+}
+
+cmd_generate_attribution() {
+  local catalog_dir="${DATA_DIR}/.transitous-catalog"
+
+  if [ ! -d "$catalog_dir/feeds" ]; then
+    err "Transitous catalog not found. Run: ./manage.sh download-all-feeds first"
+    return 1
+  fi
+
+  ensure_dirs
+  mkdir -p "${DATA_DIR}/.transitous-downloads"
+
+  log "Generating transit feed attribution data..."
+
+  if ! docker compose -f "$COMPOSE_FILE" --profile build \
+    run --rm transitous-import /run.sh generate-attribution; then
+    err "Failed to generate attribution data"
+    return 1
+  fi
+
+  # Copy attribution JSON to a location accessible by the API/web app
+  if [ -f "${DATA_DIR}/gtfs/license.json" ]; then
+    cp "${DATA_DIR}/gtfs/license.json" "${DATA_DIR}/motis/license.json"
+    ok "Attribution data saved to data/motis/license.json"
+  fi
+}
+
 build_motis() {
   if ! ls "${DATA_DIR}/motis/"*.zip 1>/dev/null 2>&1; then
     warn "No GTFS feeds linked for MOTIS"
   fi
+
+  # Generate config with GTFS-RT mappings and attribution data
+  cmd_generate_motis_config
+  cmd_generate_attribution
 
   local feed_count
   feed_count=$(find "${DATA_DIR}/motis" -name "*.zip" -type f 2>/dev/null | wc -l | tr -d ' ')
@@ -896,8 +898,8 @@ build_photon() {
 }
 
 build_overpass() {
-  if [ ! -f "${DATA_DIR}/overpass/osm/data.osm.pbf" ]; then
-    err "No OSM PBF linked for Overpass. Run: ./manage.sh link"
+  if [ ! -f "${DATA_DIR}/overpass/osm/data.osm.bz2" ]; then
+    err "No bz2 found for Overpass. Run: ./manage.sh convert-overpass"
     return 1
   fi
 
@@ -1079,7 +1081,7 @@ cmd_clean() {
       ;;
     overpass)
       rm -rf "${DATA_DIR}/overpass/db/"*
-      rm -f "${DATA_DIR}/overpass/osm/data.osm.pbf"
+      rm -f "${DATA_DIR}/overpass/osm/data.osm.pbf" "${DATA_DIR}/overpass/osm/data.osm.bz2"
       ok "Cleaned Overpass database"
       ;;
     styles)
@@ -1130,18 +1132,35 @@ COMMANDS:
                                Use "planet" for worldwide (~70 GB).
                                Default region from data.conf.
                                Regions: https://download.geofabrik.de/
+                               Auto-converts PBF → bz2 for Overpass.
+
+  convert-overpass             Convert OSM PBF → bz2 for Overpass
+                               Runs automatically after download-osm.
+                               Requires: osmium-tool (apt install osmium-tool)
 
   add-feed <url> [slug]       Download a single GTFS feed
 
-  download-all-feeds [cc]     Download ALL feeds from Transitous catalog
-                               Optional: 2-letter country code filter.
-                               Requires: jq, git
+  download-all-feeds [cc]     Download GTFS feeds via Transitous pipeline
+                               Resolves Transitland/MDB references,
+                               validates, and cleans feeds with gtfsclean.
+                               Optional: 2-letter country code filter (e.g. de)
+                               Comma-separated for multiple (e.g. de,at,ch)
 
   remove-feed <slug>          Remove a GTFS feed and its links
 
   download-style              Download map styles, fonts, and sprites
                                OSM Bright, OSM Liberty, Positron, Dark Matter
                                + OpenMapTiles font glyphs for label rendering
+
+  generate-motis-config       Generate MOTIS config.yml with GTFS-RT feeds
+                               Uses Transitous's config generator for RT
+                               feed matching, Lua scripts, and GBFS feeds.
+                               Auto-run by 'build motis'.
+
+  generate-attribution        Generate transit feed attribution/license data
+                               Extracts publisher, operator, and license info
+                               from GTFS feeds. Output: data/motis/license.json
+                               Auto-run by 'build motis'.
 
   link                        Hard-link source data into service directories
                                Detects planet-scale and skips OSRM/OTP.
@@ -1233,10 +1252,13 @@ HELP
 main() {
   case "${1:-help}" in
     download-osm)            shift; cmd_download_osm "$@" ;;
+    convert-overpass)        cmd_convert_overpass ;;
     add-feed|download-gtfs)  shift; cmd_download_gtfs "$@" ;;
     download-all-feeds)      shift; cmd_download_all_feeds "$@" ;;
     remove-feed)             shift; cmd_remove_feed "$@" ;;
     download-style)          cmd_download_style ;;
+    generate-motis-config)   cmd_generate_motis_config ;;
+    generate-attribution)    cmd_generate_attribution ;;
     link)                    cmd_link ;;
     build)                   shift; cmd_build "$@" ;;
     build-all)               cmd_build_all ;;
