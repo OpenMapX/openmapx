@@ -272,7 +272,7 @@ cmd_download_all_feeds() {
   # downloads feeds, validates, runs gtfsclean)
   log "Fetching GTFS feeds via Transitous pipeline..."
   if ! docker compose -f "$COMPOSE_FILE" --profile build \
-    run --rm transitous-import /run.sh fetch "$country_filter"; then
+    run --rm --user "$(id -u):$(id -g)" transitous-import /run.sh fetch "$country_filter"; then
     warn "Some feeds failed to download — check output above"
   fi
 
@@ -697,7 +697,7 @@ cmd_generate_motis_config() {
   # Run Transitous's generate-motis-config.py (handles RT feed matching,
   # protocol mapping, Lua script references, GBFS feeds, etc.)
   if ! docker compose -f "$COMPOSE_FILE" --profile build \
-    run --rm transitous-import /run.sh generate-config; then
+    run --rm --user "$(id -u):$(id -g)" transitous-import /run.sh generate-config; then
     err "Failed to generate MOTIS config"
     return 1
   fi
@@ -827,7 +827,7 @@ cmd_generate_attribution() {
   log "Generating transit feed attribution data..."
 
   if ! docker compose -f "$COMPOSE_FILE" --profile build \
-    run --rm transitous-import /run.sh generate-attribution; then
+    run --rm --user "$(id -u):$(id -g)" transitous-import /run.sh generate-attribution; then
     err "Failed to generate attribution data"
     return 1
   fi
