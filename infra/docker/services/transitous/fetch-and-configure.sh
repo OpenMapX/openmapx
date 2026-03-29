@@ -91,9 +91,7 @@ case "$ACTION" in
     REGION_GLOBS=()
     for f in out/*.gtfs.zip out/*.netex.zip; do
       [ -f "$f" ] || continue
-      local fname
       fname=$(basename "$f")
-      local cc
       cc=$(echo "$fname" | sed 's/[_-].*//')
       if [ -n "$cc" ] && ! printf '%s\n' "${REGION_GLOBS[@]}" 2>/dev/null | grep -qx "${cc}*"; then
         REGION_GLOBS+=("${cc}*")
