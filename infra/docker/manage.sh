@@ -697,11 +697,21 @@ build_osrm() {
     return 1
   fi
 
+  local hash_file="${DATA_DIR}/osrm/.pbf_hash"
+  local current_hash
+  current_hash=$(sha256sum "${DATA_DIR}/osrm/region.osm.pbf" | cut -d' ' -f1)
+
+  if [ -f "$hash_file" ] && [ "$(cat "$hash_file")" = "$current_hash" ] && [ -f "${DATA_DIR}/osrm/region.osrm" ]; then
+    ok "OSRM data unchanged, skipping build"
+    return 0
+  fi
+
   log "Building OSRM routing data..."
   if ! docker compose -f "$COMPOSE_FILE" run --rm osrm-build; then
     err "OSRM build failed"
     return 1
   fi
+  echo "$current_hash" > "$hash_file"
   ok "OSRM build complete"
 }
 
