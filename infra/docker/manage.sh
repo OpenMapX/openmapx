@@ -27,7 +27,10 @@ github_url() {
   # Convert a GitHub HTTPS URL to SSH if the server has SSH access
   local url="$1"
   if [ -z "$_GITHUB_SSH" ]; then
-    if ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -T git@github.com 2>&1 | grep -qi "successfully authenticated"; then
+    # ssh -T exits with 1 on success for GitHub (it closes the session)
+    # but exits with 255 on connection/auth failure
+    ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o BatchMode=yes -T git@github.com &>/dev/null
+    if [ $? -eq 1 ]; then
       _GITHUB_SSH=yes
     else
       _GITHUB_SSH=no
@@ -40,7 +43,7 @@ github_url() {
   fi
 }
 
-TRANSITOUS_REPO="https://github.com/transitous/transitous.git"
+TRANSITOUS_REPO="https://github.com/public-transport/transitous.git"
 MAX_CONCURRENT_DOWNLOADS="${MAX_CONCURRENT_DOWNLOADS:-5}"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
