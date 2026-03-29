@@ -1130,14 +1130,7 @@ cmd_status() {
   # Docker images and build cache
   echo ""
   _bold "Docker Storage:"
-  local images_size build_cache_size
-  images_size=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
-  build_cache_size=$(docker system df --format '{{.Size}}' 2>/dev/null | tail -1 || echo "?")
-  echo "  Images:      ${images_size}"
-  echo "  Build cache: ${build_cache_size}"
-  local docker_total
-  docker_total=$(du -sh /var/lib/docker 2>/dev/null | cut -f1 || echo "?")
-  echo "  Total:       ${docker_total}"
+  docker system df --format '  {{.Type}}: {{.Size}} (reclaimable: {{.Reclaimable}})' 2>/dev/null || echo "  (docker not available)"
 
   # Running containers
   echo ""
