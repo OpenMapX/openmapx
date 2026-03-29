@@ -144,7 +144,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
     try {
       const { error } = await authClient.updateUser({ name });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("updateFailed") });
+        setMessage({ type: "error", text: String(error.message ?? t("updateFailed")) });
       } else {
         setMessage({ type: "success", text: t("profileUpdated") });
       }
@@ -163,7 +163,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         newEmail,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("failedEmailChange") });
+        setMessage({ type: "error", text: String(error.message ?? t("failedEmailChange")) });
         return;
       }
       setEmailOtpSent(true);
@@ -181,7 +181,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         otp: emailOtp,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("failedChangeEmail") });
+        setMessage({ type: "error", text: String(error.message ?? t("failedChangeEmail")) });
         return;
       }
       setMessage({ type: "success", text: t("emailUpdated") });
@@ -203,7 +203,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         newPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("failedChangePassword") });
+        setMessage({ type: "error", text: String(error.message ?? t("failedChangePassword")) });
         return;
       }
       setMessage({ type: "success", text: t("passwordChanged") });
@@ -223,7 +223,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         password: twoFactorPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("failedEnable2FA") });
+        setMessage({ type: "error", text: String(error.message ?? t("failedEnable2FA")) });
         return;
       }
       if (data) {
@@ -242,7 +242,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         code: totpVerifyCode,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("invalidCode") });
+        setMessage({ type: "error", text: String(error.message ?? t("invalidCode")) });
         return;
       }
       setTwoFactorEnabled(true);
@@ -263,7 +263,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         password: twoFactorPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("failedDisable2FA") });
+        setMessage({ type: "error", text: String(error.message ?? t("failedDisable2FA")) });
         return;
       }
       setTwoFactorEnabled(false);
@@ -283,7 +283,10 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         password: twoFactorPassword,
       });
       if (error) {
-        setMessage({ type: "error", text: error.message ?? t("failedGenerateBackupCodes") });
+        setMessage({
+          type: "error",
+          text: String(error.message ?? t("failedGenerateBackupCodes")),
+        });
         return;
       }
       if (data) {
@@ -321,7 +324,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       if (error) {
         setMessage({
           type: "error",
-          text: error.message ?? t("failedAddPasskey"),
+          text: String(error.message ?? t("failedAddPasskey")),
         });
         return;
       }

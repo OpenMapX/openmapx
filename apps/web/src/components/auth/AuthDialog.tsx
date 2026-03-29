@@ -197,7 +197,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
     try {
       const { error: passkeyError } = await authClient.signIn.passkey();
       if (passkeyError) {
-        setError(passkeyError.message ?? t("passkeySignInFailed"));
+        setError(String(passkeyError.message ?? t("passkeySignInFailed")));
         return;
       }
       handleClose();
