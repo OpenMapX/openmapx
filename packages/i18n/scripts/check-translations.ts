@@ -25,9 +25,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, "..");
-const MESSAGES_DIR = join(ROOT, "messages");
-const SRC_DIR = join(ROOT, "src");
+const PKG_ROOT = join(__dirname, "..");
+const REPO_ROOT = join(PKG_ROOT, "..", "..");
+const MESSAGES_DIR = join(PKG_ROOT, "locales");
+const SRC_DIRS = [
+  join(REPO_ROOT, "apps", "web", "src"),
+  join(REPO_ROOT, "apps", "mobile", "app"),
+  join(REPO_ROOT, "apps", "mobile", "src"),
+];
 const FIX_MISSING = process.argv.includes("--fix-missing");
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -156,7 +161,14 @@ console.log(
   '\n\x1b[1m2. Unused keys\x1b[0m (defined but never referenced via static t("key") calls)\n',
 );
 
-const sourceFiles = collectFiles(SRC_DIR, [".tsx", ".ts"]);
+const sourceFiles = SRC_DIRS.filter((d) => {
+  try {
+    statSync(d);
+    return true;
+  } catch {
+    return false;
+  }
+}).flatMap((d) => collectFiles(d, [".tsx", ".ts"]));
 
 const usedKeys = new Set<string>();
 const namespacesWithDynamicCalls = new Set<string>();
@@ -182,6 +194,15 @@ for (const file of sourceFiles) {
     const dynamicPattern = new RegExp(`\\b${varName}\\(\\s*(?!["'])([\\w\`])`, "g");
     if (dynamicPattern.test(content)) {
       namespacesWithDynamicCalls.add(ns);
+    }
+  }
+
+  // react-i18next: const { t } = useTranslation() — uses flat dotted keys like t("ns.key")
+  const i18nextPattern = /\{\s*t\s*\}\s*=\s*useTranslation\(\)/;
+  if (i18nextPattern.test(content)) {
+    const flatPattern = /\bt\(\s*["']([^"']+)["']/g;
+    for (const match of content.matchAll(flatPattern)) {
+      usedKeys.add(match[1]);
     }
   }
 }

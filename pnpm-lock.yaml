@@ -456,7 +456,11 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  packages/i18n: {}
+  packages/i18n:
+    devDependencies:
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
 
 packages:
 
