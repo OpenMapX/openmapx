@@ -110,7 +110,7 @@ export function WaypointRow({
           border: "1px solid",
           borderColor: "divider",
           borderRadius: "8px",
-          bgcolor: "grey.50",
+          bgcolor: "action.hover",
           "&:focus-within": {
             borderColor: TEAL,
             bgcolor: "background.paper",

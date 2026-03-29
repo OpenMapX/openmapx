@@ -453,49 +453,53 @@ export function DirectionsPanelContent() {
           </Box>
         )}
 
-        {/* Leave now / Depart at / Arrive by + Options */}
+        {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit) */}
         <Box
           sx={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
+            justifyContent: isTransitMode ? "space-between" : "flex-end",
             px: 2,
             py: 1,
           }}
         >
-          <Box
-            onClick={() => setTimePickerOpen((v) => !v)}
-            sx={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 0.75,
-              px: 1.75,
-              py: 0.75,
-              borderRadius: "12px",
-              bgcolor: transitTimeMode !== "now" ? `${TEAL}18` : "grey.100",
-              cursor: "pointer",
-              "&:hover": { bgcolor: transitTimeMode !== "now" ? `${TEAL}28` : "grey.200" },
-              transition: "background-color 0.15s",
-            }}
-          >
-            <ScheduleIcon
-              sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
-            />
-            <Typography
-              variant="body2"
-              fontWeight={500}
-              color={transitTimeMode !== "now" ? TEAL : "text.primary"}
+          {isTransitMode && (
+            <Box
+              onClick={() => setTimePickerOpen((v) => !v)}
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.75,
+                px: 1.75,
+                py: 0.75,
+                borderRadius: "12px",
+                bgcolor: transitTimeMode !== "now" ? `${TEAL}18` : "action.hover",
+                cursor: "pointer",
+                "&:hover": {
+                  bgcolor: transitTimeMode !== "now" ? `${TEAL}28` : "action.selected",
+                },
+                transition: "background-color 0.15s",
+              }}
             >
-              {transitTimeMode === "now"
-                ? t("departNow")
-                : transitTimeMode === "depart"
-                  ? `${t("departAt")} ${transitDepartureTime instanceof Date ? transitDepartureTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`
-                  : `${t("arriveBy")} ${transitArrivalTime instanceof Date ? transitArrivalTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`}
-            </Typography>
-            <ExpandMoreIcon
-              sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
-            />
-          </Box>
+              <ScheduleIcon
+                sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
+              />
+              <Typography
+                variant="body2"
+                fontWeight={500}
+                color={transitTimeMode !== "now" ? TEAL : "text.primary"}
+              >
+                {transitTimeMode === "now"
+                  ? t("departNow")
+                  : transitTimeMode === "depart"
+                    ? `${t("departAt")} ${transitDepartureTime instanceof Date ? transitDepartureTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`
+                    : `${t("arriveBy")} ${transitArrivalTime instanceof Date ? transitArrivalTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`}
+              </Typography>
+              <ExpandMoreIcon
+                sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
+              />
+            </Box>
+          )}
 
           {!isTransitMode && (
             <Typography
@@ -542,8 +546,8 @@ export function DirectionsPanelContent() {
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    bgcolor: transitTimeMode === m ? TEAL : "grey.100",
-                    "&:hover": { bgcolor: transitTimeMode === m ? TEAL : "grey.200" },
+                    bgcolor: transitTimeMode === m ? TEAL : "action.hover",
+                    "&:hover": { bgcolor: transitTimeMode === m ? TEAL : "action.selected" },
                     transition: "background-color 0.15s",
                   }}
                 >
