@@ -219,6 +219,8 @@ services:
     ports: ["127.0.0.1:8081:8080"]
     volumes:
       - ./data/motis:/data
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/motis import -c /data/config.yml /data && /motis server /data"]
     profiles: [transit]
     networks: [openmapx]
     deploy:

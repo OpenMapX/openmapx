@@ -1191,7 +1191,7 @@ cmd_check() {
     if [ -n "$response" ] && ([ -z "$expect" ] || echo "$response" | grep -qi "$expect"); then
       printf "  %-14s %s\n" "$name" "$(_pass)"
       passed=$((passed + 1))
-    elif docker compose ps 2>/dev/null | grep -i "$name" | grep -qi "starting\|Restarting"; then
+    elif docker compose ps 2>/dev/null | grep -i "$name" | grep -qi "starting\|Restarting\|unhealthy"; then
       printf "  %-14s %s\n" "$name" "$(_importing)"
       skipped=$((skipped + 1))
     else
@@ -1230,7 +1230,7 @@ cmd_check() {
     if echo "$response" | grep -qi "elements"; then
       printf "  %-14s %s\n" "$name" "$(_pass)"
       passed=$((passed + 1))
-    elif docker compose ps 2>/dev/null | grep -i "$name" | grep -qi "starting\|Restarting"; then
+    elif docker compose ps 2>/dev/null | grep -i "$name" | grep -qi "starting\|Restarting\|unhealthy"; then
       printf "  %-14s %s\n" "$name" "$(_importing)"
       skipped=$((skipped + 1))
     else
