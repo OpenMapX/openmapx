@@ -18,6 +18,8 @@ entryPoints:
   websecure:
     address: ":443"
     http:
+      middlewares:
+        - basic-auth@file
       tls:
         certResolver: letsencrypt
 
