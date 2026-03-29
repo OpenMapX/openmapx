@@ -48,6 +48,9 @@ infra/docker/tiles/
 infra/docker/valhalla/
 infra/docker/pgdata/
 
+# Transitous API keys (contains secrets)
+infra/docker/services/transitous/api-keys.json
+
 # Planning
 docs/superpowers/
 docs/plans/

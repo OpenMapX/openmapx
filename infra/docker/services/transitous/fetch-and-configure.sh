@@ -27,6 +27,11 @@ case "$ACTION" in
       git submodule update --init --checkout --remote -q 2>/dev/null || true
     fi
 
+    # Apply local API keys overlay if present
+    if [ -f /transitous/apply-api-keys.py ]; then
+      python3 /transitous/apply-api-keys.py
+    fi
+
     # Determine which feed files to process
     feed_files=()
     for f in feeds/*.json; do
@@ -121,16 +126,14 @@ case "$ACTION" in
   generate-attribution)
     _blue "[transitous] Generating feed attribution data..."
 
-    # Init Transitland Atlas submodule (needed for resolving source metadata)
+    # Try updating Transitland Atlas submodule (already cloned on host)
     if [ -f .gitmodules ]; then
-      git submodule update --init --checkout --remote 2>/dev/null || \
-        _yellow "[!] Could not update Transitland Atlas — using cached version"
+      git submodule update --init --checkout --remote -q 2>/dev/null || true
     fi
 
     if [ -f ./src/generate-attribution.py ]; then
       python3 ./src/generate-attribution.py
       if [ -f out/license.json ]; then
-        local count
         count=$(python3 -c "import json; print(len(json.load(open('out/license.json'))))" 2>/dev/null || echo "?")
         _green "[+] Generated attribution data for ${count} feed(s) -> out/license.json"
       fi

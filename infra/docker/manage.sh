@@ -743,6 +743,74 @@ cmd_generate_motis_config() {
   fi
 }
 
+cmd_generate_api_keys() {
+  require_cmd jq
+
+  local catalog_dir="${DATA_DIR}/.transitous-catalog"
+  local keys_file="${SCRIPT_DIR}/services/transitous/api-keys.json"
+
+  if [ ! -d "$catalog_dir/feeds" ] || [ ! -d "$catalog_dir/transitland-atlas/feeds" ]; then
+    err "Transitous catalog not found or Transitland Atlas missing."
+    err "Run: ./manage.sh download-all-feeds first"
+    return 1
+  fi
+
+  # Warn if api-keys.json already has keys
+  if [ -f "$keys_file" ]; then
+    local existing_keys
+    existing_keys=$(jq '[to_entries[] | select(.key | startswith("_") | not) | select(.value != "")] | length' "$keys_file" 2>/dev/null || echo "0")
+    if [ "$existing_keys" -gt 0 ]; then
+      warn "api-keys.json already contains ${existing_keys} filled-in key(s)."
+      warn "Regenerating will OVERWRITE your existing keys."
+      printf "  Continue? [y/N] "
+      read -r confirm
+      if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        log "Aborted."
+        return 0
+      fi
+    fi
+  fi
+
+  log "Scanning Transitous catalog for feeds requiring API keys..."
+
+  # Scan Transitland Atlas (DMFR format) for feeds with authorization blocks
+  local atlas_auth
+  atlas_auth=$(find "$catalog_dir/transitland-atlas/feeds" -name "*.dmfr.json" -type f -exec \
+    jq -r '.feeds[]? | select(.authorization != null) | .id' {} \; 2>/dev/null | sort -u)
+
+  # Scan Transitous feed files for sources referencing those atlas IDs
+  # Includes skipped sources — providing a key will unskip them
+  local result="{}"
+  local count=0
+
+  for feed_file in "$catalog_dir/feeds/"*.json; do
+    [ -f "$feed_file" ] || continue
+    local region
+    region=$(basename "$feed_file" .json)
+
+    local matches
+    matches=$(jq -r --arg atlas_auth "$atlas_auth" '
+      .sources[]
+      | select(.["transitland-atlas-id"] != null)
+      | select(.["api-key"] == null)
+      | select(.["url-override"] == null)
+      | .name as $name | .["transitland-atlas-id"] as $id
+      | if ($atlas_auth | split("\n") | index($id)) then "\($name)" else empty end
+    ' "$feed_file" 2>/dev/null | sort -u)
+
+    while IFS= read -r name; do
+      [ -z "$name" ] && continue
+      result=$(echo "$result" | jq --arg k "${region}/${name}" '. + {($k): ""}')
+      count=$((count + 1))
+    done <<< "$matches"
+  done
+
+  echo "$result" | jq -S '.' > "$keys_file"
+  ok "Generated api-keys.json with ${count} entries requiring API keys"
+  log "Edit ${keys_file} and fill in your keys."
+  log "See api-keys.example.json for registration URLs."
+}
+
 cmd_generate_attribution() {
   local catalog_dir="${DATA_DIR}/.transitous-catalog"
 
@@ -1186,6 +1254,10 @@ COMMANDS:
                                feed matching, Lua scripts, and GBFS feeds.
                                Auto-run by 'build motis'.
 
+  generate-api-keys           Generate api-keys.json from Transitous catalog
+                               Scans for feeds requiring API keys and creates
+                               a template to fill in. Warns before overwriting.
+
   generate-attribution        Generate transit feed attribution/license data
                                Extracts publisher, operator, and license info
                                from GTFS feeds. Output: data/motis/license.json
@@ -1287,6 +1359,7 @@ main() {
     remove-feed)             shift; cmd_remove_feed "$@" ;;
     download-style)          cmd_download_style ;;
     generate-motis-config)   cmd_generate_motis_config ;;
+    generate-api-keys)       cmd_generate_api_keys ;;
     generate-attribution)    cmd_generate_attribution ;;
     link)                    cmd_link ;;
     build)                   shift; cmd_build "$@" ;;

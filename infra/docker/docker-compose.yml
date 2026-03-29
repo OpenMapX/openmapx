@@ -461,6 +461,8 @@ services:
       - ./data/gtfs:/transitous/out
       - ./data/.transitous-downloads:/transitous/downloads
       - ./services/transitous/fetch-and-configure.sh:/run.sh:ro
+      - ./services/transitous/apply-api-keys.py:/transitous/apply-api-keys.py:ro
+      - ./services/transitous/api-keys.json:/transitous/api-keys.json:ro
     profiles: [build]
     networks: [openmapx]
     entrypoint: ["/bin/bash"]
