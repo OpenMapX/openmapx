@@ -237,12 +237,14 @@ services:
       - ./services/otp/build-config.json:/var/opentripplanner/build-config.json:ro
       - ./services/otp/router-config.json:/var/opentripplanner/router-config.json:ro
     command: --load --serve
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx12g"
     profiles: [transit]
     networks: [openmapx]
     deploy:
       resources:
         limits:
-          memory: 8g
+          memory: 16g
     restart: unless-stopped
 
   # ── Geocoding (Pelias) ─────────────────────────────────────────────────
@@ -494,13 +496,15 @@ services:
     volumes:
       - ./data/otp:/var/opentripplanner
       - ./services/otp/build-config.json:/var/opentripplanner/build-config.json:ro
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx14g"
     profiles: [build]
     networks: [openmapx]
     command: --build --save
     deploy:
       resources:
         limits:
-          memory: 8g
+          memory: 16g
 
   pelias-schema:
     image: pelias/schema:latest
