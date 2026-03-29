@@ -22,11 +22,9 @@ case "$ACTION" in
   fetch)
     COUNTRY_FILTER="${1:-}"
 
-    # Init Transitland Atlas submodule (needed for resolving feed references)
+    # Try updating Transitland Atlas submodule (already cloned on host, this is a refresh attempt)
     if [ -f .gitmodules ]; then
-      _blue "[transitous] Initializing Transitland Atlas submodule..."
-      git submodule update --init --checkout --remote 2>/dev/null || \
-        _yellow "[!] Could not update Transitland Atlas — using cached version"
+      git submodule update --init --checkout --remote -q 2>/dev/null || true
     fi
 
     # Determine which feed files to process
@@ -86,11 +84,23 @@ case "$ACTION" in
 
     # Run Transitous's config generator (handles RT feed matching, Lua scripts,
     # GBFS feeds, protocol mapping, etc.)
-    ARGS=""
-    # Skip missing files since not all feeds from catalog may be downloaded
-    ARGS="$ARGS --skip-missing-files"
+    ARGS="--skip-missing-files"
 
-    python3 ./src/generate-motis-config.py $ARGS
+    # Build region glob patterns from downloaded feeds to avoid processing
+    # feed files for countries we don't have data for
+    REGION_GLOBS=()
+    for f in out/*.gtfs.zip out/*.netex.zip; do
+      [ -f "$f" ] || continue
+      local fname
+      fname=$(basename "$f")
+      local cc
+      cc=$(echo "$fname" | sed 's/[_-].*//')
+      if [ -n "$cc" ] && ! printf '%s\n' "${REGION_GLOBS[@]}" 2>/dev/null | grep -qx "${cc}*"; then
+        REGION_GLOBS+=("${cc}*")
+      fi
+    done
+
+    python3 ./src/generate-motis-config.py $ARGS "${REGION_GLOBS[@]}"
 
     # Count RT feeds in generated config
     if [ -f out/config.yml ]; then
