@@ -70,8 +70,8 @@ case "$ACTION" in
       fi
     done
 
-    # Garbage collect orphaned downloads
-    if [ -f ./src/garbage-collect.py ]; then
+    # Garbage collect orphaned downloads (only if some feeds succeeded)
+    if [ "$failed" -eq 0 ] && [ -f ./src/garbage-collect.py ]; then
       _blue "[transitous] Cleaning up orphaned feeds..."
       python3 ./src/garbage-collect.py --non-interactive 2>/dev/null || true
     fi

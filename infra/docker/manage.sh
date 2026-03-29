@@ -243,15 +243,16 @@ update_transitous_catalog() {
   if [ -d "$catalog_dir/.git" ]; then
     log "Updating Transitous catalog..."
     git -C "$catalog_dir" pull --ff-only -q 2>/dev/null || warn "Could not update Transitous catalog — using cached version"
+    git -C "$catalog_dir" submodule update --init --depth 1 -q 2>/dev/null || true
   else
     log "Cloning Transitous feed catalog..."
     rm -rf "$catalog_dir"
-    git clone --depth 1 -q "$(github_url "$TRANSITOUS_REPO")" "$catalog_dir"
+    git clone --depth 1 --recurse-submodules --shallow-submodules -q "$(github_url "$TRANSITOUS_REPO")" "$catalog_dir"
   fi
 }
 
 cmd_download_all_feeds() {
-  local country_filter="${1:-}"
+  local country_filter="${1:-${GTFS_COUNTRIES:-}}"
   ensure_dirs
   mkdir -p "${DATA_DIR}/.transitous-downloads"
 
