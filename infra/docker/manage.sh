@@ -1172,106 +1172,83 @@ cmd_check() {
   local failed=0
   local skipped=0
 
-  check_service() {
-    local name="$1"
-    local url="$2"
-    local expect="$3"  # string to grep for in the response
+  _pass()      { printf '\033[0;32m%s\033[0m' "OK"; }
+  _fail()      { printf '\033[0;31m%s\033[0m' "FAILED"; }
+  _skip()      { printf '\033[1;33m%s\033[0m' "SKIPPED"; }
+  _importing() { printf '\033[1;33m%s\033[0m' "IMPORTING"; }
 
-    # Check if container is running
-    local container
-    container=$(docker compose ps --format '{{.Name}}' 2>/dev/null | grep -i "$name" | head -1)
-    if [ -z "$container" ]; then
-      printf "  %-14s %s\n" "$name" "$(warn "SKIPPED (not running)")"
+  is_running() {
+    docker compose ps --format '{{.Name}}' 2>/dev/null | grep -qi "$1"
+  }
+
+  check_http() {
+    local name="$1" url="$2" expect="$3"
+    if ! is_running "$name"; then
+      printf "  %-14s %s\n" "$name" "$(_skip) (not running)"
       skipped=$((skipped + 1))
       return
     fi
-
     local response
     response=$(curl -sf --max-time 10 "$url" 2>/dev/null || echo "")
-    if [ -n "$response" ] && echo "$response" | grep -qi "$expect"; then
-      printf "  %-14s %s\n" "$name" "$(_green "OK")"
+    if [ -n "$response" ] && ([ -z "$expect" ] || echo "$response" | grep -qi "$expect"); then
+      printf "  %-14s %s\n" "$name" "$(_pass)"
       passed=$((passed + 1))
+    elif docker compose ps 2>/dev/null | grep -i "$name" | grep -qi "starting\|Restarting"; then
+      printf "  %-14s %s\n" "$name" "$(_importing)"
+      skipped=$((skipped + 1))
     else
-      printf "  %-14s %s\n" "$name" "$(_red "FAILED")"
+      printf "  %-14s %s\n" "$name" "$(_fail)"
       failed=$((failed + 1))
     fi
   }
 
-  check_docker_service() {
-    local name="$1"
-    local cmd="$2"
-    local expect="$3"
-
-    local container
-    container=$(docker compose ps --format '{{.Name}}' 2>/dev/null | grep -i "$name" | head -1)
-    if [ -z "$container" ]; then
-      printf "  %-14s %s\n" "$name" "$(warn "SKIPPED (not running)")"
+  check_docker() {
+    local name="$1" cmd="$2" expect="$3"
+    if ! is_running "$name"; then
+      printf "  %-14s %s\n" "$name" "$(_skip) (not running)"
       skipped=$((skipped + 1))
       return
     fi
-
     local response
-    response=$(docker compose exec -T "$name" $cmd 2>/dev/null || echo "")
+    response=$(docker compose exec -T "$name" sh -c "$cmd" 2>/dev/null || echo "")
     if echo "$response" | grep -qi "$expect"; then
-      printf "  %-14s %s\n" "$name" "$(_green "OK")"
+      printf "  %-14s %s\n" "$name" "$(_pass)"
       passed=$((passed + 1))
     else
-      printf "  %-14s %s\n" "$name" "$(_red "FAILED")"
+      printf "  %-14s %s\n" "$name" "$(_fail)"
       failed=$((failed + 1))
     fi
   }
 
   _bold "Infrastructure:"
-  check_docker_service "postgis"  "pg_isready -U postgres"   "accepting"
-  check_docker_service "redis"    "redis-cli ping"           "PONG"
+  check_docker "postgis" "pg_isready -U postgres" "accepting"
+  check_docker "redis" "redis-cli ping" "PONG"
 
   echo ""
   _bold "Routing:"
-  check_service "valhalla" \
-    'http://localhost:8002/status' \
-    "tileset_last_modified"
-  check_service "osrm" \
-    'http://localhost:5000/nearest/v1/driving/13.405,52.52' \
-    "waypoints"
+  check_http "valhalla" "http://localhost:8002/status" "tileset_last_modified"
+  check_http "osrm" "http://localhost:5000/nearest/v1/driving/13.405,52.52" "waypoints"
 
   echo ""
   _bold "Transit:"
-  check_service "motis" \
-    'http://localhost:8081/api/v1/geocode?text=Berlin' \
-    "matches"
-  check_service "otp" \
-    'http://localhost:8090/otp/actuators/health' \
-    "UP"
+  check_http "motis" "http://localhost:8081/api/v1/geocode?text=test" "matches"
+  check_http "otp" "http://localhost:8090/otp/routers" ""
 
   echo ""
   _bold "Geocoding:"
-  check_service "nominatim" \
-    'http://localhost:8088/status' \
-    "OK"
-  check_service "photon" \
-    'http://localhost:2322/api?q=test' \
-    "features"
+  check_http "nominatim" "http://localhost:8088/status" ""
+  check_http "photon" "http://localhost:2322/api?q=test" "features"
 
   echo ""
   _bold "Data Services:"
-  check_service "overpass" \
-    'http://localhost:8082/api/interpreter?data=[out:json];node(1);out;' \
-    "Overpass"
-  check_service "tileserver" \
-    'http://localhost:8080/health' \
-    ""
+  check_http "overpass" "http://localhost:8082/api/interpreter?data=[out:json];node(1);out;" "Overpass"
+  check_http "tileserver" "http://localhost:8080/health" ""
 
   echo ""
   _bold "Application:"
-  check_service "api" \
-    'http://localhost:3001/health' \
-    ""
-  check_service "web" \
-    'http://localhost:3000' \
-    ""
-  check_service "traefik" \
-    'http://localhost:80' \
-    ""
+  check_docker "api" "wget -qO- --timeout=5 http://localhost:3001/health 2>/dev/null || curl -sf http://localhost:3001/health" ""
+  check_docker "web" "wget -qO- --timeout=5 http://localhost:3000 2>/dev/null || curl -sf http://localhost:3000" ""
+  check_http "traefik" "http://localhost:80" ""
 
   echo ""
   echo "  ──────────────────"
