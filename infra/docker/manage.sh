@@ -1161,6 +1161,128 @@ cmd_status() {
   fi
 }
 
+# ── Health Check ─────────────────────────────────────────────────────────
+
+cmd_check() {
+  echo ""
+  log "=== Service Health Check ==="
+  echo ""
+
+  local passed=0
+  local failed=0
+  local skipped=0
+
+  check_service() {
+    local name="$1"
+    local url="$2"
+    local expect="$3"  # string to grep for in the response
+
+    # Check if container is running
+    local container
+    container=$(docker compose ps --format '{{.Name}}' 2>/dev/null | grep -i "$name" | head -1)
+    if [ -z "$container" ]; then
+      printf "  %-14s %s\n" "$name" "$(warn "SKIPPED (not running)")"
+      skipped=$((skipped + 1))
+      return
+    fi
+
+    local response
+    response=$(curl -sf --max-time 10 "$url" 2>/dev/null || echo "")
+    if [ -n "$response" ] && echo "$response" | grep -qi "$expect"; then
+      printf "  %-14s %s\n" "$name" "$(_green "OK")"
+      passed=$((passed + 1))
+    else
+      printf "  %-14s %s\n" "$name" "$(_red "FAILED")"
+      failed=$((failed + 1))
+    fi
+  }
+
+  check_docker_service() {
+    local name="$1"
+    local cmd="$2"
+    local expect="$3"
+
+    local container
+    container=$(docker compose ps --format '{{.Name}}' 2>/dev/null | grep -i "$name" | head -1)
+    if [ -z "$container" ]; then
+      printf "  %-14s %s\n" "$name" "$(warn "SKIPPED (not running)")"
+      skipped=$((skipped + 1))
+      return
+    fi
+
+    local response
+    response=$(docker compose exec -T "$name" $cmd 2>/dev/null || echo "")
+    if echo "$response" | grep -qi "$expect"; then
+      printf "  %-14s %s\n" "$name" "$(_green "OK")"
+      passed=$((passed + 1))
+    else
+      printf "  %-14s %s\n" "$name" "$(_red "FAILED")"
+      failed=$((failed + 1))
+    fi
+  }
+
+  _bold "Infrastructure:"
+  check_docker_service "postgis"  "pg_isready -U postgres"   "accepting"
+  check_docker_service "redis"    "redis-cli ping"           "PONG"
+
+  echo ""
+  _bold "Routing:"
+  check_service "valhalla" \
+    'http://localhost:8002/status' \
+    "tileset_last_modified"
+  check_service "osrm" \
+    'http://localhost:5000/nearest/v1/driving/13.405,52.52' \
+    "waypoints"
+
+  echo ""
+  _bold "Transit:"
+  check_service "motis" \
+    'http://localhost:8081/api/v1/geocode?text=Berlin' \
+    "matches"
+  check_service "otp" \
+    'http://localhost:8090/otp/actuators/health' \
+    "UP"
+
+  echo ""
+  _bold "Geocoding:"
+  check_service "nominatim" \
+    'http://localhost:8088/status' \
+    "OK"
+  check_service "photon" \
+    'http://localhost:2322/api?q=test' \
+    "features"
+
+  echo ""
+  _bold "Data Services:"
+  check_service "overpass" \
+    'http://localhost:8082/api/interpreter?data=[out:json];node(1);out;' \
+    "Overpass"
+  check_service "tileserver" \
+    'http://localhost:8080/health' \
+    ""
+
+  echo ""
+  _bold "Application:"
+  check_service "api" \
+    'http://localhost:3001/health' \
+    ""
+  check_service "web" \
+    'http://localhost:3000' \
+    ""
+  check_service "traefik" \
+    'http://localhost:80' \
+    ""
+
+  echo ""
+  echo "  ──────────────────"
+  printf "  Passed: %d  Failed: %d  Skipped: %d\n" "$passed" "$failed" "$skipped"
+  echo ""
+
+  if [ "$failed" -gt 0 ]; then
+    warn "Some services are not healthy. Check logs with: docker compose logs <service>"
+  fi
+}
+
 # ── Update ───────────────────────────────────────────────────────────────
 
 cmd_update() {
@@ -1324,6 +1446,10 @@ COMMANDS:
 
   status                      Show data inventory and disk usage
 
+  check                       Test all running services for health
+                               Checks HTTP endpoints, DB connections,
+                               and reports pass/fail/skip for each.
+
   update                      Re-download all data and rebuild
 
   clean <target>              Remove data:
@@ -1408,6 +1534,7 @@ main() {
     build)                   shift; cmd_build "$@" ;;
     build-all)               cmd_build_all ;;
     status)                  cmd_status ;;
+    check)                   cmd_check ;;
     update)                  cmd_update ;;
     clean)                   shift; cmd_clean "$@" ;;
     help|--help|-h)          cmd_help ;;
