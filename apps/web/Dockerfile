@@ -1,7 +1,7 @@
 FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# ── Install dependencies ──────────────────────────────────────────────────
+# Install dependencies
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -10,7 +10,7 @@ COPY packages/i18n/package.json packages/i18n/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 
-# ── Build ─────────────────────────────────────────────────────────────────
+# Build
 FROM base AS builder
 RUN apk add --no-cache rsync
 WORKDIR /app
@@ -37,7 +37,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app/apps/web
 RUN pnpm build
 
-# ── Production image ──────────────────────────────────────────────────────
+# Production image
 FROM node:24-alpine AS runner
 WORKDIR /app
 

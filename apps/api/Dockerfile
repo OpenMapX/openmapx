@@ -1,7 +1,7 @@
 FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# ── Install all dependencies (for building) ──────────────────────────────
+# Install all dependencies (for building)
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -9,7 +9,7 @@ COPY packages/core/package.json packages/core/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile
 
-# ── Install production dependencies only (for runtime) ───────────────────
+# Install production dependencies only (for runtime)
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
            @electric-sql+pglite* @rolldown+binding* esbuild@* @esbuild+* \
            lightningcss* drizzle-kit@* effect@* typescript@*
 
-# ── Build (type-check + bundle) ─────────────────────────────────────────
+# Build (type-check + bundle)
 FROM base AS builder
 WORKDIR /app
 
@@ -34,7 +34,7 @@ COPY turbo.json ./
 WORKDIR /app/apps/api
 RUN pnpm build
 
-# ── Production image ──────────────────────────────────────────────────────
+# Production image
 FROM node:24-alpine AS runner
 WORKDIR /app
 

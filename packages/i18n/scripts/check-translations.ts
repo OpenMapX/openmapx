@@ -35,7 +35,7 @@ const SRC_DIRS = [
 ];
 const FIX_MISSING = process.argv.includes("--fix-missing");
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 function flattenKeys(obj: Record<string, unknown>, prefix = ""): Map<string, string> {
   const result = new Map<string, string>();
@@ -87,7 +87,7 @@ function extractICUVariables(value: string): string[] {
   return [...vars].sort();
 }
 
-// ── load locale files ────────────────────────────────────────────────────────
+// Load locale files
 
 const localeFiles = readdirSync(MESSAGES_DIR)
   .filter((f) => f.endsWith(".json"))
@@ -132,7 +132,7 @@ function info(category: string, message: string) {
   console.log(`  \x1b[2m[INFO]\x1b[0m  [${category}] ${message}`);
 }
 
-// ── 1. key consistency ───────────────────────────────────────────────────────
+// 1. Key consistency
 
 console.log("\n\x1b[1m1. Key consistency between locales\x1b[0m\n");
 
@@ -155,7 +155,7 @@ for (const [locale, keys] of allLocales) {
 
 if (consistencyOk) console.log("  All locales have matching keys.");
 
-// ── 2 & 3. unused and missing keys ──────────────────────────────────────────
+// 2 & 3. Unused and missing keys
 
 console.log(
   '\n\x1b[1m2. Unused keys\x1b[0m (defined but never referenced via static t("key") calls)\n',
@@ -246,7 +246,7 @@ for (const key of usedKeys) {
 }
 if (missingCount === 0) console.log("  All referenced keys are defined.");
 
-// ── 4. duplicate values ──────────────────────────────────────────────────────
+// 4. Duplicate values
 
 console.log("\n\x1b[1m4. Duplicate values\x1b[0m in reference locale (informational)\n");
 
@@ -268,7 +268,7 @@ for (const [value, keys] of valueToKeys) {
 }
 if (dupCount === 0) console.log("  No cross-namespace duplicates found.");
 
-// ── 5. empty values ──────────────────────────────────────────────────────────
+// 5. Empty values
 
 console.log("\n\x1b[1m5. Empty values\x1b[0m\n");
 
@@ -283,7 +283,7 @@ for (const [locale, keys] of allLocales) {
 }
 if (emptyCount === 0) console.log("  No empty values found.");
 
-// ── 6. ICU placeholder consistency ───────────────────────────────────────────
+// 6. ICU placeholder consistency
 
 console.log("\n\x1b[1m6. ICU placeholder consistency\x1b[0m\n");
 
@@ -308,10 +308,10 @@ for (const [locale, keys] of allLocales) {
 }
 if (placeholderIssues === 0) console.log("  All ICU variables are consistent.");
 
-// ── fix mode ─────────────────────────────────────────────────────────────────
+// Fix mode
 
 if (FIX_MISSING) {
-  console.log("\n\x1b[1m--- Fix mode: stubbing missing keys ---\x1b[0m\n");
+  console.log("\n\x1b[1mFix mode: stubbing missing keys\x1b[0m\n");
 
   for (const [locale, keys] of allLocales) {
     if (locale === referenceLocale) continue;
@@ -343,14 +343,12 @@ if (FIX_MISSING) {
   }
 }
 
-// ── summary ──────────────────────────────────────────────────────────────────
+// Summary
 
 const color = counts.errors > 0 ? "\x1b[31m" : counts.warnings > 0 ? "\x1b[33m" : "\x1b[32m";
 
-console.log(`\n${color}========================================\x1b[0m`);
-console.log(`  Errors:   ${counts.errors}`);
-console.log(`  Warnings: ${counts.warnings}`);
-console.log(`  Info:     ${counts.info}`);
-console.log(`${color}========================================\x1b[0m\n`);
+console.log(`\n${color}Errors:   ${counts.errors}`);
+console.log(`Warnings: ${counts.warnings}`);
+console.log(`Info:     ${counts.info}\x1b[0m\n`);
 
 process.exit(counts.errors > 0 ? 1 : 0);

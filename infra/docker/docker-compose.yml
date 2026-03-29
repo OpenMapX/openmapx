@@ -1,4 +1,4 @@
-# ── OpenMapX Docker Compose ───────────────────────────────────────────────
+# OpenMapX Docker Compose
 #
 # Data management:
 #   All services share source data (OSM PBF, GTFS feeds) via hardlinks.
@@ -39,11 +39,10 @@
 #   OTP is skipped (can't handle planet + all feeds) — MOTIS covers transit.
 #   Nominatim planet import needs ~64 GB RAM (peak), ~2 GB runtime.
 #   Recommended server: 64+ GB RAM, 1+ TB SSD for full planet setup.
-# ─────────────────────────────────────────────────────────────────────────
 
 services:
 
-  # ── Reverse Proxy ───────────────────────────────────────────────────────
+  # Reverse Proxy
 
   traefik:
     image: traefik:v3.6
@@ -65,7 +64,7 @@ services:
         limits:
           memory: 256m
 
-  # ── Application ─────────────────────────────────────────────────────────
+  # Application
 
   api:
     image: ghcr.io/medformatik/openmapx-api:latest
@@ -137,7 +136,7 @@ services:
         limits:
           memory: 512m
 
-  # ── Core Infrastructure ────────────────────────────────────────────────
+  # Core Infrastructure
 
   postgis:
     image: postgis/postgis:18-3.6
@@ -175,7 +174,7 @@ services:
           memory: 512m
     restart: unless-stopped
 
-  # ── Routing ─────────────────────────────────────────────────────────────
+  # Routing
   # Valhalla: primary router, handles planet-scale (~16 GB RAM for planet)
   # OSRM: region-only alternative (~4 GB RAM for single country)
 
@@ -212,13 +211,14 @@ services:
           memory: 8g
     restart: unless-stopped
 
-  # ── Transit ─────────────────────────────────────────────────────────────
+  # Transit
   # MOTIS: primary transit router, handles planet-scale + hundreds of feeds
   # OTP: region-only alternative (max ~10 GTFS feeds)
 
   motis:
     image: ghcr.io/motis-project/motis:latest
     ports: ["127.0.0.1:8081:8080"]
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./data/motis:/motis-data
     working_dir: /motis-data
@@ -250,7 +250,7 @@ services:
           memory: 16g
     restart: unless-stopped
 
-  # ── Geocoding (Pelias) ─────────────────────────────────────────────────
+  # Geocoding (Pelias)
 
   elasticsearch:
     image: elasticsearch:7.17.18
@@ -312,7 +312,7 @@ services:
     networks: [openmapx]
     restart: unless-stopped
 
-  # ── Geocoding (Nominatim) ──────────────────────────────────────────────
+  # Geocoding (Nominatim)
   # Full-featured geocoder. Bundles its own PostgreSQL internally.
   # Planet import: ~64 GB RAM peak, ~1.5 TB disk, ~48h on fast hardware.
   # After import: ~2 GB RAM runtime, ~1 TB disk.
@@ -351,7 +351,7 @@ services:
           memory: 64g
     restart: unless-stopped
 
-  # ── Geocoding (Photon) ───────────────────────────────────────────────
+  # Geocoding (Photon)
   # Lightweight geocoder with search-as-you-type support.
   # Auto-downloads pre-built worldwide search index on first start.
   # Planet index: ~8 GB RAM runtime, ~200 GB disk.
@@ -380,7 +380,7 @@ services:
           memory: 8g
     restart: unless-stopped
 
-  # ── Overpass API ──────────────────────────────────────────────────────
+  # Overpass API
   # Self-hosted OSM query service for transit stops, POIs, trails, etc.
   # Planet import: ~24h, ~200 GB disk, ~4 GB RAM.
   # Uses pre-converted bz2 in data/overpass/osm/ (created by manage.sh link).
@@ -418,7 +418,7 @@ services:
           memory: 32g
     restart: unless-stopped
 
-  # ── Tile Serving ────────────────────────────────────────────────────────
+  # Tile Serving
 
   martin:
     image: ghcr.io/maplibre/martin:latest
@@ -463,7 +463,7 @@ services:
           memory: 2g
     restart: unless-stopped
 
-  # ── Build Services (one-shot, used by manage.sh) ────────────────────────
+  # Build Services (one-shot, used by manage.sh)
 
   # Transitous import tools: fetches GTFS feeds, cleans with gtfsclean,
   # resolves Transitland/MDB references, generates MOTIS config + Lua scripts.

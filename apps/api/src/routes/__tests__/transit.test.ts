@@ -178,10 +178,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Tests
-// ═══════════════════════════════════════════════════════════════════════════
-
 describe("GET /transit/stops", () => {
   it("returns 400 without bbox params", async () => {
     const res = await app.inject({ method: "GET", url: "/transit/stops" });

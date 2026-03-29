@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── OpenMapX Data Manager ────────────────────────────────────────────────
+# OpenMapX Data Manager
 # Manages OSM and GTFS data for all self-hosted services.
 # Downloads source data once and hardlinks it into each service's workspace,
 # so multiple services share the same files with zero extra storage.
 #
 # Requirements: curl, jq, docker (with compose plugin)
-# ─────────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
@@ -59,7 +58,7 @@ ok()   { _green  "[+] $*"; }
 warn() { _yellow "[!] $*"; }
 err()  { _red    "[x] $*"; }
 
-# ── Helpers ──────────────────────────────────────────────────────────────
+# Helpers
 
 require_cmd() {
   for cmd in "$@"; do
@@ -131,7 +130,7 @@ file_size() {
   fi
 }
 
-# ── Download OSM PBF ─────────────────────────────────────────────────────
+# Download OSM PBF
 
 cmd_download_osm() {
   local region="${1:-$REGION}"
@@ -200,7 +199,7 @@ cmd_convert_overpass() {
   fi
 }
 
-# ── Download GTFS Feeds ──────────────────────────────────────────────────
+# Download GTFS Feeds
 
 cmd_download_gtfs() {
   local url="${1:-}"
@@ -284,7 +283,7 @@ cmd_download_all_feeds() {
   ok "GTFS feeds: ${feed_count} feeds, ${gtfs_size} total"
 }
 
-# ── Download Map Style, Fonts, Sprites ─────────────────────────────────
+# Download Map Style, Fonts, Sprites
 
 cmd_download_style() {
   require_cmd curl unzip
@@ -394,7 +393,7 @@ with open('$style_file', 'w') as f:
   warn "Python3 not available, skipping style patching. Manual editing may be needed."
 }
 
-# ── Remove GTFS Feed ────────────────────────────────────────────────────
+# Remove GTFS Feed
 
 cmd_remove_feed() {
   local slug="${1:-}"
@@ -416,7 +415,7 @@ cmd_remove_feed() {
   ok "Removed feed: ${slug}"
 }
 
-# ── Link Source Data into Service Directories ────────────────────────────
+# Link Source Data into Service Directories
 
 cmd_link() {
   ensure_dirs
@@ -512,7 +511,7 @@ cmd_link() {
   fi
 }
 
-# ── Build Service Data ───────────────────────────────────────────────────
+# Build Service Data
 
 cmd_build() {
   local service="${1:-}"
@@ -1019,7 +1018,7 @@ build_overpass() {
   ok "Overpass container started (importing)"
 }
 
-# ── Status ───────────────────────────────────────────────────────────────
+# Status
 
 cmd_status() {
   ensure_dirs
@@ -1103,7 +1102,6 @@ cmd_status() {
       printf "  %-14s %s\n" "${sub}/" "$size"
     fi
   done
-  echo "  ──────────────────"
   du -sh "${DATA_DIR}" 2>/dev/null | awk '{printf "  %-14s %s\n", "TOTAL", $1}'
 
   # Docker volumes (not in data/)
@@ -1159,7 +1157,7 @@ cmd_status() {
   fi
 }
 
-# ── Health Check ─────────────────────────────────────────────────────────
+# Health Check
 
 cmd_check() {
   echo ""
@@ -1270,7 +1268,6 @@ cmd_check() {
   check_http "traefik" "http://localhost:80" ""
 
   echo ""
-  echo "  ──────────────────"
   printf "  Passed: %d  Failed: %d  Skipped: %d\n" "$passed" "$failed" "$skipped"
   echo ""
 
@@ -1279,7 +1276,7 @@ cmd_check() {
   fi
 }
 
-# ── Update ───────────────────────────────────────────────────────────────
+# Update
 
 cmd_update() {
   log "Updating all data..."
@@ -1291,7 +1288,7 @@ cmd_update() {
   ok "Update complete"
 }
 
-# ── Clean ────────────────────────────────────────────────────────────────
+# Clean
 
 cmd_clean() {
   local target="${1:-}"
@@ -1375,7 +1372,7 @@ cmd_clean() {
   esac
 }
 
-# ── Help ─────────────────────────────────────────────────────────────────
+# Help
 
 cmd_help() {
   cat <<'HELP'
@@ -1513,7 +1510,7 @@ ENVIRONMENT:
 HELP
 }
 
-# ── Main ─────────────────────────────────────────────────────────────────
+# Main
 
 main() {
   case "${1:-help}" in
