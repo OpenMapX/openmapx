@@ -30,6 +30,8 @@ export function MapCanvas() {
     let destroyed = false;
 
     const initMap = async (initialCenter: LngLat, initialZoom: number) => {
+      setCenter(initialCenter);
+      setZoom(initialZoom);
       const maplibregl = (await import("maplibre-gl")).default;
       if (destroyed || !containerRef.current) return;
 
