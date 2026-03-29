@@ -500,14 +500,14 @@ services:
       - ./data/otp:/var/opentripplanner
       - ./services/otp/build-config.json:/var/opentripplanner/build-config.json:ro
     environment:
-      JAVA_TOOL_OPTIONS: "-Xmx14g"
+      JAVA_TOOL_OPTIONS: "-Xmx24g"
     profiles: [build]
     networks: [openmapx]
     command: --build --save
     deploy:
       resources:
         limits:
-          memory: 16g
+          memory: 28g
 
   pelias-schema:
     image: pelias/schema:latest
