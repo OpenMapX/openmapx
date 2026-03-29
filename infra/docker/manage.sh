@@ -703,7 +703,33 @@ cmd_generate_motis_config() {
   # Copy generated config and scripts from gtfs output dir to motis dir
   if [ -f "${DATA_DIR}/gtfs/config.yml" ]; then
     cp "${DATA_DIR}/gtfs/config.yml" "${DATA_DIR}/motis/config.yml"
-    ok "Copied config.yml to motis/"
+
+    # Patch config for self-hosted environment
+    local config="${DATA_DIR}/motis/config.yml"
+    local pbf
+    pbf=$(find_pbf)
+
+    # Fix OSM path to match our actual PBF filename
+    if [ -n "$pbf" ]; then
+      local pbf_name
+      pbf_name=$(basename "$pbf")
+      sed -i "s|^osm: .*|osm: ${pbf_name}|" "$config"
+    else
+      # No PBF — disable features that need it
+      sed -i '/^osm:/d' "$config"
+    fi
+
+    # Disable tiles (we use TileServer GL, MOTIS tiles are for its built-in UI)
+    sed -i '/^tiles:/,/^[a-z]/{ /^tiles:/d; /^  /d; }' "$config"
+
+    # 90 days covers practical planning horizons without full-year import overhead
+    sed -i 's|num_days: 365|num_days: 90|' "$config"
+
+    # Remove Transitous-specific web_folder and data_attribution_link
+    sed -i '/web_folder:/d' "$config"
+    sed -i 's|data_attribution_link:.*|data_attribution_link: /terms#data-sources|' "$config"
+
+    ok "Copied and patched config.yml for self-hosted environment"
   fi
 
   if [ -d "${DATA_DIR}/gtfs/scripts" ]; then
