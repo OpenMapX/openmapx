@@ -24,7 +24,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: "${ACME_EMAIL}"
+      email: "placeholder@example.com"
       storage: /etc/traefik/acme.json
       httpChallenge:
         entryPoint: web
@@ -33,7 +33,7 @@ providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
-    network: openmapx_default
+    network: docker_openmapx
 
 log:
   level: WARN

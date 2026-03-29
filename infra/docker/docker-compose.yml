@@ -56,7 +56,7 @@ services:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - traefik-acme:/etc/traefik
     environment:
-      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+      TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
     networks: [openmapx]
     restart: unless-stopped
     deploy:
@@ -435,6 +435,7 @@ services:
 
   tileserver:
     image: maptiler/tileserver-gl:latest
+    command: ["--public_url", "https://${DOMAIN:-localhost}/tiles/"]
     ports: ["127.0.0.1:8080:8080"]
     volumes:
       - ./data/tileserver:/data
