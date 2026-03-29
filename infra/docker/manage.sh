@@ -256,6 +256,10 @@ cmd_download_all_feeds() {
   ensure_dirs
   mkdir -p "${DATA_DIR}/.transitous-downloads"
 
+  # Ensure api-keys.json exists (gitignored, created empty if missing)
+  local keys_file="${SCRIPT_DIR}/services/transitous/api-keys.json"
+  [ -f "$keys_file" ] || echo '{}' > "$keys_file"
+
   # Clone or update the Transitous catalog
   update_transitous_catalog
 
@@ -1103,11 +1107,57 @@ cmd_status() {
   done
   echo "  ──────────────────"
   du -sh "${DATA_DIR}" 2>/dev/null | awk '{printf "  %-14s %s\n", "TOTAL", $1}'
+
+  # Docker volumes (not in data/)
+  echo ""
+  _bold "Docker Volumes:"
+  local vol_total=0
+  local has_volumes=false
+  while IFS=$'\t' read -r vol_name vol_size; do
+    [ -z "$vol_name" ] && continue
+    has_volumes=true
+    printf "  %-30s %s\n" "$vol_name" "$vol_size"
+  done < <(docker volume ls -q 2>/dev/null | while read -r vol; do
+    local size
+    size=$(docker system df -v 2>/dev/null | grep "^$vol" | awk '{print $NF}' || echo "?")
+    [ -z "$size" ] && size="?"
+    echo -e "${vol}\t${size}"
+  done)
+  if [ "$has_volumes" = false ]; then
+    echo "  (none)"
+  fi
+
+  # Docker images and build cache
+  echo ""
+  _bold "Docker Storage:"
+  local images_size build_cache_size
+  images_size=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
+  build_cache_size=$(docker system df --format '{{.Size}}' 2>/dev/null | tail -1 || echo "?")
+  echo "  Images:      ${images_size}"
+  echo "  Build cache: ${build_cache_size}"
+  local docker_total
+  docker_total=$(du -sh /var/lib/docker 2>/dev/null | cut -f1 || echo "?")
+  echo "  Total:       ${docker_total}"
+
+  # Running containers
+  echo ""
+  _bold "Running Containers:"
+  local container_count=0
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    echo "  $line"
+    container_count=$((container_count + 1))
+  done < <(docker ps --format '{{.Names}}  {{.Status}}  {{.Image}}' 2>/dev/null)
+  [ "$container_count" -eq 0 ] && echo "  (none)"
+
+  # Overall disk
+  echo ""
+  _bold "System Disk:"
+  df -h / 2>/dev/null | tail -1 | awk '{printf "  Total: %s  Used: %s  Free: %s  (%s)\n", $2, $3, $4, $5}'
   echo ""
 
   # Resource requirements
   if is_planet 2>/dev/null; then
-    echo ""
     _bold "Planet-Scale Resource Requirements:"
     echo "  Valhalla build:   ~16 GB RAM, ~8 hours"
     echo "  Planetiler tiles: ~30 GB RAM, ~1 hour"
