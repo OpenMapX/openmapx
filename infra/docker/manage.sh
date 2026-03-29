@@ -721,6 +721,8 @@ cmd_generate_motis_config() {
 
     # Disable tiles (we use TileServer GL, MOTIS tiles are for its built-in UI)
     sed -i '/^tiles:/,/^[a-z]/{ /^tiles:/d; /^  /d; }' "$config"
+    # Squeeze multiple blank lines left by removed sections
+    sed -i '/^$/N;/^\n$/d' "$config"
 
     # 90 days covers practical planning horizons without full-year import overhead
     sed -i 's|num_days: 365|num_days: 90|' "$config"
