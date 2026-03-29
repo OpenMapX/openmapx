@@ -25,5 +25,6 @@ RUN mkdir -p /opt/motis && \
     wget -qO - "https://github.com/motis-project/motis/releases/download/${MOTIS_VERSION}/motis-linux-amd64.tar.bz2" | \
     tar -C /opt/motis -jx
 ENV PATH=/opt/motis:$PATH
+ENV PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /transitous
