@@ -82,13 +82,13 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           mb: 0.6,
         }}
       >
-        <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#202124", lineHeight: 1 }}>
+        <Typography sx={{ fontSize: 18, fontWeight: 700, color: "text.primary", lineHeight: 1 }}>
           {t("mapDetails")}
         </Typography>
         <IconButton
           onClick={onClose}
           aria-label={t("closeMorePanel")}
-          sx={{ color: "#202124", mt: -0.5 }}
+          sx={{ color: "text.primary", mt: -0.5 }}
         >
           <CloseIcon sx={{ fontSize: 23 }} />
         </IconButton>
@@ -108,9 +108,11 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
         ))}
       </Box>
 
-      <Divider sx={{ my: 0.8, borderColor: "rgba(60,64,67,0.12)" }} />
+      <Divider sx={{ my: 0.8 }} />
 
-      <Typography sx={{ fontSize: 16, fontWeight: 700, color: "#202124", lineHeight: 1, mb: 0.6 }}>
+      <Typography
+        sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 0.6 }}
+      >
         {t("mapTools")}
       </Typography>
       <Box
@@ -161,9 +163,11 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
         })}
       </Box>
 
-      <Divider sx={{ my: 0.8, borderColor: "rgba(60,64,67,0.12)" }} />
+      <Divider sx={{ my: 0.8 }} />
 
-      <Typography sx={{ fontSize: 16, fontWeight: 700, color: "#202124", lineHeight: 1, mb: 0.6 }}>
+      <Typography
+        sx={{ fontSize: 16, fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 0.6 }}
+      >
         {t("mapType")}
       </Typography>
       <Box
@@ -195,11 +199,11 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
             size="small"
             checked={globeView}
             onChange={() => setGlobeView(!globeView)}
-            icon={<CheckBoxOutlineBlankIcon sx={{ fontSize: 19, color: "#202124" }} />}
+            icon={<CheckBoxOutlineBlankIcon sx={{ fontSize: 19, color: "text.primary" }} />}
             checkedIcon={<CheckBoxIcon sx={{ fontSize: 19, color: "#0b7d8b" }} />}
             sx={{ p: 0.3 }}
           />
-          <Typography sx={{ fontSize: 12.5, color: "#202124" }}>{t("globeView")}</Typography>
+          <Typography sx={{ fontSize: 12.5, color: "text.primary" }}>{t("globeView")}</Typography>
         </Box>
       </Box>
     </Box>

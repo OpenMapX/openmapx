@@ -10,8 +10,8 @@ import Typography from "@mui/material/Typography";
 import { OVERLAY_REGISTRY, toggleOverlay, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
-import { TEAL } from "@/lib/theme";
 import { TRAFFIC_MIN_ZOOM } from "../layers/trafficConfig";
+import { LayerPreviewTile } from "./LayerPreviewTile";
 import { globePreview } from "./layerPreviewSvgs";
 import { BASE_LAYER_OPTIONS, DETAIL_OPTIONS } from "./layerSelectorConfig";
 
@@ -36,62 +36,26 @@ function DetailOptionTile({
   const disabled = option.key === "traffic" && trafficZoomTooLow;
   const highlighted = overlayActive && !disabled;
   const label = t(option.labelKey);
-  const onClick = () => {
-    if (disabled) return;
-    if (option.overlayId) toggleOverlay(option.overlayId);
-  };
 
   return (
-    <ButtonBase
-      onClick={onClick}
-      aria-label={t("toggleOverlay", { layer: label })}
-      aria-disabled={disabled ? "true" : "false"}
-      sx={{
-        width: 72,
-        minWidth: 72,
-        borderRadius: "12px",
-        p: 0.5,
-        textAlign: "center",
-        opacity: disabled ? 0.42 : 1,
-        filter: disabled ? "grayscale(1)" : "none",
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-    >
-      <Box sx={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: "10px",
-            overflow: "hidden",
-            mb: 0.3,
-            border: highlighted ? `2px solid ${TEAL}` : "2px solid transparent",
-          }}
-        >
-          {option.preview}
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.3 }}>
-          <Box sx={{ display: "flex", color: highlighted ? TEAL : "text.secondary" }}>
-            {option.icon}
-          </Box>
-          <Typography
-            sx={{
-              fontSize: 11,
-              lineHeight: 1.15,
-              color: highlighted ? TEAL : "text.secondary",
-              fontWeight: highlighted ? 600 : 500,
-            }}
-          >
-            {label}
-          </Typography>
-        </Box>
+    <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
+      <LayerPreviewTile
+        preview={option.preview}
+        label={label}
+        selected={highlighted}
+        icon={option.icon}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled && option.overlayId) toggleOverlay(option.overlayId);
+        }}
+      >
         {disabled ? (
           <Typography sx={{ mt: 0.2, fontSize: 9, color: "text.secondary" }}>
             Zoom {TRAFFIC_MIN_ZOOM}+
           </Typography>
         ) : null}
-      </Box>
-    </ButtonBase>
+      </LayerPreviewTile>
+    </Box>
   );
 }
 
@@ -99,50 +63,17 @@ function GlobeTile() {
   const t = useTranslations("layers");
   const globeView = useLayerStore((s) => s.globeView);
   const setGlobeView = useLayerStore((s) => s.setGlobeView);
-  const label = t("globeView");
 
   return (
-    <ButtonBase
-      onClick={() => setGlobeView(!globeView)}
-      aria-label={label}
-      sx={{
-        width: 72,
-        minWidth: 72,
-        borderRadius: "12px",
-        p: 0.5,
-        textAlign: "center",
-      }}
-    >
-      <Box sx={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: "10px",
-            overflow: "hidden",
-            mb: 0.3,
-            border: globeView ? `2px solid ${TEAL}` : "2px solid transparent",
-          }}
-        >
-          {globePreview}
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.3 }}>
-          <Box sx={{ display: "flex", color: globeView ? TEAL : "text.secondary" }}>
-            <PublicIcon sx={{ fontSize: 14 }} />
-          </Box>
-          <Typography
-            sx={{
-              fontSize: 11,
-              lineHeight: 1.15,
-              color: globeView ? TEAL : "text.secondary",
-              fontWeight: globeView ? 600 : 500,
-            }}
-          >
-            {label}
-          </Typography>
-        </Box>
-      </Box>
-    </ButtonBase>
+    <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
+      <LayerPreviewTile
+        preview={globePreview}
+        label={t("globeView")}
+        selected={globeView}
+        icon={<PublicIcon sx={{ fontSize: 14 }} />}
+        onClick={() => setGlobeView(!globeView)}
+      />
+    </Box>
   );
 }
 
@@ -171,50 +102,18 @@ export function DesktopQuickSelector({
         const selected = option.id === activeLayer;
         const label = t(option.labelKey);
         return (
-          <ButtonBase
+          <Box
             key={option.id}
-            onClick={() => setActiveLayer(option.id)}
-            aria-label={t("useMap", { layer: label })}
-            sx={{
-              width: 72,
-              minWidth: 72,
-              borderRadius: "12px",
-              p: 0.5,
-              textAlign: "center",
-            }}
+            sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}
           >
-            <Box
-              sx={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}
-            >
-              <Box
-                sx={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: "10px",
-                  overflow: "hidden",
-                  mb: 0.3,
-                  border: selected ? `2px solid ${TEAL}` : "2px solid transparent",
-                }}
-              >
-                {option.preview}
-              </Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.3 }}>
-                <Box sx={{ display: "flex", color: selected ? TEAL : "text.secondary" }}>
-                  {option.icon}
-                </Box>
-                <Typography
-                  sx={{
-                    fontSize: 11,
-                    lineHeight: 1.15,
-                    color: selected ? TEAL : "text.secondary",
-                    fontWeight: selected ? 600 : 500,
-                  }}
-                >
-                  {label}
-                </Typography>
-              </Box>
-            </Box>
-          </ButtonBase>
+            <LayerPreviewTile
+              preview={option.preview}
+              label={label}
+              selected={selected}
+              icon={option.icon}
+              onClick={() => setActiveLayer(option.id)}
+            />
+          </Box>
         );
       })}
 

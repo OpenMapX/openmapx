@@ -12,7 +12,6 @@ import TrafficIcon from "@mui/icons-material/Traffic";
 import TrainIcon from "@mui/icons-material/Train";
 import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import Box from "@mui/material/Box";
-import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
@@ -22,6 +21,7 @@ import { OVERLAY_REGISTRY, toggleOverlay, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 
+import { LayerPreviewTile } from "./LayerPreviewTile";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
 
 const OVERLAY_SWITCHES: { id: OverlayId; labelKey: string; icon: ReactNode }[] = [
@@ -148,52 +148,19 @@ export function MobileLayerPanel() {
         {t("mapType")}
       </Typography>
 
-      <Box sx={{ display: "flex", gap: 1 }}>
+      <Box sx={{ display: "flex", gap: 1.5, justifyContent: "center" }}>
         {BASE_LAYER_OPTIONS.map((option) => {
           const selected = option.id === activeLayer;
-          const label = t(option.labelKey);
           return (
-            <ButtonBase
+            <LayerPreviewTile
               key={option.id}
+              preview={option.preview}
+              label={t(option.labelKey)}
+              selected={selected}
+              icon={option.icon}
+              size={56}
               onClick={() => setActiveLayer(option.id)}
-              aria-label={t("useMap", { layer: label })}
-              sx={{
-                width: 95,
-                borderRadius: "12px",
-                p: 0.75,
-                textAlign: "left",
-                border: selected ? "2px solid #1A73E8" : "1px solid rgba(60,64,67,0.2)",
-                transition: "border-color 0.15s, box-shadow 0.15s",
-                boxShadow: selected ? "0 0 0 1px rgba(26,115,232,0.2)" : "none",
-              }}
-            >
-              <Box sx={{ width: "100%" }}>
-                <Box
-                  sx={{
-                    width: "100%",
-                    height: 56,
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    mb: 0.6,
-                  }}
-                >
-                  {option.preview}
-                </Box>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
-                  <Box sx={{ display: "flex", color: "text.secondary" }}>{option.icon}</Box>
-                  <Typography
-                    sx={{
-                      fontSize: 12,
-                      lineHeight: 1.1,
-                      fontWeight: selected ? 600 : 500,
-                      color: selected ? "text.primary" : "text.secondary",
-                    }}
-                  >
-                    {label}
-                  </Typography>
-                </Box>
-              </Box>
-            </ButtonBase>
+            />
           );
         })}
       </Box>
