@@ -32,6 +32,7 @@ const SRC_DIRS = [
   join(REPO_ROOT, "apps", "web", "src"),
   join(REPO_ROOT, "apps", "mobile", "app"),
   join(REPO_ROOT, "apps", "mobile", "src"),
+  join(REPO_ROOT, "apps", "api", "src"),
 ];
 const FIX_MISSING = process.argv.includes("--fix-missing");
 
@@ -172,6 +173,8 @@ const sourceFiles = SRC_DIRS.filter((d) => {
 
 const usedKeys = new Set<string>();
 const namespacesWithDynamicCalls = new Set<string>();
+const sliceNamespaces = new Set<string>();
+const dollarPrefixedNames = new Set<string>();
 
 for (const file of sourceFiles) {
   const content = readFileSync(file, "utf-8");
@@ -195,15 +198,49 @@ for (const file of sourceFiles) {
     if (dynamicPattern.test(content)) {
       namespacesWithDynamicCalls.add(ns);
     }
+
+    // Detect $-prefix convention: varName(expr.slice(1)) or varName(expr.substring(1))
+    const slicePattern = new RegExp(`\\b${varName}\\([^)]*\\.(?:slice|substring)\\(1\\)`, "g");
+    if (slicePattern.test(content)) {
+      sliceNamespaces.add(ns);
+    }
   }
 
   // react-i18next: const { t } = useTranslation() — uses flat dotted keys like t("ns.key")
   const i18nextPattern = /\{\s*t\s*\}\s*=\s*useTranslation\(\)/;
   if (i18nextPattern.test(content)) {
+    // String literal calls: t("ns.key")
     const flatPattern = /\bt\(\s*["']([^"']+)["']/g;
     for (const match of content.matchAll(flatPattern)) {
       usedKeys.add(match[1]);
     }
+
+    // Template literals without expressions: t(`ns.key`)
+    for (const match of content.matchAll(/\bt\(`([^`$]+)`\)/g)) {
+      usedKeys.add(match[1]);
+    }
+
+    // Template literals with expressions: t(`prefix.${expr}`)
+    for (const match of content.matchAll(/\bt\(`(\w+)\.\$\{/g)) {
+      namespacesWithDynamicCalls.add(match[1]);
+    }
+
+    // $-prefix convention in template literals: t(`ns.${expr.slice(1)}`)
+    for (const match of content.matchAll(/\bt\(`(\w+)\.\$\{[^}]*\.(?:slice|substring)\(1\)/g)) {
+      sliceNamespaces.add(match[1]);
+    }
+  }
+
+  // Collect $-prefixed entity names (convention for translatable names)
+  for (const match of content.matchAll(/(?:name|label)["']?\s*[:=]\s*["']\$([a-zA-Z]\w*)["']/g)) {
+    dollarPrefixedNames.add(match[1]);
+  }
+}
+
+// Derive dynamic keys: $-prefixed entity names + namespaces using slice(1) convention
+for (const word of dollarPrefixedNames) {
+  for (const ns of sliceNamespaces) {
+    usedKeys.add(`${ns}.${word}`);
   }
 }
 
