@@ -54,6 +54,13 @@ export const privacyMapTiles: PrivacyServiceRow[] = [
     privacy: "https://www.openstreetmap.fr/",
   },
   {
+    service: "Thunderforest OpenCycleMap (fallback)",
+    purpose: "Cycling-focused map tiles (fallback when CyclOSM is unavailable)",
+    dataSent: "Tile coordinates (z/x/y)",
+    country: "United Kingdom",
+    privacy: "https://www.thunderforest.com/privacy/",
+  },
+  {
     service: "Waymarked Trails (tile overlay)",
     purpose: "Cycling route overlay tiles",
     dataSent: "Tile coordinates (z/x/y)",
@@ -475,6 +482,13 @@ export const attributionMapData: AttributionRow[] = [
     license: "ODbL (OSM data)",
     licenseUrl: "https://opendatacommons.org/licenses/odbl/",
     url: "https://www.cyclosm.org/",
+  },
+  {
+    source: "Thunderforest OpenCycleMap",
+    desc: "Cycling-focused map tiles (fallback)",
+    license: "CC BY-SA 2.0",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
+    url: "https://www.thunderforest.com/maps/opencyclemap/",
   },
   {
     source: "Nominatim",

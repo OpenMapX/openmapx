@@ -72,6 +72,7 @@ await server.register(helmet);
 await server.register(cors, {
   origin: (process.env.CORS_ORIGIN ?? "http://localhost:3000").split(",").map((o) => o.trim()),
   credentials: true,
+  exposedHeaders: ["X-Tile-Source"],
 });
 
 // Better Auth handler

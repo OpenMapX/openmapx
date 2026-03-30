@@ -75,6 +75,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
 
         const buffer = Buffer.from(await response.arrayBuffer());
         reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
+        reply.header("X-Tile-Source", "cyclosm");
         reply.type("image/png");
         return reply.send(buffer);
       } catch (error) {
@@ -102,6 +103,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
 
           const tfBuffer = Buffer.from(await tfResponse.arrayBuffer());
           reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
+          reply.header("X-Tile-Source", "thunderforest");
           reply.type("image/png");
           return reply.send(tfBuffer);
         } catch (tfError) {

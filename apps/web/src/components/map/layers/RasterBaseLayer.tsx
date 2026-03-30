@@ -44,6 +44,15 @@ export function RasterBaseLayer({
 
       if (tiles.length === 0) return;
 
+      const existingSource = map.getSource(sourceId);
+      if (shouldShow && existingSource) {
+        const current = (existingSource as { attribution?: string }).attribution;
+        if (current !== attribution) {
+          if (map.getLayer(layerId)) map.removeLayer(layerId);
+          map.removeSource(sourceId);
+        }
+      }
+
       if (shouldShow && !map.getSource(sourceId)) {
         map.addSource(sourceId, {
           type: "raster",

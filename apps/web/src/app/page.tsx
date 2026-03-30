@@ -10,6 +10,7 @@ import { HikingTrailsLegend } from "@/components/map/HikingTrailsLegend";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
 import { AirQualityLayer } from "@/components/map/layers/AirQualityLayer";
 import { BuildingExtrusionLayer } from "@/components/map/layers/BuildingExtrusionLayer";
+import { CyclingBaseLayer } from "@/components/map/layers/CyclingBaseLayer";
 import { CyclingLayer } from "@/components/map/layers/CyclingLayer";
 import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { EarthquakeLayer } from "@/components/map/layers/EarthquakeLayer";
@@ -86,20 +87,7 @@ export default function HomePage() {
             attribution='© <a href="https://opentopomap.org/about" target="_blank">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC-BY-SA</a>)'
             paint={{ "raster-opacity": 0.95, "raster-saturation": -0.15 }}
           />
-          <RasterBaseLayer
-            sourceId="openmapx-cyclosm-source"
-            layerId="openmapx-cyclosm-layer"
-            tiles={[
-              process.env.NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE ||
-                (process.env.NEXT_PUBLIC_API_URL
-                  ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "")}/api/tiles/cyclosm/{z}/{x}/{y}.png`
-                  : "/api/tiles/cyclosm/{z}/{x}/{y}.png"),
-            ]}
-            activeWhen="cycling"
-            maxzoom={20}
-            attribution='© <a href="https://www.cyclosm.org/" target="_blank">CyclOSM</a> hosted by <a href="https://openstreetmap.fr/" target="_blank">OpenStreetMap France</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank">CC-BY-SA</a>)'
-            paint={{ "raster-opacity": 0.95 }}
-          />
+          <CyclingBaseLayer />
           <TrafficLayer />
           <TransitLayer />
           <CyclingLayer />
