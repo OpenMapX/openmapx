@@ -3,6 +3,7 @@ import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, emailOTP, genericOAuth, twoFactor } from "better-auth/plugins";
+import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
@@ -135,6 +136,7 @@ export const auth = betterAuth({
   plugins: [
     admin(),
     expo(),
+    emailHarmony({ allowNormalizedSignin: true }),
     passkey({
       rpID: process.env.PASSKEY_RP_ID ?? "localhost",
       rpName: "OpenMapX",
