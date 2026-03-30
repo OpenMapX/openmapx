@@ -749,71 +749,86 @@ async function checkSmtp(): Promise<ServiceStatus> {
 
 // ── Route ───────────────────────────────────────────
 
+/** Run check functions in batches to avoid exhausting DNS/sockets in Docker. */
+async function runBatched(
+  checks: (() => Promise<ServiceStatus>)[],
+  concurrency: number,
+): Promise<ServiceStatus[]> {
+  const results: ServiceStatus[] = [];
+  for (let i = 0; i < checks.length; i += concurrency) {
+    const batch = checks.slice(i, i + concurrency);
+    results.push(...(await Promise.all(batch.map((fn) => fn()))));
+  }
+  return results;
+}
+
 export const statusRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get("/status", async () => {
-    const results = await Promise.all([
+    const checks: (() => Promise<ServiceStatus>)[] = [
       // Infrastructure
-      checkPostgres(),
-      checkRedis(),
+      checkPostgres,
+      checkRedis,
       // Geocoding
-      checkNominatim(),
-      checkPhoton(),
-      checkPelias(),
-      checkMapTilerGeocoding(),
+      checkNominatim,
+      checkPhoton,
+      checkPelias,
+      checkMapTilerGeocoding,
       // Routing
-      checkOsrm(),
-      checkValhalla(),
+      checkOsrm,
+      checkValhalla,
       // Transit
-      checkTransitous(),
-      checkMotisLocal(),
-      checkOtp(),
-      checkHafas("db", "HAFAS (DB)", "https://v6.db.transport.rest"),
-      checkHafas("vbb", "HAFAS (VBB)", "https://v6.vbb.transport.rest"),
-      checkHafas("bvg", "HAFAS (BVG)", "https://v6.bvg.transport.rest"),
-      checkIRail(),
-      checkOpendataCh(),
-      checkTransitLand(),
-      checkTfl(),
-      checkMbta(),
-      checkDbRis(),
+      checkTransitous,
+      checkMotisLocal,
+      checkOtp,
+      () => checkHafas("db", "HAFAS (DB)", "https://v6.db.transport.rest"),
+      () => checkHafas("vbb", "HAFAS (VBB)", "https://v6.vbb.transport.rest"),
+      () => checkHafas("bvg", "HAFAS (BVG)", "https://v6.bvg.transport.rest"),
+      checkIRail,
+      checkOpendataCh,
+      checkTransitLand,
+      checkTfl,
+      checkMbta,
+      checkDbRis,
       // Map Tiles
-      checkMapTilerTiles(),
-      checkTileServerGl(),
-      checkMartin(),
-      checkOpenTopoMap(),
+      checkMapTilerTiles,
+      checkTileServerGl,
+      checkMartin,
+      checkOpenTopoMap,
       // Imagery
-      checkMapillary(),
-      checkFlickr(),
-      checkPanoramax(),
-      checkWikimediaPhotos(),
+      checkMapillary,
+      checkFlickr,
+      checkPanoramax,
+      checkWikimediaPhotos,
       // Traffic
-      checkTomTom(),
+      checkTomTom,
       // Data Overlays
-      checkOpenAq(),
-      checkUsgsEarthquakes(),
-      checkNasaFirms(),
-      checkOpenChargeMap(),
-      checkOverpass(),
-      checkWaymarkedTrails(),
+      checkOpenAq,
+      checkUsgsEarthquakes,
+      checkNasaFirms,
+      checkOpenChargeMap,
+      checkOverpass,
+      checkWaymarkedTrails,
       // Parking
-      checkParkApi(),
-      checkDbParking(),
+      checkParkApi,
+      checkDbParking,
       // Shared Mobility
-      checkNextbike(),
-      checkCambio(),
-      checkDbGbfs(),
+      checkNextbike,
+      checkCambio,
+      checkDbGbfs,
       // Fuel Prices
-      checkTankerkoenig(),
-      checkFuelFrance(),
-      checkFuelSpain(),
-      checkFuelAustria(),
+      checkTankerkoenig,
+      checkFuelFrance,
+      checkFuelSpain,
+      checkFuelAustria,
       // Enrichment
-      checkWikidata(),
-      checkWikipedia(),
+      checkWikidata,
+      checkWikipedia,
       // External
-      checkGitHub(),
-      checkSmtp(),
-    ]);
+      checkGitHub,
+      checkSmtp,
+    ];
+
+    const results = await runBatched(checks, 8);
     return { timestamp: new Date().toISOString(), services: results };
   });
 };
