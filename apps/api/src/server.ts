@@ -25,6 +25,7 @@ import { photosRoute } from "./routes/photos";
 import { placesRoute } from "./routes/places";
 import { risMapsRoute } from "./routes/ris-maps";
 import { savedRoute } from "./routes/saved";
+import { statusRoute } from "./routes/status";
 import { streetviewRoute } from "./routes/streetview";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
@@ -133,6 +134,7 @@ await server.register(wildfireRoute, { prefix: "/api" });
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
+await server.register(statusRoute, { prefix: "/api" });
 
 // Regional car-sharing clients (order = priority for enrichment merge:
 // Cambio first = live data wins, open data sources enrich with extra fields)

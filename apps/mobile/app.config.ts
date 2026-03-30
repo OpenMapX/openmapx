@@ -27,7 +27,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-router",
     "expo-localization",
     "expo-secure-store",
-    "expo-better-auth-passkey",
     "@maplibre/maplibre-react-native",
     [
       "expo-location",
