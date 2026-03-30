@@ -1,5 +1,6 @@
 import { expoClient } from "@better-auth/expo/client";
 import { authClient, configureApiClient, configureStorage, initAuth } from "@openmapx/core";
+import { expoPasskeyClient } from "expo-better-auth-passkey";
 import * as SecureStore from "expo-secure-store";
 import { mmkvStorageAdapter } from "./storage";
 
@@ -12,6 +13,7 @@ export function initPlatform(): void {
   // the header interceptor can call authClient.getCookie().
   initAuth({
     baseURL: API_URL,
+    passkeyPlugin: expoPasskeyClient(),
     platformPlugins: [
       expoClient({
         scheme: "openmapx",

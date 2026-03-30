@@ -13,19 +13,21 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: "automatic",
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.openmapx.app",
+    bundleIdentifier: "org.openmapx.app",
+    associatedDomains: [`webcredentials:${process.env.EXPO_PUBLIC_PASSKEY_RP_ID ?? "localhost"}`],
   },
   android: {
     adaptiveIcon: {
       backgroundColor: "#ffffff",
       foregroundImage: "./assets/images/icon.png",
     },
-    package: "com.openmapx.app",
+    package: "org.openmapx.app",
   },
   plugins: [
     "expo-router",
     "expo-localization",
     "expo-secure-store",
+    "expo-better-auth-passkey",
     "@maplibre/maplibre-react-native",
     [
       "expo-location",

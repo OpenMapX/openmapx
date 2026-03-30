@@ -27,6 +27,7 @@
     "@turf/helpers": "^7.3.4",
     "@turf/length": "^7.3.4",
     "expo": "~55.0.0",
+    "expo-better-auth-passkey": "^1.4.1",
     "expo-clipboard": "~55.0.9",
     "expo-constants": "~55.0.9",
     "expo-dev-client": "~55.0.18",

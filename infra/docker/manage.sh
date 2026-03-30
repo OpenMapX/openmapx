@@ -104,7 +104,7 @@ profile_to_services() {
   case "$1" in
     core)       echo "postgis redis" ;;
     proxy)      echo "traefik" ;;
-    app)        echo "api web" ;;
+    app)        echo "api web well-known" ;;
     routing)    echo "valhalla osrm" ;;
     transit)    echo "motis otp" ;;
     pelias)     echo "elasticsearch pelias-api pelias-placeholder pelias-pip" ;;
@@ -126,7 +126,7 @@ is_profile() {
 
 is_service() {
   case "$1" in
-    postgis|redis|traefik|api|web|valhalla|osrm|motis|otp) return 0 ;;
+    postgis|redis|traefik|api|web|well-known|valhalla|osrm|motis|otp) return 0 ;;
     elasticsearch|pelias-api|pelias-placeholder|pelias-pip) return 0 ;;
     nominatim|photon|overpass|tileserver|martin)            return 0 ;;
     *) return 1 ;;

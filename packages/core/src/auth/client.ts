@@ -5,6 +5,8 @@ import { createAuthClient } from "better-auth/react";
 export interface AuthConfig {
   baseURL: string;
   platformPlugins?: unknown[];
+  /** Override the default passkeyClient() — e.g. with expoPasskeyClient() on native. */
+  passkeyPlugin?: unknown;
 }
 
 /** Helper used only for its return type — captures the full plugin-augmented shape. */
@@ -25,7 +27,7 @@ export function initAuth(config: AuthConfig): void {
     baseURL: config.baseURL,
     basePath: "/api/auth",
     plugins: [
-      passkeyClient(),
+      (config.passkeyPlugin ?? passkeyClient()) as ReturnType<typeof passkeyClient>,
       genericOAuthClient(),
       twoFactorClient(),
       emailOTPClient(),

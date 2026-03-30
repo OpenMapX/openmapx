@@ -211,7 +211,9 @@ export const auth = betterAuth({
     passkey({
       rpID: process.env.PASSKEY_RP_ID ?? "localhost",
       rpName: "OpenMapX",
-      origin: process.env.PASSKEY_ORIGIN ?? "http://localhost:3000",
+      origin: process.env.PASSKEY_ORIGIN
+        ? process.env.PASSKEY_ORIGIN.split(",").map((o) => o.trim())
+        : ["http://localhost:3000"],
     }),
     genericOAuth({
       config: [

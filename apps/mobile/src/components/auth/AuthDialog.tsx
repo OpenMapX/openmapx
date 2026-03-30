@@ -1,4 +1,4 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { authClient, oauthProviders } from "@openmapx/core";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -183,6 +183,25 @@ export function AuthDialog({ visible, onDismiss }: AuthDialogProps) {
       setLoading(false);
     }
   }, [email, resetOtp, newPassword, resetForm, t]);
+
+  const handlePasskeySignIn = useCallback(async () => {
+    Keyboard.dismiss();
+    setLoading(true);
+    setError(null);
+    try {
+      const { error: passkeyError } = await authClient.signIn.passkey();
+      if (passkeyError) {
+        if ("code" in passkeyError && passkeyError.code === "AUTH_CANCELLED") return;
+        setError(String(passkeyError.message ?? t("auth.passkeySignInFailed")));
+        return;
+      }
+      handleClose();
+    } catch {
+      setError(t("auth.passkeyAuthFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }, [handleClose, t]);
 
   const handleOAuthSignIn = useCallback(
     async (providerId: string, providerName: string) => {
@@ -455,6 +474,22 @@ export function AuthDialog({ visible, onDismiss }: AuthDialogProps) {
               </Button>
 
               <Divider style={styles.divider} />
+
+              {/* Passkey sign-in */}
+              {mode === "sign-in" && (
+                <Button
+                  mode="outlined"
+                  onPress={handlePasskeySignIn}
+                  disabled={loading}
+                  icon={({ size, color }) => (
+                    <MaterialCommunityIcons name="key-variant" size={size} color={color} />
+                  )}
+                  style={styles.oauthButton}
+                  labelStyle={{ color: theme.colors.onSurface }}
+                >
+                  {t("auth.signInWithPasskey")}
+                </Button>
+              )}
 
               {/* OAuth providers */}
               {oauthProviders.map((provider) => (

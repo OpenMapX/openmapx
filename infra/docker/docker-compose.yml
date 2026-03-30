@@ -7,7 +7,7 @@
 # Profiles:
 #   (none)    Core: postgis, redis
 #   proxy     Traefik reverse proxy (TLS termination, path-based routing)
-#   app       API + Web (Fastify + Next.js, built from repo)
+#   app       API + Web + .well-known (Fastify + Next.js + passkey domain files)
 #   routing   Valhalla + OSRM (Valhalla handles planet, OSRM region-only)
 #   transit   MOTIS + OTP (MOTIS handles planet, OTP region-only)
 #   pelias    Elasticsearch + Pelias (self-hosted geocoding)
@@ -88,7 +88,7 @@ services:
       CORS_ORIGIN: https://${DOMAIN:-localhost},http://localhost:3000
       BETTER_AUTH_URL: https://${DOMAIN:-localhost}
       PASSKEY_RP_ID: ${DOMAIN:-localhost}
-      PASSKEY_ORIGIN: https://${DOMAIN:-localhost}
+      PASSKEY_ORIGIN: https://${DOMAIN:-localhost},openmapx://
     depends_on:
       postgis:
         condition: service_healthy
@@ -143,6 +143,25 @@ services:
       resources:
         limits:
           memory: 512m
+
+  well-known:
+    image: nginx:alpine
+    profiles: [app]
+    volumes:
+      - ./well-known:/usr/share/nginx/html/.well-known:ro
+      - ./well-known/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.well-known.rule: Host(`${DOMAIN:-localhost}`) && PathPrefix(`/.well-known`)
+      traefik.http.routers.well-known.entrypoints: websecure
+      traefik.http.routers.well-known.tls.certresolver: letsencrypt
+      traefik.http.services.well-known.loadbalancer.server.port: "80"
+    networks: [openmapx]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 32m
 
   # Core Infrastructure
 
