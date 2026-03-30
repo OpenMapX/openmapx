@@ -467,7 +467,7 @@ services:
       traefik.http.routers.martin.entrypoints: websecure
       traefik.http.routers.martin.tls.certresolver: letsencrypt
       traefik.http.middlewares.martin-strip.stripprefix.prefixes: /martin
-      traefik.http.routers.martin.middlewares: martin-strip
+      traefik.http.routers.martin.middlewares: martin-strip,tiles-cache@file
       traefik.http.services.martin.loadbalancer.server.port: "3000"
     networks: [openmapx]
     restart: unless-stopped
@@ -486,7 +486,7 @@ services:
       traefik.http.routers.tiles.entrypoints: websecure
       traefik.http.routers.tiles.tls.certresolver: letsencrypt
       traefik.http.middlewares.tiles-strip.stripprefix.prefixes: /tiles
-      traefik.http.routers.tiles.middlewares: tiles-strip
+      traefik.http.routers.tiles.middlewares: tiles-strip,tiles-cache@file
       traefik.http.services.tiles.loadbalancer.server.port: "8080"
     networks: [openmapx]
     deploy:

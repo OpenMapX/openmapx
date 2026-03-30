@@ -1,0 +1,12 @@
+# Basic auth for staging/test instances.
+# Copy to auth.yml and replace credentials.
+# Generate a password hash: htpasswd -nB admin
+#
+# This middleware is referenced as a default on the websecure entrypoint
+# in traefik.yml. Remove it from there for public production deployments.
+http:
+  middlewares:
+    basic-auth:
+      basicAuth:
+        users:
+          - "admin:$2y$05$REPLACE_WITH_HTPASSWD_HASH"
