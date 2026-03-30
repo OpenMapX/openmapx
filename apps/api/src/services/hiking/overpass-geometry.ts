@@ -1,4 +1,4 @@
-import { overpassQuery } from "../overpass";
+import { overpassQuery } from "@openmapx/core";
 
 /**
  * Overpass `out body geom` returns inline geometry on members,

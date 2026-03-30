@@ -8,12 +8,14 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
-import { getPrivacySections, privacySectionLabels } from "../legalServiceData";
+import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
 
 export default function PrivacyContent({
-  capabilities = {},
+  capabilities: _capabilities = {},
+  integrations = [],
 }: {
   capabilities?: Record<string, boolean>;
+  integrations?: import("@openmapx/core").LoadedIntegrationMeta[];
 }) {
   const { name, street, postalCode, city, country, email } = legalConfig;
 
@@ -200,10 +202,10 @@ export default function PrivacyContent({
           services:
         </Typography>
 
-        {getPrivacySections(capabilities).map((section) => (
+        {generatePrivacySectionsFromManifests(integrations).map((section) => (
           <div key={section.key}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
-              {privacySectionLabels.en[section.key]}
+              {section.labelEn}
             </Typography>
             <ServiceTable rows={section.rows} />
           </div>

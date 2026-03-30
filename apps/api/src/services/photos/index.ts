@@ -1,12 +1,12 @@
+import { wikidataEnricher } from "@integrations/enrichment-wikidata/provider.js";
+import { wikipediaEnricher } from "@integrations/enrichment-wikipedia/provider.js";
+import { flickrPhotoProvider } from "@integrations/photos-flickr/provider.js";
+import { mapillaryPhotoProvider } from "@integrations/photos-mapillary/provider.js";
+import { panoramaxPhotoProvider } from "@integrations/photos-panoramax/provider.js";
+import { wikimediaGeoProvider } from "@integrations/photos-wikimedia/provider.js";
 import type { PlacePhoto } from "@openmapx/core";
-import { wikidataEnricher } from "../enrichment/wikidata.enricher";
 import { wikimediaCommonsEnricher } from "../enrichment/wikimedia-commons.enricher";
-import { wikipediaEnricher } from "../enrichment/wikipedia.enricher";
-import { flickrPhotoProvider } from "./flickr.provider";
-import { mapillaryPhotoProvider } from "./mapillary.provider";
-import { panoramaxPhotoProvider } from "./panoramax.provider";
 import type { PhotoProvider, PhotoQuery } from "./types";
-import { wikimediaGeoProvider } from "./wikimedia-geo.provider";
 
 /** Coordinate-based photo providers. */
 const PROVIDERS: PhotoProvider[] = [

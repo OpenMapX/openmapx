@@ -1,0 +1,63 @@
+{
+  "id": "overlay-transit",
+  "name": "Public Transit",
+  "version": "1.0.0",
+  "description": "Public transit route visualization on the map",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://wiki.openstreetmap.org/wiki/Public_transport",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": false,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "transit"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": [],
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://tiles.openstreetmap.org/0/0/0.png",
+    "category": "Transit"
+  },
+
+  "quality": "stable",
+
+  "attribution": [
+    {
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL"
+    }
+  ],
+
+  "privacy": {
+    "purpose": "Transit route visualization on map",
+    "dataSent": "Map tile requests",
+    "dataReceived": "Transit overlay tiles",
+    "providerCountry": "Various",
+    "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Privacy_policy",
+    "personalData": false,
+    "cookies": false
+  }
+}

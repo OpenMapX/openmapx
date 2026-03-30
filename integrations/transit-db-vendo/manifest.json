@@ -1,0 +1,40 @@
+{
+  "id": "transit-db-vendo",
+  "name": "DB Vendo (Deutsche Bahn)",
+  "description": "Deutsche Bahn journey planning via db-vendo-client",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": [],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable DB Vendo transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://int.bahn.de/web/api/reiseloesung/suche"
+  },
+  "attribution": [
+    {
+      "name": "Deutsche Bahn",
+      "url": "https://www.bahn.de/",
+      "license": "Proprietary"
+    }
+  ],
+  "privacy": {
+    "purpose": "German rail journey planning and departures",
+    "dataSent": "Origin/destination station IDs, departure time",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+    "personalData": false
+  }
+}

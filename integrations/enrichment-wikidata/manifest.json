@@ -1,0 +1,49 @@
+{
+  "id": "enrichment-wikidata",
+  "name": "Wikidata Enrichment",
+  "version": "1.0.0",
+  "description": "Enrich place details with structured data from Wikidata",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["enrichment"],
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&format=json&props=labels&languages=en",
+    "category": "External"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "Wikidata",
+      "url": "https://www.wikidata.org/",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "Wikidata",
+      "purpose": "Enrich place details with structured data from Wikidata",
+      "dataSent": "Wikidata entity IDs (from OSM tags)",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Privacy_policy",
+      "personalData": false
+    }
+  ]
+}

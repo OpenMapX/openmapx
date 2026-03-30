@@ -5,6 +5,7 @@
  */
 
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
+export { fetchIntegrations } from "./api/integrations";
 export { categoryPlaceToPlace } from "./types/category";
 export { applyHoursFilter } from "./utils/categoryFilter";
 export { formatAddress, legalConfig } from "./utils/legalConfig";

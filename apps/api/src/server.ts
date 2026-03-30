@@ -2,18 +2,25 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+// Data source providers moved to integrations (ev-charging, fuel, parking, bike-sharing, car-sharing, scooter-sharing)
+import { bielefeldClient } from "@integrations/bike-sharing/shared-providers/bielefeld-client";
+import { cambioClient } from "@integrations/bike-sharing/shared-providers/cambio-client";
+import { registerCarSharingClient } from "@integrations/bike-sharing/shared-providers/car-sharing-registry";
+import { stadtteilAutoClient } from "@integrations/bike-sharing/shared-providers/stadtteilauto-client";
+import { wuppertalClient } from "@integrations/bike-sharing/shared-providers/wuppertal-client";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
+import { initIntegrations, shutdownIntegrations } from "./integration-host";
 import { redis } from "./redis";
-import { airQualityRoute } from "./routes/air-quality";
+// airQualityRoute moved to integrations/overlay-air-quality
 import { autocompleteRoute } from "./routes/autocomplete";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { categorySearchRoute } from "./routes/category-search";
 import { dataSourcesRoute } from "./routes/data-sources";
 import { directionsRoute } from "./routes/directions";
-import { earthquakeRoute } from "./routes/earthquakes";
+// earthquakeRoute moved to integrations/overlay-earthquakes
 import { elevationRoute } from "./routes/elevation";
 import { geocodeRoute } from "./routes/geocode";
 import { gtfsRoute } from "./routes/gtfs";
@@ -31,20 +38,8 @@ import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
 import { transitAttributionRoute } from "./routes/transit-attribution";
-import { wildfireRoute } from "./routes/wildfires";
+// wildfireRoute moved to integrations/overlay-wildfires
 import { winterSportsRoute } from "./routes/winter-sports";
-import { evChargingProvider } from "./services/data-sources/ev-charging/provider";
-import { fuelProvider } from "./services/data-sources/fuel/provider";
-import { parkingProvider } from "./services/data-sources/parking/provider";
-import { dataSourceRegistry } from "./services/data-sources/registry";
-import { bielefeldClient } from "./services/data-sources/shared-mobility/bielefeld-client";
-import { bikeSharingProvider } from "./services/data-sources/shared-mobility/bike-sharing-provider";
-import { cambioClient } from "./services/data-sources/shared-mobility/cambio-client";
-import { carSharingProvider } from "./services/data-sources/shared-mobility/car-sharing-provider";
-import { registerCarSharingClient } from "./services/data-sources/shared-mobility/car-sharing-registry";
-import { scooterSharingProvider } from "./services/data-sources/shared-mobility/scooter-provider";
-import { stadtteilAutoClient } from "./services/data-sources/shared-mobility/stadtteilauto-client";
-import { wuppertalClient } from "./services/data-sources/shared-mobility/wuppertal-client";
 import { gtfsManager } from "./services/gtfs/index";
 import { motisManager } from "./services/motis/manager";
 import { registry } from "./services/transit/registry/index";
@@ -120,7 +115,7 @@ await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(tilesRoute, { prefix: "/api" });
 await server.register(streetviewRoute, { prefix: "/api" });
-await server.register(airQualityRoute, { prefix: "/api" });
+// airQualityRoute now handled by integration framework
 await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(transitRoute, { prefix: "/api" });
 await server.register(transitAttributionRoute, { prefix: "/api" });
@@ -130,8 +125,8 @@ await server.register(isochroneRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
 await server.register(dataSourcesRoute, { prefix: "/api" });
 await server.register(photosRoute, { prefix: "/api" });
-await server.register(earthquakeRoute, { prefix: "/api" });
-await server.register(wildfireRoute, { prefix: "/api" });
+// earthquakeRoute now handled by integration framework
+// wildfireRoute now handled by integration framework
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
@@ -144,13 +139,7 @@ registerCarSharingClient(stadtteilAutoClient);
 registerCarSharingClient(wuppertalClient);
 registerCarSharingClient(bielefeldClient);
 
-// Data source providers
-dataSourceRegistry.register(evChargingProvider);
-dataSourceRegistry.register(fuelProvider);
-dataSourceRegistry.register(parkingProvider);
-dataSourceRegistry.register(bikeSharingProvider);
-dataSourceRegistry.register(scooterSharingProvider);
-dataSourceRegistry.register(carSharingProvider);
+// Data source providers now registered by integration framework
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {
@@ -178,6 +167,18 @@ try {
 } catch (err) {
   server.log.warn(err, "MOTIS manager initialization failed");
 }
+
+// Integration framework
+// Discover and load integrations from integrations/ directory
+const integrationsDir = join(import.meta.dirname ?? ".", "..", "..", "..", "integrations");
+const customIntegrationsDir = join(
+  import.meta.dirname ?? ".",
+  "..",
+  "..",
+  "..",
+  "custom_integrations",
+);
+await initIntegrations(server, [integrationsDir, customIntegrationsDir]);
 
 // Transit registry
 // Initialize dynamic transit provider registry (non-blocking — server
@@ -212,6 +213,7 @@ try {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
     registry.stopRefresh();
+    await shutdownIntegrations();
     await server.close();
     await redis?.disconnect();
     await sql.end();

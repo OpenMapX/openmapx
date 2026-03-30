@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock all provider modules
-vi.mock("../maptiler-geocoding.service.js", () => ({
+vi.mock("@integrations/geocoding-maptiler/provider.js", () => ({
   maptilerGeocodingService: {
     geocode: vi.fn(),
     autocomplete: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock("../maptiler-geocoding.service.js", () => ({
   },
 }));
 
-vi.mock("../nominatim.service.js", () => ({
+vi.mock("@integrations/geocoding-nominatim/provider.js", () => ({
   nominatimService: {
     geocode: vi.fn(),
     autocomplete: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock("../nominatim.service.js", () => ({
   },
 }));
 
-vi.mock("../pelias.service.js", () => ({
+vi.mock("@integrations/geocoding-pelias/provider.js", () => ({
   peliasService: {
     geocode: vi.fn(),
     autocomplete: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock("../pelias.service.js", () => ({
   },
 }));
 
-vi.mock("../photon.service.js", () => ({
+vi.mock("@integrations/geocoding-photon/provider.js", () => ({
   photonService: {
     geocode: vi.fn(),
     autocomplete: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock("../photon.service.js", () => ({
   },
 }));
 
-vi.mock("../motis-geocoding.service.js", () => ({
+vi.mock("@integrations/geocoding-motis/provider.js", () => ({
   motisGeocodingService: {
     geocode: vi.fn(),
     autocomplete: vi.fn(),
@@ -82,8 +82,8 @@ async function setupChain(providerEnv: string) {
   vi.clearAllMocks();
   process.env.GEOCODING_PROVIDER = providerEnv;
   const { getGeocodingProvider } = await import("../geocoding.factory.js");
-  const { photonService } = await import("../photon.service.js");
-  const { maptilerGeocodingService } = await import("../maptiler-geocoding.service.js");
+  const { photonService } = await import("@integrations/geocoding-photon/provider.js");
+  const { maptilerGeocodingService } = await import("@integrations/geocoding-maptiler/provider.js");
   return {
     getGeocodingProvider,
     photon: vi.mocked(photonService),
@@ -95,7 +95,9 @@ describe("getGeocodingProvider", () => {
   it("defaults to maptiler when GEOCODING_PROVIDER is not set", async () => {
     vi.clearAllMocks();
     const { getGeocodingProvider } = await import("../geocoding.factory.js");
-    const { maptilerGeocodingService } = await import("../maptiler-geocoding.service.js");
+    const { maptilerGeocodingService } = await import(
+      "@integrations/geocoding-maptiler/provider.js"
+    );
 
     vi.mocked(maptilerGeocodingService).geocode.mockResolvedValueOnce([
       makeSearchResult("maptiler-result"),
@@ -112,7 +114,7 @@ describe("getGeocodingProvider", () => {
     vi.clearAllMocks();
     process.env.GEOCODING_PROVIDER = "photon";
     const { getGeocodingProvider } = await import("../geocoding.factory.js");
-    const { photonService } = await import("../photon.service.js");
+    const { photonService } = await import("@integrations/geocoding-photon/provider.js");
 
     vi.mocked(photonService).geocode.mockResolvedValueOnce([makeSearchResult("photon-result")]);
 
@@ -127,7 +129,7 @@ describe("getGeocodingProvider", () => {
     vi.clearAllMocks();
     process.env.GEOCODING_PROVIDER = "transitous";
     const { getGeocodingProvider } = await import("../geocoding.factory.js");
-    const { motisGeocodingService } = await import("../motis-geocoding.service.js");
+    const { motisGeocodingService } = await import("@integrations/geocoding-motis/provider.js");
 
     vi.mocked(motisGeocodingService).geocode.mockResolvedValueOnce([
       makeSearchResult("transitous-result"),

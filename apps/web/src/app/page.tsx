@@ -1,54 +1,33 @@
 import { Suspense } from "react";
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
-import { AirQualityLegend } from "@/components/map/AirQualityLegend";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
-import { CyclingLegend } from "@/components/map/CyclingLegend";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
-import { EarthquakeLegend } from "@/components/map/EarthquakeLegend";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
-import { HikingTrailsLegend } from "@/components/map/HikingTrailsLegend";
+import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
-import { AirQualityLayer } from "@/components/map/layers/AirQualityLayer";
-import { BuildingExtrusionLayer } from "@/components/map/layers/BuildingExtrusionLayer";
 import { CyclingBaseLayer } from "@/components/map/layers/CyclingBaseLayer";
-import { CyclingLayer } from "@/components/map/layers/CyclingLayer";
 import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
-import { EarthquakeLayer } from "@/components/map/layers/EarthquakeLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
-import { HikingTrailsLayer } from "@/components/map/layers/HikingTrailsLayer";
-import { LiveTrainsLayer } from "@/components/map/layers/LiveTrainsLayer";
-import { MeasurementLayer } from "@/components/map/layers/MeasurementLayer";
-import { MountainShelterLayer } from "@/components/map/layers/MountainShelterLayer";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { SavedPlacesLayer } from "@/components/map/layers/SavedPlacesLayer";
-import { StreetViewLayer } from "@/components/map/layers/StreetViewLayer";
-import { TrafficLayer } from "@/components/map/layers/TrafficLayer";
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
-import { TransitLayer } from "@/components/map/layers/TransitLayer";
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
-import { TravelTimeLayer } from "@/components/map/layers/TravelTimeLayer";
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
-import { WildfireLayer } from "@/components/map/layers/WildfireLayer";
-import { WinterSportsLayer } from "@/components/map/layers/WinterSportsLayer";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
 import { MapControls } from "@/components/map/MapControls";
 import { MapFooter } from "@/components/map/MapFooter";
+import { MapLayerHost } from "@/components/map/MapLayerHost";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
-import { MeasurementToolbar } from "@/components/map/MeasurementToolbar";
 import { PlaceDeepLink } from "@/components/map/PlaceDeepLink";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
-import { StreetViewLegend } from "@/components/map/StreetViewLegend";
 import { StreetViewViewer } from "@/components/map/StreetViewViewer";
 import { TopRightControls } from "@/components/map/TopRightControls";
-import { TravelTimeToolbar } from "@/components/map/TravelTimeToolbar";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { WaypointMarkers } from "@/components/map/WaypointMarkers";
-import { WildfireLegend } from "@/components/map/WildfireLegend";
-import { WinterSportsLegend } from "@/components/map/WinterSportsLegend";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
 import { PanelHost } from "@/components/panels/PanelHost";
@@ -88,28 +67,17 @@ export default function HomePage() {
             paint={{ "raster-opacity": 0.95, "raster-saturation": -0.15 }}
           />
           <CyclingBaseLayer />
-          <TrafficLayer />
-          <TransitLayer />
-          <CyclingLayer />
+          {/* Core layers (not integration-managed) */}
           <RouteLayer />
           <TransitRouteLayer />
           <VehicleLiveLayer />
           <TransitItineraryLayer />
           <TransitVehicleLayer />
-          <BuildingExtrusionLayer />
-          <StreetViewLayer />
-          <AirQualityLayer />
-          <EarthquakeLayer />
-          <WildfireLayer />
-          <LiveTrainsLayer />
-          <WinterSportsLayer />
-          <HikingTrailsLayer />
-          <MountainShelterLayer />
           <CategoryResultMarkers />
           <DataSourceLayer />
           <SavedPlacesLayer />
-          <MeasurementLayer />
-          <TravelTimeLayer />
+          {/* All overlay/tool layers loaded dynamically by MapLayerHost */}
+          <MapLayerHost />
           <DataSourceDetailBridge />
           <MapClickHandler />
           <MapStylePoiClickHandler />
@@ -127,15 +95,8 @@ export default function HomePage() {
           <TopRightControls />
           <StreetViewViewer />
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col-reverse items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
-            <TravelTimeToolbar />
-            <MeasurementToolbar />
-            <StreetViewLegend />
-            <AirQualityLegend />
-            <EarthquakeLegend />
-            <WildfireLegend />
-            <CyclingLegend />
-            <WinterSportsLegend />
-            <HikingTrailsLegend />
+            {/* All legends/toolbars loaded dynamically by LegendHost */}
+            <LegendHost />
           </div>
           <LayerSelector />
           <MapControls />

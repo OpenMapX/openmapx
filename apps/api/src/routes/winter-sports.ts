@@ -1,5 +1,5 @@
+import { OverpassRateLimitError } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-import { OverpassRateLimitError } from "../services/overpass";
 import { fetchWinterSportsFeatures } from "../services/winter-sports/overpass";
 import { round, TTL, withCacheStatus } from "../utils/cache.js";
 

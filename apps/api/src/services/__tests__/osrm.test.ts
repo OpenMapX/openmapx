@@ -21,7 +21,7 @@ function mockNotOk(status = 500) {
 }
 
 async function loadModule() {
-  return import("../osrm.service.js");
+  return import("@integrations/routing-osrm/provider.js");
 }
 
 function makeStep(overrides: Record<string, unknown> = {}) {

@@ -1,0 +1,50 @@
+{
+  "id": "geocoding-photon",
+  "name": "Photon Geocoding",
+  "version": "1.0.0",
+  "description": "Forward and reverse geocoding via Photon (Komoot)",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["geocoding"],
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["PHOTON_URL"],
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://photon.komoot.io/api?q=test&limit=1",
+    "category": "Geocoding"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "Photon/Komoot",
+      "url": "https://photon.komoot.io/",
+      "license": "Apache 2.0"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "Photon/Komoot",
+      "purpose": "Forward/reverse geocoding and address search",
+      "dataSent": "Search query text, coordinates for reverse geocoding",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://photon.komoot.io/",
+      "personalData": false
+    }
+  ]
+}

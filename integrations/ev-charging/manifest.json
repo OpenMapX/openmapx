@@ -1,0 +1,76 @@
+{
+  "id": "ev-charging",
+  "name": "EV Charging Stations",
+  "version": "1.0.0",
+  "description": "Electric vehicle charging station locations from OpenChargeMap and OpenStreetMap",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["data-source"],
+
+  "frontend": {
+    "searchCategory": {
+      "id": "ev-charging",
+      "label": "EV Charging",
+      "showInChipBar": true
+    }
+  },
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["OPENCHARGEMAP_API_KEY"],
+
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${OPENCHARGEMAP_API_KEY}&latitude=0&longitude=0&distance=100",
+    "requiredEnvVars": ["OPENCHARGEMAP_API_KEY"],
+    "category": "Data Overlays"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "OpenChargeMap",
+      "url": "https://openchargemap.org/",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+    },
+    {
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "OpenChargeMap",
+      "purpose": "EV charging station locations, connector types, and availability",
+      "dataSent": "Bounding box, filter parameters (connector type, usage type), API key",
+      "dataReceived": "Station locations, operators, connector types, power levels, status",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://community.openchargemap.org/privacy",
+      "personalData": false
+    },
+    {
+      "service": "Overpass API (OSM)",
+      "purpose": "Supplement charging station data from OpenStreetMap",
+      "dataSent": "Bounding box, OSM query",
+      "dataReceived": "POI locations and tags",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+      "personalData": false
+    }
+  ]
+}

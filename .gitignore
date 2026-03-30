@@ -51,6 +51,12 @@ infra/docker/pgdata/
 # Transitous API keys (contains secrets)
 infra/docker/services/transitous/api-keys.json
 
+# Community integrations (user-installed, not version-controlled)
+custom_integrations/
+
+# Integration local config (may contain API keys)
+integrations/*/config.json
+
 # Planning
 docs/superpowers/
 docs/plans/

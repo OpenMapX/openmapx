@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../wikidata.enricher.js", () => ({
+vi.mock("@integrations/enrichment-wikidata/provider.js", () => ({
   wikidataEnricher: { name: "wikidata", enrich: vi.fn() },
 }));
-vi.mock("../wikipedia.enricher.js", () => ({
+vi.mock("@integrations/enrichment-wikipedia/provider.js", () => ({
   wikipediaEnricher: { name: "wikipedia", enrich: vi.fn() },
 }));
 vi.mock("../wikimedia-commons.enricher.js", () => ({
@@ -15,8 +15,8 @@ let wikipediaEnrich: ReturnType<typeof vi.fn>;
 let wikimediaCommonsEnrich: ReturnType<typeof vi.fn>;
 
 beforeEach(async () => {
-  const wd = await import("../wikidata.enricher.js");
-  const wp = await import("../wikipedia.enricher.js");
+  const wd = await import("@integrations/enrichment-wikidata/provider.js");
+  const wp = await import("@integrations/enrichment-wikipedia/provider.js");
   const wc = await import("../wikimedia-commons.enricher.js");
   wikidataEnrich = wd.wikidataEnricher.enrich as ReturnType<typeof vi.fn>;
   wikipediaEnrich = wp.wikipediaEnricher.enrich as ReturnType<typeof vi.fn>;

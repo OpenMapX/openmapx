@@ -1,0 +1,41 @@
+{
+  "id": "transit-hafas",
+  "name": "HAFAS Transit (DB/VBB/BVG)",
+  "description": "Deutsche Bahn, VBB, and BVG transit data via HAFAS",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "multiInstance": true,
+  "envVars": [],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable HAFAS transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://v6.db.transport.rest/stops/nearby?latitude=52.52&longitude=13.405&results=1"
+  },
+  "attribution": [
+    {
+      "name": "Deutsche Bahn",
+      "url": "https://www.bahn.de/",
+      "license": "Proprietary"
+    }
+  ],
+  "privacy": {
+    "purpose": "Transit stop departures, arrivals, and journey planning",
+    "dataSent": "Stop IDs, coordinates, departure times",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+    "personalData": false
+  }
+}

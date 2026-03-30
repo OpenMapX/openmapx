@@ -1,0 +1,40 @@
+{
+  "id": "transit-otp",
+  "name": "OpenTripPlanner",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["OTP_URL"],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable OpenTripPlanner integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "urlTemplate": "${OTP_URL}/otp/routers/default",
+    "requiredEnvVars": ["OTP_URL"]
+  },
+  "attribution": [
+    {
+      "name": "OpenTripPlanner",
+      "url": "https://www.opentripplanner.org/",
+      "license": "LGPL-3.0"
+    }
+  ],
+  "privacy": {
+    "purpose": "Multi-modal transit trip planning",
+    "dataSent": "Origin/destination coordinates",
+    "providerCountry": "Self-hosted",
+    "providerPrivacyUrl": "https://www.opentripplanner.org/",
+    "personalData": false
+  }
+}

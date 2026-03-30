@@ -51,7 +51,7 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
 }
 
 async function loadModule() {
-  return import("../motis-geocoding.service.js");
+  return import("@integrations/geocoding-motis/provider.js");
 }
 
 // geocode

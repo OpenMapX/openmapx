@@ -1,0 +1,51 @@
+{
+  "id": "geocoding-maptiler",
+  "name": "MapTiler Geocoding",
+  "version": "1.0.0",
+  "description": "Forward geocoding and autocomplete via MapTiler",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["geocoding"],
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["MAPTILER_KEY"],
+
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api.maptiler.com/geocoding/test.json?key=${MAPTILER_KEY}&limit=1",
+    "requiredEnvVars": ["MAPTILER_KEY"],
+    "category": "Geocoding"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "MapTiler",
+      "url": "https://www.maptiler.com/",
+      "license": "Proprietary"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "MapTiler",
+      "purpose": "Forward geocoding and autocomplete",
+      "dataSent": "Search query text, API key",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://www.maptiler.com/privacy-policy/",
+      "personalData": false
+    }
+  ]
+}

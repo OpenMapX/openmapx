@@ -1,7 +1,7 @@
+import type { BBox, Departure, TransitStop, TransportMode } from "@openmapx/core";
 import { gtfsManager } from "../../gtfs/index";
 import * as gtfsQueries from "../../gtfs/queries";
 import type { GtfsStopRow } from "../../gtfs/types";
-import type { BBox, Departure, TransitStop, TransportMode } from "../types";
 
 /**
  * Transit provider backed by locally-imported GTFS feeds in PostGIS.

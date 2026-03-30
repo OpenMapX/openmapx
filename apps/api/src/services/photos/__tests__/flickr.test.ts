@@ -40,7 +40,7 @@ function makeFlickrPhoto(overrides: Record<string, unknown> = {}) {
 }
 
 async function loadModule() {
-  return import("../flickr.provider.js");
+  return import("@integrations/photos-flickr/provider.js");
 }
 
 describe("flickrPhotoProvider", () => {

@@ -1,10 +1,10 @@
+import { maptilerGeocodingService } from "@integrations/geocoding-maptiler/provider.js";
+import { motisGeocodingService } from "@integrations/geocoding-motis/provider.js";
+import { nominatimService } from "@integrations/geocoding-nominatim/provider.js";
+import { peliasService } from "@integrations/geocoding-pelias/provider.js";
+import { photonService } from "@integrations/geocoding-photon/provider.js";
 import { dbRisGeocodingService } from "./db-ris/index";
 import type { GeocodingProvider } from "./geocoding.provider";
-import { maptilerGeocodingService } from "./maptiler-geocoding.service";
-import { motisGeocodingService } from "./motis-geocoding.service";
-import { nominatimService } from "./nominatim.service";
-import { peliasService } from "./pelias.service";
-import { photonService } from "./photon.service";
 
 type ProviderName =
   | "maptiler"

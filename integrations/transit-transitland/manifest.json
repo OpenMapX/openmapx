@@ -1,0 +1,40 @@
+{
+  "id": "transit-transitland",
+  "name": "TransitLand",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["TRANSIT_LAND_API_KEY"],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable TransitLand integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://transit.land/api/v2/rest/stops?lat=52.52&lon=13.405&radius=100&limit=1&api_key=${TRANSIT_LAND_API_KEY}",
+    "requiredEnvVars": ["TRANSIT_LAND_API_KEY"]
+  },
+  "attribution": [
+    {
+      "name": "TransitLand",
+      "url": "https://www.transit.land/",
+      "license": "Various (per feed)"
+    }
+  ],
+  "privacy": {
+    "purpose": "Global transit stop and route data",
+    "dataSent": "Coordinates, API key",
+    "providerCountry": "US",
+    "providerPrivacyUrl": "https://www.transit.land/terms",
+    "personalData": false
+  }
+}

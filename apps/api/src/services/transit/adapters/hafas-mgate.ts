@@ -1,8 +1,8 @@
+import { mapProducts, normalizeFptfDeparture, productToMode } from "@openmapx/core";
 import { createCachedHafasClient } from "cached-hafas-client";
 import { createRedisStore } from "cached-hafas-client/stores/redis.js";
 import { createClient } from "hafas-client";
 import { redis } from "../../../redis";
-import { mapProducts, normalizeFptfDeparture, productToMode } from "../fptf";
 import type { RegistryEntry } from "../registry/types";
 import type {
   BBox,

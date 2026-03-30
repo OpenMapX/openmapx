@@ -1,0 +1,34 @@
+{
+  "id": "overlay-3d-buildings",
+  "name": "3D Buildings",
+  "version": "1.0.0",
+  "description": "3D building extrusions using existing map tile data",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": false,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "3dBuildings"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": [],
+
+  "quality": "built-in"
+}

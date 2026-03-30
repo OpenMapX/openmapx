@@ -1,0 +1,41 @@
+{
+  "id": "transit-mbta",
+  "name": "MBTA (Boston Transit)",
+  "description": "Massachusetts Bay Transportation Authority transit data",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["MBTA_API_KEY"],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable MBTA transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api-v3.mbta.com/stops?filter[latitude]=42.36&filter[longitude]=-71.06&filter[radius]=0.01&api_key=${MBTA_API_KEY}",
+    "requiredEnvVars": ["MBTA_API_KEY"]
+  },
+  "attribution": [
+    {
+      "name": "MBTA",
+      "url": "https://www.mbta.com/",
+      "license": "Open Data"
+    }
+  ],
+  "privacy": {
+    "purpose": "Boston area transit stops and departures",
+    "dataSent": "Coordinates, stop IDs, API key",
+    "providerCountry": "US",
+    "providerPrivacyUrl": "https://www.mbta.com/policies/privacy-policy",
+    "personalData": false
+  }
+}

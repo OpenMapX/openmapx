@@ -1,0 +1,42 @@
+{
+  "id": "transit-tfl",
+  "name": "TfL (Transport for London)",
+  "description": "London public transit data",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["TFL_APP_KEY"],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable TfL transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api.tfl.gov.uk/StopPoint/search?query=victoria&app_key=${TFL_APP_KEY}",
+    "requiredEnvVars": ["TFL_APP_KEY"]
+  },
+  "attribution": [
+    {
+      "name": "Transport for London",
+      "url": "https://tfl.gov.uk/",
+      "license": "Open Government Licence",
+      "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+    }
+  ],
+  "privacy": {
+    "purpose": "London transit stops and departures",
+    "dataSent": "Stop IDs, coordinates, API key",
+    "providerCountry": "UK",
+    "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
+    "personalData": false
+  }
+}

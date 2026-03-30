@@ -1,0 +1,49 @@
+{
+  "id": "poi-overpass",
+  "name": "Overpass POI Search",
+  "version": "1.0.0",
+  "description": "Category-based point of interest search via Overpass API",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["poi-search"],
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://overpass-api.de/api/status",
+    "category": "Geocoding"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "OpenStreetMap/Overpass",
+      "url": "https://overpass-api.de/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "OpenStreetMap/Overpass",
+      "purpose": "Category-based point of interest search",
+      "dataSent": "Bounding box coordinates, OSM tag queries",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+      "personalData": false
+    }
+  ]
+}

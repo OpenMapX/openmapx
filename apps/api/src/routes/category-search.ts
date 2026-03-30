@@ -1,5 +1,5 @@
+import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-import { CATEGORY_FILTERS, searchByCategory } from "../services/overpass.service";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 interface CategorySearchQuery {

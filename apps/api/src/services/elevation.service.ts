@@ -3,7 +3,7 @@
  * Used as a fallback for driving routes (OSRM doesn't provide elevation).
  */
 
-import { encodePolyline } from "../utils/polyline.js";
+import { encodePolyline } from "@openmapx/core";
 
 const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 

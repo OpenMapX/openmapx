@@ -1,4 +1,4 @@
-import { fetchCapabilities, sectionSlug } from "@openmapx/core/server";
+import { fetchCapabilities, fetchIntegrations, sectionSlug } from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
@@ -62,11 +62,14 @@ export default async function PrivacyPage() {
       ? (await import("./content.de")).default
       : (await import("./content.en")).default;
 
-  const capabilities = await fetchCapabilities();
+  const [capabilities, integrations] = await Promise.all([
+    fetchCapabilities(),
+    fetchIntegrations(),
+  ]);
 
   return (
     <LegalPageShell sections={sections}>
-      <Content capabilities={capabilities} />
+      <Content capabilities={capabilities} integrations={integrations} />
     </LegalPageShell>
   );
 }

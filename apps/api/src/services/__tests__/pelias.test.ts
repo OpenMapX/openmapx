@@ -43,7 +43,7 @@ function makeBerlinFeature(overrides: Record<string, unknown> = {}) {
 
 async function loadModule() {
   vi.resetModules();
-  return import("../pelias.service.js");
+  return import("@integrations/geocoding-pelias/provider.js");
 }
 
 // geocode

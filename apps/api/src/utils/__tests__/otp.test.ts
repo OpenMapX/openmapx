@@ -1,5 +1,5 @@
+import { otpMode } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { otpMode } from "../otp.js";
 
 describe("otpMode", () => {
   it("maps BUS → bus", () => {

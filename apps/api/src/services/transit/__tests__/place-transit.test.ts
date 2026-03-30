@@ -22,24 +22,28 @@ vi.mock("../../../utils/cache.js", () => ({
 // initialized when the factory runs, so we cannot reference them here.
 // Instead we declare mocks inline and import them afterwards.
 
-vi.mock("../index.js", () => ({
-  fetchStopsByNameRaw: vi.fn(),
-  getRoutesForStop: vi.fn(),
-  getStopDepartures: vi.fn(),
-  getStopArrivals: vi.fn(),
-  getStopAlerts: vi.fn(),
-  getFacilities: vi.fn(),
+vi.mock("../orchestrator.js", () => ({
+  transitOrchestrator: {
+    searchByName: vi.fn(),
+    getRoutesForStop: vi.fn(),
+    getDepartures: vi.fn(),
+    getArrivals: vi.fn(),
+    getStopAlerts: vi.fn(),
+    getFacilities: vi.fn(),
+  },
 }));
 
 // Import after mocks
 
-import {
-  fetchStopsByNameRaw,
+import { transitOrchestrator } from "../orchestrator.js";
+
+const {
+  searchByName: fetchStopsByNameRaw,
   getFacilities,
   getRoutesForStop,
   getStopAlerts,
-  getStopDepartures,
-} from "../index.js";
+  getDepartures: getStopDepartures,
+} = transitOrchestrator as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
 import {
   getLinkedStops,

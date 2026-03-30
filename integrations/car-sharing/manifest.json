@@ -1,0 +1,63 @@
+{
+  "id": "car-sharing",
+  "name": "Car Sharing",
+  "version": "1.0.0",
+  "description": "Car sharing stations from GBFS feeds, Cambio, and regional operators",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["data-source"],
+
+  "frontend": {
+    "searchCategory": {
+      "id": "car-sharing",
+      "label": "Car Sharing",
+      "showInChipBar": false
+    }
+  },
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": [],
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://cwapi.cambio-carsharing.com/pub/de-ac/stations",
+    "category": "Shared Mobility"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "GBFS Catalog",
+      "url": "https://github.com/MobilityData/gbfs",
+      "license": "Various (per operator)",
+      "licenseUrl": "https://gbfs.org/"
+    },
+    {
+      "name": "Cambio CarSharing",
+      "url": "https://www.cambio-carsharing.de/",
+      "license": "Proprietary",
+      "licenseUrl": "https://www.cambio-carsharing.de/datenschutz/"
+    }
+  ],
+
+  "privacy": {
+    "purpose": "Car sharing station locations and vehicle availability",
+    "dataSent": "Bounding box coordinates",
+    "dataReceived": "Station locations, vehicle counts, operator info",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://www.cambio-carsharing.de/datenschutz/",
+    "personalData": false
+  }
+}

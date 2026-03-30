@@ -1,8 +1,8 @@
+import { wikidataEnricher } from "@integrations/enrichment-wikidata/provider.js";
+import { wikipediaEnricher } from "@integrations/enrichment-wikipedia/provider.js";
 import type { Place } from "@openmapx/core";
 import type { EnrichmentResult, EnrichmentSource } from "./types";
-import { wikidataEnricher } from "./wikidata.enricher";
 import { wikimediaCommonsEnricher } from "./wikimedia-commons.enricher";
-import { wikipediaEnricher } from "./wikipedia.enricher";
 
 const SOURCES: EnrichmentSource[] = [wikidataEnricher, wikipediaEnricher, wikimediaCommonsEnricher];
 

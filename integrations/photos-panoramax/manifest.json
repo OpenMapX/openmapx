@@ -1,0 +1,48 @@
+{
+  "id": "photos-panoramax",
+  "name": "Panoramax Photos",
+  "version": "1.0.0",
+  "description": "Street-level photos from Panoramax",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["photos"],
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.panoramax.xyz/api/search",
+    "category": "Imagery"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "Panoramax",
+      "url": "https://panoramax.fr/",
+      "license": "Various (CC)"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "Panoramax",
+      "purpose": "Street-level photos from Panoramax",
+      "dataSent": "Coordinates, search radius",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://panoramax.fr/",
+      "personalData": false
+    }
+  ]
+}

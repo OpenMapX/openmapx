@@ -58,7 +58,8 @@ export type CategoryId =
   | "bookstores"
   | "bike_sharing"
   | "scooter_sharing"
-  | "car_sharing";
+  | "car_sharing"
+  | (string & {});
 
 export interface CategoryDefinition {
   id: CategoryId;

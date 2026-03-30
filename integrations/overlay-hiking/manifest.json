@@ -1,0 +1,68 @@
+{
+  "id": "overlay-hiking",
+  "name": "Hiking Trails",
+  "version": "1.0.0",
+  "description": "Hiking trail routes and mountain shelter locations via Waymarked Trails",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://waymarkedtrails.org/",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "hiking"
+    },
+    "overlay": {
+      "excludes": ["street-view", "winter-sports"]
+    }
+  },
+
+  "backend": {
+    "routes": true
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": [],
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://hiking.waymarkedtrails.org/api/v1/list?bbox=7,47,8,48&limit=1",
+    "category": "Map Overlays"
+  },
+
+  "quality": "stable",
+
+  "attribution": [
+    {
+      "name": "Waymarked Trails",
+      "url": "https://waymarkedtrails.org/",
+      "license": "CC BY-SA 3.0"
+    },
+    {
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL"
+    }
+  ],
+
+  "privacy": {
+    "purpose": "Hiking trail routes and mountain shelter locations",
+    "dataSent": "Bounding box coordinates, trail IDs",
+    "dataReceived": "Trail geometries, shelter locations, and metadata",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://waymarkedtrails.org/",
+    "personalData": false,
+    "cookies": false
+  }
+}

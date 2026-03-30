@@ -2,28 +2,28 @@ import type { PlacePhoto } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock all 4 providers
-vi.mock("../mapillary.provider.js", () => ({
+vi.mock("@integrations/photos-mapillary/provider.js", () => ({
   mapillaryPhotoProvider: {
     id: "mapillary",
     name: "Mapillary",
     search: vi.fn().mockResolvedValue([]),
   },
 }));
-vi.mock("../flickr.provider.js", () => ({
+vi.mock("@integrations/photos-flickr/provider.js", () => ({
   flickrPhotoProvider: {
     id: "flickr",
     name: "Flickr",
     search: vi.fn().mockResolvedValue([]),
   },
 }));
-vi.mock("../panoramax.provider.js", () => ({
+vi.mock("@integrations/photos-panoramax/provider.js", () => ({
   panoramaxPhotoProvider: {
     id: "panoramax",
     name: "Panoramax",
     search: vi.fn().mockResolvedValue([]),
   },
 }));
-vi.mock("../wikimedia-geo.provider.js", () => ({
+vi.mock("@integrations/photos-wikimedia/provider.js", () => ({
   wikimediaGeoProvider: {
     id: "wikimedia-geo",
     name: "Wikimedia Commons",
@@ -32,13 +32,13 @@ vi.mock("../wikimedia-geo.provider.js", () => ({
 }));
 
 // Mock 3 enrichers
-vi.mock("../../enrichment/wikidata.enricher.js", () => ({
+vi.mock("@integrations/enrichment-wikidata/provider.js", () => ({
   wikidataEnricher: {
     name: "wikidata",
     enrich: vi.fn().mockResolvedValue(null),
   },
 }));
-vi.mock("../../enrichment/wikipedia.enricher.js", () => ({
+vi.mock("@integrations/enrichment-wikipedia/provider.js", () => ({
   wikipediaEnricher: {
     name: "wikipedia",
     enrich: vi.fn().mockResolvedValue(null),
@@ -51,14 +51,14 @@ vi.mock("../../enrichment/wikimedia-commons.enricher.js", () => ({
   },
 }));
 
-import { wikidataEnricher } from "../../enrichment/wikidata.enricher.js";
+import { wikidataEnricher } from "@integrations/enrichment-wikidata/provider.js";
+import { wikipediaEnricher } from "@integrations/enrichment-wikipedia/provider.js";
+import { flickrPhotoProvider } from "@integrations/photos-flickr/provider.js";
+import { mapillaryPhotoProvider } from "@integrations/photos-mapillary/provider.js";
+import { panoramaxPhotoProvider } from "@integrations/photos-panoramax/provider.js";
+import { wikimediaGeoProvider } from "@integrations/photos-wikimedia/provider.js";
 import { wikimediaCommonsEnricher } from "../../enrichment/wikimedia-commons.enricher.js";
-import { wikipediaEnricher } from "../../enrichment/wikipedia.enricher.js";
-import { flickrPhotoProvider } from "../flickr.provider.js";
 import { searchPhotos } from "../index.js";
-import { mapillaryPhotoProvider } from "../mapillary.provider.js";
-import { panoramaxPhotoProvider } from "../panoramax.provider.js";
-import { wikimediaGeoProvider } from "../wikimedia-geo.provider.js";
 
 function makePhoto(id: string, source: string, url?: string): PlacePhoto {
   return {

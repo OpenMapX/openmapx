@@ -1,0 +1,34 @@
+{
+  "id": "tool-travel-time",
+  "name": "Travel Time (Isochrone)",
+  "version": "1.0.0",
+  "description": "Travel time isochrone visualization using existing routing APIs",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-tools",
+      "labelKey": "travelTime"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": [],
+
+  "quality": "built-in"
+}

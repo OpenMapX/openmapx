@@ -11,18 +11,7 @@ import { useTransitStore } from "./transitStore";
 import { useWildfireStore } from "./wildfireStore";
 import { useWinterSportsStore } from "./winterSportsStore";
 
-export type OverlayId =
-  | "traffic"
-  | "transit"
-  | "street-view"
-  | "air-quality"
-  | "earthquakes"
-  | "wildfires"
-  | "winter-sports"
-  | "hiking"
-  | "cycling"
-  | "live-trains"
-  | "3d-buildings";
+export type OverlayId = string;
 
 export interface OverlayEntry {
   id: OverlayId;
@@ -32,7 +21,7 @@ export interface OverlayEntry {
   excludes: OverlayId[];
 }
 
-export const OVERLAY_REGISTRY: readonly OverlayEntry[] = [
+const overlayEntries: OverlayEntry[] = [
   {
     id: "traffic",
     serviceId: "tomtom-traffic",
@@ -105,8 +94,17 @@ export const OVERLAY_REGISTRY: readonly OverlayEntry[] = [
   },
 ];
 
+/** Read-only view of the registry (for backward compatibility). */
+export const OVERLAY_REGISTRY: readonly OverlayEntry[] = overlayEntries;
+
+/** Register a new overlay entry at runtime (used by integration framework). */
+export function registerOverlayEntry(entry: OverlayEntry): void {
+  if (overlayEntries.some((e) => e.id === entry.id)) return;
+  overlayEntries.push(entry);
+}
+
 export function getOverlayEntry(id: OverlayId): OverlayEntry | undefined {
-  return OVERLAY_REGISTRY.find((entry) => entry.id === id);
+  return overlayEntries.find((entry) => entry.id === id);
 }
 
 export function closeExclusionPeers(overlayId: OverlayId): void {

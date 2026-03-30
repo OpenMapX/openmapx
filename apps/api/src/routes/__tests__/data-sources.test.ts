@@ -15,7 +15,7 @@ vi.mock("../../services/data-sources/registry.js", () => ({
 
 // Mock ApiKeyMissingError — re-export the real class behavior
 
-vi.mock("../../services/data-sources/ev-charging/ocm.js", () => {
+vi.mock("@integrations/ev-charging/providers/ocm.js", () => {
   class ApiKeyMissingError extends Error {
     constructor() {
       super("OPENCHARGEMAP_API_KEY is not configured");
@@ -181,7 +181,7 @@ describe("GET /data-sources/:id/search", () => {
 
   it("returns 503 for ApiKeyMissingError", async () => {
     // Dynamically import the mocked class to throw it
-    const { ApiKeyMissingError } = await import("../../services/data-sources/ev-charging/ocm.js");
+    const { ApiKeyMissingError } = await import("@integrations/ev-charging/providers/ocm.js");
     const searchFn = vi.fn().mockRejectedValue(new ApiKeyMissingError());
     mockGet.mockReturnValue({ ...MOCK_PROVIDER, search: searchFn });
 
@@ -248,7 +248,7 @@ describe("GET /data-sources/:id/detail/*", () => {
   });
 
   it("returns 503 for ApiKeyMissingError on detail", async () => {
-    const { ApiKeyMissingError } = await import("../../services/data-sources/ev-charging/ocm.js");
+    const { ApiKeyMissingError } = await import("@integrations/ev-charging/providers/ocm.js");
     const detailFn = vi.fn().mockRejectedValue(new ApiKeyMissingError());
     mockGet.mockReturnValue({ ...MOCK_PROVIDER, getDetail: detailFn });
 

@@ -1,0 +1,41 @@
+{
+  "id": "transit-irail",
+  "name": "iRail (Belgian Railways)",
+  "description": "Belgian NMBS/SNCB train data",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": [],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable iRail transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.irail.be/stations/?format=json&lang=en"
+  },
+  "attribution": [
+    {
+      "name": "iRail",
+      "url": "https://irail.be/",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  ],
+  "privacy": {
+    "purpose": "Belgian rail stops and departures",
+    "dataSent": "Station IDs",
+    "providerCountry": "BE",
+    "providerPrivacyUrl": "https://irail.be/",
+    "personalData": false
+  }
+}

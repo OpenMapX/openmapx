@@ -1,0 +1,64 @@
+{
+  "id": "overlay-winter-sports",
+  "name": "Winter Sports",
+  "version": "1.0.0",
+  "description": "Winter sports piste and lift visualization via OpenSnowMap",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://www.opensnowmap.org/",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "winterSports"
+    },
+    "overlay": {
+      "excludes": ["street-view", "hiking"]
+    }
+  },
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": [],
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://tiles.opensnowmap.org/pistes/0/0/0.png",
+    "category": "Map Overlays"
+  },
+
+  "quality": "stable",
+
+  "attribution": [
+    {
+      "name": "OpenSnowMap",
+      "url": "https://www.opensnowmap.org/",
+      "license": "CC BY-SA 3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
+    }
+  ],
+
+  "privacy": {
+    "purpose": "Winter sports piste and lift visualization",
+    "dataSent": "Map tile requests",
+    "dataReceived": "Piste and lift overlay tiles",
+    "providerCountry": "CH",
+    "providerPrivacyUrl": "https://www.opensnowmap.org/",
+    "personalData": false,
+    "cookies": false
+  }
+}

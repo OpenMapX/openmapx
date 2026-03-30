@@ -1,6 +1,6 @@
+import { osrmService } from "@integrations/routing-osrm/provider.js";
+import { valhallaService } from "@integrations/routing-valhalla/provider.js";
 import type { FastifyPluginAsync } from "fastify";
-import { osrmService } from "../services/osrm.service.js";
-import { valhallaService } from "../services/valhalla.service.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 /** Parse semicolon-separated "lng,lat" pairs into coordinate tuples. */

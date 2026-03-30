@@ -1,0 +1,34 @@
+{
+  "id": "transit-gtfs-local",
+  "name": "Local GTFS Feeds",
+  "description": "Transit data from imported GTFS feeds",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable local GTFS feeds integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "attribution": [
+    {
+      "name": "Various GTFS Feeds",
+      "url": "https://gtfs.org/",
+      "license": "Various (per feed)"
+    }
+  ],
+  "privacy": {
+    "purpose": "Local transit stop and departure data from imported GTFS feeds",
+    "dataSent": "No external data sent (local database queries)",
+    "providerCountry": "Self-hosted",
+    "providerPrivacyUrl": "N/A",
+    "personalData": false
+  }
+}

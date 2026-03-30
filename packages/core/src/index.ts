@@ -18,6 +18,25 @@ export {
   providerLabel,
   resolveProvider,
 } from "./constants/transit";
+// Domains
+export type {
+  DataSourceProvider as DomainDataSourceProvider,
+  DomainDefinition,
+  DomainId,
+  EnrichmentProvider,
+  GeocodingProvider,
+  GeoJsonFeatureCollection,
+  MapOverlayData,
+  MapOverlayDetail,
+  MapOverlayProvider,
+  PhotoProvider,
+  PoiSearchProvider,
+  PoiSearchResult,
+  RoutingProvider,
+  StreetViewProvider,
+  TransitProvider,
+} from "./domains";
+export { DOMAIN_DEFINITIONS } from "./domains";
 // Hooks — Transit
 export {
   useArrivals,
@@ -75,6 +94,13 @@ export {
   useHikingSearch,
   useHikingShelters,
 } from "./hooks/useHikingTrails";
+export {
+  getOverlayStore,
+  registerOverlayStore,
+  useIntegrationOverlayActive,
+} from "./hooks/useIntegrationOverlay";
+// Integration hooks
+export { IntegrationRegistryContext, useIntegrationRegistry } from "./hooks/useIntegrationRegistry";
 export { useIsochrone } from "./hooks/useIsochrone";
 export { useLiveTrains } from "./hooks/useLiveTrains";
 export { useMergedPlace } from "./hooks/useMergedPlace";
@@ -98,6 +124,37 @@ export {
   useUpdateList,
   useUpdatePlace,
 } from "./hooks/useSavedPlaces";
+// Integration framework
+export type {
+  CacheClient,
+  CustomHealthCheckFn,
+  DatabaseClient,
+  HealthCheckResult,
+  HttpClient,
+  HttpClientOptions,
+  IntegrationAttribution,
+  IntegrationContext,
+  IntegrationEvent,
+  IntegrationFrontend,
+  IntegrationHealthCheck,
+  IntegrationLayerSelector,
+  IntegrationManifest,
+  IntegrationOverlay,
+  IntegrationPrivacy,
+  IntegrationSearchCategory,
+  LoadedIntegration,
+  LoadedIntegrationMeta,
+  Logger,
+  ManifestValidationResult,
+  RouteHandler,
+} from "./integration";
+export {
+  IntegrationEventBus,
+  IntegrationRegistry,
+  integrationManifestSchema,
+  toIntegrationMeta,
+  validateManifest,
+} from "./integration";
 export type { PanelId } from "./panels/ids";
 export { PANEL } from "./panels/ids";
 export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
@@ -132,6 +189,7 @@ export {
   getOverlayEntry,
   isOverlayActive,
   OVERLAY_REGISTRY,
+  registerOverlayEntry,
   toggleOverlay,
 } from "./stores/overlayRegistry";
 export { usePlaceStore } from "./stores/placeStore";
@@ -176,7 +234,7 @@ export type {
   ElevationProfile,
   ElevationStats,
 } from "./types/elevation";
-export type { BoundingBox, LngLat } from "./types/geometry";
+export type { BBox, BoundingBox, LngLat } from "./types/geometry";
 export type {
   HikingFeatureCollection,
   HikingTrailDetail,
@@ -203,6 +261,8 @@ export type {
   Departure,
   Facility,
   FareProduct,
+  GeoJSONLineString,
+  GeoJSONMultiLineString,
   MergedDeparture,
   MergedRoute,
   OccupancyLevel,
@@ -223,6 +283,7 @@ export type {
 } from "./types/transit";
 
 // Utils
+export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
 export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";
 export {
@@ -239,7 +300,20 @@ export {
   formatMeasurementDistance,
   getInitials,
 } from "./utils/formatting";
+export {
+  FPTF_PRODUCT_MODE,
+  mapProducts,
+  normalizeFptfDeparture,
+  normalizeRemarks,
+  productToMode,
+} from "./utils/fptf";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
+export {
+  bboxContains,
+  diceSimilarity,
+  haversineMeters,
+  mergeAttributions,
+} from "./utils/geo-server";
 export {
   geocodeStopAsPlace,
   makeSyntheticStopPlace,
@@ -252,6 +326,30 @@ export type {
   OpeningHoursStatus,
 } from "./utils/openingHours";
 export { isAlwaysOpen, isOpenAt, parseOpeningHours } from "./utils/openingHours";
+export { otpMode } from "./utils/otp";
+export {
+  buildNodeMap,
+  buildWayMap,
+  OverpassRateLimitError,
+  overpassQuery,
+  overpassQuerySafe,
+  reconstructLineString,
+  reconstructMultiLineString,
+  reconstructMultiPolygon,
+  reconstructPolygon,
+} from "./utils/overpass";
+export type {
+  LineStringGeometry,
+  MultiLineStringGeometry,
+  MultiPolygonGeometry,
+  OverpassElement,
+  OverpassNode,
+  OverpassRelation,
+  OverpassResponse,
+  OverpassWay,
+  PolygonGeometry,
+} from "./utils/overpass/types";
+export { CATEGORY_FILTERS, searchByCategory } from "./utils/overpass.service";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
@@ -266,4 +364,5 @@ export {
   shortenPlusCode,
 } from "./utils/plusCode";
 export { resolvePoiIconPath } from "./utils/poi-icon";
+export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";

@@ -1,0 +1,47 @@
+{
+  "id": "transit-motis",
+  "name": "MOTIS/Transitous Transit",
+  "description": "Transit routing and stop data via MOTIS (Transitous)",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["MOTIS_URL"],
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable MOTIS/Transitous transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://europe.motis-project.de/api/v1/plan"
+  },
+  "attribution": [
+    {
+      "name": "Transitous/MOTIS",
+      "url": "https://transitous.org/",
+      "license": "AGPL-3.0"
+    },
+    {
+      "name": "Various GTFS Feeds",
+      "url": "https://transitous.org/",
+      "license": "Various (per feed)",
+      "dynamic": true,
+      "dynamicEndpoint": "/api/integrations/transit-motis/attribution"
+    }
+  ],
+  "privacy": {
+    "purpose": "Public transit routing, stop departures, and trip planning",
+    "dataSent": "Origin/destination coordinates, departure time",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://transitous.org/",
+    "personalData": false
+  }
+}

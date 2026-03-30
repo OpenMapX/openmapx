@@ -45,7 +45,7 @@ function makeBerlinFeature(overrides: Record<string, unknown> = {}) {
 
 async function loadModule() {
   vi.resetModules();
-  return import("../maptiler-geocoding.service.js");
+  return import("@integrations/geocoding-maptiler/provider.js");
 }
 
 // geocode

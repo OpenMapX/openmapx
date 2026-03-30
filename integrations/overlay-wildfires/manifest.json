@@ -1,0 +1,68 @@
+{
+  "id": "overlay-wildfires",
+  "name": "NASA FIRMS Wildfires",
+  "version": "1.0.0",
+  "description": "Active wildfire/hotspot detections from NASA FIRMS",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://firms.modaps.eosdis.nasa.gov/",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "wildfires",
+      "iconPath": "M13.5 .67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"
+    },
+    "overlay": {
+      "excludes": ["street-view", "air-quality", "earthquakes"],
+      "minZoom": 3
+    }
+  },
+
+  "backend": {
+    "routes": true
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["FIRMS_MAP_KEY"],
+
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/${FIRMS_MAP_KEY}/VIIRS_SNPP_NRT/world/1",
+    "requiredEnvVars": ["FIRMS_MAP_KEY"],
+    "category": "Data Overlays"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "NASA FIRMS",
+      "url": "https://firms.modaps.eosdis.nasa.gov/",
+      "license": "Public Domain",
+      "licenseUrl": "https://www.nasa.gov/open/"
+    }
+  ],
+
+  "privacy": {
+    "purpose": "Active wildfire/hotspot detections worldwide",
+    "dataSent": "Data source selection, time range, API key (server-side)",
+    "dataReceived": "Fire detection locations, brightness, confidence, satellite data",
+    "providerCountry": "US",
+    "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+    "dataRetention": "Cached for 5 minutes server-side",
+    "personalData": false,
+    "cookies": false
+  }
+}

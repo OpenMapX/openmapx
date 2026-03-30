@@ -1,28 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import {
-  getAlerts,
-  getFacilities,
-  getProviderHealthStatus,
-  getReachableStops,
-  getRoute,
-  getRouteAlerts,
-  getRouteLive,
-  getRouteStops,
-  getRoutesForStop,
-  getRoutesInBbox,
-  getStop,
-  getStopAlerts,
-  getStopArrivals,
-  getStopDepartures,
-  getStopPlatforms,
-  getStopsInBbox,
-  getStopTimetable,
-  getVehicleJourney,
-  getVehiclePositions,
-  getVehicleRadar,
-  planTrip,
-  searchStopsByName,
-} from "../services/transit/index";
+import { transitOrchestrator } from "../services/transit/orchestrator";
 import {
   getLinkedStops,
   getMergedAlerts,
@@ -189,7 +166,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
             .split(",")
             .map((m) => m.trim()) as TransportMode[])
         : undefined;
-      const stops = await getStopsInBbox(bbox, modes);
+      const stops = await transitOrchestrator.getStopsInBbox(bbox, modes);
       return stops;
     },
   });
@@ -226,7 +203,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
             .map((m) => m.trim()) as TransportMode[])
         : undefined;
       reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-      const stops = await getStopsInBbox(bbox, modes);
+      const stops = await transitOrchestrator.getStopsInBbox(bbox, modes);
       return stops;
     },
   });
@@ -253,7 +230,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       }
       const limit = Math.min(Math.max(Number(q.limit) || 5, 1), 20);
       reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-      const stops = await searchStopsByName(query, limit);
+      const stops = await transitOrchestrator.searchByName(query, limit);
       return stops;
     },
   });
@@ -438,7 +415,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       params: idParamSchema,
     },
     handler: async (req, reply) => {
-      const stop = await getStop(decodeURIComponent(req.params.id));
+      const stop = await transitOrchestrator.getStop(decodeURIComponent(req.params.id));
       if (!stop) return reply.status(404).send({ error: "Stop not found" });
       return stop;
     },
@@ -451,7 +428,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
     },
     handler: async (req, reply) => {
       reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
-      return getStopPlatforms(decodeURIComponent(req.params.id));
+      return transitOrchestrator.getStopPlatforms(decodeURIComponent(req.params.id));
     },
   });
 
@@ -478,7 +455,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
           "Cache-Control",
           isPast ? "public, max-age=86400, s-maxage=86400" : "public, max-age=300, s-maxage=300",
         );
-        return getStopTimetable(decodeURIComponent(req.params.id), date);
+        return transitOrchestrator.getStopTimetable(decodeURIComponent(req.params.id), date);
       },
     },
   );
@@ -502,7 +479,10 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
           return reply.status(400).send({ error: "Invalid minutes param" });
         }
         reply.header("Cache-Control", "public, max-age=30, s-maxage=30");
-        const departures = await getStopDepartures(decodeURIComponent(req.params.id), minutes);
+        const departures = await transitOrchestrator.getDepartures(
+          decodeURIComponent(req.params.id),
+          minutes,
+        );
         return departures;
       },
     },
@@ -522,14 +502,14 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
     handler: async (req, reply) => {
       const q = req.query;
       if (q.stop_id) {
-        const routes = await getRoutesForStop(q.stop_id);
+        const routes = await transitOrchestrator.getRoutesForStop(q.stop_id);
         return routes;
       }
       const bbox = parseBBox(q as BBoxQuery);
       if (!bbox) {
         return reply.status(400).send({ error: "Provide stop_id or valid bbox params" });
       }
-      const routes = await getRoutesInBbox(bbox);
+      const routes = await transitOrchestrator.getRoutesInBbox(bbox);
       return routes;
     },
   });
@@ -540,7 +520,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       params: idParamSchema,
     },
     handler: async (req, reply) => {
-      const route = await getRoute(decodeURIComponent(req.params.id));
+      const route = await transitOrchestrator.getRoute(decodeURIComponent(req.params.id));
       if (!route) return reply.status(404).send({ error: "Route not found" });
       return route;
     },
@@ -561,7 +541,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       const bbox = parseBBox(req.query);
       if (!bbox) return reply.status(400).send({ error: "Invalid or missing bbox params" });
       reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-      const alerts = await getAlerts(bbox);
+      const alerts = await transitOrchestrator.getAlerts(bbox);
       return alerts;
     },
   });
@@ -573,7 +553,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
     },
     handler: async (req, reply) => {
       reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-      const alerts = await getStopAlerts(decodeURIComponent(req.params.id));
+      const alerts = await transitOrchestrator.getStopAlerts(decodeURIComponent(req.params.id));
       return alerts;
     },
   });
@@ -585,7 +565,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
     },
     handler: async (req, reply) => {
       reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-      const alerts = await getRouteAlerts(decodeURIComponent(req.params.id));
+      const alerts = await transitOrchestrator.getRouteAlerts(decodeURIComponent(req.params.id));
       return alerts;
     },
   });
@@ -597,7 +577,12 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
     },
     handler: async (req, reply) => {
       reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
-      return getRouteLive(decodeURIComponent(req.params.id));
+      const routeId = decodeURIComponent(req.params.id);
+      const [vehicles, alerts] = await Promise.all([
+        transitOrchestrator.getVehiclePositions(routeId),
+        transitOrchestrator.getRouteAlerts(routeId),
+      ]);
+      return { vehicles, alerts };
     },
   });
 
@@ -617,13 +602,13 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
 
       if (q.route_id) {
-        const vehicles = await getVehiclePositions(q.route_id);
+        const vehicles = await transitOrchestrator.getVehiclePositions(q.route_id);
         return vehicles;
       }
 
       const bbox = parseBBox(q as BBoxQuery);
       if (bbox) {
-        const vehicles = await getVehicleRadar(bbox);
+        const vehicles = await transitOrchestrator.getVehicleRadar(bbox);
         return vehicles;
       }
 
@@ -648,7 +633,10 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       const fallbackIds = req.query.fallback_ids
         ? req.query.fallback_ids.split(",").map((s) => decodeURIComponent(s.trim()))
         : undefined;
-      const journey = await getVehicleJourney(decodeURIComponent(req.params.id), fallbackIds);
+      const journey = await transitOrchestrator.getVehicleJourney(
+        decodeURIComponent(req.params.id),
+        fallbackIds,
+      );
       if (!journey) return reply.status(404).send({ error: "Vehicle journey not found" });
       return journey;
     },
@@ -671,7 +659,10 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: "Invalid minutes param" });
       }
       reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-      const arrivals = await getStopArrivals(decodeURIComponent(req.params.id), minutes);
+      const arrivals = await transitOrchestrator.getArrivals(
+        decodeURIComponent(req.params.id),
+        minutes,
+      );
       return arrivals;
     },
   });
@@ -693,7 +684,10 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
         const hintStopId = req.query.hint_stop_id
           ? decodeURIComponent(req.query.hint_stop_id)
           : undefined;
-        const stops = await getRouteStops(decodeURIComponent(req.params.id), hintStopId);
+        const stops = await transitOrchestrator.getRouteStops(
+          decodeURIComponent(req.params.id),
+          hintStopId,
+        );
         return stops;
       },
     },
@@ -705,7 +699,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       params: idParamSchema,
     },
     handler: async (req, _reply) => {
-      const facilities = await getFacilities(decodeURIComponent(req.params.id));
+      const facilities = await transitOrchestrator.getFacilities(decodeURIComponent(req.params.id));
       return facilities;
     },
   });
@@ -728,7 +722,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
 
   // GET /api/transit/health — provider health status (debug)
   server.get("/transit/health", async (_request, _reply) => {
-    return { providers: getProviderHealthStatus() };
+    return { providers: transitOrchestrator.getHealthStatus() };
   });
 
   // GET /api/transit/plan
@@ -782,18 +776,12 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
         // Normalize to HH:MM:SS — avoid double-appending :00 if seconds already present
         time = q.time ? (q.time.split(":").length >= 3 ? q.time : `${q.time}:00`) : utcTime();
       }
-      const numItineraries = Math.min(Math.max(Number(q.num_itineraries ?? 3), 1), 10);
-      const plan = await planTrip({
-        fromLat,
-        fromLng,
-        toLat,
-        toLng,
-        date,
-        time,
-        modes: q.modes ?? "TRANSIT",
-        numItineraries,
-        arriveBy: q.arrive_by === "true" || q.arrive_by === "1",
-        lang: q.lang,
+      const _numItineraries = Math.min(Math.max(Number(q.num_itineraries ?? 3), 1), 10);
+      const plan = await transitOrchestrator.planTrip({
+        from: { lat: fromLat, lng: fromLng },
+        to: { lat: toLat, lng: toLng },
+        departureTime: `${date}T${time}`,
+        modes: (q.modes ?? "TRANSIT").split(",").map((m) => m.trim()),
       });
       if (!plan) {
         return reply.status(503).send({
@@ -836,7 +824,12 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       });
 
       const results = await withCache(cacheKey, 300, () =>
-        getReachableStops(lat, lng, maxTravelTime, modes),
+        transitOrchestrator.getReachableStops(
+          lat,
+          lng,
+          maxTravelTime,
+          modes?.split(",").map((m) => m.trim()),
+        ),
       );
 
       reply.header("Cache-Control", "public, max-age=300");

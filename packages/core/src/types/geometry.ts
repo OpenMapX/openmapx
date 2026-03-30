@@ -7,3 +7,6 @@ export interface BoundingBox {
   east: number;
   north: number;
 }
+
+/** [west, south, east, north] bounding box tuple. */
+export type BBox = [west: number, south: number, east: number, north: number];

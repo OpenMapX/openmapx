@@ -20,7 +20,7 @@ import {
   stoptimes,
   trips,
 } from "@motis-project/motis-client";
-import { decodePolyline } from "../../utils/polyline.js";
+import { decodePolyline } from "@openmapx/core";
 import type {
   BBox,
   Departure,

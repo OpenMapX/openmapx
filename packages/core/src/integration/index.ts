@@ -1,0 +1,29 @@
+export type {
+  CacheClient,
+  CustomHealthCheckFn,
+  DatabaseClient,
+  HealthCheckResult,
+  HttpClient,
+  HttpClientOptions,
+  IntegrationContext,
+  Logger,
+  RouteHandler,
+} from "./context";
+export type { IntegrationEvent } from "./events";
+export { IntegrationEventBus } from "./events";
+
+export type { LoadedIntegration, LoadedIntegrationMeta } from "./loader";
+export { toIntegrationMeta } from "./loader";
+export type {
+  IntegrationAttribution,
+  IntegrationFrontend,
+  IntegrationHealthCheck,
+  IntegrationLayerSelector,
+  IntegrationManifest,
+  IntegrationOverlay,
+  IntegrationPrivacy,
+  IntegrationSearchCategory,
+  ManifestValidationResult,
+} from "./manifest";
+export { integrationManifestSchema, validateManifest } from "./manifest";
+export { IntegrationRegistry } from "./registry";

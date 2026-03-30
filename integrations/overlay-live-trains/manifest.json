@@ -1,0 +1,64 @@
+{
+  "id": "overlay-live-trains",
+  "name": "Live Train Positions",
+  "version": "1.0.0",
+  "description": "Real-time train positions on the German rail network via Deutsche Bahn RIS API",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://developers.deutschebahn.com/",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": false,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "liveTrains"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+
+  "backend": {
+    "routes": true
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
+
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://apis.deutschebahn.com/db/apis/ris-stations/v1",
+    "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
+    "category": "Transit"
+  },
+
+  "quality": "stable",
+
+  "attribution": [
+    {
+      "name": "Deutsche Bahn RIS",
+      "url": "https://developers.deutschebahn.com/",
+      "license": "Proprietary"
+    }
+  ],
+
+  "privacy": {
+    "purpose": "Real-time train positions on German rail network",
+    "dataSent": "API credentials, bounding box",
+    "dataReceived": "Train positions, delays, and route information",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+    "personalData": false,
+    "cookies": false
+  }
+}

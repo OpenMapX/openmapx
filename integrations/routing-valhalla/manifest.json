@@ -1,0 +1,50 @@
+{
+  "id": "routing-valhalla",
+  "name": "Valhalla Routing",
+  "version": "1.0.0",
+  "description": "Walking and cycling route calculation via Valhalla",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["routing"],
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["VALHALLA_URL"],
+
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://valhalla1.openstreetmap.de/status",
+    "category": "Routing"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "Valhalla",
+      "url": "https://github.com/valhalla/valhalla",
+      "license": "MIT"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "Valhalla",
+      "purpose": "Walking/cycling route calculation, isochrone analysis",
+      "dataSent": "Origin/destination coordinates, routing options",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://valhalla.openstreetmap.de/",
+      "personalData": false
+    }
+  ]
+}

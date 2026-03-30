@@ -1,0 +1,38 @@
+{
+  "id": "transit-vbb",
+  "name": "VBB Transit (Berlin-Brandenburg)",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable VBB Transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://v6.vbb.transport.rest/stops/nearby?latitude=52.52&longitude=13.405&results=1"
+  },
+  "attribution": [
+    {
+      "name": "VBB",
+      "url": "https://www.vbb.de/",
+      "license": "Proprietary"
+    }
+  ],
+  "privacy": {
+    "purpose": "Berlin/Brandenburg transit stops and departures",
+    "dataSent": "Stop IDs, coordinates",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://www.vbb.de/datenschutz",
+    "personalData": false
+  }
+}

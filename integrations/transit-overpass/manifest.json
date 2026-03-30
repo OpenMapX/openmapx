@@ -1,0 +1,38 @@
+{
+  "id": "transit-overpass",
+  "name": "OSM Overpass Transit",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "configSchema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Enable OSM Overpass transit integration"
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://overpass-api.de/api/status"
+  },
+  "attribution": [
+    {
+      "name": "OpenStreetMap/Overpass",
+      "url": "https://overpass-api.de/",
+      "license": "ODbL"
+    }
+  ],
+  "privacy": {
+    "purpose": "Transit stop locations from OpenStreetMap as fallback",
+    "dataSent": "Bounding box, OSM query",
+    "providerCountry": "DE",
+    "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+    "personalData": false
+  }
+}

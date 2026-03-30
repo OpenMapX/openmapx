@@ -10,7 +10,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "paths": {
+      "@integrations/*": ["../../integrations/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../integrations/*/index.ts"]
 }

@@ -1,0 +1,65 @@
+import type { IntegrationManifest } from "./manifest";
+
+export interface HttpClientOptions {
+  params?: Record<string, string | number | boolean | undefined>;
+  headers?: Record<string, string>;
+  cache?: { ttl: number };
+}
+
+export interface HttpClient {
+  get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
+  post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T>;
+}
+
+export interface CacheClient {
+  get<T = unknown>(key: string): Promise<T | null>;
+  set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
+  del(key: string): Promise<void>;
+}
+
+export interface Logger {
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, ...args: unknown[]): void;
+  debug(message: string, ...args: unknown[]): void;
+}
+
+export interface DatabaseClient {
+  execute<T = unknown>(query: string, params?: unknown[]): Promise<T>;
+}
+
+export type RouteHandler = (
+  req: { query: Record<string, string>; params: Record<string, string>; body: unknown },
+  reply: {
+    send: (data: unknown) => void;
+    status: (code: number) => { send: (data: unknown) => void };
+  },
+) => Promise<void> | void;
+
+export interface HealthCheckResult {
+  status: "up" | "down" | "unconfigured";
+  responseTime?: number;
+  error?: string;
+}
+
+export type CustomHealthCheckFn = () => Promise<HealthCheckResult>;
+
+export interface IntegrationContext {
+  readonly id: string;
+  readonly manifest: IntegrationManifest;
+  readonly config: Record<string, unknown>;
+
+  readonly http: HttpClient;
+  readonly cache: CacheClient;
+  readonly db?: DatabaseClient;
+  readonly log: Logger;
+
+  registerProvider(domain: string, provider: unknown): void;
+  registerRoute(method: string, path: string, handler: RouteHandler): void;
+  registerHealthCheck(fn: CustomHealthCheckFn): void;
+
+  emit(event: string, data: unknown): void;
+  on(event: string, handler: (data: unknown) => void): () => void;
+
+  onShutdown(cleanup: () => Promise<void>): void;
+}

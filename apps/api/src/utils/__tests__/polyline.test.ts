@@ -1,5 +1,5 @@
+import { decodePolyline } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { decodePolyline } from "../polyline.js";
 
 describe("decodePolyline", () => {
   it("decodes a basic polyline (precision 5) to correct [lng, lat] pairs", () => {

@@ -60,7 +60,7 @@ function mockPhoto(id: string): PlacePhoto {
 }
 
 async function loadModule() {
-  return import("../wikimedia-geo.provider.js");
+  return import("@integrations/photos-wikimedia/provider.js");
 }
 
 describe("wikimediaGeoProvider", () => {

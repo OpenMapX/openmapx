@@ -1,0 +1,112 @@
+{
+  "id": "fuel",
+  "name": "Fuel Prices",
+  "version": "1.0.0",
+  "description": "Gas station fuel prices from Tankerkoenig (DE), E-Control (AT), prix-carburants (FR), Minetur (ES), and OpenStreetMap",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["data-source"],
+
+  "frontend": {
+    "searchCategory": {
+      "id": "fuel",
+      "label": "Gas Stations",
+      "showInChipBar": true
+    }
+  },
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["TANKERKOENIG_API_KEY"],
+
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${TANKERKOENIG_API_KEY}",
+    "requiredEnvVars": ["TANKERKOENIG_API_KEY"],
+    "category": "Fuel Prices"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "Tankerkoenig (MTS-K)",
+      "url": "https://creativecommons.tankerkoenig.de/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "name": "E-Control Spritpreisrechner",
+      "url": "https://www.e-control.at/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "name": "prix-carburants.gouv.fr",
+      "url": "https://www.prix-carburants.gouv.fr/",
+      "license": "Open Licence 2.0",
+      "licenseUrl": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/"
+    },
+    {
+      "name": "Minetur (Spain)",
+      "url": "https://sedeaplicaciones.minetur.gob.es/",
+      "license": "Open Data",
+      "licenseUrl": "https://datos.gob.es/en/legal-notice"
+    },
+    {
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "Tankerkoenig (MTS-K)",
+      "purpose": "German fuel station prices (E5, E10, Diesel)",
+      "dataSent": "Coordinates, search radius, API key",
+      "dataReceived": "Station locations, fuel types, prices, opening hours",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://creativecommons.tankerkoenig.de/",
+      "personalData": false
+    },
+    {
+      "service": "E-Control Spritpreisrechner",
+      "purpose": "Austrian fuel station prices",
+      "dataSent": "Address or coordinates",
+      "dataReceived": "Station locations, fuel types, prices",
+      "providerCountry": "AT",
+      "providerPrivacyUrl": "https://meine.e-control.org/privacy-policy/",
+      "personalData": false
+    },
+    {
+      "service": "French government fuel price data",
+      "purpose": "French fuel station prices",
+      "dataSent": "Coordinates or region identifiers",
+      "dataReceived": "Station locations, fuel types, prices",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://www.prix-carburants.gouv.fr/rubrique/donnees-personnelles/",
+      "personalData": false
+    },
+    {
+      "service": "Spanish government fuel price data",
+      "purpose": "Spanish fuel station prices",
+      "dataSent": "Coordinates or region identifiers",
+      "dataReceived": "Station locations, fuel types, prices",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://datos.gob.es/en/legal-notice",
+      "personalData": false
+    }
+  ]
+}

@@ -40,7 +40,7 @@ function makeFeature(overrides: Record<string, unknown> = {}) {
 }
 
 async function loadModule() {
-  return import("../panoramax.provider.js");
+  return import("@integrations/photos-panoramax/provider.js");
 }
 
 describe("panoramaxPhotoProvider", () => {

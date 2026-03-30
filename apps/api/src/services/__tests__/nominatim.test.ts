@@ -37,7 +37,7 @@ function makeBerlinResult(overrides: Record<string, unknown> = {}) {
 
 async function loadModule() {
   vi.resetModules();
-  return import("../nominatim.service.js");
+  return import("@integrations/geocoding-nominatim/provider.js");
 }
 
 // geocode

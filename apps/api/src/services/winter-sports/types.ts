@@ -3,7 +3,7 @@ import type {
   MultiLineStringGeometry,
   MultiPolygonGeometry,
   PolygonGeometry,
-} from "../overpass";
+} from "@openmapx/core";
 
 export type {
   LineStringGeometry,
@@ -12,7 +12,7 @@ export type {
   OverpassElement,
   OverpassResponse,
   PolygonGeometry,
-} from "../overpass";
+} from "@openmapx/core";
 
 export interface WinterSportsPiste {
   id: string;

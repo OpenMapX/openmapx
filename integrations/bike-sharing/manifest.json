@@ -1,0 +1,75 @@
+{
+  "id": "bike-sharing",
+  "name": "Bike Sharing",
+  "version": "1.0.0",
+  "description": "Bike sharing stations from GBFS feeds, Nextbike, CityBikes, and Deutsche Bahn",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["data-source"],
+
+  "frontend": {
+    "searchCategory": {
+      "id": "bike-sharing",
+      "label": "Bike Sharing",
+      "showInChipBar": true
+    }
+  },
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["DB_GBFS_CLIENT_ID", "DB_GBFS_API_KEY"],
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://maps.nextbike.net/maps/nextbike-live.json?limit=0",
+    "category": "Shared Mobility"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "GBFS Catalog",
+      "url": "https://github.com/MobilityData/gbfs",
+      "license": "Various (per operator)",
+      "licenseUrl": "https://gbfs.org/"
+    },
+    {
+      "name": "Nextbike",
+      "url": "https://www.nextbike.com/",
+      "license": "Proprietary",
+      "licenseUrl": "https://www.nextbike.com/en/privacy/"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "GBFS Catalog (MobilityData)",
+      "purpose": "Discover bike-sharing systems worldwide",
+      "dataSent": "System discovery requests (no user data)",
+      "dataReceived": "GBFS feed URLs for bike-sharing operators",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
+      "personalData": false
+    },
+    {
+      "service": "Nextbike",
+      "purpose": "Bike-sharing station locations and availability",
+      "dataSent": "Bounding box coordinates",
+      "dataReceived": "Station locations, bike counts, station names",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.nextbike.com/en/privacy/",
+      "personalData": false
+    }
+  ]
+}

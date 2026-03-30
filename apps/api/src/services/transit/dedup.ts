@@ -1,4 +1,4 @@
-import { diceSimilarity, haversineMeters } from "../../utils/geo.js";
+import { diceSimilarity, haversineMeters } from "@openmapx/core";
 
 export { diceSimilarity, haversineMeters };
 

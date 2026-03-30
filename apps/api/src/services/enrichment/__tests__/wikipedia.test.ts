@@ -37,7 +37,7 @@ function makeSummary(overrides: Record<string, unknown> = {}) {
 }
 
 async function loadModule() {
-  return import("../wikipedia.enricher.js");
+  return import("@integrations/enrichment-wikipedia/provider.js");
 }
 
 describe("wikipediaEnricher", () => {

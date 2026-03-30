@@ -1,0 +1,64 @@
+{
+  "id": "overlay-traffic-tomtom",
+  "name": "TomTom Traffic",
+  "version": "1.0.0",
+  "description": "Real-time traffic flow visualization powered by TomTom",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://developer.tomtom.com/traffic-api/documentation",
+
+  "domains": ["map-overlay"],
+
+  "frontend": {
+    "mapLayer": true,
+    "legend": false,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "traffic"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["NEXT_PUBLIC_TOMTOM_API_KEY"],
+
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.tomtom.com",
+    "requiredEnvVars": ["NEXT_PUBLIC_TOMTOM_API_KEY"],
+    "category": "Traffic"
+  },
+
+  "quality": "stable",
+
+  "attribution": [
+    {
+      "name": "TomTom",
+      "url": "https://www.tomtom.com/",
+      "license": "Proprietary"
+    }
+  ],
+
+  "privacy": {
+    "purpose": "Real-time traffic flow visualization",
+    "dataSent": "Map tile requests with viewport coordinates",
+    "dataReceived": "Traffic flow raster tiles",
+    "providerCountry": "NL",
+    "providerPrivacyUrl": "https://www.tomtom.com/privacy/",
+    "personalData": false,
+    "cookies": false
+  }
+}

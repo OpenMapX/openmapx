@@ -1,5 +1,4 @@
-import { otpMode } from "../../../utils/otp.js";
-import { decodePolyline } from "../../../utils/polyline.js";
+import { decodePolyline, otpMode } from "@openmapx/core";
 import type { RegistryEntry } from "../registry/types";
 import type {
   Departure,

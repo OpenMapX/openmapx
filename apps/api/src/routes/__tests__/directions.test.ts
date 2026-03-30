@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 const mockOsrmRoute = vi.fn();
 
-vi.mock("../../services/osrm.service.js", () => ({
+vi.mock("@integrations/routing-osrm/provider.js", () => ({
   osrmService: { route: mockOsrmRoute },
 }));
 
@@ -13,7 +13,7 @@ vi.mock("../../services/osrm.service.js", () => ({
 
 const mockValhallaRoute = vi.fn();
 
-vi.mock("../../services/valhalla.service.js", () => ({
+vi.mock("@integrations/routing-valhalla/provider.js", () => ({
   valhallaService: { route: mockValhallaRoute },
 }));
 

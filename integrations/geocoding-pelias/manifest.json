@@ -1,0 +1,50 @@
+{
+  "id": "geocoding-pelias",
+  "name": "Pelias Geocoding",
+  "version": "1.0.0",
+  "description": "Self-hosted geocoding via Pelias",
+  "author": "OpenMapX",
+  "license": "MIT",
+
+  "domains": ["geocoding"],
+
+  "backend": {
+    "routes": false
+  },
+
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+
+  "envVars": ["PELIAS_URL"],
+
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "http://localhost:4000/v1/search?text=test&size=1",
+    "category": "Geocoding"
+  },
+
+  "quality": "built-in",
+
+  "attribution": [
+    {
+      "name": "Pelias",
+      "url": "https://pelias.io/",
+      "license": "MIT"
+    }
+  ],
+
+  "privacy": [
+    {
+      "service": "Pelias",
+      "purpose": "Self-hosted geocoding",
+      "dataSent": "Search query text (to self-hosted instance)",
+      "providerCountry": "Self-hosted",
+      "providerPrivacyUrl": "https://pelias.io/",
+      "personalData": false
+    }
+  ]
+}

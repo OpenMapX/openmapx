@@ -41,7 +41,7 @@ function makeWdResponse(qid: string, entity: Record<string, unknown>) {
 }
 
 async function loadModule() {
-  return import("../wikidata.enricher.js");
+  return import("@integrations/enrichment-wikidata/provider.js");
 }
 
 describe("wikidataEnricher", () => {
