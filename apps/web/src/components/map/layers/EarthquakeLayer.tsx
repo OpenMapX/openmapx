@@ -5,6 +5,7 @@ import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { escapeHtml, sanitizeUrl } from "@/lib/escapeHtml";
 import { relativeTime } from "@/lib/formatTime";
 import { useMap } from "@/lib/MapContext";
@@ -133,6 +134,7 @@ function depthLabel(depth: number): string {
 
 export function EarthquakeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
   const timeRange = useEarthquakeStore((s) => s.timeRange);
   const minMagnitude = useEarthquakeStore((s) => s.minMagnitude);
@@ -151,7 +153,7 @@ export function EarthquakeLayer() {
     const map = mapRef.current;
     if (!map) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const { apiUrl } = env;
     const url = `${apiUrl}/api/earthquakes?timeRange=${timeRange}&minMagnitude=${minMagnitude}`;
 
     setLoading(true);
@@ -170,7 +172,7 @@ export function EarthquakeLayer() {
     } finally {
       setLoading(false);
     }
-  }, [mapRef, timeRange, minMagnitude, setLoading, setLastUpdated]);
+  }, [env, mapRef, timeRange, minMagnitude, setLoading, setLastUpdated]);
 
   // Layer management
   // biome-ignore lint/correctness/useExhaustiveDependencies: startPulseAnimation only captures stable refs

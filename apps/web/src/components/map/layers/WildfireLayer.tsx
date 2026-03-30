@@ -5,6 +5,7 @@ import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { relativeTime } from "@/lib/formatTime";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
@@ -77,6 +78,7 @@ function confidenceLabel(conf: string): string {
 
 export function WildfireLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const layerVisible = useWildfireStore((s) => s.layerVisible);
   const dayRange = useWildfireStore((s) => s.dayRange);
   const source = useWildfireStore((s) => s.source);
@@ -93,7 +95,7 @@ export function WildfireLayer() {
     const map = mapRef.current;
     if (!map) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const { apiUrl } = env;
     const url = `${apiUrl}/api/wildfires?dayRange=${dayRange}&source=${source}`;
 
     setLoading(true);
@@ -112,7 +114,7 @@ export function WildfireLayer() {
     } finally {
       setLoading(false);
     }
-  }, [mapRef, dayRange, source, setLoading, setLastUpdated]);
+  }, [env, mapRef, dayRange, source, setLoading, setLastUpdated]);
 
   // Layer management
   useEffect(() => {

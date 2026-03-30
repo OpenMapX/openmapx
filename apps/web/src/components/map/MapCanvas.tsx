@@ -6,12 +6,14 @@ import { useMapStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { loadOpenMapXStyle, maptilerStyleUrl, STYLE_PROVIDER } from "@/lib/map";
+import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { mapRef, mapReady, notifyMapReady, notifyStyleReload } = useMap();
+  const env = useEnv();
   const locale = useLocale();
   const { mode, systemMode } = useColorScheme();
   const resolvedMode = mode === "system" ? systemMode : mode;
@@ -36,7 +38,9 @@ export function MapCanvas() {
       if (destroyed || !containerRef.current) return;
 
       const style =
-        STYLE_PROVIDER === "openmapx" ? await loadOpenMapXStyle() : maptilerStyleUrl(mapStyle);
+        env.styleProvider === "openmapx"
+          ? await loadOpenMapXStyle(env)
+          : maptilerStyleUrl(mapStyle, env);
 
       if (destroyed || !containerRef.current) return;
 
@@ -100,7 +104,7 @@ export function MapCanvas() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [mapRef, notifyMapReady, setBearing, setCenter, setPitch, setUserLocation, setZoom]);
+  }, [env, mapRef, notifyMapReady, setBearing, setCenter, setPitch, setUserLocation, setZoom]);
 
   // Swap map tile style when dark/light mode changes
   const initialStyleRef = useRef(mapStyle);
@@ -111,17 +115,17 @@ export function MapCanvas() {
     if (mapStyle === initialStyleRef.current) return;
     initialStyleRef.current = mapStyle;
 
-    if (STYLE_PROVIDER === "openmapx") {
-      loadOpenMapXStyle().then((s) => {
+    if (env.styleProvider === "openmapx") {
+      loadOpenMapXStyle(env).then((s) => {
         map.setStyle(s as maplibregl.StyleSpecification);
         map.once("style.load", () => notifyStyleReload());
       });
     } else {
-      const newUrl = maptilerStyleUrl(mapStyle);
+      const newUrl = maptilerStyleUrl(mapStyle, env);
       map.setStyle(newUrl);
       map.once("style.load", () => notifyStyleReload());
     }
-  }, [mapStyle, mapRef, mapReady, notifyStyleReload]);
+  }, [env, mapStyle, mapRef, mapReady, notifyStyleReload]);
 
   // Update map label language when locale changes
   useEffect(() => {

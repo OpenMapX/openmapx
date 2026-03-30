@@ -22,16 +22,11 @@ COPY packages/i18n/ packages/i18n/
 COPY apps/web/ apps/web/
 COPY turbo.json ./
 
-# Build with placeholders — replaced at runtime by docker-entrypoint.sh
+# Placeholder for packages/core which reads process.env.NEXT_PUBLIC_API_URL
+# directly (inlined at build time). Replaced at runtime by docker-entrypoint.sh.
+# All other NEXT_PUBLIC_* vars are provided via the EnvProvider React context
+# (built server-side from real process.env at request time) and need no placeholders.
 ENV NEXT_PUBLIC_API_URL=__NEXT_PUBLIC_API_URL__
-ENV NEXT_PUBLIC_MAPTILER_KEY=__NEXT_PUBLIC_MAPTILER_KEY__
-ENV NEXT_PUBLIC_MAPILLARY_TOKEN=__NEXT_PUBLIC_MAPILLARY_TOKEN__
-ENV NEXT_PUBLIC_MAP_STYLE_URL=__NEXT_PUBLIC_MAP_STYLE_URL__
-ENV NEXT_PUBLIC_TILES_URL=__NEXT_PUBLIC_TILES_URL__
-ENV NEXT_PUBLIC_STYLE_PROVIDER=__NEXT_PUBLIC_STYLE_PROVIDER__
-ENV NEXT_PUBLIC_TRAFFIC_MIN_ZOOM=__NEXT_PUBLIC_TRAFFIC_MIN_ZOOM__
-ENV NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE=__NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE__
-ENV NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE=__NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE__
 ENV NEXT_TELEMETRY_DISABLED=1
 
 WORKDIR /app/apps/web

@@ -3,6 +3,7 @@
 import { useOverlayExclusion, useStreetViewStore } from "@openmapx/core";
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
 import { useLayerReanchor } from "./useLayerReanchor";
@@ -17,6 +18,7 @@ const MLY_INTERACTIVE_LAYERS = [MLY_PHOTO_LAYER, MLY_PANO_LAYER] as const;
 
 export function StreetViewLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const layerVisible = useStreetViewStore((s) => s.layerVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
   useOverlayExclusion("street-view", layerVisible);
@@ -28,7 +30,7 @@ export function StreetViewLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const { apiUrl } = env;
 
     const syncLayers = () => {
       if (!layerVisible) {
@@ -125,7 +127,7 @@ export function StreetViewLayer() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, env]);
 
   // Click + cursor handlers
   useEffect(() => {

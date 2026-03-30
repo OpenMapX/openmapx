@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 
 interface ServiceStatus {
   id: string;
@@ -16,8 +17,6 @@ interface StatusResponse {
   timestamp: string;
   services: ServiceStatus[];
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 const CATEGORY_ORDER = [
   "Infrastructure",
@@ -54,6 +53,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function StatusDashboard() {
+  const { apiUrl } = useEnv();
   const [data, setData] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export default function StatusDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/status`);
+      const res = await fetch(`${apiUrl}/api/status`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
     } catch (err) {
@@ -71,7 +71,7 @@ export default function StatusDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiUrl]);
 
   useEffect(() => {
     fetchStatus();

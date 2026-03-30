@@ -22,12 +22,14 @@ import type { Viewer as MapillaryViewer, ViewerImageEvent } from "mapillary-js";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { SearchBar } from "@/components/search/SearchBar";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 
 export default function StreetViewViewerInner() {
   const t = useTranslations("streetView");
   const tc = useTranslations("common");
   const locale = useLocale();
+  const env = useEnv();
   const activeImageId = useStreetViewStore((s) => s.activeImageId);
   const closeViewer = useStreetViewStore((s) => s.closeViewer);
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
@@ -85,7 +87,7 @@ export default function StreetViewViewerInner() {
 
   // Initialize viewer once on mount
   useEffect(() => {
-    const token = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN ?? "";
+    const token = env.mapillaryToken;
     const container = containerRef.current;
     if (!container) return;
 
@@ -114,7 +116,7 @@ export default function StreetViewViewerInner() {
       viewerRef.current?.remove();
       viewerRef.current = null;
     };
-  }, []);
+  }, [env.mapillaryToken]);
 
   // Navigate when activeImageId changes after mount
   useEffect(() => {

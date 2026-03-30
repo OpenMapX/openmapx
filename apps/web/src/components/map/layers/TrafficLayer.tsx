@@ -2,13 +2,13 @@
 
 import { useTrafficStore } from "@openmapx/core";
 import { useEffect } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import {
   getFirstSymbolLayerId,
   moveLayerBeforeFirstSymbol,
   setLayerVisibility,
 } from "./layerStyleUtils";
-import { getTrafficTileTemplate, TRAFFIC_MIN_ZOOM } from "./trafficConfig";
 import { useLayerReanchor } from "./useLayerReanchor";
 
 const TRAFFIC_SOURCE_ID = "openmapx-traffic-source";
@@ -16,6 +16,7 @@ const TRAFFIC_LAYER_ID = "openmapx-traffic-layer";
 
 export function TrafficLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
   useLayerReanchor(TRAFFIC_LAYER_ID, showTraffic);
 
@@ -30,7 +31,7 @@ export function TrafficLayer() {
       if (showTraffic && !map.getSource(TRAFFIC_SOURCE_ID)) {
         map.addSource(TRAFFIC_SOURCE_ID, {
           type: "raster",
-          tiles: [getTrafficTileTemplate()],
+          tiles: [env.trafficTileUrlTemplate],
           tileSize: 256,
           attribution:
             'Traffic data © <a href="https://developer.tomtom.com/" target="_blank">TomTom</a> (<a href="https://developer.tomtom.com/terms-and-conditions" target="_blank">Proprietary</a>)',
@@ -44,7 +45,7 @@ export function TrafficLayer() {
             id: TRAFFIC_LAYER_ID,
             type: "raster",
             source: TRAFFIC_SOURCE_ID,
-            minzoom: TRAFFIC_MIN_ZOOM,
+            minzoom: env.trafficMinZoom,
             paint: {
               "raster-opacity": 0.9,
               "raster-fade-duration": 200,
@@ -66,7 +67,7 @@ export function TrafficLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [mapReady, styleVersion, mapRef, showTraffic]);
+  }, [mapReady, styleVersion, mapRef, showTraffic, env.trafficTileUrlTemplate, env.trafficMinZoom]);
 
   return null;
 }

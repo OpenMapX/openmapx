@@ -10,7 +10,7 @@ import Typography from "@mui/material/Typography";
 import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
-import { TRAFFIC_MIN_ZOOM } from "../layers/trafficConfig";
+import { useEnv } from "@/lib/EnvProvider";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { globePreview } from "./layerPreviewSvgs";
 import { BASE_LAYER_OPTIONS, DETAIL_OPTIONS } from "./layerSelectorConfig";
@@ -28,6 +28,7 @@ function DetailOptionTile({
   trafficZoomTooLow: boolean;
 }) {
   const t = useTranslations("layers");
+  const { trafficMinZoom } = useEnv();
   const overlayEntry = option.overlayId
     ? OVERLAY_REGISTRY.find((r) => r.id === option.overlayId)
     : undefined;
@@ -51,7 +52,7 @@ function DetailOptionTile({
       >
         {disabled ? (
           <Typography sx={{ mt: 0.2, fontSize: 9, color: "text.secondary" }}>
-            Zoom {TRAFFIC_MIN_ZOOM}+
+            Zoom {trafficMinZoom}+
           </Typography>
         ) : null}
       </LayerPreviewTile>

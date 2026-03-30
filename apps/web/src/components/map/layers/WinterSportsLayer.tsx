@@ -4,6 +4,7 @@ import { useDebouncedCallback, useOverlayExclusion, useWinterSportsStore } from 
 import type { GeoJSONSource, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { escapeHtml } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
@@ -109,6 +110,7 @@ function liftPopupHtml(props: Record<string, string | number | boolean>): string
 
 export function WinterSportsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
   const setLoading = useWinterSportsStore((s) => s.setLoading);
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
@@ -132,7 +134,7 @@ export function WinterSportsLayer() {
     if (!map || map.getZoom() < VECTOR_MIN_ZOOM) return;
 
     const bounds = map.getBounds();
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const { apiUrl } = env;
     const url = `${apiUrl}/api/winter-sports/features?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
     setLoading(true);
@@ -203,7 +205,7 @@ export function WinterSportsLayer() {
     } finally {
       setLoading(false);
     }
-  }, [mapRef, setLoading]);
+  }, [env, mapRef, setLoading]);
 
   // Manage layers
   useEffect(() => {

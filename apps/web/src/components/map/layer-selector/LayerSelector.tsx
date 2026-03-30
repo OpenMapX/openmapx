@@ -19,8 +19,8 @@ import {
 import { useTranslations } from "next-intl";
 import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { TRAFFIC_MIN_ZOOM } from "../layers/trafficConfig";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -28,6 +28,7 @@ import { MobileLayerPanel } from "./MobileLayerPanel";
 
 export function LayerSelector() {
   const t = useTranslations("layers");
+  const { trafficMinZoom } = useEnv();
   const theme = useTheme();
   const desktopDock = useMediaQuery(theme.breakpoints.up("sm"));
   const { mapReady, mapRef, styleVersion } = useMap();
@@ -121,7 +122,7 @@ export function LayerSelector() {
   if (hiddenByFloatingCard) return null;
 
   const open = Boolean(anchorEl);
-  const trafficZoomTooLow = zoomLevel !== null && zoomLevel < TRAFFIC_MIN_ZOOM;
+  const trafficZoomTooLow = zoomLevel !== null && zoomLevel < trafficMinZoom;
 
   return (
     <>

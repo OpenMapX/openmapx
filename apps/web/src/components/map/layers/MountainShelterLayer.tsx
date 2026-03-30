@@ -5,6 +5,7 @@ import type { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useLayerReanchor } from "./useLayerReanchor";
 
@@ -32,6 +33,7 @@ const SHELTER_TYPE_KEYS: Record<string, string> = {
 
 export function MountainShelterLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useLayerReanchor([CIRCLE_LAYER_ID, LABEL_LAYER_ID], layerVisible);
   const t = useTranslations("hiking");
@@ -47,7 +49,7 @@ export function MountainShelterLayer() {
     if (!map || map.getZoom() < MIN_ZOOM) return;
 
     const bounds = map.getBounds();
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const { apiUrl } = env;
     const url = `${apiUrl}/api/hiking/shelters?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
     try {
@@ -61,7 +63,7 @@ export function MountainShelterLayer() {
     } catch {
       // Silent failure
     }
-  }, [mapRef]);
+  }, [env, mapRef]);
 
   // Combined layer management + initial fetch
   useEffect(() => {

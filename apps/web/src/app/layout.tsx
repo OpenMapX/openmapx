@@ -8,6 +8,8 @@ import "mapillary-js/dist/mapillary.css";
 import "maplibre-theme/icons.default.css";
 import "maplibre-theme/classic.css";
 import "./globals.css";
+import { EnvProvider } from "@/lib/EnvProvider";
+import { buildClientEnv } from "@/lib/env";
 import { Providers } from "./providers";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -25,6 +27,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const locale = await getLocale();
   const messages = await getMessages();
+  const clientEnv = buildClientEnv();
 
   return (
     <html lang={locale} className={plusJakartaSans.variable} suppressHydrationWarning>
@@ -32,7 +35,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <InitColorSchemeScript attribute="class" defaultMode="system" />
         <AppRouterCacheProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
-            <Providers>{children}</Providers>
+            <EnvProvider config={clientEnv}>
+              <Providers>{children}</Providers>
+            </EnvProvider>
           </NextIntlClientProvider>
         </AppRouterCacheProvider>
       </body>

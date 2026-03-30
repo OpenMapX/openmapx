@@ -16,8 +16,9 @@ import type { PlacePhoto } from "@openmapx/core";
 import { useMapClickStore, usePlacePhotos, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { MAPTILER_KEY, maptilerStyleUrl } from "@/lib/map";
+import { maptilerStyleUrl } from "@/lib/map";
 import { PhotoAttribution, SOURCE_LABELS } from "./PhotoAttribution";
 
 interface Props {
@@ -490,6 +491,7 @@ function MobileThumbnail({
 
 /** Small MapLibre minimap showing the photo capture location. */
 function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onClick?: () => void }) {
+  const env = useEnv();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ map: unknown; marker: unknown } | null>(null);
 
@@ -501,11 +503,11 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
     let cancelled = false;
 
     import("maplibre-gl").then(({ default: maplibregl }) => {
-      if (cancelled || !el || !MAPTILER_KEY) return;
+      if (cancelled || !el || !env.maptilerKey) return;
 
       const map = new maplibregl.Map({
         container: el,
-        style: maptilerStyleUrl(),
+        style: maptilerStyleUrl("bright-v2", env),
         center: [lng, lat],
         zoom: 16,
         interactive: false,

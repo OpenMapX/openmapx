@@ -4,6 +4,7 @@ import { useAirQualityStore, useDebouncedCallback, useOverlayExclusion } from "@
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { escapeHtml, sanitizeUrl } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
@@ -81,6 +82,7 @@ function buildGeoJson(stations: AQStation[]) {
 
 export function AirQualityLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const setLoading = useAirQualityStore((s) => s.setLoading);
   useOverlayExclusion("air-quality", layerVisible);
@@ -93,7 +95,7 @@ export function AirQualityLayer() {
     if (!map) return;
 
     const bounds = map.getBounds();
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+    const { apiUrl } = env;
     const url = `${apiUrl}/api/air-quality/stations?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
     setLoading(true);
@@ -112,7 +114,7 @@ export function AirQualityLayer() {
     } finally {
       setLoading(false);
     }
-  }, [mapRef, setLoading]);
+  }, [env, mapRef, setLoading]);
 
   useEffect(() => {
     void styleVersion;
