@@ -407,9 +407,9 @@ function checkCyclOSM() {
   const url =
     env("CYCLOSM_TILE_URL")
       ?.replace("{s}", "a")
-      .replace("{z}", "0")
-      .replace("{x}", "0")
-      .replace("{y}", "0") ?? "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/0/0/0.png";
+      .replace("{z}", "12")
+      .replace("{x}", "2048")
+      .replace("{y}", "1361") ?? "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/12/2048/1361.png";
   return httpCheck("cyclosm", "CyclOSM", "Map Tiles", "https://tile-cyclosm.openstreetmap.fr", url);
 }
 
