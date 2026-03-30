@@ -38,7 +38,7 @@ function validateTileCoords(z: string, x: string, y: string): [number, number, n
 }
 
 export const tilesRoute: FastifyPluginAsync = async (fastify) => {
-  // CyclOSM tile proxy
+  // Cycling base layer tile proxy (Thunderforest primary, CyclOSM fallback)
   fastify.get<{
     Params: { z: string; x: string; y: string };
   }>("/tiles/cyclosm/:z/:x/:y.png", {
@@ -49,6 +49,31 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ message: "Invalid tile coordinates" });
       }
       const [z, x, y] = coords;
+
+      const thunderforestKey = process.env.THUNDERFOREST_API_KEY;
+      if (thunderforestKey) {
+        const tfSub = nextThunderforestSubdomain();
+        const tfUrl = `https://${tfSub}.tile.thunderforest.com/cycle/${z}/${x}/${y}.png?apikey=${thunderforestKey}`;
+
+        try {
+          const tfResponse = await fetch(tfUrl, {
+            headers: { "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)" },
+            signal: AbortSignal.timeout(10_000),
+          });
+
+          if (!tfResponse.ok) {
+            throw new Error(`Thunderforest returned ${tfResponse.status}`);
+          }
+
+          const tfBuffer = Buffer.from(await tfResponse.arrayBuffer());
+          reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
+          reply.header("X-Tile-Source", "thunderforest");
+          reply.type("image/png");
+          return reply.send(tfBuffer);
+        } catch (error) {
+          req.log.warn({ err: error, z, x, y }, "Thunderforest tile fetch failed");
+        }
+      }
 
       const baseUrl =
         process.env.CYCLOSM_TILE_URL ??
@@ -63,14 +88,12 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
 
       try {
         const response = await fetch(url, {
-          headers: {
-            "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
-          },
+          headers: { "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)" },
           signal: AbortSignal.timeout(10_000),
         });
 
         if (!response.ok) {
-          throw new Error(`CyclOSM returned ${response.status}`);
+          return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
         }
 
         const buffer = Buffer.from(await response.arrayBuffer());
@@ -79,37 +102,8 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
         reply.type("image/png");
         return reply.send(buffer);
       } catch (error) {
-        req.log.warn({ err: error, z, x, y }, "CyclOSM tile fetch failed");
-
-        const thunderforestKey = process.env.THUNDERFOREST_API_KEY;
-        if (!thunderforestKey) {
-          return reply.status(502).send({ message: "CyclOSM tile provider unavailable" });
-        }
-
-        const tfSub = nextThunderforestSubdomain();
-        const tfUrl = `https://${tfSub}.tile.thunderforest.com/cycle/${z}/${x}/${y}.png?apikey=${thunderforestKey}`;
-
-        try {
-          const tfResponse = await fetch(tfUrl, {
-            headers: {
-              "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
-            },
-            signal: AbortSignal.timeout(10_000),
-          });
-
-          if (!tfResponse.ok) {
-            return reply.status(tfResponse.status).send({ message: "Fallback tile fetch failed" });
-          }
-
-          const tfBuffer = Buffer.from(await tfResponse.arrayBuffer());
-          reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
-          reply.header("X-Tile-Source", "thunderforest");
-          reply.type("image/png");
-          return reply.send(tfBuffer);
-        } catch (tfError) {
-          req.log.warn({ err: tfError, z, x, y }, "Thunderforest fallback tile fetch failed");
-          return reply.status(502).send({ message: "All cycling tile providers unavailable" });
-        }
+        req.log.warn({ err: error, z, x, y }, "CyclOSM fallback tile fetch failed");
+        return reply.status(502).send({ message: "All cycling tile providers unavailable" });
       }
     },
   });
