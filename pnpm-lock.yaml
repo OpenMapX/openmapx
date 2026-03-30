@@ -82,6 +82,9 @@ importers:
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
+      lettermint:
+        specifier: ^1.5.1
+        version: 1.5.1
       nodemailer:
         specifier: ^8.0.3
         version: 8.0.3
@@ -6158,6 +6161,9 @@ packages:
   lan-network@0.2.0:
     resolution: {integrity: sha512-EZgbsXMrGS+oK+Ta12mCjzBFse+SIewGdwrSTr5g+MSymnjpox2x05ceI20PQejJOFvOgzcXrfDk/SdY7dSCtw==}
     hasBin: true
+
+  lettermint@1.5.1:
+    resolution: {integrity: sha512-JbZC1njXjgUAtE3rR3D7/YgUT9fao/nwWb1jRaNccQDar5quQax+EuBh6qdNG8coaW4tZ6UbuB4pzel05xazaw==}
 
   leven@3.1.0:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
@@ -14976,6 +14982,8 @@ snapshots:
   kysely@0.28.14: {}
 
   lan-network@0.2.0: {}
+
+  lettermint@1.5.1: {}
 
   leven@3.1.0: {}
 
