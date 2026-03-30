@@ -77,6 +77,15 @@ const serwist = new Serwist({
       }),
     },
 
+    // Self-hosted vector tiles & font glyphs (.pbf) — CacheFirst (immutable by z/x/y)
+    {
+      matcher: /\.pbf(\?.*)?$/i,
+      handler: new CacheFirst({
+        cacheName: "vector-tiles",
+        plugins: [new ExpirationPlugin({ maxEntries: 5000, maxAgeSeconds: 30 * 24 * 60 * 60 })],
+      }),
+    },
+
     ...defaultCache,
   ],
 });
