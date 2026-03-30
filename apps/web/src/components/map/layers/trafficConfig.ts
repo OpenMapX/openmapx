@@ -1,7 +1,7 @@
 "use client";
 
 export function getTrafficMinZoom(): number {
-  const parsed = Number(process.env.NEXT_PUBLIC_TRAFFIC_MIN_ZOOM ?? "10");
+  const parsed = Number(process.env.NEXT_PUBLIC_TRAFFIC_MIN_ZOOM || "10");
   if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 22) {
     return parsed;
   }

@@ -20,7 +20,7 @@ const SELF_HOSTED_TILES_URL = process.env.NEXT_PUBLIC_TILES_URL ?? "";
  * Default: "maptiler" (change to "openmapx" when self-hosted tiles are ready).
  */
 export const STYLE_PROVIDER =
-  (process.env.NEXT_PUBLIC_STYLE_PROVIDER as "maptiler" | "openmapx") ?? "maptiler";
+  (process.env.NEXT_PUBLIC_STYLE_PROVIDER as "maptiler" | "openmapx") || "maptiler";
 
 /** Map from MapTiler style names to self-hosted TileServer GL style names. */
 const SELF_HOSTED_STYLES: Record<string, string> = {

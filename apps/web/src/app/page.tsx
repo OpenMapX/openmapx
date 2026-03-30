@@ -90,7 +90,7 @@ export default function HomePage() {
             sourceId="openmapx-cyclosm-source"
             layerId="openmapx-cyclosm-layer"
             tiles={[
-              process.env.NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE ??
+              process.env.NEXT_PUBLIC_CYCLOSM_TILE_URL_TEMPLATE ||
                 (process.env.NEXT_PUBLIC_API_URL
                   ? `${process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "")}/api/tiles/cyclosm/{z}/{x}/{y}.png`
                   : "/api/tiles/cyclosm/{z}/{x}/{y}.png"),

@@ -8,11 +8,9 @@ set -e
 replace_env() {
   local placeholder="$1"
   local value="$2"
-  # Only replace if the env var is set (don't replace with empty)
-  if [ -n "$value" ]; then
-    find /app/apps/web/.next -name '*.js' -exec sed -i "s|${placeholder}|${value}|g" {} + 2>/dev/null || true
-    find /app/apps/web/.next -name '*.html' -exec sed -i "s|${placeholder}|${value}|g" {} + 2>/dev/null || true
-  fi
+  # Always replace — use empty string for unset vars so JS fallback logic works
+  find /app/apps/web/.next -name '*.js' -exec sed -i "s|${placeholder}|${value}|g" {} + 2>/dev/null || true
+  find /app/apps/web/.next -name '*.html' -exec sed -i "s|${placeholder}|${value}|g" {} + 2>/dev/null || true
 }
 
 replace_env "__NEXT_PUBLIC_API_URL__" "$NEXT_PUBLIC_API_URL"
