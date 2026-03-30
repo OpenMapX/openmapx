@@ -5,6 +5,7 @@ import { expandSearchQuery, getQueryVariants } from "../../utils/query-expansion
 import { matchToRoads } from "../../utils/road-snap.js";
 import { getJourneyOccupancy } from "../db-ris/transports-service.js";
 import {
+  type MotisInstance,
   motisAdapter as motis,
   motisLocalInstance,
   motisMode,
@@ -122,46 +123,65 @@ async function getRegionalStops(
   }
 }
 
-async function fetchMotisRouteGeometries(bbox: BBox): Promise<TransitRoute[]> {
-  if (!providerHealth.isHealthy("transitous")) return [];
+async function fetchMotisRouteGeometriesFrom(
+  instance: MotisInstance,
+  bbox: BBox,
+): Promise<TransitRoute[]> {
   const [south, west, north, east] = [bbox[1], bbox[0], bbox[3], bbox[2]];
-  try {
-    const { data } = await motisRoutes({
-      client: transitousInstance.client,
-      query: { min: `${south},${west}`, max: `${north},${east}`, zoom: 12 },
-    });
-    if (!data?.routes || !data.polylines) return [];
-    const results: TransitRoute[] = [];
-    for (const routeInfo of data.routes) {
-      const firstTransitRoute = routeInfo.transitRoutes[0];
-      if (!firstTransitRoute) continue;
-      const allCoords: [number, number][] = [];
-      for (const seg of routeInfo.segments) {
-        const rp = data.polylines[seg.polyline];
-        if (rp?.polyline?.points) {
-          const decoded = decodePolyline(rp.polyline.points, rp.polyline.precision);
-          allCoords.push(...decoded);
-        }
+  const { data } = await motisRoutes({
+    client: instance.client,
+    query: { min: `${south},${west}`, max: `${north},${east}`, zoom: 12 },
+  });
+  if (!data?.routes || !data.polylines) return [];
+  const results: TransitRoute[] = [];
+  for (const routeInfo of data.routes) {
+    const firstTransitRoute = routeInfo.transitRoutes[0];
+    if (!firstTransitRoute) continue;
+    const allCoords: [number, number][] = [];
+    for (const seg of routeInfo.segments) {
+      const rp = data.polylines[seg.polyline];
+      if (rp?.polyline?.points) {
+        const decoded = decodePolyline(rp.polyline.points, rp.polyline.precision);
+        allCoords.push(...decoded);
       }
-      const route: TransitRoute = {
-        id: `mo:${firstTransitRoute.id}`,
-        shortName: firstTransitRoute.shortName,
-        longName: firstTransitRoute.longName,
-        mode: motisMode(routeInfo.mode),
-        color: firstTransitRoute.color,
-        operatorName: "",
-      };
-      if (allCoords.length >= 2) {
-        route.geometry = { type: "LineString", coordinates: allCoords };
-      }
-      results.push(route);
     }
-    providerHealth.recordSuccess("transitous");
-    return results;
-  } catch {
-    providerHealth.recordFailure("transitous");
-    return [];
+    const route: TransitRoute = {
+      id: `${instance.prefix}${firstTransitRoute.id}`,
+      shortName: firstTransitRoute.shortName,
+      longName: firstTransitRoute.longName,
+      mode: motisMode(routeInfo.mode),
+      color: firstTransitRoute.color,
+      operatorName: "",
+    };
+    if (allCoords.length >= 2) {
+      route.geometry = { type: "LineString", coordinates: allCoords };
+    }
+    results.push(route);
   }
+  return results;
+}
+
+async function fetchMotisRouteGeometries(bbox: BBox): Promise<TransitRoute[]> {
+  // Prefer self-hosted MOTIS, fall back to Transitous
+  if (providerHealth.isHealthy("motis-local")) {
+    try {
+      const results = await fetchMotisRouteGeometriesFrom(motisLocalInstance, bbox);
+      providerHealth.recordSuccess("motis-local");
+      if (results.length > 0) return results;
+    } catch {
+      providerHealth.recordFailure("motis-local");
+    }
+  }
+  if (providerHealth.isHealthy("transitous")) {
+    try {
+      const results = await fetchMotisRouteGeometriesFrom(transitousInstance, bbox);
+      providerHealth.recordSuccess("transitous");
+      return results;
+    } catch {
+      providerHealth.recordFailure("transitous");
+    }
+  }
+  return [];
 }
 
 // Stops
@@ -209,7 +229,17 @@ export async function getStopsInBbox(bbox: BBox, modes?: TransportMode[]): Promi
     }
   }
 
-  // Transitous (priority 3) — global coverage with real-time data
+  // Self-hosted MOTIS (priority 3) — preferred over Transitous
+  if (stops.length === 0 && providerHealth.isHealthy("motis-local")) {
+    try {
+      stops = await motis.getStops(motisLocalInstance, bbox);
+      providerHealth.recordSuccess("motis-local");
+    } catch {
+      providerHealth.recordFailure("motis-local");
+    }
+  }
+
+  // Transitous fallback — global coverage with real-time data
   if (stops.length === 0 && providerHealth.isHealthy("transitous")) {
     try {
       stops = await motis.getStops(transitousInstance, bbox);
@@ -263,9 +293,11 @@ export async function fetchStopsByNameRaw(
   const tasks: Promise<TransitStop[]>[] = [
     ...hafas.HAFAS_INSTANCES.map((inst) => hafas.searchByName(inst, query, perProvider)),
     dbVendo.searchByName(query, perProvider),
-    ...(providerHealth.isHealthy("transitous")
-      ? [motis.searchByName(transitousInstance, query, perProvider)]
-      : []),
+    ...(providerHealth.isHealthy("motis-local")
+      ? [motis.searchByName(motisLocalInstance, query, perProvider)]
+      : providerHealth.isHealthy("transitous")
+        ? [motis.searchByName(transitousInstance, query, perProvider)]
+        : []),
     opendataCh.searchByName(query, perProvider),
     irail.searchByName(query, perProvider),
     gtfsLocal.searchByName(query, perProvider),
@@ -880,8 +912,21 @@ export async function getVehicleRadar(bbox: BBox): Promise<VehiclePosition[]> {
     }
   }
 
-  // Transitous global vehicle radar
-  if (providerHealth.isHealthy("transitous")) {
+  // Self-hosted MOTIS vehicle radar (preferred), Transitous as fallback
+  if (providerHealth.isHealthy("motis-local")) {
+    tasks.push(
+      motis.getVehicleRadar(motisLocalInstance, bbox).then(
+        (r) => {
+          providerHealth.recordSuccess("motis-local");
+          return r;
+        },
+        () => {
+          providerHealth.recordFailure("motis-local");
+          return [] as VehiclePosition[];
+        },
+      ),
+    );
+  } else if (providerHealth.isHealthy("transitous")) {
     tasks.push(
       motis.getVehicleRadar(transitousInstance, bbox).then(
         (r) => {
@@ -1207,7 +1252,28 @@ export async function planTrip(params: TripPlanParams): Promise<TripPlan | null>
     }
   }
 
-  // Transitous global fallback (MOTIS 2 — covers 117 regions with real-time data)
+  // Self-hosted MOTIS (preferred over Transitous)
+  if (!regionalPlan && providerHealth.isHealthy("motis-local")) {
+    try {
+      regionalPlan = await motis.planTrip(
+        motisLocalInstance,
+        fromLat,
+        fromLng,
+        toLat,
+        toLng,
+        date,
+        time,
+        arriveBy,
+        numItineraries,
+      );
+      if (regionalPlan) regionalPlan.provider = "motis-local";
+      providerHealth.recordSuccess("motis-local");
+    } catch {
+      providerHealth.recordFailure("motis-local");
+    }
+  }
+
+  // Transitous global fallback
   if (!regionalPlan && providerHealth.isHealthy("transitous")) {
     try {
       regionalPlan = await motis.planTrip(
@@ -1243,41 +1309,50 @@ export async function getReachableStops(
   maxTravelTimeMinutes: number,
   modes?: string,
 ): Promise<Array<{ stop: TransitStop; durationSeconds: number; transfers: number }>> {
-  try {
-    const transitModes = modes
-      ? (modes.split(",").map((m) => m.trim()) as import("@motis-project/motis-client").Mode[])
-      : undefined;
-    const { data } = await oneToAll({
-      client: transitousInstance.client,
-      query: {
-        one: `${lat},${lng}`,
-        time: new Date().toISOString(),
-        maxTravelTime: maxTravelTimeMinutes,
-        ...(transitModes ? { transitModes } : {}),
-      },
-    });
-    if (!data?.all) return [];
-    return data.all
-      .filter((r) => r.place?.stopId != null && r.duration != null)
-      .map((r) => {
-        const place = r.place as NonNullable<typeof r.place>;
-        return {
-          stop: {
-            id: `mo:${place.stopId}`,
-            name: place.name ?? "",
-            lat: place.lat ?? 0,
-            lng: place.lon ?? 0,
-            modes: place.modes ? uniqueModes(place.modes) : [],
-            provider: "transitous",
-          } satisfies TransitStop,
-          durationSeconds: (r.duration ?? 0) * 60,
-          transfers: Math.max(0, (r.k ?? 1) - 1),
-        };
-      })
-      .sort((a, b) => a.durationSeconds - b.durationSeconds);
-  } catch {
-    return [];
+  const transitModes = modes
+    ? (modes.split(",").map((m) => m.trim()) as import("@motis-project/motis-client").Mode[])
+    : undefined;
+
+  // Prefer self-hosted MOTIS, fall back to Transitous
+  const candidates: MotisInstance[] = [];
+  if (providerHealth.isHealthy("motis-local")) candidates.push(motisLocalInstance);
+  if (providerHealth.isHealthy("transitous")) candidates.push(transitousInstance);
+
+  for (const instance of candidates) {
+    try {
+      const { data } = await oneToAll({
+        client: instance.client,
+        query: {
+          one: `${lat},${lng}`,
+          time: new Date().toISOString(),
+          maxTravelTime: maxTravelTimeMinutes,
+          ...(transitModes ? { transitModes } : {}),
+        },
+      });
+      if (!data?.all?.length) continue;
+      return data.all
+        .filter((r) => r.place?.stopId != null && r.duration != null)
+        .map((r) => {
+          const place = r.place as NonNullable<typeof r.place>;
+          return {
+            stop: {
+              id: `${instance.prefix}${place.stopId}`,
+              name: place.name ?? "",
+              lat: place.lat ?? 0,
+              lng: place.lon ?? 0,
+              modes: place.modes ? uniqueModes(place.modes) : [],
+              provider: instance.provider,
+            } satisfies TransitStop,
+            durationSeconds: (r.duration ?? 0) * 60,
+            transfers: Math.max(0, (r.k ?? 1) - 1),
+          };
+        })
+        .sort((a, b) => a.durationSeconds - b.durationSeconds);
+    } catch {
+      // Try next instance
+    }
   }
+  return [];
 }
 
 // Health Status

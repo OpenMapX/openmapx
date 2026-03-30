@@ -5,8 +5,13 @@ import {
 } from "@motis-project/motis-client";
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import type { GeocodingProvider } from "./geocoding.provider.js";
-import { transitousInstance } from "./motis/instances.js";
+import { motisLocalInstance, transitousInstance } from "./motis/instances.js";
+import { motisManager } from "./motis/manager.js";
 import { uniqueModes } from "./motis/mode-map.js";
+
+async function preferredMotisClient() {
+  return (await motisManager.isReachable()) ? motisLocalInstance : transitousInstance;
+}
 
 function matchToSearchResult(match: Match): SearchResult {
   const type: SearchResult["type"] = match.type === "ADDRESS" ? "address" : "poi";
@@ -20,7 +25,10 @@ function matchToSearchResult(match: Match): SearchResult {
   };
 }
 
-function matchToAutocompleteResult(match: Match): AutocompleteResult {
+function matchToAutocompleteResult(
+  match: Match,
+  instance: { provider: string },
+): AutocompleteResult {
   if (match.type === "STOP") {
     const stop = {
       id: match.id,
@@ -28,7 +36,7 @@ function matchToAutocompleteResult(match: Match): AutocompleteResult {
       lat: match.lat,
       lng: match.lon,
       modes: uniqueModes(match.modes ?? []),
-      provider: transitousInstance.provider,
+      provider: instance.provider,
     };
     return {
       id: match.id,
@@ -52,6 +60,21 @@ function matchToAutocompleteResult(match: Match): AutocompleteResult {
 
 export const motisGeocodingService: GeocodingProvider = {
   async geocode(query: string, lang?: string): Promise<SearchResult[]> {
+    const instance = await preferredMotisClient();
+    try {
+      const { data } = await motisGeocode({
+        client: instance.client,
+        query: {
+          text: query,
+          language: lang ? [lang] : undefined,
+        },
+      });
+      const results = (data ?? []).map(matchToSearchResult);
+      if (results.length > 0 || instance === transitousInstance) return results;
+    } catch {
+      if (instance === transitousInstance) return [];
+    }
+    // Fall back to Transitous
     try {
       const { data } = await motisGeocode({
         client: transitousInstance.client,
@@ -67,6 +90,21 @@ export const motisGeocodingService: GeocodingProvider = {
   },
 
   async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+    const instance = await preferredMotisClient();
+    try {
+      const { data } = await motisGeocode({
+        client: instance.client,
+        query: {
+          text: query,
+          language: lang ? [lang] : undefined,
+        },
+      });
+      const results = (data ?? []).map((m) => matchToAutocompleteResult(m, instance));
+      if (results.length > 0 || instance === transitousInstance) return results;
+    } catch {
+      if (instance === transitousInstance) return [];
+    }
+    // Fall back to Transitous
     try {
       const { data } = await motisGeocode({
         client: transitousInstance.client,
@@ -75,7 +113,7 @@ export const motisGeocodingService: GeocodingProvider = {
           language: lang ? [lang] : undefined,
         },
       });
-      return (data ?? []).map(matchToAutocompleteResult);
+      return (data ?? []).map((m) => matchToAutocompleteResult(m, transitousInstance));
     } catch {
       return [];
     }
@@ -86,22 +124,28 @@ export const motisGeocodingService: GeocodingProvider = {
     lng: number,
     _lang?: string,
   ): Promise<ReverseGeocodingResult | null> {
-    try {
-      const { data } = await motisReverseGeocode({
-        client: transitousInstance.client,
-        query: { place: `${lat},${lng}` },
-      });
-      const match = data?.[0];
-      if (!match) return null;
+    const instances = (await motisManager.isReachable())
+      ? [motisLocalInstance, transitousInstance]
+      : [transitousInstance];
+    for (const inst of instances) {
+      try {
+        const { data } = await motisReverseGeocode({
+          client: inst.client,
+          query: { place: `${lat},${lng}` },
+        });
+        const match = data?.[0];
+        if (!match) continue;
 
-      const addressParts = [match.street, match.houseNumber].filter(Boolean);
-      const address = addressParts.length > 0 ? addressParts.join(" ") : match.name;
-      const defaultArea = match.areas.find((a) => a.default === true);
-      const city = defaultArea?.name ?? "";
+        const addressParts = [match.street, match.houseNumber].filter(Boolean);
+        const address = addressParts.length > 0 ? addressParts.join(" ") : match.name;
+        const defaultArea = match.areas.find((a) => a.default === true);
+        const city = defaultArea?.name ?? "";
 
-      return { address, city };
-    } catch {
-      return null;
+        return { address, city };
+      } catch {
+        // Try next instance
+      }
     }
+    return null;
   },
 };

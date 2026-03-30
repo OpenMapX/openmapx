@@ -1,7 +1,8 @@
 import type { RentalFormFactor, RentalStation, RentalVehicle } from "@motis-project/motis-client";
 import { rentals } from "@motis-project/motis-client";
 import type { LngLat } from "@openmapx/core";
-import { transitousInstance } from "../../motis/instances.js";
+import { motisLocalInstance, transitousInstance } from "../../motis/instances.js";
+import { motisManager } from "../../motis/manager.js";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
@@ -101,22 +102,34 @@ export async function fetchMotisRentals(
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   const [west, south, east, north] = bbox;
 
-  const response = await rentals({
-    client: transitousInstance.client,
-    query: {
-      min: `${south},${west}`,
-      max: `${north},${east}`,
-      withProviders: false,
-      withStations: true,
-      withVehicles: true,
-    },
-  });
+  // Prefer self-hosted MOTIS, fall back to Transitous
+  const instances = (await motisManager.isReachable())
+    ? [motisLocalInstance, transitousInstance]
+    : [transitousInstance];
 
-  if (response.error || !response.data) {
+  let responseData: Awaited<ReturnType<typeof rentals>>["data"] | undefined;
+  for (const instance of instances) {
+    const response = await rentals({
+      client: instance.client,
+      query: {
+        min: `${south},${west}`,
+        max: `${north},${east}`,
+        withProviders: false,
+        withStations: true,
+        withVehicles: true,
+      },
+    });
+    if (!response.error && response.data) {
+      responseData = response.data;
+      break;
+    }
+  }
+
+  if (!responseData) {
     return { stations: [], vehicles: [] };
   }
 
-  const { stations: rawStations, vehicles: rawVehicles } = response.data;
+  const { stations: rawStations, vehicles: rawVehicles } = responseData;
 
   let filteredStations = rawStations;
   if (formFactors && formFactors.length > 0) {
