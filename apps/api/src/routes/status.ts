@@ -363,6 +363,26 @@ function checkMapTilerTiles() {
   );
 }
 
+function checkMapTilerSatellite() {
+  const key = env("MAPTILER_KEY");
+  if (!key)
+    return Promise.resolve(
+      notConfigured(
+        "maptiler-satellite",
+        "MapTiler Satellite",
+        "Map Tiles",
+        "MAPTILER_KEY not set",
+      ),
+    );
+  return httpCheck(
+    "maptiler-satellite",
+    "MapTiler Satellite",
+    "Map Tiles",
+    "https://api.maptiler.com/tiles/satellite-v2",
+    `https://api.maptiler.com/tiles/satellite-v2/0/0/0.jpg?key=${key}`,
+  );
+}
+
 function checkTileServerGl() {
   const url = env("TILESERVER_URL") ?? "http://localhost:8080";
   return pingCheck("tileserver-gl", "TileServer GL", "Map Tiles", url, `${url}/health`);
@@ -380,6 +400,36 @@ function checkOpenTopoMap() {
     "Map Tiles",
     "https://tile.opentopomap.org",
     "https://tile.opentopomap.org/1/0/0.png",
+  );
+}
+
+function checkCyclOSM() {
+  const url =
+    env("CYCLOSM_TILE_URL")
+      ?.replace("{s}", "a")
+      .replace("{z}", "0")
+      .replace("{x}", "0")
+      .replace("{y}", "0") ?? "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/0/0/0.png";
+  return httpCheck("cyclosm", "CyclOSM", "Map Tiles", "https://tile-cyclosm.openstreetmap.fr", url);
+}
+
+function checkThunderforest() {
+  const key = env("THUNDERFOREST_API_KEY");
+  if (!key)
+    return Promise.resolve(
+      notConfigured(
+        "thunderforest",
+        "Thunderforest OpenCycleMap",
+        "Map Tiles",
+        "THUNDERFOREST_API_KEY not set",
+      ),
+    );
+  return httpCheck(
+    "thunderforest",
+    "Thunderforest OpenCycleMap",
+    "Map Tiles",
+    "https://tile.thunderforest.com",
+    `https://a.tile.thunderforest.com/cycle/0/0/0.png?apikey=${key}`,
   );
 }
 
@@ -531,10 +581,30 @@ function checkOverpass() {
 function checkWaymarkedTrails() {
   return httpCheck(
     "waymarked",
-    "Waymarked Trails",
+    "Waymarked Trails API",
     "Data Overlays",
     "https://hiking.waymarkedtrails.org/api/v1",
     "https://hiking.waymarkedtrails.org/api/v1/list/search?query=a&limit=1",
+  );
+}
+
+function checkWaymarkedCyclingTiles() {
+  return httpCheck(
+    "waymarked-cycling-tiles",
+    "Waymarked Trails Cycling Tiles",
+    "Map Tiles",
+    "https://tile.waymarkedtrails.org/cycling",
+    "https://tile.waymarkedtrails.org/cycling/0/0/0.png",
+  );
+}
+
+function checkWaymarkedHikingTiles() {
+  return httpCheck(
+    "waymarked-hiking-tiles",
+    "Waymarked Trails Hiking Tiles",
+    "Map Tiles",
+    "https://tile.waymarkedtrails.org/hiking",
+    "https://tile.waymarkedtrails.org/hiking/0/0/0.png",
   );
 }
 
@@ -791,9 +861,14 @@ export const statusRoute: FastifyPluginAsync = async (fastify) => {
       checkDbRis,
       // Map Tiles
       checkMapTilerTiles,
+      checkMapTilerSatellite,
       checkTileServerGl,
       checkMartin,
       checkOpenTopoMap,
+      checkCyclOSM,
+      checkThunderforest,
+      checkWaymarkedCyclingTiles,
+      checkWaymarkedHikingTiles,
       // Imagery
       checkMapillary,
       checkFlickr,
