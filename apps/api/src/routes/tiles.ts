@@ -9,6 +9,16 @@ function nextCyclOSMSubdomain(): string {
   return sub;
 }
 
+const THUNDERFOREST_SUBDOMAINS = ["a", "b", "c"] as const;
+let thunderforestSubdomainIndex = 0;
+
+function nextThunderforestSubdomain(): string {
+  const sub =
+    THUNDERFOREST_SUBDOMAINS[thunderforestSubdomainIndex % THUNDERFOREST_SUBDOMAINS.length];
+  thunderforestSubdomainIndex++;
+  return sub;
+}
+
 const TILE_PARAMS_SCHEMA = {
   type: "object" as const,
   required: ["z", "x", "y"],
@@ -56,11 +66,11 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
           headers: {
             "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
           },
-          signal: AbortSignal.timeout(15_000),
+          signal: AbortSignal.timeout(10_000),
         });
 
         if (!response.ok) {
-          return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
+          throw new Error(`CyclOSM returned ${response.status}`);
         }
 
         const buffer = Buffer.from(await response.arrayBuffer());
@@ -69,7 +79,35 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
         return reply.send(buffer);
       } catch (error) {
         req.log.warn({ err: error, z, x, y }, "CyclOSM tile fetch failed");
-        return reply.status(502).send({ message: "CyclOSM tile provider unavailable" });
+
+        const thunderforestKey = process.env.THUNDERFOREST_API_KEY;
+        if (!thunderforestKey) {
+          return reply.status(502).send({ message: "CyclOSM tile provider unavailable" });
+        }
+
+        const tfSub = nextThunderforestSubdomain();
+        const tfUrl = `https://${tfSub}.tile.thunderforest.com/cycle/${z}/${x}/${y}.png?apikey=${thunderforestKey}`;
+
+        try {
+          const tfResponse = await fetch(tfUrl, {
+            headers: {
+              "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
+            },
+            signal: AbortSignal.timeout(10_000),
+          });
+
+          if (!tfResponse.ok) {
+            return reply.status(tfResponse.status).send({ message: "Fallback tile fetch failed" });
+          }
+
+          const tfBuffer = Buffer.from(await tfResponse.arrayBuffer());
+          reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
+          reply.type("image/png");
+          return reply.send(tfBuffer);
+        } catch (tfError) {
+          req.log.warn({ err: tfError, z, x, y }, "Thunderforest fallback tile fetch failed");
+          return reply.status(502).send({ message: "All cycling tile providers unavailable" });
+        }
       }
     },
   });
