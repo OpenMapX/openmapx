@@ -12,7 +12,8 @@ export {
   userRelations,
   verification,
 } from "./auth-schema";
-
+// Integration config
+export { integrationConfig } from "./integration-config-schema";
 // Saved places tables
 export {
   labeledPlace,

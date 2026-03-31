@@ -9,11 +9,16 @@ import {
   IntegrationEventBus,
   type LoadedIntegration,
   type Logger,
+  PLATFORM_VERSION,
   type RouteHandler,
+  satisfiesPlatformVersion,
   toIntegrationMeta,
   validateManifest,
 } from "@openmapx/core";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { db } from "./db";
+import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
 import type { TransitProviderImpl } from "./services/transit/orchestrator";
@@ -103,15 +108,17 @@ function createLogger(integrationId: string, fastify: FastifyInstance): Logger {
   };
 }
 
-function resolveConfig(manifest: {
-  id: string;
-  configSchema?: Record<string, unknown>;
-  envVars?: string[];
-}): Record<string, unknown> {
+async function resolveConfig(
+  manifest: {
+    id: string;
+    configSchema?: Record<string, unknown>;
+    envVars?: string[];
+  },
+  directory: string,
+): Promise<Record<string, unknown>> {
   const config: Record<string, unknown> = {};
 
-  // Apply defaults from configSchema (supports both JSON Schema with "properties" wrapper
-  // and flat format where keys are directly under configSchema)
+  // 1. Apply defaults from configSchema
   const schema = manifest.configSchema as Record<string, unknown> | undefined;
   if (schema) {
     const props = (schema.properties ?? schema) as Record<string, { default?: unknown }>;
@@ -123,7 +130,34 @@ function resolveConfig(manifest: {
     }
   }
 
-  // Apply env var overrides: INTEGRATION_<ID>_<KEY>
+  // 2. Apply database config (if available)
+  try {
+    const [row] = await db
+      .select({ config: integrationConfig.config })
+      .from(integrationConfig)
+      .where(eq(integrationConfig.integrationId, manifest.id))
+      .limit(1);
+    if (row?.config && typeof row.config === "object") {
+      Object.assign(config, row.config);
+    }
+  } catch {
+    // DB not available or table doesn't exist yet — skip silently
+  }
+
+  // 3. Apply config.json from integration directory (gitignored, for local dev)
+  const configJsonPath = join(directory, "config.json");
+  if (existsSync(configJsonPath)) {
+    try {
+      const fileConfig = JSON.parse(readFileSync(configJsonPath, "utf-8"));
+      if (typeof fileConfig === "object" && fileConfig !== null) {
+        Object.assign(config, fileConfig);
+      }
+    } catch {
+      // Invalid JSON — skip silently
+    }
+  }
+
+  // 4. Apply env var overrides: INTEGRATION_<ID>_<KEY> (highest priority)
   const prefix = `INTEGRATION_${manifest.id.replace(/-/g, "_").toUpperCase()}_`;
   for (const [envKey, envVal] of Object.entries(process.env)) {
     if (envKey.startsWith(prefix) && envVal !== undefined) {
@@ -132,7 +166,7 @@ function resolveConfig(manifest: {
     }
   }
 
-  // Load env vars declared in manifest
+  // Also load env vars declared in manifest
   for (const envVar of manifest.envVars ?? []) {
     const val = process.env[envVar];
     if (val !== undefined) {
@@ -140,7 +174,6 @@ function resolveConfig(manifest: {
     }
   }
 
-  // Check for config.json in integration directory (gitignored, for local dev)
   return config;
 }
 
@@ -208,7 +241,17 @@ export async function initIntegrations(
       continue;
     }
 
-    const config = resolveConfig(manifest);
+    // Enforce platform version compatibility for community integrations
+    if (!isBuiltIn && manifest.platform) {
+      if (!satisfiesPlatformVersion(manifest.platform as string)) {
+        fastify.log.warn(
+          `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
+        );
+        continue;
+      }
+    }
+
+    const config = await resolveConfig(manifest, directory);
     const log = createLogger(id, fastify);
     const http = createHttpClient(log);
     const cache = createCacheClient(id);
@@ -374,18 +417,20 @@ export async function initIntegrations(
     return { timestamp: new Date().toISOString(), services: results };
   });
 
-  // Reload endpoint — re-discovers and re-initializes integrations (dev convenience)
-  fastify.post("/api/integrations/reload", async (_request, reply) => {
-    try {
-      const result = await reloadIntegrations();
-      return result;
-    } catch (err) {
-      return reply.status(500).send({
-        error: "Reload failed",
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
+  // Reload endpoint — re-discovers and re-initializes integrations (dev only)
+  if (process.env.NODE_ENV !== "production") {
+    fastify.post("/api/integrations/reload", async (_request, reply) => {
+      try {
+        const result = await reloadIntegrations();
+        return result;
+      } catch (err) {
+        return reply.status(500).send({
+          error: "Reload failed",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    });
+  }
 
   fastify.log.info(
     `Loaded ${integrations.size} integrations (${Array.from(integrations.values()).filter((i) => i.enabled).length} enabled)`,
@@ -503,7 +548,16 @@ export async function reloadIntegrations(): Promise<{
 
     if (integrations.has(id)) continue;
 
-    const config = resolveConfig(manifest);
+    if (!isBuiltIn && manifest.platform) {
+      if (!satisfiesPlatformVersion(manifest.platform as string)) {
+        _fastify.log.warn(
+          `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
+        );
+        continue;
+      }
+    }
+
+    const config = await resolveConfig(manifest, directory);
     const log = createLogger(id, _fastify);
     const http = createHttpClient(log);
     const cache = createCacheClient(id);

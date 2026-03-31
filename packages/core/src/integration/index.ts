@@ -32,4 +32,5 @@ export type {
   ManifestValidationResult,
 } from "./manifest";
 export { integrationManifestSchema, validateManifest } from "./manifest";
+export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export { IntegrationRegistry } from "./registry";

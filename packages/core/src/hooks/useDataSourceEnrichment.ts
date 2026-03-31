@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import { CATEGORY_DEFINITIONS } from "../types/category";
 import type { DataSourceDetail, DataSourceResult } from "../types/dataSource";
 import type { Place } from "../types/place";
 import { haversineDistance } from "../utils/coordinates";
@@ -14,34 +13,25 @@ import { haversineDistance } from "../utils/coordinates";
 const RAW_CATEGORY_TO_DATA_SOURCE: Record<string, string> = {
   charging_station: "ev-charging",
   "amenity/charging_station": "ev-charging",
-  // MapTiler/OpenMapTiles POI class/subclass combinations
   "car/charging_station": "ev-charging",
   "fuel/charging_station": "ev-charging",
-  // Fuel stations
+  ev_charging: "ev-charging",
   fuel: "fuel",
   "amenity/fuel": "fuel",
   "car/fuel": "fuel",
   "fuel/fuel": "fuel",
-  // Bike sharing
   bicycle_rental: "bike-sharing",
   "amenity/bicycle_rental": "bike-sharing",
-  // Car sharing
+  bike_sharing: "bike-sharing",
   car_sharing: "car-sharing",
   "amenity/car_sharing": "car-sharing",
-  // Parking (MapTiler uses class=parking/parking_garage/parking_paid, no subclass)
+  scooter_sharing: "scooter-sharing",
   parking: "parking",
   parking_garage: "parking",
   parking_paid: "parking",
   "amenity/parking": "parking",
   "car/parking": "parking",
 };
-
-// Also build mappings from CategoryDefinition entries that have dataSourceId
-for (const def of CATEGORY_DEFINITIONS) {
-  if (def.dataSourceId) {
-    RAW_CATEGORY_TO_DATA_SOURCE[def.id] = def.dataSourceId;
-  }
-}
 
 /** Maximum distance in metres for a match to be considered valid. */
 const MAX_MATCH_DISTANCE = 100;

@@ -158,7 +158,9 @@ export {
   IntegrationRegistry,
   initCommunityIntegrationRegistry,
   integrationManifestSchema,
+  PLATFORM_VERSION,
   registerCommunityModule,
+  satisfiesPlatformVersion,
   toIntegrationMeta,
   validateManifest,
 } from "./integration";
