@@ -503,6 +503,19 @@ export async function initIntegrations(
   fastify.log.info(
     `Loaded ${integrations.size} integrations (${Array.from(integrations.values()).filter((i) => i.enabled).length} enabled)`,
   );
+
+  // Run initial health check to seed the cache, then periodically refresh
+  const runHealthRefresh = () => {
+    const enabled = Array.from(integrations.values()).filter((i) => i.enabled);
+    executeAllIntegrationHealthChecks(enabled).catch((err) =>
+      fastify.log.warn(err, "Health cache refresh failed"),
+    );
+  };
+  // Seed asynchronously (don't block startup)
+  setTimeout(runHealthRefresh, 5_000);
+  // Refresh every 60 seconds
+  const healthInterval = setInterval(runHealthRefresh, 60_000);
+  healthInterval.unref();
 }
 
 export function getIntegration(id: string): LoadedIntegration | undefined {
@@ -598,10 +611,11 @@ export async function reloadIntegrations(): Promise<{
   integrations.clear();
   eventBus.removeAll();
 
-  // 2. Re-discover and re-setup
+  // 2. Re-discover and re-setup (topological sort by dependencies, same as cold start)
   const discovered = await discoverManifests(_integrationDirs);
+  const sorted = topologicalSort(discovered);
 
-  for (const { manifest: raw, directory, isBuiltIn } of discovered) {
+  for (const { manifest: raw, directory, isBuiltIn } of sorted) {
     const validation = validateManifest(raw);
     if (!validation.valid) {
       _fastify.log.warn(

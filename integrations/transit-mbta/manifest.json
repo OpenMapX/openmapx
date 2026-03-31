@@ -1,7 +1,7 @@
 {
   "id": "transit-mbta",
   "name": "MBTA (Boston Transit)",
-  "description": "Massachusetts Bay Transportation Authority transit data",
+  "description": "Boston area public transit data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",

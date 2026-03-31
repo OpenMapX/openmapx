@@ -2,7 +2,7 @@
   "id": "photos-mapillary",
   "name": "Mapillary Photos",
   "version": "1.0.0",
-  "description": "Street-level photos near places from Mapillary",
+  "description": "Street-level photos near places",
   "author": "OpenMapX",
   "license": "MIT",
 

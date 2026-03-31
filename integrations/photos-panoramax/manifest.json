@@ -2,7 +2,7 @@
   "id": "photos-panoramax",
   "name": "Panoramax Photos",
   "version": "1.0.0",
-  "description": "Street-level photos from Panoramax",
+  "description": "Street-level photos near places",
   "author": "OpenMapX",
   "license": "MIT",
 

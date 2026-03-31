@@ -2,7 +2,7 @@
   "id": "geocoding-maptiler",
   "name": "MapTiler Geocoding",
   "version": "1.0.0",
-  "description": "Forward geocoding and autocomplete via MapTiler",
+  "description": "Forward geocoding and autocomplete",
   "author": "OpenMapX",
   "license": "MIT",
 

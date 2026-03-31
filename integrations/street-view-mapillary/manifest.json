@@ -2,7 +2,7 @@
   "id": "street-view-mapillary",
   "name": "Mapillary Street View",
   "version": "1.0.0",
-  "description": "Street-level imagery powered by Mapillary",
+  "description": "Street-level imagery and navigation",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://www.mapillary.com/developer",
@@ -13,7 +13,8 @@
     "panel": false,
     "layerSelector": {
       "group": "map-details",
-      "labelKey": "streetView"
+      "labelKey": "streetLevelImagery",
+      "icon": "streetview"
     },
     "overlay": {
       "excludes": ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"]
@@ -31,7 +32,7 @@
       }
     }
   },
-  "envVars": ["NEXT_PUBLIC_MAPILLARY_TOKEN", "MAPILLARY_TOKEN"],
+  "envVars": ["MAPILLARY_TOKEN"],
   "healthCheck": {
     "type": "http",
     "url": "https://graph.mapillary.com",

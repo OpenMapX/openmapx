@@ -2,7 +2,7 @@
   "id": "car-sharing",
   "name": "Car Sharing",
   "version": "1.0.0",
-  "description": "Car sharing stations from GBFS feeds, Cambio, and regional operators",
+  "description": "Car sharing station locations and vehicle availability",
   "author": "OpenMapX",
   "license": "MIT",
 

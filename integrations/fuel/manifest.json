@@ -2,7 +2,7 @@
   "id": "fuel",
   "name": "Fuel Prices",
   "version": "1.0.0",
-  "description": "Gas station fuel prices from Tankerkoenig (DE), E-Control (AT), prix-carburants (FR), Minetur (ES), and OpenStreetMap",
+  "description": "Gas station locations and real-time fuel prices",
   "author": "OpenMapX",
   "license": "MIT",
 

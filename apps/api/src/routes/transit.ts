@@ -1,4 +1,5 @@
 import { registry } from "@integrations/transit-dynamic-registry/registry";
+import { getFeedProviders } from "@integrations/transit-motis/index.js";
 import type { FastifyInstance } from "fastify";
 import { getTransitProviderAttribution } from "../integration-host";
 import { transitOrchestrator } from "../services/transit/orchestrator";
@@ -12,7 +13,6 @@ import {
 } from "../services/transit/place-transit";
 import type { BBox, TransportMode } from "../services/transit/types";
 import { hashKey, withCache } from "../utils/cache";
-import { getFeedProviders } from "./transit-attribution";
 
 interface BBoxQuery {
   sw_lat: string;

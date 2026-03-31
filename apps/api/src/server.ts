@@ -12,19 +12,16 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
-import { initIntegrations, shutdownIntegrations } from "./integration-host";
+import { getAllIntegrations, initIntegrations, shutdownIntegrations } from "./integration-host";
 import { redis } from "./redis";
-// airQualityRoute moved to integrations/overlay-air-quality
 import { autocompleteRoute } from "./routes/autocomplete";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { categorySearchRoute } from "./routes/category-search";
 import { dataSourcesRoute } from "./routes/data-sources";
 import { directionsRoute } from "./routes/directions";
-// earthquakeRoute moved to integrations/overlay-earthquakes
 import { elevationRoute } from "./routes/elevation";
 import { geocodeRoute } from "./routes/geocode";
 import { gtfsRoute } from "./routes/gtfs";
-// hikingRoute now handled by integration framework
 import { isochroneRoute } from "./routes/isochrone";
 import { mapillaryRoute } from "./routes/mapillary";
 import { motisRoute } from "./routes/motis";
@@ -33,12 +30,9 @@ import { placesRoute } from "./routes/places";
 import { risMapsRoute } from "./routes/ris-maps";
 import { savedRoute } from "./routes/saved";
 import { statusRoute } from "./routes/status";
-// streetviewRoute now handled by integration framework
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
-// transitAttributionRoute now served by transit-motis integration
-// wildfireRoute moved to integrations/overlay-wildfires
 import { winterSportsRoute } from "./routes/winter-sports";
 import { gtfsManager } from "./services/gtfs/index";
 import { motisManager } from "./services/motis/manager";
@@ -113,19 +107,13 @@ await server.register(directionsRoute, { prefix: "/api" });
 await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(tilesRoute, { prefix: "/api" });
-// streetviewRoute now handled by integration framework
-// airQualityRoute now handled by integration framework
 await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(transitRoute, { prefix: "/api" });
-// transitAttributionRoute now served by transit-motis integration
 await server.register(gtfsRoute, { prefix: "/api" });
-// hikingRoute now handled by integration framework
 await server.register(isochroneRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
 await server.register(dataSourcesRoute, { prefix: "/api" });
 await server.register(photosRoute, { prefix: "/api" });
-// earthquakeRoute now handled by integration framework
-// wildfireRoute now handled by integration framework
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
@@ -178,6 +166,19 @@ const customIntegrationsDir = join(
   "custom_integrations",
 );
 await initIntegrations(server, [integrationsDir, customIntegrationsDir]);
+
+// Sanity check: ensure integrations were discovered
+const loadedCount = getAllIntegrations().length;
+if (loadedCount === 0) {
+  server.log.error(
+    `No integrations loaded! Expected integrations at ${integrationsDir}. ` +
+      "Check that the integrations/ directory exists and contains valid manifests.",
+  );
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
+}
+server.log.info(`Loaded ${loadedCount} integrations`);
 
 // Debug endpoint: list loaded dynamic transit providers (auth required)
 server.get("/api/transit/registry", async (req, reply) => {

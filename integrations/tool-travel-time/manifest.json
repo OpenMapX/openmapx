@@ -14,7 +14,8 @@
     "panel": false,
     "layerSelector": {
       "group": "map-tools",
-      "labelKey": "travelTime"
+      "labelKey": "travelTime",
+      "icon": "timer"
     },
     "overlay": {
       "excludes": []

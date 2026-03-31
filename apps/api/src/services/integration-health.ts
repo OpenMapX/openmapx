@@ -181,5 +181,35 @@ export async function executeAllIntegrationHealthChecks(
 ): Promise<ServiceStatus[]> {
   const checks = integrations.filter((i) => i.manifest.healthCheck);
   const results = await Promise.all(checks.map(executeIntegrationHealthCheck));
-  return results.filter((r): r is ServiceStatus => r !== null);
+  const filtered = results.filter((r): r is ServiceStatus => r !== null);
+
+  // Update the shared health cache
+  for (const r of filtered) {
+    healthCache.set(r.id, r);
+  }
+  healthCacheUpdatedAt = Date.now();
+
+  return filtered;
+}
+
+// Shared health cache: latest health status per integration ID
+const healthCache = new Map<string, ServiceStatus>();
+let healthCacheUpdatedAt = 0;
+
+/** How fresh the cache is (ms since last update). */
+export function healthCacheAge(): number {
+  return healthCacheUpdatedAt ? Date.now() - healthCacheUpdatedAt : Infinity;
+}
+
+/** Get cached health status for a single integration. */
+export function getCachedHealthStatus(id: string): ServiceStatus | undefined {
+  return healthCache.get(id);
+}
+
+/** Whether an integration is considered healthy based on cached health data. */
+export function isIntegrationHealthy(id: string, hasHealthCheck: boolean): boolean {
+  if (!hasHealthCheck) return true; // no health check = assume healthy
+  const cached = healthCache.get(id);
+  if (!cached) return true; // no data yet = assume healthy
+  return cached.status === "up";
 }

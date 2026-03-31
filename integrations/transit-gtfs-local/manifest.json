@@ -1,7 +1,7 @@
 {
   "id": "transit-gtfs-local",
   "name": "Local GTFS Feeds",
-  "description": "Transit data from imported GTFS feeds",
+  "description": "Locally imported transit schedule data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -14,8 +14,13 @@
       "description": "Enable local GTFS feeds integration"
     }
   },
+  "services": ["postgres"],
   "backend": {
     "routes": false
+  },
+  "healthCheck": {
+    "type": "custom",
+    "category": "Transit"
   },
   "attribution": [
     {

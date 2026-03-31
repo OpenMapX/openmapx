@@ -2,7 +2,7 @@
   "id": "parking",
   "name": "Parking Facilities",
   "version": "1.0.0",
-  "description": "Parking facilities from DB BahnPark, ParkAPI, and OpenStreetMap",
+  "description": "Parking facility locations, capacity, and occupancy",
   "author": "OpenMapX",
   "license": "MIT",
 

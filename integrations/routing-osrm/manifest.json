@@ -2,7 +2,7 @@
   "id": "routing-osrm",
   "name": "OSRM Routing",
   "version": "1.0.0",
-  "description": "Driving route calculation via OSRM",
+  "description": "Driving route calculation",
   "author": "OpenMapX",
   "license": "MIT",
 
@@ -19,7 +19,7 @@
     }
   },
 
-  "envVars": ["OSRM_URL"],
+  "envVars": [],
 
   "healthCheck": {
     "type": "ping",

@@ -8,7 +8,7 @@
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": ["TFL_APP_KEY"],
+  "envVars": ["TFL_API_KEY"],
   "configSchema": {
     "enabled": {
       "type": "boolean",
@@ -21,8 +21,8 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://api.tfl.gov.uk/StopPoint/search?query=victoria&app_key=${TFL_APP_KEY}",
-    "requiredEnvVars": ["TFL_APP_KEY"]
+    "urlTemplate": "https://api.tfl.gov.uk/StopPoint/search?query=victoria&app_key=${TFL_API_KEY}",
+    "requiredEnvVars": ["TFL_API_KEY"]
   },
   "attribution": [
     {

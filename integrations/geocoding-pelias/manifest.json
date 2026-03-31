@@ -2,7 +2,7 @@
   "id": "geocoding-pelias",
   "name": "Pelias Geocoding",
   "version": "1.0.0",
-  "description": "Self-hosted geocoding via Pelias",
+  "description": "Self-hosted forward and reverse geocoding",
   "author": "OpenMapX",
   "license": "MIT",
 

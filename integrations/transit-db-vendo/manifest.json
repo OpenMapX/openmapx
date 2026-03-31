@@ -1,7 +1,7 @@
 {
   "id": "transit-db-vendo",
   "name": "DB Vendo (Deutsche Bahn)",
-  "description": "Deutsche Bahn journey planning via db-vendo-client",
+  "description": "German long-distance rail journey planning",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",

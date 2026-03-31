@@ -35,12 +35,17 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
     if (!integrations) return;
     for (const integration of integrations) {
       if (integration.isBuiltIn !== false) continue;
-      if (!integration.frontend?.mapLayer && !integration.frontend?.legend) continue;
+      const fe = integration.frontend;
+      if (!fe?.mapLayer && !fe?.legend && !fe?.panel) continue;
       if (getCommunityModule(integration.id)) continue;
 
       const script = document.createElement("script");
       script.src = `/api/integrations/${integration.id}/bundle/index.js`;
+      script.type = "module";
       script.async = true;
+      script.onerror = () => {
+        console.error(`[IntegrationProvider] Failed to load bundle for ${integration.id}`);
+      };
       document.head.appendChild(script);
     }
   }, [integrations]);

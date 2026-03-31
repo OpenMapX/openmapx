@@ -2,7 +2,7 @@
   "id": "ev-charging",
   "name": "EV Charging Stations",
   "version": "1.0.0",
-  "description": "Electric vehicle charging station locations from OpenChargeMap and OpenStreetMap",
+  "description": "Electric vehicle charging station locations and connector details",
   "author": "OpenMapX",
   "license": "MIT",
 

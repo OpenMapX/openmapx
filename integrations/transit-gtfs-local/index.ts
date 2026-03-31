@@ -9,6 +9,22 @@ export function setup(ctx: IntegrationContext): void {
     gtfsLocal.setDeps(gtfsDeps);
   }
 
+  // Health check: verify PostGIS connectivity + at least one imported feed
+  ctx.registerHealthCheck(async () => {
+    if (!ctx.db) return { status: "down" as const, error: "Database not available" };
+    try {
+      const rows = await ctx.db.execute<{ count: string }[]>(
+        "SELECT count(*)::text AS count FROM public.gtfs_feeds WHERE status = 'active'",
+      );
+      const count = Number(rows?.[0]?.count ?? 0);
+      return count > 0
+        ? { status: "up" as const }
+        : { status: "down" as const, error: "No active GTFS feeds imported" };
+    } catch {
+      return { status: "down" as const, error: "PostGIS query failed" };
+    }
+  });
+
   ctx.registerProvider("transit", {
     id: "transit-gtfs-local",
     prefix: "g-",

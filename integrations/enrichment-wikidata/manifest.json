@@ -2,7 +2,7 @@
   "id": "enrichment-wikidata",
   "name": "Wikidata Enrichment",
   "version": "1.0.0",
-  "description": "Enrich place details with structured data from Wikidata",
+  "description": "Structured data enrichment for place details",
   "author": "OpenMapX",
   "license": "MIT",
 

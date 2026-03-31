@@ -5,6 +5,8 @@ import { API_ENDPOINTS } from "../api/endpoints";
 export interface ServiceCapability {
   configured: boolean;
   enabled: boolean;
+  healthy: boolean;
+  available: boolean;
   domains: string[];
 }
 
@@ -16,7 +18,7 @@ export function useCapabilities() {
   const query = useQuery({
     queryKey: ["capabilities"],
     queryFn: () => apiClient.get<CapabilitiesResponse>(API_ENDPOINTS.capabilities),
-    staleTime: 3_600_000,
+    staleTime: 60_000,
   });
 
   return {
@@ -26,8 +28,8 @@ export function useCapabilities() {
       if (!serviceId) return true;
       if (!query.data) return true;
       const service = query.data.services[serviceId];
-      if (!service) return true;
-      return service.configured && service.enabled;
+      if (!service) return false;
+      return service.available;
     },
     getCapability: (serviceId: string): ServiceCapability | undefined => {
       return query.data?.services[serviceId];

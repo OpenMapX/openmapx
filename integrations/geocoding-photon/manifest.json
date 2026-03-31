@@ -2,7 +2,7 @@
   "id": "geocoding-photon",
   "name": "Photon Geocoding",
   "version": "1.0.0",
-  "description": "Forward and reverse geocoding via Photon (Komoot)",
+  "description": "Forward and reverse geocoding",
   "author": "OpenMapX",
   "license": "MIT",
 
@@ -19,7 +19,7 @@
     }
   },
 
-  "envVars": ["PHOTON_URL"],
+  "envVars": [],
 
   "healthCheck": {
     "type": "http",

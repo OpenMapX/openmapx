@@ -2,7 +2,7 @@
   "id": "photos-wikimedia",
   "name": "Wikimedia Photos",
   "version": "1.0.0",
-  "description": "Place photos from Wikimedia Commons",
+  "description": "Geotagged place photos",
   "author": "OpenMapX",
   "license": "MIT",
 

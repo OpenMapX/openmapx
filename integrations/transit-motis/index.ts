@@ -38,6 +38,42 @@ async function isMotisReachable(): Promise<boolean> {
   }
 }
 
+interface FeedEntry {
+  filename?: string;
+  human_name?: string;
+  source?: string;
+  spdx_license_identifier?: string;
+  license_url?: string;
+  publisher?: { name?: string; url?: string };
+}
+
+/**
+ * Build a provider attribution map from MOTIS license.json keyed by feed tag.
+ * Feed tags match the format MOTIS uses in its `source` field (e.g. "de_DELFI").
+ */
+export function getFeedProviders(): Record<
+  string,
+  { label: string; url: string; license?: string; licenseUrl?: string }
+> {
+  const feeds = loadAttribution() as FeedEntry[];
+  const result: Record<
+    string,
+    { label: string; url: string; license?: string; licenseUrl?: string }
+  > = {};
+  for (const feed of feeds) {
+    if (!feed.filename) continue;
+    const tag = feed.filename.replace(/\.(gtfs|netex)\.zip$/, "");
+    if (!tag) continue;
+    result[tag] = {
+      label: feed.human_name ?? tag,
+      url: feed.publisher?.url ?? feed.source ?? "",
+      license: feed.spdx_license_identifier,
+      licenseUrl: feed.license_url,
+    };
+  }
+  return result;
+}
+
 export async function setup(ctx: IntegrationContext): Promise<void> {
   // Register Transitous (cloud MOTIS) as a transit provider
   ctx.registerProvider("transit", {
@@ -75,8 +111,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   // Register dynamic attribution endpoint
   ctx.registerRoute("GET", "/attribution", async (_req, res) => {
-    const data = loadAttribution();
-    res.send(data);
+    res.send(loadAttribution());
   });
 
   // Register local MOTIS if available

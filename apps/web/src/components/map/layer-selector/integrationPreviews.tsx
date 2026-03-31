@@ -35,7 +35,7 @@ export const INTEGRATION_PREVIEWS: Record<string, ReactNode> = {
   "live-trains": liveTrainsPreview,
   "3d-buildings": buildingsPreview,
   "travel-time": travelTimePreview,
-  measure: measurePreview,
+  measurement: measurePreview,
 };
 
 /** Generic fallback preview for integrations without a custom preview. */

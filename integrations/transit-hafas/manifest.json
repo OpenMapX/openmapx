@@ -1,7 +1,7 @@
 {
   "id": "transit-hafas",
   "name": "HAFAS Transit (DB/VBB/BVG)",
-  "description": "Deutsche Bahn, VBB, and BVG transit data via HAFAS",
+  "description": "German public transit journey planning",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",

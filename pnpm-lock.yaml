@@ -490,6 +490,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      opening_hours:
+        specifier: ^3.12.0
+        version: 3.12.0(typescript@5.9.3)
 
   integrations/geocoding-db-ris:
     dependencies:
@@ -679,6 +682,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      db-vendo-client:
+        specifier: ^6.10.8
+        version: 6.10.8
 
   integrations/transit-dynamic-registry:
     dependencies:

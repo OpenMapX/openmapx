@@ -2,7 +2,7 @@
   "id": "overlay-hiking",
   "name": "Hiking Trails",
   "version": "1.0.0",
-  "description": "Hiking trail routes and mountain shelter locations via Waymarked Trails",
+  "description": "Hiking trail routes and mountain shelter locations",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://waymarkedtrails.org/",
@@ -13,7 +13,9 @@
     "panel": false,
     "layerSelector": {
       "group": "map-details",
-      "labelKey": "hiking"
+      "labelKey": "hiking",
+      "icon": "hiking",
+      "quickSelector": true
     },
     "overlay": {
       "excludes": ["street-view", "winter-sports"]

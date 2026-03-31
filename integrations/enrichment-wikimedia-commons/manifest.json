@@ -2,7 +2,7 @@
   "id": "enrichment-wikimedia-commons",
   "name": "Wikimedia Commons Enrichment",
   "version": "1.0.0",
-  "description": "Enrich place details with photos from Wikimedia Commons categories and files",
+  "description": "Photo enrichment for place details",
   "author": "OpenMapX",
   "license": "MIT",
 

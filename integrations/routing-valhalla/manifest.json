@@ -2,7 +2,7 @@
   "id": "routing-valhalla",
   "name": "Valhalla Routing",
   "version": "1.0.0",
-  "description": "Walking and cycling route calculation via Valhalla",
+  "description": "Walking and cycling route calculation",
   "author": "OpenMapX",
   "license": "MIT",
 
@@ -19,7 +19,7 @@
     }
   },
 
-  "envVars": ["VALHALLA_URL"],
+  "envVars": [],
 
   "healthCheck": {
     "type": "ping",

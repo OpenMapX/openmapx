@@ -2,7 +2,7 @@
   "id": "geocoding-db-ris",
   "name": "Deutsche Bahn Station Search",
   "version": "1.0.0",
-  "description": "German railway station geocoding via Deutsche Bahn RIS::Stations API",
+  "description": "German railway station geocoding",
   "author": "OpenMapX",
   "license": "MIT",
 

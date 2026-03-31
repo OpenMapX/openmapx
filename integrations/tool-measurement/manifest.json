@@ -14,7 +14,8 @@
     "panel": false,
     "layerSelector": {
       "group": "map-tools",
-      "labelKey": "measure"
+      "labelKey": "measure",
+      "icon": "straighten"
     },
     "overlay": {
       "excludes": []

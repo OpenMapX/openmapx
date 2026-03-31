@@ -33,8 +33,9 @@ const healthCheckSchema = z.object({
 const layerSelectorSchema = z.object({
   group: z.enum(["map-details", "map-tools", "map-types"]),
   labelKey: z.string(),
-  iconPath: z.string().optional(),
+  icon: z.string().optional(),
   preview: z.string().nullable().optional(),
+  quickSelector: z.boolean().optional(),
 });
 
 const overlaySchema = z.object({
@@ -131,6 +132,18 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
     }
     if (manifest.backend?.routes && !manifest.privacy) {
       errors.push("manifest.privacy is required for integrations that call external APIs");
+    }
+    // Health check policy: required for integrations with envVars (external APIs)
+    // or backend services (databases, etc.)
+    if (manifest.envVars?.length && !manifest.healthCheck) {
+      errors.push(
+        "manifest.healthCheck is required for integrations with external API dependencies (envVars)",
+      );
+    }
+    if (manifest.services?.length && !manifest.healthCheck) {
+      errors.push(
+        "manifest.healthCheck is required for integrations with infrastructure dependencies (services)",
+      );
     }
     for (const attr of manifest.attribution ?? []) {
       if (!attr.name) errors.push("attribution.name is required");

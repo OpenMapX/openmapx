@@ -2,7 +2,7 @@
   "id": "geocoding-motis",
   "name": "MOTIS/Transitous Geocoding",
   "version": "1.0.0",
-  "description": "Transit stop geocoding via MOTIS/Transitous",
+  "description": "Transit stop geocoding",
   "author": "OpenMapX",
   "license": "MIT",
 

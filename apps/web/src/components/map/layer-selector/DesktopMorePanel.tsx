@@ -134,7 +134,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
       >
         {mapTools.map((item) => {
           const toolState: Record<string, { active: boolean; toggle: () => void }> = {
-            measure: {
+            measurement: {
               active: measureActive,
               toggle: () => {
                 const s = useMeasurementStore.getState();

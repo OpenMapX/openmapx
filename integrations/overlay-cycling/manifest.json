@@ -13,7 +13,8 @@
     "panel": false,
     "layerSelector": {
       "group": "map-details",
-      "labelKey": "cycling"
+      "labelKey": "cycling",
+      "icon": "pedal_bike"
     },
     "overlay": {
       "excludes": []

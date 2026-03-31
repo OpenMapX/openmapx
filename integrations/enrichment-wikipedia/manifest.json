@@ -2,7 +2,7 @@
   "id": "enrichment-wikipedia",
   "name": "Wikipedia Enrichment",
   "version": "1.0.0",
-  "description": "Enrich place details with Wikipedia descriptions and thumbnails",
+  "description": "Description and thumbnail enrichment for place details",
   "author": "OpenMapX",
   "license": "MIT",
 

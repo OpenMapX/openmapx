@@ -2,7 +2,7 @@
   "id": "geocoding-nominatim",
   "name": "Nominatim Geocoding",
   "version": "1.0.0",
-  "description": "Forward and reverse geocoding via Nominatim (OpenStreetMap)",
+  "description": "Forward and reverse geocoding",
   "author": "OpenMapX",
   "license": "MIT",
 
@@ -19,7 +19,7 @@
     }
   },
 
-  "envVars": ["NOMINATIM_URL"],
+  "envVars": [],
 
   "healthCheck": {
     "type": "http",

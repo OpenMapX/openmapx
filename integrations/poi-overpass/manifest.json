@@ -2,7 +2,7 @@
   "id": "poi-overpass",
   "name": "Overpass POI Search",
   "version": "1.0.0",
-  "description": "Category-based point of interest search via Overpass API",
+  "description": "Category-based point of interest search",
   "author": "OpenMapX",
   "license": "MIT",
 

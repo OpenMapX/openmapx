@@ -2,7 +2,7 @@
   "id": "bike-sharing",
   "name": "Bike Sharing",
   "version": "1.0.0",
-  "description": "Bike sharing stations from GBFS feeds, Nextbike, CityBikes, and Deutsche Bahn",
+  "description": "Bike sharing station locations and availability",
   "author": "OpenMapX",
   "license": "MIT",
 

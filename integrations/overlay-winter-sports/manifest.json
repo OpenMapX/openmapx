@@ -2,7 +2,7 @@
   "id": "overlay-winter-sports",
   "name": "Winter Sports",
   "version": "1.0.0",
-  "description": "Winter sports piste and lift visualization via OpenSnowMap",
+  "description": "Winter sports piste and lift visualization",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://www.opensnowmap.org/",
@@ -13,7 +13,8 @@
     "panel": false,
     "layerSelector": {
       "group": "map-details",
-      "labelKey": "winterSports"
+      "labelKey": "winterSports",
+      "icon": "ac_unit"
     },
     "overlay": {
       "excludes": ["street-view", "hiking"]

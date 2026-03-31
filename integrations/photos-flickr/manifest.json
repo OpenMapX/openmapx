@@ -2,7 +2,7 @@
   "id": "photos-flickr",
   "name": "Flickr Photos",
   "version": "1.0.0",
-  "description": "Place photos from Flickr",
+  "description": "Geotagged place photos",
   "author": "OpenMapX",
   "license": "MIT",
 

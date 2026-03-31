@@ -13,7 +13,9 @@
     "panel": false,
     "layerSelector": {
       "group": "map-details",
-      "labelKey": "transit"
+      "labelKey": "transit",
+      "icon": "directions_transit",
+      "quickSelector": true
     },
     "overlay": {
       "excludes": []

@@ -1,14 +1,14 @@
 {
   "id": "transit-motis",
   "name": "MOTIS/Transitous Transit",
-  "description": "Transit routing and stop data via MOTIS (Transitous)",
+  "description": "Global transit routing and stop data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": ["MOTIS_URL"],
+  "envVars": [],
   "configSchema": {
     "enabled": {
       "type": "boolean",

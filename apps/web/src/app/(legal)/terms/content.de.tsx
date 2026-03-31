@@ -440,7 +440,7 @@ function AttributionTable({ heading, rows }: { heading: string; rows: Attributio
           </TableHead>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.source}>
+              <TableRow key={`${row.source}-${row.desc}`}>
                 <TableCell>
                   {row.url ? (
                     <Link href={row.url} target="_blank" rel="noopener noreferrer">
