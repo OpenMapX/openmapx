@@ -109,7 +109,7 @@ function makeDepartureRow(overrides: Partial<GtfsDepartureRow> = {}): GtfsDepart
 // Load module and inject deps
 
 async function loadModule() {
-  const mod = await import("../gtfs-local.js");
+  const mod = await import("@integrations/transit-gtfs-local/gtfs-local");
   mod.setDeps(mockDeps);
   return mod;
 }

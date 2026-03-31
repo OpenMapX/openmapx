@@ -7,8 +7,11 @@ vi.mock("@integrations/transit-dynamic-registry/fetcher", () => ({
 
 // Import after mocks
 import { fetchRegistryEntries } from "@integrations/transit-dynamic-registry/fetcher";
-import { registry } from "../index.js";
-import type { ProtocolType, RegistryEntry } from "../types.js";
+import { registry } from "@integrations/transit-dynamic-registry/registry";
+import type {
+  ProtocolType,
+  RegistryEntry,
+} from "@integrations/transit-dynamic-registry/registry-types";
 
 // Helpers
 

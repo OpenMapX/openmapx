@@ -15,8 +15,6 @@ import {
 } from "@openmapx/core";
 import type { FastifyInstance } from "fastify";
 import { redis } from "./redis";
-import { dataSourceRegistry } from "./services/data-sources/registry";
-import type { DataSourceProvider as LegacyDataSourceProvider } from "./services/data-sources/types";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
 import type { TransitProviderImpl } from "./services/transit/orchestrator";
 import { transitOrchestrator } from "./services/transit/orchestrator";
@@ -25,6 +23,10 @@ type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
 const eventBus = new IntegrationEventBus();
 const integrations = new Map<string, LoadedIntegration>();
+
+// Stored for reload support
+let _fastify: FastifyInstance | null = null;
+let _integrationDirs: string[] = [];
 
 function createHttpClient(_log: Logger): HttpClient {
   return {
@@ -183,6 +185,9 @@ export async function initIntegrations(
   fastify: FastifyInstance,
   integrationDirs: string[],
 ): Promise<void> {
+  _fastify = fastify;
+  _integrationDirs = integrationDirs;
+
   const discovered = await discoverManifests(integrationDirs);
 
   for (const { manifest: raw, directory, isBuiltIn } of discovered) {
@@ -295,12 +300,6 @@ export async function initIntegrations(
         }
       }
 
-      // Bridge data-source providers into the legacy registry
-      const dsProviders = (providers.get("data-source") ?? []) as LegacyDataSourceProvider[];
-      for (const dsp of dsProviders) {
-        dataSourceRegistry.register(dsp);
-      }
-
       // Bridge transit providers into the orchestrator
       const transitProviders = (providers.get("transit") ?? []) as TransitProviderImpl[];
       for (const tp of transitProviders) {
@@ -333,14 +332,59 @@ export async function initIntegrations(
   fastify.get("/api/integrations", async () => {
     return Array.from(integrations.values())
       .filter((i) => i.enabled)
-      .map(toIntegrationMeta);
+      .map((i) => ({
+        ...toIntegrationMeta(i),
+        isBuiltIn: i.isBuiltIn,
+      }));
   });
+
+  // Serve community integration frontend bundles
+  fastify.get<{ Params: { id: string; "*": string } }>(
+    "/api/integrations/:id/bundle/*",
+    async (req, reply) => {
+      const integration = integrations.get(req.params.id);
+      if (!integration || integration.isBuiltIn) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const fileName = req.params["*"];
+      if (!fileName || fileName.includes("..")) {
+        return reply.status(400).send({ error: "Invalid path" });
+      }
+      const filePath = join(integration.directory, "dist", fileName);
+      if (!existsSync(filePath)) {
+        return reply.status(404).send({ error: "Bundle not found" });
+      }
+      const ext = fileName.split(".").pop();
+      const mimeTypes: Record<string, string> = {
+        js: "application/javascript",
+        mjs: "application/javascript",
+        css: "text/css",
+        json: "application/json",
+      };
+      reply.header("Content-Type", mimeTypes[ext ?? ""] ?? "application/octet-stream");
+      reply.header("Cache-Control", "public, max-age=3600");
+      return reply.send(readFileSync(filePath));
+    },
+  );
 
   // Health check endpoint for integration-managed services
   fastify.get("/api/integrations/health", async () => {
     const all = Array.from(integrations.values()).filter((i) => i.enabled);
     const results = await executeAllIntegrationHealthChecks(all);
     return { timestamp: new Date().toISOString(), services: results };
+  });
+
+  // Reload endpoint — re-discovers and re-initializes integrations (dev convenience)
+  fastify.post("/api/integrations/reload", async (_request, reply) => {
+    try {
+      const result = await reloadIntegrations();
+      return result;
+    } catch (err) {
+      return reply.status(500).send({
+        error: "Reload failed",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   fastify.log.info(
@@ -364,6 +408,196 @@ export function getIntegrationsByDomain(domain: string): LoadedIntegration[] {
 
 export function getIntegrationProviders<T>(id: string, domain: string): T[] {
   return (integrations.get(id)?.providers.get(domain) ?? []) as T[];
+}
+
+/**
+ * Build a provider attribution map from transit integration manifests.
+ * Keys are the provider prefixes (e.g. "db", "tfl") extracted from the
+ * registered TransitProviderImpl instances; values are attribution data
+ * from the integration manifest.
+ */
+export function getTransitProviderAttribution(): Record<
+  string,
+  { label: string; url: string; license?: string; licenseUrl?: string }
+> {
+  const result: Record<
+    string,
+    { label: string; url: string; license?: string; licenseUrl?: string }
+  > = {};
+
+  for (const provider of transitOrchestrator.getAll()) {
+    const prefix = provider.prefix.replace(/:$/, "");
+    if (result[prefix]) continue;
+
+    // Find the integration that registered this provider
+    for (const integration of integrations.values()) {
+      if (!integration.enabled) continue;
+      const domainProviders = integration.providers.get("transit") ?? [];
+      if (domainProviders.includes(provider)) {
+        const attr = integration.manifest.attribution?.[0];
+        if (attr) {
+          result[prefix] = {
+            label: attr.name,
+            url: attr.url,
+            license: attr.license,
+            licenseUrl: attr.licenseUrl,
+          };
+        }
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Reload all integrations: shutdown existing, re-discover manifests, re-setup.
+ * Note: Fastify routes registered by integrations cannot be removed at runtime,
+ * so only provider re-registration and lifecycle hooks are re-executed.
+ */
+export async function reloadIntegrations(): Promise<{
+  message: string;
+  reloaded: number;
+  enabled: number;
+}> {
+  if (!_fastify) throw new Error("Integration host not initialized");
+
+  const previousCount = integrations.size;
+
+  // 1. Shutdown all existing integrations
+  for (const integration of integrations.values()) {
+    for (const handler of integration.shutdownHandlers) {
+      try {
+        await handler();
+      } catch {
+        // best effort
+      }
+    }
+
+    // Unregister transit providers from the orchestrator
+    const transitProviders = (integration.providers.get("transit") ?? []) as TransitProviderImpl[];
+    for (const tp of transitProviders) {
+      transitOrchestrator.unregister(tp.id);
+    }
+  }
+
+  integrations.clear();
+  eventBus.removeAll();
+
+  // 2. Re-discover and re-setup
+  const discovered = await discoverManifests(_integrationDirs);
+
+  for (const { manifest: raw, directory, isBuiltIn } of discovered) {
+    const validation = validateManifest(raw);
+    if (!validation.valid) {
+      _fastify.log.warn(
+        { id: raw.id, errors: validation.errors },
+        `Skipping integration ${raw.id}: manifest validation failed`,
+      );
+      continue;
+    }
+
+    const manifest = raw;
+    const id = manifest.id as string;
+
+    if (integrations.has(id)) continue;
+
+    const config = resolveConfig(manifest);
+    const log = createLogger(id, _fastify);
+    const http = createHttpClient(log);
+    const cache = createCacheClient(id);
+    const shutdownHandlers: Array<() => Promise<void>> = [];
+    const providers = new Map<string, unknown[]>();
+
+    const integration: LoadedIntegration = {
+      id,
+      manifest,
+      config,
+      directory,
+      isBuiltIn,
+      enabled: config.enabled !== false,
+      providers,
+      customHealthCheck: undefined,
+      shutdownHandlers,
+    };
+
+    if (!integration.enabled) {
+      integrations.set(id, integration);
+      continue;
+    }
+
+    const ctx: IntegrationContext = {
+      id,
+      manifest,
+      config,
+      http,
+      cache,
+      log,
+      registerProvider(domain: string, provider: unknown) {
+        const existing = providers.get(domain) ?? [];
+        existing.push(provider);
+        providers.set(domain, existing);
+      },
+      registerRoute(_method: string, _path: string, _handler: RouteHandler) {
+        // Routes cannot be re-registered in Fastify at runtime.
+        // The original routes from initIntegrations still work.
+        log.debug("registerRoute skipped during reload (routes persist from init)");
+      },
+      registerHealthCheck(fn: CustomHealthCheckFn) {
+        integration.customHealthCheck = fn;
+      },
+      emit(event: string, data: unknown) {
+        eventBus.emit({
+          type: event,
+          integrationId: id,
+          ...(typeof data === "object" && data !== null ? data : {}),
+        } as never);
+      },
+      on(event: string, handler: (data: unknown) => void) {
+        return eventBus.on(event as never, handler as never);
+      },
+      onShutdown(cleanup: () => Promise<void>) {
+        shutdownHandlers.push(cleanup);
+      },
+    };
+
+    try {
+      const modulePath = join(directory, "index.ts");
+      const jsModulePath = join(directory, "index.js");
+      const entryPoint = existsSync(modulePath) ? modulePath : jsModulePath;
+
+      if (existsSync(entryPoint)) {
+        const mod = (await import(entryPoint)) as { setup?: SetupFunction };
+        if (typeof mod.setup === "function") {
+          await mod.setup(ctx);
+        }
+      }
+
+      const transitProviders = (providers.get("transit") ?? []) as TransitProviderImpl[];
+      for (const tp of transitProviders) {
+        transitOrchestrator.register(tp);
+      }
+
+      integrations.set(id, integration);
+      eventBus.emit({ type: "integration.loaded", integrationId: id });
+    } catch (err) {
+      _fastify.log.error(err, `Failed to reload integration ${id}`);
+      integration.enabled = false;
+      integrations.set(id, integration);
+    }
+  }
+
+  const enabledCount = Array.from(integrations.values()).filter((i) => i.enabled).length;
+  _fastify.log.info(
+    `Reloaded integrations: ${integrations.size} total (${enabledCount} enabled), was ${previousCount}`,
+  );
+
+  return {
+    message: "Integrations reloaded",
+    reloaded: integrations.size,
+    enabled: enabledCount,
+  };
 }
 
 export async function shutdownIntegrations(): Promise<void> {

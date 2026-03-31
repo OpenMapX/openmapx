@@ -15,12 +15,33 @@ interface OverlayStoreConfig<
   TExtra extends Record<string, unknown>,
   TActions extends Record<string, (...args: never[]) => void>,
 > {
+  /** Overlay ID used for dynamic registration. When set, the store is automatically
+   *  added to the overlay store registry so overlayRegistry.ts can look it up at runtime. */
+  overlayId?: string;
   extra: TExtra;
   actions?: (
     set: (partial: Partial<OverlayStoreBase & TExtra>) => void,
     get: GetState<OverlayStoreBase & TExtra & TActions>,
   ) => TActions;
   onClose?: () => Partial<TExtra>;
+}
+
+/**
+ * Runtime registry of overlay stores keyed by overlay ID.
+ * Populated automatically by createOverlayStore when overlayId is provided.
+ */
+const overlayStoreMap = new Map<string, UseBoundStore<StoreApi<OverlayStoreBase>>>();
+
+/** Get a store by its overlay ID. Used by overlayRegistry.ts. */
+export function getRegisteredOverlayStore(
+  overlayId: string,
+): UseBoundStore<StoreApi<OverlayStoreBase>> | undefined {
+  return overlayStoreMap.get(overlayId);
+}
+
+/** Get all registered overlay store IDs. */
+export function getRegisteredOverlayIds(): string[] {
+  return Array.from(overlayStoreMap.keys());
 }
 
 export function createOverlayStore<
@@ -31,7 +52,7 @@ export function createOverlayStore<
 ): UseBoundStore<StoreApi<OverlayStoreBase & TExtra & TActions>> {
   type FullState = OverlayStoreBase & TExtra & TActions;
 
-  return create<FullState>((set, get) => {
+  const store = create<FullState>((set, get) => {
     const extraActions = config.actions
       ? config.actions((partial) => set(partial as Partial<FullState>), get as GetState<FullState>)
       : ({} as TActions);
@@ -51,4 +72,13 @@ export function createOverlayStore<
       ...extraActions,
     } as FullState;
   });
+
+  if (config.overlayId) {
+    overlayStoreMap.set(
+      config.overlayId,
+      store as unknown as UseBoundStore<StoreApi<OverlayStoreBase>>,
+    );
+  }
+
+  return store;
 }

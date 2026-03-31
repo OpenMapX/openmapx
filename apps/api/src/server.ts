@@ -2,12 +2,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
-// Data source providers moved to integrations (ev-charging, fuel, parking, bike-sharing, car-sharing, scooter-sharing)
-import { bielefeldClient } from "@integrations/bike-sharing/shared-providers/bielefeld-client";
-import { cambioClient } from "@integrations/bike-sharing/shared-providers/cambio-client";
-import { registerCarSharingClient } from "@integrations/bike-sharing/shared-providers/car-sharing-registry";
-import { stadtteilAutoClient } from "@integrations/bike-sharing/shared-providers/stadtteilauto-client";
-import { wuppertalClient } from "@integrations/bike-sharing/shared-providers/wuppertal-client";
+import { bielefeldClient } from "@integrations/shared-mobility/bielefeld-client";
+import { cambioClient } from "@integrations/shared-mobility/cambio-client";
+import { registerCarSharingClient } from "@integrations/shared-mobility/car-sharing-registry";
+import { stadtteilAutoClient } from "@integrations/shared-mobility/stadtteilauto-client";
+import { wuppertalClient } from "@integrations/shared-mobility/wuppertal-client";
+import { registry } from "@integrations/transit-dynamic-registry/registry";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
@@ -42,7 +42,6 @@ import { transitAttributionRoute } from "./routes/transit-attribution";
 import { winterSportsRoute } from "./routes/winter-sports";
 import { gtfsManager } from "./services/gtfs/index";
 import { motisManager } from "./services/motis/manager";
-import { registry } from "./services/transit/registry/index";
 
 const server = Fastify({
   logger: true,

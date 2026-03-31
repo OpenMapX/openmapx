@@ -1,6 +1,6 @@
+import { bikeSharingProvider } from "@integrations/shared-mobility/bike-sharing-provider";
+import { initCache } from "@integrations/shared-mobility/cache";
 import type { IntegrationContext } from "@openmapx/core";
-import { initCache } from "./cache.js";
-import { bikeSharingProvider } from "./shared-providers/bike-sharing-provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   initCache(ctx.cache);

@@ -1,6 +1,7 @@
 import { createOverlayStore } from "./createOverlayStore";
 
 export const useWinterSportsStore = createOverlayStore({
+  overlayId: "winter-sports",
   extra: {
     loading: false,
     selectedFeatureId: null as string | null,

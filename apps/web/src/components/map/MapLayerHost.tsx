@@ -1,6 +1,6 @@
 "use client";
 
-import { useIntegrationRegistry } from "@openmapx/core";
+import { getCommunityModule, useIntegrationRegistry } from "@openmapx/core";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
 
@@ -10,7 +10,7 @@ function resolveDefault(mod: Record<string, unknown>): { default: ComponentType 
   return { default: Component };
 }
 
-function IntegrationMapLayer({ id }: { id: string }) {
+function BuiltInMapLayer({ id }: { id: string }) {
   const LazyLayer = useMemo(
     () =>
       lazy(() =>
@@ -29,6 +29,13 @@ function IntegrationMapLayer({ id }: { id: string }) {
   );
 }
 
+function CommunityMapLayer({ id }: { id: string }) {
+  const mod = getCommunityModule(id);
+  if (!mod?.mapLayer) return null;
+  const Component = mod.mapLayer;
+  return <Component />;
+}
+
 export function MapLayerHost() {
   const registry = useIntegrationRegistry();
   const withMapLayer = registry.getWithMapLayer();
@@ -37,9 +44,14 @@ export function MapLayerHost() {
 
   return (
     <>
-      {withMapLayer.map((integration) => (
-        <IntegrationMapLayer key={integration.id} id={integration.id} />
-      ))}
+      {withMapLayer.map((integration) => {
+        const isCommunity = getCommunityModule(integration.id) !== undefined;
+        return isCommunity ? (
+          <CommunityMapLayer key={integration.id} id={integration.id} />
+        ) : (
+          <BuiltInMapLayer key={integration.id} id={integration.id} />
+        );
+      })}
     </>
   );
 }

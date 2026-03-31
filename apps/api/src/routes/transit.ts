@@ -1,4 +1,6 @@
+import { registry } from "@integrations/transit-dynamic-registry/registry";
 import type { FastifyInstance } from "fastify";
+import { getTransitProviderAttribution } from "../integration-host";
 import { transitOrchestrator } from "../services/transit/orchestrator";
 import {
   getLinkedStops,
@@ -8,8 +10,6 @@ import {
   getMergedFacilities,
   getMergedRoutes,
 } from "../services/transit/place-transit";
-import { registry } from "../services/transit/registry/index";
-import { STATIC_PROVIDER_ATTRIBUTION } from "../services/transit/static-providers";
 import type { BBox, TransportMode } from "../services/transit/types";
 import { hashKey, withCache } from "../utils/cache";
 import { getFeedProviders } from "./transit-attribution";
@@ -64,6 +64,35 @@ const idParamSchema = {
   required: ["id"],
   properties: { id: { type: "string" } },
 } as const;
+
+const placeProperties = {
+  lat: { type: "string" },
+  lng: { type: "string" },
+  name: { type: "string" },
+  place_id: { type: "string" },
+} as const;
+
+const placeRequired = ["lat", "lng", "name"] as const;
+
+/** Parse and validate lat/lng/name from a query, returns null if invalid. */
+function parsePlaceQuery(q: PlaceQuery): { lat: number; lng: number; name: string } | null {
+  const lat = Number(q.lat);
+  const lng = Number(q.lng);
+  const name = q.name?.trim();
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) return null;
+  return { lat, lng, name };
+}
+
+/** Parse minutes with default and max cap. */
+function parseMinutes(raw: string | undefined, defaultVal = 60, max = 120): number | null {
+  const minutes = Math.min(Number(raw ?? defaultVal), max);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : null;
+}
+
+/** Parse comma-separated modes string. */
+function parseModes(raw: string | undefined): TransportMode[] | undefined {
+  return raw ? (raw.split(",").map((m) => m.trim()) as TransportMode[]) : undefined;
+}
 
 /** Querystring type interfaces */
 
@@ -147,27 +176,17 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       querystring: {
         type: "object",
         required: [...bboxRequired],
-        properties: {
-          ...bboxProperties,
-          modes: { type: "string" },
-        },
+        properties: { ...bboxProperties, modes: { type: "string" } },
       },
     },
     handler: async (req, reply) => {
-      const q = req.query;
-      const bbox = parseBBox(q);
+      const bbox = parseBBox(req.query);
       if (!bbox) {
         return reply
           .status(400)
           .send({ error: "Invalid or missing bbox params (sw_lat, sw_lng, ne_lat, ne_lng)" });
       }
-      const modes = q.modes
-        ? (String(q.modes)
-            .split(",")
-            .map((m) => m.trim()) as TransportMode[])
-        : undefined;
-      const stops = await transitOrchestrator.getStopsInBbox(bbox, modes);
-      return stops;
+      return transitOrchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
     },
   });
 
@@ -186,25 +205,17 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       },
     },
     handler: async (req, reply) => {
-      const q = req.query;
-      const lat = Number(q.lat);
-      const lng = Number(q.lng);
+      const lat = Number(req.query.lat);
+      const lng = Number(req.query.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return reply.status(400).send({ error: "Required: lat, lng" });
       }
-      const radiusMeters = Math.min(Number(q.radius ?? 500), 2000);
-      // Convert lat/lng + radius to a bbox (rough approximation, ~1m precision at all latitudes)
+      const radiusMeters = Math.min(Number(req.query.radius ?? 500), 2000);
       const latDelta = radiusMeters / 111_320;
       const lngDelta = radiusMeters / (111_320 * Math.cos((lat * Math.PI) / 180));
       const bbox: BBox = [lng - lngDelta, lat - latDelta, lng + lngDelta, lat + latDelta];
-      const modes = q.modes
-        ? (String(q.modes)
-            .split(",")
-            .map((m) => m.trim()) as TransportMode[])
-        : undefined;
       reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-      const stops = await transitOrchestrator.getStopsInBbox(bbox, modes);
-      return stops;
+      return transitOrchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
     },
   });
 
@@ -235,177 +246,85 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
     },
   });
 
+  const placeSchema = {
+    type: "object",
+    required: [...placeRequired],
+    properties: placeProperties,
+  } as const;
+
+  const placeMinutesSchema = {
+    type: "object",
+    required: [...placeRequired],
+    properties: { ...placeProperties, minutes: { type: "string" } },
+  } as const;
+
   // GET /api/transit/stops/near-place?lat=&lng=&name=&place_id=
   server.get<{ Querystring: PlaceQuery }>("/transit/stops/near-place", {
-    schema: {
-      querystring: {
-        type: "object",
-        required: ["lat", "lng", "name"],
-        properties: {
-          lat: { type: "string" },
-          lng: { type: "string" },
-          name: { type: "string" },
-          place_id: { type: "string" },
-        },
-      },
-    },
+    schema: { querystring: placeSchema },
     handler: async (req, reply) => {
-      const q = req.query;
-      const lat = Number(q.lat);
-      const lng = Number(q.lng);
-      const name = q.name?.trim();
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) {
-        return reply.status(400).send({ error: "Required: lat, lng, name" });
-      }
-      // Cached 24h server-side
+      const place = parsePlaceQuery(req.query);
+      if (!place) return reply.status(400).send({ error: "Required: lat, lng, name" });
       reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-      return getLinkedStops(lat, lng, name, q.place_id);
+      return getLinkedStops(place.lat, place.lng, place.name, req.query.place_id);
     },
   });
 
   // GET /api/transit/routes/for-place?lat=&lng=&name=&place_id=
   server.get<{ Querystring: PlaceQuery }>("/transit/routes/for-place", {
-    schema: {
-      querystring: {
-        type: "object",
-        required: ["lat", "lng", "name"],
-        properties: {
-          lat: { type: "string" },
-          lng: { type: "string" },
-          name: { type: "string" },
-          place_id: { type: "string" },
-        },
-      },
-    },
+    schema: { querystring: placeSchema },
     handler: async (req, reply) => {
-      const q = req.query;
-      const lat = Number(q.lat);
-      const lng = Number(q.lng);
-      const name = q.name?.trim();
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) {
-        return reply.status(400).send({ error: "Required: lat, lng, name" });
-      }
+      const place = parsePlaceQuery(req.query);
+      if (!place) return reply.status(400).send({ error: "Required: lat, lng, name" });
       reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-      return getMergedRoutes(lat, lng, name, q.place_id);
+      return getMergedRoutes(place.lat, place.lng, place.name, req.query.place_id);
     },
   });
 
   // GET /api/transit/departures/for-place?lat=&lng=&name=&minutes=60&place_id=
   server.get<{ Querystring: PlaceMinutesQuery }>("/transit/departures/for-place", {
-    schema: {
-      querystring: {
-        type: "object",
-        required: ["lat", "lng", "name"],
-        properties: {
-          lat: { type: "string" },
-          lng: { type: "string" },
-          name: { type: "string" },
-          place_id: { type: "string" },
-          minutes: { type: "string" },
-        },
-      },
-    },
+    schema: { querystring: placeMinutesSchema },
     handler: async (req, reply) => {
-      const q = req.query;
-      const lat = Number(q.lat);
-      const lng = Number(q.lng);
-      const name = q.name?.trim();
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) {
-        return reply.status(400).send({ error: "Required: lat, lng, name" });
-      }
-      const minutes = Math.min(Number(q.minutes ?? 60), 120);
-      if (!Number.isFinite(minutes) || minutes <= 0) {
-        return reply.status(400).send({ error: "Invalid minutes param" });
-      }
-      // No cache — real-time
+      const place = parsePlaceQuery(req.query);
+      if (!place) return reply.status(400).send({ error: "Required: lat, lng, name" });
+      const minutes = parseMinutes(req.query.minutes);
+      if (!minutes) return reply.status(400).send({ error: "Invalid minutes param" });
       reply.header("Cache-Control", "no-store");
-      return getMergedDepartures(lat, lng, name, minutes, q.place_id);
+      return getMergedDepartures(place.lat, place.lng, place.name, minutes, req.query.place_id);
     },
   });
 
   // GET /api/transit/arrivals/for-place?lat=&lng=&name=&minutes=60&place_id=
   server.get<{ Querystring: PlaceMinutesQuery }>("/transit/arrivals/for-place", {
-    schema: {
-      querystring: {
-        type: "object",
-        required: ["lat", "lng", "name"],
-        properties: {
-          lat: { type: "string" },
-          lng: { type: "string" },
-          name: { type: "string" },
-          place_id: { type: "string" },
-          minutes: { type: "string" },
-        },
-      },
-    },
+    schema: { querystring: placeMinutesSchema },
     handler: async (req, reply) => {
-      const q = req.query;
-      const lat = Number(q.lat);
-      const lng = Number(q.lng);
-      const name = q.name?.trim();
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) {
-        return reply.status(400).send({ error: "Required: lat, lng, name" });
-      }
-      const minutes = Math.min(Number(q.minutes ?? 60), 120);
-      if (!Number.isFinite(minutes) || minutes <= 0) {
-        return reply.status(400).send({ error: "Invalid minutes param" });
-      }
+      const place = parsePlaceQuery(req.query);
+      if (!place) return reply.status(400).send({ error: "Required: lat, lng, name" });
+      const minutes = parseMinutes(req.query.minutes);
+      if (!minutes) return reply.status(400).send({ error: "Invalid minutes param" });
       reply.header("Cache-Control", "no-store");
-      return getMergedArrivals(lat, lng, name, minutes, q.place_id);
+      return getMergedArrivals(place.lat, place.lng, place.name, minutes, req.query.place_id);
     },
   });
 
   // GET /api/transit/alerts/for-place?lat=&lng=&name=&place_id=
   server.get<{ Querystring: PlaceQuery }>("/transit/alerts/for-place", {
-    schema: {
-      querystring: {
-        type: "object",
-        required: ["lat", "lng", "name"],
-        properties: {
-          lat: { type: "string" },
-          lng: { type: "string" },
-          name: { type: "string" },
-          place_id: { type: "string" },
-        },
-      },
-    },
+    schema: { querystring: placeSchema },
     handler: async (req, reply) => {
-      const q = req.query;
-      const lat = Number(q.lat);
-      const lng = Number(q.lng);
-      const name = q.name?.trim();
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) {
-        return reply.status(400).send({ error: "Required: lat, lng, name" });
-      }
+      const place = parsePlaceQuery(req.query);
+      if (!place) return reply.status(400).send({ error: "Required: lat, lng, name" });
       reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-      return getMergedAlerts(lat, lng, name, q.place_id);
+      return getMergedAlerts(place.lat, place.lng, place.name, req.query.place_id);
     },
   });
 
   // GET /api/transit/facilities/for-place?lat=&lng=&name=&place_id=
   server.get<{ Querystring: PlaceQuery }>("/transit/facilities/for-place", {
-    schema: {
-      querystring: {
-        type: "object",
-        required: ["lat", "lng", "name"],
-        properties: {
-          lat: { type: "string" },
-          lng: { type: "string" },
-          name: { type: "string" },
-          place_id: { type: "string" },
-        },
-      },
-    },
+    schema: { querystring: placeSchema },
     handler: async (req, reply) => {
-      const q = req.query;
-      const lat = Number(q.lat);
-      const lng = Number(q.lng);
-      const name = q.name?.trim();
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) {
-        return reply.status(400).send({ error: "Required: lat, lng, name" });
-      }
+      const place = parsePlaceQuery(req.query);
+      if (!place) return reply.status(400).send({ error: "Required: lat, lng, name" });
       reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-      return getMergedFacilities(lat, lng, name, q.place_id);
+      return getMergedFacilities(place.lat, place.lng, place.name, req.query.place_id);
     },
   });
 
@@ -466,24 +385,13 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
     {
       schema: {
         params: idParamSchema,
-        querystring: {
-          type: "object",
-          properties: {
-            minutes: { type: "string" },
-          },
-        },
+        querystring: { type: "object", properties: { minutes: { type: "string" } } },
       },
       handler: async (req, reply) => {
-        const minutes = Math.min(Number(req.query.minutes ?? 60), 120);
-        if (!Number.isFinite(minutes) || minutes <= 0) {
-          return reply.status(400).send({ error: "Invalid minutes param" });
-        }
+        const minutes = parseMinutes(req.query.minutes);
+        if (!minutes) return reply.status(400).send({ error: "Invalid minutes param" });
         reply.header("Cache-Control", "public, max-age=30, s-maxage=30");
-        const departures = await transitOrchestrator.getDepartures(
-          decodeURIComponent(req.params.id),
-          minutes,
-        );
-        return departures;
+        return transitOrchestrator.getDepartures(decodeURIComponent(req.params.id), minutes);
       },
     },
   );
@@ -646,24 +554,13 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
   server.get<{ Params: { id: string }; Querystring: MinutesQuery }>("/transit/stops/:id/arrivals", {
     schema: {
       params: idParamSchema,
-      querystring: {
-        type: "object",
-        properties: {
-          minutes: { type: "string" },
-        },
-      },
+      querystring: { type: "object", properties: { minutes: { type: "string" } } },
     },
     handler: async (req, reply) => {
-      const minutes = Math.min(Number(req.query.minutes ?? 60), 120);
-      if (!Number.isFinite(minutes) || minutes <= 0) {
-        return reply.status(400).send({ error: "Invalid minutes param" });
-      }
+      const minutes = parseMinutes(req.query.minutes);
+      if (!minutes) return reply.status(400).send({ error: "Invalid minutes param" });
       reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-      const arrivals = await transitOrchestrator.getArrivals(
-        decodeURIComponent(req.params.id),
-        minutes,
-      );
-      return arrivals;
+      return transitOrchestrator.getArrivals(decodeURIComponent(req.params.id), minutes);
     },
   });
 
@@ -711,7 +608,7 @@ export async function transitRoute(server: FastifyInstance): Promise<void> {
       string,
       { label: string; url: string; license?: string; licenseUrl?: string }
     > = {
-      ...STATIC_PROVIDER_ATTRIBUTION,
+      ...getTransitProviderAttribution(),
       ...getFeedProviders(),
     };
     for (const { slug, label, url } of registry.listProviders()) {

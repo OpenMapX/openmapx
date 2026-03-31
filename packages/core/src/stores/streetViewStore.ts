@@ -1,6 +1,7 @@
 import { createOverlayStore } from "./createOverlayStore";
 
 export const useStreetViewStore = createOverlayStore({
+  overlayId: "street-view",
   extra: { activeImageId: null as string | null },
   actions: (set) => ({
     setActiveImageId: (activeImageId: string | null) => set({ activeImageId }),

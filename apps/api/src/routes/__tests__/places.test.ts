@@ -25,7 +25,7 @@ vi.mock("../../services/enrichment/index.js", () => ({
 
 const mockLookupDbStation = vi.fn();
 
-vi.mock("../../services/db-ris/index.js", () => ({
+vi.mock("@integrations/geocoding-db-ris/provider.js", () => ({
   lookupDbStation: mockLookupDbStation,
 }));
 

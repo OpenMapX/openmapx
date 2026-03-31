@@ -1,36 +1,36 @@
+import type { RegistryEntry } from "@integrations/transit-dynamic-registry/registry-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RegistryEntry } from "../../registry/types.js";
 
 // Mocks
 
-vi.mock("../../../../utils/otp.js", () => ({
-  otpMode: (mode: string | undefined): string => {
-    if (!mode) return "bus";
-    const map: Record<string, string> = {
-      BUS: "bus",
-      RAIL: "rail",
-      SUBWAY: "subway",
-      TRAM: "tram",
-      FERRY: "ferry",
-      GONDOLA: "gondola",
-      FUNICULAR: "funicular",
-      CABLE_CAR: "cable_car",
-      MONORAIL: "monorail",
-      WALK: "walking",
-    };
-    return map[mode.toUpperCase()] ?? "bus";
-  },
-}));
-
-vi.mock("../../../../utils/polyline.js", () => ({
-  decodePolyline: (_encoded: string): [number, number][] => {
-    // Return a simple two-point line for testing
-    return [
-      [10.75, 59.91],
-      [10.76, 59.92],
-    ];
-  },
-}));
+vi.mock("@openmapx/core", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>("@openmapx/core");
+  return {
+    ...actual,
+    otpMode: (mode: string | undefined): string => {
+      if (!mode) return "bus";
+      const map: Record<string, string> = {
+        BUS: "bus",
+        RAIL: "rail",
+        SUBWAY: "subway",
+        TRAM: "tram",
+        FERRY: "ferry",
+        GONDOLA: "gondola",
+        FUNICULAR: "funicular",
+        CABLE_CAR: "cable_car",
+        MONORAIL: "monorail",
+        WALK: "walking",
+      };
+      return map[mode.toUpperCase()] ?? "bus";
+    },
+    decodePolyline: (_encoded: string): [number, number][] => {
+      return [
+        [10.75, 59.91],
+        [10.76, 59.92],
+      ];
+    },
+  };
+});
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -91,7 +91,9 @@ describe("getStopsNearby", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const stops = await otpGraphQlAdapter.getStopsNearby(MOCK_ENTRY, 59.91, 10.75, 1000);
 
     expect(stops).toHaveLength(1);
@@ -106,7 +108,9 @@ describe("getStopsNearby", () => {
   it("sends ET-Client-Name header", async () => {
     mockFetch.mockResolvedValueOnce(mockGraphQL({ nearest: { edges: [] } }));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     await otpGraphQlAdapter.getStopsNearby(MOCK_ENTRY, 59.91, 10.75, 1000);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -119,7 +123,9 @@ describe("getStopsNearby", () => {
   it("sends Authorization header when apiKey is set", async () => {
     mockFetch.mockResolvedValueOnce(mockGraphQL({ nearest: { edges: [] } }));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     await otpGraphQlAdapter.getStopsNearby(MOCK_ENTRY, 59.91, 10.75, 1000);
 
     const fetchCall = mockFetch.mock.calls[0];
@@ -131,7 +137,9 @@ describe("getStopsNearby", () => {
   it("returns empty array when nearest is null", async () => {
     mockFetch.mockResolvedValueOnce(mockGraphQL({ nearest: null }));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const stops = await otpGraphQlAdapter.getStopsNearby(MOCK_ENTRY, 59.91, 10.75, 1000);
 
     expect(stops).toEqual([]);
@@ -158,7 +166,9 @@ describe("searchByName", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const stops = (await otpGraphQlAdapter.searchByName?.(MOCK_ENTRY, "Oslo", 10)) ?? [];
 
     expect(stops).toHaveLength(1);
@@ -170,7 +180,9 @@ describe("searchByName", () => {
   it("returns empty array on error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const stops = (await otpGraphQlAdapter.searchByName?.(MOCK_ENTRY, "Oslo", 10)) ?? [];
 
     expect(stops).toEqual([]);
@@ -195,7 +207,9 @@ describe("getStopById", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const stop = await otpGraphQlAdapter.getStopById?.(MOCK_ENTRY, "entur:ENT:Stop:1");
 
     expect(stop).not.toBeNull();
@@ -211,7 +225,9 @@ describe("getStopById", () => {
   it("returns null when stop is not found", async () => {
     mockFetch.mockResolvedValueOnce(mockGraphQL({ stop: null }));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const stop = await otpGraphQlAdapter.getStopById?.(MOCK_ENTRY, "entur:ENT:Stop:unknown");
 
     expect(stop).toBeNull();
@@ -278,7 +294,9 @@ describe("getDepartures", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const deps = await otpGraphQlAdapter.getDepartures(MOCK_ENTRY, "entur:ENT:Stop:1", 60);
 
     expect(deps).toHaveLength(2);
@@ -309,7 +327,9 @@ describe("getDepartures", () => {
   it("strips entur: prefix from stopId before GraphQL query", async () => {
     mockFetch.mockResolvedValueOnce(mockGraphQL({ stop: { stoptimesWithoutPatterns: [] } }));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     await otpGraphQlAdapter.getDepartures(MOCK_ENTRY, "entur:ENT:Stop:1", 30);
 
     const fetchCall = mockFetch.mock.calls[0];
@@ -320,7 +340,9 @@ describe("getDepartures", () => {
   it("returns empty array on error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("fail"));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const deps = await otpGraphQlAdapter.getDepartures(MOCK_ENTRY, "entur:ENT:Stop:1", 30);
 
     expect(deps).toEqual([]);
@@ -364,7 +386,9 @@ describe("getArrivals", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const arrivals = await otpGraphQlAdapter.getArrivals(MOCK_ENTRY, "entur:ENT:Stop:1", 60);
 
     expect(arrivals).toHaveLength(1);
@@ -404,7 +428,9 @@ describe("getAlerts", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const alerts =
       (await otpGraphQlAdapter.getAlerts?.(MOCK_ENTRY, {
         stopId: "entur:ENT:Stop:1",
@@ -443,7 +469,9 @@ describe("getAlerts", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const alerts =
       (await otpGraphQlAdapter.getAlerts?.(MOCK_ENTRY, {
         stopId: "entur:ENT:Stop:1",
@@ -472,7 +500,9 @@ describe("getAlerts", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const alerts =
       (await otpGraphQlAdapter.getAlerts?.(MOCK_ENTRY, {
         stopId: "entur:ENT:Stop:1",
@@ -484,7 +514,9 @@ describe("getAlerts", () => {
   it("strips prefix from stopId before query", async () => {
     mockFetch.mockResolvedValueOnce(mockGraphQL({ stop: { alerts: [] } }));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     await otpGraphQlAdapter.getAlerts?.(MOCK_ENTRY, { stopId: "entur:ENT:Stop:1" });
 
     const fetchCall = mockFetch.mock.calls[0];
@@ -495,7 +527,9 @@ describe("getAlerts", () => {
   it("returns empty array on error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("fail"));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const alerts =
       (await otpGraphQlAdapter.getAlerts?.(MOCK_ENTRY, {
         stopId: "entur:ENT:Stop:1",
@@ -511,7 +545,9 @@ describe("planJourney", () => {
   it("returns null when GraphQL data is null", async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) } as Response);
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const result = await otpGraphQlAdapter.planJourney(
       MOCK_ENTRY,
       59.91,
@@ -528,7 +564,9 @@ describe("planJourney", () => {
   it("returns null when itineraries are empty", async () => {
     mockFetch.mockResolvedValueOnce(mockGraphQL({ plan: { itineraries: [] } }));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const result = await otpGraphQlAdapter.planJourney(
       MOCK_ENTRY,
       59.91,
@@ -598,7 +636,9 @@ describe("planJourney", () => {
       }),
     );
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const result = await otpGraphQlAdapter.planJourney(
       MOCK_ENTRY,
       59.91,
@@ -639,7 +679,9 @@ describe("planJourney", () => {
   it("returns null on fetch error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
-    const { otpGraphQlAdapter } = await import("../otp-graphql.js");
+    const { otpGraphQlAdapter } = await import(
+      "@integrations/transit-dynamic-registry/otp-graphql"
+    );
     const result = await otpGraphQlAdapter.planJourney(
       MOCK_ENTRY,
       59.91,

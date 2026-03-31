@@ -1,6 +1,7 @@
 import { createOverlayStore } from "./createOverlayStore";
 
 export const useWildfireStore = createOverlayStore({
+  overlayId: "wildfires",
   extra: {
     loading: false,
     dayRange: 1 as 1 | 2 | 3,

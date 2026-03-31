@@ -96,6 +96,15 @@ export class TransitOrchestrator {
     return null;
   }
 
+  /** Returns the priority for a provider name (lower = better). Useful for dedup. */
+  getProviderPriority(providerName: string): number {
+    for (const p of this.providers.values()) {
+      if (p.id === providerName || providerName.startsWith(p.prefix.replace(":", "")))
+        return p.priority;
+    }
+    return 100; // unknown providers get low priority
+  }
+
   getProvidersForBbox(bbox: BBox): TransitProviderImpl[] {
     return Array.from(this.providers.values())
       .filter((p) => bboxesOverlap(bbox, p.coverage.bbox))

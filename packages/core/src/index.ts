@@ -129,6 +129,7 @@ export {
 // Integration framework
 export type {
   CacheClient,
+  CommunityIntegrationModule,
   CustomHealthCheckFn,
   DatabaseClient,
   HealthCheckResult,
@@ -151,9 +152,13 @@ export type {
   RouteHandler,
 } from "./integration";
 export {
+  getCommunityModule,
+  getCommunityModuleIds,
   IntegrationEventBus,
   IntegrationRegistry,
+  initCommunityIntegrationRegistry,
   integrationManifestSchema,
+  registerCommunityModule,
   toIntegrationMeta,
   validateManifest,
 } from "./integration";
@@ -165,10 +170,14 @@ export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
 // Stores
 export { useAirQualityStore } from "./stores/airQualityStore";
-export { useBuildingsStore } from "./stores/buildingsStore";
 export { useCategorySearchStore } from "./stores/categorySearchStore";
-// Overlay system
 export type { OverlayStoreBase } from "./stores/createOverlayStore";
+// Overlay system
+export {
+  createOverlayStore,
+  getRegisteredOverlayIds,
+  getRegisteredOverlayStore,
+} from "./stores/createOverlayStore";
 export { useCyclingStore } from "./stores/cyclingStore";
 export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
@@ -200,10 +209,9 @@ export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useSidebarStore } from "./stores/sidebarStore";
 export { useStreetViewStore } from "./stores/streetViewStore";
-export { useTrafficStore } from "./stores/trafficStore";
-export { useTransitStore } from "./stores/transitStore";
 export type { TravelTimeState } from "./stores/travelTimeStore";
 export { TRAVEL_TIME_PRESETS, useTravelTimeStore } from "./stores/travelTimeStore";
+export { useBuildingsStore, useTrafficStore, useTransitStore } from "./stores/trivialOverlayStores";
 export { useWildfireStore } from "./stores/wildfireStore";
 export { useWinterSportsStore } from "./stores/winterSportsStore";
 

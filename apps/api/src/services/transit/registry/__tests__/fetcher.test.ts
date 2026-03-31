@@ -1,14 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock redis before importing the fetcher
-vi.mock("../../../../redis.js", () => ({ redis: null }));
-
 // Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 // Import after mocks are set up
-const { fetchRegistryEntries } = await import("../fetcher.js");
+const { fetchRegistryEntries } = await import("@integrations/transit-dynamic-registry/fetcher");
 
 // Helpers
 

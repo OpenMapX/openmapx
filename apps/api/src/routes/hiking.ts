@@ -1,7 +1,11 @@
+import { fetchRouteGeometry } from "@integrations/overlay-hiking/overpass-geometry";
+import {
+  searchTrails,
+  trailDetail,
+  trailsByArea,
+} from "@integrations/overlay-hiking/waymarked-trails";
 import { OverpassRateLimitError } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-import { fetchRouteGeometry } from "../services/hiking/overpass-geometry";
-import { searchTrails, trailDetail, trailsByArea } from "../services/hiking/waymarked-trails";
 import { round, TTL, withCache } from "../utils/cache.js";
 
 const MAX_BBOX_SPAN = 1.0;

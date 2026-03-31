@@ -153,22 +153,13 @@ export function isTripNumber(shortName: string): boolean {
   return false;
 }
 
-// Provider priority
-
-const HAND_CRAFTED = new Set(["db", "vbb", "bvg", "irail", "opendata-ch", "mbta", "tfl"]);
-
-function providerPriority(provider: string): number {
-  if (HAND_CRAFTED.has(provider)) return 1;
-  if (provider.startsWith("gtfs-")) return 3;
-  if (provider === "transitous" || provider === "motis-local") return 4;
-  if (provider.startsWith("dyn:")) return 5;
-  return 8; // unknown/overpass/transitland
-}
-
 // Deduplication
 
 const MAX_DISTANCE_M = 300;
 const MIN_DICE = 0.5;
+
+/** Default priority when no resolver is provided (lower = higher priority). */
+const DEFAULT_PRIORITY = 10;
 
 /**
  * Deduplicate transit stops that refer to the same physical station.
@@ -178,15 +169,23 @@ const MIN_DICE = 0.5;
  *   2. Their normalised names have a Dice similarity >= 0.5.
  *
  * Among duplicates the stop from the highest-priority provider is kept.
+ *
+ * @param stops - Stops to deduplicate
+ * @param priorityResolver - Optional function that returns a numeric priority
+ *   for a provider name (lower = higher priority). When omitted, all providers
+ *   get equal priority and the first stop encountered wins.
  */
-export function deduplicateStops(stops: TransitStop[]): TransitStop[] {
+export function deduplicateStops(
+  stops: TransitStop[],
+  priorityResolver?: (provider: string) => number,
+): TransitStop[] {
   if (stops.length <= 1) return stops;
+
+  const getPriority = priorityResolver ?? (() => DEFAULT_PRIORITY);
 
   // Sort by provider priority (best first) so the cluster representative
   // is always the highest-priority stop.
-  const sorted = [...stops].sort(
-    (a, b) => providerPriority(a.provider) - providerPriority(b.provider),
-  );
+  const sorted = [...stops].sort((a, b) => getPriority(a.provider) - getPriority(b.provider));
 
   // Pre-compute normalised names
   const normNames = sorted.map((s) => normalizeName(s.name));

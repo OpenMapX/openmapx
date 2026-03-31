@@ -6,7 +6,7 @@
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import { bboxContains } from "@openmapx/core";
-import { TTL, withCache } from "../cache.js";
+import { TTL, withCache } from "./cache.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const NEXTBIKE_URL = "https://maps.nextbike.net/maps/nextbike-live.json";

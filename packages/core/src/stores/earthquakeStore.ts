@@ -1,6 +1,7 @@
 import { createOverlayStore } from "./createOverlayStore";
 
 export const useEarthquakeStore = createOverlayStore({
+  overlayId: "earthquakes",
   extra: {
     loading: false,
     timeRange: "week" as "hour" | "day" | "week" | "month",

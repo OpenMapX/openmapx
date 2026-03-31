@@ -1,5 +1,5 @@
+import { motisMode, uniqueModes } from "@integrations/transit-motis/mode-map";
 import { describe, expect, it } from "vitest";
-import { motisMode, uniqueModes } from "../mode-map";
 
 describe("motisMode", () => {
   it("maps WALK to walking", () => {

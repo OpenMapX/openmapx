@@ -4,7 +4,7 @@
  */
 
 import type { BoundingBox } from "@openmapx/core";
-import { TTL, withCache } from "../cache.js";
+import { TTL, withCache } from "./cache.js";
 import { fetchGbfsSystem } from "./gbfs-client.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types.js";
 

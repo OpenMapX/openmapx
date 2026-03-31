@@ -1,16 +1,9 @@
 import type { LoadedIntegrationMeta } from "../integration/loader";
-import { useAirQualityStore } from "./airQualityStore";
-import { useBuildingsStore } from "./buildingsStore";
-import type { OverlayStoreBase } from "./createOverlayStore";
-import { useCyclingStore } from "./cyclingStore";
-import { useEarthquakeStore } from "./earthquakeStore";
-import { useHikingStore } from "./hikingStore";
-import { useLiveTrainsStore } from "./liveTrainsStore";
-import { useStreetViewStore } from "./streetViewStore";
-import { useTrafficStore } from "./trafficStore";
-import { useTransitStore } from "./transitStore";
-import { useWildfireStore } from "./wildfireStore";
-import { useWinterSportsStore } from "./winterSportsStore";
+import {
+  getRegisteredOverlayIds,
+  getRegisteredOverlayStore,
+  type OverlayStoreBase,
+} from "./createOverlayStore";
 
 export type OverlayId = string;
 
@@ -25,24 +18,6 @@ export interface OverlayEntry {
 type StoreHook = {
   getState: () => OverlayStoreBase;
   <T>(selector: (s: OverlayStoreBase) => T): T;
-};
-
-/**
- * Static mapping from overlay ID to its Zustand store hook.
- * Adding a new overlay requires adding an entry here + creating the store file.
- */
-const OVERLAY_STORE_MAP: Record<string, StoreHook> = {
-  traffic: useTrafficStore as unknown as StoreHook,
-  transit: useTransitStore as unknown as StoreHook,
-  "street-view": useStreetViewStore as unknown as StoreHook,
-  "air-quality": useAirQualityStore as unknown as StoreHook,
-  earthquakes: useEarthquakeStore as unknown as StoreHook,
-  wildfires: useWildfireStore as unknown as StoreHook,
-  "winter-sports": useWinterSportsStore as unknown as StoreHook,
-  hiking: useHikingStore as unknown as StoreHook,
-  cycling: useCyclingStore as unknown as StoreHook,
-  "live-trains": useLiveTrainsStore as unknown as StoreHook,
-  "3d-buildings": useBuildingsStore as unknown as StoreHook,
 };
 
 /** Convert integration ID to overlay ID */
@@ -66,7 +41,8 @@ export function registerOverlayEntry(entry: OverlayEntry): void {
 /**
  * Initialize the overlay registry from integration manifest data.
  * Called by IntegrationProvider after fetching integration metadata.
- * Reads exclusion rules and serviceId from manifests, wires to store hooks.
+ * Reads exclusion rules and serviceId from manifests, wires to store hooks
+ * that have been dynamically registered via createOverlayStore({ overlayId }).
  */
 export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void {
   // Clear any existing entries to avoid duplicates on re-init
@@ -77,7 +53,7 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
     if (!integration.frontend?.overlay) continue;
 
     const overlayId = integrationIdToOverlayId(integration.id);
-    const storeHook = OVERLAY_STORE_MAP[overlayId];
+    const storeHook = getRegisteredOverlayStore(overlayId) as StoreHook | undefined;
     if (!storeHook) continue;
 
     const overlay = integration.frontend.overlay as {
@@ -96,8 +72,10 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
 
   // Add overlays that have stores but may not have integration manifests yet
   // (e.g., transit, tools) - these get basic entries with no exclusions
-  for (const [id, hook] of Object.entries(OVERLAY_STORE_MAP)) {
+  for (const id of getRegisteredOverlayIds()) {
     if (overlayEntries.some((e) => e.id === id)) continue;
+    const hook = getRegisteredOverlayStore(id) as StoreHook | undefined;
+    if (!hook) continue;
     overlayEntries.push({
       id,
       getState: () => hook.getState(),

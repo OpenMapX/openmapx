@@ -1,6 +1,6 @@
 "use client";
 
-import { useIntegrationRegistry } from "@openmapx/core";
+import { getCommunityModule, useIntegrationRegistry } from "@openmapx/core";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
 
@@ -10,7 +10,7 @@ function resolveDefault(mod: Record<string, unknown>): { default: ComponentType 
   return { default: Component };
 }
 
-function IntegrationLegend({ id }: { id: string }) {
+function BuiltInLegend({ id }: { id: string }) {
   const LazyLegend = useMemo(
     () =>
       lazy(() =>
@@ -29,6 +29,13 @@ function IntegrationLegend({ id }: { id: string }) {
   );
 }
 
+function CommunityLegend({ id }: { id: string }) {
+  const mod = getCommunityModule(id);
+  if (!mod?.legend) return null;
+  const Component = mod.legend;
+  return <Component />;
+}
+
 export function LegendHost() {
   const registry = useIntegrationRegistry();
   const withLegend = registry.getWithLegend();
@@ -37,9 +44,14 @@ export function LegendHost() {
 
   return (
     <>
-      {withLegend.map((integration) => (
-        <IntegrationLegend key={integration.id} id={integration.id} />
-      ))}
+      {withLegend.map((integration) => {
+        const isCommunity = getCommunityModule(integration.id) !== undefined;
+        return isCommunity ? (
+          <CommunityLegend key={integration.id} id={integration.id} />
+        ) : (
+          <BuiltInLegend key={integration.id} id={integration.id} />
+        );
+      })}
     </>
   );
 }

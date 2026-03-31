@@ -1,5 +1,5 @@
+import type { RegistryEntry } from "@integrations/transit-dynamic-registry/registry-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RegistryEntry } from "../../registry/types.js";
 
 // Mocks (must be at top level)
 
@@ -24,8 +24,6 @@ vi.mock("cached-hafas-client", () => ({
 vi.mock("cached-hafas-client/stores/redis.js", () => ({
   createRedisStore: vi.fn(),
 }));
-vi.mock("../../../redis.js", () => ({ redis: null }));
-
 // Test constants
 
 const MOCK_ENTRY: RegistryEntry = {
@@ -63,7 +61,9 @@ describe("getStopsNearby", () => {
   it("returns stops with oebb: prefix and provider=oebb", async () => {
     mockHafasClient.nearby.mockResolvedValue([FPTF_STOP]);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const stops = await hafasMgateAdapter.getStopsNearby(MOCK_ENTRY, 48.185, 16.376, 1000);
 
     expect(stops).toHaveLength(1);
@@ -78,7 +78,9 @@ describe("getStopsNearby", () => {
   it("returns empty array when nearby() throws", async () => {
     mockHafasClient.nearby.mockRejectedValue(new Error("Network error"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const stops = await hafasMgateAdapter.getStopsNearby(MOCK_ENTRY, 48.185, 16.376, 1000);
 
     expect(stops).toEqual([]);
@@ -94,7 +96,9 @@ describe("searchByName", () => {
       { type: "location", id: "addr1", name: "Some Address" },
     ]);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const stops = (await hafasMgateAdapter.searchByName?.(MOCK_ENTRY, "Wien", 10)) ?? [];
 
     expect(stops).toHaveLength(1);
@@ -106,7 +110,9 @@ describe("searchByName", () => {
   it("returns empty array on error", async () => {
     mockHafasClient.locations.mockRejectedValue(new Error("fail"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const stops = (await hafasMgateAdapter.searchByName?.(MOCK_ENTRY, "Wien", 10)) ?? [];
 
     expect(stops).toEqual([]);
@@ -119,7 +125,9 @@ describe("getStopById", () => {
   it("returns stop with oebb: prefix and strips prefix before call", async () => {
     mockHafasClient.stop.mockResolvedValue(FPTF_STOP);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const stop = await hafasMgateAdapter.getStopById?.(MOCK_ENTRY, "oebb:8100002");
 
     expect(stop).not.toBeNull();
@@ -133,7 +141,9 @@ describe("getStopById", () => {
   it("returns null when stop() returns null", async () => {
     mockHafasClient.stop.mockResolvedValue(null);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const stop = await hafasMgateAdapter.getStopById?.(MOCK_ENTRY, "oebb:unknown");
 
     expect(stop).toBeNull();
@@ -142,7 +152,9 @@ describe("getStopById", () => {
   it("returns null on error", async () => {
     mockHafasClient.stop.mockRejectedValue(new Error("fail"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const stop = await hafasMgateAdapter.getStopById?.(MOCK_ENTRY, "oebb:999");
 
     expect(stop).toBeNull();
@@ -176,7 +188,9 @@ describe("getDepartures", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const deps = await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30);
 
     expect(deps).toHaveLength(1);
@@ -208,7 +222,9 @@ describe("getDepartures", () => {
       },
     ]);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const deps = await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30);
 
     expect(deps).toHaveLength(1);
@@ -221,7 +237,9 @@ describe("getDepartures", () => {
   it("strips prefix before calling hafas-client", async () => {
     mockHafasClient.departures.mockResolvedValue([]);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30);
 
     expect(mockHafasClient.departures).toHaveBeenCalledWith("8100002", expect.any(Object));
@@ -230,7 +248,9 @@ describe("getDepartures", () => {
   it("returns empty array on error", async () => {
     mockHafasClient.departures.mockRejectedValue(new Error("fail"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const deps = await hafasMgateAdapter.getDepartures(MOCK_ENTRY, "oebb:8100002", 30);
 
     expect(deps).toEqual([]);
@@ -255,7 +275,9 @@ describe("getArrivals", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const arrivals = await hafasMgateAdapter.getArrivals(MOCK_ENTRY, "oebb:8100002", 60);
 
     expect(arrivals).toHaveLength(1);
@@ -268,7 +290,9 @@ describe("getArrivals", () => {
   it("strips prefix before calling hafas-client", async () => {
     mockHafasClient.arrivals.mockResolvedValue([]);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     await hafasMgateAdapter.getArrivals(MOCK_ENTRY, "oebb:8100002", 30);
 
     expect(mockHafasClient.arrivals).toHaveBeenCalledWith("8100002", expect.any(Object));
@@ -277,7 +301,9 @@ describe("getArrivals", () => {
   it("returns empty array on error", async () => {
     mockHafasClient.arrivals.mockRejectedValue(new Error("fail"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const arrivals = await hafasMgateAdapter.getArrivals(MOCK_ENTRY, "oebb:8100002", 30);
 
     expect(arrivals).toEqual([]);
@@ -300,7 +326,9 @@ describe("getAlerts", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const alerts = (await hafasMgateAdapter.getAlerts?.(MOCK_ENTRY, {})) ?? [];
 
     expect(alerts).toHaveLength(1);
@@ -320,7 +348,9 @@ describe("getAlerts", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const alerts = (await hafasMgateAdapter.getAlerts?.(MOCK_ENTRY, {})) ?? [];
 
     expect(alerts).toHaveLength(1);
@@ -330,7 +360,9 @@ describe("getAlerts", () => {
   it("returns empty array when remarks() throws (graceful degradation)", async () => {
     mockHafasClient.remarks.mockRejectedValue(new Error("Not supported"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const alerts = (await hafasMgateAdapter.getAlerts?.(MOCK_ENTRY, {})) ?? [];
 
     expect(alerts).toEqual([]);
@@ -348,7 +380,9 @@ describe("getAlerts", () => {
       },
     ]);
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const alerts = (await hafasMgateAdapter.getAlerts?.(MOCK_ENTRY, {})) ?? [];
 
     expect(alerts).toHaveLength(1);
@@ -371,7 +405,9 @@ describe("getVehicleRadar", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const vehicles =
       (await hafasMgateAdapter.getVehicleRadar?.(MOCK_ENTRY, [16.2, 48.1, 16.5, 48.3])) ?? [];
 
@@ -389,7 +425,9 @@ describe("getVehicleRadar", () => {
   it("returns empty array when radar() throws (graceful degradation)", async () => {
     mockHafasClient.radar.mockRejectedValue(new Error("Radar not supported"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const vehicles =
       (await hafasMgateAdapter.getVehicleRadar?.(MOCK_ENTRY, [16.2, 48.1, 16.5, 48.3])) ?? [];
 
@@ -413,7 +451,9 @@ describe("getVehicleRadar", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const vehicles =
       (await hafasMgateAdapter.getVehicleRadar?.(MOCK_ENTRY, [16.2, 48.1, 16.5, 48.3])) ?? [];
 
@@ -428,7 +468,9 @@ describe("planJourney", () => {
   it("returns null when no journeys are returned", async () => {
     mockHafasClient.journeys.mockResolvedValue({ journeys: [] });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const result = await hafasMgateAdapter.planJourney(
       MOCK_ENTRY,
       48.2,
@@ -465,7 +507,9 @@ describe("planJourney", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const result = await hafasMgateAdapter.planJourney(
       MOCK_ENTRY,
       48.2,
@@ -521,7 +565,9 @@ describe("planJourney", () => {
       ],
     });
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const result = await hafasMgateAdapter.planJourney(
       MOCK_ENTRY,
       48.185,
@@ -548,7 +594,9 @@ describe("planJourney", () => {
   it("returns null on error", async () => {
     mockHafasClient.journeys.mockRejectedValue(new Error("Network error"));
 
-    const { hafasMgateAdapter } = await import("../hafas-mgate.js");
+    const { hafasMgateAdapter } = await import(
+      "@integrations/transit-dynamic-registry/hafas-mgate"
+    );
     const result = await hafasMgateAdapter.planJourney(
       MOCK_ENTRY,
       48.2,

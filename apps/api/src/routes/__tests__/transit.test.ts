@@ -82,13 +82,13 @@ vi.mock("../../services/transit/registry/index.js", () => ({
   },
 }));
 
-// Mock static-providers
+// Mock integration-host getTransitProviderAttribution
 
-vi.mock("../../services/transit/static-providers.js", () => ({
-  STATIC_PROVIDER_ATTRIBUTION: {
+vi.mock("../../integration-host.js", () => ({
+  getTransitProviderAttribution: () => ({
     transitous: { label: "Transitous", url: "https://transitous.org" },
     db: { label: "Deutsche Bahn", url: "https://www.deutschebahn.com" },
-  },
+  }),
 }));
 
 // Mock cache utility (withCache just calls the factory fn directly)

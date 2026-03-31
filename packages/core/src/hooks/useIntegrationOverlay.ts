@@ -3,21 +3,24 @@
 import { useCallback, useSyncExternalStore } from "react";
 import type { StoreApi, UseBoundStore } from "zustand";
 import type { OverlayStoreBase } from "../stores/createOverlayStore";
+import { getRegisteredOverlayStore } from "../stores/createOverlayStore";
 
 type OverlayStore = UseBoundStore<StoreApi<OverlayStoreBase>>;
 
-const overlayStores = new Map<string, OverlayStore>();
-
-export function registerOverlayStore(integrationId: string, store: OverlayStore): void {
-  overlayStores.set(integrationId, store);
+/**
+ * @deprecated Use createOverlayStore({ overlayId }) instead for auto-registration.
+ * Kept for backward compatibility with manual registration.
+ */
+export function registerOverlayStore(_integrationId: string, _store: OverlayStore): void {
+  // No-op: stores now self-register via createOverlayStore({ overlayId })
 }
 
 export function getOverlayStore(integrationId: string): OverlayStore | undefined {
-  return overlayStores.get(integrationId);
+  return getRegisteredOverlayStore(integrationId) as OverlayStore | undefined;
 }
 
 export function useIntegrationOverlayActive(integrationId: string): boolean {
-  const store = overlayStores.get(integrationId);
+  const store = getRegisteredOverlayStore(integrationId) as OverlayStore | undefined;
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {

@@ -1,6 +1,7 @@
 import { createOverlayStore } from "./createOverlayStore";
 
 export const useLiveTrainsStore = createOverlayStore({
+  overlayId: "live-trains",
   extra: {
     selectedTrainId: null as string | null,
   },
