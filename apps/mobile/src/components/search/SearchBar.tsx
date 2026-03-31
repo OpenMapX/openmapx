@@ -18,6 +18,7 @@ import {
   useDebounce,
   useDirectionsStore,
   useGeocoding,
+  useIntegrationRegistry,
   useLabeledPlaces,
   useMapStore,
   useMenuStore,
@@ -38,15 +39,19 @@ import { AutocompleteDropdown } from "./AutocompleteDropdown";
 
 const TEAL = "#007b8b";
 
-// Category IDs that map to data source integrations (mirrors manifest searchCategory.id)
-const DATA_SOURCE_CATEGORIES: Record<string, string> = {
-  fuel: "fuel",
-  "ev-charging": "ev-charging",
-  parking: "parking",
-  "bike-sharing": "bike-sharing",
-  "scooter-sharing": "scooter-sharing",
-  "car-sharing": "car-sharing",
-};
+function useDataSourceCategories(): Record<string, string> {
+  const registry = useIntegrationRegistry();
+  return useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const integration of registry.getWithSearchCategory()) {
+      const sc = integration.frontend?.searchCategory;
+      if (sc?.id) {
+        map[sc.id] = integration.id;
+      }
+    }
+    return map;
+  }, [registry]);
+}
 
 const MODE_LABEL_KEYS: Record<string, string> = {
   bus: "bus",
@@ -119,6 +124,7 @@ export function SearchBar() {
   const { setSelectedPlace } = usePlaceStore();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
   const { setActiveCategory, clearCategory } = useCategorySearchStore();
+  const dataSourceCategories = useDataSourceCategories();
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
 
@@ -346,7 +352,7 @@ export function SearchBar() {
       if (result.type === "category") {
         const catId = result.id.replace("category-", "");
         // Data source categories that route to the data source panel
-        const dsId = DATA_SOURCE_CATEGORIES[catId];
+        const dsId = dataSourceCategories[catId];
         if (dsId) {
           clearCategory();
           setActiveSource(dsId);
@@ -408,6 +414,7 @@ export function SearchBar() {
       setActiveSource,
       tryOpenTransitStop,
       router,
+      dataSourceCategories,
     ],
   );
 

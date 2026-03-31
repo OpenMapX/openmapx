@@ -7,6 +7,7 @@ import {
   type HttpClientOptions,
   type IntegrationContext,
   IntegrationEventBus,
+  type IntegrationManifest,
   type LoadedIntegration,
   type Logger,
   PLATFORM_VERSION,
@@ -17,11 +18,11 @@ import {
 } from "@openmapx/core";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db } from "./db";
+import { db, sql as pgClient } from "./db";
 import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
-import type { TransitProviderImpl } from "./services/transit/orchestrator";
+import type { TransitProvider } from "./services/transit/orchestrator";
 import { transitOrchestrator } from "./services/transit/orchestrator";
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
@@ -195,6 +196,7 @@ async function discoverManifests(
     const entries = readdirSync(baseDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith("_")) continue;
       const manifestPath = join(baseDir, entry.name, "manifest.json");
       if (!existsSync(manifestPath)) continue;
 
@@ -214,6 +216,36 @@ async function discoverManifests(
   return results;
 }
 
+type DiscoveredEntry = {
+  manifest: Record<string, unknown>;
+  directory: string;
+  isBuiltIn: boolean;
+};
+
+function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
+  const byId = new Map<string, DiscoveredEntry>();
+  for (const entry of entries) {
+    const id = entry.manifest.id as string;
+    if (id) byId.set(id, entry);
+  }
+
+  const visited = new Set<string>();
+  const result: DiscoveredEntry[] = [];
+
+  function visit(id: string) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const entry = byId.get(id);
+    if (!entry) return;
+    const deps = (entry.manifest.dependencies ?? []) as string[];
+    for (const dep of deps) visit(dep);
+    result.push(entry);
+  }
+
+  for (const entry of entries) visit(entry.manifest.id as string);
+  return result;
+}
+
 export async function initIntegrations(
   fastify: FastifyInstance,
   integrationDirs: string[],
@@ -223,7 +255,10 @@ export async function initIntegrations(
 
   const discovered = await discoverManifests(integrationDirs);
 
-  for (const { manifest: raw, directory, isBuiltIn } of discovered) {
+  // Topological sort by manifest.dependencies to ensure deps load first
+  const sorted = topologicalSort(discovered);
+
+  for (const { manifest: raw, directory, isBuiltIn } of sorted) {
     const validation = validateManifest(raw);
     if (!validation.valid) {
       fastify.log.warn(
@@ -233,8 +268,8 @@ export async function initIntegrations(
       continue;
     }
 
-    const manifest = raw;
-    const id = manifest.id as string;
+    const manifest = raw as IntegrationManifest;
+    const id = manifest.id;
 
     if (integrations.has(id)) {
       fastify.log.warn(`Skipping duplicate integration: ${id}`);
@@ -243,7 +278,7 @@ export async function initIntegrations(
 
     // Enforce platform version compatibility for community integrations
     if (!isBuiltIn && manifest.platform) {
-      if (!satisfiesPlatformVersion(manifest.platform as string)) {
+      if (!satisfiesPlatformVersion(manifest.platform)) {
         fastify.log.warn(
           `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
         );
@@ -252,6 +287,26 @@ export async function initIntegrations(
     }
 
     const config = await resolveConfig(manifest, directory);
+
+    // Validate config against configSchema if present
+    const configSchema = manifest.configSchema as Record<string, unknown> | undefined;
+    if (configSchema?.properties) {
+      const props = configSchema.properties as Record<
+        string,
+        { type?: string; enum?: unknown[]; required?: boolean }
+      >;
+      for (const [key, def] of Object.entries(props)) {
+        if (def.required && config[key] === undefined) {
+          fastify.log.warn(`Integration ${id}: missing required config key "${key}"`);
+        }
+        if (def.enum && config[key] !== undefined && !def.enum.includes(config[key])) {
+          fastify.log.warn(
+            `Integration ${id}: config "${key}" value "${config[key]}" not in allowed values: ${def.enum.join(", ")}`,
+          );
+        }
+      }
+    }
+
     const log = createLogger(id, fastify);
     const http = createHttpClient(log);
     const cache = createCacheClient(id);
@@ -277,12 +332,25 @@ export async function initIntegrations(
       continue;
     }
 
+    const needsDb = manifest.services?.includes("postgres");
+    const integrationDb = needsDb
+      ? {
+          async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
+            const result = params
+              ? await pgClient.unsafe(query, params as never[])
+              : await pgClient.unsafe(query);
+            return result as T;
+          },
+        }
+      : undefined;
+
     const ctx: IntegrationContext = {
       id,
       manifest,
       config,
       http,
       cache,
+      db: integrationDb,
       log,
       registerProvider(domain: string, provider: unknown) {
         const existing = providers.get(domain) ?? [];
@@ -344,7 +412,7 @@ export async function initIntegrations(
       }
 
       // Bridge transit providers into the orchestrator
-      const transitProviders = (providers.get("transit") ?? []) as TransitProviderImpl[];
+      const transitProviders = (providers.get("transit") ?? []) as TransitProvider[];
       for (const tp of transitProviders) {
         transitOrchestrator.register(tp);
       }
@@ -458,7 +526,7 @@ export function getIntegrationProviders<T>(id: string, domain: string): T[] {
 /**
  * Build a provider attribution map from transit integration manifests.
  * Keys are the provider prefixes (e.g. "db", "tfl") extracted from the
- * registered TransitProviderImpl instances; values are attribution data
+ * registered TransitProvider instances; values are attribution data
  * from the integration manifest.
  */
 export function getTransitProviderAttribution(): Record<
@@ -521,7 +589,7 @@ export async function reloadIntegrations(): Promise<{
     }
 
     // Unregister transit providers from the orchestrator
-    const transitProviders = (integration.providers.get("transit") ?? []) as TransitProviderImpl[];
+    const transitProviders = (integration.providers.get("transit") ?? []) as TransitProvider[];
     for (const tp of transitProviders) {
       transitOrchestrator.unregister(tp.id);
     }
@@ -543,13 +611,13 @@ export async function reloadIntegrations(): Promise<{
       continue;
     }
 
-    const manifest = raw;
-    const id = manifest.id as string;
+    const manifest = raw as IntegrationManifest;
+    const id = manifest.id;
 
     if (integrations.has(id)) continue;
 
     if (!isBuiltIn && manifest.platform) {
-      if (!satisfiesPlatformVersion(manifest.platform as string)) {
+      if (!satisfiesPlatformVersion(manifest.platform)) {
         _fastify.log.warn(
           `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
         );
@@ -628,7 +696,7 @@ export async function reloadIntegrations(): Promise<{
         }
       }
 
-      const transitProviders = (providers.get("transit") ?? []) as TransitProviderImpl[];
+      const transitProviders = (providers.get("transit") ?? []) as TransitProvider[];
       for (const tp of transitProviders) {
         transitOrchestrator.register(tp);
       }

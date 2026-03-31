@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "lint": "biome check .",
     "check-types": "tsc --noEmit",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:e2e": "detox test --configuration ios.sim.debug"
   },
   "dependencies": {

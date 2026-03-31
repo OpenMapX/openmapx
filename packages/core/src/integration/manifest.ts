@@ -22,7 +22,7 @@ const privacyEntrySchema = z.object({
 });
 
 const healthCheckSchema = z.object({
-  type: z.string() as z.ZodType<"http" | "ping" | "tcp" | "custom">,
+  type: z.enum(["http", "ping", "tcp", "custom"]),
   url: z.string().optional(),
   urlTemplate: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
@@ -31,7 +31,7 @@ const healthCheckSchema = z.object({
 });
 
 const layerSelectorSchema = z.object({
-  group: z.string() as z.ZodType<"map-details" | "map-tools" | "map-types">,
+  group: z.enum(["map-details", "map-tools", "map-types"]),
   labelKey: z.string(),
   iconPath: z.string().optional(),
   preview: z.string().nullable().optional(),
@@ -47,7 +47,6 @@ const searchCategorySchema = z.object({
   label: z.string().optional(),
   showInChipBar: z.boolean().optional(),
   iconPath: z.string().optional(),
-  mergeWith: z.string().optional(),
 });
 
 const frontendSchema = z.object({
@@ -93,13 +92,12 @@ export const integrationManifestSchema = z.object({
   envVars: z.array(z.string()).optional(),
 
   healthCheck: healthCheckSchema.optional(),
-  quality: (z.string() as z.ZodType<"built-in" | "community-verified" | "community">).optional(),
+  quality: z.enum(["built-in", "community-verified", "community"]).optional(),
 
   attribution: z.array(attributionSchema).optional(),
   privacy: z.union([privacyEntrySchema, z.array(privacyEntrySchema)]).optional(),
 
   infrastructure: infrastructureSchema.optional(),
-  multiInstance: z.boolean().optional(),
 });
 
 export type IntegrationManifest = z.infer<typeof integrationManifestSchema>;

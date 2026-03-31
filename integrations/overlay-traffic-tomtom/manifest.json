@@ -6,9 +6,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://developer.tomtom.com/traffic-api/documentation",
-
   "domains": ["map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": false,
@@ -21,29 +19,26 @@
       "excludes": []
     }
   },
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["NEXT_PUBLIC_TOMTOM_API_KEY"],
-
   "healthCheck": {
     "type": "http",
     "url": "https://api.tomtom.com",
     "requiredEnvVars": ["NEXT_PUBLIC_TOMTOM_API_KEY"],
     "category": "Traffic"
   },
-
-  "quality": "stable",
-
+  "quality": "built-in",
   "attribution": [
     {
       "name": "TomTom",
@@ -51,7 +46,6 @@
       "license": "Proprietary"
     }
   ],
-
   "privacy": {
     "purpose": "Real-time traffic flow visualization",
     "dataSent": "Map tile requests with viewport coordinates",

@@ -1,13 +1,12 @@
 "use client";
 
 import type { VehiclePosition } from "@openmapx/core";
-import { useLiveTrains, useLiveTrainsStore, useOverlayExclusion } from "@openmapx/core";
+import { escapeHtml, useLiveTrains, useLiveTrainsStore, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
-import { escapeHtml } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 import {
   dbCategoryColor,

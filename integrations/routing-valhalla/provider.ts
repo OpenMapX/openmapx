@@ -3,7 +3,15 @@
  * Default: public FOSSGIS Valhalla instance. Override with VALHALLA_URL env var.
  */
 
-import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
+import type {
+  DirectionsResult,
+  Route,
+  RouteLeg,
+  RouteStep,
+  RoutingOptions,
+  RoutingProvider,
+  TravelMode,
+} from "@openmapx/core";
 import { decodePolyline } from "@openmapx/core";
 
 const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
@@ -99,18 +107,14 @@ function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
   };
 }
 
-export interface ValhallaRouteOptions {
-  avoidHighways?: boolean;
-  avoidFerries?: boolean;
-  units?: "metric" | "imperial";
-}
+export const valhallaService: RoutingProvider = {
+  id: "valhalla",
+  supportedModes: ["walking", "cycling", "driving"] as TravelMode[],
 
-export const valhallaService = {
-  async route(
+  async getRoute(
     waypoints: [number, number][],
-    mode: "walking" | "cycling",
-    options: ValhallaRouteOptions = {},
-    lang?: string,
+    mode: TravelMode,
+    options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
     const costingOptions: Record<string, unknown> = {};
     if (options.avoidHighways) costingOptions.use_highways = 0;
@@ -124,7 +128,7 @@ export const valhallaService = {
       costing_options: { [COSTING_MAP[mode]]: costingOptions },
       directions_options: {
         units: options.units === "imperial" ? "miles" : "km",
-        language: lang ?? "en",
+        language: options.lang ?? "en",
       },
       elevation_interval: ELEVATION_INTERVAL,
     };
@@ -164,9 +168,8 @@ export const valhallaService = {
 
   async optimizeRoute(
     waypoints: [number, number][],
-    mode: "driving" | "walking" | "cycling",
-    options: ValhallaRouteOptions = {},
-    lang?: string,
+    mode: TravelMode,
+    options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
     const costingOptions: Record<string, unknown> = {};
     if (options.avoidHighways) costingOptions.use_highways = 0;
@@ -184,7 +187,7 @@ export const valhallaService = {
       costing_options: { [COSTING_MAP[mode]]: costingOptions },
       directions_options: {
         units: options.units === "imperial" ? "miles" : "km",
-        language: lang ?? "en",
+        language: options.lang ?? "en",
       },
       elevation_interval: ELEVATION_INTERVAL,
     };

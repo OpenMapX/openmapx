@@ -1,3 +1,4 @@
+import { toIntegrationMeta } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations } from "../integration-host.js";
 
@@ -7,17 +8,11 @@ export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
       {};
 
     for (const integration of getAllIntegrations()) {
-      const envVars = integration.manifest.envVars as string[] | undefined;
-      const allSet =
-        !envVars?.length ||
-        envVars.every((v) => {
-          const val = process.env[v];
-          return val !== undefined && val !== "";
-        });
+      const meta = toIntegrationMeta(integration);
       services[integration.id] = {
-        configured: allSet,
-        enabled: integration.enabled,
-        domains: integration.manifest.domains,
+        configured: meta.configured,
+        enabled: meta.enabled,
+        domains: meta.domains,
       };
     }
 

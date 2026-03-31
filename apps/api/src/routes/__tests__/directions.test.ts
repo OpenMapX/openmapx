@@ -1,20 +1,19 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-// Mock OSRM service
+// Mock routing resolver
 
-const mockOsrmRoute = vi.fn();
+const mockGetRoute = vi.fn();
 
-vi.mock("@integrations/routing-osrm/provider.js", () => ({
-  osrmService: { route: mockOsrmRoute },
-}));
+const mockProvider = {
+  id: "mock-provider",
+  supportedModes: ["driving", "walking", "cycling"],
+  getRoute: mockGetRoute,
+};
 
-// Mock Valhalla service
-
-const mockValhallaRoute = vi.fn();
-
-vi.mock("@integrations/routing-valhalla/provider.js", () => ({
-  valhallaService: { route: mockValhallaRoute },
+vi.mock("../../services/routing.resolver.js", () => ({
+  getRoutingProvider: vi.fn(() => mockProvider),
+  getOptimizeProvider: vi.fn(() => null),
 }));
 
 // Mock cache
@@ -82,7 +81,7 @@ function qs(params: Record<string, string>): string {
 
 describe("GET /directions", () => {
   it("returns 200 with route data for all required params", async () => {
-    mockOsrmRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
+    mockGetRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
 
     const res = await app.inject({
       method: "GET",
@@ -95,19 +94,20 @@ describe("GET /directions", () => {
     expect(res.headers["cache-control"]).toBe("public, max-age=3600");
   });
 
-  it("calls osrmService.route for mode=driving (default)", async () => {
-    mockOsrmRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
+  it("calls provider.getRoute for mode=driving (default)", async () => {
+    mockGetRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
 
     await app.inject({
       method: "GET",
       url: `/directions?${qs(VALID_PARAMS)}`,
     });
 
-    expect(mockOsrmRoute).toHaveBeenCalledWith(
+    expect(mockGetRoute).toHaveBeenCalledWith(
       [
         [13.37, 52.52],
         [9.99, 53.55],
       ],
+      "driving",
       expect.objectContaining({
         avoidHighways: false,
         avoidTolls: false,
@@ -115,59 +115,42 @@ describe("GET /directions", () => {
         units: "metric",
       }),
     );
-    expect(mockValhallaRoute).not.toHaveBeenCalled();
   });
 
-  it("calls osrmService.route for explicit mode=driving", async () => {
-    mockOsrmRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
-
-    await app.inject({
-      method: "GET",
-      url: `/directions?${qs({ ...VALID_PARAMS, mode: "driving" })}`,
-    });
-
-    expect(mockOsrmRoute).toHaveBeenCalled();
-    expect(mockValhallaRoute).not.toHaveBeenCalled();
-  });
-
-  it("calls valhallaService.route for mode=walking", async () => {
-    mockValhallaRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
+  it("calls provider.getRoute for mode=walking", async () => {
+    mockGetRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
 
     await app.inject({
       method: "GET",
       url: `/directions?${qs({ ...VALID_PARAMS, mode: "walking" })}`,
     });
 
-    expect(mockValhallaRoute).toHaveBeenCalledWith(
+    expect(mockGetRoute).toHaveBeenCalledWith(
       [
         [13.37, 52.52],
         [9.99, 53.55],
       ],
       "walking",
       expect.objectContaining({ units: "metric" }),
-      undefined,
     );
-    expect(mockOsrmRoute).not.toHaveBeenCalled();
   });
 
-  it("calls valhallaService.route for mode=cycling", async () => {
-    mockValhallaRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
+  it("calls provider.getRoute for mode=cycling", async () => {
+    mockGetRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
 
     await app.inject({
       method: "GET",
       url: `/directions?${qs({ ...VALID_PARAMS, mode: "cycling" })}`,
     });
 
-    expect(mockValhallaRoute).toHaveBeenCalledWith(
+    expect(mockGetRoute).toHaveBeenCalledWith(
       [
         [13.37, 52.52],
         [9.99, 53.55],
       ],
       "cycling",
       expect.objectContaining({ units: "metric" }),
-      undefined,
     );
-    expect(mockOsrmRoute).not.toHaveBeenCalled();
   });
 
   it("returns 400 for mode=transit", async () => {
@@ -231,7 +214,7 @@ describe("GET /directions", () => {
   });
 
   it("passes avoid options correctly", async () => {
-    mockOsrmRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
+    mockGetRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
 
     await app.inject({
       method: "GET",
@@ -243,8 +226,9 @@ describe("GET /directions", () => {
       })}`,
     });
 
-    expect(mockOsrmRoute).toHaveBeenCalledWith(
+    expect(mockGetRoute).toHaveBeenCalledWith(
       expect.anything(),
+      "driving",
       expect.objectContaining({
         avoidHighways: true,
         avoidTolls: true,
@@ -253,24 +237,23 @@ describe("GET /directions", () => {
     );
   });
 
-  it("passes lang parameter to valhalla", async () => {
-    mockValhallaRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
+  it("passes lang in options", async () => {
+    mockGetRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
 
     await app.inject({
       method: "GET",
       url: `/directions?${qs({ ...VALID_PARAMS, mode: "walking", lang: "de" })}`,
     });
 
-    expect(mockValhallaRoute).toHaveBeenCalledWith(
+    expect(mockGetRoute).toHaveBeenCalledWith(
       expect.anything(),
       "walking",
-      expect.anything(),
-      "de",
+      expect.objectContaining({ lang: "de" }),
     );
   });
 
   it("sets Cache-Control: public, max-age=3600", async () => {
-    mockOsrmRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
+    mockGetRoute.mockResolvedValue(MOCK_ROUTE_RESULT);
 
     const res = await app.inject({
       method: "GET",

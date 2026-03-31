@@ -1,6 +1,17 @@
-import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
+import type { PoiSearchProvider } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
+import { getIntegrationsByDomain } from "../integration-host.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
+
+function getPoiSearchProviders(): PoiSearchProvider[] {
+  const integrations = getIntegrationsByDomain("poi-search");
+  const providers: PoiSearchProvider[] = [];
+  for (const integration of integrations) {
+    const registered = (integration.providers.get("poi-search") ?? []) as PoiSearchProvider[];
+    providers.push(...registered);
+  }
+  return providers;
+}
 
 interface CategorySearchQuery {
   category: string;
@@ -57,12 +68,13 @@ export const categorySearchRoute: FastifyPluginAsync = async (fastify) => {
       // Cache-Control is set only on success — not on 400 error responses.
       try {
         const result = await withCache(cacheKey, ttl, async () => {
-          const filters = CATEGORY_FILTERS[category];
-          if (!filters) {
+          const providers = getPoiSearchProviders();
+          const provider = providers.find((p) => p.categories.includes(category));
+          if (!provider) {
             throw Object.assign(new Error(`Unknown category: ${category}`), { statusCode: 400 });
           }
 
-          return searchByCategory(filters, bbox);
+          return provider.search(category, bbox, { lang: req.query.lang });
         });
         reply.header("Cache-Control", `public, max-age=${ttl}`);
         return result;

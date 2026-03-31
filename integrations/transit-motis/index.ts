@@ -1,7 +1,29 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
 import type { IntegrationContext } from "@openmapx/core";
 import * as motis from "./adapter.js";
 import { motisLocalInstance, transitousInstance } from "./instances.js";
+
+const MOTIS_DATA_DIR =
+  process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis");
+const LICENSE_FILE = join(MOTIS_DATA_DIR, "license.json");
+
+let cachedData: unknown[] | null = null;
+let cachedMtime = 0;
+
+function loadAttribution(): unknown[] {
+  if (!existsSync(LICENSE_FILE)) return [];
+  const mtime = statSync(LICENSE_FILE).mtimeMs;
+  if (cachedData && mtime === cachedMtime) return cachedData;
+  try {
+    cachedData = JSON.parse(readFileSync(LICENSE_FILE, "utf-8"));
+    cachedMtime = mtime;
+    return cachedData ?? [];
+  } catch {
+    return [];
+  }
+}
 
 /** Check if the local MOTIS instance is reachable. */
 async function isMotisReachable(): Promise<boolean> {
@@ -49,6 +71,12 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         time,
       );
     },
+  });
+
+  // Register dynamic attribution endpoint
+  ctx.registerRoute("GET", "/attribution", async (_req, res) => {
+    const data = loadAttribution();
+    res.send(data);
   });
 
   // Register local MOTIS if available

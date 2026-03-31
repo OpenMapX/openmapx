@@ -1,52 +1,17 @@
 import type {
   Departure,
   ServiceAlert,
+  TransitProvider,
   TransitRoute,
   TransitStop,
   TripPlan,
   VehiclePosition,
 } from "@openmapx/core";
+import { deduplicateStops } from "./dedup";
 import { providerHealth } from "./health";
 import type { BBox } from "./types";
 
-export interface TransitProviderImpl {
-  readonly id: string;
-  readonly prefix: string;
-  readonly coverage: { bbox: BBox };
-  readonly priority: number;
-
-  getStopsNearby?(lat: number, lng: number, radiusMeters: number): Promise<TransitStop[]>;
-  getDepartures?(stopId: string, minutes: number): Promise<Departure[]>;
-  getArrivals?(stopId: string, minutes: number): Promise<Departure[]>;
-  searchByName?(query: string, limit: number): Promise<TransitStop[]>;
-  getStop?(stopId: string): Promise<TransitStop | null>;
-  getStopPlatforms?(stopId: string): Promise<TransitStop[]>;
-  getStopTimetable?(stopId: string, date: string): Promise<Departure[]>;
-  getRoutesForStop?(stopId: string): Promise<TransitRoute[]>;
-  getRoutesInBbox?(bbox: BBox): Promise<TransitRoute[]>;
-  getRoute?(routeId: string): Promise<TransitRoute | null>;
-  getRouteStops?(routeId: string, hintStopId?: string): Promise<TransitStop[]>;
-  getAlerts?(bbox: BBox): Promise<ServiceAlert[]>;
-  getStopAlerts?(stopId: string): Promise<ServiceAlert[]>;
-  getRouteAlerts?(routeId: string): Promise<ServiceAlert[]>;
-  getVehiclePositions?(routeId: string): Promise<VehiclePosition[]>;
-  getVehicleRadar?(bbox: BBox): Promise<VehiclePosition[]>;
-  getVehicleJourney?(vehicleId: string, fallbackIds?: string[]): Promise<unknown>;
-  getFacilities?(stopId: string): Promise<unknown>;
-  planTrip?(params: {
-    from: { lat: number; lng: number };
-    to: { lat: number; lng: number };
-    departureTime?: string;
-    arrivalTime?: string;
-    modes?: string[];
-  }): Promise<TripPlan | null>;
-  getReachableStops?(
-    lat: number,
-    lng: number,
-    maxMinutes: number,
-    modes?: string[],
-  ): Promise<TransitStop[]>;
-}
+export type { TransitProvider } from "@openmapx/core";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -67,10 +32,10 @@ export function bboxToCenter(bbox: BBox): { lat: number; lng: number; radiusMete
 }
 
 export class TransitOrchestrator {
-  private providers = new Map<string, TransitProviderImpl>();
-  private prefixMap = new Map<string, TransitProviderImpl>();
+  private providers = new Map<string, TransitProvider>();
+  private prefixMap = new Map<string, TransitProvider>();
 
-  register(provider: TransitProviderImpl): void {
+  register(provider: TransitProvider): void {
     // First registered wins for a given prefix (hand-crafted load before dynamic)
     if (this.prefixMap.has(provider.prefix)) return;
     this.providers.set(provider.id, provider);
@@ -85,11 +50,11 @@ export class TransitOrchestrator {
     }
   }
 
-  getAll(): TransitProviderImpl[] {
+  getAll(): TransitProvider[] {
     return Array.from(this.providers.values());
   }
 
-  resolveByPrefix(id: string): TransitProviderImpl | null {
+  resolveByPrefix(id: string): TransitProvider | null {
     for (const [prefix, provider] of this.prefixMap) {
       if (id.startsWith(prefix)) return provider;
     }
@@ -105,7 +70,7 @@ export class TransitOrchestrator {
     return 100; // unknown providers get low priority
   }
 
-  getProvidersForBbox(bbox: BBox): TransitProviderImpl[] {
+  getProvidersForBbox(bbox: BBox): TransitProvider[] {
     return Array.from(this.providers.values())
       .filter((p) => bboxesOverlap(bbox, p.coverage.bbox))
       .filter((p) => providerHealth.isHealthy(p.id))
@@ -132,11 +97,13 @@ export class TransitOrchestrator {
 
     const allStops = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 
+    const deduped = deduplicateStops(allStops, (provider) => this.getProviderPriority(provider));
+
     if (modes && modes.length > 0) {
       const modeSet = new Set(modes);
-      return allStops.filter((s) => s.modes.some((m) => modeSet.has(m)));
+      return deduped.filter((s) => s.modes.some((m) => modeSet.has(m)));
     }
-    return allStops;
+    return deduped;
   }
 
   async getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
@@ -197,7 +164,11 @@ export class TransitOrchestrator {
       }),
     );
 
-    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : [])).slice(0, limit);
+    const allStops = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    return deduplicateStops(allStops, (provider) => this.getProviderPriority(provider)).slice(
+      0,
+      limit,
+    );
   }
 
   async planTrip(params: {

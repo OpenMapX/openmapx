@@ -6,20 +6,20 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
-import { isRisConfigured, risGet } from "../../apps/api/src/services/db-ris/client.js";
+import { isRisConfigured, risGet } from "./ris-client.js";
 import {
   buildStationDetail,
   stopPlaceToAutocompleteResult,
   stopPlaceToPlace,
   stopPlaceToSearchResult,
-} from "../../apps/api/src/services/db-ris/stations-mapper.js";
+} from "./stations-mapper.js";
 import type {
   RisConnectingTimesResponse,
   RisLocalServicesResponse,
   RisPlatformsResponse,
   RisStopPlace,
   RisStopPlacesResponse,
-} from "../../apps/api/src/services/db-ris/stations-types.js";
+} from "./stations-types.js";
 import type { GeocodingProviderImpl } from "./types.js";
 
 async function searchStopPlaces(query: string, limit = 6): Promise<RisStopPlace[]> {

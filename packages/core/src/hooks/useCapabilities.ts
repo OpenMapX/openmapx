@@ -2,8 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 
+export interface ServiceCapability {
+  configured: boolean;
+  enabled: boolean;
+  domains: string[];
+}
+
 interface CapabilitiesResponse {
-  services: Record<string, boolean>;
+  services: Record<string, ServiceCapability>;
 }
 
 export function useCapabilities() {
@@ -19,7 +25,12 @@ export function useCapabilities() {
     isAvailable: (serviceId: string | undefined) => {
       if (!serviceId) return true;
       if (!query.data) return true;
-      return query.data.services[serviceId] ?? true;
+      const service = query.data.services[serviceId];
+      if (!service) return true;
+      return service.configured && service.enabled;
+    },
+    getCapability: (serviceId: string): ServiceCapability | undefined => {
+      return query.data?.services[serviceId];
     },
   };
 }

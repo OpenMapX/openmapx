@@ -6,9 +6,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://www.mapillary.com/developer",
-
   "domains": ["street-view", "map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": true,
@@ -21,29 +19,26 @@
       "excludes": ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"]
     }
   },
-
   "backend": {
     "routes": true
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["NEXT_PUBLIC_MAPILLARY_TOKEN", "MAPILLARY_TOKEN"],
-
   "healthCheck": {
     "type": "http",
     "url": "https://graph.mapillary.com",
     "requiredEnvVars": ["MAPILLARY_TOKEN"],
     "category": "Imagery"
   },
-
-  "quality": "stable",
-
+  "quality": "built-in",
   "attribution": [
     {
       "name": "Mapillary",
@@ -51,7 +46,6 @@
       "license": "CC BY-SA 4.0"
     }
   ],
-
   "privacy": {
     "purpose": "Street-level imagery",
     "dataSent": "Coordinates, image IDs, API token",

@@ -34,6 +34,7 @@ export type {
   PhotoProvider,
   PoiSearchProvider,
   PoiSearchResult,
+  RoutingOptions,
   RoutingProvider,
   StreetViewProvider,
   TransitProvider,
@@ -75,7 +76,7 @@ export {
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
 export { useAutocomplete } from "./hooks/useAutocomplete";
-export { useCapabilities } from "./hooks/useCapabilities";
+export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities";
 export { useCategorySearch } from "./hooks/useCategorySearch";
 export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
 // Hooks — Data Sources
@@ -311,6 +312,7 @@ export {
   downsampleLTTB,
 } from "./utils/elevation";
 export { ConfigurationError } from "./utils/errors";
+export { escapeHtml, formatTime, relativeTime, sanitizeUrl } from "./utils/format";
 export {
   formatArea,
   formatDistance,

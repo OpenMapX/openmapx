@@ -26,7 +26,7 @@ const CATEGORY_ICONS: Partial<Record<CategoryId, string>> = {
   atms: "local-atm",
 };
 
-const DATA_SOURCE_ICONS: Record<string, string> = {
+const DATA_SOURCE_ICON_FALLBACK: Record<string, string> = {
   "ev-charging": "ev-station",
   fuel: "local-gas-station",
   parking: "local-parking",
@@ -91,7 +91,7 @@ export function CategoryChips() {
       >
         {(sourcesData?.sources ?? []).map((source) => {
           const isActive = activeSource === source.id;
-          const iconName = DATA_SOURCE_ICONS[source.id] ?? "ev-station";
+          const iconName = DATA_SOURCE_ICON_FALLBACK[source.id] ?? "ev-station";
           return (
             <Chip
               key={source.id}

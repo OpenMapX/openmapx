@@ -6,9 +6,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://waymarkedtrails.org/",
-
   "domains": ["map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": true,
@@ -21,28 +19,25 @@
       "excludes": ["street-view", "winter-sports"]
     }
   },
-
   "backend": {
     "routes": true
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": [],
-
   "healthCheck": {
     "type": "http",
     "url": "https://hiking.waymarkedtrails.org/api/v1/list?bbox=7,47,8,48&limit=1",
     "category": "Map Overlays"
   },
-
-  "quality": "stable",
-
+  "quality": "built-in",
   "attribution": [
     {
       "name": "Waymarked Trails",
@@ -55,7 +50,6 @@
       "license": "ODbL"
     }
   ],
-
   "privacy": {
     "purpose": "Hiking trail routes and mountain shelter locations",
     "dataSent": "Bounding box coordinates, trail IDs",

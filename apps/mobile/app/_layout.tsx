@@ -15,6 +15,7 @@ import { StreetViewViewer } from "../src/components/map/StreetViewViewer";
 import { ElevationHoverProvider } from "../src/lib/ElevationHoverContext";
 import { MapProvider } from "../src/lib/MapContext";
 import { useRouterSidebarSync } from "../src/lib/routerSidebarSync";
+import { IntegrationProvider } from "../src/providers/IntegrationProvider";
 
 import "../global.css";
 
@@ -67,16 +68,18 @@ export default function RootLayout() {
         <BottomSheetModalProvider>
           <QueryClientProvider client={queryClient}>
             <PaperProvider theme={theme}>
-              <MapProvider>
-                <ElevationHoverProvider>
-                  <MapCanvas />
-                  <RouterSync />
-                  <View pointerEvents="box-none" style={StyleSheet.absoluteFillObject}>
-                    <Slot />
-                  </View>
-                  <StreetViewViewer />
-                </ElevationHoverProvider>
-              </MapProvider>
+              <IntegrationProvider>
+                <MapProvider>
+                  <ElevationHoverProvider>
+                    <MapCanvas />
+                    <RouterSync />
+                    <View pointerEvents="box-none" style={StyleSheet.absoluteFillObject}>
+                      <Slot />
+                    </View>
+                    <StreetViewViewer />
+                  </ElevationHoverProvider>
+                </MapProvider>
+              </IntegrationProvider>
             </PaperProvider>
           </QueryClientProvider>
         </BottomSheetModalProvider>

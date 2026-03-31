@@ -22,7 +22,7 @@
   "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
 
   "healthCheck": {
-    "type": "env",
+    "type": "custom",
     "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
     "category": "Geocoding"
   },

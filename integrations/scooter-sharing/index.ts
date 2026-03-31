@@ -1,6 +1,6 @@
-import { initCache } from "@integrations/shared-mobility/cache";
-import { scooterSharingProvider } from "@integrations/shared-mobility/scooter-provider";
 import type { IntegrationContext } from "@openmapx/core";
+import { initCache } from "@openmapx/integration-shared-mobility/cache";
+import { scooterSharingProvider } from "@openmapx/integration-shared-mobility/scooter-provider";
 
 export function setup(ctx: IntegrationContext): void {
   initCache(ctx.cache);

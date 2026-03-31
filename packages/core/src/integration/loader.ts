@@ -18,6 +18,7 @@ export interface LoadedIntegrationMeta {
   name: string;
   description?: string;
   enabled: boolean;
+  configured: boolean;
   domains: string[];
   frontend?: IntegrationManifest["frontend"];
   attribution?: IntegrationManifest["attribution"];
@@ -26,11 +27,20 @@ export interface LoadedIntegrationMeta {
 }
 
 export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegrationMeta {
+  const envVars = integration.manifest.envVars;
+  const configured =
+    !envVars?.length ||
+    envVars.every((v) => {
+      const val = process.env[v];
+      return val !== undefined && val !== "";
+    });
+
   return {
     id: integration.id,
     name: integration.manifest.name,
     description: integration.manifest.description,
     enabled: integration.enabled,
+    configured,
     domains: integration.manifest.domains,
     frontend: integration.manifest.frontend,
     attribution: integration.manifest.attribution,

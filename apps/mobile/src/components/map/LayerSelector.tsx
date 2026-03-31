@@ -2,20 +2,11 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import type { MapLayer } from "@openmapx/core";
 import {
-  useAirQualityStore,
-  useBuildingsStore,
-  useCyclingStore,
-  useEarthquakeStore,
-  useHikingStore,
+  getRegisteredOverlayStore,
+  useIntegrationRegistry,
   useLayerStore,
-  useLiveTrainsStore,
   useMeasurementStore,
-  useStreetViewStore,
-  useTrafficStore,
-  useTransitStore,
   useTravelTimeStore,
-  useWildfireStore,
-  useWinterSportsStore,
 } from "@openmapx/core";
 import * as Haptics from "expo-haptics";
 import { ImpactFeedbackStyle } from "expo-haptics";
@@ -31,9 +22,9 @@ interface BaseLayerOption {
 }
 
 interface OverlayOption {
+  overlayId: string;
   labelKey: string;
   icon: keyof typeof MaterialIcons.glyphMap;
-  useStore: () => { layerVisible: boolean; setLayerVisible: (v: boolean) => void };
 }
 
 const BASE_LAYERS: BaseLayerOption[] = [
@@ -43,112 +34,58 @@ const BASE_LAYERS: BaseLayerOption[] = [
   { id: "cycling", labelKey: "layers.cycling", icon: "pedal-bike" },
 ];
 
-const OVERLAY_OPTIONS: OverlayOption[] = [
-  {
-    labelKey: "layers.traffic",
-    icon: "traffic",
-    useStore: () => {
-      const layerVisible = useTrafficStore((s) => s.layerVisible);
-      const setLayerVisible = useTrafficStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.transit",
-    icon: "directions-transit",
-    useStore: () => {
-      const layerVisible = useTransitStore((s) => s.layerVisible);
-      const setLayerVisible = useTransitStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.3dBuildings",
-    icon: "location-city",
-    useStore: () => {
-      const layerVisible = useBuildingsStore((s) => s.layerVisible);
-      const setLayerVisible = useBuildingsStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.streetLevelImagery",
-    icon: "streetview",
-    useStore: () => {
-      const layerVisible = useStreetViewStore((s) => s.layerVisible);
-      const setLayerVisible = useStreetViewStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.airQuality",
-    icon: "air",
-    useStore: () => {
-      const layerVisible = useAirQualityStore((s) => s.layerVisible);
-      const setLayerVisible = useAirQualityStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.earthquakes",
-    icon: "public",
-    useStore: () => {
-      const layerVisible = useEarthquakeStore((s) => s.layerVisible);
-      const setLayerVisible = useEarthquakeStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.wildfires",
-    icon: "local-fire-department",
-    useStore: () => {
-      const layerVisible = useWildfireStore((s) => s.layerVisible);
-      const setLayerVisible = useWildfireStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.liveTrains",
-    icon: "train",
-    useStore: () => {
-      const layerVisible = useLiveTrainsStore((s) => s.layerVisible);
-      const setLayerVisible = useLiveTrainsStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.winterSports",
-    icon: "downhill-skiing",
-    useStore: () => {
-      const layerVisible = useWinterSportsStore((s) => s.layerVisible);
-      const setLayerVisible = useWinterSportsStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.hiking",
-    icon: "hiking",
-    useStore: () => {
-      const layerVisible = useHikingStore((s) => s.layerVisible);
-      const setLayerVisible = useHikingStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-  {
-    labelKey: "layers.cycling",
-    icon: "pedal-bike",
-    useStore: () => {
-      const layerVisible = useCyclingStore((s) => s.layerVisible);
-      const setLayerVisible = useCyclingStore((s) => s.setLayerVisible);
-      return { layerVisible, setLayerVisible };
-    },
-  },
-];
+const OVERLAY_ICON_MAP: Record<string, keyof typeof MaterialIcons.glyphMap> = {
+  traffic: "traffic",
+  transit: "directions-transit",
+  "3d-buildings": "location-city",
+  "street-view": "streetview",
+  "air-quality": "air",
+  earthquakes: "public",
+  wildfires: "local-fire-department",
+  "live-trains": "train",
+  "winter-sports": "downhill-skiing",
+  hiking: "hiking",
+  cycling: "pedal-bike",
+};
+
+function integrationIdToOverlayId(integrationId: string): string {
+  if (integrationId === "overlay-traffic-tomtom") return "traffic";
+  if (integrationId === "street-view-mapillary") return "street-view";
+  return integrationId.replace(/^overlay-/, "").replace(/^tool-/, "");
+}
+
+function useOverlayOptions(): OverlayOption[] {
+  const registry = useIntegrationRegistry();
+
+  return useMemo(() => {
+    const withLayerSelector = registry.getWithLayerSelector();
+    const options: OverlayOption[] = [];
+
+    for (const integration of withLayerSelector) {
+      const ls = integration.frontend?.layerSelector;
+      if (!ls || ls.group !== "map-details") continue;
+
+      const overlayId = integrationIdToOverlayId(integration.id);
+      const store = getRegisteredOverlayStore(overlayId);
+      if (!store) continue;
+
+      options.push({
+        overlayId,
+        labelKey: ls.labelKey,
+        icon: OVERLAY_ICON_MAP[overlayId] ?? "layers",
+      });
+    }
+
+    return options;
+  }, [registry]);
+}
 
 function OverlayToggle({ option }: { option: OverlayOption }) {
   const { t } = useTranslation();
   const theme = useTheme();
-  const { layerVisible, setLayerVisible } = option.useStore();
+  const store = getRegisteredOverlayStore(option.overlayId);
+  const layerVisible = store ? store((s) => s.layerVisible) : false;
+  const setLayerVisible = store ? store((s) => s.setLayerVisible) : () => {};
 
   return (
     <Pressable
@@ -192,6 +129,7 @@ export function LayerSelector() {
   const activateMeasurement = useMeasurementStore((s) => s.activate);
   const activateTravelTime = useTravelTimeStore((s) => s.activate);
   const snapPoints = useMemo(() => ["60%", "90%"], []);
+  const overlayOptions = useOverlayOptions();
 
   const handleOpen = useCallback(() => {
     bottomSheetRef.current?.present();
@@ -275,8 +213,8 @@ export function LayerSelector() {
           </Text>
 
           <View style={styles.grid}>
-            {OVERLAY_OPTIONS.map((option) => (
-              <OverlayToggle key={option.labelKey} option={option} />
+            {overlayOptions.map((option) => (
+              <OverlayToggle key={option.overlayId} option={option} />
             ))}
           </View>
 

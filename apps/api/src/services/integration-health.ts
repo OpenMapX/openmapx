@@ -1,7 +1,29 @@
+import { createConnection } from "node:net";
 import type { LoadedIntegration } from "@openmapx/core";
 
 const TIMEOUT = 5_000;
 const UA = "OpenMapX/1.0 (+https://openmapx.org)";
+
+function tcpCheck(
+  host: string,
+  port: number,
+): Promise<{ ok: boolean; ms: number; error?: string }> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const socket = createConnection({ host, port }, () => {
+      socket.destroy();
+      resolve({ ok: true, ms: Date.now() - start });
+    });
+    socket.setTimeout(TIMEOUT);
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve({ ok: false, ms: Date.now() - start, error: "Timeout" });
+    });
+    socket.on("error", (err) => {
+      resolve({ ok: false, ms: Date.now() - start, error: err.message });
+    });
+  });
+}
 
 export interface ServiceStatus {
   id: string;
@@ -73,6 +95,23 @@ export async function executeIntegrationHealthCheck(
         error: errMsg(err),
       };
     }
+  }
+
+  // TCP health check
+  if (hc.type === "tcp" && hc.url) {
+    const url = new URL(hc.url.startsWith("tcp://") ? hc.url : `tcp://${hc.url}`);
+    const host = url.hostname;
+    const port = Number(url.port) || 5432;
+    const result = await tcpCheck(host, port);
+    return {
+      id,
+      name,
+      category,
+      url: `${host}:${port}`,
+      status: result.ok ? "up" : "down",
+      responseTime: result.ms,
+      error: result.error,
+    };
   }
 
   // URL template interpolation

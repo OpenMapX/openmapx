@@ -6,9 +6,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://developers.deutschebahn.com/",
-
   "domains": ["map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": false,
@@ -21,29 +19,26 @@
       "excludes": []
     }
   },
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
-
   "healthCheck": {
     "type": "ping",
     "url": "https://apis.deutschebahn.com/db/apis/ris-stations/v1",
     "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
     "category": "Transit"
   },
-
-  "quality": "stable",
-
+  "quality": "built-in",
   "attribution": [
     {
       "name": "Deutsche Bahn RIS",
@@ -51,7 +46,6 @@
       "license": "Proprietary"
     }
   ],
-
   "privacy": {
     "purpose": "Real-time train positions on German rail network",
     "dataSent": "API credentials, bounding box",

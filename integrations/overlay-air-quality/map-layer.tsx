@@ -1,13 +1,18 @@
 "use client";
 
-import { useAirQualityStore, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import {
+  escapeHtml,
+  sanitizeUrl,
+  useAirQualityStore,
+  useDebouncedCallback,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
-import { escapeHtml, sanitizeUrl } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 
 const AQ_SOURCE_ID = "openaq-air-quality";

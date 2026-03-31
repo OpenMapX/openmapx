@@ -1,6 +1,6 @@
-import { osrmService } from "@integrations/routing-osrm/provider.js";
-import { valhallaService } from "@integrations/routing-valhalla/provider.js";
+import type { TravelMode } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
+import { getOptimizeProvider, getRoutingProvider } from "../services/routing.resolver.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 /** Parse semicolon-separated "lng,lat" pairs into coordinate tuples. */
@@ -107,12 +107,16 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
         waypoints: roundWaypoints(waypoints),
       };
 
-      const result = await withCache(hashKey("cache:directions", keyParams), TTL.directions, () => {
-        if (mode === "driving") {
-          return osrmService.route(waypoints, opts);
-        }
-        return valhallaService.route(waypoints, mode as "walking" | "cycling", opts, lang);
-      });
+      const travelMode = mode as TravelMode;
+      const provider = getRoutingProvider(travelMode);
+      if (!provider) {
+        return reply.status(503).send({ error: `No routing provider available for mode: ${mode}` });
+      }
+
+      const routingOpts = { ...opts, lang };
+      const result = await withCache(hashKey("cache:directions", keyParams), TTL.directions, () =>
+        provider.getRoute(waypoints, travelMode, routingOpts),
+      );
       reply.header("Cache-Control", "public, max-age=3600");
       return result;
     },
@@ -206,21 +210,19 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
         waypoints: roundWaypoints(waypoints),
       };
 
+      const travelMode = mode as TravelMode;
+      const provider = getOptimizeProvider(travelMode);
+      if (!provider?.optimizeRoute) {
+        return reply
+          .status(503)
+          .send({ error: `No optimize provider available for mode: ${mode}` });
+      }
+
+      const routingOpts = { ...opts, lang };
       const result = await withCache(
         hashKey("cache:directions:optimize", keyParams),
         TTL.directions,
-        async () => {
-          try {
-            return await osrmService.optimizeRoute(waypoints, opts);
-          } catch {
-            return valhallaService.optimizeRoute(
-              waypoints,
-              mode as "driving" | "walking" | "cycling",
-              opts,
-              lang,
-            );
-          }
-        },
+        () => provider.optimizeRoute?.(waypoints, travelMode, routingOpts),
       );
       reply.header("Cache-Control", "public, max-age=3600");
       return result;

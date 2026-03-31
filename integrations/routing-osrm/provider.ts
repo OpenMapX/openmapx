@@ -3,7 +3,15 @@
  * Default: public OSRM demo server. Override with OSRM_URL env var.
  */
 
-import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
+import type {
+  DirectionsResult,
+  Route,
+  RouteLeg,
+  RouteStep,
+  RoutingOptions,
+  RoutingProvider,
+  TravelMode,
+} from "@openmapx/core";
 
 const OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
 
@@ -122,16 +130,14 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
   };
 }
 
-export interface OsrmRouteOptions {
-  avoidHighways?: boolean;
-  avoidTolls?: boolean;
-  avoidFerries?: boolean;
-}
+export const osrmService: RoutingProvider = {
+  id: "osrm",
+  supportedModes: ["driving"] as TravelMode[],
 
-export const osrmService = {
-  async route(
+  async getRoute(
     waypoints: [number, number][],
-    options: OsrmRouteOptions = {},
+    _mode: TravelMode,
+    options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
     const coords = waypoints.map((wp) => `${wp[0]},${wp[1]}`).join(";");
 
@@ -169,7 +175,8 @@ export const osrmService = {
 
   async optimizeRoute(
     waypoints: [number, number][],
-    options: OsrmRouteOptions = {},
+    _mode: TravelMode,
+    options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
     const coords = waypoints.map((wp) => `${wp[0]},${wp[1]}`).join(";");
 

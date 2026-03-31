@@ -12,7 +12,8 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
     "paths": {
-      "@integrations/*": ["../../integrations/*"]
+      "@integrations/*": ["../../integrations/*"],
+      "@openmapx/integration-shared-mobility/*": ["../../packages/shared-mobility/*"]
     }
   },
   "include": ["src", "../../integrations/*/index.ts"]

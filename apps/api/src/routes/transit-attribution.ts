@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { FastifyPluginAsync } from "fastify";
 
 const MOTIS_DATA_DIR =
   process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis");
@@ -63,12 +62,4 @@ export function getFeedProviders(): Record<
   return result;
 }
 
-export const transitAttributionRoute: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/transit/attribution", {
-    handler: async (_req, reply) => {
-      const data = loadAttribution();
-      reply.header("Cache-Control", "public, max-age=86400");
-      return data;
-    },
-  });
-};
+/** @deprecated Attribution is now served by the transit-motis integration */

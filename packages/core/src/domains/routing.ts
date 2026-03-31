@@ -6,6 +6,8 @@ export interface RoutingOptions {
   alternatives?: boolean;
   avoidTolls?: boolean;
   avoidHighways?: boolean;
+  avoidFerries?: boolean;
+  units?: "metric" | "imperial";
   lang?: string;
 }
 
@@ -18,5 +20,9 @@ export interface RoutingProvider {
     options?: RoutingOptions,
   ): Promise<DirectionsResult>;
   getIsochrone?(origin: LngLat, mode: TravelMode, minutes: number[]): Promise<IsochroneResult>;
-  optimizeRoute?(waypoints: LngLat[], mode: TravelMode): Promise<number[]>;
+  optimizeRoute?(
+    waypoints: LngLat[],
+    mode: TravelMode,
+    options?: RoutingOptions,
+  ): Promise<DirectionsResult>;
 }

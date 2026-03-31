@@ -6,9 +6,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://wiki.openstreetmap.org/wiki/Cycling",
-
   "domains": ["map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": true,
@@ -21,28 +19,25 @@
       "excludes": []
     }
   },
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": [],
-
   "healthCheck": {
     "type": "http",
     "url": "https://tiles.openstreetmap.org/0/0/0.png",
     "category": "Map Overlays"
   },
-
-  "quality": "stable",
-
+  "quality": "built-in",
   "attribution": [
     {
       "name": "OpenStreetMap",
@@ -50,7 +45,6 @@
       "license": "ODbL"
     }
   ],
-
   "privacy": {
     "purpose": "Cycling infrastructure visualization",
     "dataSent": "Map tile requests",

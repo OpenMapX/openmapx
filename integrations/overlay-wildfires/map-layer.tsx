@@ -1,6 +1,6 @@
 "use client";
 
-import { useOverlayExclusion, useWildfireStore } from "@openmapx/core";
+import { relativeTime, useOverlayExclusion, useWildfireStore } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -8,7 +8,6 @@ import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
-import { relativeTime } from "@/lib/formatTime";
 import { useMap } from "@/lib/MapContext";
 
 const SOURCE_ID = "openmapx-wildfires-source";

@@ -93,6 +93,6 @@ export type {
 } from "./map-overlay";
 export type { PhotoProvider } from "./photos";
 export type { PoiSearchProvider, PoiSearchResult } from "./poi-search";
-export type { RoutingProvider } from "./routing";
+export type { RoutingOptions, RoutingProvider } from "./routing";
 export type { StreetViewProvider } from "./street-view";
 export type { TransitProvider } from "./transit";

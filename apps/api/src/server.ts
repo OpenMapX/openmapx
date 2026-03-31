@@ -2,12 +2,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
-import { bielefeldClient } from "@integrations/shared-mobility/bielefeld-client";
-import { cambioClient } from "@integrations/shared-mobility/cambio-client";
-import { registerCarSharingClient } from "@integrations/shared-mobility/car-sharing-registry";
-import { stadtteilAutoClient } from "@integrations/shared-mobility/stadtteilauto-client";
-import { wuppertalClient } from "@integrations/shared-mobility/wuppertal-client";
 import { registry } from "@integrations/transit-dynamic-registry/registry";
+import { bielefeldClient } from "@openmapx/integration-shared-mobility/bielefeld-client";
+import { cambioClient } from "@openmapx/integration-shared-mobility/cambio-client";
+import { registerCarSharingClient } from "@openmapx/integration-shared-mobility/car-sharing-registry";
+import { stadtteilAutoClient } from "@openmapx/integration-shared-mobility/stadtteilauto-client";
+import { wuppertalClient } from "@openmapx/integration-shared-mobility/wuppertal-client";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
@@ -37,7 +37,7 @@ import { statusRoute } from "./routes/status";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
-import { transitAttributionRoute } from "./routes/transit-attribution";
+// transitAttributionRoute now served by transit-motis integration
 // wildfireRoute moved to integrations/overlay-wildfires
 import { winterSportsRoute } from "./routes/winter-sports";
 import { gtfsManager } from "./services/gtfs/index";
@@ -117,7 +117,7 @@ await server.register(tilesRoute, { prefix: "/api" });
 // airQualityRoute now handled by integration framework
 await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(transitRoute, { prefix: "/api" });
-await server.register(transitAttributionRoute, { prefix: "/api" });
+// transitAttributionRoute now served by transit-motis integration
 await server.register(gtfsRoute, { prefix: "/api" });
 // hikingRoute now handled by integration framework
 await server.register(isochroneRoute, { prefix: "/api" });

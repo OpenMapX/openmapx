@@ -1,13 +1,17 @@
 "use client";
 
-import { useDebouncedCallback, useOverlayExclusion, useWinterSportsStore } from "@openmapx/core";
+import {
+  escapeHtml,
+  useDebouncedCallback,
+  useOverlayExclusion,
+  useWinterSportsStore,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
-import { escapeHtml } from "@/lib/escapeHtml";
 import { useMap } from "@/lib/MapContext";
 
 const RASTER_SOURCE_ID = "openmapx-opensnowmap-source";
