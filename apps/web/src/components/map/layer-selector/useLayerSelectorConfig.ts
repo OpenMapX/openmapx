@@ -14,11 +14,10 @@ export interface GeneratedLayerEntry {
 
 /** Overlay ID mapping: integration IDs like "overlay-earthquakes" → overlay IDs like "earthquakes" */
 function integrationIdToOverlayId(integrationId: string): string {
-  return integrationId
-    .replace(/^overlay-/, "")
-    .replace(/^street-view-mapillary$/, "street-view")
-    .replace(/^overlay-traffic-tomtom$/, "traffic")
-    .replace(/^tool-/, "");
+  // Specific mappings must come before generic prefix stripping
+  if (integrationId === "overlay-traffic-tomtom") return "traffic";
+  if (integrationId === "street-view-mapillary") return "street-view";
+  return integrationId.replace(/^overlay-/, "").replace(/^tool-/, "");
 }
 
 export function useLayerSelectorConfig() {
@@ -38,6 +37,7 @@ export function useLayerSelectorConfig() {
         id: overlayId,
         labelKey: ls.labelKey,
         overlayId,
+        serviceId: integration.id,
         preview: INTEGRATION_PREVIEWS[overlayId] ?? genericPreview,
       };
 

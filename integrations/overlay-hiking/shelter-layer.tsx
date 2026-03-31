@@ -50,7 +50,7 @@ export function MountainShelterLayer() {
 
     const bounds = map.getBounds();
     const { apiUrl } = env;
-    const url = `${apiUrl}/api/hiking/shelters?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
+    const url = `${apiUrl}/api/integrations/overlay-hiking/hiking/shelters?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
     try {
       const res = await fetch(url);

@@ -1,0 +1,35 @@
+import { type Client, createClient } from "@hey-api/client-fetch";
+
+const TIMEOUT_MS = 8_000;
+
+const USER_AGENT = process.env.TRANSITOUS_USER_AGENT ?? "OpenMapX/1.0 (transit@openmapx.org)";
+
+export interface MotisInstance {
+  client: Client;
+  prefix: string;
+  provider: string;
+}
+
+function withTimeout(client: Client): void {
+  client.interceptors.request.use((request) => {
+    const signal = AbortSignal.timeout(TIMEOUT_MS);
+    return new Request(request, { signal });
+  });
+}
+
+export const transitousInstance: MotisInstance = (() => {
+  const client = createClient({
+    baseUrl: process.env.TRANSITOUS_URL ?? "https://api.transitous.org",
+    headers: { "User-Agent": USER_AGENT },
+  });
+  withTimeout(client);
+  return { client, prefix: "mo:", provider: "transitous" };
+})();
+
+export const motisLocalInstance: MotisInstance = (() => {
+  const client = createClient({
+    baseUrl: process.env.MOTIS_URL ?? "http://localhost:8081",
+  });
+  withTimeout(client);
+  return { client, prefix: "ms:", provider: "motis-local" };
+})();

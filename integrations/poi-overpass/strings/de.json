@@ -1,0 +1,11 @@
+{
+  "name": "Overpass-POI-Suche",
+  "description": "Kategoriebasierte Suche nach Points of Interest über die Overpass API",
+  "privacy": [
+    {
+      "service": "OpenStreetMap/Overpass",
+      "purpose": "Kategoriebasierte Suche nach Points of Interest",
+      "dataSent": "Begrenzungsrahmen-Koordinaten, OSM-Tag-Abfragen"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "TransitLand",
+  "description": "Weltweite Haltestellen- und Routendaten",
+  "privacy": {
+    "purpose": "Weltweite Haltestellen- und Routendaten",
+    "dataSent": "Koordinaten, API-Schlüssel"
+  }
+}

@@ -33,7 +33,7 @@ export const HAFAS_INSTANCES: HafasInstance[] = [
     id: "db",
     name: "Deutsche Bahn",
     baseUrl: "https://v6.db.transport.rest",
-    prefix: "db:",
+    prefix: "db-hafas:",
     bbox: [5.87, 47.27, 15.04, 55.06],
     hasRadar: false,
   },

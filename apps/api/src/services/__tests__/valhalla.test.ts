@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../utils/polyline.js", () => ({
-  decodePolyline: vi.fn(() => [
-    [13.388, 52.517],
-    [13.392, 52.521],
-    [13.397, 52.529],
-    [13.405, 52.535],
-  ]),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    decodePolyline: vi.fn(() => [
+      [13.388, 52.517],
+      [13.392, 52.521],
+      [13.397, 52.529],
+      [13.405, 52.535],
+    ]),
+  };
+});
 
 let mockFetch: ReturnType<typeof vi.fn>;
 

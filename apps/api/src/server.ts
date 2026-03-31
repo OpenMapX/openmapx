@@ -24,7 +24,7 @@ import { directionsRoute } from "./routes/directions";
 import { elevationRoute } from "./routes/elevation";
 import { geocodeRoute } from "./routes/geocode";
 import { gtfsRoute } from "./routes/gtfs";
-import { hikingRoute } from "./routes/hiking";
+// hikingRoute now handled by integration framework
 import { isochroneRoute } from "./routes/isochrone";
 import { mapillaryRoute } from "./routes/mapillary";
 import { motisRoute } from "./routes/motis";
@@ -33,7 +33,7 @@ import { placesRoute } from "./routes/places";
 import { risMapsRoute } from "./routes/ris-maps";
 import { savedRoute } from "./routes/saved";
 import { statusRoute } from "./routes/status";
-import { streetviewRoute } from "./routes/streetview";
+// streetviewRoute now handled by integration framework
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
@@ -114,13 +114,13 @@ await server.register(directionsRoute, { prefix: "/api" });
 await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(tilesRoute, { prefix: "/api" });
-await server.register(streetviewRoute, { prefix: "/api" });
+// streetviewRoute now handled by integration framework
 // airQualityRoute now handled by integration framework
 await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(transitRoute, { prefix: "/api" });
 await server.register(transitAttributionRoute, { prefix: "/api" });
 await server.register(gtfsRoute, { prefix: "/api" });
-await server.register(hikingRoute, { prefix: "/api" });
+// hikingRoute now handled by integration framework
 await server.register(isochroneRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
 await server.register(dataSourcesRoute, { prefix: "/api" });
@@ -180,18 +180,6 @@ const customIntegrationsDir = join(
 );
 await initIntegrations(server, [integrationsDir, customIntegrationsDir]);
 
-// Transit registry
-// Initialize dynamic transit provider registry (non-blocking — server
-// starts even if GitHub is unreachable)
-registry
-  .initialize()
-  .then(() => registry.startRefresh())
-  .catch((err) => {
-    server.log.warn(err, "Transit registry initialization failed");
-    // Start refresh anyway so it retries later
-    registry.startRefresh();
-  });
-
 // Debug endpoint: list loaded dynamic transit providers (auth required)
 server.get("/api/transit/registry", async (req, reply) => {
   const { requireAuth } = await import("./utils/require-auth.js");
@@ -212,7 +200,6 @@ try {
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
-    registry.stopRefresh();
     await shutdownIntegrations();
     await server.close();
     await redis?.disconnect();

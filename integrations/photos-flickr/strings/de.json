@@ -1,0 +1,11 @@
+{
+  "name": "Flickr-Fotos",
+  "description": "Ortsfotos von Flickr",
+  "privacy": [
+    {
+      "service": "Flickr",
+      "purpose": "Ortsfotos von Flickr",
+      "dataSent": "Koordinaten, Suchradius, API-Schlüssel"
+    }
+  ]
+}

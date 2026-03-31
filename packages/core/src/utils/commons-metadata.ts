@@ -1,4 +1,4 @@
-import type { PlacePhoto } from "@openmapx/core";
+import type { PlacePhoto } from "../types/place";
 
 const HEADERS = {
   "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",

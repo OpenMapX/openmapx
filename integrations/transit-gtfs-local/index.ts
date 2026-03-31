@@ -1,7 +1,14 @@
 import type { IntegrationContext } from "@openmapx/core";
-import * as gtfsLocal from "../../apps/api/src/services/transit/providers/gtfs-local.js";
+import type { GtfsDeps } from "./gtfs-local.js";
+import * as gtfsLocal from "./gtfs-local.js";
 
 export function setup(ctx: IntegrationContext): void {
+  // Inject GTFS manager and queries from app config
+  const gtfsDeps = ctx.config.gtfsDeps as GtfsDeps | undefined;
+  if (gtfsDeps) {
+    gtfsLocal.setDeps(gtfsDeps);
+  }
+
   ctx.registerProvider("transit", {
     id: "transit-gtfs-local",
     prefix: "g-",
@@ -18,3 +25,7 @@ export function setup(ctx: IntegrationContext): void {
     searchByName: (q: string, limit: number) => gtfsLocal.searchByName(q, limit),
   });
 }
+
+export type { GtfsDeps } from "./gtfs-local.js";
+// Re-export for consumers
+export { setDeps } from "./gtfs-local.js";

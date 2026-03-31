@@ -2,12 +2,12 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { motisLocalInstance } from "@integrations/transit-motis/instances.js";
+import type { MotisFeed, MotisStatus } from "@integrations/transit-motis/types";
 import { stops } from "@motis-project/motis-client";
+import type { BBox } from "@openmapx/core";
 import { cacheGet, cacheSet } from "../../utils/cache.js";
 import { validatePublicUrl } from "../../utils/validate-url";
-import type { BBox } from "../transit/types";
-import { motisLocalInstance } from "./instances.js";
-import type { MotisFeed, MotisStatus } from "./types";
 
 const execFileAsync = promisify(execFile);
 

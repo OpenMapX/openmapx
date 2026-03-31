@@ -1,18 +1,11 @@
-import type { BoundingBox } from "@openmapx/core";
+import { type BoundingBox, ConfigurationError } from "@openmapx/core";
 import type { OcmPoi, OcmReferenceData } from "./ocm-types.js";
 
 const OCM_BASE = "https://api.openchargemap.io/v3";
 
-export class ApiKeyMissingError extends Error {
-  constructor() {
-    super("OPENCHARGEMAP_API_KEY is not configured");
-    this.name = "ApiKeyMissingError";
-  }
-}
-
 function getApiKey(): string {
   const key = process.env.OPENCHARGEMAP_API_KEY;
-  if (!key) throw new ApiKeyMissingError();
+  if (!key) throw new ConfigurationError("OPENCHARGEMAP_API_KEY is not configured");
   return key;
 }
 

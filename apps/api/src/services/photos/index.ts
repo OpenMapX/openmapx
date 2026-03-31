@@ -1,23 +1,33 @@
-import { wikidataEnricher } from "@integrations/enrichment-wikidata/provider.js";
-import { wikipediaEnricher } from "@integrations/enrichment-wikipedia/provider.js";
-import { flickrPhotoProvider } from "@integrations/photos-flickr/provider.js";
-import { mapillaryPhotoProvider } from "@integrations/photos-mapillary/provider.js";
-import { panoramaxPhotoProvider } from "@integrations/photos-panoramax/provider.js";
-import { wikimediaGeoProvider } from "@integrations/photos-wikimedia/provider.js";
-import type { PlacePhoto } from "@openmapx/core";
-import { wikimediaCommonsEnricher } from "../enrichment/wikimedia-commons.enricher";
+import type { EnrichmentSource, PlacePhoto } from "@openmapx/core";
+import { getIntegrationsByDomain } from "../../integration-host.js";
 import type { PhotoProvider, PhotoQuery } from "./types";
 
-/** Coordinate-based photo providers. */
-const PROVIDERS: PhotoProvider[] = [
-  wikimediaGeoProvider,
-  mapillaryPhotoProvider,
-  flickrPhotoProvider,
-  panoramaxPhotoProvider,
-];
+/**
+ * Collect photo providers from all integrations registered under the "photos" domain.
+ */
+function getPhotoProviders(): PhotoProvider[] {
+  const providers: PhotoProvider[] = [];
+  for (const integration of getIntegrationsByDomain("photos")) {
+    for (const p of (integration.providers.get("photos") ?? []) as PhotoProvider[]) {
+      providers.push(p);
+    }
+  }
+  return providers;
+}
 
-/** Tag-based enrichment sources (produce photos from OSM tags like wikidata=Q...). */
-const TAG_ENRICHERS = [wikidataEnricher, wikipediaEnricher, wikimediaCommonsEnricher];
+/**
+ * Collect enrichment sources from all integrations registered under the "enrichment" domain.
+ * These are tag-based enrichers that produce photos from OSM tags (e.g. wikidata=Q...).
+ */
+function getTagEnrichers(): EnrichmentSource[] {
+  const enrichers: EnrichmentSource[] = [];
+  for (const integration of getIntegrationsByDomain("enrichment")) {
+    for (const e of (integration.providers.get("enrichment") ?? []) as EnrichmentSource[]) {
+      enrichers.push(e);
+    }
+  }
+  return enrichers;
+}
 
 /**
  * Queries all photo sources and returns a single merged, deduplicated list.
@@ -29,16 +39,19 @@ const TAG_ENRICHERS = [wikidataEnricher, wikipediaEnricher, wikimediaCommonsEnri
  * Never throws — individual provider/enricher failures are silently dropped.
  */
 export async function searchPhotos(query: PhotoQuery): Promise<PlacePhoto[]> {
+  const providers = getPhotoProviders();
+  const tagEnrichers = getTagEnrichers();
+
   const totalLimit = query.limit ?? 20;
-  const perProvider = Math.max(6, Math.ceil(totalLimit / PROVIDERS.length));
+  const perProvider = Math.max(6, Math.ceil(totalLimit / Math.max(providers.length, 1)));
 
   // Run coordinate-based providers
-  const providerPromises = PROVIDERS.map((p) => p.search({ ...query, limit: perProvider }));
+  const providerPromises = providers.map((p) => p.search({ ...query, limit: perProvider }));
 
   // Run tag-based enrichers if OSM tags are available
   const tags = query.osmTags;
   const enricherPromises = tags
-    ? TAG_ENRICHERS.map((e) => e.enrich(tags).then((r) => r?.photos ?? []))
+    ? tagEnrichers.map((e) => e.enrich(tags).then((r) => r?.photos ?? []))
     : [];
 
   const [enricherResults, providerResults] = await Promise.all([

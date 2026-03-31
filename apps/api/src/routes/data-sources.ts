@@ -1,6 +1,5 @@
-import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import { ConfigurationError, type DataSourceDetail, type DataSourceResult } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-// ApiKeyMissingError moved to integrations/ev-charging — catch generically instead
 import { dataSourceRegistry } from "../services/data-sources/registry.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
@@ -58,7 +57,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     try {
       results = await withCache(cacheKey, searchTtl, () => provider.search(bbox, filters));
     } catch (err) {
-      if (err instanceof Error && err.message.includes("API key")) {
+      if (err instanceof ConfigurationError) {
         return reply.status(503).send({ error: err.message });
       }
       throw err;
@@ -85,7 +84,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     try {
       detail = await withCache(cacheKey, detailTtl, () => provider.getDetail(itemId));
     } catch (err) {
-      if (err instanceof Error && err.message.includes("API key")) {
+      if (err instanceof ConfigurationError) {
         return reply.status(503).send({ error: err.message });
       }
       throw err;

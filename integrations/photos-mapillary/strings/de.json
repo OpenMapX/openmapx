@@ -1,0 +1,11 @@
+{
+  "name": "Mapillary-Fotos",
+  "description": "Straßenansichtsfotos in der Nähe von Orten von Mapillary",
+  "privacy": [
+    {
+      "service": "Mapillary",
+      "purpose": "Straßenansichtsfotos in der Nähe von Orten",
+      "dataSent": "Koordinaten, API-Token"
+    }
+  ]
+}

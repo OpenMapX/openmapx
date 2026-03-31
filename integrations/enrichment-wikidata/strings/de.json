@@ -1,0 +1,11 @@
+{
+  "name": "Wikidata-Anreicherung",
+  "description": "Ortsdetails mit strukturierten Daten aus Wikidata anreichern",
+  "privacy": [
+    {
+      "service": "Wikidata",
+      "purpose": "Ortsdetails mit strukturierten Daten aus Wikidata anreichern",
+      "dataSent": "Wikidata-Entitäts-IDs (aus OSM-Tags)"
+    }
+  ]
+}

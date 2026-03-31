@@ -1,0 +1,8 @@
+{
+  "name": "iRail (Belgische Eisenbahn)",
+  "description": "Belgische NMBS/SNCB-Zugdaten",
+  "privacy": {
+    "purpose": "Belgische Bahnhaltestellen und Abfahrten",
+    "dataSent": "Bahnhofs-IDs"
+  }
+}

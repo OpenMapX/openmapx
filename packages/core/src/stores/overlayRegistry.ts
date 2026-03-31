@@ -1,3 +1,4 @@
+import type { LoadedIntegrationMeta } from "../integration/loader";
 import { useAirQualityStore } from "./airQualityStore";
 import { useBuildingsStore } from "./buildingsStore";
 import type { OverlayStoreBase } from "./createOverlayStore";
@@ -21,86 +22,89 @@ export interface OverlayEntry {
   excludes: OverlayId[];
 }
 
-const overlayEntries: OverlayEntry[] = [
-  {
-    id: "traffic",
-    serviceId: "tomtom-traffic",
-    getState: () => useTrafficStore.getState(),
-    useActive: () => useTrafficStore((s) => s.panelOpen && s.layerVisible),
-    excludes: [],
-  },
-  {
-    id: "transit",
-    getState: () => useTransitStore.getState(),
-    useActive: () => useTransitStore((s) => s.panelOpen && s.layerVisible),
-    excludes: [],
-  },
-  {
-    id: "street-view",
-    serviceId: "mapillary",
-    getState: () => useStreetViewStore.getState(),
-    useActive: () => useStreetViewStore((s) => s.panelOpen && s.layerVisible),
-    excludes: ["air-quality", "earthquakes", "wildfires", "winter-sports", "hiking"],
-  },
-  {
-    id: "air-quality",
-    serviceId: "openaq",
-    getState: () => useAirQualityStore.getState(),
-    useActive: () => useAirQualityStore((s) => s.panelOpen && s.layerVisible),
-    excludes: ["street-view", "earthquakes", "wildfires"],
-  },
-  {
-    id: "earthquakes",
-    getState: () => useEarthquakeStore.getState(),
-    useActive: () => useEarthquakeStore((s) => s.panelOpen && s.layerVisible),
-    excludes: ["street-view", "air-quality", "wildfires"],
-  },
-  {
-    id: "wildfires",
-    serviceId: "firms-wildfires",
-    getState: () => useWildfireStore.getState(),
-    useActive: () => useWildfireStore((s) => s.panelOpen && s.layerVisible),
-    excludes: ["street-view", "air-quality", "earthquakes"],
-  },
-  {
-    id: "winter-sports",
-    getState: () => useWinterSportsStore.getState(),
-    useActive: () => useWinterSportsStore((s) => s.panelOpen && s.layerVisible),
-    excludes: ["street-view", "hiking"],
-  },
-  {
-    id: "hiking",
-    getState: () => useHikingStore.getState(),
-    useActive: () => useHikingStore((s) => s.panelOpen && s.layerVisible),
-    excludes: ["street-view", "winter-sports"],
-  },
-  {
-    id: "cycling",
-    getState: () => useCyclingStore.getState(),
-    useActive: () => useCyclingStore((s) => s.panelOpen && s.layerVisible),
-    excludes: [],
-  },
-  {
-    id: "live-trains",
-    getState: () => useLiveTrainsStore.getState(),
-    useActive: () => useLiveTrainsStore((s) => s.panelOpen && s.layerVisible),
-    excludes: [],
-  },
-  {
-    id: "3d-buildings",
-    getState: () => useBuildingsStore.getState(),
-    useActive: () => useBuildingsStore((s) => s.panelOpen && s.layerVisible),
-    excludes: [],
-  },
-];
+type StoreHook = {
+  getState: () => OverlayStoreBase;
+  <T>(selector: (s: OverlayStoreBase) => T): T;
+};
 
-/** Read-only view of the registry (for backward compatibility). */
+/**
+ * Static mapping from overlay ID to its Zustand store hook.
+ * Adding a new overlay requires adding an entry here + creating the store file.
+ */
+const OVERLAY_STORE_MAP: Record<string, StoreHook> = {
+  traffic: useTrafficStore as unknown as StoreHook,
+  transit: useTransitStore as unknown as StoreHook,
+  "street-view": useStreetViewStore as unknown as StoreHook,
+  "air-quality": useAirQualityStore as unknown as StoreHook,
+  earthquakes: useEarthquakeStore as unknown as StoreHook,
+  wildfires: useWildfireStore as unknown as StoreHook,
+  "winter-sports": useWinterSportsStore as unknown as StoreHook,
+  hiking: useHikingStore as unknown as StoreHook,
+  cycling: useCyclingStore as unknown as StoreHook,
+  "live-trains": useLiveTrainsStore as unknown as StoreHook,
+  "3d-buildings": useBuildingsStore as unknown as StoreHook,
+};
+
+/** Convert integration ID to overlay ID */
+function integrationIdToOverlayId(integrationId: string): string {
+  if (integrationId === "overlay-traffic-tomtom") return "traffic";
+  if (integrationId === "street-view-mapillary") return "street-view";
+  return integrationId.replace(/^overlay-/, "").replace(/^tool-/, "");
+}
+
+const overlayEntries: OverlayEntry[] = [];
+
+/** Read-only view of the registry. */
 export const OVERLAY_REGISTRY: readonly OverlayEntry[] = overlayEntries;
 
 /** Register a new overlay entry at runtime (used by integration framework). */
 export function registerOverlayEntry(entry: OverlayEntry): void {
   if (overlayEntries.some((e) => e.id === entry.id)) return;
   overlayEntries.push(entry);
+}
+
+/**
+ * Initialize the overlay registry from integration manifest data.
+ * Called by IntegrationProvider after fetching integration metadata.
+ * Reads exclusion rules and serviceId from manifests, wires to store hooks.
+ */
+export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void {
+  // Clear any existing entries to avoid duplicates on re-init
+  overlayEntries.length = 0;
+
+  for (const integration of integrations) {
+    if (!integration.enabled) continue;
+    if (!integration.frontend?.overlay) continue;
+
+    const overlayId = integrationIdToOverlayId(integration.id);
+    const storeHook = OVERLAY_STORE_MAP[overlayId];
+    if (!storeHook) continue;
+
+    const overlay = integration.frontend.overlay as {
+      excludes?: string[];
+      minZoom?: number;
+    };
+
+    overlayEntries.push({
+      id: overlayId,
+      serviceId: integration.id,
+      getState: () => storeHook.getState(),
+      useActive: () => storeHook((s: OverlayStoreBase) => s.panelOpen && s.layerVisible),
+      excludes: overlay.excludes ?? [],
+    });
+  }
+
+  // Add overlays that have stores but may not have integration manifests yet
+  // (e.g., transit, tools) - these get basic entries with no exclusions
+  for (const [id, hook] of Object.entries(OVERLAY_STORE_MAP)) {
+    if (overlayEntries.some((e) => e.id === id)) continue;
+    overlayEntries.push({
+      id,
+      getState: () => hook.getState(),
+      useActive: () => hook((s: OverlayStoreBase) => s.panelOpen && s.layerVisible),
+      excludes: [],
+    });
+  }
 }
 
 export function getOverlayEntry(id: OverlayId): OverlayEntry | undefined {

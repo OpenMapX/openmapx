@@ -1,0 +1,11 @@
+{
+  "name": "Photon-Geokodierung",
+  "description": "Vorwärts- und Rückwärtsgeokodierung über Photon (Komoot)",
+  "privacy": [
+    {
+      "service": "Photon/Komoot",
+      "purpose": "Vorwärts-/Rückwärtsgeokodierung und Adresssuche",
+      "dataSent": "Suchanfragetext, Koordinaten für Rückwärtsgeokodierung"
+    }
+  ]
+}

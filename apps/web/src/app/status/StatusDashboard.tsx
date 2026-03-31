@@ -18,21 +18,28 @@ interface StatusResponse {
   services: ServiceStatus[];
 }
 
-const CATEGORY_ORDER = [
-  "Infrastructure",
-  "Geocoding",
-  "Routing",
-  "Transit",
-  "Map Tiles",
-  "Imagery",
-  "Traffic",
-  "Data Overlays",
-  "Parking",
-  "Shared Mobility",
-  "Fuel Prices",
-  "Enrichment",
-  "External",
-];
+/**
+ * Category display order — derived from the API response order.
+ * The API returns services grouped by manifest healthCheck.category.
+ * We preserve that order but ensure "Infrastructure" always comes first.
+ */
+function deriveCategoryOrder(services: ServiceStatus[]): string[] {
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const s of services) {
+    if (!seen.has(s.category)) {
+      seen.add(s.category);
+      order.push(s.category);
+    }
+  }
+  // Infrastructure always first
+  const infraIdx = order.indexOf("Infrastructure");
+  if (infraIdx > 0) {
+    order.splice(infraIdx, 1);
+    order.unshift("Infrastructure");
+  }
+  return order;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   up: "bg-green-500",
@@ -91,10 +98,9 @@ export default function StatusDashboard() {
       }, {})
     : {};
 
-  const categories = CATEGORY_ORDER.filter((c) => grouped[c]?.length);
-  for (const c of Object.keys(grouped)) {
-    if (!categories.includes(c)) categories.push(c);
-  }
+  const categories = data
+    ? deriveCategoryOrder(data.services).filter((c) => grouped[c]?.length)
+    : [];
 
   const upCount = data?.services.filter((s) => s.status === "up").length ?? 0;
   const downCount = data?.services.filter((s) => s.status === "down").length ?? 0;

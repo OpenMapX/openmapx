@@ -1,0 +1,8 @@
+{
+  "name": "TfL (Transport for London)",
+  "description": "Londoner öffentliche Verkehrsdaten",
+  "privacy": {
+    "purpose": "Londoner Haltestellen und Abfahrten",
+    "dataSent": "Haltestellen-IDs, Koordinaten, API-Schlüssel"
+  }
+}

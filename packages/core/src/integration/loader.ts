@@ -8,7 +8,7 @@ export interface LoadedIntegration {
   directory: string;
   isBuiltIn: boolean;
   enabled: boolean;
-  providers: Map<string, unknown>;
+  providers: Map<string, unknown[]>;
   customHealthCheck?: CustomHealthCheckFn;
   shutdownHandlers: Array<() => Promise<void>>;
 }
@@ -20,7 +20,6 @@ export interface LoadedIntegrationMeta {
   enabled: boolean;
   domains: string[];
   frontend?: IntegrationManifest["frontend"];
-  config: Record<string, unknown>;
   attribution?: IntegrationManifest["attribution"];
   privacy?: IntegrationManifest["privacy"];
   healthCheck?: IntegrationManifest["healthCheck"];
@@ -34,7 +33,6 @@ export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegra
     enabled: integration.enabled,
     domains: integration.manifest.domains,
     frontend: integration.manifest.frontend,
-    config: integration.config,
     attribution: integration.manifest.attribution,
     privacy: integration.manifest.privacy,
     healthCheck: integration.manifest.healthCheck,

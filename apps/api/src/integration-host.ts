@@ -108,13 +108,16 @@ function resolveConfig(manifest: {
 }): Record<string, unknown> {
   const config: Record<string, unknown> = {};
 
-  // Apply defaults from configSchema
-  const schema = manifest.configSchema as
-    | { properties?: Record<string, { default?: unknown }> }
-    | undefined;
-  if (schema?.properties) {
-    for (const [key, def] of Object.entries(schema.properties)) {
-      if (def.default !== undefined) config[key] = def.default;
+  // Apply defaults from configSchema (supports both JSON Schema with "properties" wrapper
+  // and flat format where keys are directly under configSchema)
+  const schema = manifest.configSchema as Record<string, unknown> | undefined;
+  if (schema) {
+    const props = (schema.properties ?? schema) as Record<string, { default?: unknown }>;
+    for (const [key, def] of Object.entries(props)) {
+      if (key === "type" || key === "properties") continue;
+      if (def && typeof def === "object" && "default" in def && def.default !== undefined) {
+        config[key] = def.default;
+      }
     }
   }
 
@@ -205,7 +208,7 @@ export async function initIntegrations(
     const http = createHttpClient(log);
     const cache = createCacheClient(id);
     const shutdownHandlers: Array<() => Promise<void>> = [];
-    const providers = new Map<string, unknown>();
+    const providers = new Map<string, unknown[]>();
     let _customHealthCheck: CustomHealthCheckFn | undefined;
 
     const integration: LoadedIntegration = {
@@ -234,7 +237,9 @@ export async function initIntegrations(
       cache,
       log,
       registerProvider(domain: string, provider: unknown) {
-        providers.set(domain, provider);
+        const existing = providers.get(domain) ?? [];
+        existing.push(provider);
+        providers.set(domain, existing);
       },
       registerRoute(method: string, path: string, handler: RouteHandler) {
         const fullPath = `/api/integrations/${id}${path.startsWith("/") ? path : `/${path}`}`;
@@ -291,15 +296,22 @@ export async function initIntegrations(
       }
 
       // Bridge data-source providers into the legacy registry
-      const dsProvider = providers.get("data-source") as LegacyDataSourceProvider | undefined;
-      if (dsProvider) {
-        dataSourceRegistry.register(dsProvider);
+      const dsProviders = (providers.get("data-source") ?? []) as LegacyDataSourceProvider[];
+      for (const dsp of dsProviders) {
+        dataSourceRegistry.register(dsp);
       }
 
       // Bridge transit providers into the orchestrator
-      const transitProvider = providers.get("transit") as TransitProviderImpl | undefined;
-      if (transitProvider) {
-        transitOrchestrator.register(transitProvider);
+      const transitProviders = (providers.get("transit") ?? []) as TransitProviderImpl[];
+      for (const tp of transitProviders) {
+        transitOrchestrator.register(tp);
+      }
+
+      // Geocoding providers are read directly from the integration framework
+      // by geocoding.factory.ts via getIntegrationsByDomain("geocoding")
+      const geocodingProviders = providers.get("geocoding") ?? [];
+      if (geocodingProviders.length > 0) {
+        log.info(`Registered ${geocodingProviders.length} geocoding provider(s)`);
       }
 
       integrations.set(id, integration);
@@ -350,8 +362,8 @@ export function getIntegrationsByDomain(domain: string): LoadedIntegration[] {
   );
 }
 
-export function getIntegrationProvider<T>(id: string, domain: string): T | undefined {
-  return integrations.get(id)?.providers.get(domain) as T | undefined;
+export function getIntegrationProviders<T>(id: string, domain: string): T[] {
+  return (integrations.get(id)?.providers.get(domain) ?? []) as T[];
 }
 
 export async function shutdownIntegrations(): Promise<void> {

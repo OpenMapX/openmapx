@@ -3,7 +3,7 @@ import * as hafas from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   // Register DB HAFAS as a transit provider (VBB and BVG are registered by their own integrations)
-  const dbInst = hafas.HAFAS_INSTANCES.find((i) => i.prefix === "db:");
+  const dbInst = hafas.HAFAS_INSTANCES.find((i) => i.id === "db");
   if (dbInst) {
     ctx.registerProvider("transit", {
       id: "transit-hafas-db",

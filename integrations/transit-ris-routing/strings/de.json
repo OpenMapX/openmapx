@@ -1,0 +1,8 @@
+{
+  "name": "DB-RIS-Routing",
+  "description": "Deutsche Bahnreiseplanung über die RIS API",
+  "privacy": {
+    "purpose": "Deutsche Bahnreiseplanung",
+    "dataSent": "Start-/Zielkoordinaten, API-Zugangsdaten"
+  }
+}

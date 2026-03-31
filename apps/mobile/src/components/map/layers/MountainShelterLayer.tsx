@@ -42,7 +42,7 @@ export function MountainShelterLayer() {
     const [west, south, east, north] = bounds;
 
     const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "";
-    const url = `${apiUrl}/api/hiking/shelters?south=${south}&west=${west}&north=${north}&east=${east}`;
+    const url = `${apiUrl}/api/integrations/overlay-hiking/hiking/shelters?south=${south}&west=${west}&north=${north}&east=${east}`;
 
     try {
       const res = await fetch(url);

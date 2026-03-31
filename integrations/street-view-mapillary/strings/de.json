@@ -1,0 +1,9 @@
+{
+  "name": "Mapillary-Straßenansicht",
+  "description": "Straßenansichtsbilder von Mapillary",
+  "privacy": {
+    "purpose": "Straßenansichtsbilder",
+    "dataSent": "Koordinaten, Bild-IDs, API-Token",
+    "dataReceived": "Straßenansichtsbilder und Sequenz-Metadaten"
+  }
+}

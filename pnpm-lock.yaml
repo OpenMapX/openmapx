@@ -458,6 +458,12 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
 
+  integrations/enrichment-wikimedia-commons:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+
   integrations/enrichment-wikipedia:
     dependencies:
       '@openmapx/core':
@@ -471,6 +477,12 @@ importers:
         version: link:../../packages/core
 
   integrations/fuel:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+
+  integrations/geocoding-db-ris:
     dependencies:
       '@openmapx/core':
         specifier: workspace:^
@@ -688,6 +700,12 @@ importers:
 
   integrations/transit-motis:
     dependencies:
+      '@hey-api/client-fetch':
+        specifier: 0.4.4
+        version: 0.4.4
+      '@motis-project/motis-client':
+        specifier: ^2.9.1
+        version: 2.9.1
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core

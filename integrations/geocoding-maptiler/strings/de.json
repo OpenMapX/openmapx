@@ -1,0 +1,11 @@
+{
+  "name": "MapTiler-Geokodierung",
+  "description": "Vorwärtsgeokodierung und Autovervollständigung über MapTiler",
+  "privacy": [
+    {
+      "service": "MapTiler",
+      "purpose": "Vorwärtsgeokodierung und Autovervollständigung",
+      "dataSent": "Suchanfragetext, API-Schlüssel"
+    }
+  ]
+}

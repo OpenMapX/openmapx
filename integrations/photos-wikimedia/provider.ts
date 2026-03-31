@@ -1,5 +1,4 @@
-import type { PlacePhoto } from "@openmapx/core";
-import { type CommonsPage, parseCommonsPage } from "./commons-metadata";
+import { type CommonsPage, type PlacePhoto, parseCommonsPage } from "@openmapx/core";
 import type { PhotoProvider, PhotoQuery } from "./types";
 
 const HEADERS = {

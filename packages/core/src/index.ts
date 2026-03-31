@@ -24,6 +24,8 @@ export type {
   DomainDefinition,
   DomainId,
   EnrichmentProvider,
+  EnrichmentResult,
+  EnrichmentSource,
   GeocodingProvider,
   GeoJsonFeatureCollection,
   MapOverlayData,
@@ -187,6 +189,7 @@ export type { OverlayEntry, OverlayId } from "./stores/overlayRegistry";
 export {
   closeExclusionPeers,
   getOverlayEntry,
+  initOverlayRegistry,
   isOverlayActive,
   OVERLAY_REGISTRY,
   registerOverlayEntry,
@@ -281,10 +284,14 @@ export type {
   VehicleJourneyStop,
   VehiclePosition,
 } from "./types/transit";
-
-// Utils
 export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
+// Utils
+export {
+  type CommonsPage,
+  fetchCommonsMetadata,
+  parseCommonsPage,
+} from "./utils/commons-metadata";
 export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";
 export {
   buildElevationProfile,
@@ -293,6 +300,7 @@ export {
   computeGrades,
   downsampleLTTB,
 } from "./utils/elevation";
+export { ConfigurationError } from "./utils/errors";
 export {
   formatArea,
   formatDistance,

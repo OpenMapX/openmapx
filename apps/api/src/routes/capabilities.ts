@@ -3,13 +3,10 @@ import { getAllIntegrations } from "../integration-host.js";
 
 export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get("/capabilities", async (_req, reply) => {
-    const services: Record<string, boolean> = {};
+    const services: Record<string, { configured: boolean; enabled: boolean; domains: string[] }> =
+      {};
 
     for (const integration of getAllIntegrations()) {
-      if (!integration.enabled) {
-        services[integration.id] = false;
-        continue;
-      }
       const envVars = integration.manifest.envVars as string[] | undefined;
       const allSet =
         !envVars?.length ||
@@ -17,7 +14,11 @@ export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
           const val = process.env[v];
           return val !== undefined && val !== "";
         });
-      services[integration.id] = allSet;
+      services[integration.id] = {
+        configured: allSet,
+        enabled: integration.enabled,
+        domains: integration.manifest.domains,
+      };
     }
 
     reply.header("Cache-Control", "public, max-age=3600");

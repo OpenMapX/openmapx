@@ -1,17 +1,23 @@
 "use client";
 
 import { useIntegrationRegistry } from "@openmapx/core";
+import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
+
+function resolveDefault(mod: Record<string, unknown>): { default: ComponentType } {
+  const Component = (mod.default ??
+    Object.values(mod).find((v) => typeof v === "function")) as ComponentType;
+  return { default: Component };
+}
 
 function IntegrationMapLayer({ id }: { id: string }) {
   const LazyLayer = useMemo(
     () =>
-      lazy(
-        () =>
-          import(
-            /* webpackChunkName: "integration-[request]" */
-            `@integrations/${id}/map-layer`
-          ),
+      lazy(() =>
+        import(
+          /* webpackChunkName: "integration-[request]" */
+          `@integrations/${id}/map-layer`
+        ).then(resolveDefault),
       ),
     [id],
   );

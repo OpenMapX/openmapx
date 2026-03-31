@@ -1,0 +1,8 @@
+{
+  "name": "HAFAS-Nahverkehr (DB/VBB/BVG)",
+  "description": "Deutsche Bahn-, VBB- und BVG-Nahverkehrsdaten über HAFAS",
+  "privacy": {
+    "purpose": "Haltestellenabfahrten, Ankünfte und Reiseplanung",
+    "dataSent": "Haltestellen-IDs, Koordinaten, Abfahrtszeiten"
+  }
+}

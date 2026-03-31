@@ -96,7 +96,7 @@ export function WildfireLayer() {
     if (!map) return;
 
     const { apiUrl } = env;
-    const url = `${apiUrl}/api/wildfires?dayRange=${dayRange}&source=${source}`;
+    const url = `${apiUrl}/api/integrations/overlay-wildfires/wildfires?dayRange=${dayRange}&source=${source}`;
 
     setLoading(true);
     try {

@@ -83,7 +83,7 @@ export const DOMAIN_DEFINITIONS: Record<DomainId, DomainDefinition> = {
 };
 
 export type { DataSourceProvider } from "./data-source";
-export type { EnrichmentProvider } from "./enrichment";
+export type { EnrichmentProvider, EnrichmentResult, EnrichmentSource } from "./enrichment";
 export type { GeocodingProvider } from "./geocoding";
 export type {
   GeoJsonFeatureCollection,

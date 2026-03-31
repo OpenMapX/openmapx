@@ -96,7 +96,7 @@ export function AirQualityLayer() {
 
     const bounds = map.getBounds();
     const { apiUrl } = env;
-    const url = `${apiUrl}/api/air-quality/stations?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
+    const url = `${apiUrl}/api/integrations/overlay-air-quality/air-quality/stations?south=${bounds.getSouth()}&west=${bounds.getWest()}&north=${bounds.getNorth()}&east=${bounds.getEast()}`;
 
     setLoading(true);
     try {

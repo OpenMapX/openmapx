@@ -1,13 +1,13 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-// Mock transit service
+// Mock transit orchestrator
 
 const mockGetStopsInBbox = vi.fn();
-const mockSearchStopsByName = vi.fn();
+const mockSearchByName = vi.fn();
 const mockGetStop = vi.fn();
-const mockGetStopDepartures = vi.fn();
-const mockGetStopArrivals = vi.fn();
+const mockGetDepartures = vi.fn();
+const mockGetArrivals = vi.fn();
 const mockGetStopAlerts = vi.fn();
 const mockGetStopPlatforms = vi.fn();
 const mockGetStopTimetable = vi.fn();
@@ -16,39 +16,39 @@ const mockGetRoutesInBbox = vi.fn();
 const mockGetRoutesForStop = vi.fn();
 const mockGetRouteStops = vi.fn();
 const mockGetRouteAlerts = vi.fn();
-const mockGetRouteLive = vi.fn();
 const mockGetAlerts = vi.fn();
 const mockGetVehiclePositions = vi.fn();
 const mockGetVehicleRadar = vi.fn();
 const mockGetVehicleJourney = vi.fn();
 const mockGetFacilities = vi.fn();
 const mockPlanTrip = vi.fn();
-const mockGetProviderHealthStatus = vi.fn(() => ({}));
-const mockFetchStopsByNameRaw = vi.fn();
+const mockGetHealthStatus = vi.fn(() => ({}));
+const mockGetReachableStops = vi.fn();
 
-vi.mock("../../services/transit/index.js", () => ({
-  getStopsInBbox: mockGetStopsInBbox,
-  searchStopsByName: mockSearchStopsByName,
-  getStop: mockGetStop,
-  getStopDepartures: mockGetStopDepartures,
-  getStopArrivals: mockGetStopArrivals,
-  getStopAlerts: mockGetStopAlerts,
-  getStopPlatforms: mockGetStopPlatforms,
-  getStopTimetable: mockGetStopTimetable,
-  getRoute: mockGetRoute,
-  getRoutesInBbox: mockGetRoutesInBbox,
-  getRoutesForStop: mockGetRoutesForStop,
-  getRouteStops: mockGetRouteStops,
-  getRouteAlerts: mockGetRouteAlerts,
-  getRouteLive: mockGetRouteLive,
-  getAlerts: mockGetAlerts,
-  getVehiclePositions: mockGetVehiclePositions,
-  getVehicleRadar: mockGetVehicleRadar,
-  getVehicleJourney: mockGetVehicleJourney,
-  getFacilities: mockGetFacilities,
-  planTrip: mockPlanTrip,
-  getProviderHealthStatus: mockGetProviderHealthStatus,
-  fetchStopsByNameRaw: mockFetchStopsByNameRaw,
+vi.mock("../../services/transit/orchestrator.js", () => ({
+  transitOrchestrator: {
+    getStopsInBbox: mockGetStopsInBbox,
+    searchByName: mockSearchByName,
+    getStop: mockGetStop,
+    getDepartures: mockGetDepartures,
+    getArrivals: mockGetArrivals,
+    getStopAlerts: mockGetStopAlerts,
+    getStopPlatforms: mockGetStopPlatforms,
+    getStopTimetable: mockGetStopTimetable,
+    getRoute: mockGetRoute,
+    getRoutesInBbox: mockGetRoutesInBbox,
+    getRoutesForStop: mockGetRoutesForStop,
+    getRouteStops: mockGetRouteStops,
+    getRouteAlerts: mockGetRouteAlerts,
+    getAlerts: mockGetAlerts,
+    getVehiclePositions: mockGetVehiclePositions,
+    getVehicleRadar: mockGetVehicleRadar,
+    getVehicleJourney: mockGetVehicleJourney,
+    getFacilities: mockGetFacilities,
+    planTrip: mockPlanTrip,
+    getHealthStatus: mockGetHealthStatus,
+    getReachableStops: mockGetReachableStops,
+  },
 }));
 
 // Mock place-transit service
@@ -89,6 +89,19 @@ vi.mock("../../services/transit/static-providers.js", () => ({
     transitous: { label: "Transitous", url: "https://transitous.org" },
     db: { label: "Deutsche Bahn", url: "https://www.deutschebahn.com" },
   },
+}));
+
+// Mock cache utility (withCache just calls the factory fn directly)
+
+vi.mock("../../utils/cache.js", () => ({
+  hashKey: vi.fn((_prefix: string, _data: unknown) => "cache:test"),
+  withCache: vi.fn((_key: string, _ttl: number, fn: () => unknown) => fn()),
+}));
+
+// Mock transit-attribution
+
+vi.mock("../transit-attribution.js", () => ({
+  getFeedProviders: vi.fn(() => ({})),
 }));
 
 // Fixtures
@@ -289,32 +302,32 @@ describe("GET /transit/stops/search", () => {
   });
 
   it("returns 200 with valid query", async () => {
-    mockSearchStopsByName.mockResolvedValueOnce([MOCK_STOP]);
+    mockSearchByName.mockResolvedValueOnce([MOCK_STOP]);
     const res = await app.inject({
       method: "GET",
       url: `/transit/stops/search?${qs({ q: "Berlin" })}`,
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveLength(1);
-    expect(mockSearchStopsByName).toHaveBeenCalledWith("Berlin", 5);
+    expect(mockSearchByName).toHaveBeenCalledWith("Berlin", 5);
   });
 
   it("respects limit param", async () => {
-    mockSearchStopsByName.mockResolvedValueOnce([]);
+    mockSearchByName.mockResolvedValueOnce([]);
     await app.inject({
       method: "GET",
       url: `/transit/stops/search?${qs({ q: "Berlin", limit: "10" })}`,
     });
-    expect(mockSearchStopsByName).toHaveBeenCalledWith("Berlin", 10);
+    expect(mockSearchByName).toHaveBeenCalledWith("Berlin", 10);
   });
 
   it("caps limit at 20", async () => {
-    mockSearchStopsByName.mockResolvedValueOnce([]);
+    mockSearchByName.mockResolvedValueOnce([]);
     await app.inject({
       method: "GET",
       url: `/transit/stops/search?${qs({ q: "Berlin", limit: "100" })}`,
     });
-    expect(mockSearchStopsByName).toHaveBeenCalledWith("Berlin", 20);
+    expect(mockSearchByName).toHaveBeenCalledWith("Berlin", 20);
   });
 });
 
@@ -378,55 +391,55 @@ describe("GET /transit/stops/:id", () => {
 
 describe("GET /transit/stops/:id/departures", () => {
   it("returns departures with default minutes=60", async () => {
-    mockGetStopDepartures.mockResolvedValueOnce([MOCK_DEPARTURE]);
+    mockGetDepartures.mockResolvedValueOnce([MOCK_DEPARTURE]);
     const res = await app.inject({
       method: "GET",
       url: "/transit/stops/mo%3Ade_berlin/departures",
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveLength(1);
-    expect(mockGetStopDepartures).toHaveBeenCalledWith("mo:de_berlin", 60);
+    expect(mockGetDepartures).toHaveBeenCalledWith("mo:de_berlin", 60);
   });
 
   it("respects custom minutes param", async () => {
-    mockGetStopDepartures.mockResolvedValueOnce([]);
+    mockGetDepartures.mockResolvedValueOnce([]);
     const res = await app.inject({
       method: "GET",
       url: `/transit/stops/mo%3Ade_berlin/departures?${qs({ minutes: "30" })}`,
     });
     expect(res.statusCode).toBe(200);
-    expect(mockGetStopDepartures).toHaveBeenCalledWith("mo:de_berlin", 30);
+    expect(mockGetDepartures).toHaveBeenCalledWith("mo:de_berlin", 30);
   });
 
   it("caps minutes at 120", async () => {
-    mockGetStopDepartures.mockResolvedValueOnce([]);
+    mockGetDepartures.mockResolvedValueOnce([]);
     await app.inject({
       method: "GET",
       url: `/transit/stops/mo%3Ade_berlin/departures?${qs({ minutes: "500" })}`,
     });
-    expect(mockGetStopDepartures).toHaveBeenCalledWith("mo:de_berlin", 120);
+    expect(mockGetDepartures).toHaveBeenCalledWith("mo:de_berlin", 120);
   });
 });
 
 describe("GET /transit/stops/:id/arrivals", () => {
   it("returns arrivals with default minutes=60", async () => {
-    mockGetStopArrivals.mockResolvedValueOnce([MOCK_DEPARTURE]);
+    mockGetArrivals.mockResolvedValueOnce([MOCK_DEPARTURE]);
     const res = await app.inject({
       method: "GET",
       url: "/transit/stops/mo%3Ade_berlin/arrivals",
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveLength(1);
-    expect(mockGetStopArrivals).toHaveBeenCalledWith("mo:de_berlin", 60);
+    expect(mockGetArrivals).toHaveBeenCalledWith("mo:de_berlin", 60);
   });
 
   it("respects custom minutes param", async () => {
-    mockGetStopArrivals.mockResolvedValueOnce([]);
+    mockGetArrivals.mockResolvedValueOnce([]);
     await app.inject({
       method: "GET",
       url: `/transit/stops/mo%3Ade_berlin/arrivals?${qs({ minutes: "90" })}`,
     });
-    expect(mockGetStopArrivals).toHaveBeenCalledWith("mo:de_berlin", 90);
+    expect(mockGetArrivals).toHaveBeenCalledWith("mo:de_berlin", 90);
   });
 });
 
@@ -611,7 +624,8 @@ describe("GET /transit/routes/:id/alerts", () => {
 
 describe("GET /transit/routes/:id/live", () => {
   it("returns 200 with { vehicles, alerts }", async () => {
-    mockGetRouteLive.mockResolvedValueOnce({ vehicles: [], alerts: [MOCK_ALERT] });
+    mockGetVehiclePositions.mockResolvedValueOnce([]);
+    mockGetRouteAlerts.mockResolvedValueOnce([MOCK_ALERT]);
     const res = await app.inject({
       method: "GET",
       url: "/transit/routes/r%3A1/live",
@@ -621,13 +635,9 @@ describe("GET /transit/routes/:id/live", () => {
     expect(body).toHaveProperty("vehicles");
     expect(body).toHaveProperty("alerts");
     expect(body.alerts).toHaveLength(1);
-    expect(mockGetRouteLive).toHaveBeenCalledWith("r:1");
+    expect(mockGetVehiclePositions).toHaveBeenCalledWith("r:1");
+    expect(mockGetRouteAlerts).toHaveBeenCalledWith("r:1");
   });
-
-  // NOTE: The route handler `return getRouteLive(id)` has no explicit try/catch.
-  // If getRouteLive throws, Fastify's default error handler returns HTTP 500.
-  // If it resolves to a value, that value is returned as-is (200 OK).
-  // There is no special "empty on error" path in the handler — errors surface as 500.
 });
 
 describe("GET /transit/alerts", () => {
@@ -843,43 +853,11 @@ describe("GET /transit/plan", () => {
     expect(res.json().itineraries).toHaveLength(1);
     // Verify default params
     const call = mockPlanTrip.mock.calls[0][0];
-    expect(call.fromLat).toBe(52.5);
-    expect(call.fromLng).toBe(13.3);
-    expect(call.toLat).toBe(53.5);
-    expect(call.toLng).toBe(10.0);
-    expect(call.modes).toBe("TRANSIT");
-    expect(call.numItineraries).toBe(3);
-    expect(call.arriveBy).toBe(false);
-  });
-
-  it("passes arrive_by=true to planTrip", async () => {
-    mockPlanTrip.mockResolvedValueOnce(MOCK_PLAN);
-    await app.inject({
-      method: "GET",
-      url: `/transit/plan?${qs({ from_lat: "52.5", from_lng: "13.3", to_lat: "53.5", to_lng: "10.0", arrive_by: "true" })}`,
-    });
-    const call = mockPlanTrip.mock.calls[0][0];
-    expect(call.arriveBy).toBe(true);
-  });
-
-  it("passes arrive_by=1 as true to planTrip", async () => {
-    mockPlanTrip.mockResolvedValueOnce(MOCK_PLAN);
-    await app.inject({
-      method: "GET",
-      url: `/transit/plan?${qs({ from_lat: "52.5", from_lng: "13.3", to_lat: "53.5", to_lng: "10.0", arrive_by: "1" })}`,
-    });
-    const call = mockPlanTrip.mock.calls[0][0];
-    expect(call.arriveBy).toBe(true);
-  });
-
-  it("caps num_itineraries at 10", async () => {
-    mockPlanTrip.mockResolvedValueOnce(MOCK_PLAN);
-    await app.inject({
-      method: "GET",
-      url: `/transit/plan?${qs({ from_lat: "52.5", from_lng: "13.3", to_lat: "53.5", to_lng: "10.0", num_itineraries: "50" })}`,
-    });
-    const call = mockPlanTrip.mock.calls[0][0];
-    expect(call.numItineraries).toBe(10);
+    expect(call.from).toEqual({ lat: 52.5, lng: 13.3 });
+    expect(call.to).toEqual({ lat: 53.5, lng: 10.0 });
+    expect(call.modes).toEqual(["TRANSIT"]);
+    // departureTime should be a string like "YYYY-MM-DDTHH:MM:SS"
+    expect(call.departureTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
   });
 
   it("parses ISO 8601 time parameter", async () => {
@@ -889,8 +867,7 @@ describe("GET /transit/plan", () => {
       url: `/transit/plan?${qs({ from_lat: "52.5", from_lng: "13.3", to_lat: "53.5", to_lng: "10.0", time: "2026-03-09T20:00:00Z" })}`,
     });
     const call = mockPlanTrip.mock.calls[0][0];
-    expect(call.date).toBe("2026-03-09");
-    expect(call.time).toBe("20:00:00");
+    expect(call.departureTime).toBe("2026-03-09T20:00:00");
   });
 
   it("passes custom modes param", async () => {
@@ -900,7 +877,7 @@ describe("GET /transit/plan", () => {
       url: `/transit/plan?${qs({ from_lat: "52.5", from_lng: "13.3", to_lat: "53.5", to_lng: "10.0", modes: "BUS,RAIL" })}`,
     });
     const call = mockPlanTrip.mock.calls[0][0];
-    expect(call.modes).toBe("BUS,RAIL");
+    expect(call.modes).toEqual(["BUS", "RAIL"]);
   });
 });
 
@@ -917,7 +894,7 @@ describe("GET /transit/providers", () => {
 
 describe("GET /transit/health", () => {
   it("returns 200 with health data", async () => {
-    mockGetProviderHealthStatus.mockReturnValueOnce({ transitous: { healthy: true } });
+    mockGetHealthStatus.mockReturnValueOnce({ transitous: { healthy: true } });
     const res = await app.inject({ method: "GET", url: "/transit/health" });
     expect(res.statusCode).toBe(200);
     const body = res.json();

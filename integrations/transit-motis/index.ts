@@ -1,10 +1,20 @@
+import { stops } from "@motis-project/motis-client";
 import type { IntegrationContext } from "@openmapx/core";
-import * as motis from "../../apps/api/src/services/motis/adapter.js";
-import {
-  motisLocalInstance,
-  transitousInstance,
-} from "../../apps/api/src/services/motis/instances.js";
-import { motisManager } from "../../apps/api/src/services/motis/manager.js";
+import * as motis from "./adapter.js";
+import { motisLocalInstance, transitousInstance } from "./instances.js";
+
+/** Check if the local MOTIS instance is reachable. */
+async function isMotisReachable(): Promise<boolean> {
+  try {
+    const { response } = await stops({
+      client: motisLocalInstance.client,
+      query: { min: "0,0", max: "0.01,0.01" },
+    });
+    return response.ok || (response.status >= 400 && response.status < 500);
+  } catch {
+    return false;
+  }
+}
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
   // Register Transitous (cloud MOTIS) as a transit provider
@@ -42,7 +52,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   });
 
   // Register local MOTIS if available
-  if (await motisManager.isReachable()) {
+  if (await isMotisReachable()) {
     ctx.registerProvider("transit", {
       id: "transit-motis-local",
       prefix: "ms:",

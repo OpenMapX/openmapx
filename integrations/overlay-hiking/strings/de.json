@@ -1,0 +1,9 @@
+{
+  "name": "Wanderwege",
+  "description": "Wanderwegrouten und Berghüttenstandorte über Waymarked Trails",
+  "privacy": {
+    "purpose": "Wanderwegrouten und Berghüttenstandorte",
+    "dataSent": "Begrenzungsrahmen-Koordinaten, Weg-IDs",
+    "dataReceived": "Weggeometrien, Hüttenstandorte und Metadaten"
+  }
+}

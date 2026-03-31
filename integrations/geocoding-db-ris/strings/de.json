@@ -1,0 +1,11 @@
+{
+  "name": "Deutsche-Bahn-Bahnhofssuche",
+  "description": "Geokodierung deutscher Bahnhöfe über die Deutsche Bahn RIS::Stations API",
+  "privacy": [
+    {
+      "service": "Deutsche Bahn RIS",
+      "purpose": "Bahnhofssuche und -anreicherung",
+      "dataSent": "Suchanfragetext, Bahnhofs-IDs, API-Zugangsdaten"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Nominatim-Geokodierung",
+  "description": "Vorwärts- und Rückwärtsgeokodierung über Nominatim (OpenStreetMap)",
+  "privacy": [
+    {
+      "service": "Nominatim/OSM",
+      "purpose": "Vorwärts-/Rückwärtsgeokodierung, Ortsdetail-Abfrage",
+      "dataSent": "Suchanfragetext, Koordinaten, OSM-IDs"
+    }
+  ]
+}

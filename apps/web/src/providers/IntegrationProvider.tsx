@@ -4,10 +4,11 @@ import {
   apiClient,
   IntegrationRegistry,
   IntegrationRegistryContext,
+  initOverlayRegistry,
   type LoadedIntegrationMeta,
 } from "@openmapx/core";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 export function IntegrationProvider({ children }: { children: React.ReactNode }) {
   const { data: integrations } = useQuery({
@@ -17,6 +18,12 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
   });
 
   const registry = useMemo(() => new IntegrationRegistry(integrations ?? []), [integrations]);
+
+  useEffect(() => {
+    if (integrations?.length) {
+      initOverlayRegistry(integrations);
+    }
+  }, [integrations]);
 
   return (
     <IntegrationRegistryContext.Provider value={registry}>

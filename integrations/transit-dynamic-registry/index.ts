@@ -1,8 +1,19 @@
 import type { IntegrationContext } from "@openmapx/core";
-import { getAdapter } from "../../apps/api/src/services/transit/adapters/index.js";
-import { registry } from "../../apps/api/src/services/transit/registry/index.js";
+import { getAdapter } from "./adapters.js";
+import { setCache } from "./fetcher.js";
+import { setRedis } from "./hafas-mgate.js";
+import { registry } from "./registry.js";
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
+  // Inject the cache client so the fetcher can persist registry data
+  setCache(ctx.cache);
+
+  // Inject Redis for cached-hafas-client if available via config
+  const redisClient = ctx.config.redis;
+  if (redisClient) {
+    setRedis(redisClient);
+  }
+
   // Initialize the dynamic registry (fetches from GitHub)
   await registry.initialize().catch(() => {});
 
@@ -33,3 +44,9 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   registry.startRefresh();
   ctx.onShutdown(async () => registry.stopRefresh());
 }
+
+export type { ProtocolAdapter } from "./adapter-types";
+export { getAdapter } from "./adapters.js";
+// Re-export registry and types for consumers
+export { registry } from "./registry.js";
+export type { CoverageTier, ProtocolType, RegistryEntry } from "./registry-types";

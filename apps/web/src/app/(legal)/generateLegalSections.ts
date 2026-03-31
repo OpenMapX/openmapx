@@ -91,7 +91,7 @@ export function generatePrivacySectionsFromManifests(
   >();
 
   for (const integration of integrations) {
-    if (!integration.privacy) continue;
+    if (!integration.enabled || !integration.privacy) continue;
 
     const domain = integration.domains[0] ?? "map-overlay";
     const sectionMeta = DOMAIN_TO_PRIVACY_SECTION[domain] ?? {
@@ -128,7 +128,7 @@ export function generateAttributionSectionsFromManifests(
   const grouped = new Map<string, { heading: string; headingDe: string; rows: AttributionRow[] }>();
 
   for (const integration of integrations) {
-    if (!integration.attribution?.length) continue;
+    if (!integration.enabled || !integration.attribution?.length) continue;
 
     const domain = integration.domains[0] ?? "map-overlay";
     const sectionMeta = DOMAIN_TO_ATTRIBUTION_SECTION[domain] ?? {

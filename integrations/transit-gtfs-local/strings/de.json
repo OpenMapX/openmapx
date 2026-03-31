@@ -1,0 +1,8 @@
+{
+  "name": "Lokale GTFS-Feeds",
+  "description": "Nahverkehrsdaten aus importierten GTFS-Feeds",
+  "privacy": {
+    "purpose": "Lokale Haltestellen- und Abfahrtsdaten aus importierten GTFS-Feeds",
+    "dataSent": "Keine externen Daten gesendet (lokale Datenbankabfragen)"
+  }
+}

@@ -1,6 +1,9 @@
-import type { PlaceFact } from "@openmapx/core";
-import { fetchCommonsMetadata } from "./commons-metadata";
-import type { EnrichmentResult, EnrichmentSource } from "./types";
+import {
+  type EnrichmentResult,
+  type EnrichmentSource,
+  fetchCommonsMetadata,
+  type PlaceFact,
+} from "@openmapx/core";
 
 const HEADERS = {
   "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",

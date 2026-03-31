@@ -23,7 +23,7 @@
   },
 
   "backend": {
-    "routes": true
+    "routes": false
   },
 
   "configSchema": {

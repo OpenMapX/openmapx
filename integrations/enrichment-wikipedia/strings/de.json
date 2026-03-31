@@ -1,0 +1,11 @@
+{
+  "name": "Wikipedia-Anreicherung",
+  "description": "Ortsdetails mit Wikipedia-Beschreibungen und Vorschaubildern anreichern",
+  "privacy": [
+    {
+      "service": "Wikipedia",
+      "purpose": "Ortsdetails mit Wikipedia-Beschreibungen und Vorschaubildern anreichern",
+      "dataSent": "Wikipedia-Artikeltitel (aus OSM-Tags)"
+    }
+  ]
+}

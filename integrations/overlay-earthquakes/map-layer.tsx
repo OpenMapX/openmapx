@@ -154,7 +154,7 @@ export function EarthquakeLayer() {
     if (!map) return;
 
     const { apiUrl } = env;
-    const url = `${apiUrl}/api/earthquakes?timeRange=${timeRange}&minMagnitude=${minMagnitude}`;
+    const url = `${apiUrl}/api/integrations/overlay-earthquakes/earthquakes?timeRange=${timeRange}&minMagnitude=${minMagnitude}`;
 
     setLoading(true);
     try {

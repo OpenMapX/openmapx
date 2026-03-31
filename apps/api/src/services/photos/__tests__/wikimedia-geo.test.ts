@@ -1,11 +1,12 @@
 import type { PlacePhoto } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../enrichment/commons-metadata.js", () => ({
-  parseCommonsPage: vi.fn(),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, parseCommonsPage: vi.fn() };
+});
 
-import { parseCommonsPage } from "../../enrichment/commons-metadata.js";
+import { parseCommonsPage } from "@openmapx/core";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
