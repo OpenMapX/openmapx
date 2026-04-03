@@ -1,4 +1,0 @@
-{
-  "sandbox": false,
-  "allow": ["read", "edit", "shell"]
-}
