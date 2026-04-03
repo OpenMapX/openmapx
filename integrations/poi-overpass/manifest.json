@@ -4,6 +4,11 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["poi-search"],
+  "infrastructure": {
+    "dockerProfile": "overpass",
+    "services": ["overpass"],
+    "dataRequirements": ["osm-pbf"]
+  },
   "backend": {
     "routes": false
   },

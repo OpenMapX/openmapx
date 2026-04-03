@@ -5,6 +5,11 @@
   "license": "MIT",
   "quality": "built-in",
   "domains": ["transit"],
+  "infrastructure": {
+    "dockerProfile": "overpass",
+    "services": ["overpass"],
+    "dataRequirements": ["osm-pbf"]
+  },
   "category": "Transit",
   "configSchema": {
     "enabled": {

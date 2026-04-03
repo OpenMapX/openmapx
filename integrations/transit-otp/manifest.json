@@ -5,6 +5,12 @@
   "license": "MIT",
   "quality": "built-in",
   "domains": ["transit"],
+  "infrastructure": {
+    "dockerProfile": "transit",
+    "services": ["otp"],
+    "dataRequirements": ["osm-pbf", "gtfs-feeds"],
+    "planetScale": false
+  },
   "category": "Transit",
   "envVars": ["OTP_URL"],
   "configSchema": {

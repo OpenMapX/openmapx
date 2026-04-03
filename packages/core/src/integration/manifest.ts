@@ -68,6 +68,7 @@ const infrastructureSchema = z.object({
   dockerProfile: z.string().optional(),
   services: z.array(z.string()).optional(),
   dataRequirements: z.array(z.string()).optional(),
+  planetScale: z.boolean().optional(),
 });
 
 export const integrationManifestSchema = z.object({

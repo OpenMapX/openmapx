@@ -4,6 +4,11 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["routing"],
+  "infrastructure": {
+    "dockerProfile": "routing",
+    "services": ["valhalla"],
+    "dataRequirements": ["osm-pbf"]
+  },
   "backend": {
     "routes": false
   },

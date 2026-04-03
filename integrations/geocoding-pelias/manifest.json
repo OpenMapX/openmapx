@@ -4,6 +4,11 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["geocoding"],
+  "infrastructure": {
+    "dockerProfile": "pelias",
+    "services": ["pelias-api", "pelias-placeholder", "pelias-pip", "elasticsearch"],
+    "dataRequirements": ["osm-pbf"]
+  },
   "backend": {
     "routes": false
   },

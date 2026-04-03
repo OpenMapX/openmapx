@@ -5,6 +5,9 @@
   "license": "MIT",
   "quality": "built-in",
   "domains": ["transit"],
+  "infrastructure": {
+    "dataRequirements": ["gtfs-feeds"]
+  },
   "configSchema": {
     "enabled": {
       "type": "boolean",

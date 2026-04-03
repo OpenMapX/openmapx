@@ -5,6 +5,11 @@
   "license": "MIT",
   "quality": "built-in",
   "domains": ["transit"],
+  "infrastructure": {
+    "dockerProfile": "transit",
+    "services": ["motis"],
+    "dataRequirements": ["osm-pbf", "gtfs-feeds"]
+  },
   "category": "Transit",
   "envVars": [],
   "configSchema": {

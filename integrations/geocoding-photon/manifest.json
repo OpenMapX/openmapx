@@ -4,6 +4,10 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["geocoding"],
+  "infrastructure": {
+    "dockerProfile": "photon",
+    "services": ["photon"]
+  },
   "backend": {
     "routes": false
   },

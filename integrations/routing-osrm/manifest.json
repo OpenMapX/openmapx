@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["routing"],
+  "infrastructure": {
+    "dockerProfile": "routing",
+    "services": ["osrm"],
+    "dataRequirements": ["osm-pbf"],
+    "planetScale": false
+  },
   "backend": {
     "routes": false
   },

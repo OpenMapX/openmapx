@@ -4,6 +4,11 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["map-overlay"],
+  "infrastructure": {
+    "dockerProfile": "routing",
+    "services": ["valhalla"],
+    "dataRequirements": ["osm-pbf"]
+  },
   "frontend": {
     "mapLayer": true,
     "legend": true,
