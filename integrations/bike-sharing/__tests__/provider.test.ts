@@ -6,55 +6,55 @@ import type {
 } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../nextbike-client.js", () => ({
+vi.mock("../providers/nextbike-client.js", () => ({
   searchNextbike: vi.fn(),
 }));
 
-vi.mock("../citybikes-client.js", () => ({
+vi.mock("../providers/citybikes-client.js", () => ({
   searchCityBikes: vi.fn(),
 }));
 
-vi.mock("../donkey-client.js", () => ({
+vi.mock("../providers/donkey-client.js", () => ({
   searchDonkey: vi.fn(),
 }));
 
-vi.mock("../gbfs-provider-base.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
 }));
 
-vi.mock("../db-bike-client.js", () => ({
+vi.mock("../providers/db-bike-client.js", () => ({
   searchDbBikes: vi.fn(),
 }));
 
-vi.mock("../motis-rentals.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
   fetchMotisRentals: vi.fn(),
 }));
 
-vi.mock("../dedup.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
 }));
 
-vi.mock("../mapper.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
   mapStationToResult: vi.fn(),
   mapStationToDetail: vi.fn(),
   mapVehicleToResult: vi.fn(),
   mapVehicleToDetail: vi.fn(),
 }));
 
-import { bikeSharingProvider } from "../bike-sharing-provider.js";
-import { searchCityBikes } from "../citybikes-client.js";
-import { searchDbBikes } from "../db-bike-client.js";
-import { dedupStations } from "../dedup.js";
-import { searchDonkey } from "../donkey-client.js";
-import { fetchGbfsData } from "../gbfs-provider-base.js";
+import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "../mapper.js";
-import { fetchMotisRentals } from "../motis-rentals.js";
-import { searchNextbike } from "../nextbike-client.js";
+} from "@openmapx/integration-shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
+import { searchCityBikes } from "../providers/citybikes-client.js";
+import { searchDbBikes } from "../providers/db-bike-client.js";
+import { searchDonkey } from "../providers/donkey-client.js";
+import { searchNextbike } from "../providers/nextbike-client.js";
+import { bikeSharingProvider } from "../providers/provider.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -5,8 +5,8 @@
  */
 
 import type { LngLat } from "@openmapx/core";
+import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 import { createStaticCarSharingClient } from "./static-car-sharing-client.js";
-import type { SharedMobilityStation } from "./types.js";
 
 const WFS_URL =
   "https://www.bielefeld01.de/md/WFS/carsharing/01?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature&TYPENAME=carsharing_p&SRSNAME=EPSG:4326&OUTPUTFORMAT=text/csv";

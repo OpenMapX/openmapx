@@ -12,19 +12,22 @@ import type {
   DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
-import { dedupStations } from "./dedup.js";
-import { searchFelyx } from "./felyx-client.js";
-import { fetchGbfsData } from "./gbfs-provider-base.js";
-import { searchGoSharing } from "./gosharing-client.js";
-import { searchLink } from "./link-client.js";
+import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "./mapper.js";
-import { fetchMotisRentals } from "./motis-rentals.js";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
+} from "@openmapx/integration-shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
+import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/integration-shared-mobility/types";
+import { searchFelyx } from "./felyx-client.js";
+import { searchGoSharing } from "./gosharing-client.js";
+import { searchLink } from "./link-client.js";
 
 // In-memory cache for detail lookups
 const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();

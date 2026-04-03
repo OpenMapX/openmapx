@@ -42,6 +42,7 @@
       "service": "Nominatim/OSM",
       "purpose": "Forward/reverse geocoding, place details lookup",
       "dataSent": "Search query text, coordinates, OSM IDs",
+      "dataReceived": "Geocoded addresses, coordinates, place details, and OSM metadata",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://nominatim.openstreetmap.org/",
       "personalData": false

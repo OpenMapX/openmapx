@@ -28,7 +28,10 @@
     "copied": "Kopiert!",
     "resultsCount": "{count} Ergebnis{count, plural, one {} other {se}}",
     "stopsCount": "{count} Haltestelle{count, plural, one {} other {n}}",
-    "stationsInView": "{count} Station{count, plural, one {} other {en}} im Bereich"
+    "stationsInView": "{count} Station{count, plural, one {} other {en}} im Bereich",
+    "share": "Teilen",
+    "call": "Anrufen",
+    "website": "Website"
   },
   "search": {
     "placeholder": "OpenMapX durchsuchen",
@@ -58,7 +61,8 @@
     "language": "Sprache",
     "themeLight": "Hellmodus (Klick für Dunkelmodus)",
     "themeDark": "Dunkelmodus (Klick für Systemmodus)",
-    "themeSystem": "Systemmodus (Klick für Hellmodus)"
+    "themeSystem": "Systemmodus (Klick für Hellmodus)",
+    "droppedPin": "Markierung"
   },
   "footer": {
     "legalNotice": "Impressum",
@@ -96,7 +100,8 @@
     "earthquakes": "Erdbeben",
     "liveTrains": "Züge live",
     "cyclingMap": "Radkarte",
-    "closeMorePanel": "Erweitertes Menü schließen"
+    "closeMorePanel": "Erweitertes Menü schließen",
+    "tools": "Werkzeuge"
   },
   "cycling": {
     "cyclingInfrastructure": "Radinfrastruktur",
@@ -308,7 +313,8 @@
     "alertInfo": "Info",
     "alertWarning": "Warnung",
     "alertSevere": "Betriebsstörung",
-    "alertCritical": "Schwere Störung"
+    "alertCritical": "Schwere Störung",
+    "noTripSelected": "Keine Fahrt ausgewählt"
   },
   "category": {
     "openNow": "Jetzt geöffnet",
@@ -322,7 +328,8 @@
     "thursday": "Donnerstag",
     "friday": "Freitag",
     "saturday": "Samstag",
-    "sunday": "Sonntag"
+    "sunday": "Sonntag",
+    "searchThisArea": "In diesem Bereich suchen"
   },
   "dataSources": {
     "clearAllFilters": "Alle Filter zurücksetzen",
@@ -330,6 +337,7 @@
     "showAllTypes": "Alle {count} Typen anzeigen",
     "operator": "Betreiber",
     "searchOperators": "Betreiber suchen...",
+    "zoomIn": "Näher heranzoomen um Ergebnisse zu sehen",
     "zoomInToSee": "Für Stationen näher heranzoomen",
     "failedToLoadData": "Daten konnten nicht geladen werden. Erneut versuchen.",
     "lowToHigh": "Aufsteigend",

@@ -14,7 +14,7 @@
  */
 
 import { mergeAttributions } from "@openmapx/core";
-import type { SharedMobilityStation } from "./types.js";
+import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 
 /** Maximum distance in meters to consider two stations as the same location. */
 const MERGE_RADIUS_M = 50;

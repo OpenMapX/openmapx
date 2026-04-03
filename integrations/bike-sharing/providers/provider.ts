@@ -11,25 +11,27 @@ import type {
   DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
-import { searchCityBikes } from "./citybikes-client.js";
-import { searchDbBikes } from "./db-bike-client.js";
-import { dedupStations } from "./dedup.js";
-import { searchDonkey } from "./donkey-client.js";
-import { fetchGbfsData } from "./gbfs-provider-base.js";
+import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "./mapper.js";
-import { fetchMotisRentals } from "./motis-rentals.js";
+} from "@openmapx/integration-shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
+import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/integration-shared-mobility/types";
+import { searchCityBikes } from "./citybikes-client.js";
+import { searchDbBikes } from "./db-bike-client.js";
+import { searchDonkey } from "./donkey-client.js";
 import { searchNextbike } from "./nextbike-client.js";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
-const BIKE_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>([
-  "bicycle",
-  "cargo_bicycle",
-]);
+const BIKE_FORM_FACTORS = new Set<
+  import("@openmapx/integration-shared-mobility/types").VehicleFormFactor
+>(["bicycle", "cargo_bicycle"]);
 
 // In-memory cache for detail lookups (stations + free-floating)
 const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();

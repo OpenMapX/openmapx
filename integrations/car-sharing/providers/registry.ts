@@ -4,8 +4,8 @@
  */
 
 import type { BoundingBox } from "@openmapx/core";
+import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 import { clientMatchesBbox, type RegionalCarSharingClient } from "./regional-client-types.js";
-import type { SharedMobilityStation } from "./types.js";
 
 const clients: RegionalCarSharingClient[] = [];
 

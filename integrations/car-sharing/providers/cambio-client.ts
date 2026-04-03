@@ -6,8 +6,8 @@
 
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import { bboxContains } from "@openmapx/core";
+import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
-import type { SharedMobilityStation } from "./types.js";
 
 const CAMBIO_BASE = "https://cwapi.cambio-carsharing.com/pub";
 const HEADERS = { "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)" };

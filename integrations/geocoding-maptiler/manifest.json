@@ -43,6 +43,7 @@
       "service": "MapTiler",
       "purpose": "Forward geocoding and autocomplete",
       "dataSent": "Search query text, API key",
+      "dataReceived": "Geocoded addresses, coordinates, and place metadata",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://www.maptiler.com/privacy-policy/",
       "personalData": false

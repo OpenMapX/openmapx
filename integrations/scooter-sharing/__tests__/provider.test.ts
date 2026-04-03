@@ -6,50 +6,50 @@ import type {
 } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../felyx-client.js", () => ({
+vi.mock("../providers/felyx-client.js", () => ({
   searchFelyx: vi.fn(),
 }));
 
-vi.mock("../gosharing-client.js", () => ({
+vi.mock("../providers/gosharing-client.js", () => ({
   searchGoSharing: vi.fn(),
 }));
 
-vi.mock("../link-client.js", () => ({
+vi.mock("../providers/link-client.js", () => ({
   searchLink: vi.fn(),
 }));
 
-vi.mock("../gbfs-provider-base.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
 }));
 
-vi.mock("../motis-rentals.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
   fetchMotisRentals: vi.fn(),
 }));
 
-vi.mock("../dedup.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
 }));
 
-vi.mock("../mapper.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
   mapStationToResult: vi.fn(),
   mapStationToDetail: vi.fn(),
   mapVehicleToResult: vi.fn(),
   mapVehicleToDetail: vi.fn(),
 }));
 
-import { dedupStations } from "../dedup.js";
-import { searchFelyx } from "../felyx-client.js";
-import { fetchGbfsData } from "../gbfs-provider-base.js";
-import { searchGoSharing } from "../gosharing-client.js";
-import { searchLink } from "../link-client.js";
+import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "../mapper.js";
-import { fetchMotisRentals } from "../motis-rentals.js";
-import { scooterSharingProvider } from "../scooter-provider.js";
+} from "@openmapx/integration-shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
+import { searchFelyx } from "../providers/felyx-client.js";
+import { searchGoSharing } from "../providers/gosharing-client.js";
+import { searchLink } from "../providers/link-client.js";
+import { scooterSharingProvider } from "../providers/provider.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

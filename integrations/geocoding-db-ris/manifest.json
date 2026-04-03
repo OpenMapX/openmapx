@@ -42,6 +42,7 @@
       "service": "Deutsche Bahn RIS",
       "purpose": "Railway station search and enrichment",
       "dataSent": "Search query text, station IDs, API credentials",
+      "dataReceived": "Railway station names, coordinates, platform information, and identifiers",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.bahn.de/service/datenschutz",
       "personalData": false

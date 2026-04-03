@@ -3,11 +3,6 @@ import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { registry } from "@integrations/transit-dynamic-registry/registry";
-import { bielefeldClient } from "@openmapx/integration-shared-mobility/bielefeld-client";
-import { cambioClient } from "@openmapx/integration-shared-mobility/cambio-client";
-import { registerCarSharingClient } from "@openmapx/integration-shared-mobility/car-sharing-registry";
-import { stadtteilAutoClient } from "@openmapx/integration-shared-mobility/stadtteilauto-client";
-import { wuppertalClient } from "@openmapx/integration-shared-mobility/wuppertal-client";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
@@ -118,15 +113,6 @@ await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
 await server.register(statusRoute, { prefix: "/api" });
-
-// Regional car-sharing clients (order = priority for enrichment merge:
-// Cambio first = live data wins, open data sources enrich with extra fields)
-registerCarSharingClient(cambioClient);
-registerCarSharingClient(stadtteilAutoClient);
-registerCarSharingClient(wuppertalClient);
-registerCarSharingClient(bielefeldClient);
-
-// Data source providers now registered by integration framework
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {

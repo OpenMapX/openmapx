@@ -439,12 +439,6 @@ importers:
 
   integrations/bike-sharing:
     dependencies:
-      '@hey-api/client-fetch':
-        specifier: 0.4.4
-        version: 0.4.4
-      '@motis-project/motis-client':
-        specifier: ^2.9.1
-        version: 2.9.1
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core

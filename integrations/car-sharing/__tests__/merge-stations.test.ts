@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../../utils/geo.js", () => ({
-  mergeAttributions: vi.fn((a: unknown, b: unknown) => [a, b].flat()),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, mergeAttributions: vi.fn((a: unknown, b: unknown) => [a, b].flat()) };
+});
 
 import type { SharedMobilityStation } from "@openmapx/core";
-import { mergeRegionalStations } from "../merge-stations.js";
+import { mergeRegionalStations } from "../providers/merge-stations.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

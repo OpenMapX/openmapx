@@ -97,11 +97,7 @@ export {
   useHikingSearch,
   useHikingShelters,
 } from "./hooks/useHikingTrails";
-export {
-  getOverlayStore,
-  registerOverlayStore,
-  useIntegrationOverlayActive,
-} from "./hooks/useIntegrationOverlay";
+export { useIntegrationOverlayActive } from "./hooks/useIntegrationOverlay";
 // Integration hooks
 export { IntegrationRegistryContext, useIntegrationRegistry } from "./hooks/useIntegrationRegistry";
 export { useIsochrone } from "./hooks/useIsochrone";

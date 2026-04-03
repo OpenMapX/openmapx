@@ -6,45 +6,45 @@ import type {
 } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../car-sharing-registry.js", () => ({
+vi.mock("../providers/registry.js", () => ({
   searchRegionalClients: vi.fn(),
 }));
 
-vi.mock("../gbfs-provider-base.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
 }));
 
-vi.mock("../motis-rentals.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
   fetchMotisRentals: vi.fn(),
 }));
 
-vi.mock("../dedup.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
 }));
 
-vi.mock("../mapper.js", () => ({
+vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
   mapStationToResult: vi.fn(),
   mapStationToDetail: vi.fn(),
   mapVehicleToResult: vi.fn(),
   mapVehicleToDetail: vi.fn(),
 }));
 
-vi.mock("../merge-stations.js", () => ({
+vi.mock("../providers/merge-stations.js", () => ({
   mergeRegionalStations: vi.fn((items: unknown[]) => items),
 }));
 
-import { carSharingProvider } from "../car-sharing-provider.js";
-import { searchRegionalClients } from "../car-sharing-registry.js";
-import { dedupStations } from "../dedup.js";
-import { fetchGbfsData } from "../gbfs-provider-base.js";
+import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "../mapper.js";
-import { mergeRegionalStations } from "../merge-stations.js";
-import { fetchMotisRentals } from "../motis-rentals.js";
+} from "@openmapx/integration-shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
+import { mergeRegionalStations } from "../providers/merge-stations.js";
+import { carSharingProvider } from "../providers/provider.js";
+import { searchRegionalClients } from "../providers/registry.js";
 
 afterEach(() => {
   vi.clearAllMocks();

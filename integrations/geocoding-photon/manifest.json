@@ -42,6 +42,7 @@
       "service": "Photon/Komoot",
       "purpose": "Forward/reverse geocoding and address search",
       "dataSent": "Search query text, coordinates for reverse geocoding",
+      "dataReceived": "Geocoded addresses, coordinates, place names, and metadata",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://photon.komoot.io/",
       "personalData": false

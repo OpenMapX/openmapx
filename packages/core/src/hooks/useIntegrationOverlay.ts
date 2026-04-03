@@ -7,18 +7,6 @@ import { getRegisteredOverlayStore } from "../stores/createOverlayStore";
 
 type OverlayStore = UseBoundStore<StoreApi<OverlayStoreBase>>;
 
-/**
- * @deprecated Use createOverlayStore({ overlayId }) instead for auto-registration.
- * Kept for backward compatibility with manual registration.
- */
-export function registerOverlayStore(_integrationId: string, _store: OverlayStore): void {
-  // No-op: stores now self-register via createOverlayStore({ overlayId })
-}
-
-export function getOverlayStore(integrationId: string): OverlayStore | undefined {
-  return getRegisteredOverlayStore(integrationId) as OverlayStore | undefined;
-}
-
 export function useIntegrationOverlayActive(integrationId: string): boolean {
   const store = getRegisteredOverlayStore(integrationId) as OverlayStore | undefined;
 

@@ -42,6 +42,7 @@
       "service": "Pelias",
       "purpose": "Self-hosted geocoding",
       "dataSent": "Search query text (to self-hosted instance)",
+      "dataReceived": "Geocoded addresses, coordinates, and place metadata",
       "providerCountry": "Self-hosted",
       "providerPrivacyUrl": "https://pelias.io/",
       "personalData": false

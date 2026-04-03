@@ -11,18 +11,21 @@ import type {
   DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
-import { searchRegionalClients } from "./car-sharing-registry.js";
-import { dedupStations } from "./dedup.js";
-import { fetchGbfsData } from "./gbfs-provider-base.js";
+import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "./mapper.js";
+} from "@openmapx/integration-shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
+import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/integration-shared-mobility/types";
 import { mergeRegionalStations } from "./merge-stations.js";
-import { fetchMotisRentals } from "./motis-rentals.js";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
+import { searchRegionalClients } from "./registry.js";
 
 // In-memory cache for detail lookups
 const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();

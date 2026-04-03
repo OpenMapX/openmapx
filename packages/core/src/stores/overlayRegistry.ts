@@ -1,5 +1,6 @@
 import type { LoadedIntegrationMeta } from "../integration/loader";
 import {
+  createOverlayStore,
   getRegisteredOverlayIds,
   getRegisteredOverlayStore,
   type OverlayStoreBase,
@@ -53,8 +54,15 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
     if (!integration.frontend?.overlay) continue;
 
     const overlayId = integrationIdToOverlayId(integration.id);
-    const storeHook = getRegisteredOverlayStore(overlayId) as StoreHook | undefined;
-    if (!storeHook) continue;
+    let storeHook = getRegisteredOverlayStore(overlayId) as StoreHook | undefined;
+
+    // Auto-create a basic overlay store for integrations that don't have a
+    // pre-registered store. This lets new simple overlays work with just a
+    // manifest — no store file needed (plan section 8.3).
+    if (!storeHook) {
+      const autoStore = createOverlayStore({ overlayId, extra: {} });
+      storeHook = autoStore as unknown as StoreHook;
+    }
 
     const overlay = integration.frontend.overlay as {
       excludes?: string[];

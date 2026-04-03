@@ -28,7 +28,10 @@
     "copied": "Copied!",
     "resultsCount": "{count} result{count, plural, one {} other {s}}",
     "stopsCount": "{count} stop{count, plural, one {} other {s}}",
-    "stationsInView": "{count} station{count, plural, one {} other {s}} in view"
+    "stationsInView": "{count} station{count, plural, one {} other {s}} in view",
+    "share": "Share",
+    "call": "Call",
+    "website": "Website"
   },
   "search": {
     "placeholder": "Search OpenMapX",
@@ -58,7 +61,8 @@
     "language": "Language",
     "themeLight": "Light mode (click for dark)",
     "themeDark": "Dark mode (click for system)",
-    "themeSystem": "System theme (click for light)"
+    "themeSystem": "System theme (click for light)",
+    "droppedPin": "Dropped pin"
   },
   "footer": {
     "legalNotice": "Legal Notice",
@@ -96,7 +100,8 @@
     "earthquakes": "Earthquakes",
     "liveTrains": "Live Trains",
     "cyclingMap": "Cycling",
-    "closeMorePanel": "Close more panel placeholder"
+    "closeMorePanel": "Close more panel placeholder",
+    "tools": "Tools"
   },
   "cycling": {
     "cyclingInfrastructure": "Cycling Infrastructure",
@@ -308,7 +313,8 @@
     "alertInfo": "Info",
     "alertWarning": "Warning",
     "alertSevere": "Service disruption",
-    "alertCritical": "Major disruption"
+    "alertCritical": "Major disruption",
+    "noTripSelected": "No trip selected"
   },
   "category": {
     "openNow": "Open now",
@@ -322,7 +328,8 @@
     "thursday": "Thursday",
     "friday": "Friday",
     "saturday": "Saturday",
-    "sunday": "Sunday"
+    "sunday": "Sunday",
+    "searchThisArea": "Search this area"
   },
   "dataSources": {
     "clearAllFilters": "Clear all filters",
@@ -330,6 +337,7 @@
     "showAllTypes": "Show all {count} types",
     "operator": "Operator",
     "searchOperators": "Search operators...",
+    "zoomIn": "Zoom in to see results",
     "zoomInToSee": "Zoom in to see stations",
     "failedToLoadData": "Failed to load data. Try again.",
     "lowToHigh": "Low to high",

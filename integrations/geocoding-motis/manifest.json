@@ -42,6 +42,7 @@
       "service": "Transitous/MOTIS",
       "purpose": "Transit stop geocoding",
       "dataSent": "Search query text",
+      "dataReceived": "Transit stop names, coordinates, and identifiers",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://transitous.org/",
       "personalData": false
