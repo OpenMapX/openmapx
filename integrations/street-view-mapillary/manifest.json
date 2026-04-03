@@ -1,8 +1,6 @@
 {
   "id": "street-view-mapillary",
-  "name": "Mapillary Street View",
   "version": "1.0.0",
-  "description": "Street-level imagery and navigation",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://www.mapillary.com/developer",
@@ -48,9 +46,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Street-level imagery",
-    "dataSent": "Coordinates, image IDs, API token",
-    "dataReceived": "Street-level images and sequence metadata",
     "providerCountry": "SE",
     "providerPrivacyUrl": "https://www.mapillary.com/privacy",
     "personalData": false,

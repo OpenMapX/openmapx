@@ -1,6 +1,5 @@
 {
   "id": "transit-bvg",
-  "name": "BVG Transit (Berlin)",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -29,8 +28,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Berlin transit stops and departures",
-    "dataSent": "Stop IDs, coordinates",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://www.bvg.de/datenschutz",
     "personalData": false

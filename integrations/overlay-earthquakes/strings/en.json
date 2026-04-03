@@ -1,0 +1,10 @@
+{
+  "name": "USGS Earthquakes",
+  "description": "Real-time earthquake data and alerts",
+  "privacy": {
+    "purpose": "Display real-time earthquake locations and magnitudes on the map",
+    "dataSent": "Time range, magnitude threshold (via pre-built URL; no user data sent)",
+    "dataReceived": "Earthquake locations, magnitudes, timestamps, and metadata",
+    "dataRetention": "Cached for 5 minutes server-side"
+  }
+}

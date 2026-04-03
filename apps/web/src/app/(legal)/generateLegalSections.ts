@@ -82,8 +82,52 @@ const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe
   },
 };
 
+/**
+ * Resolve a localized string from integration.strings.
+ * `path` is a dot-separated key like "privacy.purpose" or just "name".
+ */
+function localized(integration: LoadedIntegrationMeta, locale: string, path: string): string {
+  const localeStrings = integration.strings?.[locale];
+  if (!localeStrings) return "";
+
+  const parts = path.split(".");
+  let current: unknown = localeStrings;
+  for (const part of parts) {
+    if (current == null || typeof current !== "object") return "";
+    current = (current as Record<string, unknown>)[part];
+  }
+  return typeof current === "string" ? current : "";
+}
+
+/**
+ * For privacy arrays, find the matching localized entry by array index.
+ */
+function localizedPrivacyField(
+  integration: LoadedIntegrationMeta,
+  locale: string,
+  index: number,
+  field: string,
+): string {
+  const localeStrings = integration.strings?.[locale];
+  if (!localeStrings) return "";
+
+  const privacyLocale = localeStrings.privacy;
+  if (!privacyLocale) return "";
+
+  if (Array.isArray(privacyLocale)) {
+    const entry = privacyLocale[index] as Record<string, unknown> | undefined;
+    const val = entry?.[field];
+    return typeof val === "string" ? val : "";
+  }
+
+  // Single privacy object (not array)
+  const val = (privacyLocale as Record<string, unknown>)[field];
+  return typeof val === "string" ? val : "";
+}
+
 export function generatePrivacySectionsFromManifests(
   integrations: LoadedIntegrationMeta[],
+  locale: string,
 ): { key: string; labelEn: string; labelDe: string; rows: PrivacyServiceRow[] }[] {
   const grouped = new Map<
     string,
@@ -108,11 +152,16 @@ export function generatePrivacySectionsFromManifests(
       ? integration.privacy
       : [integration.privacy];
 
-    for (const p of privacyEntries) {
+    for (let i = 0; i < privacyEntries.length; i++) {
+      const p = privacyEntries[i];
+      const service =
+        localizedPrivacyField(integration, locale, i, "service") ||
+        localized(integration, locale, "name") ||
+        integration.name;
       grouped.get(sectionMeta.key)?.rows.push({
-        service: p.service ?? integration.name,
-        purpose: p.purpose,
-        dataSent: p.dataSent,
+        service,
+        purpose: localizedPrivacyField(integration, locale, i, "purpose"),
+        dataSent: localizedPrivacyField(integration, locale, i, "dataSent"),
         country: p.providerCountry,
         privacy: p.providerPrivacyUrl,
       });
@@ -124,6 +173,7 @@ export function generatePrivacySectionsFromManifests(
 
 export function generateAttributionSectionsFromManifests(
   integrations: LoadedIntegrationMeta[],
+  locale: string,
 ): { heading: string; headingDe: string; rows: AttributionRow[] }[] {
   const grouped = new Map<string, { heading: string; headingDe: string; rows: AttributionRow[] }>();
 
@@ -142,11 +192,13 @@ export function generateAttributionSectionsFromManifests(
       grouped.set(groupKey, { ...sectionMeta, rows: [] });
     }
 
+    const desc = localized(integration, locale, "description") || integration.description || "";
+
     for (const attr of integration.attribution) {
       if (attr.dynamic) continue; // Dynamic attributions fetched at render time
       grouped.get(groupKey)?.rows.push({
         source: attr.name,
-        desc: integration.description ?? "",
+        desc,
         license: attr.license,
         licenseUrl: attr.licenseUrl,
         url: attr.url,

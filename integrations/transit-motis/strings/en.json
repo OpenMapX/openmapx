@@ -1,0 +1,8 @@
+{
+  "name": "MOTIS/Transitous Transit",
+  "description": "Global transit routing and stop data",
+  "privacy": {
+    "purpose": "Public transit routing, stop departures, and trip planning",
+    "dataSent": "Origin/destination coordinates, departure time"
+  }
+}

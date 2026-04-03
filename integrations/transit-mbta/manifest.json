@@ -1,7 +1,5 @@
 {
   "id": "transit-mbta",
-  "name": "MBTA (Boston Transit)",
-  "description": "Boston area public transit data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -32,8 +30,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Boston area transit stops and departures",
-    "dataSent": "Coordinates, stop IDs, API key",
     "providerCountry": "US",
     "providerPrivacyUrl": "https://www.mbta.com/policies/privacy-policy",
     "personalData": false

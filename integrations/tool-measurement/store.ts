@@ -1,8 +1,8 @@
+import type { LngLat, UnitSystem } from "@openmapx/core";
 import { create } from "zustand";
-import type { LngLat } from "../types/geometry";
 
 export type MeasurementMode = "line" | "polygon";
-export type UnitSystem = "metric" | "imperial";
+export type { UnitSystem };
 
 export interface MeasurementState {
   isActive: boolean;

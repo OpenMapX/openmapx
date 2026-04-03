@@ -142,6 +142,7 @@ export type {
   IntegrationOverlay,
   IntegrationPrivacy,
   IntegrationSearchCategory,
+  IntegrationStrings,
   LoadedIntegration,
   LoadedIntegrationMeta,
   Logger,
@@ -167,29 +168,21 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
-// Stores
-export { useAirQualityStore } from "./stores/airQualityStore";
+// Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export type { OverlayStoreBase } from "./stores/createOverlayStore";
-// Overlay system
 export {
   createOverlayStore,
   getRegisteredOverlayIds,
   getRegisteredOverlayStore,
 } from "./stores/createOverlayStore";
-export { useCyclingStore } from "./stores/cyclingStore";
 export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
-export { useEarthquakeStore } from "./stores/earthquakeStore";
-export { useHikingStore } from "./stores/hikingStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
-export { useLiveTrainsStore } from "./stores/liveTrainsStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
-export type { MeasurementMode, MeasurementState, UnitSystem } from "./stores/measurementStore";
-export { useMeasurementStore } from "./stores/measurementStore";
 export { useMenuStore } from "./stores/menuStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
@@ -207,13 +200,6 @@ export { usePlaceStore } from "./stores/placeStore";
 export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useSidebarStore } from "./stores/sidebarStore";
-export { useStreetViewStore } from "./stores/streetViewStore";
-export type { TravelTimeState } from "./stores/travelTimeStore";
-export { TRAVEL_TIME_PRESETS, useTravelTimeStore } from "./stores/travelTimeStore";
-export { useBuildingsStore, useTrafficStore, useTransitStore } from "./stores/trivialOverlayStores";
-export { useWildfireStore } from "./stores/wildfireStore";
-export { useWinterSportsStore } from "./stores/winterSportsStore";
-
 // Types
 export type { CategoryDefinition, CategoryId, CategoryPlace } from "./types/category";
 export {
@@ -244,7 +230,8 @@ export type {
   ElevationProfile,
   ElevationStats,
 } from "./types/elevation";
-export type { BBox, BoundingBox, LngLat } from "./types/geometry";
+// Types that originated in integration stores but are used by core utilities
+export type { BBox, BoundingBox, LngLat, UnitSystem } from "./types/geometry";
 export type {
   HikingFeatureCollection,
   HikingTrailDetail,

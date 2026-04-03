@@ -1,7 +1,5 @@
 {
   "id": "transit-opendata-ch",
-  "name": "Swiss Transit (transport.opendata.ch)",
-  "description": "Swiss public transit data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -31,8 +29,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Swiss transit stops and connections",
-    "dataSent": "Station names, coordinates",
     "providerCountry": "CH",
     "providerPrivacyUrl": "https://transport.opendata.ch/",
     "personalData": false

@@ -8,8 +8,8 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { useWildfireStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useWildfireStore } from "./store";
 
 const DAY_RANGES = [1, 2, 3] as const;
 

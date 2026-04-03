@@ -1,7 +1,5 @@
 {
   "id": "transit-irail",
-  "name": "iRail (Belgian Railways)",
-  "description": "Belgian rail transit data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -32,8 +30,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Belgian rail stops and departures",
-    "dataSent": "Station IDs",
     "providerCountry": "BE",
     "providerPrivacyUrl": "https://irail.be/",
     "personalData": false

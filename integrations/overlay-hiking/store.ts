@@ -1,4 +1,4 @@
-import { createOverlayStore } from "./createOverlayStore";
+import { createOverlayStore } from "@openmapx/core";
 
 export const useHikingStore = createOverlayStore({
   overlayId: "hiking",

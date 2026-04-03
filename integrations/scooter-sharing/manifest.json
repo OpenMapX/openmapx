@@ -1,13 +1,9 @@
 {
   "id": "scooter-sharing",
-  "name": "Scooter Sharing",
   "version": "1.0.0",
-  "description": "E-scooter and moped sharing locations and availability",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["data-source"],
-
   "frontend": {
     "searchCategory": {
       "id": "scooter-sharing",
@@ -16,28 +12,25 @@
       "showInChipBar": false
     }
   },
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": [],
-
   "healthCheck": {
     "type": "http",
     "url": "https://gbfs.api.ridedott.com/public/v2/brussels/gbfs.json",
     "category": "Shared Mobility"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "GBFS Catalog",
@@ -46,11 +39,7 @@
       "licenseUrl": "https://gbfs.org/"
     }
   ],
-
   "privacy": {
-    "purpose": "E-scooter and moped sharing vehicle locations and availability",
-    "dataSent": "Bounding box coordinates",
-    "dataReceived": "Vehicle/station locations, availability, operator info",
     "providerCountry": "CA",
     "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
     "personalData": false

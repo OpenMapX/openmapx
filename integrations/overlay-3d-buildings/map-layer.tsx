@@ -1,11 +1,12 @@
 "use client";
 
-import { useBuildingsStore, useOverlayExclusion } from "@openmapx/core";
+import { useOverlayExclusion } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
+import { useBuildingsStore } from "./store";
 
 const LAYER_ID = "openmapx-3d-buildings";
 const MIN_ZOOM = 14;

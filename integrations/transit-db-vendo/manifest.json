@@ -1,7 +1,5 @@
 {
   "id": "transit-db-vendo",
-  "name": "DB Vendo (Deutsche Bahn)",
-  "description": "German long-distance rail journey planning",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -31,8 +29,6 @@
     }
   ],
   "privacy": {
-    "purpose": "German rail journey planning and departures",
-    "dataSent": "Origin/destination station IDs, departure time",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
     "personalData": false

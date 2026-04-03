@@ -1,7 +1,5 @@
 {
   "id": "transit-tfl",
-  "name": "TfL (Transport for London)",
-  "description": "London public transit data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -33,8 +31,6 @@
     }
   ],
   "privacy": {
-    "purpose": "London transit stops and departures",
-    "dataSent": "Stop IDs, coordinates, API key",
     "providerCountry": "UK",
     "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
     "personalData": false

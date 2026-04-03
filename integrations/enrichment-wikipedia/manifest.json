@@ -1,32 +1,27 @@
 {
   "id": "enrichment-wikipedia",
-  "name": "Wikipedia Enrichment",
   "version": "1.0.0",
-  "description": "Description and thumbnail enrichment for place details",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["enrichment"],
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "healthCheck": {
     "type": "http",
     "url": "https://en.wikipedia.org/w/api.php?action=query&format=json&titles=Main_Page&prop=extracts&exintro=1&exlimit=1",
     "category": "External"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "Wikipedia",
@@ -35,12 +30,8 @@
       "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
     }
   ],
-
   "privacy": [
     {
-      "service": "Wikipedia",
-      "purpose": "Enrich place details with Wikipedia descriptions and thumbnails",
-      "dataSent": "Wikipedia article titles (from OSM tags)",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Privacy_policy",
       "personalData": false

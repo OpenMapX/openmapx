@@ -1,0 +1,8 @@
+{
+  "name": "MBTA (Boston Transit)",
+  "description": "Boston area public transit data",
+  "privacy": {
+    "purpose": "Boston area transit stops and departures",
+    "dataSent": "Coordinates, stop IDs, API key"
+  }
+}

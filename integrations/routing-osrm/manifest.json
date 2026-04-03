@@ -1,34 +1,28 @@
 {
   "id": "routing-osrm",
-  "name": "OSRM Routing",
   "version": "1.0.0",
-  "description": "Driving route calculation",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["routing"],
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": [],
-
   "healthCheck": {
     "type": "ping",
     "url": "https://router.project-osrm.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false",
     "category": "Routing"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "OSRM",
@@ -36,12 +30,8 @@
       "license": "BSD-2-Clause"
     }
   ],
-
   "privacy": [
     {
-      "service": "OSRM",
-      "purpose": "Driving route calculation",
-      "dataSent": "Origin/destination coordinates, routing options",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://project-osrm.org/",
       "personalData": false

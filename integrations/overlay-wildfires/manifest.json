@@ -1,14 +1,10 @@
 {
   "id": "overlay-wildfires",
-  "name": "NASA FIRMS Wildfires",
   "version": "1.0.0",
-  "description": "Active wildfire and hotspot detections",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://firms.modaps.eosdis.nasa.gov/",
-
   "domains": ["map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": true,
@@ -24,29 +20,26 @@
       "minZoom": 3
     }
   },
-
   "backend": {
     "routes": true
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["FIRMS_MAP_KEY"],
-
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/${FIRMS_MAP_KEY}/VIIRS_SNPP_NRT/world/1",
     "requiredEnvVars": ["FIRMS_MAP_KEY"],
     "category": "Data Overlays"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "NASA FIRMS",
@@ -55,14 +48,9 @@
       "licenseUrl": "https://www.nasa.gov/open/"
     }
   ],
-
   "privacy": {
-    "purpose": "Active wildfire/hotspot detections worldwide",
-    "dataSent": "Data source selection, time range, API key (server-side)",
-    "dataReceived": "Fire detection locations, brightness, confidence, satellite data",
     "providerCountry": "US",
     "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
-    "dataRetention": "Cached for 5 minutes server-side",
     "personalData": false,
     "cookies": false
   }

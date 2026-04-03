@@ -1,8 +1,6 @@
 {
   "id": "overlay-hiking",
-  "name": "Hiking Trails",
   "version": "1.0.0",
-  "description": "Hiking trail routes and mountain shelter locations",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://waymarkedtrails.org/",
@@ -53,9 +51,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Hiking trail routes and mountain shelter locations",
-    "dataSent": "Bounding box coordinates, trail IDs",
-    "dataReceived": "Trail geometries, shelter locations, and metadata",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://waymarkedtrails.org/",
     "personalData": false,

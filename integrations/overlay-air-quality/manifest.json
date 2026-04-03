@@ -1,14 +1,10 @@
 {
   "id": "overlay-air-quality",
-  "name": "OpenAQ Air Quality",
   "version": "1.0.0",
-  "description": "Real-time air quality measurements (PM2.5, AQI)",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://openaq.org/",
-
   "domains": ["map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": true,
@@ -24,29 +20,26 @@
       "minZoom": 5
     }
   },
-
   "backend": {
     "routes": true
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["OPENAQ_API_KEY"],
-
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://api.openaq.org/v3/locations?bbox=-0.1,-0.1,0.1,0.1&parameters_id=2&limit=1&page=1",
     "requiredEnvVars": ["OPENAQ_API_KEY"],
     "category": "Data Overlays"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "OpenAQ",
@@ -55,14 +48,9 @@
       "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
     }
   ],
-
   "privacy": {
-    "purpose": "Air quality measurements (PM2.5, AQI)",
-    "dataSent": "Bounding box coordinates",
-    "dataReceived": "Air quality station locations, PM2.5 measurements, AQI values",
     "providerCountry": "US",
     "providerPrivacyUrl": "https://openaq.org/privacy/",
-    "dataRetention": "Cached for 15 minutes server-side",
     "personalData": false,
     "cookies": false
   }

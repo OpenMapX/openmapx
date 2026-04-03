@@ -1,0 +1,8 @@
+{
+  "name": "OpenTripPlanner",
+  "description": "Multi-modal transit trip planning via OpenTripPlanner",
+  "privacy": {
+    "purpose": "Multi-modal transit trip planning",
+    "dataSent": "Origin/destination coordinates"
+  }
+}

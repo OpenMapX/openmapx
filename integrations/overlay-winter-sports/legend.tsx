@@ -5,8 +5,8 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useWinterSportsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useWinterSportsStore } from "./store";
 
 const DIFFICULTY_ITEMS = [
   { key: "novice", color: "#4CAF50" },

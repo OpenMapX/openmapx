@@ -1,34 +1,28 @@
 {
   "id": "geocoding-db-ris",
-  "name": "Deutsche Bahn Station Search",
   "version": "1.0.0",
-  "description": "German railway station geocoding",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["geocoding"],
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
-
   "healthCheck": {
     "type": "custom",
     "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
     "category": "Geocoding"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "Deutsche Bahn",
@@ -36,13 +30,8 @@
       "license": "DB API Terms"
     }
   ],
-
   "privacy": [
     {
-      "service": "Deutsche Bahn RIS",
-      "purpose": "Railway station search and enrichment",
-      "dataSent": "Search query text, station IDs, API credentials",
-      "dataReceived": "Railway station names, coordinates, platform information, and identifiers",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.bahn.de/service/datenschutz",
       "personalData": false

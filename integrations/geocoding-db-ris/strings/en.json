@@ -1,0 +1,11 @@
+{
+  "name": "Deutsche Bahn Station Search",
+  "description": "German railway station geocoding",
+  "privacy": [
+    {
+      "service": "Deutsche Bahn RIS",
+      "purpose": "Railway station search and enrichment",
+      "dataSent": "Search query text, station IDs, API credentials"
+    }
+  ]
+}

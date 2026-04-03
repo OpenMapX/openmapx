@@ -1,6 +1,6 @@
 "use client";
 
-import { useDebouncedCallback, useHikingStore } from "@openmapx/core";
+import { useDebouncedCallback } from "@openmapx/core";
 import type { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useHikingStore } from "./store";
 
 const SOURCE_ID = "openmapx-shelters-source";
 const CIRCLE_LAYER_ID = "openmapx-shelters-circles";

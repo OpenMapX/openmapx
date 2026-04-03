@@ -1,14 +1,10 @@
 {
   "id": "overlay-earthquakes",
-  "name": "USGS Earthquakes",
   "version": "1.0.0",
-  "description": "Real-time earthquake data and alerts",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://earthquake.usgs.gov/fdsnws/event/1/",
-
   "domains": ["map-overlay"],
-
   "frontend": {
     "mapLayer": true,
     "legend": true,
@@ -24,20 +20,19 @@
       "minZoom": 3
     }
   },
-
   "backend": {
     "routes": true
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": [],
-
   "healthCheck": {
     "type": "http",
     "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson",
@@ -46,9 +41,7 @@
     },
     "category": "Data Overlays"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "USGS",
@@ -57,14 +50,9 @@
       "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
     }
   ],
-
   "privacy": {
-    "purpose": "Display real-time earthquake locations and magnitudes on the map",
-    "dataSent": "Time range, magnitude threshold (via pre-built URL; no user data sent)",
-    "dataReceived": "Earthquake locations, magnitudes, timestamps, and metadata",
     "providerCountry": "US",
     "providerPrivacyUrl": "https://www.usgs.gov/privacy-policies",
-    "dataRetention": "Cached for 5 minutes server-side",
     "personalData": false,
     "cookies": false
   }

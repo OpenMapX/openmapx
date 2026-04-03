@@ -5,8 +5,9 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { SAC_GRADES, useHikingStore } from "@openmapx/core";
+import { SAC_GRADES } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useHikingStore } from "./store";
 
 const GRADES = [
   "hiking",

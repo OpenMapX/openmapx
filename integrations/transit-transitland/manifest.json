@@ -1,6 +1,5 @@
 {
   "id": "transit-transitland",
-  "name": "TransitLand",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -31,8 +30,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Global transit stop and route data",
-    "dataSent": "Coordinates, API key",
     "providerCountry": "US",
     "providerPrivacyUrl": "https://www.transit.land/terms",
     "personalData": false

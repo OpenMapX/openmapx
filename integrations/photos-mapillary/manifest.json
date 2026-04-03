@@ -1,35 +1,29 @@
 {
   "id": "photos-mapillary",
-  "name": "Mapillary Photos",
   "version": "1.0.0",
-  "description": "Street-level photos near places",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["photos"],
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["MAPILLARY_TOKEN"],
-
   "healthCheck": {
     "type": "http",
     "url": "https://graph.mapillary.com",
     "requiredEnvVars": ["MAPILLARY_TOKEN"],
     "category": "Imagery"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "Mapillary",
@@ -37,12 +31,8 @@
       "license": "CC BY-SA 4.0"
     }
   ],
-
   "privacy": [
     {
-      "service": "Mapillary",
-      "purpose": "Street-level photos near places",
-      "dataSent": "Coordinates, API token",
       "providerCountry": "SE",
       "providerPrivacyUrl": "https://www.mapillary.com/privacy",
       "personalData": false

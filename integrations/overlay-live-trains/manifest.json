@@ -1,8 +1,6 @@
 {
   "id": "overlay-live-trains",
-  "name": "Live Train Positions",
   "version": "1.0.0",
-  "description": "Real-time train positions on the German rail network",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://developers.deutschebahn.com/",
@@ -48,9 +46,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Real-time train positions on German rail network",
-    "dataSent": "API credentials, bounding box",
-    "dataReceived": "Train positions, delays, and route information",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
     "personalData": false,

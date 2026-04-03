@@ -1,34 +1,28 @@
 {
   "id": "geocoding-motis",
-  "name": "MOTIS/Transitous Geocoding",
   "version": "1.0.0",
-  "description": "Transit stop geocoding",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["geocoding"],
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["MOTIS_URL"],
-
   "healthCheck": {
     "type": "http",
     "url": "https://europe.motis-project.de/api/v1/geocode?text=test",
     "category": "Geocoding"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "Transitous/MOTIS",
@@ -36,13 +30,8 @@
       "license": "AGPL-3.0"
     }
   ],
-
   "privacy": [
     {
-      "service": "Transitous/MOTIS",
-      "purpose": "Transit stop geocoding",
-      "dataSent": "Search query text",
-      "dataReceived": "Transit stop names, coordinates, and identifiers",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://transitous.org/",
       "personalData": false

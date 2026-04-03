@@ -1,7 +1,7 @@
 "use client";
 
 import type { LngLat } from "@openmapx/core";
-import { formatArea, formatMeasurementDistance, useMeasurementStore } from "@openmapx/core";
+import { formatArea, formatMeasurementDistance } from "@openmapx/core";
 import { area } from "@turf/area";
 import { lineString, polygon as turfPolygon } from "@turf/helpers";
 import { length } from "@turf/length";
@@ -9,6 +9,7 @@ import type { MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useMeasurementStore } from "./store";
 
 const SOURCE_ID = "measurement-source";
 const LINE_CASING_LAYER = "measurement-line-casing";

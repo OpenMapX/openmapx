@@ -1,6 +1,5 @@
 "use client";
 
-import { useTransitStore } from "@openmapx/core";
 import { useEffect } from "react";
 import {
   findVectorLineReference,
@@ -11,6 +10,7 @@ import {
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { useTransitStore } from "./store";
 
 const TRANSIT_LAYER_ID = "openmapx-transit-layer";
 const TRANSIT_LAYER_HINTS = [

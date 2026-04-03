@@ -1,0 +1,11 @@
+{
+  "name": "Wikidata Enrichment",
+  "description": "Structured data enrichment for place details",
+  "privacy": [
+    {
+      "service": "Wikidata",
+      "purpose": "Enrich place details with structured data from Wikidata",
+      "dataSent": "Wikidata entity IDs (from OSM tags)"
+    }
+  ]
+}

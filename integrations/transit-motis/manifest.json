@@ -1,7 +1,5 @@
 {
   "id": "transit-motis",
-  "name": "MOTIS/Transitous Transit",
-  "description": "Global transit routing and stop data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -38,8 +36,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Public transit routing, stop departures, and trip planning",
-    "dataSent": "Origin/destination coordinates, departure time",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://transitous.org/",
     "personalData": false

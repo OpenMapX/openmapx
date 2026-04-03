@@ -11,8 +11,8 @@ const attributionSchema = z.object({
 
 const privacyEntrySchema = z.object({
   service: z.string().optional(),
-  purpose: z.string(),
-  dataSent: z.string(),
+  purpose: z.string().optional(),
+  dataSent: z.string().optional(),
   dataReceived: z.string().optional(),
   providerCountry: z.string(),
   providerPrivacyUrl: z.string(),
@@ -72,7 +72,7 @@ const infrastructureSchema = z.object({
 
 export const integrationManifestSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  name: z.string().optional(),
   version: z.string().optional(),
   description: z.string().optional(),
   author: z.string().optional(),

@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  escapeHtml,
-  relativeTime,
-  sanitizeUrl,
-  useEarthquakeStore,
-  useOverlayExclusion,
-} from "@openmapx/core";
+import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -15,6 +9,7 @@ import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useEarthquakeStore } from "./store";
 
 const SOURCE_ID = "openmapx-earthquakes-source";
 const CIRCLE_LAYER_ID = "openmapx-earthquakes-circles";

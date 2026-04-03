@@ -1,0 +1,8 @@
+{
+  "name": "iRail (Belgian Railways)",
+  "description": "Belgian rail transit data",
+  "privacy": {
+    "purpose": "Belgian rail stops and departures",
+    "dataSent": "Station IDs"
+  }
+}

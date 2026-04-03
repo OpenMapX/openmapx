@@ -1,13 +1,13 @@
 "use client";
 
+import { useMeasurementStore } from "@integrations/tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/tool-travel-time/store";
 import {
   PANEL,
   useDirectionsStore,
   useMapClickStore,
-  useMeasurementStore,
   usePlaceStore,
   useSidebarStore,
-  useTravelTimeStore,
 } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";

@@ -1,6 +1,5 @@
 "use client";
 
-import { useTrafficStore } from "@openmapx/core";
 import { useEffect } from "react";
 import {
   getFirstSymbolLayerId,
@@ -10,6 +9,7 @@ import {
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useTrafficStore } from "./store";
 
 const TRAFFIC_SOURCE_ID = "openmapx-traffic-source";
 const TRAFFIC_LAYER_ID = "openmapx-traffic-layer";

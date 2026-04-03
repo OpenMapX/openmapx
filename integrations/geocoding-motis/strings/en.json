@@ -1,0 +1,11 @@
+{
+  "name": "MOTIS/Transitous Geocoding",
+  "description": "Transit stop geocoding",
+  "privacy": [
+    {
+      "service": "Transitous/MOTIS",
+      "purpose": "Transit stop geocoding",
+      "dataSent": "Search query text"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Mapillary Street View",
+  "description": "Street-level imagery and navigation",
+  "privacy": {
+    "purpose": "Street-level imagery",
+    "dataSent": "Coordinates, image IDs, API token",
+    "dataReceived": "Street-level images and sequence metadata"
+  }
+}

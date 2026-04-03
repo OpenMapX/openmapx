@@ -1,0 +1,8 @@
+{
+  "name": "DB Vendo (Deutsche Bahn)",
+  "description": "German long-distance rail journey planning",
+  "privacy": {
+    "purpose": "German rail journey planning and departures",
+    "dataSent": "Origin/destination station IDs, departure time"
+  }
+}

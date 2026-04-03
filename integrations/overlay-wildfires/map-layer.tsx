@@ -1,6 +1,6 @@
 "use client";
 
-import { relativeTime, useOverlayExclusion, useWildfireStore } from "@openmapx/core";
+import { relativeTime, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -9,6 +9,7 @@ import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useWildfireStore } from "./store";
 
 const SOURCE_ID = "openmapx-wildfires-source";
 const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";

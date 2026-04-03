@@ -1,0 +1,8 @@
+{
+  "name": "TfL (Transport for London)",
+  "description": "London public transit data",
+  "privacy": {
+    "purpose": "London transit stops and departures",
+    "dataSent": "Stop IDs, coordinates, API key"
+  }
+}

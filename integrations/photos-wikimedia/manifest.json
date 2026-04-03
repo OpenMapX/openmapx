@@ -1,32 +1,27 @@
 {
   "id": "photos-wikimedia",
-  "name": "Wikimedia Photos",
   "version": "1.0.0",
-  "description": "Geotagged place photos",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["photos"],
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "healthCheck": {
     "type": "http",
     "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json",
     "category": "External"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "Wikimedia Commons",
@@ -34,12 +29,8 @@
       "license": "Various (CC)"
     }
   ],
-
   "privacy": [
     {
-      "service": "Wikimedia Commons",
-      "purpose": "Place photos from Wikimedia Commons",
-      "dataSent": "Coordinates, search radius",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Privacy_policy",
       "personalData": false

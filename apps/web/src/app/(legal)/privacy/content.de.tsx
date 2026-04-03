@@ -220,7 +220,7 @@ export default function PrivacyContentDe({
           externen Dienste:
         </Typography>
 
-        {generatePrivacySectionsFromManifests(integrations).map((section) => (
+        {generatePrivacySectionsFromManifests(integrations, "de").map((section) => (
           <div key={section.key}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
               {section.labelDe}

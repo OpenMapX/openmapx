@@ -4,9 +4,9 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useCyclingStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { CYCLING_COLORS } from "@/components/map/layers/cyclingConfig";
+import { useCyclingStore } from "./store";
 
 const LINE_ITEMS = [
   { colorKey: "track" as const, labelKey: "dedicatedCycleway", style: "solid" },

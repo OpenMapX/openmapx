@@ -1,8 +1,6 @@
 {
   "id": "overlay-transit",
-  "name": "Public Transit",
   "version": "1.0.0",
-  "description": "Public transit route visualization on the map",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://wiki.openstreetmap.org/wiki/Public_transport",
@@ -48,9 +46,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Transit route visualization on map",
-    "dataSent": "Map tile requests",
-    "dataReceived": "Transit overlay tiles",
     "providerCountry": "Various",
     "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Privacy_policy",
     "personalData": false,

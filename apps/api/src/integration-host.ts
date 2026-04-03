@@ -8,6 +8,7 @@ import {
   type IntegrationContext,
   IntegrationEventBus,
   type IntegrationManifest,
+  type IntegrationStrings,
   type LoadedIntegration,
   type Logger,
   PLATFORM_VERSION,
@@ -22,6 +23,7 @@ import { db, sql as pgClient } from "./db";
 import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
+import { providerHealth } from "./services/transit/health";
 import type { TransitProvider } from "./services/transit/orchestrator";
 import { transitOrchestrator } from "./services/transit/orchestrator";
 
@@ -216,6 +218,25 @@ async function discoverManifests(
   return results;
 }
 
+function loadStrings(directory: string): IntegrationStrings {
+  const stringsDir = join(directory, "strings");
+  const strings: IntegrationStrings = {};
+  if (!existsSync(stringsDir)) return strings;
+  try {
+    for (const file of readdirSync(stringsDir)) {
+      if (!file.endsWith(".json")) continue;
+      const locale = file.replace(".json", "");
+      const content = JSON.parse(readFileSync(join(stringsDir, file), "utf-8"));
+      if (content && typeof content === "object") {
+        strings[locale] = content;
+      }
+    }
+  } catch {
+    // skip unreadable strings
+  }
+  return strings;
+}
+
 type DiscoveredEntry = {
   manifest: Record<string, unknown>;
   directory: string;
@@ -252,6 +273,17 @@ export async function initIntegrations(
 ): Promise<void> {
   _fastify = fastify;
   _integrationDirs = integrationDirs;
+
+  // Reset transit provider health state when an integration is unloaded
+  // (prevents stale failure counters from poisoning reloaded providers)
+  eventBus.on("integration.unloaded", (event) => {
+    const integration = integrations.get(event.integrationId);
+    if (!integration) return;
+    const transitProviders = (integration.providers.get("transit") ?? []) as TransitProvider[];
+    for (const tp of transitProviders) {
+      providerHealth.reset(tp.id);
+    }
+  });
 
   const discovered = await discoverManifests(integrationDirs);
 
@@ -322,6 +354,7 @@ export async function initIntegrations(
       isBuiltIn,
       enabled: config.enabled !== false,
       providers,
+      strings: loadStrings(directory),
       customHealthCheck: undefined,
       shutdownHandlers,
     };
@@ -593,6 +626,8 @@ export async function reloadIntegrations(): Promise<{
 
   // 1. Shutdown all existing integrations
   for (const integration of integrations.values()) {
+    eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
+
     for (const handler of integration.shutdownHandlers) {
       try {
         await handler();
@@ -654,6 +689,7 @@ export async function reloadIntegrations(): Promise<{
       isBuiltIn,
       enabled: config.enabled !== false,
       providers,
+      strings: loadStrings(directory),
       customHealthCheck: undefined,
       shutdownHandlers,
     };
@@ -738,6 +774,8 @@ export async function reloadIntegrations(): Promise<{
 
 export async function shutdownIntegrations(): Promise<void> {
   for (const integration of integrations.values()) {
+    eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
+
     for (const handler of integration.shutdownHandlers) {
       try {
         await handler();

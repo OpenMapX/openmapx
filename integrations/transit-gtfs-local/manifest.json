@@ -1,7 +1,5 @@
 {
   "id": "transit-gtfs-local",
-  "name": "Local GTFS Feeds",
-  "description": "Locally imported transit schedule data",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -30,8 +28,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Local transit stop and departure data from imported GTFS feeds",
-    "dataSent": "No external data sent (local database queries)",
     "providerCountry": "Self-hosted",
     "providerPrivacyUrl": "N/A",
     "personalData": false

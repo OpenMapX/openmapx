@@ -304,7 +304,7 @@ export default function TermsContentDe({
           vollst&auml;ndigen Lizenztext.
         </Typography>
 
-        {generateAttributionSectionsFromManifests(integrations).map((section) => (
+        {generateAttributionSectionsFromManifests(integrations, "de").map((section) => (
           <AttributionTable key={section.heading} heading={section.headingDe} rows={section.rows} />
         ))}
 

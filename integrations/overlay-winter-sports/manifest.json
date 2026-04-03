@@ -1,8 +1,6 @@
 {
   "id": "overlay-winter-sports",
-  "name": "Winter Sports",
   "version": "1.0.0",
-  "description": "Winter sports piste and lift visualization",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://www.opensnowmap.org/",
@@ -48,9 +46,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Winter sports piste and lift visualization",
-    "dataSent": "Map tile requests",
-    "dataReceived": "Piste and lift overlay tiles",
     "providerCountry": "CH",
     "providerPrivacyUrl": "https://www.opensnowmap.org/",
     "personalData": false,

@@ -1,11 +1,12 @@
 "use client";
 
 import type { IsochroneTravelMode, LngLat } from "@openmapx/core";
-import { useIsochrone, useTravelTimeStore } from "@openmapx/core";
+import { useIsochrone } from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useTravelTimeStore } from "./store";
 
 const SOURCE_ID = "travel-time-source";
 const FILL_LAYER = "travel-time-fill";

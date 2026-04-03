@@ -1,12 +1,13 @@
 "use client";
 
-import { useOverlayExclusion, useStreetViewStore } from "@openmapx/core";
+import { useOverlayExclusion } from "@openmapx/core";
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useStreetViewStore } from "./store";
 
 const MLY_SOURCE_ID = "mly1_public";
 const MLY_SEQUENCE_LAYER = "mapillary-sequence-layer";

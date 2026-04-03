@@ -1,6 +1,5 @@
 {
   "id": "transit-ris-routing",
-  "name": "DB RIS Routing",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -31,8 +30,6 @@
     }
   ],
   "privacy": {
-    "purpose": "German rail journey planning",
-    "dataSent": "Origin/destination coordinates, API credentials",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
     "personalData": false

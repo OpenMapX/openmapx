@@ -1,5 +1,5 @@
 import { createConnection } from "node:net";
-import type { LoadedIntegration } from "@openmapx/core";
+import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/core";
 
 const TIMEOUT = 5_000;
 const UA = "OpenMapX/1.0 (+https://openmapx.org)";
@@ -56,7 +56,7 @@ export async function executeIntegrationHealthCheck(
 
   const category = (hc.category as string) ?? integration.manifest.domains[0] ?? "Other";
   const id = integration.id;
-  const name = integration.manifest.name;
+  const name = toIntegrationMeta(integration).name;
 
   // Check required env vars
   if (hc.requiredEnvVars?.some((v: string) => !process.env[v])) {

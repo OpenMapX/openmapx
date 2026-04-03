@@ -1,10 +1,11 @@
 "use client";
 
-import { useHikingStore, useOverlayExclusion } from "@openmapx/core";
+import { useOverlayExclusion } from "@openmapx/core";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
+import { useHikingStore } from "./store";
 
 const RASTER_SOURCE_ID = "openmapx-hiking-trails-source";
 const RASTER_LAYER_ID = "openmapx-hiking-trails-layer";

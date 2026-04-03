@@ -1,13 +1,9 @@
 {
   "id": "parking",
-  "name": "Parking Facilities",
   "version": "1.0.0",
-  "description": "Parking facility locations, capacity, and occupancy",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["data-source"],
-
   "frontend": {
     "searchCategory": {
       "id": "parking",
@@ -16,28 +12,25 @@
       "showInChipBar": true
     }
   },
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["DB_PARKING_CLIENT_ID", "DB_PARKING_API_KEY"],
-
   "healthCheck": {
     "type": "http",
     "url": "https://api.mobidata-bw.de/park-api/api/public/v3/parking-sites?limit=1",
     "category": "Parking"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "DB BahnPark",
@@ -58,22 +51,13 @@
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/"
     }
   ],
-
   "privacy": [
     {
-      "service": "DB BahnPark (Deutsche Bahn)",
-      "purpose": "Parking facilities at German train stations (capacity, occupancy, pricing)",
-      "dataSent": "API credentials (server-side)",
-      "dataReceived": "Parking facility locations, capacity, occupancy, pricing",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
       "personalData": false
     },
     {
-      "service": "ParkAPI v3 (MobiData BW)",
-      "purpose": "Parking site data with occupancy",
-      "dataSent": "Bounding box, filter parameters",
-      "dataReceived": "Parking site locations, capacity, occupancy",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.mobidata-bw.de/pages/datenschutz",
       "personalData": false

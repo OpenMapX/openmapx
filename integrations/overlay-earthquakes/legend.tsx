@@ -8,8 +8,8 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { useEarthquakeStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useEarthquakeStore } from "./store";
 
 const TIME_RANGES = ["hour", "day", "week", "month"] as const;
 const MAG_PRESETS = [

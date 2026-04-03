@@ -5,8 +5,8 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useAirQualityStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useAirQualityStore } from "./store";
 
 const AQI_LEVEL_KEYS = [
   { key: "good" as const, color: "#009966" },

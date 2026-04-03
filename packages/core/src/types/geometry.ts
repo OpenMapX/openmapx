@@ -10,3 +10,5 @@ export interface BoundingBox {
 
 /** [west, south, east, north] bounding box tuple. */
 export type BBox = [west: number, south: number, east: number, north: number];
+
+export type UnitSystem = "metric" | "imperial";

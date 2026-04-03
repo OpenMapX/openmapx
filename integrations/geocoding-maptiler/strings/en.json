@@ -1,0 +1,11 @@
+{
+  "name": "MapTiler Geocoding",
+  "description": "Forward geocoding and autocomplete",
+  "privacy": [
+    {
+      "service": "MapTiler",
+      "purpose": "Forward geocoding and autocomplete",
+      "dataSent": "Search query text, API key"
+    }
+  ]
+}

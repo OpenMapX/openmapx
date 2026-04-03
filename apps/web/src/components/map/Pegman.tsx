@@ -1,10 +1,10 @@
 "use client";
 
+import { useStreetViewStore } from "@integrations/street-view-mapillary/store";
 import BoyIcon from "@mui/icons-material/Boy";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
-import { useStreetViewStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";

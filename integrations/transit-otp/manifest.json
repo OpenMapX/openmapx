@@ -1,6 +1,5 @@
 {
   "id": "transit-otp",
-  "name": "OpenTripPlanner",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -31,8 +30,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Multi-modal transit trip planning",
-    "dataSent": "Origin/destination coordinates",
     "providerCountry": "Self-hosted",
     "providerPrivacyUrl": "https://www.opentripplanner.org/",
     "personalData": false

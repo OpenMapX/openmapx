@@ -1,0 +1,8 @@
+{
+  "name": "OSM Overpass Transit",
+  "description": "Transit stop locations from OpenStreetMap as fallback",
+  "privacy": {
+    "purpose": "Transit stop locations from OpenStreetMap as fallback",
+    "dataSent": "Bounding box, OSM query"
+  }
+}

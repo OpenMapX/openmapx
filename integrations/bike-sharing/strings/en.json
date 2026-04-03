@@ -1,0 +1,18 @@
+{
+  "name": "Bike Sharing",
+  "description": "Bike sharing station locations and availability",
+  "privacy": [
+    {
+      "service": "GBFS Catalog (MobilityData)",
+      "purpose": "Discover bike-sharing systems worldwide",
+      "dataSent": "System discovery requests (no user data)",
+      "dataReceived": "GBFS feed URLs for bike-sharing operators"
+    },
+    {
+      "service": "Nextbike",
+      "purpose": "Bike-sharing station locations and availability",
+      "dataSent": "Bounding box coordinates",
+      "dataReceived": "Station locations, bike counts, station names"
+    }
+  ]
+}

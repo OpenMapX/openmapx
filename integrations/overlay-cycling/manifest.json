@@ -1,8 +1,6 @@
 {
   "id": "overlay-cycling",
-  "name": "Cycling Infrastructure",
   "version": "1.0.0",
-  "description": "Cycling infrastructure visualization on the map",
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://wiki.openstreetmap.org/wiki/Cycling",
@@ -47,9 +45,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Cycling infrastructure visualization",
-    "dataSent": "Map tile requests",
-    "dataReceived": "Cycling infrastructure overlay tiles",
     "providerCountry": "Various",
     "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Privacy_policy",
     "personalData": false,

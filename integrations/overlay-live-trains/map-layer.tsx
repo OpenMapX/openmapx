@@ -1,7 +1,7 @@
 "use client";
 
 import type { VehiclePosition } from "@openmapx/core";
-import { escapeHtml, useLiveTrains, useLiveTrainsStore, useOverlayExclusion } from "@openmapx/core";
+import { escapeHtml, useLiveTrains, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -13,6 +13,7 @@ import {
   liveTrainIconExpression,
   loadLiveTrainMarkers,
 } from "@/lib/transitMarkers";
+import { useLiveTrainsStore } from "./store";
 
 const SOURCE_ID = "live-trains-source";
 const ICON_LAYER = "live-trains-icon";

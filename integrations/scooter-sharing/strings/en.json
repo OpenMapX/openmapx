@@ -1,0 +1,9 @@
+{
+  "name": "Scooter Sharing",
+  "description": "E-scooter and moped sharing locations and availability",
+  "privacy": {
+    "purpose": "E-scooter and moped sharing vehicle locations and availability",
+    "dataSent": "Bounding box coordinates",
+    "dataReceived": "Vehicle/station locations, availability, operator info"
+  }
+}

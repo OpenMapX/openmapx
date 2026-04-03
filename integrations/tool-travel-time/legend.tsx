@@ -16,8 +16,9 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { IsochroneTravelMode, LngLat } from "@openmapx/core";
-import { TRAVEL_TIME_PRESETS, useIsochrone, useTravelTimeStore } from "@openmapx/core";
+import { useIsochrone } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { TRAVEL_TIME_PRESETS, useTravelTimeStore } from "./store";
 
 function formatPresetLabel(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;

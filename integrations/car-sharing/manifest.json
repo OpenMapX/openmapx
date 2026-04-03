@@ -1,13 +1,9 @@
 {
   "id": "car-sharing",
-  "name": "Car Sharing",
   "version": "1.0.0",
-  "description": "Car sharing station locations and vehicle availability",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["data-source"],
-
   "frontend": {
     "searchCategory": {
       "id": "car-sharing",
@@ -16,28 +12,25 @@
       "showInChipBar": false
     }
   },
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": [],
-
   "healthCheck": {
     "type": "http",
     "url": "https://cwapi.cambio-carsharing.com/pub/de-ac/stations",
     "category": "Shared Mobility"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "GBFS Catalog",
@@ -52,11 +45,7 @@
       "licenseUrl": "https://www.cambio-carsharing.de/datenschutz/"
     }
   ],
-
   "privacy": {
-    "purpose": "Car sharing station locations and vehicle availability",
-    "dataSent": "Bounding box coordinates",
-    "dataReceived": "Station locations, vehicle counts, operator info",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://www.cambio-carsharing.de/datenschutz/",
     "personalData": false

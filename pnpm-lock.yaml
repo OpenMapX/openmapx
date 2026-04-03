@@ -658,12 +658,18 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      zustand:
+        specifier: '*'
+        version: 5.0.12(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
 
   integrations/tool-travel-time:
     dependencies:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      zustand:
+        specifier: '*'
+        version: 5.0.12(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
 
   integrations/transit-bvg:
     dependencies:

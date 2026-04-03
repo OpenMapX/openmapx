@@ -1,0 +1,11 @@
+{
+  "name": "Wikimedia Commons Enrichment",
+  "description": "Photo enrichment for place details",
+  "privacy": [
+    {
+      "service": "Wikimedia Commons",
+      "purpose": "Enrich place details with photos from Wikimedia Commons categories and files",
+      "dataSent": "Wikimedia Commons category/file names (from OSM tags)"
+    }
+  ]
+}

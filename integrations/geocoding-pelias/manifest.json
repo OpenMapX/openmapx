@@ -1,34 +1,28 @@
 {
   "id": "geocoding-pelias",
-  "name": "Pelias Geocoding",
   "version": "1.0.0",
-  "description": "Self-hosted forward and reverse geocoding",
   "author": "OpenMapX",
   "license": "MIT",
-
   "domains": ["geocoding"],
-
   "backend": {
     "routes": false
   },
-
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true }
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
     }
   },
-
   "envVars": ["PELIAS_URL"],
-
   "healthCheck": {
     "type": "http",
     "urlTemplate": "http://localhost:4000/v1/search?text=test&size=1",
     "category": "Geocoding"
   },
-
   "quality": "built-in",
-
   "attribution": [
     {
       "name": "Pelias",
@@ -36,13 +30,8 @@
       "license": "MIT"
     }
   ],
-
   "privacy": [
     {
-      "service": "Pelias",
-      "purpose": "Self-hosted geocoding",
-      "dataSent": "Search query text (to self-hosted instance)",
-      "dataReceived": "Geocoded addresses, coordinates, and place metadata",
       "providerCountry": "Self-hosted",
       "providerPrivacyUrl": "https://pelias.io/",
       "personalData": false

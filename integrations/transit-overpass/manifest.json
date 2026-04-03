@@ -1,6 +1,5 @@
 {
   "id": "transit-overpass",
-  "name": "OSM Overpass Transit",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -29,8 +28,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Transit stop locations from OpenStreetMap as fallback",
-    "dataSent": "Bounding box, OSM query",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
     "personalData": false

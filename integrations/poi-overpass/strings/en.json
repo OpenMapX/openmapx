@@ -1,0 +1,11 @@
+{
+  "name": "Overpass POI Search",
+  "description": "Category-based point of interest search",
+  "privacy": [
+    {
+      "service": "OpenStreetMap/Overpass",
+      "purpose": "Category-based point of interest search",
+      "dataSent": "Bounding box coordinates, OSM tag queries"
+    }
+  ]
+}

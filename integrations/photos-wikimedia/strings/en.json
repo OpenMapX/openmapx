@@ -1,0 +1,11 @@
+{
+  "name": "Wikimedia Photos",
+  "description": "Geotagged place photos",
+  "privacy": [
+    {
+      "service": "Wikimedia Commons",
+      "purpose": "Place photos from Wikimedia Commons",
+      "dataSent": "Coordinates, search radius"
+    }
+  ]
+}

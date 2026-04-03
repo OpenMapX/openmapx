@@ -1,0 +1,9 @@
+{
+  "name": "Winter Sports",
+  "description": "Winter sports piste and lift visualization",
+  "privacy": {
+    "purpose": "Winter sports piste and lift visualization",
+    "dataSent": "Map tile requests",
+    "dataReceived": "Piste and lift overlay tiles"
+  }
+}

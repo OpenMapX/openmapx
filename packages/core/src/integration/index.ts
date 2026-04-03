@@ -18,7 +18,7 @@ export type {
 } from "./context";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
-export type { LoadedIntegration, LoadedIntegrationMeta } from "./loader";
+export type { IntegrationStrings, LoadedIntegration, LoadedIntegrationMeta } from "./loader";
 export { toIntegrationMeta } from "./loader";
 export type {
   IntegrationAttribution,

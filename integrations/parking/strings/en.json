@@ -1,0 +1,18 @@
+{
+  "name": "Parking Facilities",
+  "description": "Parking facility locations, capacity, and occupancy",
+  "privacy": [
+    {
+      "service": "DB BahnPark (Deutsche Bahn)",
+      "purpose": "Parking facilities at German train stations (capacity, occupancy, pricing)",
+      "dataSent": "API credentials (server-side)",
+      "dataReceived": "Parking facility locations, capacity, occupancy, pricing"
+    },
+    {
+      "service": "ParkAPI v3 (MobiData BW)",
+      "purpose": "Parking site data with occupancy",
+      "dataSent": "Bounding box, filter parameters",
+      "dataReceived": "Parking site locations, capacity, occupancy"
+    }
+  ]
+}

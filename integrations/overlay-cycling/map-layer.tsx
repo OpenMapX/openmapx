@@ -1,6 +1,6 @@
 "use client";
 
-import { useCyclingStore, useDirectionsStore, useOverlayExclusion } from "@openmapx/core";
+import { useDirectionsStore, useOverlayExclusion } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
+import { useCyclingStore } from "./store";
 
 const REANCHOR_IDS = [
   CYCLING_LAYER_IDS.tracks,

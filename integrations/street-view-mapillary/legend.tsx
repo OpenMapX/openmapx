@@ -4,8 +4,8 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useStreetViewStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useStreetViewStore } from "./store";
 
 export function StreetViewLegend() {
   const t = useTranslations("streetView");

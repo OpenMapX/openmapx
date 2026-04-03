@@ -1,7 +1,5 @@
 {
   "id": "transit-hafas",
-  "name": "HAFAS Transit (DB/VBB/BVG)",
-  "description": "German public transit journey planning",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -31,8 +29,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Transit stop departures, arrivals, and journey planning",
-    "dataSent": "Stop IDs, coordinates, departure times",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
     "personalData": false

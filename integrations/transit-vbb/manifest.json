@@ -1,6 +1,5 @@
 {
   "id": "transit-vbb",
-  "name": "VBB Transit (Berlin-Brandenburg)",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -29,8 +28,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Berlin/Brandenburg transit stops and departures",
-    "dataSent": "Stop IDs, coordinates",
     "providerCountry": "DE",
     "providerPrivacyUrl": "https://www.vbb.de/datenschutz",
     "personalData": false

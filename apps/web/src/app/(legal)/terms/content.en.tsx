@@ -287,7 +287,7 @@ export default function TermsContent({
           you to the full license text.
         </Typography>
 
-        {generateAttributionSectionsFromManifests(integrations).map((section) => (
+        {generateAttributionSectionsFromManifests(integrations, "en").map((section) => (
           <AttributionTable key={section.heading} heading={section.heading} rows={section.rows} />
         ))}
 

@@ -1,0 +1,11 @@
+{
+  "name": "Pelias Geocoding",
+  "description": "Self-hosted forward and reverse geocoding",
+  "privacy": [
+    {
+      "service": "Pelias",
+      "purpose": "Self-hosted geocoding",
+      "dataSent": "Search query text (to self-hosted instance)"
+    }
+  ]
+}

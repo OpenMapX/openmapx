@@ -1,7 +1,5 @@
 {
   "id": "transit-dynamic-registry",
-  "name": "Dynamic Transit Registry",
-  "description": "Automatically discovered public transit APIs",
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
@@ -31,8 +29,6 @@
     }
   ],
   "privacy": {
-    "purpose": "Discover and proxy transit APIs globally",
-    "dataSent": "Varies by discovered provider",
     "providerCountry": "Various",
     "providerPrivacyUrl": "https://github.com/public-transport/transport-apis",
     "personalData": false

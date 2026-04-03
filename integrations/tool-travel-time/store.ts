@@ -1,6 +1,5 @@
+import type { IsochroneTravelMode, LngLat } from "@openmapx/core";
 import { create } from "zustand";
-import type { LngLat } from "../types/geometry";
-import type { IsochroneTravelMode } from "../types/isochrone";
 
 const MAX_SELECTED = 4;
 

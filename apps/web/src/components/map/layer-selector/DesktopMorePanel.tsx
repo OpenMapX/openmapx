@@ -1,5 +1,7 @@
 "use client";
 
+import { useMeasurementStore } from "@integrations/tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/tool-travel-time/store";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CloseIcon from "@mui/icons-material/Close";
@@ -9,14 +11,7 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import type { MapLayer } from "@openmapx/core";
-import {
-  OVERLAY_REGISTRY,
-  toggleOverlay,
-  useCapabilities,
-  useLayerStore,
-  useMeasurementStore,
-  useTravelTimeStore,
-} from "@openmapx/core";
+import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { DesktopMoreTile } from "./DesktopMoreTile";
 import { DESKTOP_MORE_MAP_TYPES } from "./layerSelectorConfig";
