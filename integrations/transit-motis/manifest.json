@@ -13,10 +13,13 @@
   "category": "Transit",
   "envVars": [],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable MOTIS/Transitous transit integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable MOTIS/Transitous transit integration"
+      }
     }
   },
   "backend": {
@@ -24,7 +27,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "url": "https://europe.motis-project.de/api/v1/plan"
+    "url": "https://api.transitous.org/api/v1/geocode?text=test"
   },
   "attribution": [
     {
@@ -40,9 +43,11 @@
       "dynamicEndpoint": "/api/integrations/transit-motis/attribution"
     }
   ],
-  "privacy": {
-    "providerCountry": "DE",
-    "providerPrivacyUrl": "https://transitous.org/",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://transitous.org/",
+      "personalData": false
+    }
+  ]
 }

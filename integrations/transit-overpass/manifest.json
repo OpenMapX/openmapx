@@ -11,11 +11,15 @@
     "dataRequirements": ["osm-pbf"]
   },
   "category": "Transit",
+  "envVars": [],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable OSM Overpass transit integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable OSM Overpass transit integration"
+      }
     }
   },
   "backend": {
@@ -32,9 +36,11 @@
       "license": "ODbL"
     }
   ],
-  "privacy": {
-    "providerCountry": "DE",
-    "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+      "personalData": false
+    }
+  ]
 }

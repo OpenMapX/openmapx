@@ -7,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function StatusPage() {
-  return <StatusDashboard />;
+  return (
+    <div className="min-h-dvh bg-gray-50 px-4 py-8">
+      <StatusDashboard />
+    </div>
+  );
 }

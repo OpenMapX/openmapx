@@ -24,10 +24,10 @@
   "envVars": [],
   "healthCheck": {
     "type": "http",
-    "url": "https://nominatim.openstreetmap.org/status",
-    "category": "Geocoding"
+    "url": "https://nominatim.openstreetmap.org/status"
   },
   "quality": "built-in",
+  "category": "Geocoding",
   "attribution": [
     {
       "name": "Nominatim/OSM",

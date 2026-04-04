@@ -38,10 +38,10 @@
     "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson",
     "headers": {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
-    },
-    "category": "Data Overlays"
+    }
   },
   "quality": "built-in",
+  "category": "Data Overlays",
   "attribution": [
     {
       "name": "USGS",
@@ -50,10 +50,12 @@
       "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits"
     }
   ],
-  "privacy": {
-    "providerCountry": "US",
-    "providerPrivacyUrl": "https://www.usgs.gov/privacy-policies",
-    "personalData": false,
-    "cookies": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.usgs.gov/privacy-policies",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
 }

@@ -18,10 +18,10 @@
   },
   "healthCheck": {
     "type": "http",
-    "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&format=json&props=labels&languages=en",
-    "category": "External"
+    "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&format=json&props=labels&languages=en"
   },
   "quality": "built-in",
+  "category": "External",
   "attribution": [
     {
       "name": "Wikidata",

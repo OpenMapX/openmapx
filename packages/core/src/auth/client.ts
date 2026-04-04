@@ -1,5 +1,10 @@
 import { passkeyClient } from "@better-auth/passkey/client";
-import { emailOTPClient, genericOAuthClient, twoFactorClient } from "better-auth/client/plugins";
+import {
+  adminClient,
+  emailOTPClient,
+  genericOAuthClient,
+  twoFactorClient,
+} from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 export interface AuthConfig {
@@ -14,7 +19,13 @@ function _buildClient(baseURL: string) {
   return createAuthClient({
     baseURL,
     basePath: "/api/auth",
-    plugins: [passkeyClient(), genericOAuthClient(), twoFactorClient(), emailOTPClient()],
+    plugins: [
+      passkeyClient(),
+      genericOAuthClient(),
+      twoFactorClient(),
+      emailOTPClient(),
+      adminClient(),
+    ],
   });
 }
 
@@ -31,6 +42,7 @@ export function initAuth(config: AuthConfig): void {
       genericOAuthClient(),
       twoFactorClient(),
       emailOTPClient(),
+      adminClient(),
       ...((config.platformPlugins as []) ?? []),
     ],
   }) as FullAuthClient;

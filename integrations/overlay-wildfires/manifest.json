@@ -29,17 +29,23 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "NASA FIRMS map key.",
+        "x-openmapx-secret": true
       }
     }
   },
   "envVars": ["FIRMS_MAP_KEY"],
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/${FIRMS_MAP_KEY}/VIIRS_SNPP_NRT/world/1",
-    "requiredEnvVars": ["FIRMS_MAP_KEY"],
-    "category": "Data Overlays"
+    "urlTemplate": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/${FIRMS_MAP_KEY}/VIIRS_SNPP_NRT/0,0,1,1/1",
+    "requiredEnvVars": ["FIRMS_MAP_KEY"]
   },
   "quality": "built-in",
+  "category": "Data Overlays",
   "attribution": [
     {
       "name": "NASA FIRMS",
@@ -48,10 +54,12 @@
       "licenseUrl": "https://www.nasa.gov/open/"
     }
   ],
-  "privacy": {
-    "providerCountry": "US",
-    "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
-    "personalData": false,
-    "cookies": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
 }

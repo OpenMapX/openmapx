@@ -517,7 +517,7 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       const result = await osrmService.optimizeRoute?.(fourWaypoints, "driving");
 
-      expect(result.optimizedOrder).toEqual([0, 2, 1, 3]);
+      expect(result?.optimizedOrder).toEqual([0, 2, 1, 3]);
     });
 
     it("returns routes from trips array", async () => {
@@ -526,8 +526,8 @@ describe("osrmService", () => {
       const { osrmService } = await loadModule();
       const result = await osrmService.optimizeRoute?.(fourWaypoints, "driving");
 
-      expect(result.routes).toHaveLength(1);
-      expect(result.routes[0].mode).toBe("driving");
+      expect(result?.routes).toHaveLength(1);
+      expect(result?.routes[0].mode).toBe("driving");
     });
 
     it("throws on HTTP error", async () => {

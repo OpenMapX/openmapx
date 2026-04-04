@@ -1,5 +1,6 @@
 import { createConnection } from "node:net";
 import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/core";
+import { recordHealthResult } from "./health-history";
 
 const TIMEOUT = 5_000;
 const UA = "OpenMapX/1.0 (+https://openmapx.org)";
@@ -54,7 +55,10 @@ export async function executeIntegrationHealthCheck(
   const hc = integration.manifest.healthCheck;
   if (!hc) return null;
 
-  const category = (hc.category as string) ?? integration.manifest.domains[0] ?? "Other";
+  const category =
+    ((integration.manifest as Record<string, unknown>).category as string) ??
+    integration.manifest.domains[0] ??
+    "Other";
   const id = integration.id;
   const name = toIntegrationMeta(integration).name;
 
@@ -127,8 +131,18 @@ export async function executeIntegrationHealthCheck(
     return null;
   }
 
-  // Mask sensitive data in display URL
-  const displayUrl = checkUrl.replace(/[?&](api_?key|key|apikey|app_key|token)=[^&]+/gi, "...");
+  // Mask sensitive data in display URL (preserve param name, mask value)
+  const displayUrl = checkUrl.replace(
+    /([?&](api_?key|key|apikey|app_key|token|access_token))=[^&]+/gi,
+    "$1=***",
+  );
+
+  // Interpolate env vars in headers
+  const rawHeaders = (hc.headers as Record<string, string>) ?? {};
+  const interpolatedHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawHeaders)) {
+    interpolatedHeaders[k] = v.replace(/\$\{(\w+)\}/g, (_, key: string) => process.env[key] ?? "");
+  }
 
   const start = Date.now();
   try {
@@ -136,7 +150,7 @@ export async function executeIntegrationHealthCheck(
       method: "GET",
       headers: {
         "User-Agent": UA,
-        ...((hc.headers as Record<string, string>) ?? {}),
+        ...interpolatedHeaders,
       },
       signal: AbortSignal.timeout(TIMEOUT),
     });
@@ -183,9 +197,15 @@ export async function executeAllIntegrationHealthChecks(
   const results = await Promise.all(checks.map(executeIntegrationHealthCheck));
   const filtered = results.filter((r): r is ServiceStatus => r !== null);
 
-  // Update the shared health cache
+  // Update the shared health cache and persist to health_history
   for (const r of filtered) {
     healthCache.set(r.id, r);
+    recordHealthResult(
+      r.id,
+      r.status === "up" ? "healthy" : r.status === "unconfigured" ? "degraded" : "unhealthy",
+      r.responseTime,
+      r.error,
+    ).catch((err) => console.error("[health-history] Failed to persist:", err));
   }
   healthCacheUpdatedAt = Date.now();
 

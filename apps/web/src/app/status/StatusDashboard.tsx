@@ -20,7 +20,7 @@ interface StatusResponse {
 
 /**
  * Category display order — derived from the API response order.
- * The API returns services grouped by manifest healthCheck.category.
+ * The API returns services grouped by manifest category.
  * We preserve that order but ensure "Infrastructure" always comes first.
  */
 function deriveCategoryOrder(services: ServiceStatus[]): string[] {
@@ -86,7 +86,9 @@ export default function StatusDashboard() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const interval = setInterval(fetchStatus, 30_000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") fetchStatus();
+    }, 30_000);
     return () => clearInterval(interval);
   }, [autoRefresh, fetchStatus]);
 
@@ -107,8 +109,8 @@ export default function StatusDashboard() {
   const unconfiguredCount = data?.services.filter((s) => s.status === "unconfigured").length ?? 0;
 
   return (
-    <div className="h-dvh overflow-auto bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+    <div>
+      <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-2xl font-bold text-gray-900">System Status</h1>
           <div className="flex items-center gap-3">

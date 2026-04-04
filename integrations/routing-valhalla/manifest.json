@@ -24,10 +24,10 @@
   "envVars": [],
   "healthCheck": {
     "type": "ping",
-    "url": "https://valhalla1.openstreetmap.de/status",
-    "category": "Routing"
+    "url": "https://valhalla1.openstreetmap.de/status"
   },
   "quality": "built-in",
+  "category": "Routing",
   "attribution": [
     {
       "name": "Valhalla",

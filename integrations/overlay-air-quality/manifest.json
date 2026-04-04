@@ -29,6 +29,12 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "OpenAQ API key.",
+        "x-openmapx-secret": true
       }
     }
   },
@@ -36,10 +42,13 @@
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://api.openaq.org/v3/locations?bbox=-0.1,-0.1,0.1,0.1&parameters_id=2&limit=1&page=1",
-    "requiredEnvVars": ["OPENAQ_API_KEY"],
-    "category": "Data Overlays"
+    "headers": {
+      "X-API-Key": "${OPENAQ_API_KEY}"
+    },
+    "requiredEnvVars": ["OPENAQ_API_KEY"]
   },
   "quality": "built-in",
+  "category": "Data Overlays",
   "attribution": [
     {
       "name": "OpenAQ",
@@ -48,10 +57,12 @@
       "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
     }
   ],
-  "privacy": {
-    "providerCountry": "US",
-    "providerPrivacyUrl": "https://openaq.org/privacy/",
-    "personalData": false,
-    "cookies": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://openaq.org/privacy/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
 }

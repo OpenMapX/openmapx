@@ -7,8 +7,17 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
-import { getAllIntegrations, initIntegrations, shutdownIntegrations } from "./integration-host";
+import {
+  getAllIntegrations,
+  initIntegrations,
+  reloadIntegrations,
+  shutdownIntegrations,
+} from "./integration-host";
 import { redis } from "./redis";
+import { adminRoute } from "./routes/admin";
+import { adminServicesRoute } from "./routes/admin-services";
+import { adminSettingsRoute } from "./routes/admin-settings";
+import { adminStoreRoute } from "./routes/admin-store";
 import { autocompleteRoute } from "./routes/autocomplete";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { categorySearchRoute } from "./routes/category-search";
@@ -29,11 +38,27 @@ import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
 import { winterSportsRoute } from "./routes/winter-sports";
+import {
+  buildTarget,
+  profileStart,
+  profileStop,
+  serviceRestart,
+  serviceStart,
+  serviceStop,
+} from "./services/admin-ops";
+import { appLogger } from "./services/app-logger";
 import { gtfsManager } from "./services/gtfs/index";
+import { pruneOldRecords } from "./services/health-history";
+import { jobRunner } from "./services/job-runner";
 import { motisManager } from "./services/motis/manager";
+import { handleInstallJob, handleRemoveJob, handleUpdateJob } from "./services/store";
 
+const { default: pino } = await import("pino");
 const server = Fastify({
-  logger: true,
+  loggerInstance: pino(
+    { level: process.env.LOG_LEVEL ?? "info" },
+    pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),
+  ),
   routerOptions: {
     // DB HAFAS trip IDs can be ~300 chars when URL-encoded (default is 100)
     maxParamLength: 500,
@@ -113,6 +138,10 @@ await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
 await server.register(statusRoute, { prefix: "/api" });
+await server.register(adminRoute, { prefix: "/api" });
+await server.register(adminServicesRoute, { prefix: "/api" });
+await server.register(adminSettingsRoute, { prefix: "/api" });
+await server.register(adminStoreRoute, { prefix: "/api" });
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {
@@ -152,6 +181,64 @@ const customIntegrationsDir = join(
   "custom_integrations",
 );
 await initIntegrations(server, [integrationsDir, customIntegrationsDir]);
+
+// Initialize job runner (picks up interrupted jobs from previous run)
+await jobRunner.initialize();
+
+// Prune old health history records daily
+setInterval(
+  () =>
+    void pruneOldRecords(30).catch((err) => server.log.warn(err, "Health history prune failed")),
+  24 * 60 * 60 * 1000,
+);
+
+// Register job handlers
+jobRunner.register("service.start", async (ctx) => {
+  const service = ctx.payload.service as string;
+  await serviceStart(service, ctx);
+  return { service, action: "start" };
+});
+
+jobRunner.register("service.stop", async (ctx) => {
+  const service = ctx.payload.service as string;
+  await serviceStop(service, ctx);
+  return { service, action: "stop" };
+});
+
+jobRunner.register("service.restart", async (ctx) => {
+  const service = ctx.payload.service as string;
+  await serviceRestart(service, ctx);
+  return { service, action: "restart" };
+});
+
+jobRunner.register("profile.start", async (ctx) => {
+  const profile = ctx.payload.profile as string;
+  await profileStart(profile, ctx);
+  return { profile, action: "start" };
+});
+
+jobRunner.register("profile.stop", async (ctx) => {
+  const profile = ctx.payload.profile as string;
+  await profileStop(profile, ctx);
+  return { profile, action: "stop" };
+});
+
+jobRunner.register("build.target", async (ctx) => {
+  const target = ctx.payload.target as string;
+  await buildTarget(target, ctx);
+  return { target };
+});
+
+jobRunner.register("integration.reload", async (ctx) => {
+  await ctx.log("Reloading all integrations...");
+  const result = await reloadIntegrations();
+  await ctx.log(`Reload complete. Reloaded: ${result.reloaded}, Enabled: ${result.enabled}`);
+  return result as Record<string, unknown>;
+});
+
+jobRunner.register("store.install", handleInstallJob);
+jobRunner.register("store.update", handleUpdateJob);
+jobRunner.register("store.remove", handleRemoveJob);
 
 // Sanity check: ensure integrations were discovered
 const loadedCount = getAllIntegrations().length;

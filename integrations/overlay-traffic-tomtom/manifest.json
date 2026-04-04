@@ -28,17 +28,23 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "TomTom Traffic API key.",
+        "x-openmapx-secret": true
       }
     }
   },
   "envVars": ["TOMTOM_TRAFFIC_KEY"],
   "healthCheck": {
     "type": "http",
-    "url": "https://api.tomtom.com",
-    "requiredEnvVars": ["TOMTOM_TRAFFIC_KEY"],
-    "category": "Traffic"
+    "urlTemplate": "https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/0/0/0.png?key=${TOMTOM_TRAFFIC_KEY}&tileSize=256",
+    "requiredEnvVars": ["TOMTOM_TRAFFIC_KEY"]
   },
   "quality": "built-in",
+  "category": "Traffic",
   "attribution": [
     {
       "name": "TomTom",
@@ -46,10 +52,12 @@
       "license": "Proprietary"
     }
   ],
-  "privacy": {
-    "providerCountry": "NL",
-    "providerPrivacyUrl": "https://www.tomtom.com/privacy/",
-    "personalData": false,
-    "cookies": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://www.tomtom.com/privacy/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
 }

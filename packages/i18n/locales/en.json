@@ -428,6 +428,7 @@
   "account": {
     "language": "Language",
     "accountSettings": "Account settings",
+    "adminPanel": "Admin panel",
     "signOut": "Sign out",
     "theme": "Theme",
     "themeLight": "Light",
@@ -551,7 +552,8 @@
     "passkeyAuthFailed": "Passkey authentication failed",
     "oauthSignInFailed": "{provider} sign-in failed",
     "togglePasswordVisibility": "Toggle password visibility",
-    "checkYourEmail": "Check your email to verify your account before signing in."
+    "checkYourEmail": "Check your email to verify your account before signing in.",
+    "invalidResetLink": "This password reset link is invalid or has expired. Please request a new one."
   },
   "legal": {
     "legal": "Legal",

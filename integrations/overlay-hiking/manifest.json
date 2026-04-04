@@ -34,10 +34,10 @@
   "envVars": [],
   "healthCheck": {
     "type": "http",
-    "url": "https://hiking.waymarkedtrails.org/api/v1/list?bbox=7,47,8,48&limit=1",
-    "category": "Map Overlays"
+    "url": "https://hiking.waymarkedtrails.org/api/v1/list/search?query=test&limit=1"
   },
   "quality": "built-in",
+  "category": "Map Overlays",
   "attribution": [
     {
       "name": "Waymarked Trails",
@@ -50,10 +50,12 @@
       "license": "ODbL"
     }
   ],
-  "privacy": {
-    "providerCountry": "DE",
-    "providerPrivacyUrl": "https://waymarkedtrails.org/",
-    "personalData": false,
-    "cookies": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://waymarkedtrails.org/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
 }

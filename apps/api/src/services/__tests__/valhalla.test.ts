@@ -433,7 +433,7 @@ describe("valhallaService", () => {
       const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
       const result = await valhallaService.optimizeRoute?.(fourWaypoints, "walking");
 
-      expect(result.optimizedOrder).toEqual([0, 2, 1, 3]);
+      expect(result?.optimizedOrder).toEqual([0, 2, 1, 3]);
     });
 
     it("falls back to sequential order when locations have no original_index", async () => {
@@ -445,7 +445,7 @@ describe("valhallaService", () => {
       const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
       const result = await valhallaService.optimizeRoute?.(fourWaypoints, "walking");
 
-      expect(result.optimizedOrder).toEqual([0, 1, 2, 3]);
+      expect(result?.optimizedOrder).toEqual([0, 1, 2, 3]);
     });
 
     it("returns routes from the trip", async () => {
@@ -454,8 +454,8 @@ describe("valhallaService", () => {
       const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
       const result = await valhallaService.optimizeRoute?.(fourWaypoints, "walking");
 
-      expect(result.routes).toHaveLength(1);
-      expect(result.routes[0].mode).toBe("walking");
+      expect(result?.routes).toHaveLength(1);
+      expect(result?.routes[0].mode).toBe("walking");
     });
 
     it("uses correct costing for driving mode", async () => {

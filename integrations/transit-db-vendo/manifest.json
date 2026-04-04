@@ -8,10 +8,13 @@
   "category": "Transit",
   "envVars": [],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable DB Vendo transit integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable DB Vendo transit integration"
+      }
     }
   },
   "backend": {
@@ -28,9 +31,11 @@
       "license": "Proprietary"
     }
   ],
-  "privacy": {
-    "providerCountry": "DE",
-    "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+      "personalData": false
+    }
+  ]
 }

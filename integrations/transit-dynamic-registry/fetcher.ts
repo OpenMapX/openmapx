@@ -3,10 +3,11 @@ import { COUNTRY_BBOXES } from "./country-bboxes";
 import type { CoverageTier, ProtocolType, RegistryEntry } from "./registry-types";
 
 // JSDelivr CDN — mirrors GitHub without API rate limits
-const JSDELIVR_LIST_URL =
-  "https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@v1/flat";
-const JSDELIVR_BASE = "https://cdn.jsdelivr.net/gh/public-transport/transport-apis@v1";
-// GitHub API fallback (used only when GITHUB_TOKEN is set)
+// @HEAD resolves to the repo's default branch (no releases/tags needed)
+const JSDELIVR_PKG_URL =
+  "https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@HEAD";
+const JSDELIVR_CDN_BASE = "https://cdn.jsdelivr.net/gh/public-transport/transport-apis@HEAD";
+// GitHub API fallback
 const GITHUB_TREE_URL =
   "https://api.github.com/repos/public-transport/transport-apis/git/trees/v1?recursive=1";
 const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transport-apis/v1";
@@ -187,7 +188,7 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const headers: Record<string, string> = {};
-    if (process.env.GITHUB_TOKEN) {
+    if (process.env.GITHUB_TOKEN && url.includes("api.github.com")) {
       headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
     }
     return await fetch(url, { signal: controller.signal, headers });
@@ -196,15 +197,32 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
   }
 }
 
-/** Fetch file listing via JSDelivr (no auth, no rate limits). */
+interface JsDelivrFile {
+  type: "file" | "directory";
+  name: string;
+  files?: JsDelivrFile[];
+}
+
+/** Recursively collect data JSON paths from a JSDelivr package tree. */
+function collectDataPaths(node: { files?: JsDelivrFile[] }, prefix = ""): string[] {
+  const paths: string[] = [];
+  for (const f of node.files ?? []) {
+    const path = `${prefix}${f.name}`;
+    if (f.type === "directory") {
+      paths.push(...collectDataPaths(f, `${path}/`));
+    } else if (path.startsWith("data/") && path.endsWith(".json")) {
+      paths.push(path);
+    }
+  }
+  return paths;
+}
+
+/** Fetch file listing via JSDelivr @HEAD (no auth, no rate limits). */
 async function fetchPathsFromJsdelivr(): Promise<string[]> {
-  const res = await fetchWithTimeout(JSDELIVR_LIST_URL, 15_000);
+  const res = await fetchWithTimeout(JSDELIVR_PKG_URL, 15_000);
   if (!res.ok) throw new Error(`JSDelivr listing: ${res.status}`);
-  const json = (await res.json()) as { files: { name: string }[] };
-  return json.files
-    .map((f) => f.name) // e.g. "/data/at/oebb.json"
-    .filter((n) => n.startsWith("/data/") && n.endsWith(".json"))
-    .map((n) => n.slice(1)); // strip leading "/"
+  const json = (await res.json()) as JsDelivrFile;
+  return collectDataPaths(json);
 }
 
 /** Fetch file listing via GitHub Tree API (requires GITHUB_TOKEN for reliable access). */
@@ -241,16 +259,16 @@ async function fetchInBatchesFrom(paths: string[], baseUrl: string): Promise<Reg
 export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
   let entries: RegistryEntry[] | null = null;
 
-  // 1. Primary: JSDelivr CDN — no rate limits, no token needed
+  // 1. Primary: JSDelivr CDN (@HEAD — no auth, no rate limits, no GitHub API calls)
   try {
     const paths = await fetchPathsFromJsdelivr();
-    entries = await fetchInBatchesFrom(paths, JSDELIVR_BASE);
+    entries = await fetchInBatchesFrom(paths, JSDELIVR_CDN_BASE);
     console.log(`[transit-registry] ${entries.length} entries loaded (JSDelivr)`);
   } catch (err) {
     console.warn("[transit-registry] JSDelivr unavailable, trying GitHub API:", err);
   }
 
-  // 2. Fallback: GitHub Tree API (works reliably with GITHUB_TOKEN)
+  // 2. Fallback: GitHub Tree API + raw.githubusercontent.com
   if (!entries) {
     try {
       const paths = await fetchPathsFromGithub();

@@ -33,10 +33,10 @@
   "envVars": [],
   "healthCheck": {
     "type": "http",
-    "url": "https://tiles.openstreetmap.org/0/0/0.png",
-    "category": "Map Overlays"
+    "url": "https://tile.openstreetmap.org/0/0/0.png"
   },
   "quality": "built-in",
+  "category": "Map Overlays",
   "attribution": [
     {
       "name": "OpenStreetMap",
@@ -44,10 +44,12 @@
       "license": "ODbL"
     }
   ],
-  "privacy": {
-    "providerCountry": "Various",
-    "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Privacy_policy",
-    "personalData": false,
-    "cookies": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "Various",
+      "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Privacy_policy",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
 }

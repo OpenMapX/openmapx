@@ -8,10 +8,24 @@
   "category": "Transit",
   "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable DB RIS Routing integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "clientId": {
+        "type": "string",
+        "title": "Client ID",
+        "description": "Deutsche Bahn RIS API client ID."
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Deutsche Bahn RIS API key.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "db-ris-api-key"
+      }
     }
   },
   "backend": {
@@ -19,8 +33,8 @@
   },
   "healthCheck": {
     "type": "ping",
-    "url": "https://apis.deutschebahn.com/db/apis/ris-stations/v1",
-    "requiredEnvVars": ["DB_RIS_CLIENT_ID"]
+    "url": "https://apis.deutschebahn.com/db/apis/ris-routing/v2",
+    "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"]
   },
   "attribution": [
     {
@@ -29,9 +43,11 @@
       "license": "Proprietary"
     }
   ],
-  "privacy": {
-    "providerCountry": "DE",
-    "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+      "personalData": false
+    }
+  ]
 }

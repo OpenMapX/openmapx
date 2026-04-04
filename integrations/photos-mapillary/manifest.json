@@ -13,17 +13,24 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "accessToken": {
+        "type": "string",
+        "title": "Access Token",
+        "description": "Mapillary client access token for the Graph API.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "mapillary-token"
       }
     }
   },
   "envVars": ["MAPILLARY_TOKEN"],
   "healthCheck": {
     "type": "http",
-    "url": "https://graph.mapillary.com",
-    "requiredEnvVars": ["MAPILLARY_TOKEN"],
-    "category": "Imagery"
+    "urlTemplate": "https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id&limit=1",
+    "requiredEnvVars": ["MAPILLARY_TOKEN"]
   },
   "quality": "built-in",
+  "category": "Imagery",
   "attribution": [
     {
       "name": "Mapillary",

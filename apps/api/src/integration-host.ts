@@ -23,6 +23,7 @@ import { db, sql as pgClient } from "./db";
 import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
+import { getSecret, resolveVaultSecrets } from "./services/secrets";
 import { providerHealth } from "./services/transit/health";
 import type { TransitProvider } from "./services/transit/orchestrator";
 import { transitOrchestrator } from "./services/transit/orchestrator";
@@ -111,6 +112,84 @@ function createLogger(integrationId: string, fastify: FastifyInstance): Logger {
   };
 }
 
+export type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
+
+export interface ConfigValueWithSource {
+  value: unknown;
+  source: ConfigSource;
+}
+
+export async function resolveConfigWithSources(
+  manifest: IntegrationManifest,
+  directory: string,
+): Promise<Record<string, ConfigValueWithSource>> {
+  const result: Record<string, ConfigValueWithSource> = {};
+  const schema = manifest.configSchema as Record<string, unknown> | undefined;
+  const knownKeys = new Set<string>();
+
+  if (schema) {
+    const props = (schema.properties ?? schema) as Record<string, { default?: unknown }>;
+    for (const [key, def] of Object.entries(props)) {
+      if (key === "type" || key === "properties") continue;
+      knownKeys.add(key);
+      if (def && typeof def === "object" && "default" in def && def.default !== undefined) {
+        result[key] = { value: def.default, source: "default" };
+      }
+    }
+  }
+
+  if (knownKeys.size === 0) return result;
+
+  try {
+    const [row] = await db
+      .select({ config: integrationConfig.config })
+      .from(integrationConfig)
+      .where(eq(integrationConfig.integrationId, manifest.id))
+      .limit(1);
+    if (row?.config && typeof row.config === "object") {
+      for (const [key, value] of Object.entries(row.config as Record<string, unknown>)) {
+        if (knownKeys.has(key)) result[key] = { value, source: "database" };
+      }
+    }
+  } catch {
+    // DB not available
+  }
+
+  // 3. Apply vault secrets
+  try {
+    const vaultSecrets = await resolveVaultSecrets(manifest.id);
+    for (const [key, value] of Object.entries(vaultSecrets)) {
+      if (knownKeys.has(key)) result[key] = { value, source: "vault" };
+    }
+  } catch {
+    // vault unavailable
+  }
+
+  const configJsonPath = join(directory, "config.json");
+  if (existsSync(configJsonPath)) {
+    try {
+      const fileConfig = JSON.parse(readFileSync(configJsonPath, "utf-8"));
+      if (typeof fileConfig === "object" && fileConfig !== null) {
+        for (const [key, value] of Object.entries(fileConfig as Record<string, unknown>)) {
+          if (knownKeys.has(key)) result[key] = { value, source: "config.json" };
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const prefix = `INTEGRATION_${manifest.id.replace(/-/g, "_").toUpperCase()}_`;
+  for (const [envKey, envVal] of Object.entries(process.env)) {
+    if (envKey.startsWith(prefix) && envVal !== undefined) {
+      const key = envKey.slice(prefix.length).toLowerCase();
+      if (knownKeys.has(key)) result[key] = { value: envVal, source: "env" };
+    }
+  }
+
+  return result;
+}
+
 async function resolveConfig(
   manifest: {
     id: string;
@@ -119,57 +198,13 @@ async function resolveConfig(
   },
   directory: string,
 ): Promise<Record<string, unknown>> {
+  const withSources = await resolveConfigWithSources(manifest as IntegrationManifest, directory);
   const config: Record<string, unknown> = {};
-
-  // 1. Apply defaults from configSchema
-  const schema = manifest.configSchema as Record<string, unknown> | undefined;
-  if (schema) {
-    const props = (schema.properties ?? schema) as Record<string, { default?: unknown }>;
-    for (const [key, def] of Object.entries(props)) {
-      if (key === "type" || key === "properties") continue;
-      if (def && typeof def === "object" && "default" in def && def.default !== undefined) {
-        config[key] = def.default;
-      }
-    }
+  for (const [key, entry] of Object.entries(withSources)) {
+    config[key] = entry.value;
   }
 
-  // 2. Apply database config (if available)
-  try {
-    const [row] = await db
-      .select({ config: integrationConfig.config })
-      .from(integrationConfig)
-      .where(eq(integrationConfig.integrationId, manifest.id))
-      .limit(1);
-    if (row?.config && typeof row.config === "object") {
-      Object.assign(config, row.config);
-    }
-  } catch {
-    // DB not available or table doesn't exist yet — skip silently
-  }
-
-  // 3. Apply config.json from integration directory (gitignored, for local dev)
-  const configJsonPath = join(directory, "config.json");
-  if (existsSync(configJsonPath)) {
-    try {
-      const fileConfig = JSON.parse(readFileSync(configJsonPath, "utf-8"));
-      if (typeof fileConfig === "object" && fileConfig !== null) {
-        Object.assign(config, fileConfig);
-      }
-    } catch {
-      // Invalid JSON — skip silently
-    }
-  }
-
-  // 4. Apply env var overrides: INTEGRATION_<ID>_<KEY> (highest priority)
-  const prefix = `INTEGRATION_${manifest.id.replace(/-/g, "_").toUpperCase()}_`;
-  for (const [envKey, envVal] of Object.entries(process.env)) {
-    if (envKey.startsWith(prefix) && envVal !== undefined) {
-      const key = envKey.slice(prefix.length).toLowerCase();
-      config[key] = envVal;
-    }
-  }
-
-  // Also load env vars declared in manifest
+  // Also load env vars declared in manifest (legacy direct-access pattern)
   for (const envVar of manifest.envVars ?? []) {
     const val = process.env[envVar];
     if (val !== undefined) {
@@ -251,15 +286,25 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
   }
 
   const visited = new Set<string>();
+  const inStack = new Set<string>();
   const result: DiscoveredEntry[] = [];
 
   function visit(id: string) {
     if (visited.has(id)) return;
-    visited.add(id);
+    if (inStack.has(id)) {
+      console.warn(`[integration-host] Dependency cycle detected involving "${id}" — skipping`);
+      return;
+    }
+    inStack.add(id);
     const entry = byId.get(id);
-    if (!entry) return;
+    if (!entry) {
+      inStack.delete(id);
+      return;
+    }
     const deps = (entry.manifest.dependencies ?? []) as string[];
     for (const dep of deps) visit(dep);
+    inStack.delete(id);
+    visited.add(id);
     result.push(entry);
   }
 
@@ -385,6 +430,7 @@ export async function initIntegrations(
       cache,
       db: integrationDb,
       log,
+      secrets: { get: (key: string) => getSecret(id, key) },
       registerProvider(domain: string, provider: unknown) {
         const existing = providers.get(domain) ?? [];
         existing.push(provider);
@@ -458,7 +504,7 @@ export async function initIntegrations(
       }
 
       integrations.set(id, integration);
-      log.info(`Integration ${id} loaded successfully`);
+      log.info(`Integration ${id} v${manifest.version ?? "unknown"} loaded successfully`);
       eventBus.emit({ type: "integration.loaded", integrationId: id });
     } catch (err) {
       fastify.log.error(err, `Failed to load integration ${id}`);
@@ -681,6 +727,25 @@ export async function reloadIntegrations(): Promise<{
     const shutdownHandlers: Array<() => Promise<void>> = [];
     const providers = new Map<string, unknown[]>();
 
+    // Validate config against configSchema if present
+    const reloadConfigSchema = manifest.configSchema as Record<string, unknown> | undefined;
+    if (reloadConfigSchema?.properties) {
+      const props = reloadConfigSchema.properties as Record<
+        string,
+        { type?: string; enum?: unknown[]; required?: boolean }
+      >;
+      for (const [key, def] of Object.entries(props)) {
+        if (def.required && config[key] === undefined) {
+          _fastify.log.warn(`Integration ${id}: missing required config key "${key}"`);
+        }
+        if (def.enum && config[key] !== undefined && !def.enum.includes(config[key])) {
+          _fastify.log.warn(
+            `Integration ${id}: config "${key}" value "${config[key]}" not in allowed values: ${def.enum.join(", ")}`,
+          );
+        }
+      }
+    }
+
     const integration: LoadedIntegration = {
       id,
       manifest,
@@ -699,13 +764,27 @@ export async function reloadIntegrations(): Promise<{
       continue;
     }
 
+    const needsDb = manifest.services?.includes("postgres");
+    const integrationDb = needsDb
+      ? {
+          async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
+            const result = params
+              ? await pgClient.unsafe(query, params as never[])
+              : await pgClient.unsafe(query);
+            return result as T;
+          },
+        }
+      : undefined;
+
     const ctx: IntegrationContext = {
       id,
       manifest,
       config,
       http,
       cache,
+      db: integrationDb,
       log,
+      secrets: { get: (key: string) => getSecret(id, key) },
       registerProvider(domain: string, provider: unknown) {
         const existing = providers.get(domain) ?? [];
         existing.push(provider);
@@ -752,6 +831,7 @@ export async function reloadIntegrations(): Promise<{
       }
 
       integrations.set(id, integration);
+      log.info(`Integration ${id} v${manifest.version ?? "unknown"} reloaded successfully`);
       eventBus.emit({ type: "integration.loaded", integrationId: id });
     } catch (err) {
       _fastify.log.error(err, `Failed to reload integration ${id}`);

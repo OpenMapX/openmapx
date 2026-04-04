@@ -23,10 +23,10 @@
   },
   "healthCheck": {
     "type": "ping",
-    "url": "https://overpass-api.de/api/status",
-    "category": "Geocoding"
+    "url": "https://overpass-api.de/api/status"
   },
   "quality": "built-in",
+  "category": "Geocoding",
   "attribution": [
     {
       "name": "OpenStreetMap/Overpass",

@@ -8,10 +8,18 @@
   "category": "Transit",
   "envVars": ["TRANSIT_LAND_API_KEY"],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable TransitLand integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Transitland API key.",
+        "x-openmapx-secret": true
+      }
     }
   },
   "backend": {
@@ -29,9 +37,11 @@
       "license": "Various (per feed)"
     }
   ],
-  "privacy": {
-    "providerCountry": "US",
-    "providerPrivacyUrl": "https://www.transit.land/terms",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.transit.land/terms",
+      "personalData": false
+    }
+  ]
 }

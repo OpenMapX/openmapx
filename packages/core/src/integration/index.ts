@@ -15,6 +15,7 @@ export type {
   IntegrationContext,
   Logger,
   RouteHandler,
+  SecretsClient,
 } from "./context";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";

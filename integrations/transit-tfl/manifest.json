@@ -8,10 +8,18 @@
   "category": "Transit",
   "envVars": ["TFL_API_KEY"],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable TfL transit integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Transport for London API key.",
+        "x-openmapx-secret": true
+      }
     }
   },
   "backend": {
@@ -30,9 +38,11 @@
       "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
     }
   ],
-  "privacy": {
-    "providerCountry": "UK",
-    "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
+      "personalData": false
+    }
+  ]
 }

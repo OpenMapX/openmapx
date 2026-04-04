@@ -18,10 +18,10 @@
   },
   "healthCheck": {
     "type": "http",
-    "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json",
-    "category": "External"
+    "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json"
   },
   "quality": "built-in",
+  "category": "External",
   "attribution": [
     {
       "name": "Wikimedia Commons",

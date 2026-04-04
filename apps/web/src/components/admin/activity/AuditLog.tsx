@@ -1,0 +1,290 @@
+"use client";
+
+import RefreshIcon from "@mui/icons-material/Refresh";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import FormControl from "@mui/material/FormControl";
+import IconButton from "@mui/material/IconButton";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TablePagination from "@mui/material/TablePagination";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
+import { TableSkeleton } from "../shared/TableSkeleton";
+
+interface AuditEntry {
+  id: string;
+  actorId: string | null;
+  targetId: string | null;
+  targetType: string | null;
+  action: string;
+  details: Record<string, unknown> | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  "integration.config.update": "Config Updated",
+  "integration.enabled": "Enabled",
+  "integration.disabled": "Disabled",
+  "integration.reload": "Integration Reload",
+  "integration.reload.all": "Reload All",
+  "credential.set": "Credential Set",
+  "credential.delete": "Credential Deleted",
+  "job.cancel": "Job Canceled",
+  "user.ban": "User Banned",
+  "user.unban": "User Unbanned",
+  "user.role.change": "Role Changed",
+  "user.delete": "User Deleted",
+  "user.impersonate": "Impersonate",
+};
+
+const KNOWN_ACTIONS = Object.keys(ACTION_LABELS);
+
+const TARGET_TYPES = ["integration", "user", "job", "credential"];
+
+function ActionChip({ action }: { action: string }) {
+  const isDestructive = action.includes("delete") || action.includes("ban");
+  const isWrite =
+    action.includes("set") ||
+    action.includes("update") ||
+    action.includes("enabled") ||
+    action.includes("disabled");
+  const color = isDestructive ? "error" : isWrite ? "primary" : "default";
+  return (
+    <Chip
+      label={ACTION_LABELS[action] ?? action}
+      size="small"
+      color={color as "error" | "primary" | "default"}
+      variant="outlined"
+    />
+  );
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60000) return "just now";
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+export function AuditLog() {
+  const env = useEnv();
+  const queryClient = useQueryClient();
+  const [actionFilter, setActionFilter] = useState("");
+  const [targetTypeFilter, setTargetTypeFilter] = useState("");
+  const [targetSearch, setTargetSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const rowsPerPage = 50;
+
+  const { data, isLoading, isFetching } = useQuery<{ entries: AuditEntry[]; total: number }>({
+    queryKey: ["admin", "audit", actionFilter, targetTypeFilter, targetSearch, page],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: String(rowsPerPage),
+        offset: String(page * rowsPerPage),
+      });
+      if (actionFilter) params.set("action", actionFilter);
+      if (targetTypeFilter) params.set("targetType", targetTypeFilter);
+      if (targetSearch.trim()) params.set("targetId", targetSearch.trim());
+      const res = await fetch(`${env.apiUrl}/api/admin/audit?${params}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load audit log");
+      return res.json();
+    },
+  });
+
+  function resetFilters() {
+    setActionFilter("");
+    setTargetTypeFilter("");
+    setTargetSearch("");
+    setPage(0);
+  }
+
+  const hasFilters = !!actionFilter || !!targetTypeFilter || !!targetSearch;
+
+  return (
+    <Stack gap={2}>
+      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel>Action</InputLabel>
+          <Select
+            value={actionFilter}
+            label="Action"
+            onChange={(e) => {
+              setActionFilter(e.target.value);
+              setPage(0);
+            }}
+          >
+            <MenuItem value="">All actions</MenuItem>
+            {KNOWN_ACTIONS.map((a) => (
+              <MenuItem key={a} value={a}>
+                {ACTION_LABELS[a] ?? a}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel>Target type</InputLabel>
+          <Select
+            value={targetTypeFilter}
+            label="Target type"
+            onChange={(e) => {
+              setTargetTypeFilter(e.target.value);
+              setPage(0);
+            }}
+          >
+            <MenuItem value="">All types</MenuItem>
+            {TARGET_TYPES.map((t) => (
+              <MenuItem key={t} value={t}>
+                {t}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <TextField
+          size="small"
+          placeholder="Search by target ID…"
+          value={targetSearch}
+          onChange={(e) => {
+            setTargetSearch(e.target.value);
+            setPage(0);
+          }}
+          sx={{ minWidth: 200 }}
+        />
+
+        {hasFilters && <Chip label="Clear filters" size="small" onDelete={resetFilters} />}
+
+        <Box sx={{ flexGrow: 1 }} />
+
+        <Chip label={`${data?.total ?? 0} events`} size="small" variant="outlined" />
+
+        <Tooltip title="Refresh">
+          <IconButton
+            size="small"
+            onClick={() => void queryClient.invalidateQueries({ queryKey: ["admin", "audit"] })}
+            disabled={isFetching}
+          >
+            <RefreshIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Action</TableCell>
+              <TableCell>Target</TableCell>
+              <TableCell>Actor</TableCell>
+              <TableCell>Details</TableCell>
+              <TableCell>When</TableCell>
+            </TableRow>
+          </TableHead>
+          {isLoading ? (
+            <TableSkeleton rows={6} columns={5} />
+          ) : !data?.entries.length ? (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <Typography color="text.secondary" variant="body2">
+                    No audit events found
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          ) : (
+            <TableBody>
+              {data.entries.map((entry) => (
+                <TableRow key={entry.id} hover>
+                  <TableCell>
+                    <ActionChip action={entry.action} />
+                  </TableCell>
+                  <TableCell>
+                    {entry.targetId ? (
+                      <Stack>
+                        {entry.targetType && (
+                          <Typography variant="caption" color="text.secondary">
+                            {entry.targetType}
+                          </Typography>
+                        )}
+                        <Typography variant="body2" fontFamily="monospace" fontSize="0.75rem">
+                          {entry.targetId.length > 32
+                            ? `${entry.targetId.slice(0, 16)}…${entry.targetId.slice(-8)}`
+                            : entry.targetId}
+                        </Typography>
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.disabled">
+                        —
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                      {entry.actorId ? `${entry.actorId.slice(0, 12)}…` : "system"}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {entry.details && Object.keys(entry.details).length > 0 ? (
+                      <Tooltip title={JSON.stringify(entry.details, null, 2)}>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ cursor: "default" }}
+                        >
+                          {Object.entries(entry.details)
+                            .slice(0, 2)
+                            .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+                            .join(", ")}
+                          {Object.keys(entry.details).length > 2 ? " …" : ""}
+                        </Typography>
+                      </Tooltip>
+                    ) : (
+                      <Typography variant="caption" color="text.disabled">
+                        —
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip title={new Date(entry.createdAt).toLocaleString()}>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatRelativeTime(entry.createdAt)}
+                      </Typography>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          )}
+        </Table>
+      </TableContainer>
+      {!!data?.entries.length && (
+        <TablePagination
+          component="div"
+          count={data.total}
+          page={page}
+          onPageChange={(_, p) => setPage(p)}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[50]}
+        />
+      )}
+    </Stack>
+  );
+}

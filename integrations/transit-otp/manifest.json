@@ -14,10 +14,13 @@
   "category": "Transit",
   "envVars": ["OTP_URL"],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable OpenTripPlanner integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable OpenTripPlanner integration"
+      }
     }
   },
   "backend": {
@@ -35,9 +38,11 @@
       "license": "LGPL-3.0"
     }
   ],
-  "privacy": {
-    "providerCountry": "Self-hosted",
-    "providerPrivacyUrl": "https://www.opentripplanner.org/",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "Self-hosted",
+      "providerPrivacyUrl": "https://www.opentripplanner.org/",
+      "personalData": false
+    }
+  ]
 }

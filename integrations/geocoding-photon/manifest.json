@@ -23,10 +23,10 @@
   "envVars": [],
   "healthCheck": {
     "type": "http",
-    "url": "https://photon.komoot.io/api?q=test&limit=1",
-    "category": "Geocoding"
+    "url": "https://photon.komoot.io/api?q=test&limit=1"
   },
   "quality": "built-in",
+  "category": "Geocoding",
   "attribution": [
     {
       "name": "Photon/Komoot",

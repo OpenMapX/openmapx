@@ -21,16 +21,28 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "clientId": {
+        "type": "string",
+        "title": "Client ID",
+        "description": "Deutsche Bahn Parking API client ID."
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Deutsche Bahn Parking API key.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "db-parking-api-key"
       }
     }
   },
   "envVars": ["DB_PARKING_CLIENT_ID", "DB_PARKING_API_KEY"],
   "healthCheck": {
     "type": "http",
-    "url": "https://api.mobidata-bw.de/park-api/api/public/v3/parking-sites?limit=1",
-    "category": "Parking"
+    "url": "https://api.mobidata-bw.de/park-api/api/public/v3/parking-sites?limit=1"
   },
   "quality": "built-in",
+  "category": "Parking",
   "attribution": [
     {
       "name": "DB BahnPark",

@@ -7,10 +7,13 @@
   "domains": ["transit"],
   "category": "Transit",
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable BVG Transit integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable BVG Transit integration"
+      }
     }
   },
   "backend": {
@@ -18,7 +21,7 @@
   },
   "healthCheck": {
     "type": "ping",
-    "url": "https://v6.bvg.transport.rest/stops/nearby?latitude=52.52&longitude=13.405&results=1"
+    "url": "https://v6.bvg.transport.rest/locations/nearby?latitude=52.52&longitude=13.405&results=1"
   },
   "attribution": [
     {
@@ -27,9 +30,11 @@
       "license": "Proprietary"
     }
   ],
-  "privacy": {
-    "providerCountry": "DE",
-    "providerPrivacyUrl": "https://www.bvg.de/datenschutz",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bvg.de/datenschutz",
+      "personalData": false
+    }
+  ]
 }

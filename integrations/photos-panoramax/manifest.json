@@ -18,10 +18,10 @@
   },
   "healthCheck": {
     "type": "http",
-    "url": "https://api.panoramax.xyz/api/search",
-    "category": "Imagery"
+    "url": "https://api.panoramax.xyz/api/search"
   },
   "quality": "built-in",
+  "category": "Imagery",
   "attribution": [
     {
       "name": "Panoramax",

@@ -8,10 +8,13 @@
   "category": "Transit",
   "envVars": [],
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable Swiss transit integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable Swiss transit integration"
+      }
     }
   },
   "backend": {
@@ -28,9 +31,11 @@
       "license": "Open Data"
     }
   ],
-  "privacy": {
-    "providerCountry": "CH",
-    "providerPrivacyUrl": "https://transport.opendata.ch/",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://transport.opendata.ch/",
+      "personalData": false
+    }
+  ]
 }

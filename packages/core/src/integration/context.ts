@@ -44,6 +44,11 @@ export interface HealthCheckResult {
 
 export type CustomHealthCheckFn = () => Promise<HealthCheckResult>;
 
+export interface SecretsClient {
+  /** Retrieve a decrypted secret from the vault, or null if not stored. */
+  get(key: string): Promise<string | null>;
+}
+
 export interface IntegrationContext {
   readonly id: string;
   readonly manifest: IntegrationManifest;
@@ -53,6 +58,7 @@ export interface IntegrationContext {
   readonly cache: CacheClient;
   readonly db?: DatabaseClient;
   readonly log: Logger;
+  readonly secrets: SecretsClient;
 
   registerProvider(domain: string, provider: unknown): void;
   registerRoute(method: string, path: string, handler: RouteHandler): void;

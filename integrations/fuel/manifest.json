@@ -21,6 +21,12 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Tankerkoenig API key for German fuel prices.",
+        "x-openmapx-secret": true
       }
     }
   },
@@ -28,10 +34,10 @@
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${TANKERKOENIG_API_KEY}",
-    "requiredEnvVars": ["TANKERKOENIG_API_KEY"],
-    "category": "Fuel Prices"
+    "requiredEnvVars": ["TANKERKOENIG_API_KEY"]
   },
   "quality": "built-in",
+  "category": "Fuel Prices",
   "attribution": [
     {
       "name": "Tankerkoenig (MTS-K)",

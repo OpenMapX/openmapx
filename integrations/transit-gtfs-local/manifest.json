@@ -4,15 +4,19 @@
   "author": "OpenMapX",
   "license": "MIT",
   "quality": "built-in",
+  "category": "Transit",
   "domains": ["transit"],
   "infrastructure": {
     "dataRequirements": ["gtfs-feeds"]
   },
   "configSchema": {
-    "enabled": {
-      "type": "boolean",
-      "default": true,
-      "description": "Enable local GTFS feeds integration"
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable local GTFS feeds integration"
+      }
     }
   },
   "services": ["postgres"],
@@ -20,8 +24,7 @@
     "routes": false
   },
   "healthCheck": {
-    "type": "custom",
-    "category": "Transit"
+    "type": "custom"
   },
   "attribution": [
     {
@@ -30,9 +33,11 @@
       "license": "Various (per feed)"
     }
   ],
-  "privacy": {
-    "providerCountry": "Self-hosted",
-    "providerPrivacyUrl": "N/A",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "Self-hosted",
+      "providerPrivacyUrl": "N/A",
+      "personalData": false
+    }
+  ]
 }

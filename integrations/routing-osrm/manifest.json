@@ -25,10 +25,10 @@
   "envVars": [],
   "healthCheck": {
     "type": "ping",
-    "url": "https://router.project-osrm.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false",
-    "category": "Routing"
+    "url": "https://router.project-osrm.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false"
   },
   "quality": "built-in",
+  "category": "Routing",
   "attribution": [
     {
       "name": "OSRM",

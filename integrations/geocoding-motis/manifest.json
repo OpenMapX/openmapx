@@ -24,10 +24,10 @@
   "envVars": ["MOTIS_URL"],
   "healthCheck": {
     "type": "http",
-    "url": "https://europe.motis-project.de/api/v1/geocode?text=test",
-    "category": "Geocoding"
+    "url": "https://europe.motis-project.de/api/v1/geocode?text=test"
   },
   "quality": "built-in",
+  "category": "Geocoding",
   "attribution": [
     {
       "name": "Transitous/MOTIS",

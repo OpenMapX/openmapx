@@ -21,6 +21,12 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "OpenChargeMap API key.",
+        "x-openmapx-secret": true
       }
     }
   },
@@ -28,10 +34,10 @@
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${OPENCHARGEMAP_API_KEY}&latitude=0&longitude=0&distance=100",
-    "requiredEnvVars": ["OPENCHARGEMAP_API_KEY"],
-    "category": "Data Overlays"
+    "requiredEnvVars": ["OPENCHARGEMAP_API_KEY"]
   },
   "quality": "built-in",
+  "category": "Data Overlays",
   "attribution": [
     {
       "name": "OpenChargeMap",

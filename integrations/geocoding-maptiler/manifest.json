@@ -13,6 +13,13 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "MapTiler API key. Get one at maptiler.com/cloud.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "maptiler-api-key"
       }
     }
   },
@@ -20,10 +27,10 @@
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://api.maptiler.com/geocoding/test.json?key=${MAPTILER_KEY}&limit=1",
-    "requiredEnvVars": ["MAPTILER_KEY"],
-    "category": "Geocoding"
+    "requiredEnvVars": ["MAPTILER_KEY"]
   },
   "quality": "built-in",
+  "category": "Geocoding",
   "attribution": [
     {
       "name": "MapTiler",

@@ -27,10 +27,10 @@
   "envVars": [],
   "healthCheck": {
     "type": "http",
-    "url": "https://cwapi.cambio-carsharing.com/pub/de-ac/stations",
-    "category": "Shared Mobility"
+    "url": "https://cwapi.cambio-carsharing.com/pub/de-ac/stations"
   },
   "quality": "built-in",
+  "category": "Shared Mobility",
   "attribution": [
     {
       "name": "GBFS Catalog",
@@ -45,9 +45,11 @@
       "licenseUrl": "https://www.cambio-carsharing.de/datenschutz/"
     }
   ],
-  "privacy": {
-    "providerCountry": "DE",
-    "providerPrivacyUrl": "https://www.cambio-carsharing.de/datenschutz/",
-    "personalData": false
-  }
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.cambio-carsharing.de/datenschutz/",
+      "personalData": false
+    }
+  ]
 }

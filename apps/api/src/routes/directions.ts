@@ -7,6 +7,9 @@ import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 function parseWaypoints(raw: string): [number, number][] {
   return raw.split(";").map((pair) => {
     const [lng, lat] = pair.split(",").map(Number);
+    if (Number.isNaN(lng) || Number.isNaN(lat)) {
+      throw new Error(`Invalid coordinate pair: "${pair}"`);
+    }
     return [lng, lat] as [number, number];
   });
 }
@@ -68,7 +71,11 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       let waypoints: [number, number][];
 
       if (waypointsParam) {
-        waypoints = parseWaypoints(waypointsParam);
+        try {
+          waypoints = parseWaypoints(waypointsParam);
+        } catch (e) {
+          return reply.status(400).send({ error: (e as Error).message });
+        }
       } else if (originLng && originLat && destLng && destLat) {
         // Legacy 2-point format
         waypoints = [
@@ -173,7 +180,11 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       let waypoints: [number, number][];
 
       if (waypointsParam) {
-        waypoints = parseWaypoints(waypointsParam);
+        try {
+          waypoints = parseWaypoints(waypointsParam);
+        } catch (e) {
+          return reply.status(400).send({ error: (e as Error).message });
+        }
       } else if (originLng && originLat && destLng && destLat) {
         waypoints = [
           [Number(originLng), Number(originLat)],
@@ -211,8 +222,8 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       };
 
       const travelMode = mode as TravelMode;
-      const provider = getOptimizeProvider(travelMode);
-      if (!provider?.optimizeRoute) {
+      const optimizeRoute = getOptimizeProvider(travelMode)?.optimizeRoute;
+      if (!optimizeRoute) {
         return reply
           .status(503)
           .send({ error: `No optimize provider available for mode: ${mode}` });
@@ -222,7 +233,7 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       const result = await withCache(
         hashKey("cache:directions:optimize", keyParams),
         TTL.directions,
-        () => provider.optimizeRoute?.(waypoints, travelMode, routingOpts),
+        () => optimizeRoute(waypoints, travelMode, routingOpts),
       );
       reply.header("Cache-Control", "public, max-age=3600");
       return result;
