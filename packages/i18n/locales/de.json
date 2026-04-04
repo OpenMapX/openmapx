@@ -29,9 +29,7 @@
     "resultsCount": "{count} Ergebnis{count, plural, one {} other {se}}",
     "stopsCount": "{count} Haltestelle{count, plural, one {} other {n}}",
     "stationsInView": "{count} Station{count, plural, one {} other {en}} im Bereich",
-    "share": "Teilen",
-    "call": "Anrufen",
-    "website": "Website"
+    "share": "Teilen"
   },
   "search": {
     "placeholder": "OpenMapX durchsuchen",
@@ -61,8 +59,7 @@
     "language": "Sprache",
     "themeLight": "Hellmodus (Klick für Dunkelmodus)",
     "themeDark": "Dunkelmodus (Klick für Systemmodus)",
-    "themeSystem": "Systemmodus (Klick für Hellmodus)",
-    "droppedPin": "Markierung"
+    "themeSystem": "Systemmodus (Klick für Hellmodus)"
   },
   "footer": {
     "legalNotice": "Impressum",
@@ -78,7 +75,6 @@
     "mapType": "Kartentyp",
     "mapDetails": "Kartendetails",
     "mapTools": "Kartenwerkzeuge",
-    "useMap": "{layer}-Karte verwenden",
     "toggleOverlay": "{layer}-Overlay umschalten",
     "default": "Standard",
     "satellite": "Satellit",
@@ -87,7 +83,6 @@
     "transit": "Nahverkehr",
     "streetLevelImagery": "Straßenansicht",
     "airQuality": "Luftqualität",
-    "publicTransport": "Öffentlicher Nahverkehr",
     "cycling": "Radwege",
     "winterSports": "Wintersport",
     "hiking": "Wandern",
@@ -100,8 +95,7 @@
     "earthquakes": "Erdbeben",
     "liveTrains": "Züge live",
     "cyclingMap": "Radkarte",
-    "closeMorePanel": "Erweitertes Menü schließen",
-    "tools": "Werkzeuge"
+    "closeMorePanel": "Erweitertes Menü schließen"
   },
   "cycling": {
     "cyclingInfrastructure": "Radinfrastruktur",
@@ -313,8 +307,7 @@
     "alertInfo": "Info",
     "alertWarning": "Warnung",
     "alertSevere": "Betriebsstörung",
-    "alertCritical": "Schwere Störung",
-    "noTripSelected": "Keine Fahrt ausgewählt"
+    "alertCritical": "Schwere Störung"
   },
   "category": {
     "openNow": "Jetzt geöffnet",
@@ -328,8 +321,7 @@
     "thursday": "Donnerstag",
     "friday": "Freitag",
     "saturday": "Samstag",
-    "sunday": "Sonntag",
-    "searchThisArea": "In diesem Bereich suchen"
+    "sunday": "Sonntag"
   },
   "dataSources": {
     "clearAllFilters": "Alle Filter zurücksetzen",
@@ -691,9 +683,6 @@
   },
   "settings": {
     "title": "Einstellungen",
-    "about": "Über",
-    "version": "Version",
-    "openSource": "Open-Source-Kartenplattform",
     "legal": "Rechtliches",
     "signIn": "Anmelden",
     "signOut": "Abmelden"

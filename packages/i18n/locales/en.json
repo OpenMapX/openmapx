@@ -29,9 +29,7 @@
     "resultsCount": "{count} result{count, plural, one {} other {s}}",
     "stopsCount": "{count} stop{count, plural, one {} other {s}}",
     "stationsInView": "{count} station{count, plural, one {} other {s}} in view",
-    "share": "Share",
-    "call": "Call",
-    "website": "Website"
+    "share": "Share"
   },
   "search": {
     "placeholder": "Search OpenMapX",
@@ -61,8 +59,7 @@
     "language": "Language",
     "themeLight": "Light mode (click for dark)",
     "themeDark": "Dark mode (click for system)",
-    "themeSystem": "System theme (click for light)",
-    "droppedPin": "Dropped pin"
+    "themeSystem": "System theme (click for light)"
   },
   "footer": {
     "legalNotice": "Legal Notice",
@@ -78,7 +75,6 @@
     "mapType": "Map type",
     "mapDetails": "Map Details",
     "mapTools": "Map Tools",
-    "useMap": "Use {layer} map",
     "toggleOverlay": "Toggle {layer} overlay",
     "default": "Default",
     "satellite": "Satellite",
@@ -87,7 +83,6 @@
     "transit": "Transit",
     "streetLevelImagery": "Street-level imagery",
     "airQuality": "Air Quality",
-    "publicTransport": "Public Transport",
     "cycling": "Cycling",
     "winterSports": "Winter Sports",
     "hiking": "Hiking",
@@ -100,8 +95,7 @@
     "earthquakes": "Earthquakes",
     "liveTrains": "Live Trains",
     "cyclingMap": "Cycling",
-    "closeMorePanel": "Close more panel placeholder",
-    "tools": "Tools"
+    "closeMorePanel": "Close more panel placeholder"
   },
   "cycling": {
     "cyclingInfrastructure": "Cycling Infrastructure",
@@ -313,8 +307,7 @@
     "alertInfo": "Info",
     "alertWarning": "Warning",
     "alertSevere": "Service disruption",
-    "alertCritical": "Major disruption",
-    "noTripSelected": "No trip selected"
+    "alertCritical": "Major disruption"
   },
   "category": {
     "openNow": "Open now",
@@ -328,8 +321,7 @@
     "thursday": "Thursday",
     "friday": "Friday",
     "saturday": "Saturday",
-    "sunday": "Sunday",
-    "searchThisArea": "Search this area"
+    "sunday": "Sunday"
   },
   "dataSources": {
     "clearAllFilters": "Clear all filters",
@@ -691,9 +683,6 @@
   },
   "settings": {
     "title": "Settings",
-    "about": "About",
-    "version": "Version",
-    "openSource": "Open-source mapping platform",
     "legal": "Legal",
     "signIn": "Sign in",
     "signOut": "Sign out"
