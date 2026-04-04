@@ -28,7 +28,8 @@
     {
       "name": "Deutsche Bahn",
       "url": "https://www.bahn.de/",
-      "license": "Proprietary"
+      "license": "Proprietary",
+      "licenseUrl": "https://www.bahn.de/agb"
     }
   ],
   "privacy": [

@@ -35,7 +35,8 @@
     {
       "name": "OpenTripPlanner",
       "url": "https://www.opentripplanner.org/",
-      "license": "LGPL-3.0"
+      "license": "LGPL-3.0",
+      "licenseUrl": "https://www.gnu.org/licenses/lgpl-3.0.html"
     }
   ],
   "privacy": [

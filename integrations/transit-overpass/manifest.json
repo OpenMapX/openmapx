@@ -33,7 +33,8 @@
     {
       "name": "OpenStreetMap/Overpass",
       "url": "https://overpass-api.de/",
-      "license": "ODbL"
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
     }
   ],
   "privacy": [

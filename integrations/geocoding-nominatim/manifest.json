@@ -32,7 +32,8 @@
     {
       "name": "Nominatim/OSM",
       "url": "https://nominatim.openstreetmap.org/",
-      "license": "ODbL"
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
     }
   ],
   "privacy": [

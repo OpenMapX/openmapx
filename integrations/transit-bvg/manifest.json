@@ -27,7 +27,8 @@
     {
       "name": "BVG",
       "url": "https://www.bvg.de/",
-      "license": "Proprietary"
+      "license": "Proprietary",
+      "licenseUrl": "https://www.bvg.de/de/service-und-kontakt/nutzungsordnung"
     }
   ],
   "privacy": [

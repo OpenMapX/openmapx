@@ -30,7 +30,8 @@
     {
       "name": "Various GTFS Feeds",
       "url": "https://gtfs.org/",
-      "license": "Various (per feed)"
+      "license": "Various (per feed)",
+      "licenseUrl": "https://gtfs.org/"
     }
   ],
   "privacy": [

@@ -34,7 +34,8 @@
     {
       "name": "TransitLand",
       "url": "https://www.transit.land/",
-      "license": "Various (per feed)"
+      "license": "Various (per feed)",
+      "licenseUrl": "https://www.transit.land/terms"
     }
   ],
   "privacy": [

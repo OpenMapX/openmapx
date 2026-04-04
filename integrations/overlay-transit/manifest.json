@@ -42,7 +42,8 @@
     {
       "name": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/",
-      "license": "ODbL"
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
     }
   ],
   "privacy": [

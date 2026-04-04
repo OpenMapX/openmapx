@@ -35,7 +35,8 @@
     {
       "name": "MapTiler",
       "url": "https://www.maptiler.com/",
-      "license": "Proprietary"
+      "license": "Proprietary",
+      "licenseUrl": "https://www.maptiler.com/cloud/terms/"
     }
   ],
   "privacy": [

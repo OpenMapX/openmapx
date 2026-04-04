@@ -31,7 +31,8 @@
     {
       "name": "Photon/Komoot",
       "url": "https://photon.komoot.io/",
-      "license": "Apache 2.0"
+      "license": "Apache 2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0"
     }
   ],
   "privacy": [

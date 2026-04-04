@@ -54,7 +54,8 @@
     {
       "name": "Deutsche Bahn RIS",
       "url": "https://developers.deutschebahn.com/",
-      "license": "Proprietary"
+      "license": "Proprietary",
+      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
     }
   ],
   "privacy": [

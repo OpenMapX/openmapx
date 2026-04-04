@@ -32,7 +32,8 @@
     {
       "name": "Pelias",
       "url": "https://pelias.io/",
-      "license": "MIT"
+      "license": "MIT",
+      "licenseUrl": "https://opensource.org/licenses/MIT"
     }
   ],
   "privacy": [

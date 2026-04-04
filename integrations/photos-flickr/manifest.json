@@ -34,7 +34,8 @@
     {
       "name": "Flickr",
       "url": "https://www.flickr.com/",
-      "license": "Various (per photo)"
+      "license": "Various (per photo)",
+      "licenseUrl": "https://www.flickr.com/creativecommons/"
     }
   ],
   "privacy": [

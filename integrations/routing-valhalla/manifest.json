@@ -32,7 +32,8 @@
     {
       "name": "Valhalla",
       "url": "https://github.com/valhalla/valhalla",
-      "license": "MIT"
+      "license": "MIT",
+      "licenseUrl": "https://opensource.org/licenses/MIT"
     }
   ],
   "privacy": [

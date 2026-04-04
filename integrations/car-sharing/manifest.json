@@ -41,8 +41,8 @@
     {
       "name": "Cambio CarSharing",
       "url": "https://www.cambio-carsharing.de/",
-      "license": "Proprietary",
-      "licenseUrl": "https://www.cambio-carsharing.de/datenschutz/"
+      "license": "Proprietary (no public API license)",
+      "licenseUrl": "https://www.cambio-carsharing.de/agb"
     }
   ],
   "privacy": [

@@ -34,7 +34,8 @@
     {
       "name": "MBTA",
       "url": "https://www.mbta.com/",
-      "license": "Open Data"
+      "license": "Open Data",
+      "licenseUrl": "https://www.mass.gov/files/documents/2017/10/27/develop_license_agree_0.pdf"
     }
   ],
   "privacy": [

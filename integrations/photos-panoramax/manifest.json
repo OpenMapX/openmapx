@@ -26,7 +26,8 @@
     {
       "name": "Panoramax",
       "url": "https://panoramax.fr/",
-      "license": "Various (CC)"
+      "license": "Various (CC)",
+      "licenseUrl": "https://creativecommons.org/licenses/"
     }
   ],
   "privacy": [

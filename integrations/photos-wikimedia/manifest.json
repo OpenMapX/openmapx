@@ -26,7 +26,8 @@
     {
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
-      "license": "Various (CC)"
+      "license": "Various (CC)",
+      "licenseUrl": "https://creativecommons.org/licenses/"
     }
   ],
   "privacy": [

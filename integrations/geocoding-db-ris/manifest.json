@@ -39,7 +39,8 @@
     {
       "name": "Deutsche Bahn",
       "url": "https://developers.deutschebahn.com",
-      "license": "DB API Terms"
+      "license": "DB API Terms",
+      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
     }
   ],
   "privacy": [

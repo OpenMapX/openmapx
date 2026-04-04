@@ -28,7 +28,8 @@
     {
       "name": "transport.opendata.ch",
       "url": "https://transport.opendata.ch/",
-      "license": "Open Data"
+      "license": "Open Data",
+      "licenseUrl": "https://transport.opendata.ch/"
     }
   ],
   "privacy": [
