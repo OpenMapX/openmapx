@@ -39,14 +39,14 @@
     {
       "name": "Deutsche Bahn",
       "url": "https://developers.deutschebahn.com",
-      "license": "DB API Terms",
-      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
     }
   ],
   "privacy": [
     {
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.bahn.de/service/datenschutz",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
       "personalData": false
     }
   ]

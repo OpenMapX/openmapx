@@ -42,25 +42,25 @@
     {
       "name": "OpenChargeMap",
       "url": "https://openchargemap.org/",
-      "license": "CC BY-SA 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
     },
     {
       "name": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/",
       "license": "ODbL",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/"
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
     }
   ],
   "privacy": [
     {
-      "providerCountry": "UK",
-      "providerPrivacyUrl": "https://community.openchargemap.org/privacy",
+      "providerCountry": "AU",
+      "providerPrivacyUrl": "https://openchargemap.org/site/about/terms",
       "personalData": false
     },
     {
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
       "personalData": false
     }
   ]

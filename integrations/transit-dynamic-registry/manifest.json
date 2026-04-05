@@ -28,8 +28,8 @@
     {
       "name": "public-transport/transport-apis",
       "url": "https://github.com/public-transport/transport-apis",
-      "license": "ISC",
-      "licenseUrl": "https://opensource.org/licenses/ISC"
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
     }
   ],
   "privacy": [

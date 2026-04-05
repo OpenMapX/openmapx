@@ -32,7 +32,7 @@
   },
   "attribution": [
     {
-      "name": "TransitLand",
+      "name": "Transitland",
       "url": "https://www.transit.land/",
       "license": "Various (per feed)",
       "licenseUrl": "https://www.transit.land/terms"
@@ -41,7 +41,7 @@
   "privacy": [
     {
       "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.transit.land/terms",
+      "providerPrivacyUrl": "https://www.interline.io/legal/privacy/",
       "personalData": false
     }
   ]

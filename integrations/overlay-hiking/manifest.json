@@ -42,8 +42,8 @@
     {
       "name": "Waymarked Trails",
       "url": "https://waymarkedtrails.org/",
-      "license": "CC BY-SA 3.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
+      "license": "ODbL (OSM data)",
+      "licenseUrl": "https://www.openstreetmap.org/copyright"
     },
     {
       "name": "OpenStreetMap",

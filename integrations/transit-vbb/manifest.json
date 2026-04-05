@@ -19,6 +19,7 @@
   "backend": {
     "routes": false
   },
+  "envVars": [],
   "healthCheck": {
     "type": "ping",
     "url": "https://v6.vbb.transport.rest/locations/nearby?latitude=52.52&longitude=13.405&results=1"
@@ -34,7 +35,7 @@
   "privacy": [
     {
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.vbb.de/datenschutz",
+      "providerPrivacyUrl": "https://www.vbb.de/datenschutz/",
       "personalData": false
     }
   ]

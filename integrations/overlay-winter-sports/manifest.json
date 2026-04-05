@@ -19,7 +19,7 @@
     }
   },
   "backend": {
-    "routes": false
+    "routes": true
   },
   "configSchema": {
     "type": "object",
@@ -41,13 +41,13 @@
     {
       "name": "OpenSnowMap",
       "url": "https://www.opensnowmap.org/",
-      "license": "CC BY-SA 3.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/"
+      "license": "ODbL (OSM data)",
+      "licenseUrl": "https://www.openstreetmap.org/copyright"
     }
   ],
   "privacy": [
     {
-      "providerCountry": "CH",
+      "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.opensnowmap.org/",
       "personalData": false,
       "cookies": false

@@ -22,6 +22,9 @@
       "excludes": []
     }
   },
+  "backend": {
+    "routes": false
+  },
   "configSchema": {
     "type": "object",
     "properties": {
@@ -32,5 +35,21 @@
     }
   },
   "envVars": [],
-  "quality": "built-in"
+  "quality": "built-in",
+  "category": "Map Tools",
+  "attribution": [
+    {
+      "name": "Valhalla",
+      "url": "https://github.com/valhalla/valhalla",
+      "license": "MIT",
+      "licenseUrl": "https://opensource.org/licenses/MIT"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.openstreetmap.de/impressum/datenschutz/",
+      "personalData": false
+    }
+  ]
 }

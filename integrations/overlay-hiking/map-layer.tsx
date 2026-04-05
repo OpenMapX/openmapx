@@ -4,6 +4,7 @@ import { useOverlayExclusion } from "@openmapx/core";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useHikingStore } from "./store";
 
@@ -12,6 +13,7 @@ const RASTER_LAYER_ID = "openmapx-hiking-trails-layer";
 
 export function HikingTrailsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const env = useEnv();
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useOverlayExclusion("hiking", layerVisible);
   useLayerReanchor(RASTER_LAYER_ID, layerVisible);
@@ -27,7 +29,7 @@ export function HikingTrailsLayer() {
       if (layerVisible && !map.getSource(RASTER_SOURCE_ID)) {
         map.addSource(RASTER_SOURCE_ID, {
           type: "raster",
-          tiles: ["https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png"],
+          tiles: [`${env.apiUrl}/api/integrations/overlay-hiking/tiles/{z}/{x}/{y}.png`],
           tileSize: 256,
           maxzoom: 18,
           attribution:

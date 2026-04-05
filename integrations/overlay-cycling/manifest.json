@@ -48,7 +48,7 @@
   "privacy": [
     {
       "providerCountry": "Various",
-      "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Privacy_policy",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
       "personalData": false,
       "cookies": false
     }

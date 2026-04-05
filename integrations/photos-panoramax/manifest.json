@@ -16,6 +16,7 @@
       }
     }
   },
+  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://api.panoramax.xyz/api/search"
@@ -26,14 +27,14 @@
     {
       "name": "Panoramax",
       "url": "https://panoramax.fr/",
-      "license": "Various (CC)",
-      "licenseUrl": "https://creativecommons.org/licenses/"
+      "license": "Various (open)",
+      "licenseUrl": "https://wiki.openstreetmap.org/wiki/Panoramax"
     }
   ],
   "privacy": [
     {
       "providerCountry": "FR",
-      "providerPrivacyUrl": "https://panoramax.fr/",
+      "providerPrivacyUrl": "https://www.ign.fr/institut/donnees-caractere-personnel",
       "personalData": false
     }
   ]

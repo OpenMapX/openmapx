@@ -53,8 +53,8 @@
     {
       "name": "OpenAQ",
       "url": "https://openaq.org/",
-      "license": "CC BY 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+      "license": "Mixed (source-dependent)",
+      "licenseUrl": "https://docs.openaq.org/about/terms"
     }
   ],
   "privacy": [

@@ -84,7 +84,6 @@ export const integrationManifestSchema = z.object({
   domains: z.array(z.string()),
 
   dependencies: z.array(z.string()).optional(),
-  services: z.array(z.string()).optional(),
   npmDependencies: z.record(z.string(), z.string()).optional(),
 
   frontend: frontendSchema.optional(),
@@ -141,7 +140,7 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
         "manifest.healthCheck is required for integrations with external API dependencies (envVars)",
       );
     }
-    if (manifest.services?.length && !manifest.healthCheck) {
+    if (manifest.infrastructure?.services?.length && !manifest.healthCheck) {
       errors.push(
         "manifest.healthCheck is required for integrations with infrastructure dependencies (services)",
       );

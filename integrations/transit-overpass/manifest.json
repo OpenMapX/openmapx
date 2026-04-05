@@ -40,7 +40,7 @@
   "privacy": [
     {
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
       "personalData": false
     }
   ]

@@ -17,6 +17,9 @@
       "excludes": []
     }
   },
+  "backend": {
+    "routes": false
+  },
   "configSchema": {
     "type": "object",
     "properties": {
@@ -27,5 +30,8 @@
     }
   },
   "envVars": [],
-  "quality": "built-in"
+  "quality": "built-in",
+  "category": "Map Tools",
+  "attribution": [],
+  "privacy": []
 }

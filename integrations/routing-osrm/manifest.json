@@ -40,7 +40,7 @@
   "privacy": [
     {
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://project-osrm.org/",
+      "providerPrivacyUrl": "https://www.openstreetmap.de/impressum/datenschutz/",
       "personalData": false
     }
   ]

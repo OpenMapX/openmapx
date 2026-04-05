@@ -16,6 +16,7 @@
       }
     }
   },
+  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json"
@@ -26,8 +27,8 @@
     {
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
-      "license": "Various (CC)",
-      "licenseUrl": "https://creativecommons.org/licenses/"
+      "license": "Various (free licenses)",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing"
     }
   ],
   "privacy": [

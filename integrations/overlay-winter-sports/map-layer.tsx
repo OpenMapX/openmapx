@@ -242,7 +242,7 @@ export function WinterSportsLayer() {
       if (!map.getSource(RASTER_SOURCE_ID)) {
         map.addSource(RASTER_SOURCE_ID, {
           type: "raster",
-          tiles: ["https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png"],
+          tiles: [`${env.apiUrl}/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png`],
           tileSize: 256,
           maxzoom: 16,
           attribution:

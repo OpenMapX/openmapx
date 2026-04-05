@@ -38,8 +38,8 @@
   ],
   "privacy": [
     {
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://nominatim.openstreetmap.org/",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
       "personalData": false
     }
   ]

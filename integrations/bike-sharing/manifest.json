@@ -47,13 +47,13 @@
       "name": "GBFS Catalog",
       "url": "https://github.com/MobilityData/gbfs",
       "license": "Various (per operator)",
-      "licenseUrl": "https://gbfs.org/"
+      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
     },
     {
       "name": "Nextbike",
       "url": "https://www.nextbike.com/",
       "license": "Proprietary",
-      "licenseUrl": "https://www.nextbike.com/"
+      "licenseUrl": "https://www.nextbike.net/en/tc/"
     }
   ],
   "privacy": [
@@ -64,7 +64,7 @@
     },
     {
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.nextbike.com/en/privacy/",
+      "providerPrivacyUrl": "https://www.nextbike.de/en/privacy/",
       "personalData": false
     }
   ]

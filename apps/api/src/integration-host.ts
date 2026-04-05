@@ -410,7 +410,7 @@ export async function initIntegrations(
       continue;
     }
 
-    const needsDb = manifest.services?.includes("postgres");
+    const needsDb = manifest.infrastructure?.services?.includes("postgres");
     const integrationDb = needsDb
       ? {
           async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
@@ -764,7 +764,7 @@ export async function reloadIntegrations(): Promise<{
       continue;
     }
 
-    const needsDb = manifest.services?.includes("postgres");
+    const needsDb = manifest.infrastructure?.services?.includes("postgres");
     const integrationDb = needsDb
       ? {
           async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
