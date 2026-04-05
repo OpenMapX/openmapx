@@ -34,7 +34,8 @@ const eventBus = new IntegrationEventBus();
 const integrations = new Map<string, LoadedIntegration>();
 
 // Stored for reload support
-let _fastify: FastifyInstance | null = null;
+// biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
+let _fastify: FastifyInstance<any, any, any, any> | null = null;
 let _integrationDirs: string[] = [];
 
 function createHttpClient(_log: Logger): HttpClient {
@@ -313,7 +314,8 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
 }
 
 export async function initIntegrations(
-  fastify: FastifyInstance,
+  // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
+  fastify: FastifyInstance<any, any, any, any>,
   integrationDirs: string[],
 ): Promise<void> {
   _fastify = fastify;
@@ -453,6 +455,8 @@ export async function initIntegrations(
                 status: (code) => ({
                   send: (data) => reply.status(code).send(data),
                 }),
+                header: (name, value) => reply.header(name, value),
+                type: (contentType) => reply.type(contentType),
               },
             );
           },

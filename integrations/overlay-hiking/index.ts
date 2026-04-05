@@ -55,7 +55,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.type("image/png");
       reply.send(buffer);
     } catch (err) {
-      ctx.log.warn({ err, z, x, y }, "Hiking tile fetch failed");
+      ctx.log.warn("Hiking tile fetch failed", err);
       reply.status(502).send({ message: "Hiking tile provider unavailable" });
     }
   });

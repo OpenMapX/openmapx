@@ -33,6 +33,8 @@ export type RouteHandler = (
   reply: {
     send: (data: unknown) => void;
     status: (code: number) => { send: (data: unknown) => void };
+    header: (name: string, value: string) => void;
+    type: (contentType: string) => void;
   },
 ) => Promise<void> | void;
 

@@ -31,7 +31,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.type("image/png");
       reply.send(buffer);
     } catch (err) {
-      ctx.log.warn({ err, z, x, y }, "Winter sports tile fetch failed");
+      ctx.log.warn("Winter sports tile fetch failed", err);
       reply.status(502).send({ message: "Winter sports tile provider unavailable" });
     }
   });
