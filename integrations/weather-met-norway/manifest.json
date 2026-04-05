@@ -1,0 +1,33 @@
+{
+  "id": "weather-met-norway",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["weather"],
+  "frontend": {},
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.met.no/weatherapi/locationforecast/2.0/status"
+  },
+  "quality": "built-in",
+  "category": "Weather",
+  "attribution": [
+    {
+      "name": "MET Norway",
+      "url": "https://www.met.no/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://api.met.no/doc/License"
+    }
+  ],
+  "privacy": [
+    {
+      "service": "MET Norway",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://www.met.no/en/About-us/privacy",
+      "personalData": false
+    }
+  ]
+}

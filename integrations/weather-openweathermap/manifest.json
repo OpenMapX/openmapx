@@ -1,0 +1,56 @@
+{
+  "id": "weather-openweathermap",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://openweathermap.org/current",
+  "domains": ["weather"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "OpenWeatherMap API Key",
+        "description": "API key for current weather and 5-day forecast",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "envVars": ["OWM_API_KEY"],
+  "quality": "built-in",
+  "category": "Weather",
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api.openweathermap.org/data/2.5/weather?lat=0&lon=0&appid=${OWM_API_KEY}",
+    "requiredEnvVars": ["OWM_API_KEY"]
+  },
+  "attribution": [
+    {
+      "name": "OpenWeatherMap",
+      "url": "https://openweathermap.org/",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://openweathermap.org/terms"
+    }
+  ],
+  "privacy": [
+    {
+      "service": "OpenWeatherMap",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://openweather.co.uk/privacy-policy",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

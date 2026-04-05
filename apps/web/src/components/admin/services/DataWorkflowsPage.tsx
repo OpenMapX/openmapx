@@ -32,7 +32,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 
-// ---- Types ----------------------------------------------------------------
+// Types
 
 interface OsmInfo {
   found: boolean;
@@ -65,7 +65,7 @@ interface DataResponse {
   fetchedAt: string;
 }
 
-// ---- Helpers --------------------------------------------------------------
+// Helpers
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -96,7 +96,7 @@ const BUILD_LABELS: Record<string, string> = {
   overpass: "Overpass",
 };
 
-// ---- OsmSection -----------------------------------------------------------
+// OsmSection
 
 function OsmSection({ osm }: { osm: OsmInfo }) {
   return (
@@ -162,7 +162,7 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
   );
 }
 
-// ---- BuildsSection --------------------------------------------------------
+// BuildsSection
 
 function BuildsSection({
   builds,
@@ -236,7 +236,7 @@ function BuildsSection({
   );
 }
 
-// ---- GtfsSection ----------------------------------------------------------
+// GtfsSection
 
 function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
   const queryClient = useQueryClient();
@@ -345,7 +345,7 @@ function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
   );
 }
 
-// ---- Main component -------------------------------------------------------
+// Main component
 
 export function DataWorkflowsPage() {
   const { apiUrl } = useEnv();

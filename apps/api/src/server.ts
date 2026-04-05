@@ -37,6 +37,7 @@ import { statusRoute } from "./routes/status";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
+import { weatherRoute } from "./routes/weather";
 import { winterSportsRoute } from "./routes/winter-sports";
 import {
   buildTarget,
@@ -134,6 +135,7 @@ await server.register(isochroneRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
 await server.register(dataSourcesRoute, { prefix: "/api" });
 await server.register(photosRoute, { prefix: "/api" });
+await server.register(weatherRoute, { prefix: "/api" });
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });

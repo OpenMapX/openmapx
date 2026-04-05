@@ -45,7 +45,7 @@ import type { StoreCatalogEntry } from "./StoreCard";
 import { StoreCard } from "./StoreCard";
 import { StoreDetailDrawer } from "./StoreDetailDrawer";
 
-// ---- Types -----------------------------------------------------------------
+// Types
 
 interface CatalogResponse {
   entries: StoreCatalogEntry[];
@@ -92,7 +92,7 @@ const QUALITY_OPTIONS = [
   { value: "community", label: "Community" },
 ];
 
-// ---- Sources types ---------------------------------------------------------
+// Sources types
 
 interface CatalogSource {
   url: string;
@@ -100,7 +100,7 @@ interface CatalogSource {
   isDefault: boolean;
 }
 
-// ---- Add Source Dialog ------------------------------------------------------
+// Add Source Dialog
 
 function AddSourceDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { apiUrl } = useEnv();
@@ -176,7 +176,7 @@ function AddSourceDialog({ open, onClose }: { open: boolean; onClose: () => void
   );
 }
 
-// ---- Sources tab -----------------------------------------------------------
+// Sources tab
 
 function SourcesTab() {
   const { apiUrl } = useEnv();
@@ -304,7 +304,7 @@ function SourcesTab() {
   );
 }
 
-// ---- Installed tab ---------------------------------------------------------
+// Installed tab
 
 function InstalledTab({
   data,
@@ -440,7 +440,7 @@ function InstalledTab({
   );
 }
 
-// ---- Main page -------------------------------------------------------------
+// Main page
 
 export function StorePage() {
   const { apiUrl } = useEnv();

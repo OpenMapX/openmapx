@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useEarthquakeStore } from "./store";
 
@@ -500,12 +501,14 @@ export function EarthquakeLayer() {
 
     map.on("click", CIRCLE_LAYER_ID, onClick);
     map.on("mousemove", onMouseMove);
+    INTERACTIVE_LAYER_IDS.add(CIRCLE_LAYER_ID);
 
     return () => {
       map.off("click", CIRCLE_LAYER_ID, onClick);
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
+      INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
     };
   }, [mapReady, mapRef, styleVersion, layerVisible, t]);
 

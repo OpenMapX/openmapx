@@ -69,11 +69,30 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
       minZoom?: number;
     };
 
+    // Use dynamic lookup so that when the real store (from a lazy-loaded
+    // map-layer.tsx) overwrites the auto-created store in the registry,
+    // getState/useActive always reference the current store instance.
+    const oid = overlayId;
     overlayEntries.push({
-      id: overlayId,
+      id: oid,
       serviceId: integration.id,
-      getState: () => storeHook.getState(),
-      useActive: () => storeHook((s: OverlayStoreBase) => s.panelOpen && s.layerVisible),
+      getState: () => {
+        const current = getRegisteredOverlayStore(oid) as StoreHook | undefined;
+        return current
+          ? current.getState()
+          : {
+              panelOpen: false,
+              layerVisible: false,
+              openPanel: () => {},
+              closePanel: () => {},
+              setLayerVisible: () => {},
+            };
+      },
+      useActive: () => {
+        const current = getRegisteredOverlayStore(oid) as StoreHook | undefined;
+        if (!current) return false;
+        return current((s: OverlayStoreBase) => s.panelOpen && s.layerVisible);
+      },
       excludes: overlay.excludes ?? [],
     });
   }
@@ -82,12 +101,26 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
   // (e.g., transit, tools) - these get basic entries with no exclusions
   for (const id of getRegisteredOverlayIds()) {
     if (overlayEntries.some((e) => e.id === id)) continue;
-    const hook = getRegisteredOverlayStore(id) as StoreHook | undefined;
-    if (!hook) continue;
+    const storeId = id;
     overlayEntries.push({
-      id,
-      getState: () => hook.getState(),
-      useActive: () => hook((s: OverlayStoreBase) => s.panelOpen && s.layerVisible),
+      id: storeId,
+      getState: () => {
+        const current = getRegisteredOverlayStore(storeId) as StoreHook | undefined;
+        return current
+          ? current.getState()
+          : {
+              panelOpen: false,
+              layerVisible: false,
+              openPanel: () => {},
+              closePanel: () => {},
+              setLayerVisible: () => {},
+            };
+      },
+      useActive: () => {
+        const current = getRegisteredOverlayStore(storeId) as StoreHook | undefined;
+        if (!current) return false;
+        return current((s: OverlayStoreBase) => s.panelOpen && s.layerVisible);
+      },
       excludes: [],
     });
   }

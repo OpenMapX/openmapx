@@ -1,0 +1,11 @@
+{
+  "name": "MET Norway Weather",
+  "description": "Weather forecasts from the Norwegian Meteorological Institute",
+  "privacy": [
+    {
+      "service": "MET Norway",
+      "purpose": "Weather conditions and forecasts",
+      "dataSent": "Coordinates (latitude, longitude)"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "weather-open-meteo-air-quality",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://open-meteo.com/en/docs/air-quality-api",
+  "domains": ["weather"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=0&longitude=0&current=european_aqi"
+  },
+  "quality": "built-in",
+  "category": "Weather",
+  "attribution": [
+    {
+      "name": "Open-Meteo",
+      "url": "https://open-meteo.com/",
+      "license": "CC BY 4.0 (free non-commercial; paid commercial)",
+      "licenseUrl": "https://open-meteo.com/en/terms"
+    }
+  ],
+  "privacy": [
+    {
+      "service": "Open-Meteo",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://open-meteo.com/en/terms",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

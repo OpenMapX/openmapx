@@ -1,0 +1,11 @@
+{
+  "name": "Open-Meteo Air Quality",
+  "description": "Global air quality index and pollutant forecasts",
+  "privacy": [
+    {
+      "service": "Open-Meteo",
+      "purpose": "Air quality index and pollutant data for map viewport",
+      "dataSent": "Coordinates (latitude, longitude)"
+    }
+  ]
+}

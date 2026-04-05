@@ -11,7 +11,7 @@ import { redis } from "../redis";
 import { safeChildEnv } from "./admin-ops";
 import type { JobContext } from "./job-runner";
 
-// ---- Path resolution -------------------------------------------------------
+// Path resolution
 
 function findRootDir(): string {
   if (process.env.OPENMAPX_ROOT_DIR) return process.env.OPENMAPX_ROOT_DIR;
@@ -22,7 +22,7 @@ function findRootDir(): string {
 export const ROOT_DIR = findRootDir();
 export const INTEGRATION_SH = join(ROOT_DIR, "scripts", "integration.sh");
 
-// ---- Catalog ---------------------------------------------------------------
+// Catalog
 
 const DEFAULT_CATALOG_URL =
   process.env.STORE_CATALOG_URL ??
@@ -151,7 +151,7 @@ export async function fetchReadme(repository: string): Promise<string | null> {
   }
 }
 
-// ---- Update check ----------------------------------------------------------
+// Update check
 
 export interface UpdateInfo {
   id: string;
@@ -178,7 +178,7 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
   });
 }
 
-// ---- Job: run integration.sh -----------------------------------------------
+// Job: run integration.sh
 
 function runIntegrationSh(args: string[], ctx: JobContext): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -224,7 +224,7 @@ function runIntegrationSh(args: string[], ctx: JobContext): Promise<void> {
   });
 }
 
-// ---- Job handlers ----------------------------------------------------------
+// Job handlers
 
 export async function handleInstallJob(ctx: JobContext): Promise<Record<string, unknown>> {
   const { repository, version, actorId } = ctx.payload as {
@@ -393,7 +393,7 @@ export async function handleRemoveJob(ctx: JobContext): Promise<Record<string, u
   return { integrationId: id };
 }
 
-// ---- Platform compatibility ------------------------------------------------
+// Platform compatibility
 
 export function isCompatible(entry: CatalogEntry): boolean {
   if (!entry.minPlatform) return true;

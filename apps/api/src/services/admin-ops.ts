@@ -8,7 +8,7 @@ import type { JobContext } from "./job-runner";
 
 const execFile = promisify(execFileCb);
 
-// ---- Path resolution ------------------------------------------------------
+// Path resolution
 
 function findInfraDir(): string {
   if (process.env.DOCKER_INFRA_DIR) return process.env.DOCKER_INFRA_DIR;
@@ -22,7 +22,7 @@ export const COMPOSE_FILE = join(INFRA_DIR, "docker-compose.yml");
 export const MANAGE_SH = join(INFRA_DIR, "manage.sh");
 export const DATA_DIR = join(INFRA_DIR, "data");
 
-// ---- Allowlists -----------------------------------------------------------
+// Allowlists
 
 export const ALLOWED_SERVICES = new Set([
   "postgis",
@@ -107,7 +107,7 @@ export const SERVICE_META: Record<string, { image: string; profile: string; port
   tileserver: { image: "maptiler/tileserver-gl:latest", profile: "tiles", port: 8080 },
 };
 
-// ---- Docker availability --------------------------------------------------
+// Docker availability
 
 let _dockerCache: boolean | null = null;
 let _dockerCacheAt = 0;
@@ -135,13 +135,13 @@ export function resetDockerCache(): void {
   _dockerCacheAt = 0;
 }
 
-// ---- docker compose helpers -----------------------------------------------
+// docker compose helpers
 
 function composeArgs(...extra: string[]): string[] {
   return ["compose", "-f", COMPOSE_FILE, ...extra];
 }
 
-// ---- Service status -------------------------------------------------------
+// Service status
 
 export interface ServiceStatus {
   service: string;
@@ -248,7 +248,7 @@ function buildOfflineStatuses(): ServiceStatus[] {
   }));
 }
 
-// ---- Logs -----------------------------------------------------------------
+// Logs
 
 export async function getServiceLogs(service: string, lines = 100): Promise<string> {
   if (!ALLOWED_SERVICES.has(service)) throw new Error(`"${service}" is not an allowed service`);
@@ -260,7 +260,7 @@ export async function getServiceLogs(service: string, lines = 100): Promise<stri
   return (stdout + stderr).trim();
 }
 
-// ---- Service control (creates jobs — these are the job handlers) ----------
+// Service control (creates jobs — these are the job handlers)
 
 export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
   if (!ALLOWED_SERVICES.has(service)) throw new Error(`"${service}" is not an allowed service`);
@@ -303,7 +303,7 @@ export async function profileStop(profile: string, ctx: JobContext): Promise<voi
   await ctx.log(`Profile "${profile}" stopped.`);
 }
 
-// ---- Safe env for child processes -----------------------------------------
+// Safe env for child processes
 
 /** Allowlist of env vars passed to child processes (manage.sh, integration.sh). */
 const CHILD_ENV_ALLOWLIST = new Set([
@@ -331,7 +331,7 @@ export function safeChildEnv(): NodeJS.ProcessEnv {
   return env as NodeJS.ProcessEnv;
 }
 
-// ---- Build (streaming via manage.sh) --------------------------------------
+// Build (streaming via manage.sh)
 
 export async function buildTarget(target: string, ctx: JobContext): Promise<void> {
   if (!ALLOWED_BUILD_TARGETS.has(target))
@@ -372,7 +372,7 @@ export async function buildTarget(target: string, ctx: JobContext): Promise<void
   });
 }
 
-// ---- Data inventory -------------------------------------------------------
+// Data inventory
 
 export interface OsmPbfInfo {
   found: boolean;

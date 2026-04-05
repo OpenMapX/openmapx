@@ -47,6 +47,11 @@ const DOMAIN_TO_PRIVACY_SECTION: Record<string, { key: string; labelEn: string; 
       labelEn: "Point of Interest Search",
       labelDe: "Interessenpunkt-Suche",
     },
+    weather: {
+      key: "weather",
+      labelEn: "Weather",
+      labelDe: "Wetter",
+    },
   };
 
 const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe: string }> = {
@@ -79,6 +84,10 @@ const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe
   "poi-search": {
     heading: "Point of Interest Search",
     headingDe: "Interessenpunkt-Suche",
+  },
+  weather: {
+    heading: "Weather",
+    headingDe: "Wetter",
   },
 };
 

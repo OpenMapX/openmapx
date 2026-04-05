@@ -1,0 +1,16 @@
+{
+  "name": "Umweltsensoren (openSenseMap + Sensor.Community)",
+  "description": "Citizen-Science-Umweltsensorstationen mit Temperatur, Luftfeuchtigkeit, PM2.5, PM10, UV, Lärm und mehr",
+  "privacy": [
+    {
+      "service": "openSenseMap",
+      "purpose": "Umweltsensordaten von Citizen-Science-Stationen",
+      "dataSent": "Begrenzungsrahmen-Koordinaten, Sensortyp-Filter"
+    },
+    {
+      "service": "Sensor.Community",
+      "purpose": "Luftqualitäts- und Wetterdaten vom Citizen-Science-Sensornetzwerk",
+      "dataSent": "Begrenzungsrahmen-Koordinaten, Sensortyp-Filter"
+    }
+  ]
+}

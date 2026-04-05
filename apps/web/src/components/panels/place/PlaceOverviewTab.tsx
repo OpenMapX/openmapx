@@ -50,6 +50,7 @@ import { TEAL } from "@/lib/theme";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
+import { PlaceWeather } from "./PlaceWeather";
 
 interface Props {
   place: Place;
@@ -523,6 +524,10 @@ export function PlaceOverviewTab({
             )}
           </Box>
         </Box>
+
+        {/* Weather at this place */}
+        <Divider sx={{ my: 1 }} />
+        <PlaceWeather lat={place.coordinates[1]} lng={place.coordinates[0]} />
       </Box>
 
       {/* Add label dialog */}

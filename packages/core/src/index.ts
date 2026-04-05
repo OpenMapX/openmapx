@@ -20,6 +20,8 @@ export {
 } from "./constants/transit";
 // Domains
 export type {
+  CurrentWeather,
+  DailyForecastPoint,
   DataSourceProvider as DomainDataSourceProvider,
   DomainDefinition,
   DomainId,
@@ -28,6 +30,7 @@ export type {
   EnrichmentSource,
   GeocodingProvider,
   GeoJsonFeatureCollection,
+  HourlyForecastPoint,
   MapOverlayData,
   MapOverlayDetail,
   MapOverlayProvider,
@@ -38,6 +41,10 @@ export type {
   RoutingProvider,
   StreetViewProvider,
   TransitProvider,
+  WeatherAttribution,
+  WeatherOptions,
+  WeatherProvider,
+  WeatherResponse,
 } from "./domains";
 export { DOMAIN_DEFINITIONS } from "./domains";
 // Hooks — Transit
@@ -72,12 +79,13 @@ export {
   isTransitName,
   isTransitRawCategory,
 } from "./hooks/transit/transitEligibility";
-// Hooks — General
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
 export { useAutocomplete } from "./hooks/useAutocomplete";
 export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities";
 export { useCategorySearch } from "./hooks/useCategorySearch";
+// Hooks — General
+export { useCurrentWeather } from "./hooks/useCurrentWeather";
 export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
 // Hooks — Data Sources
 export {
@@ -278,6 +286,13 @@ export type {
   VehicleJourneyStop,
   VehiclePosition,
 } from "./types/transit";
+export type {
+  RadarFrame,
+  RadarMeta,
+  TemperatureUnit,
+  WeatherSubLayer,
+  WindSpeedUnit,
+} from "./types/weather";
 export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
 // Utils
@@ -369,3 +384,9 @@ export {
 export { resolvePoiIconPath } from "./utils/poi-icon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";
+export {
+  type WeatherCodeInfo,
+  weatherCodeToDescription,
+  weatherCodeToIcon,
+  weatherCodeToInfo,
+} from "./utils/weatherCodes";

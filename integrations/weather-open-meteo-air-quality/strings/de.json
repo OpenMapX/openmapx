@@ -1,0 +1,11 @@
+{
+  "name": "Open-Meteo Luftqualität",
+  "description": "Globaler Luftqualitätsindex und Schadstoffvorhersagen",
+  "privacy": [
+    {
+      "service": "Open-Meteo",
+      "purpose": "Luftqualitätsindex und Schadstoffdaten für den Kartenausschnitt",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad)"
+    }
+  ]
+}

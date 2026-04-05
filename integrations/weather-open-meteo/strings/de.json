@@ -1,0 +1,11 @@
+{
+  "name": "Open-Meteo Wetter",
+  "description": "Aktuelle Wetterbedingungen und Vorhersagen von Open-Meteo",
+  "privacy": [
+    {
+      "service": "Open-Meteo",
+      "purpose": "Aktuelle Wetterbedingungen und Vorhersagen für Kartenansicht und Ortsdetails",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad)"
+    }
+  ]
+}

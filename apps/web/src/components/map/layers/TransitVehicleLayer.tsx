@@ -244,7 +244,7 @@ export function TransitVehicleLayer() {
       }
 
       const map = mapRef.current;
-      if (!map || !map.isStyleLoaded()) return;
+      if (!map?.isStyleLoaded()) return;
 
       // Load icon images + ensure source + layers exist
       loadTransitVehicleMarkers(map);

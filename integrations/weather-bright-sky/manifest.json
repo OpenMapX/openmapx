@@ -1,0 +1,48 @@
+{
+  "id": "weather-bright-sky",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["weather"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.brightsky.dev/current_weather?lat=52.52&lon=13.405"
+  },
+  "quality": "built-in",
+  "category": "Weather",
+  "attribution": [
+    {
+      "name": "Bright Sky / DWD",
+      "url": "https://brightsky.dev/",
+      "license": "GeoNutzV",
+      "licenseUrl": "https://www.gesetze-im-internet.de/geonutzv/"
+    }
+  ],
+  "privacy": [
+    {
+      "service": "Bright Sky / DWD",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://brightsky.dev/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

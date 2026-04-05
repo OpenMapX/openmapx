@@ -1,0 +1,16 @@
+{
+  "name": "Wetter-Overlay",
+  "description": "Niederschlagsradar, Temperatur und weitere Wetter-Kartenlayer",
+  "privacy": [
+    {
+      "service": "RainViewer",
+      "purpose": "Niederschlagsradar-Animation auf der Karte",
+      "dataSent": "Kachelkoordinaten (Zoom, X, Y)"
+    },
+    {
+      "service": "OpenWeatherMap",
+      "purpose": "Temperatur-, Wolken-, Wind- und Luftdruck-Kartenlayer",
+      "dataSent": "Kachelkoordinaten (Zoom, X, Y)"
+    }
+  ]
+}

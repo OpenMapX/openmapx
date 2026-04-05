@@ -240,4 +240,8 @@ export const TTL = {
     networks: 3600,
     stations: 120,
   },
+  weather: {
+    current: 900,
+    forecast: 1800,
+  },
 } as const;

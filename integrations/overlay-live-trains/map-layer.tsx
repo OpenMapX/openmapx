@@ -7,6 +7,7 @@ import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import {
   dbCategoryColor,
@@ -250,11 +251,13 @@ export function LiveTrainsLayer() {
     map.on("mouseleave", ICON_LAYER, () => {
       map.getCanvas().style.cursor = "";
     });
+    INTERACTIVE_LAYER_IDS.add(ICON_LAYER);
 
     layerInitRef.current = true;
 
     return () => {
       map.off("click", ICON_LAYER, handleClick);
+      INTERACTIVE_LAYER_IDS.delete(ICON_LAYER);
       try {
         if (map.getLayer(LABEL_LAYER)) map.removeLayer(LABEL_LAYER);
         if (map.getLayer(ICON_LAYER)) map.removeLayer(ICON_LAYER);

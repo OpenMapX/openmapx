@@ -1,0 +1,11 @@
+{
+  "name": "Bright Sky Wetter",
+  "description": "Aktuelles Wetter und Vorhersagen für Deutschland über DWD-Offene-Daten",
+  "privacy": [
+    {
+      "service": "Bright Sky (DWD)",
+      "purpose": "Aktuelle Wetterbedingungen und Vorhersagen",
+      "dataSent": "Koordinaten (Breitengrad/Längengrad)"
+    }
+  ]
+}

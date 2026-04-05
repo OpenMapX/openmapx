@@ -60,7 +60,7 @@ ensure_custom_dir() {
   mkdir -p "$CUSTOM_DIR"
 }
 
-# --- install ---
+# install
 
 cmd_install() {
   local source="${1:-}"
@@ -179,7 +179,7 @@ install_from_local() {
   log "Done. Restart the API server to activate."
 }
 
-# --- remove ---
+# remove
 
 cmd_remove() {
   local id="${1:-}"
@@ -196,7 +196,7 @@ cmd_remove() {
   log "Restart the API server to deactivate."
 }
 
-# --- list ---
+# list
 
 cmd_list() {
   ensure_custom_dir
@@ -226,7 +226,7 @@ cmd_list() {
   fi
 }
 
-# --- validate ---
+# validate
 
 validate_manifest() {
   local id="$1"
@@ -292,7 +292,7 @@ cmd_validate() {
   fi
 }
 
-# --- build ---
+# build
 
 cmd_build() {
   local id="${1:-}"
@@ -369,7 +369,7 @@ cmd_build() {
   log "Bundle created: $target_dir/dist/index.js"
 }
 
-# --- main ---
+# main
 
 case "${1:-}" in
   install)  shift; cmd_install "$@" ;;

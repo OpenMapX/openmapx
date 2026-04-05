@@ -1,0 +1,11 @@
+{
+  "name": "Bright Sky Weather",
+  "description": "Current weather and forecasts for Germany via DWD open data",
+  "privacy": [
+    {
+      "service": "Bright Sky (DWD)",
+      "purpose": "Current weather conditions and forecasts",
+      "dataSent": "Coordinates (latitude/longitude)"
+    }
+  ]
+}

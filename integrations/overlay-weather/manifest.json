@@ -1,0 +1,84 @@
+{
+  "id": "overlay-weather",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://open-meteo.com/en/docs",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "weather",
+      "icon": "cloud",
+      "iconPath": "M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"
+    },
+    "overlay": {
+      "excludes": ["air-quality", "environment"],
+      "minZoom": 2
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "owmApiKey": {
+        "type": "string",
+        "title": "OpenWeatherMap API Key",
+        "description": "Required for temperature/cloud/wind/pressure tile layers. Radar works without it.",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "envVars": ["OWM_API_KEY"],
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.rainviewer.com/public/weather-maps.json"
+  },
+  "attribution": [
+    {
+      "name": "RainViewer",
+      "url": "https://www.rainviewer.com/",
+      "license": "Free (attribution required)",
+      "licenseUrl": "https://www.rainviewer.com/api.html"
+    },
+    {
+      "name": "OpenWeatherMap",
+      "url": "https://openweathermap.org/",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://openweathermap.org/terms"
+    },
+    {
+      "name": "Open-Meteo",
+      "url": "https://open-meteo.com/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://open-meteo.com/en/terms"
+    }
+  ],
+  "privacy": [
+    {
+      "service": "RainViewer",
+      "providerCountry": "UA",
+      "providerPrivacyUrl": "https://www.rainviewer.com/privacy.html",
+      "personalData": false,
+      "cookies": false
+    },
+    {
+      "service": "OpenWeatherMap",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://openweather.co.uk/privacy-policy",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

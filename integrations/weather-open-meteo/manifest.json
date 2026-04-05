@@ -1,0 +1,39 @@
+{
+  "id": "weather-open-meteo",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://open-meteo.com/en/docs",
+  "domains": ["weather"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": false
+  },
+  "quality": "built-in",
+  "category": "Weather",
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m"
+  },
+  "attribution": [
+    {
+      "name": "Open-Meteo",
+      "url": "https://open-meteo.com/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://open-meteo.com/en/terms"
+    }
+  ],
+  "privacy": [
+    {
+      "service": "Open-Meteo",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://open-meteo.com/en/terms",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

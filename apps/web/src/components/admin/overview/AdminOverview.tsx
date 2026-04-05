@@ -27,7 +27,7 @@ import Link from "next/link";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
 
-// ---- Types ------------------------------------------------------------------
+// Types
 
 interface AttentionItem {
   type: string;
@@ -65,7 +65,7 @@ interface OverviewData {
   activeJobs: JobEntry[];
 }
 
-// ---- Components -------------------------------------------------------------
+// Components
 
 function StatCard({
   title,
@@ -136,7 +136,7 @@ function jobStatusColor(status: string): "default" | "success" | "error" | "warn
   return "default";
 }
 
-// ---- Main -------------------------------------------------------------------
+// Main
 
 export function AdminOverview() {
   const env = useEnv();

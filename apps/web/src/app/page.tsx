@@ -34,6 +34,7 @@ import { PanelHost } from "@/components/panels/PanelHost";
 import { CategoryChips } from "@/components/search/CategoryChips";
 import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
 import { SearchBar } from "@/components/search/SearchBar";
+import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/lib/MapContext";
 
 export default function HomePage() {
@@ -87,6 +88,7 @@ export default function HomePage() {
           <ElevationHoverMarker />
           <HamburgerMenu />
           <SearchBar />
+          <WeatherWidget />
           <CategoryChips />
           <CategoryFilterBar />
           <SearchInAreaChip />

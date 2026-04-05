@@ -1,0 +1,11 @@
+{
+  "name": "OpenWeatherMap Wetter",
+  "description": "Wetterdaten von der OpenWeatherMap One Call API 3.0",
+  "privacy": [
+    {
+      "service": "OpenWeatherMap",
+      "purpose": "Wetterbedingungen und Vorhersagen mit höherer Priorität bei konfiguriertem API-Schlüssel",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), API-Schlüssel"
+    }
+  ]
+}

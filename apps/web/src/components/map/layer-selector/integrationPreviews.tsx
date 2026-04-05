@@ -6,6 +6,7 @@ import {
   buildingsPreview,
   cyclingMapPreview,
   earthquakesPreview,
+  environmentPreview,
   hikingPreview,
   liveTrainsPreview,
   measurePreview,
@@ -13,6 +14,7 @@ import {
   trafficPreview,
   transitPreview,
   travelTimePreview,
+  weatherPreview,
   wildfirePreview,
   winterSportsPreview,
 } from "./layerPreviewSvgs";
@@ -36,6 +38,8 @@ export const INTEGRATION_PREVIEWS: Record<string, ReactNode> = {
   "3d-buildings": buildingsPreview,
   "travel-time": travelTimePreview,
   measurement: measurePreview,
+  weather: weatherPreview,
+  environment: environmentPreview,
 };
 
 /** Generic fallback preview for integrations without a custom preview. */

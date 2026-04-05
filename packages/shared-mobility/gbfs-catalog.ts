@@ -58,7 +58,7 @@ function parseCatalogCsv(csv: string): GbfsCatalogEntry[] {
     const fields = parseCSVLine(lines[i]);
     if (fields.length < 6) continue;
     const autoDiscoveryUrl = fields[5]?.trim();
-    if (!autoDiscoveryUrl || !autoDiscoveryUrl.startsWith("http")) continue;
+    if (!autoDiscoveryUrl?.startsWith("http")) continue;
 
     entries.push({
       countryCode: fields[0]?.trim() ?? "",

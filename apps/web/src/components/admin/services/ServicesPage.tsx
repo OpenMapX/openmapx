@@ -33,7 +33,7 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 
-// ---- Types ----------------------------------------------------------------
+// Types
 
 interface ServiceStatus {
   service: string;
@@ -64,7 +64,7 @@ interface ProfilesResponse {
   profiles: ProfileSummary[];
 }
 
-// ---- Status helpers -------------------------------------------------------
+// Status helpers
 
 function stateColor(state: ServiceStatus["state"]): "success" | "error" | "warning" | "default" {
   if (state === "running") return "success";
@@ -85,7 +85,7 @@ function shortImage(image: string): string {
   return image.replace(/^ghcr\.io\/[^/]+\//, "").replace(/:latest$/, "");
 }
 
-// ---- LogsDrawer -----------------------------------------------------------
+// LogsDrawer
 
 function LogsDrawer({
   service,
@@ -168,7 +168,7 @@ function LogsDrawer({
   );
 }
 
-// ---- ServiceCard ----------------------------------------------------------
+// ServiceCard
 
 function ServiceCard({
   svc,
@@ -276,7 +276,7 @@ function ServiceCard({
   );
 }
 
-// ---- ProfileBar -----------------------------------------------------------
+// ProfileBar
 
 function ProfileBar({
   profile,
@@ -315,7 +315,7 @@ function ProfileBar({
   );
 }
 
-// ---- Main component -------------------------------------------------------
+// Main component
 
 const ALL_PROFILES = [
   "all",

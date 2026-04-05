@@ -1,0 +1,16 @@
+{
+  "name": "Environmental Sensors (openSenseMap + Sensor.Community)",
+  "description": "Citizen science environmental sensor stations showing temperature, humidity, PM2.5, PM10, UV, noise, and more",
+  "privacy": [
+    {
+      "service": "openSenseMap",
+      "purpose": "Environmental sensor data from citizen science stations",
+      "dataSent": "Bounding box coordinates, sensor type filter"
+    },
+    {
+      "service": "Sensor.Community",
+      "purpose": "Air quality and weather data from citizen science sensor network",
+      "dataSent": "Bounding box coordinates, sensor type filter"
+    }
+  ]
+}

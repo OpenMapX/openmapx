@@ -7,7 +7,8 @@ export type DomainId =
   | "poi-search"
   | "photos"
   | "enrichment"
-  | "street-view";
+  | "street-view"
+  | "weather";
 
 export interface DomainDefinition {
   id: DomainId;
@@ -80,6 +81,13 @@ export const DOMAIN_DEFINITIONS: Record<DomainId, DomainDefinition> = {
     providerInterface: "StreetViewProvider",
     supportsMultiple: false,
   },
+  weather: {
+    id: "weather",
+    description: "Current weather conditions and forecasts",
+    providerInterface: "WeatherProvider",
+    supportsMultiple: true,
+    mergeStrategy: "fallback-chain",
+  },
 };
 
 export type { DataSourceProvider } from "./data-source";
@@ -96,3 +104,12 @@ export type { PoiSearchProvider, PoiSearchResult } from "./poi-search";
 export type { RoutingOptions, RoutingProvider } from "./routing";
 export type { StreetViewProvider } from "./street-view";
 export type { TransitProvider } from "./transit";
+export type {
+  CurrentWeather,
+  DailyForecastPoint,
+  HourlyForecastPoint,
+  WeatherAttribution,
+  WeatherOptions,
+  WeatherProvider,
+  WeatherResponse,
+} from "./weather";

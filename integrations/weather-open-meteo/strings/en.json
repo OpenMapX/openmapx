@@ -1,0 +1,11 @@
+{
+  "name": "Open-Meteo Weather",
+  "description": "Current weather conditions and forecasts from Open-Meteo",
+  "privacy": [
+    {
+      "service": "Open-Meteo",
+      "purpose": "Current weather conditions and forecasts for map viewport and place details",
+      "dataSent": "Coordinates (latitude, longitude)"
+    }
+  ]
+}

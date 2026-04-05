@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { useAirQualityStore } from "./store";
 
@@ -265,12 +266,14 @@ export function AirQualityLayer() {
 
     map.on("click", AQ_LAYER_ID, onClick);
     map.on("mousemove", onMouseMove);
+    INTERACTIVE_LAYER_IDS.add(AQ_LAYER_ID);
 
     return () => {
       map.off("click", AQ_LAYER_ID, onClick);
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
       popupRef.current?.remove();
+      INTERACTIVE_LAYER_IDS.delete(AQ_LAYER_ID);
     };
   }, [mapReady, styleVersion, mapRef, layerVisible]);
 

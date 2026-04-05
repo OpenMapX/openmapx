@@ -703,3 +703,171 @@ export const globePreview: ReactNode = (
     <circle cx="40" cy="40" r="30" fill="none" stroke="#88C6FC" strokeWidth="1" opacity="0.2" />
   </svg>
 );
+
+export const weatherPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="weather-radar" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stopColor="#43A047" stopOpacity="0.15" />
+        <stop offset="40%" stopColor="#FDD835" stopOpacity="0.35" />
+        <stop offset="70%" stopColor="#FF9800" stopOpacity="0.4" />
+        <stop offset="100%" stopColor="#E53935" stopOpacity="0.35" />
+      </linearGradient>
+    </defs>
+    <rect width="80" height="80" fill="#e4eef2" />
+    {/* subtle roads */}
+    <line x1="0" y1="40" x2="80" y2="40" stroke="#d5dce6" strokeWidth="2.5" />
+    <line x1="32" y1="0" x2="32" y2="80" stroke="#d5dce6" strokeWidth="2" />
+    {/* radar sweep overlay */}
+    <ellipse cx="45" cy="35" rx="30" ry="25" fill="url(#weather-radar)" />
+    <ellipse cx="20" cy="55" rx="18" ry="14" fill="#43A047" opacity="0.2" />
+    {/* cloud */}
+    <path
+      d="M22 28 Q22 20 30 20 Q34 14 42 18 Q48 16 50 22 Q56 22 56 28 Q56 34 50 34 L26 34 Q20 34 22 28Z"
+      fill="#90A4AE"
+      opacity="0.75"
+    />
+    {/* rain drops */}
+    <line
+      x1="28"
+      y1="36"
+      x2="26"
+      y2="42"
+      stroke="#42A5F5"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <line
+      x1="36"
+      y1="37"
+      x2="34"
+      y2="43"
+      stroke="#42A5F5"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <line
+      x1="44"
+      y1="36"
+      x2="42"
+      y2="42"
+      stroke="#42A5F5"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    {/* sun peeking */}
+    <circle cx="62" cy="18" r="8" fill="#FFB74D" opacity="0.7" />
+    <g stroke="#FFB74D" strokeWidth="1.2" strokeLinecap="round" opacity="0.5">
+      <line x1="62" y1="7" x2="62" y2="9" />
+      <line x1="71" y1="18" x2="73" y2="18" />
+      <line x1="69" y1="11" x2="70.5" y2="9.5" />
+    </g>
+    {/* temperature label */}
+    <text x="60" y="62" fontSize="11" fill="#E53935" fontFamily="sans-serif" fontWeight="700">
+      18°
+    </text>
+  </svg>
+);
+
+export const environmentPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <rect width="80" height="80" fill="#e4eef2" />
+    {/* subtle roads */}
+    <line x1="0" y1="32" x2="80" y2="32" stroke="#d5dce6" strokeWidth="2.5" />
+    <line x1="50" y1="0" x2="50" y2="80" stroke="#d5dce6" strokeWidth="2" />
+    <line x1="20" y1="0" x2="20" y2="80" stroke="#d5dce6" strokeWidth="1.5" />
+    {/* sensor stations — colored circles with value labels */}
+    <circle cx="14" cy="20" r="6" fill="#42A5F5" opacity="0.8" />
+    <text
+      x="14"
+      y="22.5"
+      fontSize="5.5"
+      fill="#fff"
+      fontFamily="sans-serif"
+      fontWeight="700"
+      textAnchor="middle"
+    >
+      8°
+    </text>
+    <circle cx="38" cy="16" r="6" fill="#66BB6A" opacity="0.8" />
+    <text
+      x="38"
+      y="18.5"
+      fontSize="5.5"
+      fill="#fff"
+      fontFamily="sans-serif"
+      fontWeight="700"
+      textAnchor="middle"
+    >
+      15°
+    </text>
+    <circle cx="62" cy="24" r="6" fill="#FFA726" opacity="0.85" />
+    <text
+      x="62"
+      y="26.5"
+      fontSize="5.5"
+      fill="#fff"
+      fontFamily="sans-serif"
+      fontWeight="700"
+      textAnchor="middle"
+    >
+      24°
+    </text>
+    <circle cx="26" cy="50" r="7" fill="#E53935" opacity="0.8" />
+    <text
+      x="26"
+      y="52.5"
+      fontSize="6"
+      fill="#fff"
+      fontFamily="sans-serif"
+      fontWeight="700"
+      textAnchor="middle"
+    >
+      32°
+    </text>
+    <circle cx="56" cy="54" r="5.5" fill="#66BB6A" opacity="0.75" />
+    <text
+      x="56"
+      y="56.2"
+      fontSize="5"
+      fill="#fff"
+      fontFamily="sans-serif"
+      fontWeight="700"
+      textAnchor="middle"
+    >
+      17°
+    </text>
+    <circle cx="42" cy="68" r="5" fill="#4FC3F7" opacity="0.75" />
+    <text
+      x="42"
+      y="70.2"
+      fontSize="5"
+      fill="#fff"
+      fontFamily="sans-serif"
+      fontWeight="700"
+      textAnchor="middle"
+    >
+      11°
+    </text>
+    {/* wifi-like sensor icon in corner */}
+    <g transform="translate(66, 62)" opacity="0.4">
+      <circle cx="4" cy="8" r="1.5" fill="#546E7A" />
+      <path d="M0 4 Q4 0 8 4" fill="none" stroke="#546E7A" strokeWidth="1.2" />
+      <path d="M-2 1 Q4 -4 10 1" fill="none" stroke="#546E7A" strokeWidth="1" />
+    </g>
+  </svg>
+);

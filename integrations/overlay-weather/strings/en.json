@@ -1,0 +1,16 @@
+{
+  "name": "Weather Overlay",
+  "description": "Precipitation radar, temperature, and other weather map layers",
+  "privacy": [
+    {
+      "service": "RainViewer",
+      "purpose": "Precipitation radar animation on the map",
+      "dataSent": "Tile coordinates (zoom, x, y)"
+    },
+    {
+      "service": "OpenWeatherMap",
+      "purpose": "Temperature, cloud, wind, and pressure tile layers on the map",
+      "dataSent": "Tile coordinates (zoom, x, y)"
+    }
+  ]
+}
