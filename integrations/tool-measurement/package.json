@@ -5,6 +5,6 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "zustand": "*"
+    "zustand": "^5.0.12"
   }
 }

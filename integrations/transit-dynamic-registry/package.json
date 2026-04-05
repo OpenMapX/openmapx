@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "cached-hafas-client": "*",
-    "hafas-client": "*"
+    "cached-hafas-client": "^5.1.9",
+    "hafas-client": "^6.3.6"
   }
 }
