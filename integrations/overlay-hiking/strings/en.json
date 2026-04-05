@@ -1,0 +1,9 @@
+{
+  "name": "Hiking Trails",
+  "description": "Hiking trail routes and mountain shelter locations",
+  "privacy": {
+    "purpose": "Hiking trail routes and mountain shelter locations",
+    "dataSent": "Bounding box coordinates, trail IDs",
+    "dataReceived": "Trail geometries, shelter locations, and metadata"
+  }
+}

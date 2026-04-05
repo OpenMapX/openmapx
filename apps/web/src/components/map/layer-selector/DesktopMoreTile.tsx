@@ -1,7 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { LayerPreviewTile } from "./LayerPreviewTile";
-import type { DesktopMoreOption } from "./layerSelectorConfig";
 
 export function DesktopMoreTile({
   item,
@@ -9,7 +9,7 @@ export function DesktopMoreTile({
   labelWidth = 96,
   onClick,
 }: {
-  item: DesktopMoreOption;
+  item: { preview: ReactNode; selected?: boolean };
   label: string;
   labelWidth?: number;
   onClick?: () => void;

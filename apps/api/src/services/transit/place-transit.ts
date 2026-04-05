@@ -9,14 +9,7 @@ import {
   normalizeName,
   normalizeShortName,
 } from "./dedup";
-import {
-  fetchStopsByNameRaw,
-  getFacilities,
-  getRoutesForStop,
-  getStopAlerts,
-  getStopArrivals,
-  getStopDepartures,
-} from "./index";
+import { transitOrchestrator } from "./orchestrator";
 import type {
   BBox,
   Departure,
@@ -59,12 +52,12 @@ export async function getLinkedStops(
   // providers from distant regions don't contribute stops that share stop-database
   // IDs but would then return their own regional routes via getRoutesForStop.
   const buf = 1.0;
-  const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
+  const _placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
   // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
   // providers indexing either form are found, then deduplicate by stop id.
   const variants = getQueryVariants(name);
   const variantResults = await Promise.all(
-    variants.map((v) => fetchStopsByNameRaw(v, 30, placeBbox)),
+    variants.map((v) => transitOrchestrator.searchByName(v, 30)),
   );
   const seen = new Set<string>();
   const raw = variantResults.flat().filter((s) => {
@@ -110,7 +103,9 @@ export async function getMergedRoutes(
   }
 
   // Fetch routes for all stops in parallel
-  const routeResults = await Promise.allSettled(stops.map((s) => getRoutesForStop(s.id)));
+  const routeResults = await Promise.allSettled(
+    stops.map((s) => transitOrchestrator.getRoutesForStop(s.id)),
+  );
 
   // Map: "(mode):(shortName)" → best MergedRoute candidate
   const byKey = new Map<string, MergedRoute>();
@@ -127,7 +122,7 @@ export async function getMergedRoutes(
 
       if (!existing) {
         // First time seeing this route
-        byKey.set(k, { ...route, providers: [providerName] });
+        byKey.set(k, { ...route, providers: [providerName] } as MergedRoute);
       } else {
         // Already seen — merge providers
         if (!existing.providers.includes(providerName)) {
@@ -279,7 +274,11 @@ export async function getMergedDepartures(
   placeId?: string,
 ): Promise<MergedDeparture[]> {
   const stops = await getLinkedStops(lat, lng, name, placeId);
-  return buildMergedTimetable(stops, getStopDepartures, minutes);
+  return buildMergedTimetable(
+    stops,
+    (id, min) => transitOrchestrator.getDepartures(id, min),
+    minutes,
+  );
 }
 
 export async function getMergedArrivals(
@@ -290,7 +289,11 @@ export async function getMergedArrivals(
   placeId?: string,
 ): Promise<MergedDeparture[]> {
   const stops = await getLinkedStops(lat, lng, name, placeId);
-  return buildMergedTimetable(stops, getStopArrivals, minutes);
+  return buildMergedTimetable(
+    stops,
+    (id, min) => transitOrchestrator.getArrivals(id, min),
+    minutes,
+  );
 }
 
 // Alert merging
@@ -316,7 +319,9 @@ export async function getMergedAlerts(
     return [];
   }
 
-  const alertResults = await Promise.allSettled(stops.map((s) => getStopAlerts(s.id)));
+  const alertResults = await Promise.allSettled(
+    stops.map((s) => transitOrchestrator.getStopAlerts(s.id)),
+  );
   const byId = new Map<string, ServiceAlert>();
 
   for (const result of alertResults) {
@@ -362,11 +367,13 @@ export async function getMergedFacilities(
     return [];
   }
 
-  const facResults = await Promise.allSettled(stops.map((s) => getFacilities(s.id)));
+  const facResults = await Promise.allSettled(
+    stops.map((s) => transitOrchestrator.getFacilities(s.id) as Promise<Facility[]>),
+  );
   const byId = new Map<string, Facility>();
 
   for (const result of facResults) {
-    if (result.status !== "fulfilled") continue;
+    if (result.status !== "fulfilled" || !Array.isArray(result.value)) continue;
     for (const fac of result.value) {
       if (!byId.has(fac.id)) byId.set(fac.id, fac);
     }

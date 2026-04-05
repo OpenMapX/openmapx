@@ -1,0 +1,50 @@
+{
+  "id": "overlay-3d-buildings",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": false,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "3dBuildings",
+      "icon": "view_in_ar"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "quality": "built-in",
+  "category": "Map Overlays",
+  "attribution": [
+    {
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "Various",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "personalData": false
+    }
+  ]
+}

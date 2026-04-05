@@ -1,0 +1,47 @@
+{
+  "id": "routing-osrm",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["routing"],
+  "infrastructure": {
+    "dockerProfile": "routing",
+    "services": ["osrm"],
+    "dataRequirements": ["osm-pbf"],
+    "planetScale": false
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://router.project-osrm.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false"
+  },
+  "quality": "built-in",
+  "category": "Routing",
+  "attribution": [
+    {
+      "name": "OSRM",
+      "url": "https://project-osrm.org/",
+      "license": "BSD-2-Clause",
+      "licenseUrl": "https://opensource.org/licenses/BSD-2-Clause"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.openstreetmap.de/impressum/datenschutz/",
+      "personalData": false
+    }
+  ]
+}

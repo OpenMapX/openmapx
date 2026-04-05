@@ -58,7 +58,8 @@ export type CategoryId =
   | "bookstores"
   | "bike_sharing"
   | "scooter_sharing"
-  | "car_sharing";
+  | "car_sharing"
+  | (string & {});
 
 export interface CategoryDefinition {
   id: CategoryId;
@@ -69,8 +70,6 @@ export interface CategoryDefinition {
   iconPath: string;
   /** Whether this category supports the opening hours filter chip. */
   supportsHoursFilter?: boolean;
-  /** If set, clicking the chip activates the data source system instead of Overpass category search. */
-  dataSourceId?: string;
 }
 
 export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
@@ -223,14 +222,6 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
       "M13 3H6v18h4v-6h3c3.31 0 6-2.69 6-6s-2.69-6-6-6m.2 8H10V7h3.2c1.1 0 2 .9 2 2s-.9 2-2 2",
   },
   {
-    id: "fuel",
-    label: "Gas Stations",
-    showInChipBar: false,
-    dataSourceId: "fuel",
-    iconPath:
-      "m19.77 7.23.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77M12 10H6V5h6zm6 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1",
-  },
-  {
     id: "schools",
     label: "Schools",
     showInChipBar: false,
@@ -283,13 +274,6 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     showInChipBar: false,
     iconPath:
       "M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2m0 4-8 5-8-5V6l8 5 8-5z",
-  },
-  {
-    id: "ev_charging",
-    label: "EV Charging",
-    showInChipBar: false,
-    iconPath: "M7 2v11h3v9l7-12h-4l4-8z",
-    dataSourceId: "ev-charging",
   },
   {
     id: "swimming",
@@ -464,30 +448,6 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     showInChipBar: false,
     iconPath:
       "M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z",
-  },
-  {
-    id: "bike_sharing",
-    label: "Bike Sharing",
-    showInChipBar: false,
-    dataSourceId: "bike-sharing",
-    iconPath:
-      "M15.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2M5 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5m0 8.5c-1.93 0-3.5-1.57-3.5-3.5S3.07 13.5 5 13.5s3.5 1.57 3.5 3.5S6.93 20.5 5 20.5m5.8-10l2.4-2.4.8.8c1.3 1.3 3 2.1 5.1 2.1V11c-1.5 0-2.7-.6-3.6-1.5l-1.9-1.9c-.5-.4-1-.6-1.6-.6s-1.1.2-1.4.6L7.8 10.4c-.4.4-.6.9-.6 1.4 0 .6.2 1.1.6 1.4L11 16v5h2v-6.2zm9.2 1.5c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5m0 8.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5",
-  },
-  {
-    id: "scooter_sharing",
-    label: "E-Scooters",
-    showInChipBar: false,
-    dataSourceId: "scooter-sharing",
-    iconPath:
-      "M7.82 16H15v-1c0-2.21 1.79-4 4-4h.74l-1.22-3H15V6c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H5.5c-.66 0-1.21.42-1.42 1.01L2 16v2c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-2H7.82zM8 20c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1m8 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1",
-  },
-  {
-    id: "car_sharing",
-    label: "Car Sharing",
-    showInChipBar: false,
-    dataSourceId: "car-sharing",
-    iconPath:
-      "M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16m11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5M5 11l1.5-4.5h11L19 11z",
   },
 ];
 

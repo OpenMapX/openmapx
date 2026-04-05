@@ -1,0 +1,9 @@
+{
+  "name": "Öffentlicher Nahverkehr",
+  "description": "Visualisierung von ÖPNV-Routen auf der Karte",
+  "privacy": {
+    "purpose": "ÖPNV-Routenvisualisierung auf der Karte",
+    "dataSent": "Kartenkachel-Anfragen",
+    "dataReceived": "ÖPNV-Overlay-Kacheln"
+  }
+}

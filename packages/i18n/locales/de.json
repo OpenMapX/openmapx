@@ -28,7 +28,8 @@
     "copied": "Kopiert!",
     "resultsCount": "{count} Ergebnis{count, plural, one {} other {se}}",
     "stopsCount": "{count} Haltestelle{count, plural, one {} other {n}}",
-    "stationsInView": "{count} Station{count, plural, one {} other {en}} im Bereich"
+    "stationsInView": "{count} Station{count, plural, one {} other {en}} im Bereich",
+    "share": "Teilen"
   },
   "search": {
     "placeholder": "OpenMapX durchsuchen",
@@ -74,7 +75,6 @@
     "mapType": "Kartentyp",
     "mapDetails": "Kartendetails",
     "mapTools": "Kartenwerkzeuge",
-    "useMap": "{layer}-Karte verwenden",
     "toggleOverlay": "{layer}-Overlay umschalten",
     "default": "Standard",
     "satellite": "Satellit",
@@ -83,7 +83,6 @@
     "transit": "Nahverkehr",
     "streetLevelImagery": "Straßenansicht",
     "airQuality": "Luftqualität",
-    "publicTransport": "Öffentlicher Nahverkehr",
     "cycling": "Radwege",
     "winterSports": "Wintersport",
     "hiking": "Wandern",
@@ -330,6 +329,7 @@
     "showAllTypes": "Alle {count} Typen anzeigen",
     "operator": "Betreiber",
     "searchOperators": "Betreiber suchen...",
+    "zoomIn": "Näher heranzoomen um Ergebnisse zu sehen",
     "zoomInToSee": "Für Stationen näher heranzoomen",
     "failedToLoadData": "Daten konnten nicht geladen werden. Erneut versuchen.",
     "lowToHigh": "Aufsteigend",
@@ -420,6 +420,7 @@
   "account": {
     "language": "Sprache",
     "accountSettings": "Kontoeinstellungen",
+    "adminPanel": "Admin-Panel",
     "signOut": "Abmelden",
     "theme": "Design",
     "themeLight": "Hell",
@@ -543,7 +544,8 @@
     "passkeyAuthFailed": "Passkey-Authentifizierung fehlgeschlagen",
     "oauthSignInFailed": "{provider}-Anmeldung fehlgeschlagen",
     "togglePasswordVisibility": "Passwort-Sichtbarkeit umschalten",
-    "checkYourEmail": "Überprüfen Sie Ihre E-Mails, um Ihr Konto vor der Anmeldung zu bestätigen."
+    "checkYourEmail": "Überprüfen Sie Ihre E-Mails, um Ihr Konto vor der Anmeldung zu bestätigen.",
+    "invalidResetLink": "Dieser Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an."
   },
   "legal": {
     "legal": "Recht",
@@ -681,9 +683,6 @@
   },
   "settings": {
     "title": "Einstellungen",
-    "about": "Über",
-    "version": "Version",
-    "openSource": "Open-Source-Kartenplattform",
     "legal": "Rechtliches",
     "signIn": "Anmelden",
     "signOut": "Abmelden"

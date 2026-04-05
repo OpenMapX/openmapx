@@ -1,0 +1,46 @@
+{
+  "id": "geocoding-nominatim",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["geocoding"],
+  "infrastructure": {
+    "dockerProfile": "nominatim",
+    "services": ["nominatim"],
+    "dataRequirements": ["osm-pbf"]
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://nominatim.openstreetmap.org/status"
+  },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "attribution": [
+    {
+      "name": "Nominatim/OSM",
+      "url": "https://nominatim.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "personalData": false
+    }
+  ]
+}

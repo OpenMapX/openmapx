@@ -1,10 +1,5 @@
-import { dbRisGeocodingService } from "./db-ris/index";
+import { getIntegrationsByDomain } from "../integration-host.js";
 import type { GeocodingProvider } from "./geocoding.provider";
-import { maptilerGeocodingService } from "./maptiler-geocoding.service";
-import { motisGeocodingService } from "./motis-geocoding.service";
-import { nominatimService } from "./nominatim.service";
-import { peliasService } from "./pelias.service";
-import { photonService } from "./photon.service";
 
 type ProviderName =
   | "maptiler"
@@ -15,18 +10,36 @@ type ProviderName =
   | "transitous"
   | "db-ris";
 
-const providers: Record<ProviderName, GeocodingProvider> = {
-  maptiler: maptilerGeocodingService,
-  nominatim: nominatimService,
-  pelias: peliasService,
-  photon: photonService,
-  motis: motisGeocodingService,
-  transitous: motisGeocodingService,
-  "db-ris": dbRisGeocodingService,
+/**
+ * Map provider names (as used in GEOCODING_PROVIDER env var) to integration IDs.
+ * Most follow the "geocoding-<name>" convention; aliases are listed explicitly.
+ */
+const NAME_TO_INTEGRATION: Record<ProviderName, string> = {
+  maptiler: "geocoding-maptiler",
+  nominatim: "geocoding-nominatim",
+  pelias: "geocoding-pelias",
+  photon: "geocoding-photon",
+  motis: "geocoding-motis",
+  transitous: "geocoding-motis",
+  "db-ris": "geocoding-db-ris",
 };
 
+function collectProviders(): Map<string, GeocodingProvider> {
+  const map = new Map<string, GeocodingProvider>();
+  const geocodingIntegrations = getIntegrationsByDomain("geocoding");
+
+  for (const integration of geocodingIntegrations) {
+    const providers = (integration.providers.get("geocoding") ?? []) as GeocodingProvider[];
+    for (const provider of providers) {
+      map.set(integration.id, provider);
+    }
+  }
+
+  return map;
+}
+
 function isProviderName(value: string): value is ProviderName {
-  return value in providers;
+  return value in NAME_TO_INTEGRATION;
 }
 
 function parseProviderList(): ProviderName[] {
@@ -39,7 +52,7 @@ function parseProviderList(): ProviderName[] {
   for (const name of names) {
     if (!isProviderName(name)) {
       throw new Error(
-        `Unknown GEOCODING_PROVIDER: "${name}". Valid options: ${Object.keys(providers).join(", ")}`,
+        `Unknown GEOCODING_PROVIDER: "${name}". Valid options: ${Object.keys(NAME_TO_INTEGRATION).join(", ")}`,
       );
     }
     valid.push(name);
@@ -58,18 +71,32 @@ let cached: GeocodingProvider | null = null;
  * GEOCODING_PROVIDER accepts a comma-separated list, e.g. "photon,maptiler".
  * The first provider is tried; on failure the next one is used, and so on.
  * A single value (e.g. "maptiler") works as before.
+ *
+ * Providers are resolved from the integration framework at call time.
  */
 export function getGeocodingProvider(): GeocodingProvider {
   if (cached) return cached;
 
   const names = parseProviderList();
+  const providersByIntegration = collectProviders();
 
-  if (names.length === 1) {
-    cached = providers[names[0]];
-    return cached;
+  const chain: GeocodingProvider[] = [];
+  for (const name of names) {
+    const integrationId = NAME_TO_INTEGRATION[name];
+    const provider = providersByIntegration.get(integrationId);
+    if (!provider) {
+      throw new Error(
+        `Geocoding provider "${name}" (integration "${integrationId}") is not loaded. ` +
+          `Check that the integration is enabled and its manifest is valid.`,
+      );
+    }
+    chain.push(provider);
   }
 
-  const chain = names.map((n) => providers[n]);
+  if (chain.length === 1) {
+    cached = chain[0];
+    return cached;
+  }
 
   cached = {
     async geocode(query, lang) {

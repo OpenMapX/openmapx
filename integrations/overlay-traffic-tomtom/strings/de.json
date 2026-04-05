@@ -1,0 +1,9 @@
+{
+  "name": "TomTom-Verkehr",
+  "description": "Echtzeit-Verkehrsflussvisualisierung von TomTom",
+  "privacy": {
+    "purpose": "Echtzeit-Verkehrsflussvisualisierung",
+    "dataSent": "Kartenkachel-Anfragen mit Ansichtsfenster-Koordinaten",
+    "dataReceived": "Verkehrsfluss-Rasterkacheln"
+  }
+}

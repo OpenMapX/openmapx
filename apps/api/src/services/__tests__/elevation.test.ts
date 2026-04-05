@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../utils/polyline.js", () => ({
+vi.mock("@openmapx/core", () => ({
   encodePolyline: vi.fn(() => "encoded_string"),
 }));
 
@@ -82,7 +82,7 @@ describe("elevationService", () => {
       const largeCoords = makeCoords(600);
       mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
 
-      const { encodePolyline } = await import("../../utils/polyline.js");
+      const { encodePolyline } = await import("@openmapx/core");
       const encodeMock = encodePolyline as ReturnType<typeof vi.fn>;
       const callsBefore = encodeMock.mock.calls.length;
 
@@ -97,7 +97,7 @@ describe("elevationService", () => {
     it("passes through coordinates unchanged when ≤500 points", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
 
-      const { encodePolyline } = await import("../../utils/polyline.js");
+      const { encodePolyline } = await import("@openmapx/core");
       const encodeMock = encodePolyline as ReturnType<typeof vi.fn>;
       const callsBefore = encodeMock.mock.calls.length;
 
@@ -214,7 +214,7 @@ describe("elevationService", () => {
     it("passes precision 6 to encodePolyline", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeHeightResponse(sampleRangeHeight)));
 
-      const { encodePolyline } = await import("../../utils/polyline.js");
+      const { encodePolyline } = await import("@openmapx/core");
       const { elevationService } = await import("../elevation.service.js");
       await elevationService.getElevation(sampleCoords, 5000);
 

@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock fetcher before importing the manager
-vi.mock("../fetcher.js", () => ({
+// Mock fetcher at the integration path (registry code was moved to the integration)
+vi.mock("@integrations/transit-dynamic-registry/fetcher", () => ({
   fetchRegistryEntries: vi.fn(),
 }));
 
 // Import after mocks
-import { fetchRegistryEntries } from "../fetcher.js";
-import { registry } from "../index.js";
-import type { ProtocolType, RegistryEntry } from "../types.js";
+import { fetchRegistryEntries } from "@integrations/transit-dynamic-registry/fetcher";
+import { registry } from "@integrations/transit-dynamic-registry/registry";
+import type {
+  ProtocolType,
+  RegistryEntry,
+} from "@integrations/transit-dynamic-registry/registry-types";
 
 // Helpers
 

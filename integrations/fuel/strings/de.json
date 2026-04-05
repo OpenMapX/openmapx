@@ -1,0 +1,30 @@
+{
+  "name": "Kraftstoffpreise",
+  "description": "Tankstellenpreise von Tankerkoenig (DE), E-Control (AT), prix-carburants (FR), Minetur (ES) und OpenStreetMap",
+  "privacy": [
+    {
+      "service": "Tankerkoenig (MTS-K)",
+      "purpose": "Deutsche Tankstellenpreise (E5, E10, Diesel)",
+      "dataSent": "Koordinaten, Suchradius, API-Schlüssel",
+      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise, Öffnungszeiten"
+    },
+    {
+      "service": "E-Control Spritpreisrechner",
+      "purpose": "Österreichische Tankstellenpreise",
+      "dataSent": "Adresse oder Koordinaten",
+      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise"
+    },
+    {
+      "service": "Französische Kraftstoffpreisdaten der Regierung",
+      "purpose": "Französische Tankstellenpreise",
+      "dataSent": "Koordinaten oder Regionskennungen",
+      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise"
+    },
+    {
+      "service": "Spanische Kraftstoffpreisdaten der Regierung",
+      "purpose": "Spanische Tankstellenpreise",
+      "dataSent": "Koordinaten oder Regionskennungen",
+      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise"
+    }
+  ]
+}

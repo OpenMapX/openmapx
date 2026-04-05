@@ -1,0 +1,11 @@
+{
+  "name": "Valhalla-Routenberechnung",
+  "description": "Fuß- und Fahrradrouten-Berechnung über Valhalla",
+  "privacy": [
+    {
+      "service": "Valhalla",
+      "purpose": "Fuß-/Fahrradrouten-Berechnung, Isochronenanalyse",
+      "dataSent": "Start-/Zielkoordinaten, Routenoptionen"
+    }
+  ]
+}

@@ -15,6 +15,20 @@
       "when": 1774830132782,
       "tag": "0001_add-normalized-email",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774956529879,
+      "tag": "0002_add-integration-config",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775312524272,
+      "tag": "0003_add-admin",
+      "breakpoints": true
     }
   ]
 }

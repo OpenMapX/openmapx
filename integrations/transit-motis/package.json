@@ -1,0 +1,11 @@
+{
+  "name": "@openmapx/integration-transit-motis",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hey-api/client-fetch": "0.4.4",
+    "@motis-project/motis-client": "^2.9.1",
+    "@openmapx/core": "workspace:^"
+  }
+}

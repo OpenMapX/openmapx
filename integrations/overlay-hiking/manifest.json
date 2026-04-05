@@ -1,0 +1,63 @@
+{
+  "id": "overlay-hiking",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://waymarkedtrails.org/",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "hiking",
+      "icon": "hiking",
+      "quickSelector": true
+    },
+    "overlay": {
+      "excludes": ["street-view", "winter-sports"]
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://hiking.waymarkedtrails.org/api/v1/list/search?query=test&limit=1"
+  },
+  "quality": "built-in",
+  "category": "Map Overlays",
+  "attribution": [
+    {
+      "name": "Waymarked Trails",
+      "url": "https://waymarkedtrails.org/",
+      "license": "ODbL (OSM data)",
+      "licenseUrl": "https://www.openstreetmap.org/copyright"
+    },
+    {
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://waymarkedtrails.org/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

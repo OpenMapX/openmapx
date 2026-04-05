@@ -1,0 +1,8 @@
+{
+  "name": "Dynamic Transit Registry",
+  "description": "Automatically discovered public transit APIs",
+  "privacy": {
+    "purpose": "Discover and proxy transit APIs globally",
+    "dataSent": "Varies by discovered provider"
+  }
+}

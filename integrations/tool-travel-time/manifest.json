@@ -1,0 +1,55 @@
+{
+  "id": "tool-travel-time",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["map-overlay"],
+  "infrastructure": {
+    "dockerProfile": "routing",
+    "services": ["valhalla"],
+    "dataRequirements": ["osm-pbf"]
+  },
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-tools",
+      "labelKey": "travelTime",
+      "icon": "timer"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "quality": "built-in",
+  "category": "Map Tools",
+  "attribution": [
+    {
+      "name": "Valhalla",
+      "url": "https://github.com/valhalla/valhalla",
+      "license": "MIT",
+      "licenseUrl": "https://opensource.org/licenses/MIT"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.openstreetmap.de/impressum/datenschutz/",
+      "personalData": false
+    }
+  ]
+}

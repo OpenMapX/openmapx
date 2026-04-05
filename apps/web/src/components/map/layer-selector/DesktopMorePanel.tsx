@@ -1,5 +1,7 @@
 "use client";
 
+import { useMeasurementStore } from "@integrations/tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/tool-travel-time/store";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CloseIcon from "@mui/icons-material/Close";
@@ -8,22 +10,13 @@ import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import type { MapLayer, OverlayId } from "@openmapx/core";
-import {
-  OVERLAY_REGISTRY,
-  toggleOverlay,
-  useCapabilities,
-  useLayerStore,
-  useMeasurementStore,
-  useTravelTimeStore,
-} from "@openmapx/core";
+import type { MapLayer } from "@openmapx/core";
+import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { DesktopMoreTile } from "./DesktopMoreTile";
-import {
-  DESKTOP_MORE_MAP_DETAILS,
-  DESKTOP_MORE_MAP_TOOLS,
-  DESKTOP_MORE_MAP_TYPES,
-} from "./layerSelectorConfig";
+import { DESKTOP_MORE_MAP_TYPES } from "./layerSelectorConfig";
+import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
+import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 
 interface DesktopMorePanelProps {
   onClose: () => void;
@@ -34,7 +27,7 @@ function OverlayDetailTile({
   label,
   onClose,
 }: {
-  item: (typeof DESKTOP_MORE_MAP_DETAILS)[number];
+  item: GeneratedLayerEntry;
   label: string;
   onClose: () => void;
 }) {
@@ -49,7 +42,7 @@ function OverlayDetailTile({
       onClick={
         item.overlayId
           ? () => {
-              toggleOverlay(item.overlayId as OverlayId);
+              toggleOverlay(item.overlayId);
               onClose();
             }
           : undefined
@@ -67,6 +60,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
   const measureActive = useMeasurementStore((s) => s.isActive);
   const travelTimeActive = useTravelTimeStore((s) => s.isActive);
   const { isAvailable } = useCapabilities();
+  const { mapDetails, mapTools } = useLayerSelectorConfig();
 
   return (
     <Box
@@ -105,9 +99,16 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           rowGap: 0.4,
         }}
       >
-        {DESKTOP_MORE_MAP_DETAILS.filter((item) => isAvailable(item.serviceId)).map((item) => (
-          <OverlayDetailTile key={item.id} item={item} label={t(item.labelKey)} onClose={onClose} />
-        ))}
+        {mapDetails
+          .filter((item) => isAvailable(item.serviceId))
+          .map((item) => (
+            <OverlayDetailTile
+              key={item.id}
+              item={item}
+              label={t(item.labelKey)}
+              onClose={onClose}
+            />
+          ))}
       </Box>
 
       <Divider sx={{ my: 0.8 }} />
@@ -126,9 +127,9 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           rowGap: 0.4,
         }}
       >
-        {DESKTOP_MORE_MAP_TOOLS.map((item) => {
+        {mapTools.map((item) => {
           const toolState: Record<string, { active: boolean; toggle: () => void }> = {
-            measure: {
+            measurement: {
               active: measureActive,
               toggle: () => {
                 const s = useMeasurementStore.getState();

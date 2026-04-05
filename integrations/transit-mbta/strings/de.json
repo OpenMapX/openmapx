@@ -1,0 +1,8 @@
+{
+  "name": "MBTA (Nahverkehr Boston)",
+  "description": "Nahverkehrsdaten der Massachusetts Bay Transportation Authority",
+  "privacy": {
+    "purpose": "Haltestellen und Abfahrten im Raum Boston",
+    "dataSent": "Koordinaten, Haltestellen-IDs, API-Schlüssel"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "name": "Travel Time (Isochrone)",
+  "description": "Travel time isochrone visualization using existing routing APIs"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "MOTIS/Transitous-Geokodierung",
+  "description": "Geokodierung von Haltestellen über MOTIS/Transitous",
+  "privacy": [
+    {
+      "service": "Transitous/MOTIS",
+      "purpose": "Geokodierung von Haltestellen",
+      "dataSent": "Suchanfragetext"
+    }
+  ]
+}

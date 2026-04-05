@@ -35,6 +35,16 @@ export interface TransitRoute {
   };
 }
 
+export interface GeoJSONLineString {
+  type: "LineString";
+  coordinates: [number, number][];
+}
+
+export interface GeoJSONMultiLineString {
+  type: "MultiLineString";
+  coordinates: [number, number][][];
+}
+
 export interface TripRemark {
   text: string;
   type: "info" | "warning" | "cancellation";

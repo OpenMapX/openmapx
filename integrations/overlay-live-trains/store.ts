@@ -1,0 +1,12 @@
+import { createOverlayStore } from "@openmapx/core";
+
+export const useLiveTrainsStore = createOverlayStore({
+  overlayId: "live-trains",
+  extra: {
+    selectedTrainId: null as string | null,
+  },
+  actions: (set) => ({
+    selectTrain: (id: string | null) => set({ selectedTrainId: id }),
+  }),
+  onClose: () => ({ selectedTrainId: null }),
+});

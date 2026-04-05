@@ -1,12 +1,15 @@
+import type { TravelMode } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-import { osrmService } from "../services/osrm.service.js";
-import { valhallaService } from "../services/valhalla.service.js";
+import { getOptimizeProvider, getRoutingProvider } from "../services/routing.resolver.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 
 /** Parse semicolon-separated "lng,lat" pairs into coordinate tuples. */
 function parseWaypoints(raw: string): [number, number][] {
   return raw.split(";").map((pair) => {
     const [lng, lat] = pair.split(",").map(Number);
+    if (Number.isNaN(lng) || Number.isNaN(lat)) {
+      throw new Error(`Invalid coordinate pair: "${pair}"`);
+    }
     return [lng, lat] as [number, number];
   });
 }
@@ -68,7 +71,11 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       let waypoints: [number, number][];
 
       if (waypointsParam) {
-        waypoints = parseWaypoints(waypointsParam);
+        try {
+          waypoints = parseWaypoints(waypointsParam);
+        } catch (e) {
+          return reply.status(400).send({ error: (e as Error).message });
+        }
       } else if (originLng && originLat && destLng && destLat) {
         // Legacy 2-point format
         waypoints = [
@@ -107,12 +114,16 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
         waypoints: roundWaypoints(waypoints),
       };
 
-      const result = await withCache(hashKey("cache:directions", keyParams), TTL.directions, () => {
-        if (mode === "driving") {
-          return osrmService.route(waypoints, opts);
-        }
-        return valhallaService.route(waypoints, mode as "walking" | "cycling", opts, lang);
-      });
+      const travelMode = mode as TravelMode;
+      const provider = getRoutingProvider(travelMode);
+      if (!provider) {
+        return reply.status(503).send({ error: `No routing provider available for mode: ${mode}` });
+      }
+
+      const routingOpts = { ...opts, lang };
+      const result = await withCache(hashKey("cache:directions", keyParams), TTL.directions, () =>
+        provider.getRoute(waypoints, travelMode, routingOpts),
+      );
       reply.header("Cache-Control", "public, max-age=3600");
       return result;
     },
@@ -169,7 +180,11 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       let waypoints: [number, number][];
 
       if (waypointsParam) {
-        waypoints = parseWaypoints(waypointsParam);
+        try {
+          waypoints = parseWaypoints(waypointsParam);
+        } catch (e) {
+          return reply.status(400).send({ error: (e as Error).message });
+        }
       } else if (originLng && originLat && destLng && destLat) {
         waypoints = [
           [Number(originLng), Number(originLat)],
@@ -206,21 +221,19 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
         waypoints: roundWaypoints(waypoints),
       };
 
+      const travelMode = mode as TravelMode;
+      const optimizeRoute = getOptimizeProvider(travelMode)?.optimizeRoute;
+      if (!optimizeRoute) {
+        return reply
+          .status(503)
+          .send({ error: `No optimize provider available for mode: ${mode}` });
+      }
+
+      const routingOpts = { ...opts, lang };
       const result = await withCache(
         hashKey("cache:directions:optimize", keyParams),
         TTL.directions,
-        async () => {
-          try {
-            return await osrmService.optimizeRoute(waypoints, opts);
-          } catch {
-            return valhallaService.optimizeRoute(
-              waypoints,
-              mode as "driving" | "walking" | "cycling",
-              opts,
-              lang,
-            );
-          }
-        },
+        () => optimizeRoute(waypoints, travelMode, routingOpts),
       );
       reply.header("Cache-Control", "public, max-age=3600");
       return result;

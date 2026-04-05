@@ -1,0 +1,46 @@
+{
+  "id": "geocoding-motis",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["geocoding"],
+  "infrastructure": {
+    "dockerProfile": "transit",
+    "services": ["motis"],
+    "dataRequirements": ["osm-pbf", "gtfs-feeds"]
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": ["MOTIS_URL"],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://europe.motis-project.de/api/v1/geocode?text=test"
+  },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "attribution": [
+    {
+      "name": "Transitous/MOTIS",
+      "url": "https://transitous.org/",
+      "license": "AGPL-3.0",
+      "licenseUrl": "https://www.gnu.org/licenses/agpl-3.0.html"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://transitous.org/privacy/",
+      "personalData": false
+    }
+  ]
+}

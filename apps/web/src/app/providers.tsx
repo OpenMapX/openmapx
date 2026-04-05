@@ -5,7 +5,9 @@ import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { configureStorage } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { localStorageAdapter } from "../lib/storage";
+import { IntegrationProvider } from "../providers/IntegrationProvider";
 
 configureStorage(localStorageAdapter);
 
@@ -92,7 +94,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        {children}
+        <ImpersonationBanner />
+        <IntegrationProvider>{children}</IntegrationProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

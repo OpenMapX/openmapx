@@ -1,0 +1,42 @@
+{
+  "id": "transit-irail",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": [],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable iRail transit integration"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.irail.be/stations/?format=json&lang=en"
+  },
+  "attribution": [
+    {
+      "name": "iRail",
+      "url": "https://irail.be/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://irail.be/",
+      "personalData": false
+    }
+  ]
+}

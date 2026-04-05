@@ -1,0 +1,8 @@
+{
+  "name": "MOTIS/Transitous-Nahverkehr",
+  "description": "Nahverkehrsrouting und Haltestellendaten über MOTIS (Transitous)",
+  "privacy": {
+    "purpose": "ÖPNV-Routing, Haltestellenabfahrten und Reiseplanung",
+    "dataSent": "Start-/Zielkoordinaten, Abfahrtszeit"
+  }
+}

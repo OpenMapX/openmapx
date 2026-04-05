@@ -1,0 +1,10 @@
+{
+  "name": "OpenAQ-Luftqualität",
+  "description": "Luftqualitätsmessungen (PM2.5, AQI) von OpenAQ",
+  "privacy": {
+    "purpose": "Luftqualitätsmessungen (PM2.5, AQI)",
+    "dataSent": "Begrenzungsrahmen-Koordinaten",
+    "dataReceived": "Standorte von Luftqualitätsstationen, PM2.5-Messwerte, AQI-Werte",
+    "dataRetention": "Serverseitig 15 Minuten zwischengespeichert"
+  }
+}

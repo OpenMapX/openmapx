@@ -3,21 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockMotisGeocode = vi.fn();
 const mockMotisReverseGeocode = vi.fn();
 const mockUniqueModes = vi.fn();
+let mockFetch: ReturnType<typeof vi.fn>;
 
 vi.mock("@motis-project/motis-client", () => ({
   geocode: (...args: unknown[]) => mockMotisGeocode(...args),
   reverseGeocode: (...args: unknown[]) => mockMotisReverseGeocode(...args),
 }));
 
-vi.mock("../motis/instances.js", () => ({
-  transitousInstance: {
-    client: { baseUrl: "https://api.transitous.org" },
-    prefix: "mo:",
-    provider: "transitous",
-  },
+vi.mock("@hey-api/client-fetch", () => ({
+  createClient: vi.fn(() => ({ baseUrl: "https://api.transitous.org" })),
 }));
 
-vi.mock("../motis/mode-map.js", () => ({
+vi.mock("@integrations/geocoding-motis/mode-map.js", () => ({
   uniqueModes: (...args: unknown[]) => mockUniqueModes(...args),
 }));
 
@@ -26,6 +23,10 @@ beforeEach(() => {
   mockMotisReverseGeocode.mockReset();
   mockUniqueModes.mockReset();
   mockUniqueModes.mockReturnValue(["bus", "rail"]);
+
+  // Make isMotisLocalReachable() return false so we always use Transitous
+  mockFetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+  vi.stubGlobal("fetch", mockFetch);
 });
 
 afterEach(() => {
@@ -51,7 +52,7 @@ function makeMatch(overrides: Record<string, unknown> = {}) {
 }
 
 async function loadModule() {
-  return import("../motis-geocoding.service.js");
+  return import("@integrations/geocoding-motis/provider.js");
 }
 
 // geocode
@@ -93,7 +94,7 @@ describe("geocode", () => {
   });
 
   it("returns empty array on error", async () => {
-    mockMotisGeocode.mockRejectedValueOnce(new Error("Network error"));
+    mockMotisGeocode.mockRejectedValue(new Error("Network error"));
     const { motisGeocodingService } = await loadModule();
 
     const results = await motisGeocodingService.geocode("Berlin");
@@ -162,7 +163,7 @@ describe("autocomplete", () => {
   });
 
   it("returns empty array on error", async () => {
-    mockMotisGeocode.mockRejectedValueOnce(new Error("timeout"));
+    mockMotisGeocode.mockRejectedValue(new Error("timeout"));
     const { motisGeocodingService } = await loadModule();
 
     const results = await motisGeocodingService.autocomplete("Berlin");
@@ -245,7 +246,7 @@ describe("reverseGeocode", () => {
   });
 
   it("returns null on error", async () => {
-    mockMotisReverseGeocode.mockRejectedValueOnce(new Error("server error"));
+    mockMotisReverseGeocode.mockRejectedValue(new Error("server error"));
     const { motisGeocodingService } = await loadModule();
 
     const result = await motisGeocodingService.reverseGeocode(52.52, 13.37);

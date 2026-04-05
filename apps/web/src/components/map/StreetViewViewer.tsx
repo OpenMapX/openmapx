@@ -1,6 +1,7 @@
 "use client";
 
-import { useDirectionsStore, useStreetViewStore } from "@openmapx/core";
+import { useStreetViewStore } from "@integrations/street-view-mapillary/store";
+import { useDirectionsStore } from "@openmapx/core";
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
 

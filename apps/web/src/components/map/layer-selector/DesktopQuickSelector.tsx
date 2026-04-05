@@ -7,13 +7,20 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
-import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
+import {
+  toggleOverlay,
+  useCapabilities,
+  useIntegrationOverlayActive,
+  useLayerStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { globePreview } from "./layerPreviewSvgs";
-import { BASE_LAYER_OPTIONS, DETAIL_OPTIONS } from "./layerSelectorConfig";
+import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
+import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
+import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 
 interface DesktopQuickSelectorProps {
   onMoreClick: (event: MouseEvent<HTMLElement>) => void;
@@ -21,33 +28,31 @@ interface DesktopQuickSelectorProps {
 }
 
 function DetailOptionTile({
-  option,
+  entry,
   trafficZoomTooLow,
 }: {
-  option: (typeof DETAIL_OPTIONS)[number];
+  entry: GeneratedLayerEntry;
   trafficZoomTooLow: boolean;
 }) {
   const t = useTranslations("layers");
   const { trafficMinZoom } = useEnv();
-  const overlayEntry = option.overlayId
-    ? OVERLAY_REGISTRY.find((r) => r.id === option.overlayId)
-    : undefined;
-  const overlayActive = overlayEntry?.useActive() ?? false;
+  const overlayActive = useIntegrationOverlayActive(entry.overlayId);
 
-  const disabled = option.key === "traffic" && trafficZoomTooLow;
+  const isTraffic = entry.overlayId === "traffic";
+  const disabled = isTraffic && trafficZoomTooLow;
   const highlighted = overlayActive && !disabled;
-  const label = t(option.labelKey);
+  const label = t(entry.labelKey);
 
   return (
     <Box sx={{ width: 72, minWidth: 72, p: 0.5, display: "flex", justifyContent: "center" }}>
       <LayerPreviewTile
-        preview={option.preview}
+        preview={entry.preview}
         label={label}
         selected={highlighted}
-        icon={option.icon}
+        icon={entry.icon}
         disabled={disabled}
         onClick={() => {
-          if (!disabled && option.overlayId) toggleOverlay(option.overlayId);
+          if (!disabled) toggleOverlay(entry.overlayId);
         }}
       >
         {disabled ? (
@@ -86,6 +91,7 @@ export function DesktopQuickSelector({
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const { isAvailable } = useCapabilities();
+  const { quickDetails } = useLayerSelectorConfig();
 
   return (
     <Paper
@@ -121,9 +127,11 @@ export function DesktopQuickSelector({
 
       <Divider orientation="vertical" flexItem sx={{ my: 0.4 }} />
 
-      {DETAIL_OPTIONS.filter((option) => isAvailable(option.serviceId)).map((option) => (
-        <DetailOptionTile key={option.key} option={option} trafficZoomTooLow={trafficZoomTooLow} />
-      ))}
+      {quickDetails
+        .filter((entry) => isAvailable(entry.serviceId))
+        .map((entry) => (
+          <DetailOptionTile key={entry.id} entry={entry} trafficZoomTooLow={trafficZoomTooLow} />
+        ))}
 
       <GlobeTile />
 

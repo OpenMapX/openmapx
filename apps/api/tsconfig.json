@@ -10,7 +10,11 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "paths": {
+      "@integrations/*": ["../../integrations/*"],
+      "@openmapx/integration-shared-mobility/*": ["../../packages/shared-mobility/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../integrations/*/index.ts"]
 }

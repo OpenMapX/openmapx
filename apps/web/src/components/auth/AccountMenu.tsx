@@ -1,5 +1,6 @@
 "use client";
 
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import SettingsIcon from "@mui/icons-material/Settings";
 import Avatar from "@mui/material/Avatar";
@@ -12,6 +13,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
 import { authClient, getInitials } from "@openmapx/core";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 interface AccountMenuProps {
@@ -24,6 +26,8 @@ interface AccountMenuProps {
 export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: AccountMenuProps) {
   const open = Boolean(anchorEl);
   const t = useTranslations("account");
+  const router = useRouter();
+  const isAdmin = user.role === "admin";
 
   const handleSignOut = async () => {
     onClose();
@@ -89,6 +93,20 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
         </ListItemIcon>
         <ListItemText>{t("accountSettings")}</ListItemText>
       </MenuItem>
+      {isAdmin && (
+        <MenuItem
+          onClick={() => {
+            onClose();
+            router.push("/admin");
+          }}
+          sx={{ py: 1.5 }}
+        >
+          <ListItemIcon>
+            <AdminPanelSettingsIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t("adminPanel")}</ListItemText>
+        </MenuItem>
+      )}
       <Divider sx={{ my: "0 !important" }} />
       <MenuItem onClick={handleSignOut} sx={{ py: 1.5 }}>
         <ListItemIcon>

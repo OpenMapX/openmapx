@@ -1,0 +1,11 @@
+{
+  "name": "@openmapx/integration-transit-dynamic-registry",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "cached-hafas-client": "*",
+    "hafas-client": "*"
+  }
+}

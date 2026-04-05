@@ -1,0 +1,11 @@
+{
+  "name": "Panoramax Photos",
+  "description": "Street-level photos near places",
+  "privacy": [
+    {
+      "service": "Panoramax",
+      "purpose": "Street-level photos from Panoramax",
+      "dataSent": "Coordinates, search radius"
+    }
+  ]
+}

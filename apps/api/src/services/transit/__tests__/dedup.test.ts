@@ -167,6 +167,18 @@ describe("isTripNumber", () => {
 // deduplicateStops
 
 describe("deduplicateStops", () => {
+  /** Priority resolver: lower number = higher priority. */
+  const testPriority = (provider: string): number => {
+    const priorities: Record<string, number> = {
+      db: 1,
+      vbb: 1,
+      bvg: 1,
+      "gtfs-de": 3,
+      transitous: 10,
+    };
+    return priorities[provider] ?? 50;
+  };
+
   function makeStop(
     overrides: Partial<TransitStop> & Pick<TransitStop, "id" | "name" | "provider">,
   ): TransitStop {
@@ -202,9 +214,8 @@ describe("deduplicateStops", () => {
       lat: 52.5251,
       lng: 13.3691,
     });
-    const result = deduplicateStops([stop1, stop2]);
+    const result = deduplicateStops([stop1, stop2], testPriority);
     expect(result).toHaveLength(1);
-    // DB is hand-crafted (priority 1), so it should be kept over transitous (priority 10)
     expect(result[0].provider).toBe("db");
   });
 
@@ -223,7 +234,7 @@ describe("deduplicateStops", () => {
       lat: 52.5205,
       lng: 13.3867,
     });
-    const result = deduplicateStops([stop1, stop2]);
+    const result = deduplicateStops([stop1, stop2], testPriority);
     expect(result).toHaveLength(2);
   });
 
@@ -242,12 +253,11 @@ describe("deduplicateStops", () => {
       lat: 48.14,
       lng: 11.56, // Munich — far away
     });
-    const result = deduplicateStops([stop1, stop2]);
+    const result = deduplicateStops([stop1, stop2], testPriority);
     expect(result).toHaveLength(2);
   });
 
   it("prefers higher-priority provider in cluster", () => {
-    // transitous (priority 10) vs GTFS (priority 3) vs hand-crafted (priority 1)
     const stops: TransitStop[] = [
       makeStop({
         id: "mo:1",
@@ -271,7 +281,7 @@ describe("deduplicateStops", () => {
         lng: 13.3692,
       }),
     ];
-    const result = deduplicateStops(stops);
+    const result = deduplicateStops(stops, testPriority);
     expect(result).toHaveLength(1);
     expect(result[0].provider).toBe("db");
   });
@@ -309,9 +319,27 @@ describe("deduplicateStops", () => {
         lng: 13.3868,
       }),
     ];
-    const result = deduplicateStops(stops);
+    const result = deduplicateStops(stops, testPriority);
     expect(result).toHaveLength(2);
-    // Both clusters should be represented by DB (higher priority)
     expect(result.every((s) => s.provider === "db")).toBe(true);
+  });
+
+  it("works without priority resolver (equal priority, first wins)", () => {
+    const stop1 = makeStop({
+      id: "a:1",
+      name: "Berlin Hbf",
+      provider: "provA",
+      lat: 52.525,
+      lng: 13.369,
+    });
+    const stop2 = makeStop({
+      id: "b:1",
+      name: "Berlin Hauptbahnhof",
+      provider: "provB",
+      lat: 52.5251,
+      lng: 13.3691,
+    });
+    const result = deduplicateStops([stop1, stop2]);
+    expect(result).toHaveLength(1);
   });
 });

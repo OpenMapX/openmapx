@@ -1,0 +1,48 @@
+{
+  "id": "transit-mbta",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["MBTA_API_KEY"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "MBTA v3 API key.",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api-v3.mbta.com/stops?filter[latitude]=42.36&filter[longitude]=-71.06&filter[radius]=0.01&api_key=${MBTA_API_KEY}",
+    "requiredEnvVars": ["MBTA_API_KEY"]
+  },
+  "attribution": [
+    {
+      "name": "MBTA",
+      "url": "https://www.mbta.com/",
+      "license": "Open Data",
+      "licenseUrl": "https://cdn.mbta.com/sites/default/files/2023-08/mbta-massdot-develop-license-agreement.pdf"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.mbta.com/policies/privacy-policy",
+      "personalData": false
+    }
+  ]
+}

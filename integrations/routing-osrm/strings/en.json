@@ -1,0 +1,11 @@
+{
+  "name": "OSRM Routing",
+  "description": "Driving route calculation",
+  "privacy": [
+    {
+      "service": "OSRM",
+      "purpose": "Driving route calculation",
+      "dataSent": "Origin/destination coordinates, routing options"
+    }
+  ]
+}

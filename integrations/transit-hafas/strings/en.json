@@ -1,0 +1,8 @@
+{
+  "name": "HAFAS Transit (DB/VBB/BVG)",
+  "description": "German public transit journey planning",
+  "privacy": {
+    "purpose": "Transit stop departures, arrivals, and journey planning",
+    "dataSent": "Stop IDs, coordinates, departure times"
+  }
+}

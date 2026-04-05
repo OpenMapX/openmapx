@@ -1,0 +1,42 @@
+{
+  "id": "transit-db-vendo",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": [],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable DB Vendo transit integration"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://int.bahn.de/web/api/reiseloesung/suche"
+  },
+  "attribution": [
+    {
+      "name": "Deutsche Bahn",
+      "url": "https://www.bahn.de/",
+      "license": "Proprietary",
+      "licenseUrl": "https://www.bahn.de/nutzungsbedingungen"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+      "personalData": false
+    }
+  ]
+}

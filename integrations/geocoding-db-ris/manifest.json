@@ -1,0 +1,53 @@
+{
+  "id": "geocoding-db-ris",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["geocoding"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "clientId": {
+        "type": "string",
+        "title": "Client ID",
+        "description": "Deutsche Bahn RIS API client ID."
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Deutsche Bahn RIS API key.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "db-ris-api-key"
+      }
+    }
+  },
+  "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
+  "healthCheck": {
+    "type": "custom",
+    "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"]
+  },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "attribution": [
+    {
+      "name": "Deutsche Bahn",
+      "url": "https://developers.deutschebahn.com",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+      "personalData": false
+    }
+  ]
+}

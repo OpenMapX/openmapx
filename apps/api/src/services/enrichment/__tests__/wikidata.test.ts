@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../commons-metadata.js", () => ({
-  fetchCommonsMetadata: vi.fn(),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, fetchCommonsMetadata: vi.fn() };
+});
 
 let mockFetch: ReturnType<typeof vi.fn>;
 let mockFetchCommonsMetadata: ReturnType<typeof vi.fn>;
@@ -10,8 +11,8 @@ let mockFetchCommonsMetadata: ReturnType<typeof vi.fn>;
 beforeEach(async () => {
   mockFetch = vi.fn();
   vi.stubGlobal("fetch", mockFetch);
-  const cm = await import("../commons-metadata.js");
-  mockFetchCommonsMetadata = cm.fetchCommonsMetadata as ReturnType<typeof vi.fn>;
+  const { fetchCommonsMetadata } = await import("@openmapx/core");
+  mockFetchCommonsMetadata = fetchCommonsMetadata as unknown as ReturnType<typeof vi.fn>;
 });
 
 afterEach(() => {
@@ -41,7 +42,7 @@ function makeWdResponse(qid: string, entity: Record<string, unknown>) {
 }
 
 async function loadModule() {
-  return import("../wikidata.enricher.js");
+  return import("@integrations/enrichment-wikidata/provider.js");
 }
 
 describe("wikidataEnricher", () => {

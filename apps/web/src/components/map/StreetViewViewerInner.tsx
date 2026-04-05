@@ -1,5 +1,6 @@
 "use client";
 
+import { useStreetViewStore } from "@integrations/street-view-mapillary/store";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -16,7 +17,6 @@ import {
   useReverseGeocoding,
   useSearchStore,
   useSidebarStore,
-  useStreetViewStore,
 } from "@openmapx/core";
 import type { Viewer as MapillaryViewer, ViewerImageEvent } from "mapillary-js";
 import { useLocale, useTranslations } from "next-intl";

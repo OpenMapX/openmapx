@@ -1,4 +1,4 @@
-import type { LineStringGeometry, MultiLineStringGeometry, OverpassElement } from "../overpass";
+import type { LineStringGeometry, MultiLineStringGeometry, OverpassElement } from "@openmapx/core";
 import {
   buildNodeMap,
   buildWayMap,
@@ -7,7 +7,7 @@ import {
   reconstructMultiLineString,
   reconstructMultiPolygon,
   reconstructPolygon,
-} from "../overpass";
+} from "@openmapx/core";
 import type {
   WinterSportsArea,
   WinterSportsFeaturesResponse,

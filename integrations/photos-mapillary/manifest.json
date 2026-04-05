@@ -1,0 +1,49 @@
+{
+  "id": "photos-mapillary",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["photos"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "accessToken": {
+        "type": "string",
+        "title": "Access Token",
+        "description": "Mapillary client access token for the Graph API.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "mapillary-token"
+      }
+    }
+  },
+  "envVars": ["MAPILLARY_TOKEN"],
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id&limit=1",
+    "requiredEnvVars": ["MAPILLARY_TOKEN"]
+  },
+  "quality": "built-in",
+  "category": "Imagery",
+  "attribution": [
+    {
+      "name": "Mapillary",
+      "url": "https://www.mapillary.com/",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.mapillary.com/privacy",
+      "personalData": false
+    }
+  ]
+}

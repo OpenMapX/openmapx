@@ -1,0 +1,64 @@
+{
+  "id": "overlay-traffic-tomtom",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://developer.tomtom.com/traffic-api/documentation",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": false,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "traffic",
+      "icon": "traffic",
+      "quickSelector": true
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "TomTom Traffic API key.",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "envVars": ["TOMTOM_TRAFFIC_KEY"],
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/0/0/0.png?key=${TOMTOM_TRAFFIC_KEY}&tileSize=256",
+    "requiredEnvVars": ["TOMTOM_TRAFFIC_KEY"]
+  },
+  "quality": "built-in",
+  "category": "Traffic",
+  "attribution": [
+    {
+      "name": "TomTom",
+      "url": "https://www.tomtom.com/",
+      "license": "Proprietary",
+      "licenseUrl": "https://developer.tomtom.com/terms-and-conditions"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://www.tomtom.com/privacy/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

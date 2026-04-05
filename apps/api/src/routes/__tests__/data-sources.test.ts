@@ -1,29 +1,15 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-// Mock data source registry
+// Mock integration host
 
-const mockGetAll = vi.fn();
-const mockGet = vi.fn();
+const mockGetIntegrationsByDomain = vi.fn();
 
-vi.mock("../../services/data-sources/registry.js", () => ({
-  dataSourceRegistry: {
-    getAll: mockGetAll,
-    get: mockGet,
-  },
+vi.mock("../../integration-host.js", () => ({
+  getIntegrationsByDomain: (...args: unknown[]) => mockGetIntegrationsByDomain(...args),
 }));
 
-// Mock ApiKeyMissingError — re-export the real class behavior
-
-vi.mock("../../services/data-sources/ev-charging/ocm.js", () => {
-  class ApiKeyMissingError extends Error {
-    constructor() {
-      super("OPENCHARGEMAP_API_KEY is not configured");
-      this.name = "ApiKeyMissingError";
-    }
-  }
-  return { ApiKeyMissingError };
-});
+import { ConfigurationError } from "@openmapx/core";
 
 // Mock cache
 
@@ -78,6 +64,14 @@ const MOCK_PROVIDER = {
 
 const VALID_BBOX = { south: "52.0", west: "13.0", north: "53.0", east: "14.0" };
 
+/** Helper: wrap a provider into the integration shape expected by getIntegrationsByDomain */
+function wrapAsIntegration(provider: typeof MOCK_PROVIDER) {
+  return {
+    enabled: true,
+    providers: new Map([["data-source", [provider]]]),
+  };
+}
+
 function qs(params: Record<string, string>): string {
   return new URLSearchParams(params).toString();
 }
@@ -86,7 +80,7 @@ function qs(params: Record<string, string>): string {
 
 describe("GET /data-sources", () => {
   it("returns list of providers with filters", async () => {
-    mockGetAll.mockReturnValue([MOCK_PROVIDER]);
+    mockGetIntegrationsByDomain.mockReturnValue([wrapAsIntegration(MOCK_PROVIDER)]);
 
     const res = await app.inject({ method: "GET", url: "/data-sources" });
 
@@ -99,7 +93,7 @@ describe("GET /data-sources", () => {
   });
 
   it("returns empty sources when no providers registered", async () => {
-    mockGetAll.mockReturnValue([]);
+    mockGetIntegrationsByDomain.mockReturnValue([]);
 
     const res = await app.inject({ method: "GET", url: "/data-sources" });
 
@@ -111,7 +105,7 @@ describe("GET /data-sources", () => {
 
 describe("GET /data-sources/:id/search", () => {
   it("returns 200 with search results for valid bbox", async () => {
-    mockGet.mockReturnValue(MOCK_PROVIDER);
+    mockGetIntegrationsByDomain.mockReturnValue([wrapAsIntegration(MOCK_PROVIDER)]);
 
     const res = await app.inject({
       method: "GET",
@@ -124,7 +118,7 @@ describe("GET /data-sources/:id/search", () => {
   });
 
   it("returns 404 for unknown data source id", async () => {
-    mockGet.mockReturnValue(undefined);
+    mockGetIntegrationsByDomain.mockReturnValue([]);
 
     const res = await app.inject({
       method: "GET",
@@ -137,7 +131,7 @@ describe("GET /data-sources/:id/search", () => {
   });
 
   it("returns 400 for invalid bbox coordinates", async () => {
-    mockGet.mockReturnValue(MOCK_PROVIDER);
+    mockGetIntegrationsByDomain.mockReturnValue([wrapAsIntegration(MOCK_PROVIDER)]);
 
     const res = await app.inject({
       method: "GET",
@@ -150,7 +144,7 @@ describe("GET /data-sources/:id/search", () => {
   });
 
   it("returns 400 for invalid JSON filters", async () => {
-    mockGet.mockReturnValue(MOCK_PROVIDER);
+    mockGetIntegrationsByDomain.mockReturnValue([wrapAsIntegration(MOCK_PROVIDER)]);
 
     const res = await app.inject({
       method: "GET",
@@ -164,7 +158,9 @@ describe("GET /data-sources/:id/search", () => {
 
   it("passes valid JSON filters to provider.search", async () => {
     const searchFn = vi.fn().mockResolvedValue([]);
-    mockGet.mockReturnValue({ ...MOCK_PROVIDER, search: searchFn });
+    mockGetIntegrationsByDomain.mockReturnValue([
+      wrapAsIntegration({ ...MOCK_PROVIDER, search: searchFn }),
+    ]);
 
     const filters = encodeURIComponent(JSON.stringify({ power: 50 }));
     const res = await app.inject({
@@ -179,11 +175,13 @@ describe("GET /data-sources/:id/search", () => {
     );
   });
 
-  it("returns 503 for ApiKeyMissingError", async () => {
-    // Dynamically import the mocked class to throw it
-    const { ApiKeyMissingError } = await import("../../services/data-sources/ev-charging/ocm.js");
-    const searchFn = vi.fn().mockRejectedValue(new ApiKeyMissingError());
-    mockGet.mockReturnValue({ ...MOCK_PROVIDER, search: searchFn });
+  it("returns 503 for ConfigurationError", async () => {
+    const searchFn = vi
+      .fn()
+      .mockRejectedValue(new ConfigurationError("OPENCHARGEMAP_API_KEY is not configured"));
+    mockGetIntegrationsByDomain.mockReturnValue([
+      wrapAsIntegration({ ...MOCK_PROVIDER, search: searchFn }),
+    ]);
 
     const res = await app.inject({
       method: "GET",
@@ -196,7 +194,7 @@ describe("GET /data-sources/:id/search", () => {
   });
 
   it("sets Cache-Control header on success", async () => {
-    mockGet.mockReturnValue(MOCK_PROVIDER);
+    mockGetIntegrationsByDomain.mockReturnValue([wrapAsIntegration(MOCK_PROVIDER)]);
 
     const res = await app.inject({
       method: "GET",
@@ -209,7 +207,7 @@ describe("GET /data-sources/:id/search", () => {
 
 describe("GET /data-sources/:id/detail/*", () => {
   it("returns 200 with detail data", async () => {
-    mockGet.mockReturnValue(MOCK_PROVIDER);
+    mockGetIntegrationsByDomain.mockReturnValue([wrapAsIntegration(MOCK_PROVIDER)]);
 
     const res = await app.inject({
       method: "GET",
@@ -222,7 +220,7 @@ describe("GET /data-sources/:id/detail/*", () => {
   });
 
   it("returns 404 for unknown data source", async () => {
-    mockGet.mockReturnValue(undefined);
+    mockGetIntegrationsByDomain.mockReturnValue([]);
 
     const res = await app.inject({
       method: "GET",
@@ -236,7 +234,9 @@ describe("GET /data-sources/:id/detail/*", () => {
 
   it("handles IDs with slashes (wildcard param)", async () => {
     const detailFn = vi.fn().mockResolvedValue({ id: "tankerkoenig/abc-123" });
-    mockGet.mockReturnValue({ ...MOCK_PROVIDER, getDetail: detailFn });
+    mockGetIntegrationsByDomain.mockReturnValue([
+      wrapAsIntegration({ ...MOCK_PROVIDER, getDetail: detailFn }),
+    ]);
 
     const res = await app.inject({
       method: "GET",
@@ -247,10 +247,13 @@ describe("GET /data-sources/:id/detail/*", () => {
     expect(detailFn).toHaveBeenCalledWith("tankerkoenig/abc-123");
   });
 
-  it("returns 503 for ApiKeyMissingError on detail", async () => {
-    const { ApiKeyMissingError } = await import("../../services/data-sources/ev-charging/ocm.js");
-    const detailFn = vi.fn().mockRejectedValue(new ApiKeyMissingError());
-    mockGet.mockReturnValue({ ...MOCK_PROVIDER, getDetail: detailFn });
+  it("returns 503 for ConfigurationError on detail", async () => {
+    const detailFn = vi
+      .fn()
+      .mockRejectedValue(new ConfigurationError("OPENCHARGEMAP_API_KEY is not configured"));
+    mockGetIntegrationsByDomain.mockReturnValue([
+      wrapAsIntegration({ ...MOCK_PROVIDER, getDetail: detailFn }),
+    ]);
 
     const res = await app.inject({
       method: "GET",
@@ -261,7 +264,7 @@ describe("GET /data-sources/:id/detail/*", () => {
   });
 
   it("sets Cache-Control header on detail success", async () => {
-    mockGet.mockReturnValue(MOCK_PROVIDER);
+    mockGetIntegrationsByDomain.mockReturnValue([wrapAsIntegration(MOCK_PROVIDER)]);
 
     const res = await app.inject({
       method: "GET",

@@ -1,0 +1,11 @@
+{
+  "name": "Pelias-Geokodierung",
+  "description": "Selbst gehostete Geokodierung über Pelias",
+  "privacy": [
+    {
+      "service": "Pelias",
+      "purpose": "Selbst gehostete Geokodierung",
+      "dataSent": "Suchanfragetext (an selbst gehostete Instanz)"
+    }
+  ]
+}

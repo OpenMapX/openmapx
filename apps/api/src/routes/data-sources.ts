@@ -1,17 +1,28 @@
-import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import { ConfigurationError, type DataSourceDetail, type DataSourceResult } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-import { ApiKeyMissingError } from "../services/data-sources/ev-charging/ocm.js";
-import { dataSourceRegistry } from "../services/data-sources/registry.js";
-import { serviceRegistry } from "../services/service-registry.js";
+import { getIntegrationsByDomain } from "../integration-host.js";
+import type { DataSourceProvider } from "../services/data-sources/types.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
+
+function getAllDataSourceProviders(): DataSourceProvider[] {
+  const integrations = getIntegrationsByDomain("data-source");
+  const providers: DataSourceProvider[] = [];
+  for (const integration of integrations) {
+    const domainProviders = (integration.providers.get("data-source") ??
+      []) as DataSourceProvider[];
+    providers.push(...domainProviders);
+  }
+  return providers;
+}
+
+function getDataSourceProvider(id: string): DataSourceProvider | undefined {
+  return getAllDataSourceProviders().find((p) => p.id === id);
+}
 
 export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
   // List available data sources with filter definitions
   fastify.get("/data-sources", async (_req, reply) => {
-    const providers = dataSourceRegistry.getAll().filter((p) => {
-      if (!p.serviceIds || p.serviceIds.length === 0) return true;
-      return p.serviceIds.some((id) => serviceRegistry.isAvailable(id));
-    });
+    const providers = getAllDataSourceProviders();
     const sources = await Promise.all(
       providers.map(async (p) => {
         const filters = await withCache(`cache:ds:filters:${p.id}`, TTL.dataSources.filters, () =>
@@ -28,7 +39,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     Params: { id: string };
     Querystring: { south: string; west: string; north: string; east: string; filters?: string };
   }>("/data-sources/:id/search", async (req, reply) => {
-    const provider = dataSourceRegistry.get(req.params.id);
+    const provider = getDataSourceProvider(req.params.id);
     if (!provider) return reply.status(404).send({ error: "Unknown data source" });
 
     const south = Number(req.query.south);
@@ -61,7 +72,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     try {
       results = await withCache(cacheKey, searchTtl, () => provider.search(bbox, filters));
     } catch (err) {
-      if (err instanceof ApiKeyMissingError) {
+      if (err instanceof ConfigurationError) {
         return reply.status(503).send({ error: err.message });
       }
       throw err;
@@ -75,7 +86,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
     Params: { id: string; "*": string };
   }>("/data-sources/:id/detail/*", async (req, reply) => {
-    const provider = dataSourceRegistry.get(req.params.id);
+    const provider = getDataSourceProvider(req.params.id);
     if (!provider) return reply.status(404).send({ error: "Unknown data source" });
 
     const itemId = req.params["*"];
@@ -88,7 +99,7 @@ export const dataSourcesRoute: FastifyPluginAsync = async (fastify) => {
     try {
       detail = await withCache(cacheKey, detailTtl, () => provider.getDetail(itemId));
     } catch (err) {
-      if (err instanceof ApiKeyMissingError) {
+      if (err instanceof ConfigurationError) {
         return reply.status(503).send({ error: err.message });
       }
       throw err;

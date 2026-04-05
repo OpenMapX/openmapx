@@ -1,0 +1,41 @@
+{
+  "id": "enrichment-wikipedia",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["enrichment"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://en.wikipedia.org/w/api.php?action=query&format=json&titles=Main_Page&prop=extracts&exintro=1&exlimit=1"
+  },
+  "quality": "built-in",
+  "category": "External",
+  "attribution": [
+    {
+      "name": "Wikipedia",
+      "url": "https://www.wikipedia.org/",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Privacy_policy",
+      "personalData": false
+    }
+  ]
+}

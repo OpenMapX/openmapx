@@ -1,0 +1,10 @@
+{
+  "name": "@openmapx/integration-fuel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "opening_hours": "^3.12.0"
+  }
+}

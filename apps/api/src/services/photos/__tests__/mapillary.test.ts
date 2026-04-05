@@ -35,7 +35,7 @@ function makeImage(overrides: Record<string, unknown> = {}) {
 }
 
 async function loadModule() {
-  return import("../mapillary.provider.js");
+  return import("@integrations/photos-mapillary/provider.js");
 }
 
 describe("mapillaryPhotoProvider", () => {

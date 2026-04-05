@@ -33,6 +33,7 @@ import {
   useDebounce,
   useDirectionsStore,
   useGeocoding,
+  useIntegrationRegistry,
   useLabeledPlaces,
   useMenuStore,
   usePlaceStore,
@@ -145,6 +146,21 @@ export function SearchBar() {
   // Labeled places (Home, Work, custom) for search suggestions
   const { data: labeledPlaces } = useLabeledPlaces();
 
+  // Data source categories from integration manifests
+  const registry = useIntegrationRegistry();
+  const dataSourceCategories = useMemo(() => {
+    const withSearchCat = registry.getWithSearchCategory();
+    return withSearchCat
+      .map((i) => {
+        const sc = i.frontend?.searchCategory as
+          | { id: string; label?: string; iconPath?: string }
+          | undefined;
+        if (!sc) return null;
+        return { id: sc.id, label: sc.label ?? sc.id, iconPath: sc.iconPath, integrationId: i.id };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+  }, [registry]);
+
   // Clean up blur timeout on unmount
   useEffect(() => {
     return () => {
@@ -208,21 +224,30 @@ export function SearchBar() {
   }
 
   // Inject matching category suggestions at the top of the dropdown
-  const categorySuggestions = useMemo<AutocompleteResult[]>(
-    () =>
-      q.length >= 1
-        ? CATEGORY_DEFINITIONS.filter((cat) =>
-            cat.label.toLowerCase().includes(q.toLowerCase()),
-          ).map((cat) => ({
-            id: `category-${cat.id}`,
-            label: cat.label,
-            sublabel: t("searchCategory"),
-            type: "category" as const,
-            iconPath: cat.iconPath,
-          }))
-        : [],
-    [q, t],
-  );
+  // Merges POI categories (hardcoded) with data source categories (from manifests)
+  const categorySuggestions = useMemo<AutocompleteResult[]>(() => {
+    if (q.length < 1) return [];
+    const lower = q.toLowerCase();
+    const poiMatches = CATEGORY_DEFINITIONS.filter((cat) =>
+      cat.label.toLowerCase().includes(lower),
+    ).map((cat) => ({
+      id: `category-${cat.id}`,
+      label: cat.label,
+      sublabel: t("searchCategory"),
+      type: "category" as const,
+      iconPath: cat.iconPath,
+    }));
+    const dsMatches = dataSourceCategories
+      .filter((ds) => ds.label.toLowerCase().includes(lower))
+      .map((ds) => ({
+        id: `category-${ds.id}`,
+        label: ds.label,
+        sublabel: t("searchCategory"),
+        type: "category" as const,
+        iconPath: ds.iconPath,
+      }));
+    return [...dsMatches, ...poiMatches];
+  }, [q, t, dataSourceCategories]);
 
   const stopSuggestions = useMemo<AutocompleteResult[]>(
     () =>
@@ -438,11 +463,11 @@ export function SearchBar() {
     if (result.type === "category") {
       // Extract category id from the synthetic id ("category-restaurants" → "restaurants")
       const catId = result.id.replace("category-", "");
-      const def = CATEGORY_DEFINITIONS.find((c) => c.id === catId);
-      if (def?.dataSourceId) {
-        // Route to data source system instead of category search
+      const dsMatch = dataSourceCategories.find((ds) => ds.id === catId);
+      if (dsMatch) {
+        // Route to data source system (manifest-driven)
         clearCategory();
-        setActiveSource(def.dataSourceId);
+        setActiveSource(dsMatch.id);
         useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
       } else {
         setActiveCategory(catId as Parameters<typeof setActiveCategory>[0]);

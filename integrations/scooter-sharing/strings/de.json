@@ -1,0 +1,9 @@
+{
+  "name": "Roller-Sharing",
+  "description": "E-Scooter- und Moped-Sharing von GBFS-Feeds, Felyx, GO Sharing und Link",
+  "privacy": {
+    "purpose": "E-Scooter- und Moped-Sharing-Fahrzeugstandorte und Verfügbarkeit",
+    "dataSent": "Begrenzungsrahmen-Koordinaten",
+    "dataReceived": "Fahrzeug-/Stationsstandorte, Verfügbarkeit, Betreiberinformationen"
+  }
+}

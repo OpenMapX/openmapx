@@ -1,0 +1,10 @@
+{
+  "name": "USGS-Erdbeben",
+  "description": "Echtzeit-Erdbebendaten des US Geological Survey",
+  "privacy": {
+    "purpose": "Anzeige von Echtzeit-Erdbebenstandorten und -stärken auf der Karte",
+    "dataSent": "Zeitraum, Magnitudenschwelle (über vorgefertigte URL; keine Nutzerdaten gesendet)",
+    "dataReceived": "Erdbebenstandorte, Magnituden, Zeitstempel und Metadaten",
+    "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
+  }
+}

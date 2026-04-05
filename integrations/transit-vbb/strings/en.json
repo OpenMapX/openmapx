@@ -1,0 +1,8 @@
+{
+  "name": "VBB Transit (Berlin-Brandenburg)",
+  "description": "Berlin-Brandenburg public transit data from VBB",
+  "privacy": {
+    "purpose": "Berlin/Brandenburg transit stops and departures",
+    "dataSent": "Stop IDs, coordinates"
+  }
+}

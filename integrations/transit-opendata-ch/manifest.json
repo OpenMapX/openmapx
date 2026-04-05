@@ -1,0 +1,42 @@
+{
+  "id": "transit-opendata-ch",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": [],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable Swiss transit integration"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://transport.opendata.ch/v1/locations?query=Bern&type=station"
+  },
+  "attribution": [
+    {
+      "name": "transport.opendata.ch",
+      "url": "https://transport.opendata.ch/",
+      "license": "Open Data",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://transport.opendata.ch/",
+      "personalData": false
+    }
+  ]
+}

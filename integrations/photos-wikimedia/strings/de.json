@@ -1,0 +1,11 @@
+{
+  "name": "Wikimedia-Fotos",
+  "description": "Ortsfotos von Wikimedia Commons",
+  "privacy": [
+    {
+      "service": "Wikimedia Commons",
+      "purpose": "Ortsfotos von Wikimedia Commons",
+      "dataSent": "Koordinaten, Suchradius"
+    }
+  ]
+}

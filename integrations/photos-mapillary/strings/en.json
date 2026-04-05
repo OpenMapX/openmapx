@@ -1,0 +1,11 @@
+{
+  "name": "Mapillary Photos",
+  "description": "Street-level photos near places",
+  "privacy": [
+    {
+      "service": "Mapillary",
+      "purpose": "Street-level photos near places",
+      "dataSent": "Coordinates, API token"
+    }
+  ]
+}

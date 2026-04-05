@@ -1,0 +1,9 @@
+{
+  "name": "Live-Zugpositionen",
+  "description": "Echtzeit-Zugpositionen im deutschen Schienennetz über die Deutsche Bahn RIS API",
+  "privacy": {
+    "purpose": "Echtzeit-Zugpositionen im deutschen Schienennetz",
+    "dataSent": "API-Zugangsdaten, Begrenzungsrahmen",
+    "dataReceived": "Zugpositionen, Verspätungen und Routeninformationen"
+  }
+}

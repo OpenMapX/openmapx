@@ -1,0 +1,42 @@
+{
+  "id": "transit-dynamic-registry",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": [],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable dynamic transit registry"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.github.com/repos/public-transport/transport-apis/git/trees/v1"
+  },
+  "attribution": [
+    {
+      "name": "public-transport/transport-apis",
+      "url": "https://github.com/public-transport/transport-apis",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "Various",
+      "providerPrivacyUrl": "https://github.com/public-transport/transport-apis",
+      "personalData": false
+    }
+  ]
+}

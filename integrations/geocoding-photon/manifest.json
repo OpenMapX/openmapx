@@ -1,0 +1,45 @@
+{
+  "id": "geocoding-photon",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["geocoding"],
+  "infrastructure": {
+    "dockerProfile": "photon",
+    "services": ["photon"]
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://photon.komoot.io/api?q=test&limit=1"
+  },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "attribution": [
+    {
+      "name": "Photon/Komoot",
+      "url": "https://photon.komoot.io/",
+      "license": "Apache 2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.komoot.com/privacy",
+      "personalData": false
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "id": "parking",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["data-source"],
+  "frontend": {
+    "searchCategory": {
+      "id": "parking",
+      "label": "Parking",
+      "iconPath": "M13 3H6v18h4v-6h3c3.31 0 6-2.69 6-6s-2.69-6-6-6zm.2 8H10V7h3.2c1.1 0 2 .9 2 2s-.9 2-2 2z",
+      "showInChipBar": true
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "clientId": {
+        "type": "string",
+        "title": "Client ID",
+        "description": "Deutsche Bahn Parking API client ID."
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Deutsche Bahn Parking API key.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "db-parking-api-key"
+      }
+    }
+  },
+  "envVars": ["DB_PARKING_CLIENT_ID", "DB_PARKING_API_KEY"],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.mobidata-bw.de/park-api/api/public/v3/parking-sites?limit=1"
+  },
+  "quality": "built-in",
+  "category": "Parking",
+  "attribution": [
+    {
+      "name": "DB BahnPark",
+      "url": "https://www.bahnhof.de/parken",
+      "license": "DL-DE-BY-2.0 (no content modification)",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+    },
+    {
+      "name": "ParkAPI (MobiData BW)",
+      "url": "https://www.mobidata-bw.de/",
+      "license": "DL-DE-BY-2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+    },
+    {
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+      "personalData": false
+    },
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobidata-bw.de/pages/datenschutz",
+      "personalData": false
+    }
+  ]
+}

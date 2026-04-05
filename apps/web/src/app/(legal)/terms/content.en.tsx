@@ -9,14 +9,16 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
-import { getAttributionSections } from "../legalServiceData";
+import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
 
 export default function TermsContent({
   transitAttribution = [],
-  capabilities = {},
+  capabilities: _capabilities = {},
+  integrations = [],
 }: {
   transitAttribution?: unknown[];
   capabilities?: Record<string, boolean>;
+  integrations?: import("@openmapx/core").LoadedIntegrationMeta[];
 }) {
   const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
 
@@ -285,7 +287,7 @@ export default function TermsContent({
           you to the full license text.
         </Typography>
 
-        {getAttributionSections(capabilities).map((section) => (
+        {generateAttributionSectionsFromManifests(integrations, "en").map((section) => (
           <AttributionTable key={section.heading} heading={section.heading} rows={section.rows} />
         ))}
 
@@ -418,7 +420,7 @@ function AttributionTable({ heading, rows }: { heading: string; rows: Attributio
           </TableHead>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.source}>
+              <TableRow key={`${row.source}-${row.desc}`}>
                 <TableCell>
                   {row.url ? (
                     <Link href={row.url} target="_blank" rel="noopener noreferrer">

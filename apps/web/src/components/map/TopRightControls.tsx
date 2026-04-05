@@ -10,6 +10,7 @@ import { useRef, useState } from "react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { AccountSettingsDialog } from "@/components/auth/AccountSettingsDialog";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { ResetPasswordDialog } from "@/components/auth/ResetPasswordDialog";
 
 export function TopRightControls() {
   const t = useTranslations("map");
@@ -71,6 +72,9 @@ export function TopRightControls() {
 
       {/* Auth dialog (sign-in / sign-up) */}
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
+
+      {/* Password reset dialog (opened via email link) */}
+      <ResetPasswordDialog />
 
       {/* Account dropdown menu */}
       {user && (

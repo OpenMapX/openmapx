@@ -37,6 +37,11 @@ class ProviderHealth {
     this.state.set(id, s);
   }
 
+  /** Reset health state for a specific provider (e.g., after integration reload). */
+  reset(id: string): void {
+    this.state.delete(id);
+  }
+
   /** Get all tracked provider states (for debug endpoint). */
   getStatus(): Record<string, { healthy: boolean; failures: number; disabledUntil?: string }> {
     const result: Record<string, { healthy: boolean; failures: number; disabledUntil?: string }> =

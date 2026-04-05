@@ -1,0 +1,8 @@
+{
+  "name": "BVG-Nahverkehr (Berlin)",
+  "description": "Berliner ÖPNV-Daten der BVG",
+  "privacy": {
+    "purpose": "Berliner Haltestellen und Abfahrten",
+    "dataSent": "Haltestellen-IDs, Koordinaten"
+  }
+}

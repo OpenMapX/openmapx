@@ -1,0 +1,49 @@
+{
+  "id": "geocoding-maptiler",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["geocoding"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "MapTiler API key. Get one at maptiler.com/cloud.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "maptiler-api-key"
+      }
+    }
+  },
+  "envVars": ["MAPTILER_KEY"],
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api.maptiler.com/geocoding/test.json?key=${MAPTILER_KEY}&limit=1",
+    "requiredEnvVars": ["MAPTILER_KEY"]
+  },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "attribution": [
+    {
+      "name": "MapTiler",
+      "url": "https://www.maptiler.com/",
+      "license": "Proprietary",
+      "licenseUrl": "https://www.maptiler.com/terms/cloud/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://www.maptiler.com/privacy-policy/",
+      "personalData": false
+    }
+  ]
+}

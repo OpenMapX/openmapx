@@ -1,0 +1,8 @@
+{
+  "name": "Swiss Transit (transport.opendata.ch)",
+  "description": "Swiss public transit data",
+  "privacy": {
+    "purpose": "Swiss transit stops and connections",
+    "dataSent": "Station names, coordinates"
+  }
+}

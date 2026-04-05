@@ -1,5 +1,5 @@
+import { lookupDbStation } from "@integrations/geocoding-db-ris/provider.js";
 import type { FastifyPluginAsync } from "fastify";
-import { lookupDbStation } from "../services/db-ris/index";
 import { enrichPlace } from "../services/enrichment/index";
 import {
   lookupByCoords,

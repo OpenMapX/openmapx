@@ -1,0 +1,49 @@
+{
+  "id": "transit-otp",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "infrastructure": {
+    "dockerProfile": "transit",
+    "services": ["otp"],
+    "dataRequirements": ["osm-pbf", "gtfs-feeds"],
+    "planetScale": false
+  },
+  "category": "Transit",
+  "envVars": ["OTP_URL"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable OpenTripPlanner integration"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "urlTemplate": "${OTP_URL}/otp/routers/default",
+    "requiredEnvVars": ["OTP_URL"]
+  },
+  "attribution": [
+    {
+      "name": "OpenTripPlanner",
+      "url": "https://www.opentripplanner.org/",
+      "license": "LGPL-3.0",
+      "licenseUrl": "https://www.gnu.org/licenses/lgpl-3.0.html"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "Self-hosted",
+      "providerPrivacyUrl": "https://www.opentripplanner.org/",
+      "personalData": false
+    }
+  ]
+}

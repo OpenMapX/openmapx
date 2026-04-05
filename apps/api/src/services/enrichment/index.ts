@@ -1,10 +1,18 @@
-import type { Place } from "@openmapx/core";
-import type { EnrichmentResult, EnrichmentSource } from "./types";
-import { wikidataEnricher } from "./wikidata.enricher";
-import { wikimediaCommonsEnricher } from "./wikimedia-commons.enricher";
-import { wikipediaEnricher } from "./wikipedia.enricher";
+import type { EnrichmentResult, EnrichmentSource, Place } from "@openmapx/core";
+import { getIntegrationsByDomain } from "../../integration-host.js";
 
-const SOURCES: EnrichmentSource[] = [wikidataEnricher, wikipediaEnricher, wikimediaCommonsEnricher];
+/**
+ * Collect enrichment sources from all integrations registered under the "enrichment" domain.
+ */
+function getEnrichmentSources(): EnrichmentSource[] {
+  const sources: EnrichmentSource[] = [];
+  for (const integration of getIntegrationsByDomain("enrichment")) {
+    for (const e of (integration.providers.get("enrichment") ?? []) as EnrichmentSource[]) {
+      sources.push(e);
+    }
+  }
+  return sources;
+}
 
 /**
  * Runs all enrichment sources in parallel and merges their results.
@@ -15,8 +23,10 @@ const SOURCES: EnrichmentSource[] = [wikidataEnricher, wikipediaEnricher, wikime
 export async function enrichPlace(place: Place, lang?: string): Promise<EnrichmentResult> {
   if (!place.osmTags) return {};
 
+  const sources = getEnrichmentSources();
+
   const settled = await Promise.allSettled(
-    SOURCES.map((source) => source.enrich(place.osmTags as Record<string, string>, lang)),
+    sources.map((source) => source.enrich(place.osmTags as Record<string, string>, lang)),
   );
 
   const merged: EnrichmentResult = {};

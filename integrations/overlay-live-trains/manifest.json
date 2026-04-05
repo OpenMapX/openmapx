@@ -1,0 +1,69 @@
+{
+  "id": "overlay-live-trains",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://developers.deutschebahn.com/",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": false,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "liveTrains",
+      "icon": "train"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "clientId": {
+        "type": "string",
+        "title": "Client ID",
+        "description": "Deutsche Bahn RIS API client ID."
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Deutsche Bahn RIS API key.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "db-ris-api-key"
+      }
+    }
+  },
+  "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://apis.deutschebahn.com/db/apis/ris-maps/v2",
+    "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"]
+  },
+  "quality": "built-in",
+  "category": "Transit",
+  "attribution": [
+    {
+      "name": "Deutsche Bahn RIS",
+      "url": "https://developers.deutschebahn.com/",
+      "license": "Proprietary",
+      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

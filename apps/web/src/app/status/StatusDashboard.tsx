@@ -18,21 +18,28 @@ interface StatusResponse {
   services: ServiceStatus[];
 }
 
-const CATEGORY_ORDER = [
-  "Infrastructure",
-  "Geocoding",
-  "Routing",
-  "Transit",
-  "Map Tiles",
-  "Imagery",
-  "Traffic",
-  "Data Overlays",
-  "Parking",
-  "Shared Mobility",
-  "Fuel Prices",
-  "Enrichment",
-  "External",
-];
+/**
+ * Category display order — derived from the API response order.
+ * The API returns services grouped by manifest category.
+ * We preserve that order but ensure "Infrastructure" always comes first.
+ */
+function deriveCategoryOrder(services: ServiceStatus[]): string[] {
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const s of services) {
+    if (!seen.has(s.category)) {
+      seen.add(s.category);
+      order.push(s.category);
+    }
+  }
+  // Infrastructure always first
+  const infraIdx = order.indexOf("Infrastructure");
+  if (infraIdx > 0) {
+    order.splice(infraIdx, 1);
+    order.unshift("Infrastructure");
+  }
+  return order;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   up: "bg-green-500",
@@ -79,7 +86,9 @@ export default function StatusDashboard() {
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const interval = setInterval(fetchStatus, 30_000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") fetchStatus();
+    }, 30_000);
     return () => clearInterval(interval);
   }, [autoRefresh, fetchStatus]);
 
@@ -91,18 +100,17 @@ export default function StatusDashboard() {
       }, {})
     : {};
 
-  const categories = CATEGORY_ORDER.filter((c) => grouped[c]?.length);
-  for (const c of Object.keys(grouped)) {
-    if (!categories.includes(c)) categories.push(c);
-  }
+  const categories = data
+    ? deriveCategoryOrder(data.services).filter((c) => grouped[c]?.length)
+    : [];
 
   const upCount = data?.services.filter((s) => s.status === "up").length ?? 0;
   const downCount = data?.services.filter((s) => s.status === "down").length ?? 0;
   const unconfiguredCount = data?.services.filter((s) => s.status === "unconfigured").length ?? 0;
 
   return (
-    <div className="h-dvh overflow-auto bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+    <div>
+      <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-2xl font-bold text-gray-900">System Status</h1>
           <div className="flex items-center gap-3">

@@ -1,0 +1,48 @@
+{
+  "id": "transit-tfl",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["TFL_API_KEY"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Transport for London API key.",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://api.tfl.gov.uk/StopPoint/search?query=victoria&app_key=${TFL_API_KEY}",
+    "requiredEnvVars": ["TFL_API_KEY"]
+  },
+  "attribution": [
+    {
+      "name": "Transport for London",
+      "url": "https://tfl.gov.uk/",
+      "license": "Open Government Licence",
+      "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
+      "personalData": false
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "OSRM-Routenberechnung",
+  "description": "Autorouten-Berechnung über OSRM",
+  "privacy": [
+    {
+      "service": "OSRM",
+      "purpose": "Autorouten-Berechnung",
+      "dataSent": "Start-/Zielkoordinaten, Routenoptionen"
+    }
+  ]
+}

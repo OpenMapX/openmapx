@@ -1,0 +1,8 @@
+{
+  "name": "TransitLand",
+  "description": "Global transit stop and route data",
+  "privacy": {
+    "purpose": "Global transit stop and route data",
+    "dataSent": "Coordinates, API key"
+  }
+}

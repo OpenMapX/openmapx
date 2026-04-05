@@ -1,0 +1,18 @@
+{
+  "name": "Parkeinrichtungen",
+  "description": "Parkeinrichtungen von DB BahnPark, ParkAPI und OpenStreetMap",
+  "privacy": [
+    {
+      "service": "DB BahnPark (Deutsche Bahn)",
+      "purpose": "Parkeinrichtungen an deutschen Bahnhöfen (Kapazität, Belegung, Preise)",
+      "dataSent": "API-Zugangsdaten (serverseitig)",
+      "dataReceived": "Parkplatzstandorte, Kapazität, Belegung, Preise"
+    },
+    {
+      "service": "ParkAPI v3 (MobiData BW)",
+      "purpose": "Parkplatzdaten mit Belegung",
+      "dataSent": "Begrenzungsrahmen, Filterparameter",
+      "dataReceived": "Parkplatzstandorte, Kapazität, Belegung"
+    }
+  ]
+}

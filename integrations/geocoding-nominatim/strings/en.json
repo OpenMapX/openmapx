@@ -1,0 +1,11 @@
+{
+  "name": "Nominatim Geocoding",
+  "description": "Forward and reverse geocoding",
+  "privacy": [
+    {
+      "service": "Nominatim/OSM",
+      "purpose": "Forward/reverse geocoding, place details lookup",
+      "dataSent": "Search query text, coordinates, OSM IDs"
+    }
+  ]
+}

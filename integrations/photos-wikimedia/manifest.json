@@ -1,0 +1,41 @@
+{
+  "id": "photos-wikimedia",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["photos"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json"
+  },
+  "quality": "built-in",
+  "category": "External",
+  "attribution": [
+    {
+      "name": "Wikimedia Commons",
+      "url": "https://commons.wikimedia.org/",
+      "license": "Various (free licenses)",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Privacy_policy",
+      "personalData": false
+    }
+  ]
+}

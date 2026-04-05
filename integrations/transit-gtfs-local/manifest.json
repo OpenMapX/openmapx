@@ -1,0 +1,45 @@
+{
+  "id": "transit-gtfs-local",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "category": "Transit",
+  "domains": ["transit"],
+  "infrastructure": {
+    "services": ["postgres"],
+    "dataRequirements": ["gtfs-feeds"]
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable local GTFS feeds integration"
+      }
+    }
+  },
+  "envVars": [],
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "custom"
+  },
+  "attribution": [
+    {
+      "name": "Various GTFS Feeds",
+      "url": "https://gtfs.org/",
+      "license": "Various (per feed)",
+      "licenseUrl": "https://gtfs.org/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "Self-hosted",
+      "providerPrivacyUrl": "N/A",
+      "personalData": false
+    }
+  ]
+}

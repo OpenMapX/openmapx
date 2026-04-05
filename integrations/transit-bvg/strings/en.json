@@ -1,0 +1,8 @@
+{
+  "name": "BVG Transit (Berlin)",
+  "description": "Berlin public transit data from BVG",
+  "privacy": {
+    "purpose": "Berlin transit stops and departures",
+    "dataSent": "Stop IDs, coordinates"
+  }
+}

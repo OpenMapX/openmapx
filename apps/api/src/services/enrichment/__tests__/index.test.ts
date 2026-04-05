@@ -1,26 +1,42 @@
+import type { EnrichmentSource } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../wikidata.enricher.js", () => ({
-  wikidataEnricher: { name: "wikidata", enrich: vi.fn() },
-}));
-vi.mock("../wikipedia.enricher.js", () => ({
-  wikipediaEnricher: { name: "wikipedia", enrich: vi.fn() },
-}));
-vi.mock("../wikimedia-commons.enricher.js", () => ({
-  wikimediaCommonsEnricher: { name: "wikimedia-commons", enrich: vi.fn() },
+// Mock enrichers
+const mockWikidataEnricher: EnrichmentSource = {
+  name: "wikidata",
+  enrich: vi.fn(),
+};
+const mockWikipediaEnricher: EnrichmentSource = {
+  name: "wikipedia",
+  enrich: vi.fn(),
+};
+const mockWikimediaCommonsEnricher: EnrichmentSource = {
+  name: "wikimedia-commons",
+  enrich: vi.fn(),
+};
+
+// Mock integration-host to return our fake integrations
+vi.mock("../../../integration-host.js", () => ({
+  getIntegrationsByDomain: vi.fn((domain: string) => {
+    if (domain === "enrichment") {
+      return [
+        { providers: new Map([["enrichment", [mockWikidataEnricher]]]) },
+        { providers: new Map([["enrichment", [mockWikipediaEnricher]]]) },
+        { providers: new Map([["enrichment", [mockWikimediaCommonsEnricher]]]) },
+      ];
+    }
+    return [];
+  }),
 }));
 
 let wikidataEnrich: ReturnType<typeof vi.fn>;
 let wikipediaEnrich: ReturnType<typeof vi.fn>;
 let wikimediaCommonsEnrich: ReturnType<typeof vi.fn>;
 
-beforeEach(async () => {
-  const wd = await import("../wikidata.enricher.js");
-  const wp = await import("../wikipedia.enricher.js");
-  const wc = await import("../wikimedia-commons.enricher.js");
-  wikidataEnrich = wd.wikidataEnricher.enrich as ReturnType<typeof vi.fn>;
-  wikipediaEnrich = wp.wikipediaEnricher.enrich as ReturnType<typeof vi.fn>;
-  wikimediaCommonsEnrich = wc.wikimediaCommonsEnricher.enrich as ReturnType<typeof vi.fn>;
+beforeEach(() => {
+  wikidataEnrich = mockWikidataEnricher.enrich as ReturnType<typeof vi.fn>;
+  wikipediaEnrich = mockWikipediaEnricher.enrich as ReturnType<typeof vi.fn>;
+  wikimediaCommonsEnrich = mockWikimediaCommonsEnricher.enrich as ReturnType<typeof vi.fn>;
 });
 
 afterEach(() => {

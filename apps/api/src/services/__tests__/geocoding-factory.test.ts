@@ -1,62 +1,51 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock all provider modules
-vi.mock("../maptiler-geocoding.service.js", () => ({
-  maptilerGeocodingService: {
-    geocode: vi.fn(),
-    autocomplete: vi.fn(),
-    reverseGeocode: vi.fn(),
-  },
+const mockGetIntegrationsByDomain = vi.fn();
+
+vi.mock("../../integration-host.js", () => ({
+  getIntegrationsByDomain: mockGetIntegrationsByDomain,
 }));
 
-vi.mock("../nominatim.service.js", () => ({
-  nominatimService: {
+function mockProvider() {
+  return {
     geocode: vi.fn(),
     autocomplete: vi.fn(),
     reverseGeocode: vi.fn(),
-  },
-}));
+  };
+}
 
-vi.mock("../pelias.service.js", () => ({
-  peliasService: {
-    geocode: vi.fn(),
-    autocomplete: vi.fn(),
-    reverseGeocode: vi.fn(),
-  },
-}));
+const maptilerProvider = mockProvider();
+const photonProvider = mockProvider();
+const motisProvider = mockProvider();
+const nominatimProvider = mockProvider();
 
-vi.mock("../photon.service.js", () => ({
-  photonService: {
-    geocode: vi.fn(),
-    autocomplete: vi.fn(),
-    reverseGeocode: vi.fn(),
-  },
-}));
+function makeIntegration(id: string, provider: unknown) {
+  return {
+    id,
+    enabled: true,
+    manifest: { domains: ["geocoding"] },
+    providers: new Map([["geocoding", [provider]]]),
+  };
+}
 
-vi.mock("../motis-geocoding.service.js", () => ({
-  motisGeocodingService: {
-    geocode: vi.fn(),
-    autocomplete: vi.fn(),
-    reverseGeocode: vi.fn(),
-  },
-}));
-
-vi.mock("../db-ris/index", () => ({
-  dbRisGeocodingService: {
-    geocode: vi.fn(),
-    autocomplete: vi.fn(),
-    reverseGeocode: vi.fn(),
-  },
-}));
+function setupIntegrations() {
+  mockGetIntegrationsByDomain.mockReturnValue([
+    makeIntegration("geocoding-maptiler", maptilerProvider),
+    makeIntegration("geocoding-photon", photonProvider),
+    makeIntegration("geocoding-motis", motisProvider),
+    makeIntegration("geocoding-nominatim", nominatimProvider),
+  ]);
+}
 
 beforeEach(() => {
   vi.resetModules();
+  vi.clearAllMocks();
   delete process.env.GEOCODING_PROVIDER;
+  setupIntegrations();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
   delete process.env.GEOCODING_PROVIDER;
 });
 
@@ -74,32 +63,18 @@ function makeReverseResult(address: string) {
   return { address, city: "Berlin" };
 }
 
-/**
- * Helper to set up a fresh factory + mock pair for chain tests.
- * Clears all prior mock state before configuring new mocks.
- */
 async function setupChain(providerEnv: string) {
   vi.clearAllMocks();
+  setupIntegrations();
   process.env.GEOCODING_PROVIDER = providerEnv;
   const { getGeocodingProvider } = await import("../geocoding.factory.js");
-  const { photonService } = await import("../photon.service.js");
-  const { maptilerGeocodingService } = await import("../maptiler-geocoding.service.js");
-  return {
-    getGeocodingProvider,
-    photon: vi.mocked(photonService),
-    maptiler: vi.mocked(maptilerGeocodingService),
-  };
+  return { getGeocodingProvider, photon: photonProvider, maptiler: maptilerProvider };
 }
 
 describe("getGeocodingProvider", () => {
   it("defaults to maptiler when GEOCODING_PROVIDER is not set", async () => {
-    vi.clearAllMocks();
     const { getGeocodingProvider } = await import("../geocoding.factory.js");
-    const { maptilerGeocodingService } = await import("../maptiler-geocoding.service.js");
-
-    vi.mocked(maptilerGeocodingService).geocode.mockResolvedValueOnce([
-      makeSearchResult("maptiler-result"),
-    ]);
+    maptilerProvider.geocode.mockResolvedValueOnce([makeSearchResult("maptiler-result")]);
 
     const provider = getGeocodingProvider();
     const results = await provider.geocode("Berlin");
@@ -109,12 +84,9 @@ describe("getGeocodingProvider", () => {
   });
 
   it("returns single provider directly when only one configured", async () => {
-    vi.clearAllMocks();
     process.env.GEOCODING_PROVIDER = "photon";
     const { getGeocodingProvider } = await import("../geocoding.factory.js");
-    const { photonService } = await import("../photon.service.js");
-
-    vi.mocked(photonService).geocode.mockResolvedValueOnce([makeSearchResult("photon-result")]);
+    photonProvider.geocode.mockResolvedValueOnce([makeSearchResult("photon-result")]);
 
     const provider = getGeocodingProvider();
     const results = await provider.geocode("Berlin");
@@ -123,25 +95,19 @@ describe("getGeocodingProvider", () => {
     expect(results[0].label).toBe("photon-result");
   });
 
-  it('"transitous" maps to motisGeocodingService', async () => {
-    vi.clearAllMocks();
+  it('"transitous" maps to motis provider', async () => {
     process.env.GEOCODING_PROVIDER = "transitous";
     const { getGeocodingProvider } = await import("../geocoding.factory.js");
-    const { motisGeocodingService } = await import("../motis-geocoding.service.js");
-
-    vi.mocked(motisGeocodingService).geocode.mockResolvedValueOnce([
-      makeSearchResult("transitous-result"),
-    ]);
+    motisProvider.geocode.mockResolvedValueOnce([makeSearchResult("transitous-result")]);
 
     const provider = getGeocodingProvider();
     const results = await provider.geocode("test");
 
-    expect(vi.mocked(motisGeocodingService).geocode).toHaveBeenCalled();
+    expect(motisProvider.geocode).toHaveBeenCalled();
     expect(results[0].label).toBe("transitous-result");
   });
 
   it("throws descriptive error for unknown provider name", async () => {
-    vi.clearAllMocks();
     process.env.GEOCODING_PROVIDER = "google";
 
     await expect(
@@ -149,8 +115,6 @@ describe("getGeocodingProvider", () => {
     ).rejects.toThrow(/Unknown GEOCODING_PROVIDER: "google"/);
   });
 });
-
-// Chain: geocode
 
 describe("chain: geocode", () => {
   it("first non-empty result wins, second provider not called", async () => {
@@ -207,8 +171,6 @@ describe("chain: geocode", () => {
   });
 });
 
-// Chain: reverseGeocode
-
 describe("chain: reverseGeocode", () => {
   it("tries second provider when first returns null", async () => {
     const { getGeocodingProvider, photon, maptiler } = await setupChain("photon,maptiler");
@@ -255,8 +217,6 @@ describe("chain: reverseGeocode", () => {
     expect(result?.address).toBe("Saved by MapTiler");
   });
 });
-
-// Chain: autocomplete
 
 describe("chain: autocomplete", () => {
   it("first non-empty autocomplete result wins", async () => {

@@ -1,0 +1,9 @@
+{
+  "name": "Carsharing",
+  "description": "Carsharing-Stationen von GBFS-Feeds, Cambio und regionalen Anbietern",
+  "privacy": {
+    "purpose": "Carsharing-Stationsstandorte und Fahrzeugverfügbarkeit",
+    "dataSent": "Begrenzungsrahmen-Koordinaten",
+    "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Betreiberinformationen"
+  }
+}

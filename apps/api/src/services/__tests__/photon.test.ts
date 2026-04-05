@@ -46,7 +46,7 @@ function makeBerlinFeature(overrides: Record<string, unknown> = {}) {
 
 async function loadModule() {
   vi.resetModules();
-  return import("../photon.service.js");
+  return import("@integrations/geocoding-photon/provider.js");
 }
 
 // geocode

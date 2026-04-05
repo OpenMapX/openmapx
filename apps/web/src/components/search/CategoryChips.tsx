@@ -1,19 +1,5 @@
 "use client";
 
-import type { SvgIconComponent } from "@mui/icons-material";
-import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
-import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
-import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
-import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
-import EvStationIcon from "@mui/icons-material/EvStation";
-import HotelIcon from "@mui/icons-material/Hotel";
-import LocalActivityIcon from "@mui/icons-material/LocalActivity";
-import LocalAtmIcon from "@mui/icons-material/LocalAtm";
-import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
-import LocalParkingIcon from "@mui/icons-material/LocalParking";
-import LocalPharmacyIcon from "@mui/icons-material/LocalPharmacy";
-import PedalBikeIcon from "@mui/icons-material/PedalBike";
-import RestaurantIcon from "@mui/icons-material/Restaurant";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import type { CategoryId } from "@openmapx/core";
@@ -24,31 +10,28 @@ import {
   useDataSourceStore,
   useDataSources,
   useDirectionsStore,
+  useIntegrationRegistry,
   useMapStore,
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TEAL } from "@/lib/theme";
 
-const CATEGORY_ICONS: Partial<Record<CategoryId, ReactNode>> = {
-  restaurants: <RestaurantIcon sx={{ fontSize: 16 }} />,
-  hotels: <HotelIcon sx={{ fontSize: 16 }} />,
-  activities: <LocalActivityIcon sx={{ fontSize: 16 }} />,
-  museums: <AccountBalanceIcon sx={{ fontSize: 16 }} />,
-  transit: <DirectionsBusIcon sx={{ fontSize: 16 }} />,
-  pharmacies: <LocalPharmacyIcon sx={{ fontSize: 16 }} />,
-  atms: <LocalAtmIcon sx={{ fontSize: 16 }} />,
-};
-
-const DATA_SOURCE_ICONS: Record<string, SvgIconComponent> = {
-  "ev-charging": EvStationIcon,
-  fuel: LocalGasStationIcon,
-  parking: LocalParkingIcon,
-  "bike-sharing": PedalBikeIcon,
-  "scooter-sharing": ElectricScooterIcon,
-  "car-sharing": DirectionsCarIcon,
-};
+function SvgIcon({ path, size = 16 }: { path: string; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      role="img"
+      aria-hidden="true"
+    >
+      <path d={path} />
+    </svg>
+  );
+}
 
 export function CategoryChips() {
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
@@ -57,6 +40,21 @@ export function CategoryChips() {
   const zoom = useMapStore((s) => s.zoom);
   const { activeSource, toggleSource, setActiveSource } = useDataSourceStore();
   const { data: sourcesData } = useDataSources();
+  const registry = useIntegrationRegistry();
+
+  // Build icon path lookup from data source integration manifests
+  const dataSourceIcons = useCallback(
+    (sourceId: string): string | undefined => {
+      const all = registry.getAll();
+      const match = all.find(
+        (i) =>
+          i.frontend?.searchCategory &&
+          (i.frontend.searchCategory as { id: string }).id === sourceId,
+      );
+      return (match?.frontend?.searchCategory as { iconPath?: string })?.iconPath;
+    },
+    [registry],
+  );
 
   const handleSourceClick = useCallback(
     (sourceId: string, label: string, isActive: boolean) => {
@@ -117,12 +115,41 @@ export function CategoryChips() {
   const leftStop = canScrollLeft ? `black ${FADE}px` : "black 0px";
   const mask = `linear-gradient(to right, ${leftEdge}, ${leftStop}, black calc(100% - ${FADE}px), transparent)`;
 
+  const chipSx = (isActive: boolean) =>
+    ({
+      height: 36,
+      borderRadius: "18px",
+      fontWeight: 500,
+      fontSize: 13,
+      bgcolor: isActive ? TEAL : "background.paper",
+      color: isActive ? "#fff" : "text.primary",
+      borderColor: isActive ? TEAL : "var(--omx-border)",
+      boxShadow: isActive ? "none" : "0 1px 3px var(--omx-shadow-soft)",
+      cursor: "pointer",
+      userSelect: "none",
+      flexShrink: 0,
+      "& .MuiChip-icon": {
+        color: "inherit",
+        ml: "10px",
+        mr: "-4px",
+      },
+      "&&:hover": {
+        bgcolor: isActive ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
+      },
+    }) as const;
+
+  const chipIcon = (iconPath: string | undefined): React.ReactElement | undefined =>
+    iconPath ? (
+      <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
+        <SvgIcon path={iconPath} />
+      </Box>
+    ) : undefined;
+
   return (
     <Box
       ref={scrollRef}
       sx={{
         position: "absolute",
-        // Desktop: same level as search bar. Mobile: below search bar (12+48+12=72)
         top: { xs: 72, sm: 18 },
         left: { xs: 0, sm: 420 },
         right: { xs: 0, sm: 108 },
@@ -136,7 +163,6 @@ export function CategoryChips() {
         "&::-webkit-scrollbar": { display: "none" },
         maskImage: mask,
         WebkitMaskImage: mask,
-        // Ensure chips don't get clipped visually
         py: "2px",
         opacity: zoomedOut ? 0 : 1,
         pointerEvents: zoomedOut ? "none" : "auto",
@@ -146,40 +172,15 @@ export function CategoryChips() {
       <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
         {(sourcesData?.sources ?? []).map((source) => {
           const isActive = activeSource === source.id;
-          const IconComponent = DATA_SOURCE_ICONS[source.id] ?? EvStationIcon;
           return (
             <Chip
               key={source.id}
-              icon={
-                <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
-                  <IconComponent sx={{ fontSize: 16 }} />
-                </Box>
-              }
+              icon={chipIcon(dataSourceIcons(source.id))}
               label={source.categoryChipLabel}
               onClick={() => handleSourceClick(source.id, source.categoryChipLabel, isActive)}
               variant={isActive ? "filled" : "outlined"}
               color={isActive ? "primary" : "default"}
-              sx={{
-                height: 36,
-                borderRadius: "18px",
-                fontWeight: 500,
-                fontSize: 13,
-                bgcolor: isActive ? TEAL : "background.paper",
-                color: isActive ? "#fff" : "text.primary",
-                borderColor: isActive ? TEAL : "var(--omx-border)",
-                boxShadow: isActive ? "none" : "0 1px 3px var(--omx-shadow-soft)",
-                cursor: "pointer",
-                userSelect: "none",
-                flexShrink: 0,
-                "& .MuiChip-icon": {
-                  color: "inherit",
-                  ml: "10px",
-                  mr: "-4px",
-                },
-                "&&:hover": {
-                  bgcolor: isActive ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
-                },
-              }}
+              sx={chipSx(isActive)}
             />
           );
         })}
@@ -189,34 +190,10 @@ export function CategoryChips() {
             <Chip
               key={cat.id}
               label={cat.label}
-              icon={
-                <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
-                  {CATEGORY_ICONS[cat.id]}
-                </Box>
-              }
+              icon={chipIcon(cat.iconPath)}
               onClick={() => handleCategoryClick(cat.id, cat.label, isActive)}
               variant={isActive ? "filled" : "outlined"}
-              sx={{
-                height: 36,
-                borderRadius: "18px",
-                fontWeight: 500,
-                fontSize: 13,
-                bgcolor: isActive ? TEAL : "background.paper",
-                color: isActive ? "#fff" : "text.primary",
-                borderColor: isActive ? TEAL : "var(--omx-border)",
-                boxShadow: isActive ? "none" : "0 1px 3px var(--omx-shadow-soft)",
-                cursor: "pointer",
-                userSelect: "none",
-                flexShrink: 0,
-                "& .MuiChip-icon": {
-                  color: "inherit",
-                  ml: "10px",
-                  mr: "-4px",
-                },
-                "&&:hover": {
-                  bgcolor: isActive ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
-                },
-              }}
+              sx={chipSx(isActive)}
             />
           );
         })}

@@ -1,0 +1,8 @@
+{
+  "name": "DB RIS Routing",
+  "description": "German rail journey planning via DB RIS API",
+  "privacy": {
+    "purpose": "German rail journey planning",
+    "dataSent": "Origin/destination coordinates, API credentials"
+  }
+}

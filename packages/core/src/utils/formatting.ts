@@ -20,7 +20,7 @@ export function formatDistance(metres: number): string {
   return `${(metres / 1000).toFixed(1)} km`;
 }
 
-import type { UnitSystem } from "../stores/measurementStore.js";
+import type { UnitSystem } from "../types/geometry.js";
 
 const FEET_PER_METRE = 3.28084;
 const FEET_PER_MILE = 5280;

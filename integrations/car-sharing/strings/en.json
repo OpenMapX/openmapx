@@ -1,0 +1,9 @@
+{
+  "name": "Car Sharing",
+  "description": "Car sharing station locations and vehicle availability",
+  "privacy": {
+    "purpose": "Car sharing station locations and vehicle availability",
+    "dataSent": "Bounding box coordinates",
+    "dataReceived": "Station locations, vehicle counts, operator info"
+  }
+}

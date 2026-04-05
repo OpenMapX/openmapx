@@ -1,0 +1,42 @@
+{
+  "id": "transit-hafas",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": [],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable HAFAS transit integration"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://v6.db.transport.rest/locations/nearby?latitude=52.52&longitude=13.405&results=1"
+  },
+  "attribution": [
+    {
+      "name": "Deutsche Bahn",
+      "url": "https://www.bahn.de/",
+      "license": "Proprietary",
+      "licenseUrl": "https://www.bahn.de/nutzungsbedingungen"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
+      "personalData": false
+    }
+  ]
+}

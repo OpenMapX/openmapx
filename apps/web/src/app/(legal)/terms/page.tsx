@@ -1,4 +1,5 @@
-import { fetchCapabilities, sectionSlug } from "@openmapx/core/server";
+import type { LoadedIntegrationMeta } from "@openmapx/core";
+import { fetchCapabilities, fetchIntegrations, sectionSlug } from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
@@ -82,17 +83,28 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-async function fetchTransitAttribution(): Promise<unknown[]> {
+async function fetchDynamicAttribution(integrations: LoadedIntegrationMeta[]): Promise<unknown[]> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-  try {
-    const res = await fetch(`${apiUrl}/api/transit/attribution`, {
-      next: { revalidate: 86400 },
-    });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
+  const results: unknown[] = [];
+
+  for (const integration of integrations) {
+    for (const attr of integration.attribution ?? []) {
+      if (!attr.dynamic || !attr.dynamicEndpoint) continue;
+      try {
+        const res = await fetch(`${apiUrl}${attr.dynamicEndpoint}`, {
+          next: { revalidate: 86400 },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) results.push(...data);
+        }
+      } catch {
+        // Dynamic attribution unavailable
+      }
+    }
   }
+
+  return results;
 }
 
 export default async function TermsPage() {
@@ -103,14 +115,19 @@ export default async function TermsPage() {
       ? (await import("./content.de")).default
       : (await import("./content.en")).default;
 
-  const [transitAttribution, capabilities] = await Promise.all([
-    fetchTransitAttribution(),
+  const [capabilities, integrations] = await Promise.all([
     fetchCapabilities(),
+    fetchIntegrations(),
   ]);
+  const transitAttribution = await fetchDynamicAttribution(integrations);
 
   return (
     <LegalPageShell sections={sections}>
-      <Content transitAttribution={transitAttribution} capabilities={capabilities} />
+      <Content
+        transitAttribution={transitAttribution}
+        capabilities={capabilities}
+        integrations={integrations}
+      />
     </LegalPageShell>
   );
 }

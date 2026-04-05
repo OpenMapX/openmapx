@@ -1,0 +1,10 @@
+{
+  "name": "NASA-FIRMS-Waldbrände",
+  "description": "Aktive Waldbrand-/Hotspot-Erkennungen von NASA FIRMS",
+  "privacy": {
+    "purpose": "Weltweite aktive Waldbrand-/Hotspot-Erkennungen",
+    "dataSent": "Datenquellenauswahl, Zeitraum, API-Schlüssel (serverseitig)",
+    "dataReceived": "Branderkennungsstandorte, Helligkeit, Konfidenz, Satellitendaten",
+    "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
+  }
+}

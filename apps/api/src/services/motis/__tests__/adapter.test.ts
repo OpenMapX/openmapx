@@ -9,22 +9,18 @@ vi.mock("@motis-project/motis-client", () => ({
   geocode: vi.fn(),
 }));
 
-vi.mock("../../../utils/polyline.js", () => ({
-  decodePolyline: (_encoded: string): [number, number][] => [
-    [13.4, 52.5],
-    [13.41, 52.51],
-    [13.42, 52.52],
-  ],
-}));
+vi.mock("@openmapx/core", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>("@openmapx/core");
+  return {
+    ...actual,
+    decodePolyline: (_encoded: string): [number, number][] => [
+      [13.4, 52.5],
+      [13.41, 52.51],
+      [13.42, 52.52],
+    ],
+  };
+});
 
-import {
-  geocode,
-  stops as motisStops,
-  trip as motisTrip,
-  plan,
-  stoptimes,
-  trips,
-} from "@motis-project/motis-client";
 import {
   getArrivals,
   getDepartures,
@@ -34,8 +30,16 @@ import {
   getVehicleRadar,
   planTrip,
   searchByName,
-} from "../adapter.js";
-import type { MotisInstance } from "../instances.js";
+} from "@integrations/transit-motis/adapter";
+import type { MotisInstance } from "@integrations/transit-motis/instances";
+import {
+  geocode,
+  stops as motisStops,
+  trip as motisTrip,
+  plan,
+  stoptimes,
+  trips,
+} from "@motis-project/motis-client";
 
 const testInstance: MotisInstance = {
   client: {} as never,

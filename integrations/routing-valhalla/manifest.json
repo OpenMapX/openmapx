@@ -1,0 +1,46 @@
+{
+  "id": "routing-valhalla",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["routing"],
+  "infrastructure": {
+    "dockerProfile": "routing",
+    "services": ["valhalla"],
+    "dataRequirements": ["osm-pbf"]
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://valhalla1.openstreetmap.de/status"
+  },
+  "quality": "built-in",
+  "category": "Routing",
+  "attribution": [
+    {
+      "name": "Valhalla",
+      "url": "https://github.com/valhalla/valhalla",
+      "license": "MIT",
+      "licenseUrl": "https://opensource.org/licenses/MIT"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.openstreetmap.de/impressum/datenschutz/",
+      "personalData": false
+    }
+  ]
+}

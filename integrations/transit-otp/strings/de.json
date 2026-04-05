@@ -1,0 +1,8 @@
+{
+  "name": "OpenTripPlanner",
+  "description": "Multimodale Nahverkehrs-Reiseplanung",
+  "privacy": {
+    "purpose": "Multimodale Nahverkehrs-Reiseplanung",
+    "dataSent": "Start-/Zielkoordinaten"
+  }
+}

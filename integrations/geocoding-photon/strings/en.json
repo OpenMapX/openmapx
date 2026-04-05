@@ -1,0 +1,11 @@
+{
+  "name": "Photon Geocoding",
+  "description": "Forward and reverse geocoding",
+  "privacy": [
+    {
+      "service": "Photon/Komoot",
+      "purpose": "Forward/reverse geocoding and address search",
+      "dataSent": "Search query text, coordinates for reverse geocoding"
+    }
+  ]
+}

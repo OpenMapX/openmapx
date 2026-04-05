@@ -4,10 +4,11 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Install dependencies
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY packages/core/package.json packages/core/
 COPY packages/i18n/package.json packages/i18n/
 COPY apps/web/package.json apps/web/
+COPY integrations/ integrations/
 RUN pnpm install --frozen-lockfile
 
 # Build
@@ -19,6 +20,7 @@ COPY --from=deps /app ./
 
 COPY packages/core/ packages/core/
 COPY packages/i18n/ packages/i18n/
+COPY integrations/ integrations/
 COPY apps/web/ apps/web/
 COPY turbo.json ./
 

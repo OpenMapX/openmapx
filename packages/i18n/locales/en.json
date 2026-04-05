@@ -28,7 +28,8 @@
     "copied": "Copied!",
     "resultsCount": "{count} result{count, plural, one {} other {s}}",
     "stopsCount": "{count} stop{count, plural, one {} other {s}}",
-    "stationsInView": "{count} station{count, plural, one {} other {s}} in view"
+    "stationsInView": "{count} station{count, plural, one {} other {s}} in view",
+    "share": "Share"
   },
   "search": {
     "placeholder": "Search OpenMapX",
@@ -74,7 +75,6 @@
     "mapType": "Map type",
     "mapDetails": "Map Details",
     "mapTools": "Map Tools",
-    "useMap": "Use {layer} map",
     "toggleOverlay": "Toggle {layer} overlay",
     "default": "Default",
     "satellite": "Satellite",
@@ -83,7 +83,6 @@
     "transit": "Transit",
     "streetLevelImagery": "Street-level imagery",
     "airQuality": "Air Quality",
-    "publicTransport": "Public Transport",
     "cycling": "Cycling",
     "winterSports": "Winter Sports",
     "hiking": "Hiking",
@@ -330,6 +329,7 @@
     "showAllTypes": "Show all {count} types",
     "operator": "Operator",
     "searchOperators": "Search operators...",
+    "zoomIn": "Zoom in to see results",
     "zoomInToSee": "Zoom in to see stations",
     "failedToLoadData": "Failed to load data. Try again.",
     "lowToHigh": "Low to high",
@@ -420,6 +420,7 @@
   "account": {
     "language": "Language",
     "accountSettings": "Account settings",
+    "adminPanel": "Admin panel",
     "signOut": "Sign out",
     "theme": "Theme",
     "themeLight": "Light",
@@ -543,7 +544,8 @@
     "passkeyAuthFailed": "Passkey authentication failed",
     "oauthSignInFailed": "{provider} sign-in failed",
     "togglePasswordVisibility": "Toggle password visibility",
-    "checkYourEmail": "Check your email to verify your account before signing in."
+    "checkYourEmail": "Check your email to verify your account before signing in.",
+    "invalidResetLink": "This password reset link is invalid or has expired. Please request a new one."
   },
   "legal": {
     "legal": "Legal",
@@ -681,9 +683,6 @@
   },
   "settings": {
     "title": "Settings",
-    "about": "About",
-    "version": "Version",
-    "openSource": "Open-source mapping platform",
     "legal": "Legal",
     "signIn": "Sign in",
     "signOut": "Sign out"

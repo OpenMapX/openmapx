@@ -1,0 +1,10 @@
+{
+  "name": "@openmapx/integration-transit-db-vendo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "db-vendo-client": "^6.10.8"
+  }
+}

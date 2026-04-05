@@ -1,0 +1,11 @@
+{
+  "name": "Valhalla Routing",
+  "description": "Walking and cycling route calculation",
+  "privacy": [
+    {
+      "service": "Valhalla",
+      "purpose": "Walking/cycling route calculation, isochrone analysis",
+      "dataSent": "Origin/destination coordinates, routing options"
+    }
+  ]
+}

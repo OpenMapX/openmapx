@@ -18,6 +18,28 @@ export {
   providerLabel,
   resolveProvider,
 } from "./constants/transit";
+// Domains
+export type {
+  DataSourceProvider as DomainDataSourceProvider,
+  DomainDefinition,
+  DomainId,
+  EnrichmentProvider,
+  EnrichmentResult,
+  EnrichmentSource,
+  GeocodingProvider,
+  GeoJsonFeatureCollection,
+  MapOverlayData,
+  MapOverlayDetail,
+  MapOverlayProvider,
+  PhotoProvider,
+  PoiSearchProvider,
+  PoiSearchResult,
+  RoutingOptions,
+  RoutingProvider,
+  StreetViewProvider,
+  TransitProvider,
+} from "./domains";
+export { DOMAIN_DEFINITIONS } from "./domains";
 // Hooks — Transit
 export {
   useArrivals,
@@ -54,7 +76,7 @@ export {
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
 export { useAutocomplete } from "./hooks/useAutocomplete";
-export { useCapabilities } from "./hooks/useCapabilities";
+export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities";
 export { useCategorySearch } from "./hooks/useCategorySearch";
 export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
 // Hooks — Data Sources
@@ -75,6 +97,9 @@ export {
   useHikingSearch,
   useHikingShelters,
 } from "./hooks/useHikingTrails";
+export { useIntegrationOverlayActive } from "./hooks/useIntegrationOverlay";
+// Integration hooks
+export { IntegrationRegistryContext, useIntegrationRegistry } from "./hooks/useIntegrationRegistry";
 export { useIsochrone } from "./hooks/useIsochrone";
 export { useLiveTrains } from "./hooks/useLiveTrains";
 export { useMergedPlace } from "./hooks/useMergedPlace";
@@ -98,31 +123,66 @@ export {
   useUpdateList,
   useUpdatePlace,
 } from "./hooks/useSavedPlaces";
+// Integration framework
+export type {
+  CacheClient,
+  CommunityIntegrationModule,
+  CustomHealthCheckFn,
+  DatabaseClient,
+  HealthCheckResult,
+  HttpClient,
+  HttpClientOptions,
+  IntegrationAttribution,
+  IntegrationContext,
+  IntegrationEvent,
+  IntegrationFrontend,
+  IntegrationHealthCheck,
+  IntegrationLayerSelector,
+  IntegrationManifest,
+  IntegrationOverlay,
+  IntegrationPrivacy,
+  IntegrationSearchCategory,
+  IntegrationStrings,
+  LoadedIntegration,
+  LoadedIntegrationMeta,
+  Logger,
+  ManifestValidationResult,
+  RouteHandler,
+} from "./integration";
+export {
+  getCommunityModule,
+  getCommunityModuleIds,
+  IntegrationEventBus,
+  IntegrationRegistry,
+  initCommunityIntegrationRegistry,
+  integrationManifestSchema,
+  PLATFORM_VERSION,
+  registerCommunityModule,
+  satisfiesPlatformVersion,
+  toIntegrationMeta,
+  validateManifest,
+} from "./integration";
 export type { PanelId } from "./panels/ids";
 export { PANEL } from "./panels/ids";
 export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
-// Stores
-export { useAirQualityStore } from "./stores/airQualityStore";
-export { useBuildingsStore } from "./stores/buildingsStore";
+// Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
-// Overlay system
 export type { OverlayStoreBase } from "./stores/createOverlayStore";
-export { useCyclingStore } from "./stores/cyclingStore";
+export {
+  createOverlayStore,
+  getRegisteredOverlayIds,
+  getRegisteredOverlayStore,
+} from "./stores/createOverlayStore";
 export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
-export { useEarthquakeStore } from "./stores/earthquakeStore";
-export { useHikingStore } from "./stores/hikingStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
-export { useLiveTrainsStore } from "./stores/liveTrainsStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
-export type { MeasurementMode, MeasurementState, UnitSystem } from "./stores/measurementStore";
-export { useMeasurementStore } from "./stores/measurementStore";
 export { useMenuStore } from "./stores/menuStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
@@ -130,22 +190,16 @@ export type { OverlayEntry, OverlayId } from "./stores/overlayRegistry";
 export {
   closeExclusionPeers,
   getOverlayEntry,
+  initOverlayRegistry,
   isOverlayActive,
   OVERLAY_REGISTRY,
+  registerOverlayEntry,
   toggleOverlay,
 } from "./stores/overlayRegistry";
 export { usePlaceStore } from "./stores/placeStore";
 export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useSidebarStore } from "./stores/sidebarStore";
-export { useStreetViewStore } from "./stores/streetViewStore";
-export { useTrafficStore } from "./stores/trafficStore";
-export { useTransitStore } from "./stores/transitStore";
-export type { TravelTimeState } from "./stores/travelTimeStore";
-export { TRAVEL_TIME_PRESETS, useTravelTimeStore } from "./stores/travelTimeStore";
-export { useWildfireStore } from "./stores/wildfireStore";
-export { useWinterSportsStore } from "./stores/winterSportsStore";
-
 // Types
 export type { CategoryDefinition, CategoryId, CategoryPlace } from "./types/category";
 export {
@@ -176,7 +230,8 @@ export type {
   ElevationProfile,
   ElevationStats,
 } from "./types/elevation";
-export type { BoundingBox, LngLat } from "./types/geometry";
+// Types that originated in integration stores but are used by core utilities
+export type { BBox, BoundingBox, LngLat, UnitSystem } from "./types/geometry";
 export type {
   HikingFeatureCollection,
   HikingTrailDetail,
@@ -203,6 +258,8 @@ export type {
   Departure,
   Facility,
   FareProduct,
+  GeoJSONLineString,
+  GeoJSONMultiLineString,
   MergedDeparture,
   MergedRoute,
   OccupancyLevel,
@@ -221,9 +278,14 @@ export type {
   VehicleJourneyStop,
   VehiclePosition,
 } from "./types/transit";
-
-// Utils
+export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
+// Utils
+export {
+  type CommonsPage,
+  fetchCommonsMetadata,
+  parseCommonsPage,
+} from "./utils/commons-metadata";
 export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";
 export {
   buildElevationProfile,
@@ -232,6 +294,8 @@ export {
   computeGrades,
   downsampleLTTB,
 } from "./utils/elevation";
+export { ConfigurationError } from "./utils/errors";
+export { escapeHtml, formatTime, relativeTime, sanitizeUrl } from "./utils/format";
 export {
   formatArea,
   formatDistance,
@@ -239,7 +303,20 @@ export {
   formatMeasurementDistance,
   getInitials,
 } from "./utils/formatting";
+export {
+  FPTF_PRODUCT_MODE,
+  mapProducts,
+  normalizeFptfDeparture,
+  normalizeRemarks,
+  productToMode,
+} from "./utils/fptf";
 export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
+export {
+  bboxContains,
+  diceSimilarity,
+  haversineMeters,
+  mergeAttributions,
+} from "./utils/geo-server";
 export {
   geocodeStopAsPlace,
   makeSyntheticStopPlace,
@@ -252,6 +329,30 @@ export type {
   OpeningHoursStatus,
 } from "./utils/openingHours";
 export { isAlwaysOpen, isOpenAt, parseOpeningHours } from "./utils/openingHours";
+export { otpMode } from "./utils/otp";
+export {
+  buildNodeMap,
+  buildWayMap,
+  OverpassRateLimitError,
+  overpassQuery,
+  overpassQuerySafe,
+  reconstructLineString,
+  reconstructMultiLineString,
+  reconstructMultiPolygon,
+  reconstructPolygon,
+} from "./utils/overpass";
+export type {
+  LineStringGeometry,
+  MultiLineStringGeometry,
+  MultiPolygonGeometry,
+  OverpassElement,
+  OverpassNode,
+  OverpassRelation,
+  OverpassResponse,
+  OverpassWay,
+  PolygonGeometry,
+} from "./utils/overpass/types";
+export { CATEGORY_FILTERS, searchByCategory } from "./utils/overpass.service";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
@@ -266,4 +367,5 @@ export {
   shortenPlusCode,
 } from "./utils/plusCode";
 export { resolvePoiIconPath } from "./utils/poi-icon";
+export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";

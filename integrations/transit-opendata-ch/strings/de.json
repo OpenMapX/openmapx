@@ -1,0 +1,8 @@
+{
+  "name": "Schweizer Nahverkehr (transport.opendata.ch)",
+  "description": "Schweizer öffentliche Verkehrsdaten",
+  "privacy": {
+    "purpose": "Schweizer Haltestellen und Verbindungen",
+    "dataSent": "Haltestellennamen, Koordinaten"
+  }
+}

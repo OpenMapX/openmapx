@@ -1,0 +1,11 @@
+{
+  "name": "Flickr Photos",
+  "description": "Geotagged place photos",
+  "privacy": [
+    {
+      "service": "Flickr",
+      "purpose": "Place photos from Flickr",
+      "dataSent": "Coordinates, search radius, API key"
+    }
+  ]
+}

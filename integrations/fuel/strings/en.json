@@ -1,0 +1,30 @@
+{
+  "name": "Fuel Prices",
+  "description": "Gas station locations and real-time fuel prices",
+  "privacy": [
+    {
+      "service": "Tankerkoenig (MTS-K)",
+      "purpose": "German fuel station prices (E5, E10, Diesel)",
+      "dataSent": "Coordinates, search radius, API key",
+      "dataReceived": "Station locations, fuel types, prices, opening hours"
+    },
+    {
+      "service": "E-Control Spritpreisrechner",
+      "purpose": "Austrian fuel station prices",
+      "dataSent": "Address or coordinates",
+      "dataReceived": "Station locations, fuel types, prices"
+    },
+    {
+      "service": "French government fuel price data",
+      "purpose": "French fuel station prices",
+      "dataSent": "Coordinates or region identifiers",
+      "dataReceived": "Station locations, fuel types, prices"
+    },
+    {
+      "service": "Spanish government fuel price data",
+      "purpose": "Spanish fuel station prices",
+      "dataSent": "Coordinates or region identifiers",
+      "dataReceived": "Station locations, fuel types, prices"
+    }
+  ]
+}

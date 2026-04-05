@@ -16,7 +16,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@integrations/*": ["../../integrations/*"]
+    }
   },
   "include": [
     "next-env.d.ts",

@@ -1,0 +1,9 @@
+{
+  "name": "TomTom Traffic",
+  "description": "Real-time traffic flow visualization",
+  "privacy": {
+    "purpose": "Real-time traffic flow visualization",
+    "dataSent": "Map tile requests with viewport coordinates",
+    "dataReceived": "Traffic flow raster tiles"
+  }
+}

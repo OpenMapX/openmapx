@@ -1,0 +1,228 @@
+"use client";
+
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import Collapse from "@mui/material/Collapse";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TablePagination from "@mui/material/TablePagination";
+import TableRow from "@mui/material/TableRow";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
+import { TableSkeleton } from "../shared/TableSkeleton";
+import { JobDetail } from "./JobDetail";
+import { JobStatusChip } from "./JobStatusChip";
+
+interface AdminJob {
+  id: string;
+  type: string;
+  status: string;
+  payload: Record<string, unknown> | null;
+  error: string | null;
+  progress: number | null;
+  createdBy: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+type StatusFilter = "all" | "active" | "success" | "failed";
+
+const STATUS_FILTER_QUERY: Record<StatusFilter, string | undefined> = {
+  all: undefined,
+  active: "running",
+  success: "success",
+  failed: "failed",
+};
+
+function formatJobType(type: string): string {
+  return type.replace(/\./g, " › ").replace(/_/g, " ");
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60000) return "just now";
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function JobRow({ job }: { job: AdminJob }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <TableRow
+        hover
+        onClick={() => setExpanded((v) => !v)}
+        sx={{ cursor: "pointer", "& td": { borderBottom: expanded ? "none" : undefined } }}
+      >
+        <TableCell sx={{ width: 32, px: 1 }}>
+          <IconButton size="small" tabIndex={-1}>
+            {expanded ? (
+              <KeyboardArrowDownIcon fontSize="small" />
+            ) : (
+              <KeyboardArrowRightIcon fontSize="small" />
+            )}
+          </IconButton>
+        </TableCell>
+        <TableCell>
+          <Typography variant="body2" fontWeight={500}>
+            {formatJobType(job.type)}
+          </Typography>
+          {job.payload && Object.keys(job.payload).length > 0 && (
+            <Typography variant="caption" color="text.secondary" display="block">
+              {Object.entries(job.payload)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ")}
+            </Typography>
+          )}
+        </TableCell>
+        <TableCell>
+          <JobStatusChip status={job.status} />
+        </TableCell>
+        <TableCell>
+          <Typography variant="caption" color="text.secondary">
+            {job.createdBy ? `${job.createdBy.slice(0, 8)}…` : "—"}
+          </Typography>
+        </TableCell>
+        <TableCell>
+          <Tooltip title={new Date(job.createdAt).toLocaleString()}>
+            <Typography variant="caption" color="text.secondary">
+              {formatRelativeTime(job.createdAt)}
+            </Typography>
+          </Tooltip>
+        </TableCell>
+      </TableRow>
+      <TableRow>
+        <TableCell colSpan={5} sx={{ py: 0, px: 2, bgcolor: "grey.50" }}>
+          <Collapse in={expanded} unmountOnExit>
+            <Box py={1.5}>
+              <JobDetail jobId={job.id} />
+            </Box>
+          </Collapse>
+        </TableCell>
+      </TableRow>
+    </>
+  );
+}
+
+export function JobList() {
+  const env = useEnv();
+  const queryClient = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [page, setPage] = useState(0);
+  const rowsPerPage = 25;
+
+  const statusParam = STATUS_FILTER_QUERY[statusFilter];
+
+  const { data, isLoading, isFetching } = useQuery<{ jobs: AdminJob[]; total: number }>({
+    queryKey: ["admin", "jobs", "list", statusFilter, page],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: String(rowsPerPage),
+        offset: String(page * rowsPerPage),
+      });
+      if (statusParam) params.set("status", statusParam);
+      const res = await fetch(`${env.apiUrl}/api/admin/jobs?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load jobs");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
+  return (
+    <Stack gap={2}>
+      <Stack direction="row" alignItems="center" gap={1}>
+        <ToggleButtonGroup
+          size="small"
+          value={statusFilter}
+          exclusive
+          onChange={(_, v) => {
+            if (v) {
+              setStatusFilter(v);
+              setPage(0);
+            }
+          }}
+        >
+          <ToggleButton value="all">All</ToggleButton>
+          <ToggleButton value="active">Active</ToggleButton>
+          <ToggleButton value="success">Completed</ToggleButton>
+          <ToggleButton value="failed">Failed</ToggleButton>
+        </ToggleButtonGroup>
+
+        <Box sx={{ flexGrow: 1 }} />
+
+        <Chip label={`${data?.total ?? 0} jobs`} size="small" variant="outlined" />
+
+        <Tooltip title="Refresh">
+          <IconButton
+            size="small"
+            onClick={() =>
+              void queryClient.invalidateQueries({ queryKey: ["admin", "jobs", "list"] })
+            }
+            disabled={isFetching}
+          >
+            <RefreshIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ width: 32 }} />
+              <TableCell>Job</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actor</TableCell>
+              <TableCell>When</TableCell>
+            </TableRow>
+          </TableHead>
+          {isLoading ? (
+            <TableSkeleton rows={5} columns={5} />
+          ) : !data?.jobs.length ? (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <Typography color="text.secondary" variant="body2">
+                    No jobs found
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          ) : (
+            <TableBody>
+              {data.jobs.map((job) => (
+                <JobRow key={job.id} job={job} />
+              ))}
+            </TableBody>
+          )}
+        </Table>
+      </TableContainer>
+      {!!data?.jobs.length && (
+        <TablePagination
+          component="div"
+          count={data.total}
+          page={page}
+          onPageChange={(_, p) => setPage(p)}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[25]}
+        />
+      )}
+    </Stack>
+  );
+}

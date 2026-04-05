@@ -2,22 +2,30 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import { registry } from "@integrations/transit-dynamic-registry/registry";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
+import {
+  getAllIntegrations,
+  initIntegrations,
+  reloadIntegrations,
+  shutdownIntegrations,
+} from "./integration-host";
 import { redis } from "./redis";
-import { airQualityRoute } from "./routes/air-quality";
+import { adminRoute } from "./routes/admin";
+import { adminServicesRoute } from "./routes/admin-services";
+import { adminSettingsRoute } from "./routes/admin-settings";
+import { adminStoreRoute } from "./routes/admin-store";
 import { autocompleteRoute } from "./routes/autocomplete";
 import { capabilitiesRoute } from "./routes/capabilities";
 import { categorySearchRoute } from "./routes/category-search";
 import { dataSourcesRoute } from "./routes/data-sources";
 import { directionsRoute } from "./routes/directions";
-import { earthquakeRoute } from "./routes/earthquakes";
 import { elevationRoute } from "./routes/elevation";
 import { geocodeRoute } from "./routes/geocode";
 import { gtfsRoute } from "./routes/gtfs";
-import { hikingRoute } from "./routes/hiking";
 import { isochroneRoute } from "./routes/isochrone";
 import { mapillaryRoute } from "./routes/mapillary";
 import { motisRoute } from "./routes/motis";
@@ -26,31 +34,31 @@ import { placesRoute } from "./routes/places";
 import { risMapsRoute } from "./routes/ris-maps";
 import { savedRoute } from "./routes/saved";
 import { statusRoute } from "./routes/status";
-import { streetviewRoute } from "./routes/streetview";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { transitRoute } from "./routes/transit";
-import { transitAttributionRoute } from "./routes/transit-attribution";
-import { wildfireRoute } from "./routes/wildfires";
 import { winterSportsRoute } from "./routes/winter-sports";
-import { evChargingProvider } from "./services/data-sources/ev-charging/provider";
-import { fuelProvider } from "./services/data-sources/fuel/provider";
-import { parkingProvider } from "./services/data-sources/parking/provider";
-import { dataSourceRegistry } from "./services/data-sources/registry";
-import { bielefeldClient } from "./services/data-sources/shared-mobility/bielefeld-client";
-import { bikeSharingProvider } from "./services/data-sources/shared-mobility/bike-sharing-provider";
-import { cambioClient } from "./services/data-sources/shared-mobility/cambio-client";
-import { carSharingProvider } from "./services/data-sources/shared-mobility/car-sharing-provider";
-import { registerCarSharingClient } from "./services/data-sources/shared-mobility/car-sharing-registry";
-import { scooterSharingProvider } from "./services/data-sources/shared-mobility/scooter-provider";
-import { stadtteilAutoClient } from "./services/data-sources/shared-mobility/stadtteilauto-client";
-import { wuppertalClient } from "./services/data-sources/shared-mobility/wuppertal-client";
+import {
+  buildTarget,
+  profileStart,
+  profileStop,
+  serviceRestart,
+  serviceStart,
+  serviceStop,
+} from "./services/admin-ops";
+import { appLogger } from "./services/app-logger";
 import { gtfsManager } from "./services/gtfs/index";
+import { pruneOldRecords } from "./services/health-history";
+import { jobRunner } from "./services/job-runner";
 import { motisManager } from "./services/motis/manager";
-import { registry } from "./services/transit/registry/index";
+import { handleInstallJob, handleRemoveJob, handleUpdateJob } from "./services/store";
 
+const { default: pino } = await import("pino");
 const server = Fastify({
-  logger: true,
+  loggerInstance: pino(
+    { level: process.env.LOG_LEVEL ?? "info" },
+    pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),
+  ),
   routerOptions: {
     // DB HAFAS trip IDs can be ~300 chars when URL-encoded (default is 100)
     maxParamLength: 500,
@@ -119,38 +127,21 @@ await server.register(directionsRoute, { prefix: "/api" });
 await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(tilesRoute, { prefix: "/api" });
-await server.register(streetviewRoute, { prefix: "/api" });
-await server.register(airQualityRoute, { prefix: "/api" });
 await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(transitRoute, { prefix: "/api" });
-await server.register(transitAttributionRoute, { prefix: "/api" });
 await server.register(gtfsRoute, { prefix: "/api" });
-await server.register(hikingRoute, { prefix: "/api" });
 await server.register(isochroneRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
 await server.register(dataSourcesRoute, { prefix: "/api" });
 await server.register(photosRoute, { prefix: "/api" });
-await server.register(earthquakeRoute, { prefix: "/api" });
-await server.register(wildfireRoute, { prefix: "/api" });
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
 await server.register(statusRoute, { prefix: "/api" });
-
-// Regional car-sharing clients (order = priority for enrichment merge:
-// Cambio first = live data wins, open data sources enrich with extra fields)
-registerCarSharingClient(cambioClient);
-registerCarSharingClient(stadtteilAutoClient);
-registerCarSharingClient(wuppertalClient);
-registerCarSharingClient(bielefeldClient);
-
-// Data source providers
-dataSourceRegistry.register(evChargingProvider);
-dataSourceRegistry.register(fuelProvider);
-dataSourceRegistry.register(parkingProvider);
-dataSourceRegistry.register(bikeSharingProvider);
-dataSourceRegistry.register(scooterSharingProvider);
-dataSourceRegistry.register(carSharingProvider);
+await server.register(adminRoute, { prefix: "/api" });
+await server.register(adminServicesRoute, { prefix: "/api" });
+await server.register(adminSettingsRoute, { prefix: "/api" });
+await server.register(adminStoreRoute, { prefix: "/api" });
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {
@@ -179,17 +170,88 @@ try {
   server.log.warn(err, "MOTIS manager initialization failed");
 }
 
-// Transit registry
-// Initialize dynamic transit provider registry (non-blocking — server
-// starts even if GitHub is unreachable)
-registry
-  .initialize()
-  .then(() => registry.startRefresh())
-  .catch((err) => {
-    server.log.warn(err, "Transit registry initialization failed");
-    // Start refresh anyway so it retries later
-    registry.startRefresh();
-  });
+// Integration framework
+// Discover and load integrations from integrations/ directory
+const integrationsDir = join(import.meta.dirname ?? ".", "..", "..", "..", "integrations");
+const customIntegrationsDir = join(
+  import.meta.dirname ?? ".",
+  "..",
+  "..",
+  "..",
+  "custom_integrations",
+);
+await initIntegrations(server, [integrationsDir, customIntegrationsDir]);
+
+// Initialize job runner (picks up interrupted jobs from previous run)
+await jobRunner.initialize();
+
+// Prune old health history records daily
+setInterval(
+  () =>
+    void pruneOldRecords(30).catch((err) => server.log.warn(err, "Health history prune failed")),
+  24 * 60 * 60 * 1000,
+);
+
+// Register job handlers
+jobRunner.register("service.start", async (ctx) => {
+  const service = ctx.payload.service as string;
+  await serviceStart(service, ctx);
+  return { service, action: "start" };
+});
+
+jobRunner.register("service.stop", async (ctx) => {
+  const service = ctx.payload.service as string;
+  await serviceStop(service, ctx);
+  return { service, action: "stop" };
+});
+
+jobRunner.register("service.restart", async (ctx) => {
+  const service = ctx.payload.service as string;
+  await serviceRestart(service, ctx);
+  return { service, action: "restart" };
+});
+
+jobRunner.register("profile.start", async (ctx) => {
+  const profile = ctx.payload.profile as string;
+  await profileStart(profile, ctx);
+  return { profile, action: "start" };
+});
+
+jobRunner.register("profile.stop", async (ctx) => {
+  const profile = ctx.payload.profile as string;
+  await profileStop(profile, ctx);
+  return { profile, action: "stop" };
+});
+
+jobRunner.register("build.target", async (ctx) => {
+  const target = ctx.payload.target as string;
+  await buildTarget(target, ctx);
+  return { target };
+});
+
+jobRunner.register("integration.reload", async (ctx) => {
+  await ctx.log("Reloading all integrations...");
+  const result = await reloadIntegrations();
+  await ctx.log(`Reload complete. Reloaded: ${result.reloaded}, Enabled: ${result.enabled}`);
+  return result as Record<string, unknown>;
+});
+
+jobRunner.register("store.install", handleInstallJob);
+jobRunner.register("store.update", handleUpdateJob);
+jobRunner.register("store.remove", handleRemoveJob);
+
+// Sanity check: ensure integrations were discovered
+const loadedCount = getAllIntegrations().length;
+if (loadedCount === 0) {
+  server.log.error(
+    `No integrations loaded! Expected integrations at ${integrationsDir}. ` +
+      "Check that the integrations/ directory exists and contains valid manifests.",
+  );
+  if (process.env.NODE_ENV === "production") {
+    process.exit(1);
+  }
+}
+server.log.info(`Loaded ${loadedCount} integrations`);
 
 // Debug endpoint: list loaded dynamic transit providers (auth required)
 server.get("/api/transit/registry", async (req, reply) => {
@@ -211,7 +273,7 @@ try {
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
-    registry.stopRefresh();
+    await shutdownIntegrations();
     await server.close();
     await redis?.disconnect();
     await sql.end();

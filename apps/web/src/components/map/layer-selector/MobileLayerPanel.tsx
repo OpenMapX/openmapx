@@ -1,113 +1,50 @@
 "use client";
 
-import AcUnitIcon from "@mui/icons-material/AcUnit";
-import AirIcon from "@mui/icons-material/Air";
-import DirectionsTransitFilledIcon from "@mui/icons-material/DirectionsTransitFilled";
-import HikingIcon from "@mui/icons-material/Hiking";
-import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
-import PedalBikeIcon from "@mui/icons-material/PedalBike";
 import PublicIcon from "@mui/icons-material/Public";
-import StreetviewIcon from "@mui/icons-material/Streetview";
-import TrafficIcon from "@mui/icons-material/Traffic";
-import TrainIcon from "@mui/icons-material/Train";
-import ViewInArIcon from "@mui/icons-material/ViewInAr";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import type { OverlayId } from "@openmapx/core";
-import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
+import {
+  toggleOverlay,
+  useCapabilities,
+  useIntegrationOverlayActive,
+  useLayerStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
 
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
+import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";
+import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 
-const OVERLAY_SWITCHES: { id: OverlayId; labelKey: string; icon: ReactNode; serviceId?: string }[] =
-  [
-    {
-      id: "traffic",
-      labelKey: "traffic",
-      icon: <TrafficIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-      serviceId: "tomtom-traffic",
-    },
-    {
-      id: "transit",
-      labelKey: "transit",
-      icon: <DirectionsTransitFilledIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-    },
-    {
-      id: "live-trains",
-      labelKey: "liveTrains",
-      icon: <TrainIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-    },
-    {
-      id: "cycling",
-      labelKey: "cycling",
-      icon: <PedalBikeIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-    },
-    // Kartenansichten
-    {
-      id: "street-view",
-      labelKey: "streetLevelImagery",
-      icon: <StreetviewIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-      serviceId: "mapillary",
-    },
-    {
-      id: "3d-buildings",
-      labelKey: "3dBuildings",
-      icon: <ViewInArIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-    },
-    // Outdoor & Freizeit
-    {
-      id: "hiking",
-      labelKey: "hiking",
-      icon: <HikingIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-    },
-    {
-      id: "winter-sports",
-      labelKey: "winterSports",
-      icon: <AcUnitIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-    },
-    // Umwelt & Gefahren
-    {
-      id: "air-quality",
-      labelKey: "airQuality",
-      icon: <AirIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-      serviceId: "openaq",
-    },
-    {
-      id: "wildfires",
-      labelKey: "wildfires",
-      icon: <LocalFireDepartmentIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-      serviceId: "firms-wildfires",
-    },
-    {
-      id: "earthquakes",
-      labelKey: "earthquakes",
-      icon: <PublicIcon sx={{ fontSize: 17, color: "text.secondary" }} />,
-    },
-  ];
-
-function OverlaySwitchRow({ entry }: { entry: (typeof OVERLAY_SWITCHES)[number] }) {
+function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
   const t = useTranslations("layers");
-  const registryEntry = OVERLAY_REGISTRY.find((r) => r.id === entry.id);
-  const active = registryEntry?.useActive() ?? false;
+  const active = useIntegrationOverlayActive(entry.overlayId);
 
   return (
     <FormControlLabel
       sx={{ mr: 0, ml: 0.25 }}
       label={
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
-          {entry.icon}
+          <Box
+            sx={{
+              color: "text.secondary",
+              display: "flex",
+              "& .MuiIcon-root": { fontSize: 17 },
+              "& .MuiSvgIcon-root": { fontSize: 17 },
+            }}
+          >
+            {entry.icon}
+          </Box>
           <Typography sx={{ fontSize: 13.5 }}>{t(entry.labelKey)}</Typography>
         </Box>
       }
       control={
         <Switch
           checked={active}
-          onChange={() => toggleOverlay(entry.id)}
+          onChange={() => toggleOverlay(entry.overlayId)}
           inputProps={{ "aria-label": t("toggleOverlay", { layer: t(entry.labelKey) }) }}
           size="small"
         />
@@ -147,6 +84,7 @@ export function MobileLayerPanel() {
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const { isAvailable } = useCapabilities();
+  const { mapDetails } = useLayerSelectorConfig();
 
   return (
     <Box sx={{ p: 1.5 }}>
@@ -177,9 +115,11 @@ export function MobileLayerPanel() {
         {t("mapDetails")}
       </Typography>
 
-      {OVERLAY_SWITCHES.filter((entry) => isAvailable(entry.serviceId)).map((entry) => (
-        <OverlaySwitchRow key={entry.id} entry={entry} />
-      ))}
+      {mapDetails
+        .filter((entry) => isAvailable(entry.serviceId))
+        .map((entry) => (
+          <OverlaySwitchRow key={entry.id} entry={entry} />
+        ))}
       <GlobeSwitchRow />
     </Box>
   );

@@ -1,0 +1,18 @@
+{
+  "name": "Bikesharing",
+  "description": "Bikesharing-Stationen von GBFS-Feeds, Nextbike, CityBikes und Deutsche Bahn",
+  "privacy": [
+    {
+      "service": "GBFS Catalog (MobilityData)",
+      "purpose": "Weltweite Erkennung von Bikesharing-Systemen",
+      "dataSent": "Systemerkennungsanfragen (keine Nutzerdaten)",
+      "dataReceived": "GBFS-Feed-URLs für Bikesharing-Betreiber"
+    },
+    {
+      "service": "Nextbike",
+      "purpose": "Bikesharing-Stationsstandorte und Verfügbarkeit",
+      "dataSent": "Begrenzungsrahmen-Koordinaten",
+      "dataReceived": "Stationsstandorte, Fahrradanzahl, Stationsnamen"
+    }
+  ]
+}

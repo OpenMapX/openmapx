@@ -1,0 +1,11 @@
+{
+  "name": "Wikipedia Enrichment",
+  "description": "Description and thumbnail enrichment for place details",
+  "privacy": [
+    {
+      "service": "Wikipedia",
+      "purpose": "Enrich place details with Wikipedia descriptions and thumbnails",
+      "dataSent": "Wikipedia article titles (from OSM tags)"
+    }
+  ]
+}

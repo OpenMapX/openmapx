@@ -1,7 +1,36 @@
+import type {
+  GtfsDepartureRow,
+  GtfsDeps,
+  GtfsStopRow,
+} from "@integrations/transit-gtfs-local/gtfs-local";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GtfsDepartureRow, GtfsStopRow, ImportedFeed } from "../../../gtfs/types.js";
+import type { ImportedFeed } from "../../../gtfs/types.js";
 
-// Mocks
+// Mock dependencies injected via setDeps()
+
+const mockGetStopsInBbox = vi.fn();
+const mockGetStopById = vi.fn();
+const mockSearchStopsByName = vi.fn();
+const mockGetDepartures = vi.fn();
+const mockGetArrivals = vi.fn();
+const mockGetDeparturesByDate = vi.fn();
+const mockGetChildStops = vi.fn();
+
+const routeTypeToMode = (n: number) => {
+  const map: Record<number, string> = {
+    0: "tram",
+    1: "subway",
+    2: "rail",
+    3: "bus",
+    4: "ferry",
+    5: "cable_car",
+    6: "gondola",
+    7: "funicular",
+    11: "bus",
+    12: "monorail",
+  };
+  return map[n] ?? "bus";
+};
 
 const mockGtfsManager = {
   initialized: true,
@@ -12,42 +41,19 @@ const mockGtfsManager = {
   getSlugFromStopId: vi.fn(),
 };
 
-vi.mock("../../../gtfs/index.js", () => ({
-  gtfsManager: mockGtfsManager,
-}));
-
-const mockGetStopsInBbox = vi.fn();
-const mockGetStopById = vi.fn();
-const mockSearchStopsByName = vi.fn();
-const mockGetDepartures = vi.fn();
-const mockGetArrivals = vi.fn();
-const mockGetDeparturesByDate = vi.fn();
-const mockGetChildStops = vi.fn();
-
-vi.mock("../../../gtfs/queries.js", () => ({
-  getStopsInBbox: (...args: unknown[]) => mockGetStopsInBbox(...args),
-  getStopById: (...args: unknown[]) => mockGetStopById(...args),
-  searchStopsByName: (...args: unknown[]) => mockSearchStopsByName(...args),
-  getDepartures: (...args: unknown[]) => mockGetDepartures(...args),
-  getArrivals: (...args: unknown[]) => mockGetArrivals(...args),
-  getDeparturesByDate: (...args: unknown[]) => mockGetDeparturesByDate(...args),
-  getChildStops: (...args: unknown[]) => mockGetChildStops(...args),
-  routeTypeToMode: (n: number) => {
-    const map: Record<number, string> = {
-      0: "tram",
-      1: "subway",
-      2: "rail",
-      3: "bus",
-      4: "ferry",
-      5: "cable_car",
-      6: "gondola",
-      7: "funicular",
-      11: "bus",
-      12: "monorail",
-    };
-    return map[n] ?? "bus";
-  },
-}));
+const mockDeps: GtfsDeps = {
+  manager: mockGtfsManager as unknown as GtfsDeps["manager"],
+  queries: {
+    getStopsInBbox: mockGetStopsInBbox,
+    getStopById: mockGetStopById,
+    searchStopsByName: mockSearchStopsByName,
+    getDepartures: mockGetDepartures,
+    getArrivals: mockGetArrivals,
+    getDeparturesByDate: mockGetDeparturesByDate,
+    getChildStops: mockGetChildStops,
+    routeTypeToMode,
+  } as unknown as GtfsDeps["queries"],
+};
 
 // Helpers
 
@@ -100,10 +106,12 @@ function makeDepartureRow(overrides: Partial<GtfsDepartureRow> = {}): GtfsDepart
   };
 }
 
-// Load module
+// Load module and inject deps
 
 async function loadModule() {
-  return import("../gtfs-local.js");
+  const mod = await import("@integrations/transit-gtfs-local/gtfs-local");
+  mod.setDeps(mockDeps);
+  return mod;
 }
 
 // Tests
@@ -111,7 +119,6 @@ async function loadModule() {
 describe("gtfs-local provider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset initialized to true by default
     mockGtfsManager.initialized = true;
   });
 

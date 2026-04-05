@@ -1,0 +1,48 @@
+{
+  "id": "transit-transitland",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "envVars": ["TRANSIT_LAND_API_KEY"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Transitland API key.",
+        "x-openmapx-secret": true
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "http",
+    "urlTemplate": "https://transit.land/api/v2/rest/stops?lat=52.52&lon=13.405&radius=100&limit=1&api_key=${TRANSIT_LAND_API_KEY}",
+    "requiredEnvVars": ["TRANSIT_LAND_API_KEY"]
+  },
+  "attribution": [
+    {
+      "name": "Transitland",
+      "url": "https://www.transit.land/",
+      "license": "Various (per feed)",
+      "licenseUrl": "https://www.transit.land/terms"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.interline.io/legal/privacy/",
+      "personalData": false
+    }
+  ]
+}

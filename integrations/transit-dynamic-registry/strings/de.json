@@ -1,0 +1,8 @@
+{
+  "name": "Dynamisches Nahverkehrsregister",
+  "description": "Automatische Erkennung von Nahverkehrs-APIs aus dem public-transport/transport-apis GitHub-Repository",
+  "privacy": {
+    "purpose": "Erkennung und Weiterleitung von Nahverkehrs-APIs weltweit",
+    "dataSent": "Variiert je nach erkanntem Anbieter"
+  }
+}

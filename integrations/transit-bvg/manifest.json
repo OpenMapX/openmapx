@@ -1,0 +1,42 @@
+{
+  "id": "transit-bvg",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable BVG Transit integration"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://v6.bvg.transport.rest/locations/nearby?latitude=52.52&longitude=13.405&results=1"
+  },
+  "attribution": [
+    {
+      "name": "BVG",
+      "url": "https://www.bvg.de/",
+      "license": "Proprietary",
+      "licenseUrl": "https://www.bvg.de/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bvg.de/datenschutz",
+      "personalData": false
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "id": "photos-panoramax",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["photos"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.panoramax.xyz/api/search"
+  },
+  "quality": "built-in",
+  "category": "Imagery",
+  "attribution": [
+    {
+      "name": "Panoramax",
+      "url": "https://panoramax.fr/",
+      "license": "Various (open)",
+      "licenseUrl": "https://wiki.openstreetmap.org/wiki/Panoramax"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://www.ign.fr/institut/donnees-caractere-personnel",
+      "personalData": false
+    }
+  ]
+}

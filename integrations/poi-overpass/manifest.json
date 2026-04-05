@@ -1,0 +1,46 @@
+{
+  "id": "poi-overpass",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["poi-search"],
+  "infrastructure": {
+    "dockerProfile": "overpass",
+    "services": ["overpass"],
+    "dataRequirements": ["osm-pbf"]
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://overpass-api.de/api/status"
+  },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "attribution": [
+    {
+      "name": "OpenStreetMap/Overpass",
+      "url": "https://overpass-api.de/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "personalData": false
+    }
+  ]
+}

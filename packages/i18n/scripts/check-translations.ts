@@ -30,9 +30,8 @@ const REPO_ROOT = join(PKG_ROOT, "..", "..");
 const MESSAGES_DIR = join(PKG_ROOT, "locales");
 const SRC_DIRS = [
   join(REPO_ROOT, "apps", "web", "src"),
-  join(REPO_ROOT, "apps", "mobile", "app"),
-  join(REPO_ROOT, "apps", "mobile", "src"),
   join(REPO_ROOT, "apps", "api", "src"),
+  join(REPO_ROOT, "integrations"),
 ];
 const FIX_MISSING = process.argv.includes("--fix-missing");
 
@@ -56,6 +55,7 @@ function flattenKeys(obj: Record<string, unknown>, prefix = ""): Map<string, str
 function collectFiles(dir: string, exts: string[]): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === "strings") continue;
     const full = join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) {
@@ -235,6 +235,23 @@ for (const file of sourceFiles) {
   for (const match of content.matchAll(/(?:name|label)["']?\s*[:=]\s*["']\$([a-zA-Z]\w*)["']/g)) {
     dollarPrefixedNames.add(match[1]);
   }
+}
+
+// Scan integration manifest.json files for labelKey values (used dynamically via t(entry.labelKey))
+const integrationsDir = join(REPO_ROOT, "integrations");
+try {
+  for (const entry of readdirSync(integrationsDir)) {
+    const manifestPath = join(integrationsDir, entry, "manifest.json");
+    try {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+      const labelKey = manifest.frontend?.layerSelector?.labelKey;
+      if (labelKey) usedKeys.add(`layers.${labelKey}`);
+    } catch {
+      // no manifest or unreadable — skip
+    }
+  }
+} catch {
+  // integrations dir doesn't exist — skip
 }
 
 // Derive dynamic keys: $-prefixed entity names + namespaces using slice(1) convention
