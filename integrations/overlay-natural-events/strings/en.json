@@ -1,0 +1,10 @@
+{
+  "name": "NASA EONET Natural Events",
+  "description": "Global natural events including volcanoes, storms, floods, landslides, and more from NASA EONET",
+  "privacy": {
+    "purpose": "Display active natural events on the map from NASA Earth Observatory",
+    "dataSent": "Time range and status filter",
+    "dataReceived": "Event locations, titles, categories, magnitudes, and source links",
+    "dataRetention": "Cached for 15 minutes server-side"
+  }
+}

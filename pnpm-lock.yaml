@@ -397,6 +397,12 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
 
+  integrations/overlay-natural-events:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+
   integrations/overlay-traffic-tomtom:
     dependencies:
       '@openmapx/core':

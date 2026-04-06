@@ -50,7 +50,7 @@
     {
       "name": "NASA FIRMS",
       "url": "https://firms.modaps.eosdis.nasa.gov/",
-      "license": "Public Domain",
+      "license": "CC0 1.0",
       "licenseUrl": "https://earthdata.nasa.gov/learn/use-data/data-use-policy"
     }
   ],

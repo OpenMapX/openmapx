@@ -1,0 +1,10 @@
+{
+  "name": "NASA EONET Naturereignisse",
+  "description": "Globale Naturereignisse wie Vulkane, Stürme, Überschwemmungen, Erdrutsche und mehr von NASA EONET",
+  "privacy": {
+    "purpose": "Anzeige aktiver Naturereignisse auf der Karte vom NASA Earth Observatory",
+    "dataSent": "Zeitraum und Statusfilter",
+    "dataReceived": "Ereignisstandorte, Titel, Kategorien, Stärken und Quelllinks",
+    "dataRetention": "Serverseitig 15 Minuten zwischengespeichert"
+  }
+}

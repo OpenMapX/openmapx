@@ -1,0 +1,58 @@
+{
+  "id": "overlay-natural-events",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://eonet.gsfc.nasa.gov/docs/v3",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "naturalEvents",
+      "icon": "warning",
+      "iconPath": "M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+    },
+    "overlay": {
+      "excludes": ["street-view"],
+      "minZoom": 2
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://eonet.gsfc.nasa.gov/api/v3/categories"
+  },
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "attribution": [
+    {
+      "name": "NASA EONET",
+      "url": "https://eonet.gsfc.nasa.gov/",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://earthdata.nasa.gov/learn/use-data/data-use-policy"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}
