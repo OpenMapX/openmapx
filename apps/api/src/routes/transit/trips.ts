@@ -72,7 +72,7 @@ export async function tripsRoutes(server: FastifyInstance): Promise<void> {
       const plan = await transitOrchestrator.planTrip({
         from: { lat: fromLat, lng: fromLng },
         to: { lat: toLat, lng: toLng },
-        departureTime: `${date}T${time}`,
+        departureTime: `${date}T${time}Z`,
         modes: (q.modes ?? "TRANSIT").split(",").map((m) => m.trim()),
       });
       if (!plan) {

@@ -497,7 +497,7 @@ export const hafasMgateAdapter: ProtocolAdapter = {
   async planJourney(entry, fromLat, fromLng, toLat, toLng, date, time, arriveBy, numItineraries) {
     try {
       const client = getClient(entry);
-      const dt = new Date(`${date}T${time}`);
+      const dt = new Date(`${date}T${time}Z`);
       const result = await withTimeout(
         client.journeys(
           { type: "location", address: "Origin", latitude: fromLat, longitude: fromLng },

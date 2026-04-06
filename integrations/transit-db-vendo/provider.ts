@@ -227,7 +227,7 @@ export async function planJourney(
   numItineraries?: number,
 ): Promise<TripPlan | null> {
   try {
-    const dt = new Date(`${date}T${time}`);
+    const dt = new Date(`${date}T${time}Z`);
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const data: any = await client.journeys(
       { type: "location", address: "Origin", latitude: fromLat, longitude: fromLng },
