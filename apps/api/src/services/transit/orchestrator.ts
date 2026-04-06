@@ -7,7 +7,7 @@ import type {
   TripPlan,
   VehiclePosition,
 } from "@openmapx/core";
-import { deduplicateStops } from "./dedup";
+import { deduplicateStops, isTripNumber } from "./dedup";
 import { providerHealth } from "./health";
 import type { BBox } from "./types";
 
@@ -146,9 +146,26 @@ export class TransitOrchestrator {
   }
 
   async searchByName(query: string, limit: number): Promise<TransitStop[]> {
-    const withSearch = Array.from(this.providers.values())
-      .filter((p) => p.searchByName && providerHealth.isHealthy(p.id))
-      .sort((a, b) => a.priority - b.priority);
+    const allStops = await this.searchByNameRaw(query, limit);
+    return deduplicateStops(allStops, (provider) => this.getProviderPriority(provider)).slice(
+      0,
+      limit,
+    );
+  }
+
+  /**
+   * Raw stop-name search without deduplication/truncation.
+   * Used by place-linked lookups that need full candidate sets before local
+   * distance/name filtering is applied.
+   */
+  async searchByNameRaw(query: string, limit: number, bbox?: BBox): Promise<TransitStop[]> {
+    const withSearch = (
+      bbox
+        ? this.getProvidersForBbox(bbox)
+        : Array.from(this.providers.values())
+            .filter((p) => providerHealth.isHealthy(p.id))
+            .sort((a, b) => a.priority - b.priority)
+    ).filter((p) => p.searchByName);
 
     const results = await Promise.allSettled(
       withSearch.map(async (p) => {
@@ -164,11 +181,7 @@ export class TransitOrchestrator {
       }),
     );
 
-    const allStops = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
-    return deduplicateStops(allStops, (provider) => this.getProviderPriority(provider)).slice(
-      0,
-      limit,
-    );
+    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   }
 
   async planTrip(params: {
@@ -270,11 +283,44 @@ export class TransitOrchestrator {
 
   async getRoutesForStop(stopId: string): Promise<TransitRoute[]> {
     const provider = this.resolveByPrefix(stopId);
-    if (!provider?.getRoutesForStop) return [];
+    if (!provider) return [];
+
+    // Prefer provider-native route lookup when available.
+    if (provider.getRoutesForStop) {
+      try {
+        const result = await provider.getRoutesForStop(stopId);
+        providerHealth.recordSuccess(provider.id);
+        // Keep old behavior: if provider route lookup returns nothing, derive
+        // routes from departures as a fallback.
+        if (result.length > 0 || !provider.getDepartures) return result;
+      } catch {
+        providerHealth.recordFailure(provider.id);
+        if (!provider.getDepartures) return [];
+      }
+    } else if (!provider.getDepartures) {
+      return [];
+    }
+
+    // Compatibility fallback: derive routes from a 12-hour departures window.
+    // Several providers expose departures but no route-by-stop endpoint.
     try {
-      const result = await provider.getRoutesForStop(stopId);
+      const departures = await provider.getDepartures?.(stopId, 720);
+      if (!departures) return [];
       providerHealth.recordSuccess(provider.id);
-      return result;
+      const byRouteId = new Map<string, TransitRoute>();
+      for (const dep of departures) {
+        if (byRouteId.has(dep.route.id)) continue;
+        if (isTripNumber(dep.route.shortName)) continue;
+        byRouteId.set(dep.route.id, {
+          id: dep.route.id,
+          shortName: dep.route.shortName,
+          longName: dep.route.longName,
+          mode: dep.route.mode,
+          color: dep.route.color,
+          operatorName: "",
+        });
+      }
+      return Array.from(byRouteId.values());
     } catch {
       providerHealth.recordFailure(provider.id);
       return [];
@@ -314,11 +360,64 @@ export class TransitOrchestrator {
 
   async getRouteStops(routeId: string, hintStopId?: string): Promise<TransitStop[]> {
     const provider = this.resolveByPrefix(routeId);
-    if (!provider?.getRouteStops) return [];
+    if (!provider) return [];
+
+    if (provider.getRouteStops) {
+      try {
+        const result = await provider.getRouteStops(routeId, hintStopId);
+        providerHealth.recordSuccess(provider.id);
+        if (
+          result.length > 0 ||
+          !hintStopId ||
+          !provider.getDepartures ||
+          !provider.getVehicleJourney
+        ) {
+          return result;
+        }
+      } catch {
+        providerHealth.recordFailure(provider.id);
+        if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) return [];
+      }
+    } else if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) {
+      return [];
+    }
+
+    // Compatibility fallback (pre-refactor behavior):
+    // derive route stop sequence via a departure trip detail.
     try {
-      const result = await provider.getRouteStops(routeId, hintStopId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
+      const departures = await provider.getDepartures?.(hintStopId, 720);
+      if (!departures) return [];
+      const dep = departures.find((d) => d.route.id === routeId && !!d.tripId);
+      if (!dep?.tripId) return [];
+      const journey = await provider.getVehicleJourney?.(dep.tripId);
+      if (
+        !journey ||
+        typeof journey !== "object" ||
+        !Array.isArray((journey as { stops?: unknown[] }).stops)
+      ) {
+        return [];
+      }
+
+      return (
+        journey as {
+          stops: Array<{
+            stopId: string;
+            name: string;
+            lat: number;
+            lng: number;
+            platform?: string;
+          }>;
+        }
+      ).stops.map((s, i) => ({
+        id: s.stopId,
+        name: s.name,
+        lat: s.lat,
+        lng: s.lng,
+        modes: [],
+        platformCode: s.platform,
+        provider: provider.id,
+        sequence: i + 1,
+      }));
     } catch {
       providerHealth.recordFailure(provider.id);
       return [];

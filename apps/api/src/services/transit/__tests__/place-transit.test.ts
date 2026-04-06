@@ -24,7 +24,7 @@ vi.mock("../../../utils/cache.js", () => ({
 
 vi.mock("../orchestrator.js", () => ({
   transitOrchestrator: {
-    searchByName: vi.fn(),
+    searchByNameRaw: vi.fn(),
     getRoutesForStop: vi.fn(),
     getDepartures: vi.fn(),
     getArrivals: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("../orchestrator.js", () => ({
 import { transitOrchestrator } from "../orchestrator.js";
 
 const {
-  searchByName: fetchStopsByNameRaw,
+  searchByNameRaw: fetchStopsByNameRaw,
   getFacilities,
   getRoutesForStop,
   getStopAlerts,
@@ -61,7 +61,7 @@ function makeStop(
   name: string,
   lat: number,
   lng: number,
-  provider = "transitous",
+  provider = "mo",
 ): TransitStop {
   return { id, name, lat, lng, modes: ["rail"], provider };
 }
@@ -77,7 +77,7 @@ function makeDeparture(
     headsign: "Destination",
     scheduledAt,
     canceled: false,
-    providers: ["transitous"],
+    providers: ["mo"],
     ...extra,
   };
 }
@@ -124,6 +124,19 @@ describe("getLinkedStops", () => {
     expect(result[0].id).toBe("mo:de_berlin");
   });
 
+  it("does not link nearby stops that only match the city token", async () => {
+    const bushof = makeStop("db:bushof", "Bushof, Aachen", 50.776478, 6.089661, "db");
+    const hbf = makeStop("db:hbf", "Hauptbahnhof, Aachen", 50.768757, 6.090767, "db");
+    const bastei = makeStop("db:bastei", "Aachen, Bastei", 50.782433, 6.089132, "db");
+
+    vi.mocked(fetchStopsByNameRaw).mockResolvedValue([bushof, hbf, bastei]);
+
+    const result = await getLinkedStops(50.7766, 6.0928, "Aachen Bushof");
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("db:bushof");
+  });
+
   it("returns empty array when no stops match name+distance criteria", async () => {
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([
       makeStop("mo:de_far", "Munich Hbf", 48.14, 11.558), // far from Berlin coords
@@ -140,12 +153,14 @@ describe("getLinkedStops", () => {
 
     // "Berlin Hbf" expands to ["Berlin Hbf", "Berlin Hauptbahnhof"] via getQueryVariants
     expect(fetchStopsByNameRaw).toHaveBeenCalledTimes(2);
-    const [name1, limit1] = vi.mocked(fetchStopsByNameRaw).mock.calls[0];
+    const [name1, limit1, bbox1] = vi.mocked(fetchStopsByNameRaw).mock.calls[0];
     expect(name1).toBe("Berlin Hbf");
     expect(limit1).toBe(30);
-    const [name2, limit2] = vi.mocked(fetchStopsByNameRaw).mock.calls[1];
+    expect(bbox1).toEqual([12.369, 51.525, 14.369, 53.525]);
+    const [name2, limit2, bbox2] = vi.mocked(fetchStopsByNameRaw).mock.calls[1];
     expect(name2).toBe("Berlin Hauptbahnhof");
     expect(limit2).toBe(30);
+    expect(bbox2).toEqual([12.369, 51.525, 14.369, 53.525]);
   });
 });
 
@@ -161,7 +176,7 @@ describe("getMergedRoutes", () => {
   });
 
   it("merges routes from multiple stops and deduplicates by mode+shortName", async () => {
-    const stop1 = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "transitous");
+    const stop1 = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "mo");
     const stop2 = makeStop("db:berlin", "Berlin Hbf", 52.525, 13.369, "db");
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([stop1, stop2]);
 
@@ -198,7 +213,7 @@ describe("getMergedRoutes", () => {
     // ICE should be deduplicated into one entry with both providers
     const ice = result.find((r) => r.shortName === "ICE 1");
     expect(ice).toBeDefined();
-    expect(ice?.providers).toContain("transitous");
+    expect(ice?.providers).toContain("mo");
     expect(ice?.providers).toContain("db");
     // Color should be picked up from stop2's entry (which has color data)
     expect(ice?.color).toBe("FF0000");
@@ -221,14 +236,14 @@ describe("getMergedDepartures", () => {
   });
 
   it("deduplicates same departure from two providers using shortName+scheduledAt key", async () => {
-    const stop1 = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "transitous");
+    const stop1 = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "mo");
     const stop2 = makeStop("db:berlin", "Berlin Hbf", 52.525, 13.369, "db");
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([stop1, stop2]);
 
     const scheduledAt = "2026-03-10T12:00:00Z";
 
     // Same ICE departure reported by both providers
-    const dep1 = makeDeparture("ICE 1", scheduledAt, { providers: ["transitous"] });
+    const dep1 = makeDeparture("ICE 1", scheduledAt, { providers: ["mo"] });
     const dep2 = makeDeparture("ICE 1", scheduledAt, { providers: ["db"], platform: "5" });
 
     vi.mocked(getStopDepartures).mockResolvedValueOnce([dep1]);
@@ -239,28 +254,28 @@ describe("getMergedDepartures", () => {
     // Should have exactly 1 merged departure (not 2)
     expect(result).toHaveLength(1);
     // Both providers should be listed
-    expect(result[0].providers).toContain("transitous");
+    expect(result[0].providers).toContain("mo");
     expect(result[0].providers).toContain("db");
     // Platform from second provider should be merged in
     expect(result[0].platform).toBe("5");
   });
 
   it("keeps separate departures with different shortName or scheduledAt", async () => {
-    const stop = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "transitous");
+    const stop = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "mo");
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([stop]);
 
     // Different routes to different destinations at the same time — should NOT merge
     // because shortNames differ and headsigns also differ (preventing k3 collision)
     const dep1 = makeDeparture("ICE 1", "2026-03-10T12:00:00Z", {
-      providers: ["transitous"],
+      providers: ["mo"],
       headsign: "Hamburg Hbf",
     });
     const dep2 = makeDeparture("ICE 2", "2026-03-10T12:00:00Z", {
-      providers: ["transitous"],
+      providers: ["mo"],
       headsign: "München Hbf",
     }); // different route+destination
     const dep3 = makeDeparture("ICE 1", "2026-03-10T13:00:00Z", {
-      providers: ["transitous"],
+      providers: ["mo"],
       headsign: "Hamburg Hbf",
     }); // same route, different time
 
@@ -272,12 +287,12 @@ describe("getMergedDepartures", () => {
   });
 
   it("sorts departures by scheduledAt ascending", async () => {
-    const stop = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "transitous");
+    const stop = makeStop("mo:de_berlin", "Berlin Hbf", 52.526, 13.37, "mo");
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([stop]);
 
-    const dep1 = makeDeparture("ICE 1", "2026-03-10T14:00:00Z", { providers: ["transitous"] });
-    const dep2 = makeDeparture("ICE 2", "2026-03-10T12:00:00Z", { providers: ["transitous"] });
-    const dep3 = makeDeparture("RB10", "2026-03-10T13:00:00Z", { providers: ["transitous"] });
+    const dep1 = makeDeparture("ICE 1", "2026-03-10T14:00:00Z", { providers: ["mo"] });
+    const dep2 = makeDeparture("ICE 2", "2026-03-10T12:00:00Z", { providers: ["mo"] });
+    const dep3 = makeDeparture("RB10", "2026-03-10T13:00:00Z", { providers: ["mo"] });
 
     vi.mocked(getStopDepartures).mockResolvedValueOnce([dep1, dep2, dep3]);
 
@@ -300,11 +315,11 @@ describe("getMergedAlerts", () => {
   });
 
   it("deduplicates alerts with same id across stops", async () => {
-    const stop1 = makeStop("mo:de_berlin_1", "Berlin Hbf", 52.526, 13.37, "transitous");
-    const stop2 = makeStop("mo:de_berlin_2", "Berlin Hbf", 52.525, 13.369, "transitous");
+    const stop1 = makeStop("mo:de_berlin_1", "Berlin Hbf", 52.526, 13.37, "mo");
+    const stop2 = makeStop("mo:de_berlin_2", "Berlin Hbf", 52.525, 13.369, "mo");
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([stop1, stop2]);
 
-    const alert = makeAlert("alert:1", ["transitous"]);
+    const alert = makeAlert("alert:1", ["mo"]);
     // Same alert from both stops
     vi.mocked(getStopAlerts).mockResolvedValueOnce([alert]);
     vi.mocked(getStopAlerts).mockResolvedValueOnce([alert]);
@@ -327,8 +342,8 @@ describe("getMergedFacilities", () => {
   });
 
   it("deduplicates facilities with same id across stops", async () => {
-    const stop1 = makeStop("mo:de_berlin_1", "Berlin Hbf", 52.526, 13.37, "transitous");
-    const stop2 = makeStop("mo:de_berlin_2", "Berlin Hbf", 52.525, 13.369, "transitous");
+    const stop1 = makeStop("mo:de_berlin_1", "Berlin Hbf", 52.526, 13.37, "mo");
+    const stop2 = makeStop("mo:de_berlin_2", "Berlin Hbf", 52.525, 13.369, "mo");
     vi.mocked(fetchStopsByNameRaw).mockResolvedValue([stop1, stop2]);
 
     const facility = {
@@ -337,7 +352,7 @@ describe("getMergedFacilities", () => {
       name: "Main Elevator",
       type: "elevator" as const,
       isAccessible: true,
-      provider: "transitous",
+      provider: "mo",
     };
     vi.mocked(getFacilities).mockResolvedValueOnce([facility]);
     vi.mocked(getFacilities).mockResolvedValueOnce([facility]);

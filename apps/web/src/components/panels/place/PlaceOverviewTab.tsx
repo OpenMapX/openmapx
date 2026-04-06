@@ -210,7 +210,7 @@ export function PlaceOverviewTab({
 
   return (
     <>
-      <Box sx={{ px: 2, pt: 1.5, pb: 2 }}>
+      <Box sx={{ px: 2, py: 1 }}>
         {/* Action buttons */}
         <PlaceActionButtons place={place} />
 

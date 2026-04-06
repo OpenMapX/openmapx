@@ -9,11 +9,7 @@ export function useLinkedTransitFacilities(place: Place | null) {
   const enabled = isTransitEligiblePlace(place);
 
   return useQuery({
-    queryKey: [
-      "linked-transit-facilities",
-      place?.id ?? place?.coordinates?.join(","),
-      place?.name,
-    ],
+    queryKey: ["linked-transit-facilities", place?.id ?? place?.coordinates?.join(",")],
     queryFn: () => {
       if (!place) throw new Error("invariant: place must be non-null");
       const p = place;

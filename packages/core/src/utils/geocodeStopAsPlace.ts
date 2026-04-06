@@ -14,6 +14,8 @@ export function makeSyntheticStopPlace(stop: TransitStop): Place {
     name: stop.name,
     address: stop.name,
     coordinates: [stop.lng, stop.lat],
+    category: "station",
+    rawCategory: "transit_stop",
   };
 }
 
@@ -55,8 +57,8 @@ export async function geocodeStopAsPlace(stop: TransitStop): Promise<Place | nul
       name: match.label,
       address: match.label,
       coordinates: match.coordinates,
-      category: match.type,
-      rawCategory: match.rawCategory,
+      category: match.type ?? "station",
+      rawCategory: match.rawCategory ?? "transit_stop",
     };
   } catch {
     return null;

@@ -13,14 +13,14 @@ const transitousInstance: MotisInstance = (() => {
   const client = createClient({
     baseUrl: process.env.TRANSITOUS_URL ?? "https://api.transitous.org",
   });
-  return { client, prefix: "mo:", provider: "transitous" };
+  return { client, prefix: "mo:", provider: "mo" };
 })();
 
 const motisLocalInstance: MotisInstance = (() => {
   const client = createClient({
     baseUrl: process.env.MOTIS_URL ?? "http://localhost:8081",
   });
-  return { client, prefix: "ms:", provider: "motis-local" };
+  return { client, prefix: "ms:", provider: "ms" };
 })();
 
 async function isMotisLocalReachable(): Promise<boolean> {

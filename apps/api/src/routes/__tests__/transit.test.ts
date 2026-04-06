@@ -112,7 +112,7 @@ const MOCK_STOP = {
   lat: 52.525,
   lng: 13.369,
   modes: ["rail"],
-  provider: "transitous",
+  provider: "mo",
 };
 
 const MOCK_DEPARTURE = {
@@ -123,7 +123,7 @@ const MOCK_DEPARTURE = {
   headsign: "Hamburg Hbf",
   canceled: false,
   route: { id: "r:1", shortName: "ICE 1", longName: "ICE Berlin-Hamburg", mode: "rail" },
-  providers: ["transitous"],
+  providers: ["mo"],
 };
 
 const MOCK_ROUTE = {
@@ -140,7 +140,7 @@ const MOCK_ALERT = {
   title: "Delay on ICE 1",
   description: "Due to construction work",
   severity: "warning",
-  providers: ["transitous"],
+  providers: ["mo"],
   affectedRouteIds: [],
   affectedStopIds: [],
 };
@@ -160,7 +160,7 @@ const MOCK_PLAN = {
 const MOCK_VEHICLE_JOURNEY = {
   id: "db:trip_123",
   name: "ICE 1",
-  provider: "transitous",
+  provider: "mo",
   stops: [],
 };
 

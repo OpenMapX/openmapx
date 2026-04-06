@@ -210,7 +210,7 @@ describe("deduplicateStops", () => {
     const stop2 = makeStop({
       id: "mo:2",
       name: "Berlin Hbf",
-      provider: "transitous",
+      provider: "mo",
       lat: 52.5251,
       lng: 13.3691,
     });
@@ -262,7 +262,7 @@ describe("deduplicateStops", () => {
       makeStop({
         id: "mo:1",
         name: "Berlin Hbf",
-        provider: "transitous",
+        provider: "mo",
         lat: 52.525,
         lng: 13.369,
       }),
@@ -299,7 +299,7 @@ describe("deduplicateStops", () => {
       makeStop({
         id: "mo:1",
         name: "Berlin Hauptbahnhof",
-        provider: "transitous",
+        provider: "mo",
         lat: 52.5251,
         lng: 13.3691,
       }),
@@ -314,7 +314,7 @@ describe("deduplicateStops", () => {
       makeStop({
         id: "mo:2",
         name: "Friedrichstraße",
-        provider: "transitous",
+        provider: "mo",
         lat: 52.5206,
         lng: 13.3868,
       }),

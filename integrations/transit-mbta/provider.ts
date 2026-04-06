@@ -45,7 +45,7 @@ function normalizeStop(d: any): TransitStop {
     parentStationId: d.relationships?.parent_station?.data?.id
       ? `mb:${d.relationships.parent_station.data.id}`
       : undefined,
-    provider: "mbta",
+    provider: "mb",
   };
 }
 
@@ -203,7 +203,7 @@ export async function getAlerts(opts?: {
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       (a: any): ServiceAlert => ({
         id: `mb:${a.id}`,
-        providers: ["mbta"],
+        providers: ["mb"],
         severity: mapMbtaSeverity(a.attributes?.severity ?? 1),
         effect: a.attributes?.effect ?? undefined,
         title: a.attributes?.header ?? "",
@@ -246,7 +246,7 @@ export async function getVehiclePositions(routeId: string): Promise<VehiclePosit
       // biome-ignore lint/suspicious/noExplicitAny: external API response
       (v: any): VehiclePosition => ({
         id: `mb:${v.id}`,
-        provider: "mbta",
+        provider: "mb",
         lat: v.attributes?.latitude ?? 0,
         lng: v.attributes?.longitude ?? 0,
         bearing: v.attributes?.bearing ?? undefined,
@@ -387,7 +387,7 @@ export async function getFacilities(stopId: string): Promise<Facility[]> {
         name: f.attributes?.long_name ?? f.attributes?.short_name ?? f.id,
         type,
         isAccessible,
-        provider: "mbta",
+        provider: "mb",
       };
     },
   );

@@ -203,18 +203,26 @@ interface JsDelivrFile {
   files?: JsDelivrFile[];
 }
 
-/** Recursively collect data JSON paths from a JSDelivr package tree. */
-function collectDataPaths(node: { files?: JsDelivrFile[] }, prefix = ""): string[] {
+interface JsDelivrFlatFile {
+  name: string;
+}
+
+/** Collect data JSON paths from JSDelivr responses (tree and flat variants). */
+function collectDataPaths(
+  node: { files?: Array<JsDelivrFile | JsDelivrFlatFile> },
+  prefix = "",
+): string[] {
   const paths: string[] = [];
   for (const f of node.files ?? []) {
-    const path = `${prefix}${f.name}`;
-    if (f.type === "directory") {
+    const name = f.name.startsWith("/") ? f.name.slice(1) : f.name;
+    const path = `${prefix}${name}`;
+    if ("type" in f && f.type === "directory") {
       paths.push(...collectDataPaths(f, `${path}/`));
     } else if (path.startsWith("data/") && path.endsWith(".json")) {
       paths.push(path);
     }
   }
-  return paths;
+  return [...new Set(paths)];
 }
 
 /** Fetch file listing via JSDelivr @HEAD (no auth, no rate limits). */

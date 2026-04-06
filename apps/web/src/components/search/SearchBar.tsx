@@ -355,6 +355,8 @@ export function SearchBar() {
           name: match.name,
           address: match.name,
           coordinates: [match.lng, match.lat] as [number, number],
+          category: "station",
+          rawCategory: "transit_stop",
         });
         useSidebarStore.getState().openSidebar(PANEL.PLACE);
         return true;

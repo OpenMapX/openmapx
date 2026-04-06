@@ -23,7 +23,7 @@ export function PlaceWeather({ lat, lng }: Props) {
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
 
   return (
-    <Box sx={{ pt: 1, pb: 1.5 }}>
+    <Box sx={{ py: 1 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <WeatherIcon code={current.weatherCode} isDay={current.isDay} size={28} />
         <Typography sx={{ fontWeight: 600, fontSize: 18 }}>

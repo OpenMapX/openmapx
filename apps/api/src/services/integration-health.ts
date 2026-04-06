@@ -118,13 +118,15 @@ export async function executeIntegrationHealthCheck(
     };
   }
 
-  // URL template interpolation
+  // URL template interpolation (fall back to static url if template produces a broken URL)
   let checkUrl: string;
   if (hc.urlTemplate) {
-    checkUrl = (hc.urlTemplate as string).replace(
+    const resolved = (hc.urlTemplate as string).replace(
       /\$\{(\w+)\}/g,
       (_, key: string) => process.env[key] ?? "",
     );
+    const hasHost = /^https?:\/\/[^/]/.test(resolved);
+    checkUrl = hasHost ? resolved : ((hc.url as string | undefined) ?? resolved);
   } else if (hc.url) {
     checkUrl = hc.url as string;
   } else {

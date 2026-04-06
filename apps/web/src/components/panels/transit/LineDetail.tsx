@@ -54,9 +54,11 @@ export function LineDetail({
   const providersList = routeHint?.providers ?? (route as MergedRoute)?.providers ?? [];
 
   // Derive a hint stop for providers without a route-stops endpoint.
-  // Pick a stop from the same provider as the route.
+  // Prefer route-specific hint from backend, otherwise pick a stop from the
+  // same provider as the route.
   const { data: linkedStops } = useLinkedTransitStops(place ?? null);
   const hintStopId = useMemo(() => {
+    if (routeHint?.hintStopId) return routeHint.hintStopId;
     if (!linkedStops?.length) return undefined;
     const provider = providersList[0];
     if (provider) {
@@ -64,7 +66,7 @@ export function LineDetail({
       if (match) return match.id;
     }
     return linkedStops[0].id;
-  }, [linkedStops, providersList]);
+  }, [linkedStops, providersList, routeHint?.hintStopId]);
 
   const { data: stops, isLoading: stopsLoading } = useRouteStops(routeId, hintStopId);
   const { data: alerts } = useRouteAlerts(routeId);

@@ -197,6 +197,8 @@ export interface RouteStop {
 /** A transit route merged across multiple providers. */
 export interface MergedRoute extends TransitRoute {
   providers: string[];
+  /** Suggested stop ID to resolve route stop sequences for providers lacking route-stops APIs. */
+  hintStopId?: string;
 }
 
 /** A departure merged across multiple providers/stops. */

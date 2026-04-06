@@ -95,7 +95,7 @@ export function PlaceTransitSection({
   // Show skeleton while loading only if we haven't confirmed there are no routes
   if (isLoading && !routes) {
     return (
-      <Box sx={{ px: 2, py: 1.5 }}>
+      <Box sx={{ px: 2, py: 1 }}>
         <Divider sx={{ mb: 1.5 }} />
         <Skeleton variant="text" width="40%" height={16} sx={{ mb: 1 }} />
         <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
@@ -113,7 +113,7 @@ export function PlaceTransitSection({
   const grouped = groupByMode(routes);
 
   return (
-    <Box sx={{ px: 2, py: 1.5 }}>
+    <Box sx={{ px: 2, py: 1 }}>
       <Divider sx={{ mb: 1.5 }} />
 
       {/* Section header */}

@@ -50,9 +50,10 @@ export function WeatherWidget() {
     <Box
       sx={{
         position: "absolute",
-        top: { xs: 110, sm: 66 },
+        top: { xs: 118, sm: 74 },
         left: 12,
         zIndex: 9,
+        width: { xs: "calc(100% - 110px)", sm: "auto" },
       }}
     >
       <Tooltip title={attrText} placement="bottom-start">
@@ -62,6 +63,7 @@ export function WeatherWidget() {
             display: "flex",
             alignItems: "center",
             gap: 0.75,
+            width: { xs: "100%", sm: 376 },
             px: 1.5,
             py: 0.75,
             borderRadius: "20px",
@@ -81,6 +83,8 @@ export function WeatherWidget() {
               color: "text.secondary",
               lineHeight: 1,
               display: { xs: "none", sm: "inline" },
+              flex: 1,
+              minWidth: 0,
             }}
           >
             {info.description}
@@ -91,8 +95,9 @@ export function WeatherWidget() {
               color: "text.secondary",
               lineHeight: 1,
               display: { xs: "none", sm: "inline" },
-              ml: 0.5,
-              "&::before": { content: '"·"', mr: 0.5 },
+              ml: "auto",
+              textAlign: "right",
+              whiteSpace: "nowrap",
             }}
           >
             H:{current.humidity}% W:{Math.round(current.windSpeed)}km/h{" "}

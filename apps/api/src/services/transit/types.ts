@@ -218,6 +218,8 @@ export interface TripPlanParams {
 export interface MergedRoute extends TransitRoute {
   /** All providers that reported this route (deduplicated). */
   providers: string[];
+  /** Suggested stop ID to resolve route stop sequences when provider has no route-stops endpoint. */
+  hintStopId?: string;
 }
 
 /** A departure that has been merged across multiple providers/stops. */

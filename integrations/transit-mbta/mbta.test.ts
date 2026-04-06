@@ -55,7 +55,7 @@ describe("mbta provider", () => {
       expect(stops[0].id).toBe("mb:place-north");
       expect(stops[0].name).toBe("North Station");
       expect(stops[0].modes).toEqual(["rail"]);
-      expect(stops[0].provider).toBe("mbta");
+      expect(stops[0].provider).toBe("mb");
 
       // Verify radius is divided by 1000 (1000m → 1km in URL)
       const fetchUrl = mockFetch.mock.calls[0][0] as string;
@@ -353,7 +353,7 @@ describe("mbta provider", () => {
 
       expect(vehicles).toHaveLength(1);
       expect(vehicles[0].id).toBe("mb:v1");
-      expect(vehicles[0].provider).toBe("mbta");
+      expect(vehicles[0].provider).toBe("mb");
       expect(vehicles[0].lat).toBe(42.36);
       expect(vehicles[0].lng).toBe(-71.06);
       expect(vehicles[0].bearing).toBe(180);
@@ -462,7 +462,7 @@ describe("mbta provider", () => {
       expect(facilities[0].type).toBe("elevator");
       expect(facilities[0].isAccessible).toBe(true);
       expect(facilities[0].name).toBe("Elevator 1");
-      expect(facilities[0].provider).toBe("mbta");
+      expect(facilities[0].provider).toBe("mb");
 
       expect(facilities[1].type).toBe("escalator");
       expect(facilities[1].isAccessible).toBe(false);

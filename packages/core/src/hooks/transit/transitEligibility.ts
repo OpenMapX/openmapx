@@ -168,6 +168,8 @@ export function isTransitName(name: string): boolean {
 export function isTransitEligiblePlace(place: Place | null): boolean {
   if (!place) return false;
   if (place.id.startsWith("coordinate-")) return false;
+  // Synthetic/opened transit stops are explicitly transit places.
+  if (place.id.startsWith("stop:")) return true;
   if (!place.coordinates || !place.name) return false;
   // External data source places (e.g. EV charging) are never transit infrastructure
   if (place.dataSourceDetail) return false;

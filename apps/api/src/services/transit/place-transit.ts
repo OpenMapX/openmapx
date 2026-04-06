@@ -6,7 +6,6 @@ import {
   haversineMeters,
   isTripNumber,
   normalizeHeadsign,
-  normalizeName,
   normalizeShortName,
 } from "./dedup";
 import { transitOrchestrator } from "./orchestrator";
@@ -22,6 +21,22 @@ import type {
 
 const LINK_RADIUS_M = 1000; // 1 km
 const MIN_NAME_DICE = 0.4;
+const MIN_INFORMATIVE_TOKEN_LEN = 4;
+
+function normalizeLinkName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeLinkName(name: string): string[] {
+  const norm = normalizeLinkName(name);
+  if (!norm) return [];
+  return norm.split(" ").filter((t) => t.length > 0);
+}
 
 /** Canonical cache id from place coordinates + name (synonyms normalised). */
 function placeCacheId(lat: number, lng: number, name: string, placeId?: string): string {
@@ -52,12 +67,12 @@ export async function getLinkedStops(
   // providers from distant regions don't contribute stops that share stop-database
   // IDs but would then return their own regional routes via getRoutesForStop.
   const buf = 1.0;
-  const _placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
+  const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
   // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
   // providers indexing either form are found, then deduplicate by stop id.
   const variants = getQueryVariants(name);
   const variantResults = await Promise.all(
-    variants.map((v) => transitOrchestrator.searchByName(v, 30)),
+    variants.map((v) => transitOrchestrator.searchByNameRaw(v, 30, placeBbox)),
   );
   const seen = new Set<string>();
   const raw = variantResults.flat().filter((s) => {
@@ -65,12 +80,57 @@ export async function getLinkedStops(
     seen.add(s.id);
     return true;
   });
-  const normPlace = normalizeName(name);
+  const normVariants = variants
+    .map((v) => normalizeLinkName(v))
+    .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
 
-  const linked = raw.filter((stop) => {
+  // First-pass candidates: distance + fuzzy name match against any query variant.
+  const prelim = raw.filter((stop) => {
     if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
-    return diceSimilarity(normalizeName(stop.name), normPlace) >= MIN_NAME_DICE;
+    const stopNorm = normalizeLinkName(stop.name);
+    if (!stopNorm) return false;
+    let best = 0;
+    for (const q of normVariants) {
+      const score = diceSimilarity(stopNorm, q);
+      if (score > best) best = score;
+    }
+    return best >= MIN_NAME_DICE;
   });
+
+  if (prelim.length === 0) {
+    await cacheSet(key, [], TTL.transit.placeStops);
+    return [];
+  }
+
+  // Second-pass pruning: avoid linking by city token only.
+  // Keep candidates that share at least one informative token from the place
+  // name variants (tokens present in some, but not all, prelim candidates).
+  const tokenFreq = new Map<string, number>();
+  const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
+  for (const tokens of prelimTokenSets) {
+    for (const t of tokens) {
+      tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+    }
+  }
+
+  const placeTokens = new Set<string>();
+  for (const q of normVariants) {
+    for (const t of tokenizeLinkName(q)) {
+      if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
+      if (/^\d+$/.test(t)) continue;
+      placeTokens.add(t);
+    }
+  }
+
+  const informativeTokens = Array.from(placeTokens).filter((t) => {
+    const count = tokenFreq.get(t) ?? 0;
+    return count > 0 && count < prelim.length;
+  });
+
+  const linked =
+    informativeTokens.length === 0
+      ? prelim
+      : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
 
   await cacheSet(key, linked, TTL.transit.placeStops);
   return linked;
@@ -122,11 +182,18 @@ export async function getMergedRoutes(
 
       if (!existing) {
         // First time seeing this route
-        byKey.set(k, { ...route, providers: [providerName] } as MergedRoute);
+        byKey.set(k, {
+          ...route,
+          providers: [providerName],
+          hintStopId: stops[i].id,
+        } as MergedRoute);
       } else {
         // Already seen — merge providers
         if (!existing.providers.includes(providerName)) {
           existing.providers.push(providerName);
+        }
+        if (!existing.hintStopId) {
+          existing.hintStopId = stops[i].id;
         }
         // Prefer entry with color data
         if (!existing.color && route.color) {
@@ -208,7 +275,7 @@ async function buildMergedTimetable(
     const stopProvider = stops[i].provider;
 
     for (const dep of result.value) {
-      // Include both feed-level tag (e.g. "de_DELFI") and instance provider (e.g. "transitous")
+      // Include both feed-level tag (e.g. "de_DELFI") and instance provider (e.g. "mo")
       const feedProviders: string[] = [];
       if (dep.feedTag) feedProviders.push(dep.feedTag);
       if (stopProvider && stopProvider !== dep.feedTag) feedProviders.push(stopProvider);

@@ -23,7 +23,7 @@ export const transitousInstance: MotisInstance = (() => {
     headers: { "User-Agent": USER_AGENT },
   });
   withTimeout(client);
-  return { client, prefix: "mo:", provider: "transitous" };
+  return { client, prefix: "mo:", provider: "mo" };
 })();
 
 export const motisLocalInstance: MotisInstance = (() => {
@@ -31,5 +31,5 @@ export const motisLocalInstance: MotisInstance = (() => {
     baseUrl: process.env.MOTIS_URL ?? "http://localhost:8081",
   });
   withTimeout(client);
-  return { client, prefix: "ms:", provider: "motis-local" };
+  return { client, prefix: "ms:", provider: "ms" };
 })();

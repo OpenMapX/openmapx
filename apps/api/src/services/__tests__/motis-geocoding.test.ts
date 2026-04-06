@@ -128,7 +128,7 @@ describe("autocomplete", () => {
       lat: 52.52,
       lng: 13.37,
       modes: ["bus", "rail"],
-      provider: "transitous",
+      provider: "mo",
     });
     expect(results[0].rawCategory).toBe("train_station");
   });
