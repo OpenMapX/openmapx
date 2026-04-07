@@ -16,6 +16,7 @@ import {
   trafficPreview,
   transitPreview,
   travelTimePreview,
+  weatherAlertsPreview,
   weatherPreview,
   wildfirePreview,
   winterSportsPreview,
@@ -43,6 +44,7 @@ export const INTEGRATION_PREVIEWS: Record<string, ReactNode> = {
   "travel-time": travelTimePreview,
   measurement: measurePreview,
   weather: weatherPreview,
+  "weather-alerts": weatherAlertsPreview,
   environment: environmentPreview,
 };
 

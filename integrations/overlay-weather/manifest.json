@@ -41,10 +41,24 @@
   "envVars": ["OWM_API_KEY"],
   "quality": "built-in",
   "category": "Data Overlays",
-  "healthCheck": {
-    "type": "http",
-    "url": "https://api.rainviewer.com/public/weather-maps.json"
-  },
+  "healthCheck": [
+    {
+      "name": "RainViewer",
+      "type": "http",
+      "url": "https://api.rainviewer.com/public/weather-maps.json"
+    },
+    {
+      "name": "OpenWeatherMap",
+      "type": "http",
+      "urlTemplate": "https://tile.openweathermap.org/map/temp_new/0/0/0.png?appid=${OWM_API_KEY}",
+      "requiredEnvVars": ["OWM_API_KEY"]
+    },
+    {
+      "name": "Open-Meteo",
+      "type": "ping",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m"
+    }
+  ],
   "attribution": [
     {
       "name": "RainViewer",
@@ -77,6 +91,13 @@
       "service": "OpenWeatherMap",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://openweather.co.uk/privacy-policy",
+      "personalData": false,
+      "cookies": false
+    },
+    {
+      "service": "Open-Meteo",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://open-meteo.com/en/terms",
       "personalData": false,
       "cookies": false
     }

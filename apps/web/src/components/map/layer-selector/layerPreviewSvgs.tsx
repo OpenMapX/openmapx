@@ -966,3 +966,48 @@ export const satelliteImageryPreview: ReactNode = (
     </g>
   </svg>
 );
+
+export const weatherAlertsPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <rect width="80" height="80" fill="#e8edf2" />
+    {/* map background */}
+    <path d="M0 30 Q20 24 40 30 Q60 36 80 28 L80 80 L0 80Z" fill="#dde5ec" opacity="0.4" />
+    {/* extreme severity polygon */}
+    <polygon
+      points="12,18 32,14 36,30 18,34"
+      fill="#991b1b"
+      opacity="0.3"
+      stroke="#991b1b"
+      strokeWidth="1.2"
+    />
+    {/* severe severity polygon */}
+    <polygon
+      points="38,22 62,16 66,40 42,44"
+      fill="#ea580c"
+      opacity="0.3"
+      stroke="#ea580c"
+      strokeWidth="1.2"
+    />
+    {/* moderate severity polygon */}
+    <polygon
+      points="8,42 28,38 32,58 14,60"
+      fill="#d97706"
+      opacity="0.3"
+      stroke="#d97706"
+      strokeWidth="1.2"
+    />
+    {/* minor severity point alert */}
+    <circle cx="58" cy="56" r="5" fill="#ca8a04" opacity="0.85" stroke="#fff" strokeWidth="1.2" />
+    {/* warning icon */}
+    <g transform="translate(32,50) scale(0.5)" opacity="0.7">
+      <path d="M12 2L1 21h22L12 2zm1 14h-2v2h2v-2zm0-6h-2v4h2v-4z" fill="#991b1b" />
+    </g>
+  </svg>
+);

@@ -31,11 +31,29 @@
     }
   },
   "envVars": ["TANKERKOENIG_API_KEY"],
-  "healthCheck": {
-    "type": "http",
-    "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${TANKERKOENIG_API_KEY}",
-    "requiredEnvVars": ["TANKERKOENIG_API_KEY"]
-  },
+  "healthCheck": [
+    {
+      "name": "Tankerkoenig (DE)",
+      "type": "http",
+      "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${TANKERKOENIG_API_KEY}",
+      "requiredEnvVars": ["TANKERKOENIG_API_KEY"]
+    },
+    {
+      "name": "E-Control (AT)",
+      "type": "ping",
+      "url": "https://api.e-control.at/sprit/1.0/search/gas-stations/by-address?latitude=48.2082&longitude=16.3738&fuelType=DIE&includeClosed=false"
+    },
+    {
+      "name": "Prix Carburants (FR)",
+      "type": "ping",
+      "url": "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records?limit=1"
+    },
+    {
+      "name": "Minetur (ES)",
+      "type": "ping",
+      "url": "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/"
+    }
+  ],
   "quality": "built-in",
   "category": "Fuel Prices",
   "attribution": [

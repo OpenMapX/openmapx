@@ -60,6 +60,7 @@ export function LayerSelector() {
 
   const handleClose = () => {
     setAnchorEl(null);
+    setDesktopExpanded(false);
   };
 
   const clearDesktopCloseTimer = () => {
@@ -247,6 +248,11 @@ export function LayerSelector() {
         open={open}
         anchorEl={anchorEl}
         onClose={handleClose}
+        disableScrollLock
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        hideBackdrop
         anchorOrigin={
           desktopDock
             ? { vertical: "bottom", horizontal: "left" }
@@ -254,8 +260,10 @@ export function LayerSelector() {
         }
         transformOrigin={{ vertical: "bottom", horizontal: "left" }}
         slotProps={{
+          root: { sx: { pointerEvents: "none" } },
           paper: {
             sx: {
+              pointerEvents: "auto",
               mb: desktopDock ? 0 : 1.25,
               borderRadius: desktopDock ? "22px" : "16px",
               width: desktopDock ? "auto" : 346,

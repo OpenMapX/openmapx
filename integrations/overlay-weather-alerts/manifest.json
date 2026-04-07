@@ -1,0 +1,112 @@
+{
+  "id": "overlay-weather-alerts",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://www.weather.gov/documentation/services-web-api, https://maps.dwd.de/geoserver/web/, https://www.meteoalarm.org/",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "weatherAlerts",
+      "icon": "warning_amber",
+      "iconPath": "M12 5.99L19.53 19H4.47L12 5.99M12 2L1 21h22L12 2zm1 14h-2v2h2v-2zm0-6h-2v4h2v-4z"
+    },
+    "overlay": {
+      "excludes": ["street-view"],
+      "minZoom": 2
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": [
+    {
+      "name": "NOAA",
+      "type": "http",
+      "url": "https://api.weather.gov/alerts/active?status=actual&limit=1"
+    },
+    {
+      "name": "ECCC",
+      "type": "http",
+      "url": "https://api.weather.gc.ca/collections/weather-alerts/items?f=json&limit=1"
+    },
+    {
+      "name": "DWD",
+      "type": "http",
+      "url": "https://maps.dwd.de/geoserver/dwd/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=dwd:Warnungen_Gemeinden_vereinigt&outputFormat=application/json&count=1"
+    },
+    {
+      "name": "MeteoAlarm",
+      "type": "ping",
+      "url": "https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-de"
+    }
+  ],
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "attribution": [
+    {
+      "name": "NOAA National Weather Service",
+      "url": "https://www.weather.gov/",
+      "license": "Public Domain",
+      "licenseUrl": "https://www.weather.gov/disclaimer"
+    },
+    {
+      "name": "ECCC (Environment Canada)",
+      "url": "https://weather.gc.ca/",
+      "license": "Open Government Licence - Canada",
+      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada"
+    },
+    {
+      "name": "DWD (Deutscher Wetterdienst)",
+      "url": "https://www.dwd.de/",
+      "license": "GeoNutzV",
+      "licenseUrl": "https://www.dwd.de/EN/service/copyright/copyright_node.html"
+    },
+    {
+      "name": "MeteoAlarm / EUMETNET",
+      "url": "https://www.meteoalarm.org/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://www.meteoalarm.org/en/terms-of-use/"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.weather.gov/privacy",
+      "personalData": false,
+      "cookies": false
+    },
+    {
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
+      "personalData": false,
+      "cookies": false
+    },
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.dwd.de/DE/service/datenschutz/datenschutz_node.html",
+      "personalData": false,
+      "cookies": false
+    },
+    {
+      "providerCountry": "EU",
+      "providerPrivacyUrl": "https://www.meteoalarm.org/en/privacy-policy/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

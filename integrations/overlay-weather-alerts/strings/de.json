@@ -1,0 +1,10 @@
+{
+  "name": "Wetterwarnungen",
+  "description": "Aktive Wetterwarnungen von NOAA (USA), ECCC (Kanada), DWD (Deutschland) und MeteoAlarm (Europa)",
+  "privacy": {
+    "purpose": "Anzeige aktiver Wetterwarnungen auf der Karte",
+    "dataSent": "Keine Nutzerdaten gesendet; nur vordefinierte API-Abfragen",
+    "dataReceived": "Warngebiete, Schweregrade, Ereignistypen und Beschreibungen",
+    "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
+  }
+}

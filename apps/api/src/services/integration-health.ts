@@ -49,18 +49,28 @@ function errMsg(err: unknown): string {
   return String(err).slice(0, 120);
 }
 
-export async function executeIntegrationHealthCheck(
+async function executeSingleHealthCheck(
   integration: LoadedIntegration,
+  hc: {
+    name?: string;
+    type: string;
+    url?: string;
+    urlTemplate?: string;
+    headers?: Record<string, string>;
+    requiredEnvVars?: string[];
+    category?: string;
+  },
+  suffix?: string,
 ): Promise<ServiceStatus | null> {
-  const hc = integration.manifest.healthCheck;
-  if (!hc) return null;
-
   const category =
+    hc.category ??
     ((integration.manifest as Record<string, unknown>).category as string) ??
     integration.manifest.domains[0] ??
     "Other";
-  const id = integration.id;
-  const name = toIntegrationMeta(integration).name;
+  const id = suffix ? `${integration.id}:${suffix}` : integration.id;
+  const name = hc.name
+    ? `${toIntegrationMeta(integration).name} — ${hc.name}`
+    : toIntegrationMeta(integration).name;
 
   // Check required env vars
   if (hc.requiredEnvVars?.some((v: string) => !process.env[v])) {
@@ -74,8 +84,8 @@ export async function executeIntegrationHealthCheck(
     };
   }
 
-  // Custom health check (registered via ctx.registerHealthCheck)
-  if (integration.customHealthCheck) {
+  // Custom health check (registered via ctx.registerHealthCheck) — only for primary
+  if (!suffix && integration.customHealthCheck) {
     const start = Date.now();
     try {
       const result = await integration.customHealthCheck();
@@ -159,12 +169,10 @@ export async function executeIntegrationHealthCheck(
     const ms = Date.now() - start;
 
     if (hc.type === "ping") {
-      // Ping: any non-5xx = up
       if (res.status < 500) {
         return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
       }
     } else {
-      // HTTP: 2xx = up
       if (res.ok) {
         return { id, name, category, url: displayUrl, status: "up", responseTime: ms };
       }
@@ -192,12 +200,32 @@ export async function executeIntegrationHealthCheck(
   }
 }
 
+export async function executeIntegrationHealthCheck(
+  integration: LoadedIntegration,
+): Promise<ServiceStatus[]> {
+  const raw = integration.manifest.healthCheck;
+  if (!raw) return [];
+
+  const checks = Array.isArray(raw) ? raw : [raw];
+  const results = await Promise.all(
+    checks.map((hc, i) =>
+      executeSingleHealthCheck(
+        integration,
+        hc,
+        checks.length > 1 ? (hc.name ?? String(i)) : undefined,
+      ),
+    ),
+  );
+
+  return results.filter((r): r is ServiceStatus => r !== null);
+}
+
 export async function executeAllIntegrationHealthChecks(
   integrations: LoadedIntegration[],
 ): Promise<ServiceStatus[]> {
   const checks = integrations.filter((i) => i.manifest.healthCheck);
   const results = await Promise.all(checks.map(executeIntegrationHealthCheck));
-  const filtered = results.filter((r): r is ServiceStatus => r !== null);
+  const filtered = results.flat();
 
   // Update the shared health cache and persist to health_history
   for (const r of filtered) {

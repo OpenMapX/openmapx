@@ -37,10 +37,28 @@
     }
   },
   "envVars": ["DB_PARKING_CLIENT_ID", "DB_PARKING_API_KEY"],
-  "healthCheck": {
-    "type": "http",
-    "url": "https://api.mobidata-bw.de/park-api/api/public/v3/parking-sites?limit=1"
-  },
+  "healthCheck": [
+    {
+      "name": "ParkAPI",
+      "type": "http",
+      "url": "https://api.mobidata-bw.de/park-api/api/public/v3/parking-sites?limit=1"
+    },
+    {
+      "name": "DB BahnPark",
+      "type": "http",
+      "urlTemplate": "https://apis.deutschebahn.com/db-api-marketplace/apis/parking-information/db-bahnpark/v2/parking-facilities?limit=1",
+      "headers": {
+        "DB-Client-Id": "${DB_PARKING_CLIENT_ID}",
+        "DB-Api-Key": "${DB_PARKING_API_KEY}"
+      },
+      "requiredEnvVars": ["DB_PARKING_CLIENT_ID", "DB_PARKING_API_KEY"]
+    },
+    {
+      "name": "ParkenDD",
+      "type": "http",
+      "url": "https://api.parkendd.de"
+    }
+  ],
   "quality": "built-in",
   "category": "Parking",
   "attribution": [
@@ -55,6 +73,12 @@
       "url": "https://www.mobidata-bw.de/",
       "license": "DL-DE-BY-2.0",
       "licenseUrl": "https://www.govdata.de/dl-de/by-2-0"
+    },
+    {
+      "name": "ParkenDD",
+      "url": "https://parkendd.de/",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/offenesdresden/ParkAPI/blob/master/LICENSE"
     },
     {
       "name": "OpenStreetMap",
@@ -72,6 +96,11 @@
     {
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.mobidata-bw.de/pages/datenschutz",
+      "personalData": false
+    },
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://parkendd.de/",
       "personalData": false
     }
   ]

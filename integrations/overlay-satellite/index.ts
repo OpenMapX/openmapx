@@ -1,11 +1,13 @@
 import type { IntegrationContext } from "@openmapx/core";
 import { XMLParser } from "fast-xml-parser";
-import { type Capabilities, GIBS_LAYERS } from "./store";
+import { type Capabilities, GIBS_LAYERS, type GibsLayerId } from "./store";
 
 const FETCH_TIMEOUT_MS = 15_000;
 
 // Derive lookup maps from the single source of truth in store.ts
-const GIBS_LAYER_BY_ID = new Map(GIBS_LAYERS.map((l) => [l.id, l]));
+const GIBS_LAYER_BY_ID = new Map<GibsLayerId, (typeof GIBS_LAYERS)[number]>(
+  GIBS_LAYERS.map((l) => [l.id, l]),
+);
 const GIBS_ID_TO_KEY = new Map(GIBS_LAYERS.map((l) => [l.identifier, l.id]));
 
 const CAPABILITIES_CACHE_KEY = "satellite:capabilities";
@@ -140,7 +142,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/tiles/:layerId/:date/:z/:y/:x", async (req, reply) => {
     const { layerId, date, z, y, x } = req.params as Record<string, string>;
 
-    const layer = GIBS_LAYER_BY_ID.get(layerId);
+    const layer = GIBS_LAYER_BY_ID.get(layerId as GibsLayerId);
     if (!layer) {
       reply.status(400).send({ message: "Invalid layer" });
       return;

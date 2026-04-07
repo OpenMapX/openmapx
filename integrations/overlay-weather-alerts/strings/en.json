@@ -1,0 +1,10 @@
+{
+  "name": "Weather Alerts",
+  "description": "Active severe weather warnings from NOAA (US), ECCC (Canada), DWD (Germany), and MeteoAlarm (Europe)",
+  "privacy": {
+    "purpose": "Display active weather alerts and warnings on the map",
+    "dataSent": "No user data sent; pre-defined API queries only",
+    "dataReceived": "Alert polygons, severity levels, event types, and descriptions",
+    "dataRetention": "Cached for 5 minutes server-side"
+  }
+}

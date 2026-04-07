@@ -1,4 +1,8 @@
 {
   "name": "Travel Time (Isochrone)",
-  "description": "Travel time isochrone visualization using existing routing APIs"
+  "description": "Travel time isochrone visualization using existing routing APIs",
+  "privacy": {
+    "purpose": "Calculate and display reachable areas by travel time on the map",
+    "dataSent": "Origin coordinates, travel mode, time intervals"
+  }
 }

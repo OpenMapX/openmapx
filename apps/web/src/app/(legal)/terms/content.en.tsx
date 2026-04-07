@@ -28,7 +28,7 @@ export default function TermsContent({
         Terms of Service
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        Last updated: March 2026
+        Last updated: April 2026
       </Typography>
 
       <Section title="1. Scope and Provider">
@@ -56,11 +56,11 @@ export default function TermsContent({
           OpenMapX is a free, open-data mapping service that provides map viewing, address search,
           route planning (including isochrones and elevation profiles), public transit information,
           street-level imagery, place photos and enrichment data, live traffic overlays, air quality
-          data, wildfire and earthquake monitoring, hiking and outdoor trail information, parking
-          availability, EV charging station locations, fuel prices, shared mobility data
-          (bike-sharing, e-scooters, car-sharing), and general place information. The service
-          aggregates data from multiple open-data sources and third-party APIs as listed in Section
-          10 below.
+          data, weather alerts, wildfire and earthquake monitoring, natural event tracking,
+          satellite imagery, hiking and outdoor trail information, parking availability, EV charging
+          station locations, fuel prices, shared mobility data (bike-sharing, e-scooters,
+          car-sharing), and general place information. The service aggregates data from multiple
+          open-data sources and third-party APIs as listed in Section 10 below.
         </Typography>
       </Section>
 
@@ -186,6 +186,9 @@ export default function TermsContent({
             <Typography>Air quality measurements and environmental indices</Typography>
           </li>
           <li>
+            <Typography>Weather alerts and severe weather warnings</Typography>
+          </li>
+          <li>
             <Typography>
               Wildfire detections, earthquake data, and other natural disaster information
             </Typography>
@@ -209,11 +212,24 @@ export default function TermsContent({
           </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
+          <strong>Geographic coverage and data completeness.</strong> OpenMapX aggregates data from
+          regional and national data providers. Many features, including but not limited to weather
+          alerts, public transit information, traffic data, air quality measurements, and fuel
+          prices, are only available in certain countries or regions. Coverage depends entirely on
+          the availability of open-data sources in a given area and may change without notice. The
+          absence of data for a particular location does not indicate that no relevant information
+          exists; it means that no suitable open-data source is currently integrated for that area.
+          We make no representation that any feature is available worldwide or that data displayed
+          is complete for any given region.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           <strong>
             Do not rely on OpenMapX for safety-critical decisions, emergency navigation, disaster
             response, or situations where inaccurate information could lead to harm. In particular,
-            wildfire and earthquake data may be delayed or incomplete and must not be used as a
-            substitute for official emergency alerts.
+            weather alerts, wildfire detections, earthquake data, and other natural disaster
+            information may be delayed, incomplete, or unavailable in your region and must not be
+            used as a substitute for official emergency alerts from your national weather service or
+            civil protection authority.
           </strong>
         </Typography>
         <Typography sx={{ mt: 1 }}>

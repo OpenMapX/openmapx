@@ -422,10 +422,10 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       return { id: integration.id, status: "unconfigured", error: "No health check defined" };
     }
 
-    const result = await executeIntegrationHealthCheck(integration);
-    return (
-      result ?? { id: integration.id, status: "unconfigured", error: "No health check defined" }
-    );
+    const results = await executeIntegrationHealthCheck(integration);
+    return results.length > 0
+      ? results
+      : [{ id: integration.id, status: "unconfigured", error: "No health check defined" }];
   });
 
   app.post(
@@ -797,19 +797,20 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       });
     }
 
-    const result = await executeIntegrationHealthCheck(integration);
-    if (!result) {
+    const results = await executeIntegrationHealthCheck(integration);
+    if (results.length === 0) {
       return reply.status(500).send({ error: "Health check returned no result" });
     }
 
-    const passed = result.status === "up";
+    const passed = results.every((r) => r.status === "up");
+    const primary = results[0];
     return {
       ok: passed,
       integrationId,
       key: (request.body as { key?: string })?.key ?? null,
-      status: result.status,
-      responseTime: result.responseTime,
-      error: result.error ?? null,
+      status: passed ? "up" : primary.status,
+      responseTime: primary.responseTime,
+      error: results.find((r) => r.error)?.error ?? null,
     };
   });
 

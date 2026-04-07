@@ -22,6 +22,7 @@ const privacyEntrySchema = z.object({
 });
 
 const healthCheckSchema = z.object({
+  name: z.string().optional(),
   type: z.enum(["http", "ping", "tcp", "custom"]),
   url: z.string().optional(),
   urlTemplate: z.string().optional(),
@@ -92,7 +93,7 @@ export const integrationManifestSchema = z.object({
   configSchema: z.record(z.string(), z.unknown()).optional(),
   envVars: z.array(z.string()).optional(),
 
-  healthCheck: healthCheckSchema.optional(),
+  healthCheck: z.union([healthCheckSchema, z.array(healthCheckSchema)]).optional(),
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
 
   attribution: z.array(attributionSchema).optional(),

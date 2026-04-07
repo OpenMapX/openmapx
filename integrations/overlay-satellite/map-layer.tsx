@@ -6,7 +6,7 @@ import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { type Capabilities, useSatelliteStore } from "./store";
+import { type Capabilities, GIBS_LAYERS, useSatelliteStore } from "./store";
 
 const SOURCE_ID = "openmapx-satellite-gibs-source";
 const LAYER_ID = "openmapx-satellite-gibs-layer";

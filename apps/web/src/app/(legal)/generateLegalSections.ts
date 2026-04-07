@@ -163,8 +163,10 @@ export function generatePrivacySectionsFromManifests(
 
     for (let i = 0; i < privacyEntries.length; i++) {
       const p = privacyEntries[i];
+      const attrName = integration.attribution?.[i]?.name;
       const service =
         localizedPrivacyField(integration, locale, i, "service") ||
+        attrName ||
         localized(integration, locale, "name") ||
         integration.name;
       grouped.get(sectionMeta.key)?.rows.push({

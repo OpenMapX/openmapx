@@ -28,7 +28,7 @@ export default function TermsContentDe({
         Nutzungsbedingungen
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        Zuletzt aktualisiert: M&auml;rz 2026
+        Zuletzt aktualisiert: April 2026
       </Typography>
 
       <Section title="1. Geltungsbereich und Anbieter">
@@ -56,8 +56,9 @@ export default function TermsContentDe({
           OpenMapX ist ein kostenloser Open-Data-Kartendienst, der Kartenansicht, Adresssuche,
           Routenplanung (einschlie&szlig;lich Isochronen und H&ouml;henprofilen),
           Nahverkehrsinformationen, Stra&szlig;enansicht, Ortsfotos und Anreicherungsdaten,
-          Live-Verkehrs-Overlays, Luftqualit&auml;tsdaten, Waldbrand- und Erdbeben&uuml;berwachung,
-          Wander- und Outdoor-Informationen, Parkplatzverf&uuml;gbarkeit, E-Ladestation-Standorte,
+          Live-Verkehrs-Overlays, Luftqualit&auml;tsdaten, Wetterwarnungen, Waldbrand- und
+          Erdbeben&uuml;berwachung, Naturereignis-Tracking, Satellitenbilder, Wander- und
+          Outdoor-Informationen, Parkplatzverf&uuml;gbarkeit, E-Ladestation-Standorte,
           Kraftstoffpreise, geteilte Mobilit&auml;tsdaten (Bike-Sharing, E-Scooter, Carsharing) und
           allgemeine Ortsinformationen bietet. Der Dienst aggregiert Daten aus mehreren offenen
           Datenquellen und Drittanbieter-APIs wie in Abschnitt&nbsp;10 aufgef&uuml;hrt.
@@ -194,6 +195,9 @@ export default function TermsContentDe({
             <Typography>Luftqualit&auml;tsmessungen und Umweltindizes</Typography>
           </li>
           <li>
+            <Typography>Wetterwarnungen und Unwetterwarnungen</Typography>
+          </li>
+          <li>
             <Typography>
               Waldbranderkennungen, Erdbebendaten und andere Naturkatastrophen-Informationen
             </Typography>
@@ -219,12 +223,27 @@ export default function TermsContentDe({
           </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
+          <strong>Geografische Abdeckung und Datenvollst&auml;ndigkeit.</strong> OpenMapX aggregiert
+          Daten von regionalen und nationalen Datenanbietern. Viele Funktionen, darunter unter
+          anderem Wetterwarnungen, Nahverkehrsinformationen, Verkehrsdaten,
+          Luftqualit&auml;tsmessungen und Kraftstoffpreise, sind nur in bestimmten L&auml;ndern oder
+          Regionen verf&uuml;gbar. Die Abdeckung h&auml;ngt vollst&auml;ndig von der
+          Verf&uuml;gbarkeit offener Datenquellen in einem bestimmten Gebiet ab und kann sich ohne
+          Vorank&uuml;ndigung &auml;ndern. Das Fehlen von Daten f&uuml;r einen bestimmten Standort
+          bedeutet nicht, dass keine relevanten Informationen existieren; es bedeutet lediglich,
+          dass derzeit keine geeignete offene Datenquelle f&uuml;r dieses Gebiet integriert ist. Wir
+          geben keine Zusicherung, dass eine Funktion weltweit verf&uuml;gbar ist oder dass die
+          angezeigten Daten f&uuml;r eine bestimmte Region vollst&auml;ndig sind.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           <strong>
             Verlassen Sie sich nicht auf OpenMapX f&uuml;r sicherheitskritische Entscheidungen,
             Notfallnavigation, Katastrophenbew&auml;ltigung oder Situationen, in denen ungenaue
             Informationen zu Sch&auml;den f&uuml;hren k&ouml;nnten. Insbesondere k&ouml;nnen
-            Waldbrand- und Erdbebendaten verz&ouml;gert oder unvollst&auml;ndig sein und d&uuml;rfen
-            nicht als Ersatz f&uuml;r offizielle Katastrophenwarnungen verwendet werden.
+            Wetterwarnungen, Waldbranderkennungen, Erdbebendaten und andere
+            Naturkatastrophen-Informationen verz&ouml;gert, unvollst&auml;ndig oder in Ihrer Region
+            nicht verf&uuml;gbar sein und d&uuml;rfen nicht als Ersatz f&uuml;r offizielle Warnungen
+            Ihres nationalen Wetterdienstes oder Katastrophenschutzes verwendet werden.
           </strong>
         </Typography>
         <Typography sx={{ mt: 1 }}>

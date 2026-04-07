@@ -430,6 +430,15 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
 
+  integrations/overlay-weather-alerts:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      fast-xml-parser:
+        specifier: ^5.5.10
+        version: 5.5.10
+
   integrations/overlay-wildfires:
     dependencies:
       '@openmapx/core':

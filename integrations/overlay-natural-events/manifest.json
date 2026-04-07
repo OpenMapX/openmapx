@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "documentation": "https://eonet.gsfc.nasa.gov/docs/v3",
+  "documentation": "https://eonet.gsfc.nasa.gov/docs/v3, https://www.gdacs.org/gdacsapi/",
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,
@@ -33,10 +33,18 @@
     }
   },
   "envVars": [],
-  "healthCheck": {
-    "type": "http",
-    "url": "https://eonet.gsfc.nasa.gov/api/v3/categories"
-  },
+  "healthCheck": [
+    {
+      "name": "NASA EONET",
+      "type": "http",
+      "url": "https://eonet.gsfc.nasa.gov/api/v3/categories"
+    },
+    {
+      "name": "GDACS",
+      "type": "http",
+      "url": "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC&fromDate=2020-01-01&toDate=2020-01-02&alertlevel=Green"
+    }
+  ],
   "quality": "built-in",
   "category": "Data Overlays",
   "attribution": [
@@ -45,12 +53,24 @@
       "url": "https://eonet.gsfc.nasa.gov/",
       "license": "CC0 1.0",
       "licenseUrl": "https://earthdata.nasa.gov/learn/use-data/data-use-policy"
+    },
+    {
+      "name": "GDACS",
+      "url": "https://www.gdacs.org/",
+      "license": "Public Domain",
+      "licenseUrl": "https://www.gdacs.org/About/termofuse.aspx"
     }
   ],
   "privacy": [
     {
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+      "personalData": false,
+      "cookies": false
+    },
+    {
+      "providerCountry": "EU",
+      "providerPrivacyUrl": "https://www.gdacs.org/About/termofuse.aspx",
       "personalData": false,
       "cookies": false
     }

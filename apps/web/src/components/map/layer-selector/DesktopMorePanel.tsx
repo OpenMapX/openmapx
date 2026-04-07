@@ -22,15 +22,7 @@ interface DesktopMorePanelProps {
   onClose: () => void;
 }
 
-function OverlayDetailTile({
-  item,
-  label,
-  onClose,
-}: {
-  item: GeneratedLayerEntry;
-  label: string;
-  onClose: () => void;
-}) {
+function OverlayDetailTile({ item, label }: { item: GeneratedLayerEntry; label: string }) {
   const entry = item.overlayId ? OVERLAY_REGISTRY.find((r) => r.id === item.overlayId) : undefined;
   const active = entry?.useActive() ?? false;
 
@@ -43,7 +35,6 @@ function OverlayDetailTile({
         item.overlayId
           ? () => {
               toggleOverlay(item.overlayId);
-              onClose();
             }
           : undefined
       }
@@ -102,12 +93,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
         {mapDetails
           .filter((item) => isAvailable(item.serviceId))
           .map((item) => (
-            <OverlayDetailTile
-              key={item.id}
-              item={item}
-              label={t(item.labelKey)}
-              onClose={onClose}
-            />
+            <OverlayDetailTile key={item.id} item={item} label={t(item.labelKey)} />
           ))}
       </Box>
 
@@ -157,7 +143,6 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
                 tool
                   ? () => {
                       tool.toggle();
-                      onClose();
                     }
                   : undefined
               }
@@ -190,7 +175,6 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
             labelWidth={96}
             onClick={() => {
               setActiveLayer(item.id as MapLayer);
-              onClose();
             }}
           />
         ))}

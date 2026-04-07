@@ -30,6 +30,11 @@ export const CATEGORY_COLORS: Record<string, string> = {
   manmade: "#546e7a",
 };
 
+const ALERT_STROKE_COLORS: Record<string, string> = {
+  red: "#d50000",
+  orange: "#ff6d00",
+};
+
 function buildColorExpr(): maplibregl.ExpressionSpecification {
   const cases: (string | string[])[] = [];
   for (const [id, color] of Object.entries(CATEGORY_COLORS)) {
@@ -40,6 +45,29 @@ function buildColorExpr(): maplibregl.ExpressionSpecification {
     ["get", "categoryId"],
     ...cases,
     "#78909c",
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function buildStrokeColorExpr(): maplibregl.ExpressionSpecification {
+  return [
+    "match",
+    ["get", "alertLevel"],
+    "red",
+    ALERT_STROKE_COLORS.red,
+    "orange",
+    ALERT_STROKE_COLORS.orange,
+    "#ffffff",
+  ] as maplibregl.ExpressionSpecification;
+}
+
+function buildStrokeWidthExpr(): maplibregl.ExpressionSpecification {
+  return [
+    "case",
+    ["==", ["get", "alertLevel"], "red"],
+    ["interpolate", ["linear"], ["zoom"], 2, 2.5, 8, 4],
+    ["==", ["get", "alertLevel"], "orange"],
+    ["interpolate", ["linear"], ["zoom"], 2, 2, 8, 3],
+    ["interpolate", ["linear"], ["zoom"], 2, 1, 8, 2],
   ] as maplibregl.ExpressionSpecification;
 }
 
@@ -131,7 +159,8 @@ export function NaturalEventLayer() {
         map.addSource(SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution: '© <a href="https://eonet.gsfc.nasa.gov/" target="_blank">NASA EONET</a>',
+          attribution:
+            '© <a href="https://eonet.gsfc.nasa.gov/" target="_blank">NASA EONET</a> · <a href="https://www.gdacs.org/" target="_blank">GDACS</a>',
         });
       }
 
@@ -146,8 +175,8 @@ export function NaturalEventLayer() {
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 6, 5, 10, 10, 16, 14, 22],
               "circle-color": buildColorExpr(),
               "circle-opacity": 0.85,
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 2, 1, 8, 2],
+              "circle-stroke-color": buildStrokeColorExpr(),
+              "circle-stroke-width": buildStrokeWidthExpr(),
               "circle-stroke-opacity": 0.9,
             },
           },
@@ -217,19 +246,30 @@ export function NaturalEventLayer() {
       const magLabel = p.magnitudeLabel ? escapeHtml(String(p.magnitudeLabel)) : null;
       const sourceUrl = p.sourceUrl ? String(p.sourceUrl) : null;
       const link = p.link ? String(p.link) : null;
+      const alertLevel = p.alertLevel ? String(p.alertLevel) : null;
+      const dataSource = p.source === "gdacs" ? "GDACS" : "NASA EONET";
+
+      const alertBadge =
+        alertLevel && alertLevel !== "green"
+          ? `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;color:#fff;background:${alertLevel === "red" ? "#d50000" : "#ff6d00"};margin-left:4px">${alertLevel === "red" ? t("alertRed") : t("alertOrange")}</span>`
+          : "";
 
       const html = `
         <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:200px;max-width:280px">
           <div style="font-size:14px;font-weight:600;margin-bottom:4px">${title}</div>
-          <div style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;color:#fff;background:${catColor};margin-bottom:6px">
-            ${catTitle}
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:6px">
+            <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;color:#fff;background:${catColor}">
+              ${catTitle}
+            </span>
+            ${alertBadge}
           </div>
           ${date ? `<div style="font-size:12px;color:#666;margin-bottom:4px">${date}</div>` : ""}
           ${magLabel ? `<div style="font-size:12px;margin-bottom:4px"><span style="color:#666">${t("magnitude")}:</span> <strong>${magLabel}</strong></div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px;margin-top:4px">
             ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${t("viewSource")}</a>` : ""}
             ${sourceUrl && link ? " · " : ""}
-            ${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">NASA EONET</a>` : ""}
+            ${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${dataSource}</a>` : ""}
+            ${!link && !sourceUrl ? dataSource : ""}
           </div>
         </div>`;
 

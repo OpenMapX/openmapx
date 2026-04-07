@@ -25,10 +25,23 @@
     }
   },
   "envVars": [],
-  "healthCheck": {
-    "type": "http",
-    "url": "https://cwapi.cambio-carsharing.com/pub/de-ac/stations"
-  },
+  "healthCheck": [
+    {
+      "name": "Cambio",
+      "type": "http",
+      "url": "https://cwapi.cambio-carsharing.com/pub/de-ac/stations"
+    },
+    {
+      "name": "Stadtteilauto Münster",
+      "type": "ping",
+      "url": "https://www.muenster01.de/stadtteilauto/stations.json"
+    },
+    {
+      "name": "GBFS Catalog",
+      "type": "ping",
+      "url": "https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv"
+    }
+  ],
   "quality": "built-in",
   "category": "Shared Mobility",
   "attribution": [
@@ -43,12 +56,28 @@
       "url": "https://www.cambio-carsharing.de/",
       "license": "Proprietary (no public API license)",
       "licenseUrl": "https://www.cambio-carsharing.de/agb"
+    },
+    {
+      "name": "Stadt Münster Open Data",
+      "url": "https://opendata.stadt-muenster.de/",
+      "license": "DL-DE/Zero-2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0"
     }
   ],
   "privacy": [
     {
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
+      "personalData": false
+    },
+    {
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.cambio-carsharing.de/datenschutz/",
+      "personalData": false
+    },
+    {
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.stadt-muenster.de/datenschutz",
       "personalData": false
     }
   ]

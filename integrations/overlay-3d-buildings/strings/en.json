@@ -1,4 +1,8 @@
 {
   "name": "3D Buildings",
-  "description": "3D building extrusions using existing map tile data"
+  "description": "3D building extrusions using existing map tile data",
+  "privacy": {
+    "purpose": "3D building height extrusions on the map",
+    "dataSent": "No additional data — uses existing map tiles"
+  }
 }

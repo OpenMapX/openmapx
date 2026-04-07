@@ -25,10 +25,18 @@
   },
   "quality": "built-in",
   "category": "Data Overlays",
-  "healthCheck": {
-    "type": "http",
-    "url": "https://api.opensensemap.org/stats"
-  },
+  "healthCheck": [
+    {
+      "name": "openSenseMap",
+      "type": "http",
+      "url": "https://api.opensensemap.org/stats"
+    },
+    {
+      "name": "Sensor.Community",
+      "type": "ping",
+      "url": "https://data.sensor.community/airrohr/v1/sensor/1/"
+    }
+  ],
   "attribution": [
     {
       "name": "openSenseMap",

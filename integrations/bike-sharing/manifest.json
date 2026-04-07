@@ -36,10 +36,23 @@
     }
   },
   "envVars": ["DB_GBFS_CLIENT_ID", "DB_GBFS_API_KEY"],
-  "healthCheck": {
-    "type": "http",
-    "url": "https://maps.nextbike.net/maps/nextbike-live.json?limit=0"
-  },
+  "healthCheck": [
+    {
+      "name": "Nextbike",
+      "type": "http",
+      "url": "https://maps.nextbike.net/maps/nextbike-live.json?limit=0"
+    },
+    {
+      "name": "CityBikes",
+      "type": "http",
+      "url": "https://api.citybik.es/v2/networks?fields=id&limit=1"
+    },
+    {
+      "name": "Donkey Republic",
+      "type": "ping",
+      "url": "https://stables.donkey.bike/api/public/nearby?latitude=52.52&longitude=13.405&radius=1"
+    }
+  ],
   "quality": "built-in",
   "category": "Shared Mobility",
   "attribution": [
@@ -54,6 +67,18 @@
       "url": "https://www.nextbike.com/",
       "license": "Proprietary",
       "licenseUrl": "https://www.nextbike.net/en/tc/"
+    },
+    {
+      "name": "CityBikes",
+      "url": "https://citybik.es/",
+      "license": "AGPLv3",
+      "licenseUrl": "https://github.com/eskerda/pybikes/blob/master/LICENSE"
+    },
+    {
+      "name": "Donkey Republic",
+      "url": "https://www.donkey.bike/",
+      "license": "Proprietary",
+      "licenseUrl": "https://www.donkey.bike/terms/"
     }
   ],
   "privacy": [
@@ -65,6 +90,16 @@
     {
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.nextbike.de/en/privacy/",
+      "personalData": false
+    },
+    {
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://citybik.es/",
+      "personalData": false
+    },
+    {
+      "providerCountry": "DK",
+      "providerPrivacyUrl": "https://www.donkey.bike/privacy-policy/",
       "personalData": false
     }
   ]

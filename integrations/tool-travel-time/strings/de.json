@@ -1,4 +1,8 @@
 {
   "name": "Reisezeit (Isochrone)",
-  "description": "Reisezeit-Isochronen-Visualisierung mit vorhandenen Routing-APIs"
+  "description": "Reisezeit-Isochronen-Visualisierung mit vorhandenen Routing-APIs",
+  "privacy": {
+    "purpose": "Berechnung und Anzeige erreichbarer Gebiete nach Reisezeit auf der Karte",
+    "dataSent": "Ausgangskoordinaten, Verkehrsmittel, Zeitintervalle"
+  }
 }
