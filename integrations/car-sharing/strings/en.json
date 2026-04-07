@@ -1,9 +1,24 @@
 {
   "name": "Car Sharing",
   "description": "Car sharing station locations and vehicle availability",
-  "privacy": {
-    "purpose": "Car sharing station locations and vehicle availability",
-    "dataSent": "Bounding box coordinates",
-    "dataReceived": "Station locations, vehicle counts, operator info"
-  }
+  "privacy": [
+    {
+      "service": "GBFS Catalog (MobilityData)",
+      "purpose": "Discover car-sharing systems worldwide",
+      "dataSent": "System discovery requests (no user data)",
+      "dataReceived": "GBFS feed URLs for car-sharing operators"
+    },
+    {
+      "service": "Cambio CarSharing",
+      "purpose": "Car sharing station locations and vehicle availability",
+      "dataSent": "Region identifier (no user location data)",
+      "dataReceived": "Station locations, vehicle counts, booking URLs"
+    },
+    {
+      "service": "Stadt Münster Open Data",
+      "purpose": "Car sharing station locations in Münster",
+      "dataSent": "No user data sent; pre-defined API queries only",
+      "dataReceived": "Station locations, vehicle classes"
+    }
+  ]
 }

@@ -1,10 +1,34 @@
 {
   "name": "Wetterwarnungen",
   "description": "Aktive Wetterwarnungen von NOAA (USA), ECCC (Kanada), DWD (Deutschland) und MeteoAlarm (Europa)",
-  "privacy": {
-    "purpose": "Anzeige aktiver Wetterwarnungen auf der Karte",
-    "dataSent": "Keine Nutzerdaten gesendet; nur vordefinierte API-Abfragen",
-    "dataReceived": "Warngebiete, Schweregrade, Ereignistypen und Beschreibungen",
-    "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
-  }
+  "privacy": [
+    {
+      "service": "NOAA National Weather Service",
+      "purpose": "Anzeige aktiver US-Wetterwarnungen auf der Karte",
+      "dataSent": "Keine Nutzerdaten gesendet; nur vordefinierte API-Abfragen",
+      "dataReceived": "Warngebiete, Schweregrad, Ereignistyp, Beschreibungen und Hinweise",
+      "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
+    },
+    {
+      "service": "ECCC (Environment Canada)",
+      "purpose": "Anzeige aktiver kanadischer Wetterwarnungen auf der Karte",
+      "dataSent": "Keine Nutzerdaten gesendet; nur vordefinierte API-Abfragen",
+      "dataReceived": "Warngebiete, Warnungstyp, Gebietsbeschreibungen und Ablaufzeiten",
+      "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
+    },
+    {
+      "service": "DWD (Deutscher Wetterdienst)",
+      "purpose": "Anzeige aktiver deutscher Wetterwarnungen auf der Karte",
+      "dataSent": "Keine Nutzerdaten gesendet; nur vordefinierte API-Abfragen",
+      "dataReceived": "Warngebiete, Schweregrad, Ereignistyp, Beschreibungen und Hinweise",
+      "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
+    },
+    {
+      "service": "MeteoAlarm / EUMETNET",
+      "purpose": "Anzeige aktiver europäischer Wetterwarnungen auf der Karte",
+      "dataSent": "Keine Nutzerdaten gesendet; nur länderspezifische Feed-Abfragen",
+      "dataReceived": "Warnschweregrad, Ereignistyp, Beginn- und Ablaufzeiten",
+      "dataRetention": "Serverseitig 5 Minuten zwischengespeichert"
+    }
+  ]
 }

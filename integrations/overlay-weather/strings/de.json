@@ -11,6 +11,11 @@
       "service": "OpenWeatherMap",
       "purpose": "Temperatur-, Wolken-, Wind- und Luftdruck-Kartenlayer",
       "dataSent": "Kachelkoordinaten (Zoom, X, Y)"
+    },
+    {
+      "service": "Open-Meteo",
+      "purpose": "Aktuelle Wetterbedingungen für Karten-Widget und Ortsdetails",
+      "dataSent": "Standortkoordinaten (Breitengrad, Längengrad), Zeitzone, Einheitenpräferenzen"
     }
   ]
 }

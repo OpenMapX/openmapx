@@ -11,6 +11,11 @@
       "service": "OpenWeatherMap",
       "purpose": "Temperature, cloud, wind, and pressure tile layers on the map",
       "dataSent": "Tile coordinates (zoom, x, y)"
+    },
+    {
+      "service": "Open-Meteo",
+      "purpose": "Current weather conditions for map widget and place details",
+      "dataSent": "Location coordinates (latitude, longitude), timezone, unit preferences"
     }
   ]
 }

@@ -1,10 +1,20 @@
 {
   "name": "Natural Events (NASA EONET + GDACS)",
   "description": "Global natural events including volcanoes, storms, floods, landslides, drought, and more from NASA EONET and GDACS with alert severity levels",
-  "privacy": {
-    "purpose": "Display active natural events on the map from NASA Earth Observatory and the Global Disaster Alert and Coordination System",
-    "dataSent": "Time range and status filter",
-    "dataReceived": "Event locations, titles, categories, magnitudes, alert levels, and source links",
-    "dataRetention": "Cached for 15 minutes server-side"
-  }
+  "privacy": [
+    {
+      "service": "NASA EONET",
+      "purpose": "Display active natural events on the map from NASA Earth Observatory",
+      "dataSent": "Time range and status filter",
+      "dataReceived": "Event locations, titles, categories, magnitudes, and source links",
+      "dataRetention": "Cached for 15 minutes server-side"
+    },
+    {
+      "service": "GDACS",
+      "purpose": "Global disaster alerts with severity levels",
+      "dataSent": "Date range and event type filter",
+      "dataReceived": "Event locations, alert levels, severity scores, and affected countries",
+      "dataRetention": "Cached for 15 minutes server-side"
+    }
+  ]
 }

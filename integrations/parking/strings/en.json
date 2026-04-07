@@ -13,6 +13,12 @@
       "purpose": "Parking site data with occupancy",
       "dataSent": "Bounding box, filter parameters",
       "dataReceived": "Parking site locations, capacity, occupancy"
+    },
+    {
+      "service": "ParkenDD",
+      "purpose": "Multi-city parking occupancy data",
+      "dataSent": "City and lot lookup requests",
+      "dataReceived": "Parking lot locations, capacity, real-time occupancy"
     }
   ]
 }

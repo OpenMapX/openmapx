@@ -37,7 +37,7 @@
     {
       "name": "NOAA",
       "type": "http",
-      "url": "https://api.weather.gov/alerts/active?status=actual&limit=1"
+      "url": "https://api.weather.gov/alerts/active/count"
     },
     {
       "name": "ECCC",

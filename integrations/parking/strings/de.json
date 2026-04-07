@@ -13,6 +13,12 @@
       "purpose": "Parkplatzdaten mit Belegung",
       "dataSent": "Begrenzungsrahmen, Filterparameter",
       "dataReceived": "Parkplatzstandorte, Kapazität, Belegung"
+    },
+    {
+      "service": "ParkenDD",
+      "purpose": "Städteübergreifende Parkplatzbelegungsdaten",
+      "dataSent": "Stadt- und Parkplatzabfragen",
+      "dataReceived": "Parkplatzstandorte, Kapazität, Echtzeitbelegung"
     }
   ]
 }

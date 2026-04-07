@@ -573,7 +573,7 @@ function ServiceTable({ rows }: { rows: ServiceRow[] }) {
         </TableHead>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={`${row.service}-${row.country}`}>
+            <TableRow key={`${row.service}-${row.country}-${row.purpose}`}>
               <TableCell>{row.service}</TableCell>
               <TableCell>{row.purpose}</TableCell>
               <TableCell>{row.dataSent}</TableCell>

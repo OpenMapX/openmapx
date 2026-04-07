@@ -13,6 +13,18 @@
       "purpose": "Bikesharing-Stationsstandorte und Verfügbarkeit",
       "dataSent": "Begrenzungsrahmen-Koordinaten",
       "dataReceived": "Stationsstandorte, Fahrradanzahl, Stationsnamen"
+    },
+    {
+      "service": "CityBikes",
+      "purpose": "Weltweite Bikesharing-Netzwerk- und Stationsdaten",
+      "dataSent": "Netzwerkliste und Einzelnetzwerk-Stationsabfragen (keine Standortdaten)",
+      "dataReceived": "Stationsstandorte, Fahrrad-/E-Bike-Anzahl, Netzwerk-Metadaten"
+    },
+    {
+      "service": "Donkey Republic",
+      "purpose": "Fahrrad- und E-Bike-Hub-Standorte und Verfügbarkeit",
+      "dataSent": "Begrenzungsrahmen-Koordinaten",
+      "dataReceived": "Hub-Standorte, Fahrzeuganzahl, Fahrzeugtypen"
     }
   ]
 }

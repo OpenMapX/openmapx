@@ -1,10 +1,34 @@
 {
   "name": "Weather Alerts",
   "description": "Active severe weather warnings from NOAA (US), ECCC (Canada), DWD (Germany), and MeteoAlarm (Europe)",
-  "privacy": {
-    "purpose": "Display active weather alerts and warnings on the map",
-    "dataSent": "No user data sent; pre-defined API queries only",
-    "dataReceived": "Alert polygons, severity levels, event types, and descriptions",
-    "dataRetention": "Cached for 5 minutes server-side"
-  }
+  "privacy": [
+    {
+      "service": "NOAA National Weather Service",
+      "purpose": "Display active US weather alerts and warnings on the map",
+      "dataSent": "No user data sent; pre-defined API queries only",
+      "dataReceived": "Alert polygons, severity, event type, descriptions, and instructions",
+      "dataRetention": "Cached for 5 minutes server-side"
+    },
+    {
+      "service": "ECCC (Environment Canada)",
+      "purpose": "Display active Canadian weather alerts on the map",
+      "dataSent": "No user data sent; pre-defined API queries only",
+      "dataReceived": "Alert polygons, alert type, area descriptions, and expiry times",
+      "dataRetention": "Cached for 5 minutes server-side"
+    },
+    {
+      "service": "DWD (Deutscher Wetterdienst)",
+      "purpose": "Display active German weather warnings on the map",
+      "dataSent": "No user data sent; pre-defined API queries only",
+      "dataReceived": "Warning polygons, severity, event type, descriptions, and instructions",
+      "dataRetention": "Cached for 5 minutes server-side"
+    },
+    {
+      "service": "MeteoAlarm / EUMETNET",
+      "purpose": "Display active European weather alerts on the map",
+      "dataSent": "No user data sent; per-country feed requests only",
+      "dataReceived": "Alert severity, event type, onset and expiry times",
+      "dataRetention": "Cached for 5 minutes server-side"
+    }
+  ]
 }

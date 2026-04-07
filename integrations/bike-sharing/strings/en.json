@@ -13,6 +13,18 @@
       "purpose": "Bike-sharing station locations and availability",
       "dataSent": "Bounding box coordinates",
       "dataReceived": "Station locations, bike counts, station names"
+    },
+    {
+      "service": "CityBikes",
+      "purpose": "Bike-sharing network and station data worldwide",
+      "dataSent": "Network list and per-network station requests (no user location data)",
+      "dataReceived": "Station locations, bike/e-bike counts, network metadata"
+    },
+    {
+      "service": "Donkey Republic",
+      "purpose": "Bike and e-bike hub locations and availability",
+      "dataSent": "Bounding box coordinates",
+      "dataReceived": "Hub locations, vehicle counts, vehicle types"
     }
   ]
 }

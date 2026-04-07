@@ -1,9 +1,24 @@
 {
   "name": "Carsharing",
   "description": "Carsharing-Stationen von GBFS-Feeds, Cambio und regionalen Anbietern",
-  "privacy": {
-    "purpose": "Carsharing-Stationsstandorte und Fahrzeugverfügbarkeit",
-    "dataSent": "Begrenzungsrahmen-Koordinaten",
-    "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Betreiberinformationen"
-  }
+  "privacy": [
+    {
+      "service": "GBFS Catalog (MobilityData)",
+      "purpose": "Weltweite Erkennung von Carsharing-Systemen",
+      "dataSent": "Systemerkennungsanfragen (keine Nutzerdaten)",
+      "dataReceived": "GBFS-Feed-URLs für Carsharing-Betreiber"
+    },
+    {
+      "service": "Cambio CarSharing",
+      "purpose": "Carsharing-Stationsstandorte und Fahrzeugverfügbarkeit",
+      "dataSent": "Regionskennung (keine Standortdaten)",
+      "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Buchungs-URLs"
+    },
+    {
+      "service": "Stadt Münster Open Data",
+      "purpose": "Carsharing-Stationsstandorte in Münster",
+      "dataSent": "Keine Nutzerdaten gesendet; nur vordefinierte API-Abfragen",
+      "dataReceived": "Stationsstandorte, Fahrzeugklassen"
+    }
+  ]
 }
