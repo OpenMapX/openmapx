@@ -2,6 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
+import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -11,13 +12,22 @@ import { windDirectionLabel } from "@/components/weather/weatherUtils";
 interface Props {
   lat: number;
   lng: number;
+  enabled?: boolean;
 }
 
-export function PlaceWeather({ lat, lng }: Props) {
+export function PlaceWeather({ lat, lng, enabled = true }: Props) {
   const t = useTranslations("weather");
-  const { data, isLoading } = useCurrentWeather(lat, lng);
+  const { data, isLoading } = useCurrentWeather(lat, lng, enabled);
 
-  if (isLoading || !data) return null;
+  if (isLoading)
+    return (
+      <Box sx={{ py: 1 }}>
+        <Skeleton variant="text" width="70%" />
+        <Skeleton variant="text" width="50%" />
+      </Box>
+    );
+
+  if (!data) return null;
 
   const { current, attribution } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);

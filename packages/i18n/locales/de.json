@@ -615,6 +615,7 @@
     "noData": "Keine Wetterdaten verfügbar",
     "radarPlay": "Animation abspielen",
     "radarPause": "Animation anhalten",
+    "currentWeather": "Aktuelles Wetter",
     "attribution": "Wetterdaten von",
     "radarBy": "Radar von",
     "tilesBy": "Kacheln von",

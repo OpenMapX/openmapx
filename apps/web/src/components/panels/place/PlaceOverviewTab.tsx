@@ -13,6 +13,7 @@ import HomeIcon from "@mui/icons-material/Home";
 import LanguageIcon from "@mui/icons-material/Language";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PlaceIcon from "@mui/icons-material/Place";
+import WbSunnyOutlinedIcon from "@mui/icons-material/WbSunnyOutlined";
 import WorkIcon from "@mui/icons-material/Work";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -126,6 +127,44 @@ function DetailRow({
   );
 }
 
+function ExpandableDetailRow({
+  icon,
+  label,
+  expanded,
+  onToggle,
+  children,
+}: {
+  icon: ReactNode;
+  label: ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Box
+      onClick={onToggle}
+      sx={{
+        py: 1.25,
+        cursor: "pointer",
+        mx: -2,
+        px: 2,
+        "&:hover": { bgcolor: "action.hover" },
+      }}
+    >
+      <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+        <Box sx={{ color: TEAL, flexShrink: 0, display: "flex" }}>{icon}</Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>{label}</Box>
+        {expanded ? (
+          <ExpandLessIcon sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0 }} />
+        ) : (
+          <ExpandMoreIcon sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0 }} />
+        )}
+      </Box>
+      {expanded && <Box sx={{ pl: "38px" }}>{children}</Box>}
+    </Box>
+  );
+}
+
 export function PlaceOverviewTab({
   place,
   isLoading,
@@ -137,6 +176,7 @@ export function PlaceOverviewTab({
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const tSaved = useTranslations("saved");
+  const tWeather = useTranslations("weather");
   const hours = parseOpeningHours(place.openingHours, {
     lat: place.coordinates[1],
     lon: place.coordinates[0],
@@ -147,6 +187,7 @@ export function PlaceOverviewTab({
   const city = place.city ?? null;
   const shortCodeDisplay = city ? `${shortCode} ${city}` : null;
   const [hoursExpanded, setHoursExpanded] = useState(false);
+  const [weatherExpanded, setWeatherExpanded] = useState(false);
   const [savedExpanded, setSavedExpanded] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelName, setLabelName] = useState("");
@@ -335,80 +376,71 @@ export function PlaceOverviewTab({
               <Skeleton variant="text" width="60%" />
             </DetailRow>
           ) : (
-            hours && (
-              <Box
-                onClick={hours.weekSchedule ? () => setHoursExpanded((v) => !v) : undefined}
-                sx={{
-                  display: "flex",
-                  gap: 2,
-                  alignItems: "flex-start",
-                  py: 1.25,
-                  ...(hours.weekSchedule
-                    ? { cursor: "pointer", mx: -2, px: 2, "&:hover": { bgcolor: "action.hover" } }
-                    : {}),
-                }}
+            hours &&
+            (hours.weekSchedule ? (
+              <ExpandableDetailRow
+                icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}
+                expanded={hoursExpanded}
+                onToggle={() => setHoursExpanded((v) => !v)}
+                label={
+                  <>
+                    <Typography
+                      variant="body2"
+                      component="span"
+                      fontWeight={500}
+                      color={hours.isOpen ? "success.main" : "error.main"}
+                    >
+                      {hours.isOpen ? tc("open") : tc("closed")}
+                    </Typography>
+                    {hours.detail && (
+                      <Typography variant="body2" component="span" color="text.secondary">
+                        {" · "}
+                        {hours.detail}
+                      </Typography>
+                    )}
+                  </>
+                }
               >
-                <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: "2px" }}>
-                  <AccessTimeIcon sx={{ fontSize: 22 }} />
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  {/* Status row */}
-                  <Box sx={{ display: "flex", alignItems: "center" }}>
-                    <Box sx={{ flex: 1 }}>
+                <Box sx={{ mt: 1, mb: 0.5 }}>
+                  {hours.weekSchedule.map(({ day, hours: h, isToday }) => (
+                    <Box key={day} sx={{ display: "flex", gap: 2, py: 0.4 }}>
                       <Typography
                         variant="body2"
-                        component="span"
-                        fontWeight={500}
-                        color={hours.isOpen ? "success.main" : "error.main"}
+                        fontWeight={isToday ? 600 : 400}
+                        color={isToday ? "text.primary" : "text.secondary"}
+                        sx={{ width: 96, flexShrink: 0 }}
                       >
-                        {hours.isOpen ? tc("open") : tc("closed")}
+                        {day}
                       </Typography>
-                      {hours.detail && (
-                        <Typography variant="body2" component="span" color="text.secondary">
-                          {" · "}
-                          {hours.detail}
-                        </Typography>
-                      )}
+                      <Typography
+                        variant="body2"
+                        fontWeight={isToday ? 600 : 400}
+                        color={isToday ? "text.primary" : "text.secondary"}
+                      >
+                        {h}
+                      </Typography>
                     </Box>
-                    {hours.weekSchedule &&
-                      (hoursExpanded ? (
-                        <ExpandLessIcon
-                          sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0, ml: 0.5 }}
-                        />
-                      ) : (
-                        <ExpandMoreIcon
-                          sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0, ml: 0.5 }}
-                        />
-                      ))}
-                  </Box>
-
-                  {/* Expanded weekly schedule */}
-                  {hoursExpanded && hours.weekSchedule && (
-                    <Box sx={{ mt: 1, mb: 0.5 }}>
-                      {hours.weekSchedule.map(({ day, hours: h, isToday }) => (
-                        <Box key={day} sx={{ display: "flex", gap: 2, py: 0.4 }}>
-                          <Typography
-                            variant="body2"
-                            fontWeight={isToday ? 600 : 400}
-                            color={isToday ? "text.primary" : "text.secondary"}
-                            sx={{ width: 96, flexShrink: 0 }}
-                          >
-                            {day}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            fontWeight={isToday ? 600 : 400}
-                            color={isToday ? "text.primary" : "text.secondary"}
-                          >
-                            {h}
-                          </Typography>
-                        </Box>
-                      ))}
-                    </Box>
-                  )}
+                  ))}
                 </Box>
-              </Box>
-            )
+              </ExpandableDetailRow>
+            ) : (
+              <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
+                <Typography
+                  variant="body2"
+                  component="span"
+                  fontWeight={500}
+                  color={hours.isOpen ? "success.main" : "error.main"}
+                >
+                  {hours.isOpen ? tc("open") : tc("closed")}
+                </Typography>
+                {hours.detail && (
+                  <Typography variant="body2" component="span" color="text.secondary">
+                    {" · "}
+                    {hours.detail}
+                  </Typography>
+                )}
+              </DetailRow>
+            ))
           )}
 
           {/* Phone */}
@@ -523,11 +555,25 @@ export function PlaceOverviewTab({
               </Typography>
             )}
           </Box>
-        </Box>
 
-        {/* Weather at this place */}
-        <Divider sx={{ my: 1 }} />
-        <PlaceWeather lat={place.coordinates[1]} lng={place.coordinates[0]} />
+          {/* Weather (expandable) */}
+          <ExpandableDetailRow
+            icon={<WbSunnyOutlinedIcon sx={{ fontSize: 22 }} />}
+            expanded={weatherExpanded}
+            onToggle={() => setWeatherExpanded((v) => !v)}
+            label={
+              <Typography variant="body2" color="text.primary">
+                {tWeather("currentWeather")}
+              </Typography>
+            }
+          >
+            <PlaceWeather
+              lat={place.coordinates[1]}
+              lng={place.coordinates[0]}
+              enabled={weatherExpanded}
+            />
+          </ExpandableDetailRow>
+        </Box>
       </Box>
 
       {/* Add label dialog */}

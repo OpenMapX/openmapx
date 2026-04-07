@@ -615,6 +615,7 @@
     "noData": "No weather data available",
     "radarPlay": "Play animation",
     "radarPause": "Pause animation",
+    "currentWeather": "Current weather",
     "attribution": "Weather data by",
     "radarBy": "Radar by",
     "tilesBy": "Tiles by",
