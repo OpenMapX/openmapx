@@ -96,6 +96,7 @@
     "3dBuildings": "3D-Gebäude",
     "earthquakes": "Erdbeben",
     "naturalEvents": "Naturereignisse",
+    "satelliteImagery": "Satellitenbilder",
     "liveTrains": "Züge live",
     "cyclingMap": "Radkarte",
     "closeMorePanel": "Erweitertes Menü schließen"
@@ -660,6 +661,23 @@
     "noEvents": "Keine Ereignisse in diesem Zeitraum",
     "loading": "Lade Ereignisse…",
     "lastUpdated": "Aktualisiert {time}",
+    "data": "Daten"
+  },
+  "satelliteImagery": {
+    "satelliteImagery": "Satellitenbilder",
+    "toggleOverlay": "Satellitenbilder-Overlay umschalten",
+    "layer": "Ebene",
+    "trueColor": "Echtfarben (MODIS)",
+    "trueColorViirs": "Echtfarben (VIIRS)",
+    "nightLights": "Nachtlichter",
+    "vegetation": "Vegetation (NDVI)",
+    "snowCover": "Schneebedeckung",
+    "seaSurfaceTemp": "Meeresoberflächentemp.",
+    "aerosol": "Aerosol-Tiefe",
+    "date": "Datum",
+    "today": "Heute",
+    "yesterday": "Gestern",
+    "opacity": "Deckkraft",
     "data": "Daten"
   },
   "searchModes": {

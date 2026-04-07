@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "name": "NASA GIBS Satellitenbilder",
+    "description": "NASA-Satellitenbilder mit Datumsauswahl — Echtfarben-Erde, Vegetation, Schneebedeckung, Meeresoberflächentemperatur, Nachtlichter und Aerosoldaten.",
+    "privacyDescription": "Satellitenbild-Kacheln werden über unseren Server geleitet. Es werden keine personenbezogenen Daten an die NASA gesendet."
+  }
+}

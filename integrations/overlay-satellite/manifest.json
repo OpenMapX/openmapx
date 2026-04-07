@@ -1,0 +1,58 @@
+{
+  "id": "overlay-satellite",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://nasa-gibs.github.io/gibs-api-docs/",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "satelliteImagery",
+      "icon": "satellite_alt",
+      "iconPath": "M15.44.59l-3.18 3.18c-.78.78-.78 2.05 0 2.83l1.24 1.24-.71.71-1.24-1.25c-.78-.78-2.05-.78-2.83 0L5.54 10.48c-.78.78-.78 2.05 0 2.83l1.24 1.24-.71.71L4.83 14c-.78-.78-2.05-.78-2.83 0L.59 15.41c-.78.78-.78 2.05 0 2.83l5.17 5.17c.78.78 2.05.78 2.83 0L9.8 22.2c.78-.78.78-2.05 0-2.83l-1.24-1.24.71-.71 1.24 1.25c.78.78 2.05.78 2.83 0l3.18-3.18c.78-.78.78-2.05 0-2.83L15.28 11.4l.71-.71 1.24 1.25c.78.78 2.05.78 2.83 0l1.41-1.41c.78-.78.78-2.05 0-2.83L16.3.53c-.78-.78-2.05-.78-2.83 0l.01.01-.04.05zM9.1 21.49l-1.41 1.41-5.17-5.17 1.41-1.41 5.17 5.17zM22.71 7.51l-1.29 1.29-5.17-5.17L17.54 2.34l5.17 5.17z"
+    },
+    "overlay": {
+      "excludes": ["street-view"],
+      "minZoom": 2
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2024-01-01/GoogleMapsCompatible_Level9/0/0/0.jpg"
+  },
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "attribution": [
+    {
+      "name": "NASA GIBS",
+      "url": "https://nasa-gibs.github.io/gibs-api-docs/",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
+    }
+  ],
+  "privacy": [
+    {
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

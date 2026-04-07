@@ -1,0 +1,10 @@
+{
+  "name": "@openmapx/integration-overlay-satellite",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "fast-xml-parser": "^5.5.10"
+  }
+}

@@ -19,7 +19,7 @@ export function WeatherWidget() {
     const map = mapRef.current;
     if (!map) return;
     const c = map.getCenter();
-    setCenter({ lat: Math.round(c.lat * 100) / 100, lng: Math.round(c.lng * 100) / 100 });
+    setCenter({ lat: Math.round(c.lat * 10) / 10, lng: Math.round(c.lng * 10) / 10 });
     setZoom(map.getZoom());
   }, [mapRef]);
 

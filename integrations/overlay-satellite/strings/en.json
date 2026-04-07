@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "name": "NASA GIBS Satellite Imagery",
+    "description": "Browse NASA satellite imagery layers with date selection — true-color Earth, vegetation, snow cover, sea surface temperature, night lights, and aerosol data.",
+    "privacyDescription": "Satellite imagery tiles are proxied through our server. No personal data is sent to NASA."
+  }
+}
