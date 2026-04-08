@@ -1,0 +1,11 @@
+{
+  "name": "Sonnenauf-/untergang",
+  "description": "Sonnenauf-, Sonnenuntergangs- und Dämmerungszeiten für jeden Ort",
+  "privacy": [
+    {
+      "service": "Sunrise-Sunset.org",
+      "purpose": "Sonnenauf-, Sonnenuntergangs- und Dämmerungszeiten für Ortsdetails",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad)"
+    }
+  ]
+}

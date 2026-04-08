@@ -1,0 +1,11 @@
+{
+  "name": "Sunrise-Sunset",
+  "description": "Sunrise, sunset, and twilight times for any location",
+  "privacy": [
+    {
+      "service": "Sunrise-Sunset.org",
+      "purpose": "Sunrise, sunset, and twilight times for place details",
+      "dataSent": "Coordinates (latitude, longitude)"
+    }
+  ]
+}

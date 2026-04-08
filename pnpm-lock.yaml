@@ -283,6 +283,15 @@ importers:
         specifier: workspace:^
         version: link:../../packages/shared-mobility
 
+  integrations/enrichment-sunrise-sunset:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      geo-tz:
+        specifier: ^8.1.6
+        version: 8.1.6
+
   integrations/enrichment-wikidata:
     dependencies:
       '@openmapx/core':
@@ -3603,6 +3612,9 @@ packages:
   '@turf/area@7.3.4':
     resolution: {integrity: sha512-UEQQFw2XwHpozSBAMEtZI3jDsAad4NnHL/poF7/S6zeDCjEBCkt3MYd6DSGH/cvgcOozxH/ky3/rIVSMZdx4vA==}
 
+  '@turf/boolean-point-in-polygon@7.3.4':
+    resolution: {integrity: sha512-v/4hfyY90Vz9cDgs2GwjQf+Lft8o7mNCLJOTz/iv8SHAIgMMX0czEoIaNVOJr7tBqPqwin1CGwsncrkf5C9n8Q==}
+
   '@turf/distance@7.3.4':
     resolution: {integrity: sha512-9drWgd46uHPPyzgrcRQLgSvdS/SjVlQ6ZIBoRQagS5P2kSjUbcOXHIMeOSPwfxwlKhEtobLyr+IiR2ns1TfF8w==}
 
@@ -3902,6 +3914,9 @@ packages:
   aria-hidden@1.2.6:
     resolution: {integrity: sha512-ik3ZgC9dY/lYVVM++OISsaYDeg1tb0VtP5uL3ouh1koGOaUMDPpbFIei4JkFimWUFPn90sbMNMXQAIVOlnYKJA==}
     engines: {node: '>=10'}
+
+  array-source@0.0.4:
+    resolution: {integrity: sha512-frNdc+zBn80vipY+GdcJkLEbMWj3xmzArYApmUGxoiV8uAu/ygcs9icPdsGdA26h0MkHUMW6EN2piIvVx+M5Mw==}
 
   array-union@2.1.0:
     resolution: {integrity: sha512-HGyxoOTYUyCM6stUe6EJgnd4EoewAI7zMdfqO+kGjnlZmBDz/cR5pf8r/cR4Wq60sL/p0IkcjUEEPwS3GFrIyw==}
@@ -4323,6 +4338,10 @@ packages:
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
+
+  concat-stream@2.0.0:
+    resolution: {integrity: sha512-MWufYdFw53ccGjCA+Ol7XJYpAlW6/prSMzuPOTRnJGcGzuhLn4Scrz7qf6o8bROZ514ltazcIFJZevcfbo0x7A==}
+    engines: {'0': node >= 6.0}
 
   connect@3.7.0:
     resolution: {integrity: sha512-ZqRXc+tZukToSNmh5C2iWMSoV3X1YUcPbqEM4DkEG5tNQXrQUZCNVGGv3IuicnkMtPfGf3Xtp8WCXs295iQ1pQ==}
@@ -4954,6 +4973,9 @@ packages:
   fetch-nodeshim@0.4.10:
     resolution: {integrity: sha512-m6I8ALe4L4XpdETy7MJZWs6L1IVMbjs99bwbpIKphxX+0CTns4IKDWJY0LWfr4YsFjfg+z1TjzTMU8lKl8rG0w==}
 
+  file-source@0.6.1:
+    resolution: {integrity: sha512-1R1KneL7eTXmXfKxC10V/9NeGOdbsAXJ+lQ//fvvcHUgtaZcZDWNJNblxAoVOyV1cj45pOtUrR3vZTBwqcW8XA==}
+
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
@@ -5031,6 +5053,14 @@ packages:
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
+
+  geo-tz@8.1.6:
+    resolution: {integrity: sha512-6YEper1rtHi1l3ZS99oy9ZBvrBO4qsLzvQwZoxYtV3fyxPuxh7yqiOUWRVs1bzSj693EXEO4k60jKXQmkY/JnQ==}
+    engines: {node: '>=16'}
+
+  geobuf@3.0.2:
+    resolution: {integrity: sha512-ASgKwEAQQRnyNFHNvpd5uAwstbVYmiTW0Caw3fBb509tNTqXyAAPMyFs5NNihsLZhLxU1j/kjFhkhLWA9djuVg==}
+    hasBin: true
 
   get-caller-file@2.0.5:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
@@ -6111,6 +6141,9 @@ packages:
     resolution: {integrity: sha512-3O/iVVsJAPsOnpwWIeD+d6z/7PmqApyQePUtCndjatj/9I5LylHvt5qluFaBT3I5h3r1ejfR056c+FCv+NnNXg==}
     engines: {node: 18 || 20 || >=22}
 
+  path-source@0.1.3:
+    resolution: {integrity: sha512-dWRHm5mIw5kw0cs3QZLNmpUWty48f5+5v9nWD2dw3Y0Hf+s01Ag8iJEWV0Sm0kocE8kK27DrIowha03e1YR+Qw==}
+
   path-type@4.0.0:
     resolution: {integrity: sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==}
     engines: {node: '>=8'}
@@ -6169,6 +6202,9 @@ packages:
 
   po-parser@2.1.1:
     resolution: {integrity: sha512-ECF4zHLbUItpUgE3OTtLKlPjeBN+fKEczj2zYjDfCGOzicNs0GK3Vg2IoAYwx7LH/XYw43fZQP6xnZ4TkNxSLQ==}
+
+  point-in-polygon-hao@1.2.4:
+    resolution: {integrity: sha512-x2pcvXeqhRHlNRdhLs/tgFapAbSSe86wa/eqmj1G6pWftbEs5aVRJhRGM6FYSUERKu0PjekJzMq0gsI2XyiclQ==}
 
   polylabel@1.1.0:
     resolution: {integrity: sha512-bxaGcA40sL3d6M4hH72Z4NdLqxpXRsCFk8AITYg6x1rn1Ei3izf00UMLklerBZTO49aPA3CYrIwVulx2Bce2pA==}
@@ -6576,6 +6612,9 @@ packages:
   robust-predicates@2.0.4:
     resolution: {integrity: sha512-l4NwboJM74Ilm4VKfbAtFeGq7aEjWL+5kVFcmgFA2MrdnQWx9iE/tUGvxY5HyMI7o/WpSIUFLbC5fbeaHgSCYg==}
 
+  robust-predicates@3.0.3:
+    resolution: {integrity: sha512-NS3levdsRIUOmiJ8FZWCP7LG3QpJyrs/TE0Zpf1yvZu8cAJJ6QMW92H1c7kWpdIHo8RvmLxN/o2JXTKHp74lUA==}
+
   rolldown@1.0.0-rc.11:
     resolution: {integrity: sha512-NRjoKMusSjfRbSYiH3VSumlkgFe7kYAa3pzVOsVYVFY3zb5d7nS+a3KGQ7hJKXuYWbzJKPVQ9Wxq2UvyK+ENpw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -6697,6 +6736,10 @@ packages:
   shallowequal@1.1.0:
     resolution: {integrity: sha512-y0m1JoUZSlPAjXVtPPW70aZWfIL/dSP7AFkRnniLCrK/8MDKog3TySTBmckD+RObVxH0v4Tox67+F14PdED2oQ==}
 
+  shapefile@0.6.6:
+    resolution: {integrity: sha512-rLGSWeK2ufzCVx05wYd+xrWnOOdSV7xNUW5/XFgx3Bc02hBkpMlrd2F1dDII7/jhWzv0MSyBFh5uJIy9hLdfuw==}
+    hasBin: true
+
   sharp@0.34.5:
     resolution: {integrity: sha512-Ou9I5Ft9WNcCbXrU9cMgPBcCK8LiwLqcbywW3t4oDV37n1pzpuNLsYiAV8eODnjbtQlSDwZ2cUEeQz4E54Hltg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
@@ -6759,6 +6802,9 @@ packages:
   slice-ansi@8.0.0:
     resolution: {integrity: sha512-stxByr12oeeOyY2BlviTNQlYV5xOj47GirPr4yA1hE9JCtxfQN0+tVbkxwCtYDQWhEKWFHsEK48ORg5jrouCAg==}
     engines: {node: '>=20'}
+
+  slice-source@0.4.1:
+    resolution: {integrity: sha512-YiuPbxpCj4hD9Qs06hGAz/OZhQ0eDuALN0lRWJez0eD/RevzKqGdUx1IOMUnXgpr+sXZLq3g8ERwbAH0bCb8vg==}
 
   slugg@1.2.1:
     resolution: {integrity: sha512-yzUY7d53sdY3wp6rGCc54fn+cel0aNsdG5lvRVN8bvlAXYQI2fIo36AAOVjArOaMzlidHYyAYqriHzuos93h+Q==}
@@ -6841,6 +6887,9 @@ packages:
   stream-buffers@2.2.0:
     resolution: {integrity: sha512-uyQK/mx5QjHun80FLJTfaWE7JtwfRMKBLkMne6udYOmvH0CawotVa7TfgYHzAnpphn4+TweIx1QKMnRIbipmUg==}
     engines: {node: '>= 0.10.0'}
+
+  stream-source@0.3.5:
+    resolution: {integrity: sha512-ZuEDP9sgjiAwUVoDModftG0JtYiLUV8K4ljYD1VyUMRWtbVf92474o4kuuul43iZ8t/hRuiDAx1dIJSvirrK/g==}
 
   strict-uri-encode@2.0.0:
     resolution: {integrity: sha512-QwiXZgpRcKkhTj2Scnn++4PKtWsH0kpzZ62L2R6c/LUVYv7hVnZqcg2+sMuT6R7Jusu1vviK/MFsu6kNJfWlEQ==}
@@ -6966,6 +7015,10 @@ packages:
     resolution: {integrity: sha512-cAGWPIyOHU6zlmg88jwm7VRyXnMN7iV68OGAbYDk/Mh/xC/pzVPlQtY6ngoIH/5/tciuhGfvESU8GrHrcxD56w==}
     engines: {node: '>=8'}
 
+  text-encoding@0.6.4:
+    resolution: {integrity: sha512-hJnc6Qg3dWoOMkqP53F0dzRIgtmsAge09kxUIqGrEUS4qr5rWLckGYaQAVr+opBrIMRErGgy6f5aPnyPpyGRfg==}
+    deprecated: no longer maintained
+
   thread-stream@4.0.0:
     resolution: {integrity: sha512-4iMVL6HAINXWf1ZKZjIPcz5wYaOdPhtO8ATvZ+Xqp3BTdaqtAwQkNmKORqcIo5YkQqGXq5cwfswDwMqqQNrpJA==}
     engines: {node: '>=20'}
@@ -7068,6 +7121,9 @@ packages:
   typed-array-buffer@1.0.3:
     resolution: {integrity: sha512-nAYYwfY3qnzX30IkA6AQZjVbtK6duGontcQm1WSG1MD94YLqK0515GNApXkoxKOWMusVssAHWLh9SeaoefYFGw==}
     engines: {node: '>= 0.4'}
+
+  typedarray@0.0.6:
+    resolution: {integrity: sha512-/aCDEGatGvZ2BIk+HmLf4ifCJFwvKFNb9/JeZPMulfgFracn9QFcAf5GO8B/mweUjSoblS5In0cWhqpfs/5PQA==}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -10628,6 +10684,14 @@ snapshots:
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
+  '@turf/boolean-point-in-polygon@7.3.4':
+    dependencies:
+      '@turf/helpers': 7.3.4
+      '@turf/invariant': 7.3.4
+      '@types/geojson': 7946.0.16
+      point-in-polygon-hao: 1.2.4
+      tslib: 2.8.1
+
   '@turf/distance@7.3.4':
     dependencies:
       '@turf/helpers': 7.3.4
@@ -10963,6 +11027,8 @@ snapshots:
     dependencies:
       tslib: 2.8.1
     optional: true
+
+  array-source@0.0.4: {}
 
   array-union@2.1.0: {}
 
@@ -11443,8 +11509,7 @@ snapshots:
 
   commander@14.0.3: {}
 
-  commander@2.20.3:
-    optional: true
+  commander@2.20.3: {}
 
   commander@7.2.0:
     optional: true
@@ -11473,6 +11538,13 @@ snapshots:
 
   concat-map@0.0.1:
     optional: true
+
+  concat-stream@2.0.0:
+    dependencies:
+      buffer-from: 1.1.2
+      inherits: 2.0.4
+      readable-stream: 3.6.2
+      typedarray: 0.0.6
 
   connect@3.7.0:
     dependencies:
@@ -12147,6 +12219,10 @@ snapshots:
   fetch-nodeshim@0.4.10:
     optional: true
 
+  file-source@0.6.1:
+    dependencies:
+      stream-source: 0.3.5
+
   fill-range@7.1.1:
     dependencies:
       to-regex-range: 5.0.1
@@ -12230,6 +12306,19 @@ snapshots:
 
   gensync@1.0.0-beta.2:
     optional: true
+
+  geo-tz@8.1.6:
+    dependencies:
+      '@turf/boolean-point-in-polygon': 7.3.4
+      '@turf/helpers': 7.3.4
+      geobuf: 3.0.2
+      pbf: 3.3.0
+
+  geobuf@3.0.2:
+    dependencies:
+      concat-stream: 2.0.0
+      pbf: 3.3.0
+      shapefile: 0.6.6
 
   get-caller-file@2.0.5: {}
 
@@ -13655,6 +13744,11 @@ snapshots:
       minipass: 7.1.3
     optional: true
 
+  path-source@0.1.3:
+    dependencies:
+      array-source: 0.0.4
+      file-source: 0.6.1
+
   path-type@4.0.0: {}
 
   pathe@2.0.3: {}
@@ -13712,6 +13806,10 @@ snapshots:
   pngjs@5.0.0: {}
 
   po-parser@2.1.1: {}
+
+  point-in-polygon-hao@1.2.4:
+    dependencies:
+      robust-predicates: 3.0.3
 
   polylabel@1.1.0:
     dependencies:
@@ -14188,6 +14286,8 @@ snapshots:
 
   robust-predicates@2.0.4: {}
 
+  robust-predicates@3.0.3: {}
+
   rolldown@1.0.0-rc.11(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.2):
     dependencies:
       '@oxc-project/types': 0.122.0
@@ -14336,6 +14436,15 @@ snapshots:
   shallowequal@1.1.0:
     optional: true
 
+  shapefile@0.6.6:
+    dependencies:
+      array-source: 0.0.4
+      commander: 2.20.3
+      path-source: 0.1.3
+      slice-source: 0.4.1
+      stream-source: 0.3.5
+      text-encoding: 0.6.4
+
   sharp@0.34.5:
     dependencies:
       '@img/colour': 1.1.0
@@ -14439,6 +14548,8 @@ snapshots:
       ansi-styles: 6.2.3
       is-fullwidth-code-point: 5.1.0
 
+  slice-source@0.4.1: {}
+
   slugg@1.2.1: {}
 
   slugify@1.6.9:
@@ -14508,6 +14619,8 @@ snapshots:
 
   stream-buffers@2.2.0:
     optional: true
+
+  stream-source@0.3.5: {}
 
   strict-uri-encode@2.0.0:
     optional: true
@@ -14635,6 +14748,8 @@ snapshots:
       minimatch: 3.1.5
     optional: true
 
+  text-encoding@0.6.4: {}
+
   thread-stream@4.0.0:
     dependencies:
       real-require: 0.2.0
@@ -14732,6 +14847,8 @@ snapshots:
       call-bound: 1.0.4
       es-errors: 1.3.0
       is-typed-array: 1.1.15
+
+  typedarray@0.0.6: {}
 
   typescript@5.9.3: {}
 

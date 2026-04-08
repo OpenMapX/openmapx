@@ -14,6 +14,7 @@ import LanguageIcon from "@mui/icons-material/Language";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PlaceIcon from "@mui/icons-material/Place";
 import WbSunnyOutlinedIcon from "@mui/icons-material/WbSunnyOutlined";
+import WbTwilightIcon from "@mui/icons-material/WbTwilight";
 import WorkIcon from "@mui/icons-material/Work";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -51,6 +52,7 @@ import { TEAL } from "@/lib/theme";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
+import { PlaceSunTimes } from "./PlaceSunTimes";
 import { PlaceTagDetails } from "./PlaceTagDetails";
 import { PlaceWeather } from "./PlaceWeather";
 
@@ -178,6 +180,7 @@ export function PlaceOverviewTab({
   const tc = useTranslations("common");
   const tSaved = useTranslations("saved");
   const tWeather = useTranslations("weather");
+  const tSun = useTranslations("sunTimes");
   const hours = parseOpeningHours(place.openingHours, {
     lat: place.coordinates[1],
     lon: place.coordinates[0],
@@ -189,6 +192,7 @@ export function PlaceOverviewTab({
   const shortCodeDisplay = city ? `${shortCode} ${city}` : null;
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [weatherExpanded, setWeatherExpanded] = useState(false);
+  const [sunTimesExpanded, setSunTimesExpanded] = useState(false);
   const [savedExpanded, setSavedExpanded] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelName, setLabelName] = useState("");
@@ -572,6 +576,24 @@ export function PlaceOverviewTab({
               lat={place.coordinates[1]}
               lng={place.coordinates[0]}
               enabled={weatherExpanded}
+            />
+          </ExpandableDetailRow>
+
+          {/* Sunrise & sunset (expandable) */}
+          <ExpandableDetailRow
+            icon={<WbTwilightIcon sx={{ fontSize: 22 }} />}
+            expanded={sunTimesExpanded}
+            onToggle={() => setSunTimesExpanded((v) => !v)}
+            label={
+              <Typography variant="body2" color="text.primary">
+                {tSun("sunriseSunset")}
+              </Typography>
+            }
+          >
+            <PlaceSunTimes
+              lat={place.coordinates[1]}
+              lng={place.coordinates[0]}
+              enabled={sunTimesExpanded}
             />
           </ExpandableDetailRow>
         </Box>

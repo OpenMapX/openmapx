@@ -677,6 +677,18 @@
     "radarUnavailable": "Radardaten derzeit nicht verfügbar",
     "owmNotConfigured": "OWM_API_KEY konfigurieren für weitere Layer"
   },
+  "sunTimes": {
+    "sunriseSunset": "Sonnenauf- & -untergang",
+    "sunrise": "Sonnenaufgang",
+    "sunset": "Sonnenuntergang",
+    "solarNoon": "Sonnenhöchststand",
+    "dayLength": "Tageslänge",
+    "civilTwilight": "Bürgerliche Dämmerung",
+    "nauticalTwilight": "Nautische Dämmerung",
+    "astronomicalTwilight": "Astronomische Dämmerung",
+    "noData": "Sonnenzeitdaten nicht verfügbar",
+    "attribution": "Daten von"
+  },
   "environment": {
     "environmentalSensors": "Umweltsensoren",
     "toggleOverlay": "Umwelt-Overlay umschalten",

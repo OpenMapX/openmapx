@@ -677,6 +677,18 @@
     "radarUnavailable": "Radar data currently unavailable",
     "owmNotConfigured": "Configure OWM_API_KEY for additional layers"
   },
+  "sunTimes": {
+    "sunriseSunset": "Sunrise & sunset",
+    "sunrise": "Sunrise",
+    "sunset": "Sunset",
+    "solarNoon": "Solar noon",
+    "dayLength": "Day length",
+    "civilTwilight": "Civil twilight",
+    "nauticalTwilight": "Nautical twilight",
+    "astronomicalTwilight": "Astronomical twilight",
+    "noData": "Sun times data unavailable",
+    "attribution": "Data by"
+  },
   "environment": {
     "environmentalSensors": "Environmental Sensors",
     "toggleOverlay": "Toggle environment overlay",

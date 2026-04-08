@@ -1,0 +1,39 @@
+{
+  "id": "enrichment-sunrise-sunset",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://sunrise-sunset.org/api",
+  "domains": ["enrichment"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "quality": "built-in",
+  "category": "Enrichment",
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.sunrise-sunset.org/json?lat=0&lng=0&formatted=0"
+  },
+  "attribution": [
+    {
+      "name": "Sunrise-Sunset.org",
+      "url": "https://sunrise-sunset.org/",
+      "license": "Free, attribution required",
+      "licenseUrl": "https://sunrise-sunset.org/api"
+    }
+  ],
+  "privacy": [
+    {
+      "service": "Sunrise-Sunset.org",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://sunrise-sunset.org/api",
+      "personalData": false,
+      "cookies": false
+    }
+  ]
+}

@@ -137,6 +137,7 @@ export {
   useUpdateList,
   useUpdatePlace,
 } from "./hooks/useSavedPlaces";
+export { type SunTimesResponse, useSunTimes } from "./hooks/useSunTimes";
 // Integration framework
 export type {
   CacheClient,
