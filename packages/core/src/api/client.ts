@@ -98,3 +98,14 @@ export class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+/**
+ * Rewrite an image URL to go through the backend image proxy.
+ * This prevents leaking the user's IP address to external image hosts.
+ */
+export function proxyImageUrl(url: string): string {
+  // Only proxy external HTTP(S) URLs
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return url;
+  const cfg = getConfig();
+  return `${cfg.baseUrl}/api/image-proxy?url=${encodeURIComponent(url)}`;
+}

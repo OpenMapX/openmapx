@@ -9,6 +9,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { getOverviewConsumedKeys } from "./PlaceTagDetails";
 
 interface Props {
   place: Place;
@@ -121,10 +122,15 @@ interface RenderedGroup {
 function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
   const assigned = new Set<string>();
   const groups: RenderedGroup[] = [];
+  const overviewKeys = getOverviewConsumedKeys(osmTags);
 
   for (const group of TAG_GROUPS) {
     const entries: Array<{ key: string; value: string }> = [];
     for (const key of group.keys) {
+      if (overviewKeys.has(key)) {
+        assigned.add(key);
+        continue;
+      }
       const value = osmTags[key];
       if (value !== undefined) {
         entries.push({ key, value });
@@ -136,10 +142,10 @@ function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
     }
   }
 
-  // Catch-all for unassigned tags (excluding enrichment meta-keys)
+  // Catch-all for unassigned tags (excluding enrichment meta-keys and overview-consumed keys)
   const other: Array<{ key: string; value: string }> = [];
   for (const [key, value] of Object.entries(osmTags)) {
-    if (!assigned.has(key) && !ENRICHMENT_KEYS.has(key)) {
+    if (!assigned.has(key) && !ENRICHMENT_KEYS.has(key) && !overviewKeys.has(key)) {
       other.push({ key, value });
     }
   }

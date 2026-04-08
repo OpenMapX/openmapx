@@ -51,6 +51,7 @@ import { TEAL } from "@/lib/theme";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
+import { PlaceTagDetails } from "./PlaceTagDetails";
 import { PlaceWeather } from "./PlaceWeather";
 
 interface Props {
@@ -637,6 +638,10 @@ export function PlaceOverviewTab({
       </Dialog>
 
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
+      {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
+      {place.osmTags && Object.keys(place.osmTags).length > 0 && (
+        <PlaceTagDetails osmTags={place.osmTags} />
+      )}
       {/* Transit section — self-hides if no linked stops */}
       <PlaceTransitSection
         place={place}

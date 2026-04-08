@@ -2,7 +2,13 @@
 
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
 // API
-export { ApiClient, type ApiClientConfig, apiClient, configureApiClient } from "./api/client";
+export {
+  ApiClient,
+  type ApiClientConfig,
+  apiClient,
+  configureApiClient,
+  proxyImageUrl,
+} from "./api/client";
 export { API_ENDPOINTS } from "./api/endpoints";
 // Auth
 export type { Session, User } from "./auth/client";

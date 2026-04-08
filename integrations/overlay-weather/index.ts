@@ -84,6 +84,7 @@ export function setup(ctx: IntegrationContext): void {
 
       reply.header("Content-Type", "image/png");
       reply.header("Cache-Control", "public, max-age=600, s-maxage=600");
+      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
       reply.send(Buffer.from(await tileRes.arrayBuffer()));
     } catch {
       reply.status(502).send({ message: "Tile fetch failed" });

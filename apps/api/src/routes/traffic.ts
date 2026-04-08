@@ -30,6 +30,7 @@ export const trafficRoute: FastifyPluginAsync = async (fastify) => {
         const tile = await getTrafficProvider().getFlowTile(z, x, y);
 
         reply.header("Cache-Control", tile.cacheControl ?? "public, max-age=30, s-maxage=30");
+        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
         reply.type(tile.contentType);
         return reply.send(Buffer.from(tile.bytes));
       } catch (error) {

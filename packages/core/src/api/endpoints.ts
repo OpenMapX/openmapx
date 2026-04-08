@@ -42,6 +42,7 @@ export const API_ENDPOINTS = {
   dataSourceSearch: "/api/data-sources", // used as `${base}/${sourceId}/search`
   dataSourceDetail: "/api/data-sources", // used as `${base}/${sourceId}/detail/${itemId}`
   photos: "/api/photos",
+  imageProxy: "/api/image-proxy",
   hikingSearch: "/api/integrations/overlay-hiking/hiking/search",
   hikingArea: "/api/integrations/overlay-hiking/hiking/area",
   hikingDetail: "/api/integrations/overlay-hiking/hiking/details",

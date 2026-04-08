@@ -59,8 +59,9 @@ export async function searchPhotos(query: PhotoQuery): Promise<PlacePhoto[]> {
     Promise.allSettled(providerPromises),
   ]);
 
-  // Enrichment photos first (hero image priority), then provider photos
+  // OSM image tags first (highest priority), then enrichment, then providers
   const all: PlacePhoto[] = [];
+  if (tags) all.push(...(await extractImageTagPhotos(tags)));
   for (const result of enricherResults) {
     if (result.status === "fulfilled") all.push(...result.value);
   }
@@ -69,6 +70,202 @@ export async function searchPhotos(query: PhotoQuery): Promise<PlacePhoto[]> {
   }
 
   return deduplicatePhotos(all, totalLimit);
+}
+
+/**
+ * Extract photos from OSM `image` tags.
+ * Handles: `image`, `image:0`, `image:1`, …
+ * Values can be direct URLs, Wikimedia Commons filenames, or Google Photos share links.
+ */
+async function extractImageTagPhotos(tags: Record<string, string>): Promise<PlacePhoto[]> {
+  const photos: PlacePhoto[] = [];
+  const seen = new Set<string>();
+
+  // Collect image tag values in order: image, image:0, image:1, …
+  const imageValues: string[] = [];
+  if (tags.image) imageValues.push(tags.image);
+  for (let i = 0; i <= 20; i++) {
+    const v = tags[`image:${i}`];
+    if (v) imageValues.push(v);
+  }
+
+  // Resolve all values (some may be async, e.g. Google Photos links)
+  const resolved = await Promise.allSettled(imageValues.map((raw) => resolveImageValue(raw)));
+
+  for (let i = 0; i < resolved.length; i++) {
+    const result = resolved[i];
+    if (result.status !== "fulfilled" || !result.value) continue;
+    const rawValue = imageValues[i];
+    const isGooglePhotos =
+      rawValue.includes("photos.app.goo.gl") || rawValue.includes("photos.google.com/share");
+    for (const url of result.value) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      photos.push({
+        url,
+        attribution: isGooglePhotos ? "Google Photos" : "OpenStreetMap",
+        source: isGooglePhotos ? "google-photos" : "osm",
+        pageUrl: isGooglePhotos ? rawValue : undefined,
+      });
+    }
+  }
+
+  return photos;
+}
+
+/**
+ * Resolve an OSM image tag value to one or more displayable URLs.
+ * Handles direct URLs, Wikimedia Commons filenames, and Google Photos share links.
+ */
+async function resolveImageValue(value: string): Promise<string[] | null> {
+  // Wikimedia Commons filename: "File:Example.jpg"
+  if (value.startsWith("File:")) {
+    const filename = value.slice(5);
+    return [
+      `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=1200`,
+    ];
+  }
+
+  // Not a URL
+  if (!value.startsWith("http://") && !value.startsWith("https://")) return null;
+
+  // Google Photos share link → resolve og:image preview only.
+  // Full album extraction is implemented (extractGoogleUserContentUrls) but
+  // disabled for legal reasons (Google ToS, photographer copyright).
+  // We only use the og:image which is intended for link-preview embedding.
+  if (value.includes("photos.app.goo.gl") || value.includes("photos.google.com/share")) {
+    const preview = await resolveGooglePhotosPreview(value);
+    return preview ? [preview] : null;
+  }
+
+  return [value];
+}
+
+// Browser-like headers to avoid Google blocking server-side fetches
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+/**
+ * Resolve a Google Photos share link to actual image URLs.
+ * Exported so the image proxy can use it as a fallback.
+ */
+export async function resolveGooglePhotosLink(shareUrl: string): Promise<string[]> {
+  try {
+    // Step 1: For short URLs (photos.app.goo.gl), follow the redirect manually
+    // to get the actual photos.google.com/share/ URL. Using redirect: "follow"
+    // lands on a DurableDeepLink wrapper page that has no image data.
+    let pageUrl = shareUrl;
+    if (shareUrl.includes("photos.app.goo.gl")) {
+      const redirect = await fetch(shareUrl, {
+        signal: AbortSignal.timeout(5_000),
+        redirect: "manual",
+      });
+      const location = redirect.headers.get("location");
+      if (location?.includes("photos.google.com")) {
+        pageUrl = location;
+      }
+    }
+
+    // Step 2: Fetch the actual Google Photos share page
+    const res = await fetch(pageUrl, {
+      signal: AbortSignal.timeout(8_000),
+      headers: BROWSER_HEADERS,
+    });
+    if (!res.ok) return [];
+
+    const html = await res.text();
+
+    // Strategy 1: Extract all googleusercontent.com URLs from the page.
+    // These appear in script data, meta tags, and preload links.
+    const allGoogleUrls = extractGoogleUserContentUrls(html);
+    if (allGoogleUrls.length > 0) return allGoogleUrls;
+
+    // Strategy 2: og:image meta tag (single image fallback)
+    const ogMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i);
+    if (ogMatch) {
+      let imgUrl = ogMatch[1].replace(/&amp;/g, "&");
+      if (imgUrl.includes("googleusercontent.com") && !imgUrl.includes("=w")) {
+        imgUrl += "=w1200";
+      }
+      return [imgUrl];
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve a Google Photos share link to a single og:image preview URL.
+ * The og:image is the preview thumbnail Google explicitly provides for link embedding
+ * (used by social media cards, chat previews, etc.) — safer legally than scraping all images.
+ */
+async function resolveGooglePhotosPreview(shareUrl: string): Promise<string | null> {
+  try {
+    let pageUrl = shareUrl;
+    if (shareUrl.includes("photos.app.goo.gl")) {
+      const redirect = await fetch(shareUrl, {
+        signal: AbortSignal.timeout(5_000),
+        redirect: "manual",
+      });
+      const location = redirect.headers.get("location");
+      if (location?.includes("photos.google.com")) {
+        pageUrl = location;
+      }
+    }
+
+    const res = await fetch(pageUrl, {
+      signal: AbortSignal.timeout(8_000),
+      headers: BROWSER_HEADERS,
+    });
+    if (!res.ok) return null;
+
+    const html = await res.text();
+
+    const ogMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i);
+    if (ogMatch) {
+      let imgUrl = ogMatch[1].replace(/&amp;/g, "&");
+      // Replace any existing size suffix with high-quality one
+      imgUrl = imgUrl.replace(/=[swh]\d[\da-z-]*$/i, "").replace(/=s\d[\da-z-]*$/i, "");
+      return `${imgUrl}=w2048`;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract all unique googleusercontent.com image URLs from Google Photos HTML.
+ * Google embeds these in various places: AF_initDataCallback script blocks,
+ * meta tags, preload links, and inline data.
+ */
+function extractGoogleUserContentUrls(html: string): string[] {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+
+  // Match googleusercontent.com URLs — only allow URL-safe characters
+  const urlPattern = /https:\/\/lh[3-6]\.googleusercontent\.com\/[a-zA-Z0-9_\-/.=]+/g;
+  for (const m of html.matchAll(urlPattern)) {
+    // Strip any size/crop suffix: =w600-h315-p-k-no, =s32-p, =w1200, etc.
+    const base = m[0].replace(/=[swh]\d[\da-z-]*$/i, "").replace(/=s\d[\da-z-]*$/i, "");
+    // Skip avatar/profile-pic paths (/a/ segment)
+    if (/\/a\//.test(base)) continue;
+    // Skip very short base paths (likely not real photos)
+    if (base.length < 80) continue;
+    if (seen.has(base)) continue;
+    seen.add(base);
+    // Request high quality (w2048 is the max Google serves without auth)
+    urls.push(`${base}=w2048`);
+  }
+
+  return urls;
 }
 
 /**

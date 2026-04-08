@@ -35,6 +35,7 @@ export const mapillaryRoute: FastifyPluginAsync = async (fastify) => {
       const contentType =
         upstream.headers.get("content-type") ?? "application/vnd.mapbox-vector-tile";
       reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
+      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
       reply.type(contentType);
       return reply.send(Buffer.from(bytes));
     },

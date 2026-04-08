@@ -6,7 +6,7 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import type { PlacePhoto } from "@openmapx/core";
+import { type PlacePhoto, proxyImageUrl } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { PhotoAttribution } from "./PhotoAttribution";
 
@@ -23,8 +23,8 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos }: Pro
   const photo = photos[0];
   if (!photo) return null;
 
-  const photoUrl = photo.url;
-  const isValid = photoUrl.startsWith("https://") || photoUrl.startsWith("http://");
+  const photoUrl = proxyImageUrl(photo.url);
+  const isValid = photo.url.startsWith("https://") || photo.url.startsWith("http://");
   if (!isValid) return null;
 
   const totalCount = photos.length;

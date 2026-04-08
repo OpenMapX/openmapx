@@ -9,6 +9,8 @@ const SOURCE_LABELS: Record<string, string> = {
   mapillary: "Mapillary",
   flickr: "Flickr",
   panoramax: "Panoramax",
+  osm: "OpenStreetMap",
+  "google-photos": "Google Photos",
 };
 
 const SOURCE_URLS: Record<string, string> = {
@@ -17,6 +19,7 @@ const SOURCE_URLS: Record<string, string> = {
   mapillary: "https://www.mapillary.com",
   flickr: "https://www.flickr.com",
   panoramax: "https://panoramax.xyz",
+  osm: "https://www.openstreetmap.org",
 };
 
 interface Props {

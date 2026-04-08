@@ -28,6 +28,7 @@ export function setup(ctx: IntegrationContext): void {
       }
       const buffer = Buffer.from(await response.arrayBuffer());
       reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
+      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
       reply.type("image/png");
       reply.send(buffer);
     } catch (err) {

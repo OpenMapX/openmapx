@@ -12,8 +12,14 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Modal from "@mui/material/Modal";
 import Typography from "@mui/material/Typography";
-import type { PlacePhoto } from "@openmapx/core";
-import { useMapClickStore, usePlacePhotos, usePlaceStore, useSidebarStore } from "@openmapx/core";
+import {
+  type PlacePhoto,
+  proxyImageUrl,
+  useMapClickStore,
+  usePlacePhotos,
+  usePlaceStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
@@ -320,7 +326,7 @@ function MainImage({ photo, placeName }: { photo: PlacePhoto; placeName: string 
   return (
     <Box
       component="img"
-      src={photo.url}
+      src={proxyImageUrl(photo.url)}
       alt={photo.author ?? placeName}
       onError={() => setFailed(true)}
       sx={{
@@ -346,12 +352,13 @@ function GalleryThumbnail({
   const [attempt, setAttempt] = useState(0);
 
   const hasSeparateThumb = Boolean(photo.thumbnailUrl && photo.thumbnailUrl !== photo.url);
-  const imgSrc =
+  const rawSrc =
     attempt === 0 && hasSeparateThumb
       ? (photo.thumbnailUrl ?? photo.url)
       : attempt <= 1
         ? photo.url
         : null;
+  const imgSrc = rawSrc ? proxyImageUrl(rawSrc) : null;
 
   return (
     <Box
@@ -442,12 +449,13 @@ function MobileThumbnail({
 }) {
   const [attempt, setAttempt] = useState(0);
   const hasSeparateThumb = Boolean(photo.thumbnailUrl && photo.thumbnailUrl !== photo.url);
-  const imgSrc =
+  const rawSrc =
     attempt === 0 && hasSeparateThumb
       ? (photo.thumbnailUrl ?? photo.url)
       : attempt <= 1
         ? photo.url
         : null;
+  const imgSrc = rawSrc ? proxyImageUrl(rawSrc) : null;
 
   return (
     <Box

@@ -9,11 +9,11 @@ import type { Place, PlaceReviewLink } from "@openmapx/core";
 
 interface PlatformDef {
   name: string;
-  /** Key in Place.osmTags, e.g. "ref:yelp" */
-  osmTagKey?: string;
+  /** Keys in Place.osmTags to check (in priority order), e.g. ["ref:yelp", "contact:yelp"]. */
+  osmTagKeys?: string[];
   /** Key in enriched externalIds map, e.g. "yelp" */
   wikidataKey?: string;
-  /** Constructs a direct link from a known platform ID. */
+  /** Constructs a direct link from a known platform ID or URL. */
   directUrl?: (id: string) => string;
   /** Fallback search URL using place name + coordinates. */
   searchUrl: (name: string, lat: number, lng: number) => string;
@@ -27,21 +27,25 @@ const PLATFORMS: PlatformDef[] = [
   },
   {
     name: "Yelp",
-    osmTagKey: "ref:yelp",
+    osmTagKeys: ["ref:yelp", "contact:yelp"],
     wikidataKey: "yelp",
-    directUrl: (id) => `https://www.yelp.com/biz/${encodeURIComponent(id)}`,
+    directUrl: (id) =>
+      id.startsWith("http") ? id : `https://www.yelp.com/biz/${encodeURIComponent(id)}`,
     searchUrl: (name, lat, lng) =>
       `https://www.yelp.com/search?find_desc=${encodeURIComponent(name)}&find_lat=${lat}&find_lng=${lng}`,
   },
   {
     name: "TripAdvisor",
+    osmTagKeys: ["contact:tripadvisor"],
+    directUrl: (url) => (url.startsWith("http") ? url : `https://www.tripadvisor.com/${url}`),
     searchUrl: (name) => `https://www.tripadvisor.com/Search?q=${encodeURIComponent(name)}`,
   },
   {
     name: "Foursquare",
-    osmTagKey: "ref:foursquare",
+    osmTagKeys: ["ref:foursquare", "contact:foursquare"],
     wikidataKey: "foursquare",
-    directUrl: (id) => `https://foursquare.com/v/${encodeURIComponent(id)}`,
+    directUrl: (id) =>
+      id.startsWith("http") ? id : `https://foursquare.com/v/${encodeURIComponent(id)}`,
     searchUrl: (name, lat, lng) =>
       `https://foursquare.com/explore?q=${encodeURIComponent(name)}&ll=${lat},${lng}`,
   },
@@ -59,10 +63,12 @@ export function buildReviewLinks(
   const osmTags = place.osmTags ?? {};
 
   return PLATFORMS.map((platform): PlaceReviewLink => {
-    // Tier 1: OSM extratag
-    const osmId = platform.osmTagKey ? osmTags[platform.osmTagKey] : undefined;
-    if (osmId && platform.directUrl) {
-      return { platform: platform.name, url: platform.directUrl(osmId) };
+    // Tier 1: OSM extratags (check all keys in priority order)
+    if (platform.osmTagKeys && platform.directUrl) {
+      for (const key of platform.osmTagKeys) {
+        const val = osmTags[key];
+        if (val) return { platform: platform.name, url: platform.directUrl(val) };
+      }
     }
 
     // Tier 2: Wikidata external ID

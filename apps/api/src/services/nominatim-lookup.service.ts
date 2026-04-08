@@ -52,7 +52,14 @@ function buildAddress(addr: NominatimAddress): string {
 }
 
 function toPlace(r: NominatimDetailResult, id: string): Place {
-  const { opening_hours, phone, website, ...rest } = r.extratags ?? {};
+  const {
+    opening_hours,
+    phone,
+    website,
+    "contact:phone": contactPhone,
+    "contact:website": contactWebsite,
+    ...rest
+  } = r.extratags ?? {};
 
   const osmTags: Record<string, string> = {};
   for (const [k, v] of Object.entries(rest)) {
@@ -71,8 +78,8 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
     countryCode: r.address.country_code ?? undefined,
     coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
     category: resolveOsmLabel(r.class, r.type),
-    phone,
-    website,
+    phone: phone ?? contactPhone,
+    website: website ?? contactWebsite,
     openingHours: opening_hours,
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
   };
