@@ -44,41 +44,73 @@
   ],
   "quality": "built-in",
   "category": "Shared Mobility",
-  "attribution": [
-    {
-      "name": "GBFS Catalog",
-      "url": "https://github.com/MobilityData/gbfs",
-      "license": "Various (per operator)",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
-    },
+  "dataSources": [
     {
       "name": "Cambio CarSharing",
       "url": "https://www.cambio-carsharing.de/",
-      "license": "Proprietary (no public API license)",
-      "licenseUrl": "https://www.cambio-carsharing.de/agb"
+      "license": "Datenlizenz Deutschland Zero 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.cambio-carsharing.de/en/privacy-policy/privacy-policy-for-the-cambio-website",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "Stadt Münster Open Data",
       "url": "https://opendata.stadt-muenster.de/",
-      "license": "DL-DE/Zero-2.0",
-      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "CA",
-      "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
-      "personalData": false
-    },
-    {
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.cambio-carsharing.de/datenschutz/",
-      "personalData": false
-    },
-    {
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://opendata.stadt-muenster.de/dataset/stadtteilauto-m%C3%BCnster-carsharing-stationen-und-fahrzeuge",
+      "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.stadt-muenster.de/datenschutz",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "Stadt Bielefeld Open Data",
+      "url": "https://open-data.bielefeld.de/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://open-data.bielefeld.de/page/nutzungsbedingungen",
+      "attribution": "Datenquelle: <a href=\"https://open-data.bielefeld.de/\">Stadt Bielefeld</a>",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bielefeld.de/datenschutzerklaerung",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "Stadt Wuppertal Open Data",
+      "url": "https://offenedaten-wuppertal.de/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://offenedaten-wuppertal.de/page/nutzungsbedingungen-kontakt-lizenzen",
+      "attribution": "Datenquelle: <a href=\"https://offenedaten-wuppertal.de/\">CC-BY-4.0 - Stadt Wuppertal</a>",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.wuppertal.de/service/datenschutz_dsgvo.php",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "GBFS Catalog (MobilityData)",
+      "url": "https://github.com/MobilityData/gbfs",
+      "license": "CC BY 3.0 (spec); per-operator data licenses",
+      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

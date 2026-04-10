@@ -10,7 +10,12 @@ import Switch from "@mui/material/Switch";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { type WeatherSubLayer, weatherCodeToInfo } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  useIntegrationRegistry,
+  type WeatherSubLayer,
+  weatherCodeToInfo,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
 import { useWeatherStore } from "./store";
@@ -38,6 +43,9 @@ export function WeatherLegend() {
   const t = useTranslations("weather");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-weather");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWeatherStore((s) => s.panelOpen);
   const layerVisible = useWeatherStore((s) => s.layerVisible);
   const setLayerVisible = useWeatherStore((s) => s.setLayerVisible);
@@ -237,41 +245,15 @@ export function WeatherLegend() {
         </Typography>
       )}
 
-      {/* Attribution */}
-      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
-        {t("attribution")}{" "}
-        <a
-          href="https://open-meteo.com/"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          Open-Meteo
-        </a>{" "}
-        (CC BY 4.0) · {t("radarBy")}{" "}
-        <a
-          href="https://www.rainviewer.com/"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          RainViewer
-        </a>
-        {owmAvailable && (
-          <>
-            {" "}
-            · {t("tilesBy")}{" "}
-            <a
-              href="https://openweathermap.org/"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: "inherit" }}
-            >
-              OpenWeatherMap
-            </a>
-          </>
-        )}
-      </Typography>
+      {/* Attribution (from manifest dataSources -- trusted, not user-generated) */}
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 1 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

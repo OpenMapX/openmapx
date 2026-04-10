@@ -24,19 +24,34 @@
     "type": "http",
     "url": "https://api.github.com/repos/public-transport/transport-apis/git/trees/v1"
   },
-  "attribution": [
+  "dataSources": [
     {
-      "name": "public-transport/transport-apis",
-      "url": "https://github.com/public-transport/transport-apis",
-      "license": "CC0-1.0",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
-    }
-  ],
-  "privacy": [
+      "name": "JSDelivr CDN",
+      "url": "https://cdn.jsdelivr.net/",
+      "license": "MIT",
+      "licenseUrl": "https://www.jsdelivr.com/terms/terms-of-use",
+      "commercialUse": "yes",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://www.jsdelivr.com/terms/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": true,
+      "dpaUrl": "https://www.jsdelivr.com/documents/data-processing-agreement.pdf"
+    },
     {
-      "providerCountry": "Various",
-      "providerPrivacyUrl": "https://github.com/public-transport/transport-apis",
-      "personalData": false
+      "name": "GitHub API",
+      "url": "https://api.github.com/",
+      "license": "Proprietary (GitHub ToS)",
+      "licenseUrl": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://docs.github.com/site-policy/privacy-policies/github-privacy-statement",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": true,
+      "dpaUrl": "https://github.com/customer-terms/github-data-protection-agreement"
     }
   ]
 }

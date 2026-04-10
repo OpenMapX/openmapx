@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  buildIntegrationAttribution,
   type RadarMeta,
   useDebouncedCallback,
+  useIntegrationRegistry,
   useOverlayExclusion,
   type WeatherSubLayer,
 } from "@openmapx/core";
@@ -31,6 +33,9 @@ const OWM_LAYER_MAP: Record<WeatherSubLayer, string | null> = {
 export function WeatherLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-weather");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useWeatherStore((s) => s.layerVisible);
   const activeSubLayer = useWeatherStore((s) => s.activeSubLayer);
   const radarHost = useWeatherStore((s) => s.radarHost);
@@ -148,12 +153,13 @@ export function WeatherLayer() {
       const frame = allFrames[i];
 
       if (!map.getSource(sourceId)) {
+        const proxyTileUrl = `${env.apiUrl}/api/integrations/overlay-weather/radar/tile/{z}/{x}/{y}?path=${encodeURIComponent(frame.path)}`;
         map.addSource(sourceId, {
           type: "raster",
-          tiles: [`${radarHost}${frame.path}/256/{z}/{x}/{y}/1/1_1.png`],
+          tiles: [proxyTileUrl],
           tileSize: 256,
           maxzoom: 7,
-          attribution: '© <a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
+          attribution: attributionHtml,
         });
       }
 
@@ -234,7 +240,7 @@ export function WeatherLayer() {
       type: "raster",
       tiles: [tileUrl],
       tileSize: 256,
-      attribution: '© <a href="https://openweathermap.org/" target="_blank">OpenWeatherMap</a>',
+      attribution: attributionHtml,
     });
 
     map.addLayer(

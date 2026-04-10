@@ -30,19 +30,21 @@
   },
   "quality": "built-in",
   "category": "External",
-  "attribution": [
+  "dataSources": [
     {
       "name": "Flickr",
       "url": "https://www.flickr.com/",
-      "license": "Various (per photo)",
-      "licenseUrl": "https://www.flickr.com/creativecommons/"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "Proprietary",
+      "licenseUrl": "https://www.flickr.com/help/terms/api",
+      "attribution": "Photos by <a href=\"https://www.flickr.com/\">Flickr</a>",
+      "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.flickr.com/help/privacy",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": true,
+      "dpaUrl": "https://www.flickr.com/help/dpa"
     }
   ]
 }

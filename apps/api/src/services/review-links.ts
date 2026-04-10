@@ -1,7 +1,7 @@
 /**
  * Builds external review links for a place using three tiers:
  *   1. OSM extratags  — direct link when a platform ID is stored in OSM (e.g. ref:yelp)
- *   2. Wikidata IDs   — direct link from enriched external IDs (P2397 = Yelp, P7566 = Foursquare)
+ *   2. Wikidata IDs   — direct link from enriched external IDs (P3108 = Yelp, P3134 = TripAdvisor, etc.)
  *   3. Search URL     — fallback using place name + coordinates (always available)
  */
 
@@ -22,6 +22,8 @@ interface PlatformDef {
 const PLATFORMS: PlatformDef[] = [
   {
     name: "Google Maps",
+    wikidataKey: "google_maps",
+    directUrl: (cid) => `https://www.google.com/maps?cid=${encodeURIComponent(cid)}`,
     searchUrl: (name, lat, lng) =>
       `https://www.google.com/maps/search/${encodeURIComponent(name)}/@${lat},${lng},17z`,
   },
@@ -32,22 +34,14 @@ const PLATFORMS: PlatformDef[] = [
     directUrl: (id) =>
       id.startsWith("http") ? id : `https://www.yelp.com/biz/${encodeURIComponent(id)}`,
     searchUrl: (name, lat, lng) =>
-      `https://www.yelp.com/search?find_desc=${encodeURIComponent(name)}&find_lat=${lat}&find_lng=${lng}`,
+      `https://www.yelp.com/search?find_desc=${encodeURIComponent(name)}&find_loc=${lat},${lng}`,
   },
   {
     name: "TripAdvisor",
     osmTagKeys: ["contact:tripadvisor"],
+    wikidataKey: "tripadvisor",
     directUrl: (url) => (url.startsWith("http") ? url : `https://www.tripadvisor.com/${url}`),
     searchUrl: (name) => `https://www.tripadvisor.com/Search?q=${encodeURIComponent(name)}`,
-  },
-  {
-    name: "Foursquare",
-    osmTagKeys: ["ref:foursquare", "contact:foursquare"],
-    wikidataKey: "foursquare",
-    directUrl: (id) =>
-      id.startsWith("http") ? id : `https://foursquare.com/v/${encodeURIComponent(id)}`,
-    searchUrl: (name, lat, lng) =>
-      `https://foursquare.com/explore?q=${encodeURIComponent(name)}&ll=${lat},${lng}`,
   },
 ];
 

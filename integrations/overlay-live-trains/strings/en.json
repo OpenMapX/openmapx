@@ -1,9 +1,11 @@
 {
   "name": "Live Train Positions",
   "description": "Real-time train positions on the German rail network",
-  "privacy": {
-    "purpose": "Real-time train positions on German rail network",
-    "dataSent": "API credentials, bounding box",
-    "dataReceived": "Train positions, delays, and route information"
-  }
+  "dataSources": [
+    {
+      "purpose": "Live GPS positions of active Deutsche Bahn trains",
+      "dataSent": "Railway administration IDs (operator filter)",
+      "dataReceived": "Live + emulated train positions with journeyID, coordinates, direction, speed, train category, origin/destination"
+    }
+  ]
 }

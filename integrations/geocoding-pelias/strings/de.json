@@ -1,11 +1,11 @@
 {
   "name": "Pelias-Geokodierung",
   "description": "Selbst gehostete Geokodierung über Pelias",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Pelias",
-      "purpose": "Selbst gehostete Geokodierung",
-      "dataSent": "Suchanfragetext (an selbst gehostete Instanz)"
+      "purpose": "Vorwärts-Geokodierung, Autovervollständigung und Rückwärts-Geokodierung über selbst gehostete Pelias-Instanz",
+      "dataSent": "Suchtext oder Koordinaten (Breitengrad, Längengrad), Ergebnislimit, Sprache",
+      "dataReceived": "GeoJSON-Features mit GID, Label, Name, Ebene (Venue/Adresse/Straße/Ort), Konfidenz, Koordinaten"
     }
   ]
 }

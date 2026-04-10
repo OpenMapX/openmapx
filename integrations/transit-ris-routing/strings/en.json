@@ -1,8 +1,11 @@
 {
   "name": "DB RIS Routing",
   "description": "German rail journey planning via DB RIS API",
-  "privacy": {
-    "purpose": "German rail journey planning",
-    "dataSent": "Origin/destination coordinates, API credentials"
-  }
+  "dataSources": [
+    {
+      "purpose": "Deutsche Bahn's official journey planner for multi-modal transit routing in Germany",
+      "dataSent": "Origin and destination coordinates, departure or arrival time, language",
+      "dataReceived": "Trips with legs (WALK/JOURNEY/CONNECT), transport category/line/number, Google-encoded polylines, per-stop scheduled/actual times and platforms"
+    }
+  ]
 }

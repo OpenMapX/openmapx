@@ -43,7 +43,9 @@
     "searchInArea": "In diesem Bereich suchen",
     "noResultsFound": "Keine Ergebnisse in diesem Bereich gefunden.",
     "noStopsFound": "Keine Haltestellen in diesem Bereich gefunden.",
-    "failedToLoad": "Ergebnisse konnten nicht geladen werden. Erneut versuchen."
+    "failedToLoad": "Ergebnisse konnten nicht geladen werden. Erneut versuchen.",
+    "zoomInToSearch": "Näher heranzoomen, um Ergebnisse in diesem Bereich zu sehen.",
+    "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen."
   },
   "map": {
     "myLocation": "Mein Standort",
@@ -325,7 +327,8 @@
     "heritageNational": "Nationales Denkmal",
     "heritageRegional": "Regionales Denkmal",
     "heritageYes": "Denkmalgeschützt",
-    "minAge": "Mindestalter {age}"
+    "minAge": "Mindestalter {age}",
+    "source": "Quelle"
   },
   "transit": {
     "transit": "Nahverkehr",

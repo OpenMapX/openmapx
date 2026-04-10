@@ -31,19 +31,19 @@
     "urlTemplate": "${OTP_URL}/otp/routers/default",
     "requiredEnvVars": ["OTP_URL"]
   },
-  "attribution": [
+  "dataSources": [
     {
-      "name": "OpenTripPlanner",
-      "url": "https://www.opentripplanner.org/",
-      "license": "LGPL-3.0",
-      "licenseUrl": "https://www.gnu.org/licenses/lgpl-3.0.html"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "Self-hosted",
-      "providerPrivacyUrl": "https://www.opentripplanner.org/",
-      "personalData": false
+      "name": "OpenTripPlanner (self-hosted)",
+      "url": "http://localhost:8090/",
+      "license": "LGPL v3+",
+      "licenseUrl": "https://github.com/opentripplanner/OpenTripPlanner/blob/dev-2.x/LICENSE",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

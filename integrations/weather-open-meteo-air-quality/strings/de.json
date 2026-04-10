@@ -1,11 +1,11 @@
 {
   "name": "Open-Meteo Luftqualität",
   "description": "Globaler Luftqualitätsindex und Schadstoffvorhersagen",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Open-Meteo",
-      "purpose": "Luftqualitätsindex und Schadstoffdaten für den Kartenausschnitt",
-      "dataSent": "Koordinaten (Breitengrad, Längengrad)"
+      "purpose": "Aktueller Luftqualitätsindex und Schadstoffkonzentrationen",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad)",
+      "dataReceived": "Europäischer und US-AQI-Wert, PM10, PM2,5, CO, NO2, SO2, Ozon-Konzentrationen. 15 Min. gecacht."
     }
   ]
 }

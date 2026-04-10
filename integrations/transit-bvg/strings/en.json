@@ -1,8 +1,11 @@
 {
   "name": "BVG Transit (Berlin)",
   "description": "Berlin public transit data from BVG",
-  "privacy": {
-    "purpose": "Berlin transit stops and departures",
-    "dataSent": "Stop IDs, coordinates"
-  }
+  "dataSources": [
+    {
+      "purpose": "Berlin BVG transit data — stops, departures, journey planning, live vehicle positions",
+      "dataSent": "Coordinates (latitude, longitude), search radius, stop ID, search query, origin and destination coordinates, departure/arrival time, bounding box (for vehicle radar)",
+      "dataReceived": "FPTF stops/departures/arrivals/journeys/trips/radar data for Berlin BVG network"
+    }
+  ]
 }

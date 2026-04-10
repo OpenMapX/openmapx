@@ -26,20 +26,5 @@
   },
   "healthCheck": {
     "type": "custom"
-  },
-  "attribution": [
-    {
-      "name": "Various GTFS Feeds",
-      "url": "https://gtfs.org/",
-      "license": "Various (per feed)",
-      "licenseUrl": "https://gtfs.org/"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "Self-hosted",
-      "providerPrivacyUrl": "N/A",
-      "personalData": false
-    }
-  ]
+  }
 }

@@ -1,9 +1,26 @@
 {
   "name": "Scooter Sharing",
   "description": "E-scooter and moped sharing locations and availability",
-  "privacy": {
-    "purpose": "E-scooter and moped sharing vehicle locations and availability",
-    "dataSent": "Bounding box coordinates",
-    "dataReceived": "Vehicle/station locations, availability, operator info"
-  }
+  "dataSources": [
+    {
+      "purpose": "Discover GBFS-compliant shared mobility systems worldwide",
+      "dataSent": "No user data (static catalog)",
+      "dataReceived": "Station locations/capacity/availability, free-floating vehicle positions, vehicle types, pricing plans"
+    },
+    {
+      "purpose": "Felyx moped/e-scooter positions (Netherlands, Belgium)",
+      "dataSent": "No user data (fetches entire dataset, filtered server-side to bounding box)",
+      "dataReceived": "Vehicles with id, coordinates, fuel level, vehicle type"
+    },
+    {
+      "purpose": "GO Sharing scooters near the map center (primarily Netherlands)",
+      "dataSent": "Coordinates (latitude, longitude), search radius in meters",
+      "dataReceived": "Vehicles with id, coordinates, battery level, vehicle type"
+    },
+    {
+      "purpose": "Link e-scooters (multiple European cities). Company shut down Dec 2023.",
+      "dataSent": "Coordinates (latitude, longitude)",
+      "dataReceived": "Vehicles with id, coordinates, battery level, vehicle type"
+    }
+  ]
 }

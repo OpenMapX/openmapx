@@ -5,7 +5,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { SAC_GRADES } from "@openmapx/core";
+import { buildIntegrationAttribution, SAC_GRADES, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useHikingStore } from "./store";
 
@@ -27,6 +27,9 @@ const SHELTER_ITEMS = [
 
 export function HikingTrailsLegend() {
   const t = useTranslations("hiking");
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-hiking");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useHikingStore((s) => s.panelOpen);
   const layerVisible = useHikingStore((s) => s.layerVisible);
   const loading = useHikingStore((s) => s.loading);
@@ -120,26 +123,14 @@ export function HikingTrailsLegend() {
         ))}
       </Box>
 
-      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
-        {t("attribution")} ·{" "}
-        <a
-          href="https://hiking.waymarkedtrails.org"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          Waymarked Trails
-        </a>{" "}
-        /{" "}
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          OSM
-        </a>
-      </Typography>
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 1 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

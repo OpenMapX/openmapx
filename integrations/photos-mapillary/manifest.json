@@ -31,19 +31,20 @@
   },
   "quality": "built-in",
   "category": "Imagery",
-  "attribution": [
+  "dataSources": [
     {
       "name": "Mapillary",
       "url": "https://www.mapillary.com/",
-      "license": "CC BY-SA 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "US",
+      "license": "CC BY-SA 4.0 (imagery); Proprietary (API)",
+      "licenseUrl": "https://www.mapillary.com/terms",
+      "attribution": "<a href=\"https://www.mapillary.com/\">Mapillary</a> (CC BY-SA)",
+      "commercialUse": "conditional",
+      "providerCountry": "IE",
       "providerPrivacyUrl": "https://www.mapillary.com/privacy",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

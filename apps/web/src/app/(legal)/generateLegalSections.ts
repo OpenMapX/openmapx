@@ -6,6 +6,7 @@ export interface PrivacyServiceRow {
   dataSent: string;
   country: string;
   privacy: string;
+  endUserExposure?: string;
 }
 
 export interface AttributionRow {
@@ -14,6 +15,8 @@ export interface AttributionRow {
   license: string;
   licenseUrl?: string;
   url: string;
+  attributionHtml?: string;
+  commercialUse?: string;
 }
 
 const DOMAIN_TO_PRIVACY_SECTION: Record<string, { key: string; labelEn: string; labelDe: string }> =
@@ -91,10 +94,38 @@ const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe
   },
 };
 
+const EXPOSURE_LABELS: Record<string, { en: string; de: string }> = {
+  direct: { en: "Direct (browser)", de: "Direkt (Browser)" },
+  proxied: { en: "Proxied (server)", de: "Über Server (Proxy)" },
+  "server-only": { en: "Server-only", de: "Nur Server" },
+  "build-time": { en: "Build-time only", de: "Nur zur Build-Zeit" },
+};
+
 /**
- * Resolve a localized string from integration.strings.
- * `path` is a dot-separated key like "privacy.purpose" or just "name".
+ * Resolve a localized string from integration.strings dataSources array by index.
  */
+function localizedDataSourceField(
+  integration: LoadedIntegrationMeta,
+  locale: string,
+  index: number,
+  field: string,
+): string {
+  const localeStrings = integration.strings?.[locale];
+  if (!localeStrings) return "";
+
+  const dsLocale = localeStrings.dataSources;
+  if (!dsLocale) return "";
+
+  if (Array.isArray(dsLocale)) {
+    const entry = dsLocale[index] as Record<string, unknown> | undefined;
+    const val = entry?.[field];
+    return typeof val === "string" ? val : "";
+  }
+
+  const val = (dsLocale as Record<string, unknown>)[field];
+  return typeof val === "string" ? val : "";
+}
+
 function localized(integration: LoadedIntegrationMeta, locale: string, path: string): string {
   const localeStrings = integration.strings?.[locale];
   if (!localeStrings) return "";
@@ -108,32 +139,6 @@ function localized(integration: LoadedIntegrationMeta, locale: string, path: str
   return typeof current === "string" ? current : "";
 }
 
-/**
- * For privacy arrays, find the matching localized entry by array index.
- */
-function localizedPrivacyField(
-  integration: LoadedIntegrationMeta,
-  locale: string,
-  index: number,
-  field: string,
-): string {
-  const localeStrings = integration.strings?.[locale];
-  if (!localeStrings) return "";
-
-  const privacyLocale = localeStrings.privacy;
-  if (!privacyLocale) return "";
-
-  if (Array.isArray(privacyLocale)) {
-    const entry = privacyLocale[index] as Record<string, unknown> | undefined;
-    const val = entry?.[field];
-    return typeof val === "string" ? val : "";
-  }
-
-  // Single privacy object (not array)
-  const val = (privacyLocale as Record<string, unknown>)[field];
-  return typeof val === "string" ? val : "";
-}
-
 export function generatePrivacySectionsFromManifests(
   integrations: LoadedIntegrationMeta[],
   locale: string,
@@ -144,7 +149,10 @@ export function generatePrivacySectionsFromManifests(
   >();
 
   for (const integration of integrations) {
-    if (!integration.enabled || !integration.configured || !integration.privacy) continue;
+    if (!integration.enabled || !integration.configured) continue;
+
+    const sources = integration.dataSources;
+    if (!sources?.length) continue;
 
     const domain = integration.domains[0] ?? "map-overlay";
     const sectionMeta = DOMAIN_TO_PRIVACY_SECTION[domain] ?? {
@@ -157,24 +165,24 @@ export function generatePrivacySectionsFromManifests(
       grouped.set(sectionMeta.key, { ...sectionMeta, rows: [] });
     }
 
-    const privacyEntries = Array.isArray(integration.privacy)
-      ? integration.privacy
-      : [integration.privacy];
+    for (let i = 0; i < sources.length; i++) {
+      const ds = sources[i];
+      const service = ds.name || localized(integration, locale, "name") || integration.name;
+      const exposure = ds.endUserExposure
+        ? (EXPOSURE_LABELS[ds.endUserExposure]?.[locale === "de" ? "de" : "en"] ??
+          ds.endUserExposure)
+        : "";
 
-    for (let i = 0; i < privacyEntries.length; i++) {
-      const p = privacyEntries[i];
-      const attrName = integration.attribution?.[i]?.name;
-      const service =
-        localizedPrivacyField(integration, locale, i, "service") ||
-        attrName ||
-        localized(integration, locale, "name") ||
-        integration.name;
       grouped.get(sectionMeta.key)?.rows.push({
         service,
-        purpose: localizedPrivacyField(integration, locale, i, "purpose"),
-        dataSent: localizedPrivacyField(integration, locale, i, "dataSent"),
-        country: p.providerCountry,
-        privacy: p.providerPrivacyUrl,
+        purpose:
+          localizedDataSourceField(integration, locale, i, "purpose") ||
+          localizedDataSourceField(integration, locale, i, "service") ||
+          "",
+        dataSent: localizedDataSourceField(integration, locale, i, "dataSent") || "",
+        country: ds.providerCountry,
+        privacy: ds.providerPrivacyUrl,
+        endUserExposure: exposure,
       });
     }
   }
@@ -189,8 +197,10 @@ export function generateAttributionSectionsFromManifests(
   const grouped = new Map<string, { heading: string; headingDe: string; rows: AttributionRow[] }>();
 
   for (const integration of integrations) {
-    if (!integration.enabled || !integration.configured || !integration.attribution?.length)
-      continue;
+    if (!integration.enabled || !integration.configured) continue;
+
+    const sources = integration.dataSources;
+    if (!sources?.length) continue;
 
     const domain = integration.domains[0] ?? "map-overlay";
     const sectionMeta = DOMAIN_TO_ATTRIBUTION_SECTION[domain] ?? {
@@ -205,14 +215,16 @@ export function generateAttributionSectionsFromManifests(
 
     const desc = localized(integration, locale, "description") || integration.description || "";
 
-    for (const attr of integration.attribution) {
-      if (attr.dynamic) continue; // Dynamic attributions fetched at render time
+    for (const ds of sources) {
+      if (ds.dynamic) continue;
       grouped.get(groupKey)?.rows.push({
-        source: attr.name,
+        source: ds.name,
         desc,
-        license: attr.license,
-        licenseUrl: attr.licenseUrl,
-        url: attr.url,
+        license: ds.license,
+        licenseUrl: ds.licenseUrl,
+        url: ds.url,
+        attributionHtml: ds.attribution,
+        commercialUse: ds.commercialUse,
       });
     }
   }

@@ -22,13 +22,12 @@ export { IntegrationEventBus } from "./events";
 export type { IntegrationStrings, LoadedIntegration, LoadedIntegrationMeta } from "./loader";
 export { toIntegrationMeta } from "./loader";
 export type {
-  IntegrationAttribution,
+  IntegrationDataSource,
   IntegrationFrontend,
   IntegrationHealthCheck,
   IntegrationLayerSelector,
   IntegrationManifest,
   IntegrationOverlay,
-  IntegrationPrivacy,
   IntegrationSearchCategory,
   ManifestValidationResult,
 } from "./manifest";

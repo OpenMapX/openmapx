@@ -1,8 +1,11 @@
 {
   "name": "DB Vendo (Deutsche Bahn)",
   "description": "Deutsche Bahn Reiseplanung über db-vendo-client",
-  "privacy": {
-    "purpose": "Deutsche Bahnreiseplanung und Abfahrten",
-    "dataSent": "Start-/Zielbahnhofs-IDs, Abfahrtszeit"
-  }
+  "dataSources": [
+    {
+      "purpose": "Deutsche-Bahn-Nahverkehrsdaten — Haltestellensuche, Abfahrtstafeln, Reiseplanung, Live-Fahrt-Tracking",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius, Haltestellen-ID, Suchbegriff, Start- und Zielkoordinaten, Abfahrts-/Ankunftszeit, Fahrt-ID",
+      "dataReceived": "FPTF-Haltestellen, Abfahrten/Ankünfte mit Echtzeit-Verspätungen, Mehrabschnitt-Reisen mit Zwischenhalten, Fahrtdetails mit Zeiten/Bahnsteigen pro Halt"
+    }
+  ]
 }

@@ -1,9 +1,4 @@
 {
   "name": "Public Transit",
-  "description": "Public transit route visualization on the map",
-  "privacy": {
-    "purpose": "Transit route visualization on map",
-    "dataSent": "Map tile requests",
-    "dataReceived": "Transit overlay tiles"
-  }
+  "description": "Public transit route visualization on the map"
 }

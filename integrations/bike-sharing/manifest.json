@@ -55,52 +55,72 @@
   ],
   "quality": "built-in",
   "category": "Shared Mobility",
-  "attribution": [
-    {
-      "name": "GBFS Catalog",
-      "url": "https://github.com/MobilityData/gbfs",
-      "license": "Various (per operator)",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
-    },
-    {
-      "name": "Nextbike",
-      "url": "https://www.nextbike.com/",
-      "license": "Proprietary",
-      "licenseUrl": "https://www.nextbike.net/en/tc/"
-    },
+  "dataSources": [
     {
       "name": "CityBikes",
       "url": "https://citybik.es/",
-      "license": "AGPLv3",
-      "licenseUrl": "https://github.com/eskerda/pybikes/blob/master/LICENSE"
+      "license": "Proprietary (custom terms, attribution required)",
+      "licenseUrl": "https://docs.citybik.es/api/tos",
+      "attribution": "Data: <a href=\"https://citybik.es/\">CityBikes</a>",
+      "commercialUse": "unknown",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "Donkey Republic",
       "url": "https://www.donkey.bike/",
       "license": "Proprietary",
-      "licenseUrl": "https://www.donkey.bike/terms/"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "CA",
-      "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
-      "personalData": false
+      "licenseUrl": "https://www.donkey.bike/terms-and-conditions/",
+      "commercialUse": "unknown",
+      "providerCountry": "DK",
+      "providerPrivacyUrl": "https://www.donkey.bike/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
+      "name": "Nextbike",
+      "url": "https://www.nextbike.com/",
+      "license": "Proprietary",
+      "licenseUrl": "https://github.com/nextbike/api-doc",
+      "commercialUse": "unknown",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.nextbike.de/en/privacy/",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
-      "providerCountry": "ES",
-      "providerPrivacyUrl": "https://citybik.es/",
-      "personalData": false
+      "name": "Deutsche Bahn GBFS",
+      "url": "https://developers.deutschebahn.com/",
+      "license": "Proprietary (bilateral license per API product)",
+      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
-      "providerCountry": "DK",
-      "providerPrivacyUrl": "https://www.donkey.bike/privacy-policy/",
-      "personalData": false
+      "name": "GBFS Catalog (MobilityData)",
+      "url": "https://github.com/MobilityData/gbfs",
+      "license": "CC BY 3.0 (spec); per-operator data licenses",
+      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

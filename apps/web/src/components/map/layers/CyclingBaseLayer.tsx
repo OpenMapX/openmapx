@@ -1,15 +1,38 @@
 "use client";
 
-import { useLayerStore } from "@openmapx/core";
+import { buildAttributionHtml, useLayerStore } from "@openmapx/core";
 import { useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { RasterBaseLayer } from "./RasterBaseLayer";
 
-const CYCLOSM_ATTRIBUTION =
-  '© <a href="https://www.cyclosm.org/" target="_blank">CyclOSM</a> hosted by <a href="https://openstreetmap.fr/" target="_blank">OpenStreetMap France</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank">CC-BY-SA</a>)';
+const OSM_ATTRIBUTION = buildAttributionHtml({
+  name: "OpenStreetMap",
+  url: "https://www.openstreetmap.org/copyright",
+  license: "CC-BY-SA",
+  licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
+  attribution:
+    '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noopener noreferrer">CC-BY-SA</a>)',
+});
 
-const THUNDERFOREST_ATTRIBUTION =
-  '© <a href="https://www.thunderforest.com/maps/opencyclemap/" target="_blank">Thunderforest OpenCycleMap</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank">CC-BY-SA</a>)';
+const CYCLOSM_ATTRIBUTION = [
+  buildAttributionHtml({
+    name: "CyclOSM",
+    url: "https://www.cyclosm.org/",
+    license: "",
+    attribution:
+      '© <a href="https://www.cyclosm.org/" target="_blank" rel="noopener noreferrer">CyclOSM</a> hosted by <a href="https://openstreetmap.fr/" target="_blank" rel="noopener noreferrer">OpenStreetMap France</a>',
+  }),
+  OSM_ATTRIBUTION,
+].join(" · ");
+
+const THUNDERFOREST_ATTRIBUTION = [
+  buildAttributionHtml({
+    name: "Thunderforest OpenCycleMap",
+    url: "https://www.thunderforest.com/maps/opencyclemap/",
+    license: "",
+  }),
+  OSM_ATTRIBUTION,
+].join(" · ");
 
 export function CyclingBaseLayer() {
   const env = useEnv();

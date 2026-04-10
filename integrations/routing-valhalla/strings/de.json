@@ -1,11 +1,11 @@
 {
   "name": "Valhalla-Routenberechnung",
   "description": "Fuß- und Fahrradrouten-Berechnung über Valhalla",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Valhalla",
-      "purpose": "Fuß-/Fahrradrouten-Berechnung, Isochronenanalyse",
-      "dataSent": "Start-/Zielkoordinaten, Routenoptionen"
+      "purpose": "Multimodales Routing (Gehen, Radfahren, Autofahren) mit Höhenprofilen und lokalisierten Anweisungen; Wegpunktoptimierung",
+      "dataSent": "Routen-Wegpunktkoordinaten, Fortbewegungsart, Vermeidungsoptionen (Autobahn, Fähre), Einheitenpräferenz, Sprache",
+      "dataReceived": "Route mit Polyline6-Geometrie, lokalisierten Abbiegeanweisungen, Entfernung/Dauer, Höhenprofil, bis zu 3 Alternativen. Optimierte Wegpunktfolge."
     }
   ]
 }

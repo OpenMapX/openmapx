@@ -1,9 +1,11 @@
 {
   "name": "Mapillary-Straßenansicht",
   "description": "Straßenansichtsbilder von Mapillary",
-  "privacy": {
-    "purpose": "Straßenansichtsbilder",
-    "dataSent": "Koordinaten, Bild-IDs, API-Token",
-    "dataReceived": "Straßenansichtsbilder und Sequenz-Metadaten"
-  }
+  "dataSources": [
+    {
+      "purpose": "Straßenbilder. Bildersuche ist serverseitig, aber der MapillaryJS-Viewer kontaktiert graph.mapillary.com und fbcdn.net DIREKT vom Browser. Vektorkacheln über BFF proxied.",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (~1 km um den Klickpunkt), Ergebnislimit",
+      "dataReceived": "Nächste Bild-ID für Viewer; Vektorkacheln (Sequenzlinien + Bildpunkte); Panoramabilder über MapillaryJS"
+    }
+  ]
 }

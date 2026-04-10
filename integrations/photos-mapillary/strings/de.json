@@ -1,11 +1,11 @@
 {
   "name": "Mapillary-Fotos",
   "description": "Straßenansichtsfotos in der Nähe von Orten von Mapillary",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Mapillary",
-      "purpose": "Straßenansichtsfotos in der Nähe von Orten",
-      "dataSent": "Koordinaten, API-Token"
+      "purpose": "Straßenfotos in der Nähe eines Ortes für das Ortsdetail-Panel",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (~660 m um den Punkt), Ergebnislimit",
+      "dataReceived": "Bilder mit ID, Koordinaten, Vorschaubild-URLs, Aufnahmezeitstempel, Erstellername"
     }
   ]
 }

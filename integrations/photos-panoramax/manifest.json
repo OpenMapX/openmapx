@@ -23,19 +23,20 @@
   },
   "quality": "built-in",
   "category": "Imagery",
-  "attribution": [
+  "dataSources": [
     {
       "name": "Panoramax",
-      "url": "https://panoramax.fr/",
-      "license": "Various (open)",
-      "licenseUrl": "https://wiki.openstreetmap.org/wiki/Panoramax"
-    }
-  ],
-  "privacy": [
-    {
+      "url": "https://panoramax.xyz/",
+      "license": "Licence Ouverte v2.0 (IGN); CC BY-SA 4.0 (OSM France)",
+      "licenseUrl": "https://docs.panoramax.fr/",
+      "attribution": "<a href=\"https://panoramax.xyz/\">Panoramax</a>",
+      "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "https://www.ign.fr/institut/donnees-caractere-personnel",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

@@ -44,4 +44,6 @@ export interface DirectionsResult {
   routes: Route[];
   activeRouteIndex: number;
   optimizedOrder?: number[];
+  /** Integration ID of the routing provider that produced these results. */
+  provider?: string;
 }

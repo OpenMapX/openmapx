@@ -47,32 +47,34 @@
   ],
   "quality": "built-in",
   "category": "Data Overlays",
-  "attribution": [
+  "dataSources": [
     {
       "name": "NASA EONET",
       "url": "https://eonet.gsfc.nasa.gov/",
-      "license": "CC0 1.0",
-      "licenseUrl": "https://earthdata.nasa.gov/learn/use-data/data-use-policy"
+      "license": "U.S. Public Domain",
+      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+      "attribution": "Natural events data by <a href=\"https://eonet.gsfc.nasa.gov/\">NASA EONET</a>",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "GDACS",
       "url": "https://www.gdacs.org/",
-      "license": "Public Domain",
-      "licenseUrl": "https://www.gdacs.org/About/termofuse.aspx"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+      "license": "Proprietary (disclaimer-based)",
+      "licenseUrl": "https://www.gdacs.org/About/termofuse.aspx",
+      "attribution": "Disaster data by <a href=\"https://www.gdacs.org/\">GDACS</a>",
+      "commercialUse": "no",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
-    },
-    {
-      "providerCountry": "EU",
-      "providerPrivacyUrl": "https://www.gdacs.org/About/termofuse.aspx",
-      "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

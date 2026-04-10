@@ -188,9 +188,7 @@ const CONSUMED_SIMPLE_KEYS = new Set([
   // Review platform links (consumed by Reviews tab)
   "contact:tripadvisor",
   "contact:yelp",
-  "contact:foursquare",
   "ref:yelp",
-  "ref:foursquare",
   // Photos (consumed by gallery)
   "image",
   // Social media (consumed by social row)

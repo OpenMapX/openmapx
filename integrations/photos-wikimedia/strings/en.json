@@ -1,11 +1,11 @@
 {
   "name": "Wikimedia Photos",
   "description": "Geotagged place photos",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Wikimedia Commons",
-      "purpose": "Place photos from Wikimedia Commons",
-      "dataSent": "Coordinates, search radius"
+      "purpose": "Openly-licensed photographs geotagged near a place",
+      "dataSent": "Coordinates (latitude, longitude), search radius (500 m), result limit",
+      "dataReceived": "File pages with thumbnail URL (800px), artist, license, capture date, coordinates. Filtered: no SVG/PDF/TIFF, max 50MB."
     }
   ]
 }

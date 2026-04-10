@@ -1,21 +1,16 @@
 {
   "name": "Wetter-Overlay",
   "description": "Niederschlagsradar, Temperatur und weitere Wetter-Kartenlayer",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "RainViewer",
-      "purpose": "Niederschlagsradar-Animation auf der Karte",
-      "dataSent": "Kachelkoordinaten (Zoom, X, Y)"
+      "purpose": "Niederschlagsradar-Animation (Metadaten serverseitig, aber Radarkacheln direkt vom Browser geladen)",
+      "dataSent": "Keine Nutzerdaten (statischer Metadaten-Feed)",
+      "dataReceived": "CDN-Host-URL, vergangene Radarbilder und Nowcast-Vorhersagen; PNG-Radarkacheln"
     },
     {
-      "service": "OpenWeatherMap",
-      "purpose": "Temperatur-, Wolken-, Wind- und Luftdruck-Kartenlayer",
-      "dataSent": "Kachelkoordinaten (Zoom, X, Y)"
-    },
-    {
-      "service": "Open-Meteo",
-      "purpose": "Aktuelle Wetterbedingungen für Karten-Widget und Ortsdetails",
-      "dataSent": "Standortkoordinaten (Breitengrad, Längengrad), Zeitzone, Einheitenpräferenzen"
+      "purpose": "Wetterparameter-Overlay-Kacheln (Temperatur, Wolken, Wind, Druck, Niederschlag)",
+      "dataSent": "Wetterebenen-Name, Kachelkoordinaten (z/x/y)",
+      "dataReceived": "PNG-Kacheln mit dem ausgewählten Wetterparameter"
     }
   ]
 }

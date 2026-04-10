@@ -1,9 +1,26 @@
 {
   "name": "Roller-Sharing",
   "description": "E-Scooter- und Moped-Sharing von GBFS-Feeds, Felyx, GO Sharing und Link",
-  "privacy": {
-    "purpose": "E-Scooter- und Moped-Sharing-Fahrzeugstandorte und Verfügbarkeit",
-    "dataSent": "Begrenzungsrahmen-Koordinaten",
-    "dataReceived": "Fahrzeug-/Stationsstandorte, Verfügbarkeit, Betreiberinformationen"
-  }
+  "dataSources": [
+    {
+      "purpose": "GBFS-kompatible Shared-Mobility-Systeme weltweit entdecken",
+      "dataSent": "Keine Nutzerdaten (statischer Katalog)",
+      "dataReceived": "Stationsstandorte/-kapazität/-verfügbarkeit, freifliegende Fahrzeugpositionen, Fahrzeugtypen, Preispläne"
+    },
+    {
+      "purpose": "Felyx-Moped-/E-Scooter-Positionen (Niederlande, Belgien)",
+      "dataSent": "Keine Nutzerdaten (gesamter Datensatz wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
+      "dataReceived": "Fahrzeuge mit ID, Koordinaten, Füllstand, Fahrzeugtyp"
+    },
+    {
+      "purpose": "GO-Sharing-Scooter in der Nähe des Kartenzentrums (hauptsächlich Niederlande)",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius in Metern",
+      "dataReceived": "Fahrzeuge mit ID, Koordinaten, Akkustand, Fahrzeugtyp"
+    },
+    {
+      "purpose": "Link-E-Scooter (mehrere europäische Städte). Unternehmen eingestellt Dez. 2023.",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad)",
+      "dataReceived": "Fahrzeuge mit ID, Koordinaten, Akkustand, Fahrzeugtyp"
+    }
+  ]
 }

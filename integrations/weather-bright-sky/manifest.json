@@ -28,21 +28,20 @@
   },
   "quality": "built-in",
   "category": "Weather",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Bright Sky / DWD",
+      "name": "Bright Sky (DWD data)",
       "url": "https://brightsky.dev/",
-      "license": "GeoNutzV",
-      "licenseUrl": "https://www.gesetze-im-internet.de/geonutzv/"
-    }
-  ],
-  "privacy": [
-    {
-      "service": "Bright Sky / DWD",
+      "license": "MIT (software); CC BY 4.0 (DWD data)",
+      "licenseUrl": "https://brightsky.dev/",
+      "attribution": "Weather data: <a href=\"https://www.dwd.de/\">DWD</a> via <a href=\"https://brightsky.dev/\">Bright Sky</a>",
+      "commercialUse": "yes",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://brightsky.dev/",
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

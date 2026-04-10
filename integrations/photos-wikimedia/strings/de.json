@@ -1,11 +1,11 @@
 {
   "name": "Wikimedia-Fotos",
   "description": "Ortsfotos von Wikimedia Commons",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Wikimedia Commons",
-      "purpose": "Ortsfotos von Wikimedia Commons",
-      "dataSent": "Koordinaten, Suchradius"
+      "purpose": "Offen lizenzierte, georeferenzierte Fotografien in der Nähe eines Ortes",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius (500 m), Ergebnislimit",
+      "dataReceived": "Dateiseiten mit Vorschaubild-URL (800px), Künstler, Lizenz, Aufnahmedatum, Koordinaten. Gefiltert: kein SVG/PDF/TIFF, max 50 MB."
     }
   ]
 }

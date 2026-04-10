@@ -43,7 +43,9 @@
     "searchInArea": "Search in this area",
     "noResultsFound": "No results found in this area.",
     "noStopsFound": "No stops found in this area.",
-    "failedToLoad": "Failed to load results. Try again."
+    "failedToLoad": "Failed to load results. Try again.",
+    "zoomInToSearch": "Zoom in to see results in this area.",
+    "partialResults": "Some results may be missing. Zoom in for complete results."
   },
   "map": {
     "myLocation": "My location",
@@ -325,7 +327,8 @@
     "heritageNational": "National heritage",
     "heritageRegional": "Regional heritage",
     "heritageYes": "Heritage site",
-    "minAge": "Min. age {age}"
+    "minAge": "Min. age {age}",
+    "source": "Source"
   },
   "transit": {
     "transit": "Transit",

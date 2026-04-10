@@ -1,11 +1,11 @@
 {
   "name": "MET Norway Weather",
   "description": "Weather forecasts from the Norwegian Meteorological Institute",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "MET Norway",
-      "purpose": "Weather conditions and forecasts",
-      "dataSent": "Coordinates (latitude, longitude)"
+      "purpose": "Current weather, hourly, and daily forecasts. Global coverage.",
+      "dataSent": "Coordinates (latitude, longitude)",
+      "dataReceived": "Timeseries with instant details (temperature, pressure, clouds, humidity, wind) and next_1h/next_6h summaries (symbol, precipitation, min/max temp)"
     }
   ]
 }

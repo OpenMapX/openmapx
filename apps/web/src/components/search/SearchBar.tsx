@@ -12,11 +12,14 @@ import InputBase from "@mui/material/InputBase";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, LngLat, TransitStop } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
+  buildIntegrationAttribution,
   CATEGORY_DEFINITIONS,
+  combineAttributions,
   decodeShortPlusCode,
   detectShortPlusCodeCity,
   isTransitName,
@@ -28,6 +31,7 @@ import {
   useActiveSidePanel,
   useAdaptiveDebounce,
   useAutocomplete,
+  useCapabilities,
   useCategorySearchStore,
   useDataSourceStore,
   useDebounce,
@@ -160,6 +164,19 @@ export function SearchBar() {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [registry]);
+
+  // Geocoding attribution — only show providers that are available and healthy
+  const { services: caps } = useCapabilities();
+  const geocodingAttribution = useMemo(() => {
+    const geocoders = registry.getByDomain("geocoding").filter((g) => {
+      const cap = caps[g.id];
+      return cap ? cap.available && cap.healthy : false;
+    });
+    if (geocoders.length === 0) return "";
+    return combineAttributions(
+      geocoders.map((g) => buildIntegrationAttribution(g.dataSources)).filter(Boolean),
+    );
+  }, [registry, caps]);
 
   // Clean up blur timeout on unmount
   useEffect(() => {
@@ -622,6 +639,21 @@ export function SearchBar() {
                 onSelect={handleSelect}
                 highlightedIndex={highlightedIndex}
               />
+              {geocodingAttribution && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{
+                    display: "block",
+                    p: 0.5,
+                    textAlign: "center",
+                    fontSize: 10.5,
+                    "& a": { color: "text.secondary", textDecoration: "underline" },
+                  }}
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
+                  dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
+                />
+              )}
             </Box>
           </>
         )}

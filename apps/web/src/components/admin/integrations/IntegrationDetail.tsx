@@ -78,36 +78,23 @@ interface IntegrationDetailData {
   } | null;
   manifest: {
     configSchema?: Record<string, unknown>;
-    attribution?: Array<{
+    dataSources?: Array<{
       name: string;
       url: string;
       license: string;
       licenseUrl?: string;
+      attribution?: string;
+      commercialUse?: string;
+      providerCountry: string;
+      providerPrivacyUrl: string;
+      endUserExposure?: string;
+      personalData?: boolean;
+      cookies?: boolean;
+      dpaAvailable?: boolean;
+      dpaUrl?: string;
       dynamic?: boolean;
+      dynamicEndpoint?: string;
     }>;
-    privacy?:
-      | Array<{
-          service?: string;
-          purpose?: string;
-          dataSent?: string;
-          dataReceived?: string;
-          providerCountry: string;
-          providerPrivacyUrl: string;
-          dataRetention?: string;
-          personalData?: boolean;
-          cookies?: boolean;
-        }>
-      | {
-          service?: string;
-          purpose?: string;
-          dataSent?: string;
-          dataReceived?: string;
-          providerCountry: string;
-          providerPrivacyUrl: string;
-          dataRetention?: string;
-          personalData?: boolean;
-          cookies?: boolean;
-        };
   };
   resolvedConfig: Record<string, { value: unknown; source: ConfigSource }>;
   dependencyStatus: Array<{ id: string; loaded: boolean; enabled: boolean }>;
@@ -717,87 +704,49 @@ function HealthTab({
   );
 }
 
-function AttributionTab({ data }: { data: IntegrationDetailData }) {
-  const attrs = data.manifest.attribution;
-  if (!attrs?.length) {
+function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
+  const sources = data.manifest.dataSources;
+  if (!sources?.length) {
     return (
       <Alert severity="info" variant="outlined">
-        No attribution declared.
+        No data sources declared.
       </Alert>
     );
   }
 
   return (
     <Stack gap={1.5}>
-      {attrs.map((attr) => (
-        <Card key={attr.name} variant="outlined">
-          <CardContent>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
-              <Stack gap={0.5}>
-                <Typography variant="subtitle2" fontWeight={600}>
-                  {attr.name}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  License: {attr.license}
-                </Typography>
-                {attr.licenseUrl && (
-                  <Link
-                    href={attr.licenseUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="body2"
-                  >
-                    License details
-                  </Link>
-                )}
-                {attr.dynamic && (
-                  <Chip
-                    label="Dynamic attribution"
-                    size="small"
-                    variant="outlined"
-                    color="info"
-                    sx={{ width: "fit-content" }}
-                  />
-                )}
-              </Stack>
-              <Link href={attr.url} target="_blank" rel="noopener noreferrer">
-                <Stack direction="row" alignItems="center" gap={0.5}>
-                  <OpenInNewIcon fontSize="small" />
-                  <Typography variant="body2">{attr.url}</Typography>
-                </Stack>
-              </Link>
-            </Stack>
-          </CardContent>
-        </Card>
-      ))}
-    </Stack>
-  );
-}
-
-function PrivacyTab({ data }: { data: IntegrationDetailData }) {
-  const raw = data.manifest.privacy;
-  if (!raw) {
-    return (
-      <Alert severity="info" variant="outlined">
-        No privacy declaration.
-      </Alert>
-    );
-  }
-
-  const entries = Array.isArray(raw) ? raw : [raw];
-
-  return (
-    <Stack gap={1.5}>
-      {entries.map((entry, i) => (
-        <Card key={entry.service ?? i} variant="outlined">
+      {sources.map((ds) => (
+        <Card key={ds.name} variant="outlined">
           <CardContent>
             <Stack gap={1}>
-              {entry.service && <MetaRow label="Service" value={entry.service} />}
-              {entry.purpose && <MetaRow label="Purpose" value={entry.purpose} />}
-              {entry.dataSent && <MetaRow label="Data sent" value={entry.dataSent} />}
-              {entry.dataReceived && <MetaRow label="Data received" value={entry.dataReceived} />}
-              <MetaRow label="Provider country" value={entry.providerCountry} />
-              {entry.dataRetention && <MetaRow label="Retention" value={entry.dataRetention} />}
+              <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+                <Typography variant="subtitle2" fontWeight={600}>
+                  {ds.name}
+                </Typography>
+                <Link href={ds.url} target="_blank" rel="noopener noreferrer">
+                  <Stack direction="row" alignItems="center" gap={0.5}>
+                    <OpenInNewIcon fontSize="small" />
+                    <Typography variant="body2">{ds.url}</Typography>
+                  </Stack>
+                </Link>
+              </Stack>
+              <MetaRow label="License" value={ds.license} />
+              {ds.licenseUrl && (
+                <Link
+                  href={ds.licenseUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="body2"
+                >
+                  License details
+                </Link>
+              )}
+              {ds.commercialUse && <MetaRow label="Commercial use" value={ds.commercialUse} />}
+              <MetaRow label="Provider country" value={ds.providerCountry} />
+              {ds.endUserExposure && (
+                <MetaRow label="End-user exposure" value={ds.endUserExposure} />
+              )}
               <Stack direction="row" gap={1} alignItems="center">
                 <Typography variant="body2" color="text.secondary" sx={{ minWidth: 110 }}>
                   Flags
@@ -806,13 +755,19 @@ function PrivacyTab({ data }: { data: IntegrationDetailData }) {
                   <Chip
                     label="Personal data"
                     size="small"
-                    color={entry.personalData ? "warning" : "default"}
+                    color={ds.personalData ? "warning" : "default"}
                     variant="outlined"
                   />
                   <Chip
                     label="Cookies"
                     size="small"
-                    color={entry.cookies ? "warning" : "default"}
+                    color={ds.cookies ? "warning" : "default"}
+                    variant="outlined"
+                  />
+                  <Chip
+                    label="DPA available"
+                    size="small"
+                    color={ds.dpaAvailable ? "success" : "default"}
                     variant="outlined"
                   />
                 </Stack>
@@ -821,16 +776,31 @@ function PrivacyTab({ data }: { data: IntegrationDetailData }) {
                 <Typography variant="body2" color="text.secondary" sx={{ minWidth: 110 }}>
                   Privacy URL
                 </Typography>
-                <Link
-                  href={entry.providerPrivacyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  variant="body2"
-                  sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                >
-                  Privacy policy <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
-                </Link>
+                {ds.providerPrivacyUrl.startsWith("http") ? (
+                  <Link
+                    href={ds.providerPrivacyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    variant="body2"
+                    sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                  >
+                    Privacy policy <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
+                  </Link>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    {ds.providerPrivacyUrl}
+                  </Typography>
+                )}
               </Stack>
+              {ds.dynamic && (
+                <Chip
+                  label="Dynamic attribution"
+                  size="small"
+                  variant="outlined"
+                  color="info"
+                  sx={{ width: "fit-content" }}
+                />
+              )}
             </Stack>
           </CardContent>
         </Card>
@@ -839,7 +809,7 @@ function PrivacyTab({ data }: { data: IntegrationDetailData }) {
   );
 }
 
-const TABS = ["Overview", "Configuration", "Credentials", "Health", "Attribution", "Privacy"];
+const TABS = ["Overview", "Configuration", "Credentials", "Health", "Data Sources"];
 
 interface IntegrationDetailProps {
   id: string;
@@ -1000,8 +970,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
         )}
         {tab === 2 && <CredentialsTab data={data} integrationId={id} />}
         {tab === 3 && <HealthTab data={data} integrationId={id} apiUrl={apiUrl} />}
-        {tab === 4 && <AttributionTab data={data} />}
-        {tab === 5 && <PrivacyTab data={data} />}
+        {tab === 4 && <DataSourcesTab data={data} />}
       </Box>
     </Stack>
   );

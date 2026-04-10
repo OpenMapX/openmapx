@@ -44,7 +44,12 @@ export interface Place {
   reviewCount?: number;
   osmTags?: Record<string, string>;
   photos?: PlacePhoto[];
+  /** Short tagline (from Wikidata entity description). */
   description?: string;
+  /** Longer article summary (from Wikipedia extract). */
+  wikipediaExtract?: string;
+  /** Integration ID(s) that supplied the Wikipedia extract (e.g. "enrichment-wikipedia" or "enrichment-wikidata"). */
+  wikipediaExtractSource?: string | string[];
   wikipediaUrl?: string;
   facts?: PlaceFact[];
   reviewLinks?: PlaceReviewLink[];

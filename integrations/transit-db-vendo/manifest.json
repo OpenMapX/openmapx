@@ -24,19 +24,19 @@
     "type": "ping",
     "url": "https://int.bahn.de/web/api/reiseloesung/suche"
   },
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Deutsche Bahn",
+      "name": "Deutsche Bahn (db-vendo-client)",
       "url": "https://www.bahn.de/",
-      "license": "Proprietary",
-      "licenseUrl": "https://www.bahn.de/nutzungsbedingungen"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "ISC (client software); no open license for data",
+      "licenseUrl": "https://github.com/public-transport/db-vendo-client",
+      "commercialUse": "unknown",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
-      "personalData": false
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

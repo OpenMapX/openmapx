@@ -1,30 +1,31 @@
 {
   "name": "Fuel Prices",
   "description": "Gas station locations and real-time fuel prices",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Tankerkoenig (MTS-K)",
       "purpose": "German fuel station prices (E5, E10, Diesel)",
-      "dataSent": "Coordinates, search radius, API key",
-      "dataReceived": "Station locations, fuel types, prices, opening hours"
+      "dataSent": "Center coordinates (latitude, longitude), search radius (max 25 km)",
+      "dataReceived": "Gas stations with name, brand, address, coordinates, live diesel/E5/E10 prices, open/closed status"
     },
     {
-      "service": "E-Control Spritpreisrechner",
-      "purpose": "Austrian fuel station prices",
-      "dataSent": "Address or coordinates",
-      "dataReceived": "Station locations, fuel types, prices"
+      "purpose": "Austrian fuel station prices (Diesel, Super 95)",
+      "dataSent": "Center coordinates (latitude, longitude), search radius, fuel type (diesel and Super 95 queried separately)",
+      "dataReceived": "Gas stations with name, address, coordinates, prices per fuel type, open/closed status"
     },
     {
-      "service": "French government fuel price data",
-      "purpose": "French fuel station prices",
-      "dataSent": "Coordinates or region identifiers",
-      "dataReceived": "Station locations, fuel types, prices"
+      "purpose": "French fuel station prices (6 fuel types)",
+      "dataSent": "Center coordinates (latitude, longitude), search radius",
+      "dataReceived": "Gas stations with address, coordinates, prices for 6 fuel types with update timestamps"
     },
     {
-      "service": "Spanish government fuel price data",
-      "purpose": "Spanish fuel station prices",
-      "dataSent": "Coordinates or region identifiers",
-      "dataReceived": "Station locations, fuel types, prices"
+      "purpose": "Spanish fuel station prices (5 fuel types)",
+      "dataSent": "No user data (fetches entire national dataset)",
+      "dataReceived": "All Spanish gas stations with name, address, coordinates, prices for 5 fuel types"
+    },
+    {
+      "purpose": "Fuel station locations (global fallback, no prices)",
+      "dataSent": "Bounding box coordinates",
+      "dataReceived": "OSM fuel station nodes with name, operator, address"
     }
   ]
 }

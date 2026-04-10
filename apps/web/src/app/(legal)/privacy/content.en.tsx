@@ -25,7 +25,7 @@ export default function PrivacyContent({
         Privacy Policy
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        Last updated: March 2026
+        Last updated: April 2026
       </Typography>
 
       <Section title="1. Controller and Contact">
@@ -212,36 +212,7 @@ export default function PrivacyContent({
         ))}
 
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
-          6.15 Place Enrichment
-        </Typography>
-        <ServiceTable
-          rows={[
-            {
-              service: "Wikipedia (Wikimedia Foundation)",
-              purpose: "Place descriptions, article summaries, thumbnail images",
-              dataSent: "Article titles, language code",
-              country: "USA",
-              privacy: "https://foundation.wikimedia.org/wiki/Privacy_policy",
-            },
-            {
-              service: "Wikidata (Wikimedia Foundation)",
-              purpose: "Structured place facts (population, founding date, architect, etc.)",
-              dataSent: "Wikidata entity IDs",
-              country: "USA",
-              privacy: "https://foundation.wikimedia.org/wiki/Privacy_policy",
-            },
-            {
-              service: "Wikimedia Commons (Wikimedia Foundation)",
-              purpose: "Image metadata, attribution, and license information",
-              dataSent: "File names",
-              country: "USA",
-              privacy: "https://foundation.wikimedia.org/wiki/Privacy_policy",
-            },
-          ]}
-        />
-
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
-          6.16 Authentication Providers
+          Authentication Providers
         </Typography>
         <ServiceTable
           rows={[
@@ -263,7 +234,7 @@ export default function PrivacyContent({
         />
 
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
-          6.17 Software Registries and Catalogs
+          Software Registries and Catalogs
         </Typography>
         <ServiceTable
           rows={[
@@ -271,7 +242,7 @@ export default function PrivacyContent({
               service: "GitHub API (Microsoft)",
               purpose:
                 "Fetching transit API registry and GTFS feed catalog from open-source repositories (server-side only)",
-              dataSent: "Repository file paths; optionally a GitHub token for rate limits",
+              dataSent: "No user data (server-side repository file lookups)",
               country: "USA",
               privacy:
                 "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
@@ -280,12 +251,12 @@ export default function PrivacyContent({
         />
 
         <Typography sx={{ mt: 2 }}>
-          <strong>Note on data flow:</strong> For most of the above services, requests are routed
-          through our backend server (API proxy). This means that the third-party provider typically
-          receives our server&apos;s IP address, not your browser&apos;s IP address. Exceptions are
-          map tiles loaded directly by your browser (MapTiler, OpenTopoMap, CyclOSM, Waymarked
-          Trails tile overlays) and the MapillaryJS street-view viewer, where your browser connects
-          directly to the provider.
+          <strong>Note on data flow:</strong> The &quot;Data Access&quot; column above indicates how
+          each service is contacted. &quot;Server-only&quot; and &quot;Proxied (server)&quot; mean
+          requests are routed through our backend server — the third-party provider only sees our
+          server&apos;s IP address, not yours. &quot;Direct (browser)&quot; means your browser
+          connects directly to the provider, exposing your IP address and browser fingerprint to
+          them. The vast majority of services are server-only or proxied.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>
@@ -556,9 +527,11 @@ interface ServiceRow {
   dataSent: string;
   country: string;
   privacy: string;
+  endUserExposure?: string;
 }
 
 function ServiceTable({ rows }: { rows: ServiceRow[] }) {
+  const hasExposure = rows.some((r) => r.endUserExposure);
   return (
     <TableContainer sx={{ mt: 1, mb: 1 }}>
       <Table size="small">
@@ -567,6 +540,7 @@ function ServiceTable({ rows }: { rows: ServiceRow[] }) {
             <TableCell sx={{ fontWeight: 600 }}>Service</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Purpose</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Data Transmitted</TableCell>
+            {hasExposure && <TableCell sx={{ fontWeight: 600 }}>Data Access</TableCell>}
             <TableCell sx={{ fontWeight: 600 }}>Country</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Privacy Info</TableCell>
           </TableRow>
@@ -577,6 +551,7 @@ function ServiceTable({ rows }: { rows: ServiceRow[] }) {
               <TableCell>{row.service}</TableCell>
               <TableCell>{row.purpose}</TableCell>
               <TableCell>{row.dataSent}</TableCell>
+              {hasExposure && <TableCell>{row.endUserExposure}</TableCell>}
               <TableCell>{row.country}</TableCell>
               <TableCell>
                 {row.privacy.startsWith("http") ? (

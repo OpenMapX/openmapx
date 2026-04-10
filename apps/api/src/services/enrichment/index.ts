@@ -33,13 +33,24 @@ export async function enrichPlace(place: Place, lang?: string): Promise<Enrichme
 
   for (const result of settled) {
     if (result.status !== "fulfilled" || !result.value) continue;
-    const { photos, description, wikipediaUrl, facts, externalIds } = result.value;
+    const {
+      photos,
+      description,
+      wikipediaExtract,
+      wikipediaExtractSource,
+      wikipediaUrl,
+      facts,
+      externalIds,
+    } = result.value;
 
     if (description && !merged.description) merged.description = description;
+    if (wikipediaExtract && !merged.wikipediaExtract) {
+      merged.wikipediaExtract = wikipediaExtract;
+      merged.wikipediaExtractSource = wikipediaExtractSource;
+    }
     if (wikipediaUrl && !merged.wikipediaUrl) merged.wikipediaUrl = wikipediaUrl;
     if (photos?.length) merged.photos = [...(merged.photos ?? []), ...photos];
     if (facts?.length) merged.facts = [...(merged.facts ?? []), ...facts];
-    // Merge external IDs — first value per key wins
     if (externalIds) {
       merged.externalIds = { ...externalIds, ...(merged.externalIds ?? {}) };
     }

@@ -1,11 +1,11 @@
 {
   "name": "Wikimedia Commons Enrichment",
   "description": "Photo enrichment for place details",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Wikimedia Commons",
-      "purpose": "Enrich place details with photos from Wikimedia Commons categories and files",
-      "dataSent": "Wikimedia Commons category/file names (from OSM tags)"
+      "purpose": "Show photos from a place's Wikimedia Commons category with proper attribution",
+      "dataSent": "Wikimedia Commons filename or category name (from OSM `wikimedia_commons` tag)",
+      "dataReceived": "File pages with thumbnail URL, artist, license, capture date, coordinates (up to 6 files per category)"
     }
   ]
 }

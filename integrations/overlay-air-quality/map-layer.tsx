@@ -1,6 +1,13 @@
 "use client";
 
-import { escapeHtml, sanitizeUrl, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  escapeHtml,
+  sanitizeUrl,
+  useDebouncedCallback,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -84,6 +91,9 @@ function buildGeoJson(stations: AQStation[]) {
 export function AirQualityLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-air-quality");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const setLoading = useAirQualityStore((s) => s.setLoading);
   useOverlayExclusion("air-quality", layerVisible);
@@ -141,8 +151,7 @@ export function AirQualityLayer() {
         map.addSource(AQ_SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution:
-            '© <a href="https://openaq.org/" target="_blank">OpenAQ</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a>)',
+          attribution: attributionHtml,
         });
       }
 

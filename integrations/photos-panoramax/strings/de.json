@@ -1,11 +1,11 @@
 {
   "name": "Panoramax-Fotos",
   "description": "Straßenansichtsfotos von Panoramax",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Panoramax",
-      "purpose": "Straßenansichtsfotos von Panoramax",
-      "dataSent": "Koordinaten, Suchradius"
+      "purpose": "Offene Straßenbilder in der Nähe eines Ortes",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (~660 m um den Punkt), Ergebnislimit",
+      "dataReceived": "GeoJSON-Features mit ID, Koordinaten, Datum/Uhrzeit, Lizenz (SPDX), Anbietername, Vorschaubild/SD/HD-Asset-URLs"
     }
   ]
 }

@@ -115,14 +115,20 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       };
 
       const travelMode = mode as TravelMode;
-      const provider = getRoutingProvider(travelMode);
-      if (!provider) {
+      const resolved = getRoutingProvider(travelMode);
+      if (!resolved) {
         return reply.status(503).send({ error: `No routing provider available for mode: ${mode}` });
       }
 
       const routingOpts = { ...opts, lang };
-      const result = await withCache(hashKey("cache:directions", keyParams), TTL.directions, () =>
-        provider.getRoute(waypoints, travelMode, routingOpts),
+      const result = await withCache(
+        hashKey("cache:directions", keyParams),
+        TTL.directions,
+        async () => {
+          const r = await resolved.provider.getRoute(waypoints, travelMode, routingOpts);
+          r.provider = resolved.integrationId;
+          return r;
+        },
       );
       reply.header("Cache-Control", "public, max-age=3600");
       return result;
@@ -222,8 +228,8 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       };
 
       const travelMode = mode as TravelMode;
-      const optimizeRoute = getOptimizeProvider(travelMode)?.optimizeRoute;
-      if (!optimizeRoute) {
+      const resolved = getOptimizeProvider(travelMode);
+      if (!resolved?.provider.optimizeRoute) {
         return reply
           .status(503)
           .send({ error: `No optimize provider available for mode: ${mode}` });
@@ -233,7 +239,11 @@ export const directionsRoute: FastifyPluginAsync = async (fastify) => {
       const result = await withCache(
         hashKey("cache:directions:optimize", keyParams),
         TTL.directions,
-        () => optimizeRoute(waypoints, travelMode, routingOpts),
+        async () => {
+          const r = await resolved.provider.optimizeRoute?.(waypoints, travelMode, routingOpts);
+          r.provider = resolved.integrationId;
+          return r;
+        },
       );
       reply.header("Cache-Control", "public, max-age=3600");
       return result;

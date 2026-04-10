@@ -32,7 +32,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang={locale} className={plusJakartaSans.variable} suppressHydrationWarning>
       <head>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+        <link rel="stylesheet" href="/fonts/material-icons.css" />
       </head>
       <body className="h-dvh overflow-hidden antialiased">
         <InitColorSchemeScript attribute="class" defaultMode="system" />

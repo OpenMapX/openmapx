@@ -5,6 +5,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
+import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useAirQualityStore } from "./store";
 
@@ -19,6 +20,9 @@ const AQI_LEVEL_KEYS = [
 
 export function AirQualityLegend() {
   const t = useTranslations("airQuality");
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-air-quality");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useAirQualityStore((s) => s.panelOpen);
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const loading = useAirQualityStore((s) => s.loading);
@@ -78,22 +82,15 @@ export function AirQualityLegend() {
         ))}
       </Box>
 
-      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
-        {t("attribution")} ·{" "}
-        <a href="https://openaq.org" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
-          OpenAQ
-        </a>{" "}
-        (
-        <a
-          href="https://creativecommons.org/licenses/by/4.0/"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          CC BY 4.0
-        </a>
-        )
-      </Typography>
+      {/* Attribution (from manifest dataSources, trusted static config) */}
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 1 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

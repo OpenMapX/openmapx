@@ -1,11 +1,11 @@
 {
   "name": "Deutsche Bahn Station Search",
   "description": "German railway station geocoding",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Deutsche Bahn RIS",
-      "purpose": "Railway station search and enrichment",
-      "dataSent": "Search query text, station IDs, API credentials"
+      "purpose": "Forward/reverse geocoding of German railway stations, plus station detail enrichment",
+      "dataSent": "Search query or coordinates (latitude, longitude, radius) for geocoding; EVA station number for detail enrichment",
+      "dataReceived": "Stop places with EVA number, multilingual names, coordinates, transport modes; platforms, transfer times, local services"
     }
   ]
 }

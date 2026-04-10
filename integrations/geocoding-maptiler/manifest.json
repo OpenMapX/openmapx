@@ -31,19 +31,21 @@
   },
   "quality": "built-in",
   "category": "Geocoding",
-  "attribution": [
+  "dataSources": [
     {
       "name": "MapTiler",
-      "url": "https://www.maptiler.com/",
+      "url": "https://api.maptiler.com/",
       "license": "Proprietary",
-      "licenseUrl": "https://www.maptiler.com/terms/cloud/"
-    }
-  ],
-  "privacy": [
-    {
+      "licenseUrl": "https://www.maptiler.com/terms/cloud/",
+      "attribution": "© <a href=\"https://www.maptiler.com/copyright/\">MapTiler</a>",
+      "commercialUse": "conditional",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://www.maptiler.com/privacy-policy/",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": true,
+      "dpaUrl": "https://explore.openli.com/privacy/maptiler-cloud/data-processing-agreements"
     }
   ]
 }

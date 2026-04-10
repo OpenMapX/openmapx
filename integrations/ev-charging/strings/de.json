@@ -1,18 +1,16 @@
 {
   "name": "E-Ladestationen",
   "description": "Standorte von Elektrofahrzeug-Ladestationen aus OpenChargeMap und OpenStreetMap",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "OpenChargeMap",
-      "purpose": "Standorte von E-Ladestationen, Steckertypen und Verfügbarkeit",
-      "dataSent": "Begrenzungsrahmen, Filterparameter (Steckertyp, Nutzungsart), API-Schlüssel",
-      "dataReceived": "Stationsstandorte, Betreiber, Steckertypen, Ladeleistung, Status"
+      "purpose": "Ladestationsstandorte mit Steckerdetails, Leistungsstufen und Verfügbarkeit",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (Süd, West, Nord, Ost), optionale Filter (Steckertyp, Nutzungsart, Status)",
+      "dataReceived": "Ladestationen mit Steckertypen, Leistungsstufen, Betreiberinfo, Preise, Verfügbarkeitsstatus"
     },
     {
-      "service": "Overpass API (OSM)",
-      "purpose": "Ergänzung von Ladestationsdaten aus OpenStreetMap",
-      "dataSent": "Begrenzungsrahmen, OSM-Abfrage",
-      "dataReceived": "POI-Standorte und Tags"
+      "purpose": "Ladestationsstandorte aus OpenStreetMap (Sekundärquelle, globaler Fallback)",
+      "dataSent": "Keine Nutzerdaten (statischer Referenzdatensatz)",
+      "dataReceived": "OSM-Ladestationsknoten mit Name, Betreiber, Steckertypen, Kapazität, Gebühreninfo"
     }
   ]
 }

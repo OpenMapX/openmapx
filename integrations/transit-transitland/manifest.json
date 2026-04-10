@@ -30,19 +30,20 @@
     "urlTemplate": "https://transit.land/api/v2/rest/stops?lat=52.52&lon=13.405&radius=100&limit=1&api_key=${TRANSIT_LAND_API_KEY}",
     "requiredEnvVars": ["TRANSIT_LAND_API_KEY"]
   },
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Transitland",
-      "url": "https://www.transit.land/",
-      "license": "Various (per feed)",
-      "licenseUrl": "https://www.transit.land/terms"
-    }
-  ],
-  "privacy": [
-    {
+      "name": "Transitland (Interline)",
+      "url": "https://transit.land/",
+      "license": "Proprietary (Interline Technologies ToS)",
+      "licenseUrl": "https://www.transit.land/terms",
+      "attribution": "Transit data by <a href=\"https://transit.land/\">Transitland</a>",
+      "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.interline.io/legal/privacy/",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

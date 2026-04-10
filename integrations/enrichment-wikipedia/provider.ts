@@ -28,6 +28,7 @@ export const wikipediaEnricher: EnrichmentSource = {
 
     const data = (await res.json()) as {
       description?: string;
+      extract?: string;
       thumbnail?: { source: string; width: number; height: number };
       originalimage?: { source: string; width: number; height: number };
       content_urls?: { desktop?: { page?: string } };
@@ -35,7 +36,13 @@ export const wikipediaEnricher: EnrichmentSource = {
 
     const result: EnrichmentResult = {};
 
-    if (data.description) result.description = data.description;
+    if (data.description) {
+      result.description = data.description;
+    }
+    if (data.extract) {
+      result.wikipediaExtract = data.extract;
+      result.wikipediaExtractSource = "enrichment-wikipedia";
+    }
     if (data.content_urls?.desktop?.page) result.wikipediaUrl = data.content_urls.desktop.page;
 
     // Extract filename from thumbnail URL and fetch rich metadata from Commons

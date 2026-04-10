@@ -8,6 +8,9 @@ export interface EnrichmentProvider {
 export interface EnrichmentResult {
   photos?: PlacePhoto[];
   description?: string;
+  wikipediaExtract?: string;
+  /** Integration ID(s) that supplied the Wikipedia extract. */
+  wikipediaExtractSource?: string | string[];
   wikipediaUrl?: string;
   facts?: PlaceFact[];
   externalIds?: Record<string, string>;

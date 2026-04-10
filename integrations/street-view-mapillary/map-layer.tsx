@@ -1,6 +1,10 @@
 "use client";
 
-import { useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
@@ -20,6 +24,9 @@ const MLY_INTERACTIVE_LAYERS = [MLY_PHOTO_LAYER, MLY_PANO_LAYER] as const;
 export function StreetViewLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("street-view-mapillary");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useStreetViewStore((s) => s.layerVisible);
   const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
   useOverlayExclusion("street-view", layerVisible);
@@ -54,8 +61,7 @@ export function StreetViewLayer() {
           tiles: [`${apiUrl}/api/mapillary/tiles/{z}/{x}/{y}`],
           minzoom: 6,
           maxzoom: 14,
-          attribution:
-            '© <a href="https://www.mapillary.com/" target="_blank">Mapillary</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC BY-SA 4.0</a>)',
+          attribution: attributionHtml,
         });
       }
 

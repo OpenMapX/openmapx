@@ -1,6 +1,12 @@
 "use client";
 
-import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  escapeHtml,
+  useDebouncedCallback,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -111,6 +117,9 @@ function liftPopupHtml(props: Record<string, string | number | boolean>): string
 export function WinterSportsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-winter-sports");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
   const setLoading = useWinterSportsStore((s) => s.setLoading);
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
@@ -245,8 +254,7 @@ export function WinterSportsLayer() {
           tiles: [`${env.apiUrl}/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png`],
           tileSize: 256,
           maxzoom: 16,
-          attribution:
-            '© <a href="https://www.opensnowmap.org" target="_blank">OpenSnowMap</a> / <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+          attribution: attributionHtml,
         });
       }
 

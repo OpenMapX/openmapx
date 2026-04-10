@@ -1,5 +1,6 @@
 "use client";
 
+import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
 import { useEffect } from "react";
 import {
   getFirstSymbolLayerId,
@@ -17,6 +18,9 @@ const TRAFFIC_LAYER_ID = "openmapx-traffic-layer";
 export function TrafficLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-traffic-tomtom");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
   useLayerReanchor(TRAFFIC_LAYER_ID, showTraffic);
 
@@ -33,8 +37,7 @@ export function TrafficLayer() {
           type: "raster",
           tiles: [env.trafficTileUrlTemplate],
           tileSize: 256,
-          attribution:
-            'Traffic data © <a href="https://developer.tomtom.com/" target="_blank">TomTom</a> (<a href="https://developer.tomtom.com/terms-and-conditions" target="_blank">Proprietary</a>)',
+          attribution: attributionHtml,
         });
       }
 

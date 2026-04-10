@@ -8,6 +8,7 @@ import Divider from "@mui/material/Divider";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
+import { buildAttributionHtml, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
 
@@ -158,7 +159,9 @@ function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
 
 export function PlaceInfoTab({ place, isLoading }: Props) {
   const t = useTranslations("place");
-  const hasDescription = Boolean(place.description);
+  const registry = useIntegrationRegistry();
+  const infoDescription = place.wikipediaExtract ?? place.description;
+  const hasDescription = Boolean(infoDescription);
   const hasFacts = Boolean(place.facts?.length);
   const hasOsmTags = Boolean(place.osmTags && Object.keys(place.osmTags).length > 0);
   const hasAnyContent = hasDescription || hasFacts || hasOsmTags;
@@ -207,12 +210,35 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
 
   return (
     <Box sx={{ pb: 2 }}>
-      {/* Description */}
+      {/* Description — Wikipedia extract preferred, Wikidata description as fallback */}
       {hasDescription && (
         <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
           <Typography variant="body2" color="text.secondary">
-            {place.description}
+            {infoDescription}
           </Typography>
+          {(() => {
+            const sources =
+              place.wikipediaExtractSource ??
+              (place.wikipediaExtract ? "enrichment-wikipedia" : "enrichment-wikidata");
+            const ids = Array.isArray(sources) ? sources : [sources];
+            const parts = ids
+              .map((id) => {
+                const meta = registry.get(id);
+                const ds = meta?.dataSources?.[0];
+                return ds ? buildAttributionHtml(ds) : "";
+              })
+              .filter(Boolean);
+            if (!parts.length) return null;
+            return (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
+                dangerouslySetInnerHTML={{ __html: `${t("source")}: ${parts.join(", ")}` }}
+              />
+            );
+          })()}
         </Box>
       )}
 
@@ -242,6 +268,22 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
                 </Box>
               ))}
             </Box>
+            {place.osmTags?.wikidata &&
+              (() => {
+                const meta = registry.get("enrichment-wikidata");
+                const ds = meta?.dataSources?.[0];
+                const html = ds ? buildAttributionHtml(ds) : "";
+                if (!html) return null;
+                return (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
+                    dangerouslySetInnerHTML={{ __html: `${t("source")}: ${html}` }}
+                  />
+                );
+              })()}
           </Box>
         </>
       )}

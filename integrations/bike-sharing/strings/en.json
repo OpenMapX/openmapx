@@ -1,30 +1,31 @@
 {
   "name": "Bike Sharing",
   "description": "Bike sharing station locations and availability",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "GBFS Catalog (MobilityData)",
-      "purpose": "Discover bike-sharing systems worldwide",
-      "dataSent": "System discovery requests (no user data)",
-      "dataReceived": "GBFS feed URLs for bike-sharing operators"
-    },
-    {
-      "service": "Nextbike",
-      "purpose": "Bike-sharing station locations and availability",
-      "dataSent": "Bounding box coordinates",
-      "dataReceived": "Station locations, bike counts, station names"
-    },
-    {
-      "service": "CityBikes",
       "purpose": "Bike-sharing network and station data worldwide",
-      "dataSent": "Network list and per-network station requests (no user location data)",
-      "dataReceived": "Station locations, bike/e-bike counts, network metadata"
+      "dataSent": "No user data (network index with fields filter); per-network station data by network URL",
+      "dataReceived": "Station locations, available bikes, empty slots, network metadata"
     },
     {
-      "service": "Donkey Republic",
-      "purpose": "Bike and e-bike hub locations and availability",
-      "dataSent": "Bounding box coordinates",
-      "dataReceived": "Hub locations, vehicle counts, vehicle types"
+      "purpose": "Bike and e-bike hub locations and availability in European cities",
+      "dataSent": "Bounding box coordinates (top-right and bottom-left corner lat/lng pairs)",
+      "dataReceived": "Hub locations, available bikes/e-bikes/e-scooters counts, radius"
+    },
+    {
+      "purpose": "Bike-sharing station locations and availability worldwide",
+      "dataSent": "No user data (fetches entire global dataset)",
+      "dataReceived": "Station locations, available bike counts, free racks, station names"
+    },
+    {
+      "purpose": "Call-a-Bike and StadtRad stations and free-floating bikes in German cities",
+      "dataSent": "No user data (fetches full GBFS feeds per provider)",
+      "dataReceived": "Station locations, bike availability, free-floating vehicle positions, vehicle types"
+    },
+    {
+      "purpose": "Discover GBFS-compliant bike-sharing systems worldwide",
+      "dataSent": "No user data (static catalog)",
+      "dataReceived": "GBFS feed URLs for bike-sharing operators"
     }
   ]
 }

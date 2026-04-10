@@ -1,10 +1,11 @@
 {
   "name": "USGS Earthquakes",
   "description": "Real-time earthquake data and alerts",
-  "privacy": {
-    "purpose": "Display real-time earthquake locations and magnitudes on the map",
-    "dataSent": "Time range, magnitude threshold (via pre-built URL; no user data sent)",
-    "dataReceived": "Earthquake locations, magnitudes, timestamps, and metadata",
-    "dataRetention": "Cached for 5 minutes server-side"
-  }
+  "dataSources": [
+    {
+      "purpose": "Earthquake events displayed on the map, color-coded by depth/recency with magnitude-scaled circles",
+      "dataSent": "Magnitude threshold and time range",
+      "dataReceived": "GeoJSON features with magnitude, place name, time, depth, alert level, tsunami flag, significance"
+    }
+  ]
 }

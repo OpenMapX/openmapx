@@ -24,19 +24,20 @@
     "type": "http",
     "url": "https://api.irail.be/stations/?format=json&lang=en"
   },
-  "attribution": [
+  "dataSources": [
     {
       "name": "iRail",
-      "url": "https://irail.be/",
-      "license": "CC BY 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
-    }
-  ],
-  "privacy": [
-    {
+      "url": "https://api.irail.be/",
+      "license": "AGPL-3.0 (software); CC0 (log data)",
+      "licenseUrl": "https://hello.irail.be/api/",
+      "attribution": "Belgian rail data by <a href=\"https://irail.be/\">iRail</a>",
+      "commercialUse": "yes",
       "providerCountry": "BE",
-      "providerPrivacyUrl": "https://irail.be/",
-      "personalData": false
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

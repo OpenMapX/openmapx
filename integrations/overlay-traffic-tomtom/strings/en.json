@@ -1,9 +1,11 @@
 {
   "name": "TomTom Traffic",
   "description": "Real-time traffic flow visualization",
-  "privacy": {
-    "purpose": "Real-time traffic flow visualization",
-    "dataSent": "Map tile requests with viewport coordinates",
-    "dataReceived": "Traffic flow raster tiles"
-  }
+  "dataSources": [
+    {
+      "purpose": "Real-time traffic flow conditions",
+      "dataSent": "Tile coordinates (z/x/y), traffic style",
+      "dataReceived": "PNG raster tiles showing traffic flow (color-coded road segments)"
+    }
+  ]
 }

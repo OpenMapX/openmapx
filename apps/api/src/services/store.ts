@@ -65,6 +65,25 @@ async function getExtraSources(): Promise<CatalogSource[]> {
 
 export async function addCatalogSource(url: string, label: string): Promise<void> {
   if (!redis) return;
+
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:") {
+    throw new Error("Catalog source must use HTTPS");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("Catalog source URL must not contain credentials");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.)/.test(hostname) ||
+    hostname === "[::1]"
+  ) {
+    throw new Error("Catalog source must not point to internal addresses");
+  }
+
   const existing = await getExtraSources();
   if (existing.some((s) => s.url === url)) return;
   existing.push({ url, label, isDefault: false });

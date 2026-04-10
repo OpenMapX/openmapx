@@ -89,7 +89,7 @@ export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
 export { useAutocomplete } from "./hooks/useAutocomplete";
 export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities";
-export { useCategorySearch } from "./hooks/useCategorySearch";
+export { isAreaTooLarge, useCategorySearch } from "./hooks/useCategorySearch";
 // Hooks — General
 export { useCurrentWeather } from "./hooks/useCurrentWeather";
 export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
@@ -147,15 +147,14 @@ export type {
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,
-  IntegrationAttribution,
   IntegrationContext,
+  IntegrationDataSource,
   IntegrationEvent,
   IntegrationFrontend,
   IntegrationHealthCheck,
   IntegrationLayerSelector,
   IntegrationManifest,
   IntegrationOverlay,
-  IntegrationPrivacy,
   IntegrationSearchCategory,
   IntegrationStrings,
   LoadedIntegration,
@@ -216,7 +215,12 @@ export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useSidebarStore } from "./stores/sidebarStore";
 // Types
-export type { CategoryDefinition, CategoryId, CategoryPlace } from "./types/category";
+export type {
+  CategoryDefinition,
+  CategoryId,
+  CategoryPlace,
+  CategorySearchResponse,
+} from "./types/category";
 export {
   CATEGORY_DEFINITIONS,
   categoryPlaceToPlace,
@@ -300,6 +304,11 @@ export type {
   WeatherSubLayer,
   WindSpeedUnit,
 } from "./types/weather";
+export {
+  buildAttributionHtml,
+  buildIntegrationAttribution,
+  combineAttributions,
+} from "./utils/attribution";
 export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
 // Utils
@@ -356,6 +365,7 @@ export {
   buildNodeMap,
   buildWayMap,
   OverpassRateLimitError,
+  OverpassTimeoutError,
   overpassQuery,
   overpassQuerySafe,
   reconstructLineString,

@@ -463,6 +463,11 @@ export interface CategoryPlace {
   isOpen?: boolean;
 }
 
+export interface CategorySearchResponse {
+  results: CategoryPlace[];
+  partial: boolean;
+}
+
 /** Set of category IDs that support the opening hours filter chip, derived from CATEGORY_DEFINITIONS. */
 export const HOURS_FILTER_CATEGORY_IDS: ReadonlySet<string> = new Set(
   CATEGORY_DEFINITIONS.filter((c) => c.supportsHoursFilter).map((c) => c.id),

@@ -1,11 +1,11 @@
 {
   "name": "MapTiler-Geokodierung",
   "description": "Vorwärtsgeokodierung und Autovervollständigung über MapTiler",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "MapTiler",
-      "purpose": "Vorwärtsgeokodierung und Autovervollständigung",
-      "dataSent": "Suchanfragetext, API-Schlüssel"
+      "purpose": "Vorwärts-Geokodierung und Autovervollständigung — Textsuche nach Orten, Adressen, POIs weltweit; Rückwärts-Geokodierung",
+      "dataSent": "Suchtext oder Koordinaten (Längengrad, Breitengrad), Sprache, Ergebnislimit",
+      "dataReceived": "GeoJSON-Features mit Ortsname, Koordinaten, Ortstyp, Relevanzbewertung, Kategorien"
     }
   ]
 }

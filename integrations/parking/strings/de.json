@@ -1,24 +1,26 @@
 {
   "name": "Parkeinrichtungen",
   "description": "Parkeinrichtungen von DB BahnPark, ParkAPI und OpenStreetMap",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "DB BahnPark (Deutsche Bahn)",
-      "purpose": "Parkeinrichtungen an deutschen Bahnhöfen (Kapazität, Belegung, Preise)",
-      "dataSent": "API-Zugangsdaten (serverseitig)",
-      "dataReceived": "Parkplatzstandorte, Kapazität, Belegung, Preise"
+      "purpose": "Echtzeit-Parkplatzverfügbarkeit in europäischen Städten",
+      "dataSent": "Keine Nutzerdaten (statischer Städtelisten-Endpunkt); Stadtname für Parkplatzabfrage",
+      "dataReceived": "Städteliste mit Koordinaten und Quelleninfo; Parkplätze pro Stadt mit Name, Adresse, Koordinaten, Gesamt-/Freie Kapazität"
     },
     {
-      "service": "ParkAPI v3 (MobiData BW)",
-      "purpose": "Parkplatzdaten mit Belegung",
-      "dataSent": "Begrenzungsrahmen, Filterparameter",
-      "dataReceived": "Parkplatzstandorte, Kapazität, Belegung"
+      "purpose": "Deutsche Parkplätze mit Echtzeit-Belegungsdaten",
+      "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab); Standort-ID für Detailabfrage",
+      "dataReceived": "Parkplätze mit Name, Adresse, Koordinaten, Kapazität, Echtzeit-Freie Kapazität, Typ, Gebühreninfo, Öffnungszeiten"
     },
     {
-      "service": "ParkenDD",
-      "purpose": "Städteübergreifende Parkplatzbelegungsdaten",
-      "dataSent": "Stadt- und Parkplatzabfragen",
-      "dataReceived": "Parkplatzstandorte, Kapazität, Echtzeitbelegung"
+      "purpose": "Deutsche-Bahn-Bahnhofsparkplätze (~312 Anlagen in Deutschland)",
+      "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab); Anlagen-ID für Detailabfrage",
+      "dataReceived": "Parkanlagen mit Name, Adresse, Koordinaten, Kapazität, Tarif/Preise, Barrierefreiheit, E-Ladeinfo"
+    },
+    {
+      "purpose": "Parkeinrichtungen aus OpenStreetMap (statische Daten, keine Echtzeit-Verfügbarkeit)",
+      "dataSent": "Begrenzungsrahmen-Koordinaten, OSM-Elementtyp und -ID für Detailabfrage",
+      "dataReceived": "OSM-Elemente mit Name, Koordinaten, Kapazität, Gebühr, Zugang, Betreiber, Öffnungszeiten"
     }
   ]
 }

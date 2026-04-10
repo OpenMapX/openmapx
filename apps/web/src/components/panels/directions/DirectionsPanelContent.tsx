@@ -14,13 +14,16 @@ import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
+  buildIntegrationAttribution,
   formatDistance,
   formatDuration,
   resolveProvider,
   useAutocomplete,
+  useCapabilities,
   useDebounce,
   useDirections,
   useDirectionsStore,
+  useIntegrationRegistry,
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
@@ -83,6 +86,8 @@ export function DirectionsPanelContent() {
 
   const { userLocation } = useMapStore();
   const { data: providers } = useProviders();
+  const registry = useIntegrationRegistry();
+  const { services: caps } = useCapabilities();
   const queryClient = useQueryClient();
   const optimizeMutation = useOptimizeRoute();
 
@@ -168,6 +173,19 @@ export function DirectionsPanelContent() {
 
   const detailsRoute =
     detailsRouteIndex !== null ? (data?.routes[detailsRouteIndex] ?? null) : null;
+
+  const routingAttribution = useMemo(() => {
+    if (data?.provider) {
+      const meta = registry.get(data.provider);
+      if (meta) return buildIntegrationAttribution(meta.dataSources);
+    }
+    const routingIntegrations = registry.getByDomain("routing").filter((r) => {
+      const cap = caps[r.id];
+      return cap ? cap.available && cap.healthy : false;
+    });
+    if (!routingIntegrations.length) return "";
+    return buildIntegrationAttribution(routingIntegrations[0].dataSources);
+  }, [registry, caps, data?.provider]);
 
   const getCachedTime = (m: TravelMode): string | undefined => {
     if (!allWaypointsFilled) return undefined;
@@ -718,96 +736,122 @@ export function DirectionsPanelContent() {
           </Box>
         ) : hasMultipleStops && data?.routes[0] ? (
           // Multi-stop: single route with leg summary
-          <Box>
-            <Box
-              sx={{
-                px: 2,
-                py: 1.5,
-                cursor: "pointer",
-                borderLeft: `4px solid ${TEAL}`,
-                bgcolor: "rgba(0,123,139,0.04)",
-                "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
-              }}
-              onClick={() => setDetailsRouteIndex(0)}
-            >
+          <>
+            <Box>
               <Box
-                sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}
+                sx={{
+                  px: 2,
+                  py: 1.5,
+                  cursor: "pointer",
+                  borderLeft: `4px solid ${TEAL}`,
+                  bgcolor: "rgba(0,123,139,0.04)",
+                  "&:hover": { bgcolor: "rgba(0,123,139,0.07)" },
+                }}
+                onClick={() => setDetailsRouteIndex(0)}
               >
-                <Typography variant="body2" fontWeight={600} color="text.primary">
-                  {formatDuration(data.routes[0].duration)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {units === "imperial"
-                    ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
-                    : formatDistance(data.routes[0].distance)}
-                </Typography>
-              </Box>
-              {data.routes[0].legs.length > 1 && (
-                <Box sx={{ mt: 1 }}>
-                  {data.routes[0].legs.map((leg, i) => {
-                    const fromLabel = waypoints[i]?.label || t("origin");
-                    const toLabel = waypoints[i + 1]?.label || t("destination");
-                    return (
-                      <Typography
-                        // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
-                        key={i}
-                        variant="caption"
-                        color="text.secondary"
-                        display="block"
-                        sx={{ lineHeight: 1.6 }}
-                      >
-                        {fromLabel} → {toLabel}
-                        {" · "}
-                        {formatDuration(leg.duration)}
-                        {" · "}
-                        {units === "imperial"
-                          ? `${(leg.distance / 1609.34).toFixed(1)} mi`
-                          : formatDistance(leg.distance)}
-                      </Typography>
-                    );
-                  })}
-                </Box>
-              )}
-              <Box sx={{ mt: 0.5, ml: -1.5 }}>
-                <Typography
-                  component="span"
-                  variant="caption"
-                  sx={{
-                    color: TEAL,
-                    cursor: "pointer",
-                    fontWeight: 500,
-                    px: 1.5,
-                    py: 0.75,
-                    borderRadius: 99,
-                    "&:hover": { bgcolor: `${TEAL}18` },
-                    transition: "background-color 0.15s",
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDetailsRouteIndex(0);
-                  }}
+                <Box
+                  sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}
                 >
-                  {tc("details")}
-                </Typography>
+                  <Typography variant="body2" fontWeight={600} color="text.primary">
+                    {formatDuration(data.routes[0].duration)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {units === "imperial"
+                      ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
+                      : formatDistance(data.routes[0].distance)}
+                  </Typography>
+                </Box>
+                {data.routes[0].legs.length > 1 && (
+                  <Box sx={{ mt: 1 }}>
+                    {data.routes[0].legs.map((leg, i) => {
+                      const fromLabel = waypoints[i]?.label || t("origin");
+                      const toLabel = waypoints[i + 1]?.label || t("destination");
+                      return (
+                        <Typography
+                          // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
+                          key={i}
+                          variant="caption"
+                          color="text.secondary"
+                          display="block"
+                          sx={{ lineHeight: 1.6 }}
+                        >
+                          {fromLabel} → {toLabel}
+                          {" · "}
+                          {formatDuration(leg.duration)}
+                          {" · "}
+                          {units === "imperial"
+                            ? `${(leg.distance / 1609.34).toFixed(1)} mi`
+                            : formatDistance(leg.distance)}
+                        </Typography>
+                      );
+                    })}
+                  </Box>
+                )}
+                <Box sx={{ mt: 0.5, ml: -1.5 }}>
+                  <Typography
+                    component="span"
+                    variant="caption"
+                    sx={{
+                      color: TEAL,
+                      cursor: "pointer",
+                      fontWeight: 500,
+                      px: 1.5,
+                      py: 0.75,
+                      borderRadius: 99,
+                      "&:hover": { bgcolor: `${TEAL}18` },
+                      transition: "background-color 0.15s",
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDetailsRouteIndex(0);
+                    }}
+                  >
+                    {tc("details")}
+                  </Typography>
+                </Box>
               </Box>
             </Box>
-          </Box>
-        ) : (
-          data?.routes.map((route, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
-            <Box key={i}>
-              <RouteCard
-                route={route}
-                index={i}
-                active={i === activeRouteIndex}
-                onSelect={() => setActiveRouteIndex(i)}
-                onDetails={() => setDetailsRouteIndex(i)}
-                units={units}
-              />
-              {i < data.routes.length - 1 && <Divider />}
-            </Box>
-          ))
-        )}
+            {routingAttribution && (
+              <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ "& a": { color: "inherit", textDecoration: "underline" } }}
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
+                  dangerouslySetInnerHTML={{ __html: routingAttribution }}
+                />
+              </Box>
+            )}
+          </>
+        ) : data?.routes.length ? (
+          <>
+            {data.routes.map((route, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
+              <Box key={i}>
+                <RouteCard
+                  route={route}
+                  index={i}
+                  active={i === activeRouteIndex}
+                  onSelect={() => setActiveRouteIndex(i)}
+                  onDetails={() => setDetailsRouteIndex(i)}
+                  units={units}
+                />
+                {i < data.routes.length - 1 && <Divider />}
+              </Box>
+            ))}
+            {routingAttribution && (
+              <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ "& a": { color: "inherit", textDecoration: "underline" } }}
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
+                  dangerouslySetInnerHTML={{ __html: routingAttribution }}
+                />
+              </Box>
+            )}
+          </>
+        ) : null}
 
         {/* Suggestions overlay */}
         {showSuggestions && (

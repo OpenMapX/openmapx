@@ -1,11 +1,11 @@
 {
   "name": "OpenWeatherMap Wetter",
   "description": "Wetterdaten von der OpenWeatherMap One Call API 3.0",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "OpenWeatherMap",
-      "purpose": "Wetterbedingungen und Vorhersagen mit höherer Priorität bei konfiguriertem API-Schlüssel",
-      "dataSent": "Koordinaten (Breitengrad, Längengrad), API-Schlüssel"
+      "purpose": "Aktuelles Wetter und 3-stündliche Vorhersagen (bis 5 Tage). Globale Abdeckung.",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Einheitenpräferenz, Sprache; Intervallanzahl für Vorhersagen",
+      "dataReceived": "Temperatur, gefühlte Temperatur, Feuchtigkeit, Druck, Wind, Wolken, Wetterlage, Niederschlagswahrscheinlichkeit, Regen/Schnee"
     }
   ]
 }

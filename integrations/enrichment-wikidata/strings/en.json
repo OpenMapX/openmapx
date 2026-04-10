@@ -1,11 +1,16 @@
 {
   "name": "Wikidata Enrichment",
   "description": "Structured data enrichment for place details",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Wikidata",
-      "purpose": "Enrich place details with structured data from Wikidata",
-      "dataSent": "Wikidata entity IDs (from OSM tags)"
+      "purpose": "Enrich place details with structured facts (founding date, population, architect, etc.), description, Wikipedia link, and lead image",
+      "dataSent": "Wikidata entity ID (QID from OSM tag), language preference",
+      "dataReceived": "Entity claims, descriptions, Wikipedia sitelinks, referenced entity labels"
+    },
+    {
+      "purpose": "Fetch metadata for the Wikidata main image (P18 claim)",
+      "dataSent": "Image filename (from Wikidata P18 claim)",
+      "dataReceived": "Thumbnail URL, artist, license, capture date, coordinates"
     }
   ]
 }

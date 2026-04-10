@@ -1,7 +1,23 @@
-import type { PoiSearchProvider } from "@openmapx/core";
+import { type BoundingBox, OverpassTimeoutError, type PoiSearchProvider } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { getIntegrationsByDomain } from "../integration-host.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
+
+const MAX_SHRINK_RETRIES = 3;
+const SHRINK_FACTOR = 0.6;
+
+function shrinkBbox(bbox: BoundingBox, factor: number): BoundingBox {
+  const centerLat = (bbox.north + bbox.south) / 2;
+  const centerLon = (bbox.east + bbox.west) / 2;
+  const halfLat = ((bbox.north - bbox.south) / 2) * factor;
+  const halfLon = ((bbox.east - bbox.west) / 2) * factor;
+  return {
+    south: centerLat - halfLat,
+    north: centerLat + halfLat,
+    west: centerLon - halfLon,
+    east: centerLon + halfLon,
+  };
+}
 
 function getPoiSearchProviders(): PoiSearchProvider[] {
   const integrations = getIntegrationsByDomain("poi-search");
@@ -74,11 +90,29 @@ export const categorySearchRoute: FastifyPluginAsync = async (fastify) => {
             throw Object.assign(new Error(`Unknown category: ${category}`), { statusCode: 400 });
           }
 
-          return provider.search(category, bbox, { lang: req.query.lang });
+          // On Overpass timeout, retry with progressively smaller bbox
+          let currentBbox = bbox;
+          for (let attempt = 0; ; attempt++) {
+            try {
+              const results = await provider.search(category, currentBbox, {
+                lang: req.query.lang,
+              });
+              return { results, partial: attempt > 0 };
+            } catch (err) {
+              if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
+                currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
+                continue;
+              }
+              throw err;
+            }
+          }
         });
         reply.header("Cache-Control", `public, max-age=${ttl}`);
         return result;
       } catch (err) {
+        if (err instanceof OverpassTimeoutError) {
+          return reply.status(422).send({ error: "area_too_large" });
+        }
         const e = err as { statusCode?: number; message: string };
         if (e.statusCode === 400) {
           return reply.status(400).send({ error: e.message });

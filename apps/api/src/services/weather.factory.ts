@@ -20,9 +20,9 @@ function getProviders(): ProviderWithAttribution[] {
 
   for (const integration of integrations) {
     const ps = (integration.providers.get("weather") ?? []) as WeatherProvider[];
-    const attr = integration.manifest.attribution?.[0];
-    const attribution = attr
-      ? { name: attr.name, url: attr.url, license: attr.license, licenseUrl: attr.licenseUrl }
+    const ds = integration.manifest.dataSources?.[0];
+    const attribution = ds
+      ? { name: ds.name, url: ds.url, license: ds.license, licenseUrl: ds.licenseUrl }
       : undefined;
     for (const provider of ps) {
       result.push({ provider, attribution });

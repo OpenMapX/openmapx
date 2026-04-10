@@ -245,15 +245,15 @@ validate_manifest() {
     if (!m.name) errors.push('name is required');
     if (!m.version) errors.push('version is required');
     if (!m.domains || !Array.isArray(m.domains)) errors.push('domains array is required');
-    if (m.backend?.routes && (!m.attribution || m.attribution.length === 0))
-      errors.push('attribution is required for integrations with backend routes');
-    if (m.backend?.routes && !m.privacy)
-      errors.push('privacy is required for integrations that call external APIs');
-    if (m.attribution) {
-      for (const a of m.attribution) {
-        if (!a.name) errors.push('attribution.name is required');
-        if (!a.url) errors.push('attribution.url is required');
-        if (!a.license) errors.push('attribution.license is required');
+    if (m.backend?.routes && (!m.dataSources || m.dataSources.length === 0))
+      errors.push('dataSources is required for integrations with backend routes');
+    if (m.dataSources) {
+      for (const ds of m.dataSources) {
+        if (!ds.name) errors.push('dataSources[].name is required');
+        if (!ds.url) errors.push('dataSources[].url is required');
+        if (!ds.license) errors.push('dataSources[].license is required');
+        if (!ds.providerCountry) errors.push('dataSources[].providerCountry is required');
+        if (!ds.providerPrivacyUrl) errors.push('dataSources[].providerPrivacyUrl is required');
       }
     }
     if (errors.length > 0) {

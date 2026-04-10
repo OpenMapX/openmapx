@@ -1,34 +1,26 @@
 {
   "name": "Weather Alerts",
   "description": "Active severe weather warnings from NOAA (US), ECCC (Canada), DWD (Germany), and MeteoAlarm (Europe)",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "NOAA National Weather Service",
-      "purpose": "Display active US weather alerts and warnings on the map",
-      "dataSent": "No user data sent; pre-defined API queries only",
-      "dataReceived": "Alert polygons, severity, event type, descriptions, and instructions",
-      "dataRetention": "Cached for 5 minutes server-side"
+      "purpose": "US weather alerts (warnings, watches, advisories) with polygon boundaries",
+      "dataSent": "No user data (static active alerts feed)",
+      "dataReceived": "GeoJSON with polygon geometries; headline, event, severity, urgency, description, instruction, onset/expires"
     },
     {
-      "service": "ECCC (Environment Canada)",
-      "purpose": "Display active Canadian weather alerts on the map",
-      "dataSent": "No user data sent; pre-defined API queries only",
-      "dataReceived": "Alert polygons, alert type, area descriptions, and expiry times",
-      "dataRetention": "Cached for 5 minutes server-side"
+      "purpose": "Canadian weather alerts with polygon boundaries",
+      "dataSent": "No user data (static active alerts feed)",
+      "dataReceived": "GeoJSON with alert type, name (EN/FR), urgency, confidence, publication/expiration, province, polygon geometry"
     },
     {
-      "service": "DWD (Deutscher Wetterdienst)",
-      "purpose": "Display active German weather warnings on the map",
-      "dataSent": "No user data sent; pre-defined API queries only",
-      "dataReceived": "Warning polygons, severity, event type, descriptions, and instructions",
-      "dataRetention": "Cached for 5 minutes server-side"
+      "purpose": "German weather warnings with municipality-level polygon boundaries",
+      "dataSent": "No user data (static active warnings feed)",
+      "dataReceived": "GeoJSON with municipality polygons; headline, event, severity, urgency, description, instruction, onset/expires"
     },
     {
-      "service": "MeteoAlarm / EUMETNET",
-      "purpose": "Display active European weather alerts on the map",
-      "dataSent": "No user data sent; per-country feed requests only",
-      "dataReceived": "Alert severity, event type, onset and expiry times",
-      "dataRetention": "Cached for 5 minutes server-side"
+      "purpose": "European weather alerts (24 countries, excl. Germany). No polygon geometry — country centroid used.",
+      "dataSent": "Country code (per-country feed selection)",
+      "dataReceived": "Atom XML with CAP entries: event, severity, urgency, certainty, onset/expires, area description"
     }
   ]
 }

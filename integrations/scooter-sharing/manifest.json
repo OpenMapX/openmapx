@@ -31,19 +31,58 @@
   },
   "quality": "built-in",
   "category": "Shared Mobility",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "GBFS Catalog",
+      "name": "GBFS Catalog (MobilityData)",
       "url": "https://github.com/MobilityData/gbfs",
-      "license": "Various (per operator)",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "CC BY 3.0 (spec); per-operator data licenses",
+      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md",
+      "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "Felyx",
+      "url": "https://felyx.com/",
+      "license": "Proprietary (undocumented API)",
+      "licenseUrl": "https://felyx.com/terms/",
+      "commercialUse": "unknown",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://cooltra.com/en/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "GO Sharing",
+      "url": "https://go-sharing.com/",
+      "license": "Proprietary (undocumented API)",
+      "licenseUrl": "https://go-sharing.com/terms-conditions/",
+      "commercialUse": "unknown",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://go-sharing.com/privacy-verklaring/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "Link/Superpedestrian",
+      "url": "https://superpedestrian.com/",
+      "license": "Proprietary (undocumented API; company defunct Dec 2023)",
+      "licenseUrl": "https://superpedestrian.com/legal",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://superpedestrian.com/at-eng/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

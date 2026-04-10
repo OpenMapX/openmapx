@@ -28,19 +28,32 @@
   },
   "quality": "built-in",
   "category": "Geocoding",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Transitous/MOTIS",
-      "url": "https://transitous.org/",
-      "license": "AGPL-3.0",
-      "licenseUrl": "https://www.gnu.org/licenses/agpl-3.0.html"
-    }
-  ],
-  "privacy": [
-    {
+      "name": "Transitous",
+      "url": "https://api.transitous.org/",
+      "license": "AGPL-3.0-or-later",
+      "licenseUrl": "https://transitous.org/api/",
+      "commercialUse": "no",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://transitous.org/privacy/",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "MOTIS (self-hosted)",
+      "url": "https://github.com/motis-project/motis",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/motis-project/motis",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

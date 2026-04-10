@@ -12,7 +12,7 @@ const HEADERS = {
 
 // Wikidata API types (minimal)
 type TimeValue = { time: string; precision: number };
-type QuantityValue = { amount: string };
+type QuantityValue = { amount: string; unit?: string };
 type EntityValue = { id: string };
 type DataValue =
   | { type: "time"; value: TimeValue }
@@ -40,12 +40,17 @@ const PROPS: PropConfig[] = [
   { id: "P571", label: "Founded", type: "time" },
   { id: "P576", label: "Dissolved", type: "time" },
   { id: "P1619", label: "Opened", type: "time" },
-  // Numbers
+  // Counts (dimensionless)
   { id: "P1082", label: "Population", type: "quantity" },
   { id: "P1083", label: "Capacity", type: "quantity" },
   { id: "P1128", label: "Employees", type: "quantity" },
   { id: "P2196", label: "Students enrolled", type: "quantity" },
-  { id: "P3872", label: "Beds", type: "quantity" },
+  { id: "P6801", label: "Beds", type: "quantity" },
+  // Measurements (with units)
+  { id: "P2046", label: "Area", type: "quantity" },
+  { id: "P2044", label: "Elevation", type: "quantity" },
+  { id: "P2048", label: "Height", type: "quantity" },
+  { id: "P2043", label: "Length", type: "quantity" },
   // Items (resolved via a second batch call)
   { id: "P84", label: "Architect", type: "item" },
   { id: "P112", label: "Founder", type: "item" },
@@ -86,9 +91,25 @@ function formatYear(tv: TimeValue): string {
   return bce ? `${year} BCE` : String(year);
 }
 
+const UNIT_LABELS: Record<string, string> = {
+  Q11573: "m",
+  Q828224: "km",
+  Q712226: "km²",
+  Q25343: "m²",
+  Q35852: "ha",
+  Q3710: "ft",
+  Q253276: "mi",
+};
+
 function formatQuantity(qv: QuantityValue, lang = "en"): string {
   const n = Math.round(Number.parseFloat(qv.amount));
-  return n.toLocaleString(lang);
+  const formatted = n.toLocaleString(lang);
+  if (qv.unit && qv.unit !== "1") {
+    const unitId = qv.unit.replace("http://www.wikidata.org/entity/", "");
+    const label = UNIT_LABELS[unitId];
+    if (label) return `${formatted} ${label}`;
+  }
+  return formatted;
 }
 
 // Enricher
@@ -120,14 +141,33 @@ export const wikidataEnricher: EnrichmentSource = {
 
     const result: EnrichmentResult = {};
 
-    // Description
+    // Short Wikidata description (tagline for Overview tab)
     const desc = entity.descriptions?.[effectiveLang]?.value;
-    if (desc) result.description = desc.charAt(0).toUpperCase() + desc.slice(1);
+    if (desc) {
+      result.description = desc.charAt(0).toUpperCase() + desc.slice(1);
+    }
 
-    // Wikipedia URL
+    // Wikipedia URL + extract (longer summary for Info tab)
     const wikiTitle = entity.sitelinks?.[`${effectiveLang}wiki`]?.title;
     if (wikiTitle) {
-      result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodeURIComponent(wikiTitle.replace(/ /g, "_"))}`;
+      const encodedTitle = encodeURIComponent(wikiTitle.replace(/ /g, "_"));
+      result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodedTitle}`;
+
+      try {
+        const wpRes = await fetch(
+          `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
+          { headers: HEADERS, signal: AbortSignal.timeout(3000) },
+        );
+        if (wpRes.ok) {
+          const wpData = (await wpRes.json()) as { extract?: string };
+          if (wpData.extract) {
+            result.wikipediaExtract = wpData.extract;
+            result.wikipediaExtractSource = ["enrichment-wikidata", "enrichment-wikipedia"];
+          }
+        }
+      } catch {
+        // Wikipedia extract unavailable
+      }
     }
 
     // Main image (P18) — fetch rich metadata from Commons
@@ -152,8 +192,9 @@ export const wikidataEnricher: EnrichmentSource = {
 
     // External platform IDs — used downstream to build direct review links
     const EXTERNAL_ID_PROPS: Record<string, string> = {
-      P2397: "yelp", // Yelp business slug
-      P7566: "foursquare", // Foursquare venue UUID
+      P3108: "yelp", // Yelp business ID
+      P3134: "tripadvisor", // TripAdvisor location ID
+      P3749: "google_maps", // Google Maps CID
     };
     const externalIds: Record<string, string> = {};
     for (const [prop, key] of Object.entries(EXTERNAL_ID_PROPS)) {

@@ -123,7 +123,7 @@ describe("enrichPlace", () => {
 
   it("external IDs: merged, first value per key wins", async () => {
     wikidataEnrich.mockResolvedValueOnce({
-      externalIds: { yelp: "biz-abc", foursquare: "venue-xyz" },
+      externalIds: { yelp: "biz-abc", google_maps: "123456" },
     });
     wikipediaEnrich.mockResolvedValueOnce({
       externalIds: { yelp: "biz-other", tripadvisor: "loc-123" },
@@ -134,7 +134,7 @@ describe("enrichPlace", () => {
     const result = await enrichPlace(makePlace({ wikidata: "Q42" }));
     expect(result.externalIds).toEqual({
       yelp: "biz-abc",
-      foursquare: "venue-xyz",
+      google_maps: "123456",
       tripadvisor: "loc-123",
     });
   });

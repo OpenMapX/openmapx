@@ -18,10 +18,14 @@ export function useFilteredCategoryResults() {
 
   const isTransitCategory = activeCategory === "transit";
   const {
-    data: rawResults,
+    data: response,
     isLoading,
     isError,
+    error,
   } = useCategorySearch(isTransitCategory ? null : activeCategory, searchBbox);
+
+  const rawResults = response?.results;
+  const partial = response?.partial ?? false;
 
   const filtered = useMemo(
     () =>
@@ -31,5 +35,5 @@ export function useFilteredCategoryResults() {
     [rawResults, openingHoursFilter, openAtDay, openAtHour],
   );
 
-  return { rawResults, filtered, isLoading, isError, isTransitCategory };
+  return { rawResults, filtered, isLoading, isError, error, partial, isTransitCategory };
 }

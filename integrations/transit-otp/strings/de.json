@@ -1,8 +1,11 @@
 {
   "name": "OpenTripPlanner",
   "description": "Multimodale Nahverkehrs-Reiseplanung",
-  "privacy": {
-    "purpose": "Multimodale Nahverkehrs-Reiseplanung",
-    "dataSent": "Start-/Zielkoordinaten"
-  }
+  "dataSources": [
+    {
+      "purpose": "Multimodale Reiseplanung über selbst gehosteten OpenTripPlanner. Abdeckung abhängig von geladenen Daten.",
+      "dataSent": "Start- und Zielkoordinaten, Uhrzeit, Datum, Reisemodus, Anzahl der Reiserouten, optionales Ankunftszeit-Flag",
+      "dataReceived": "Reiserouten mit Dauer, Umsteigepunkten, Gehstrecke, Abschnitte mit Modus, Route, kodierter Polylinien-Geometrie, Zwischenhalten"
+    }
+  ]
 }

@@ -1,8 +1,16 @@
 {
   "name": "MOTIS/Transitous-Nahverkehr",
   "description": "Nahverkehrsrouting und Haltestellendaten über MOTIS (Transitous)",
-  "privacy": {
-    "purpose": "ÖPNV-Routing, Haltestellenabfahrten und Reiseplanung",
-    "dataSent": "Start-/Zielkoordinaten, Abfahrtszeit"
-  }
+  "dataSources": [
+    {
+      "purpose": "Globale Nahverkehrsdaten — Haltestellen, Abfahrten, Reiseplanung mit Tarifen, Live-Fahrzeug-Radar, Fahrtverfolgung",
+      "dataSent": "Haltestellen-ID, Zeitfenster, Suchbegriff, Start- und Zielkoordinaten, Abfahrts-/Ankunftszeit, Begrenzungsrahmen (für Fahrzeugpositionen), Fahrt-ID",
+      "dataReceived": "Haltestellen mit Verkehrsmitteln, Abfahrten/Ankünfte mit Verspätungen/Ausfällen/Gleisen, Reiserouten mit Tarifen und Abschnittsgeometrie, Fahrzeugpositionen"
+    },
+    {
+      "purpose": "Selbst gehostete Nahverkehrsdaten — gleiche Funktionen wie Transitous, Abdeckung abhängig von geladenen GTFS-/OSM-Daten",
+      "dataSent": "Haltestellen-ID, Zeitfenster, Suchbegriff, Start- und Zielkoordinaten, Abfahrts-/Ankunftszeit, Begrenzungsrahmen (für Fahrzeugpositionen), Fahrt-ID",
+      "dataReceived": "Gleiche Datenstruktur wie Transitous"
+    }
+  ]
 }

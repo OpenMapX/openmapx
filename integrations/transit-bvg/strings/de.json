@@ -1,8 +1,11 @@
 {
   "name": "BVG-Nahverkehr (Berlin)",
   "description": "Berliner ÖPNV-Daten der BVG",
-  "privacy": {
-    "purpose": "Berliner Haltestellen und Abfahrten",
-    "dataSent": "Haltestellen-IDs, Koordinaten"
-  }
+  "dataSources": [
+    {
+      "purpose": "Berlin-BVG-Nahverkehrsdaten — Haltestellen, Abfahrten, Reiseplanung, Live-Fahrzeugpositionen",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius, Haltestellen-ID, Suchbegriff, Start- und Zielkoordinaten, Abfahrts-/Ankunftszeit, Begrenzungsrahmen (für Fahrzeugradar)",
+      "dataReceived": "FPTF-Haltestellen/Abfahrten/Ankünfte/Reisen/Fahrten/Radardaten für das Berliner BVG-Netz"
+    }
+  ]
 }

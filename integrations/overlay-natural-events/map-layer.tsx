@@ -1,6 +1,11 @@
 "use client";
 
-import { escapeHtml, useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  escapeHtml,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -82,6 +87,9 @@ function buildFilterExpr(active: Set<string>): maplibregl.ExpressionSpecificatio
 export function NaturalEventLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-natural-events");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const t = useTranslations("naturalEvents");
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
   const days = useNaturalEventStore((s) => s.days);
@@ -159,8 +167,7 @@ export function NaturalEventLayer() {
         map.addSource(SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution:
-            '© <a href="https://eonet.gsfc.nasa.gov/" target="_blank">NASA EONET</a> · <a href="https://www.gdacs.org/" target="_blank">GDACS</a>',
+          attribution: attributionHtml,
         });
       }
 

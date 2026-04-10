@@ -30,19 +30,20 @@
     "urlTemplate": "https://api-v3.mbta.com/stops?filter[latitude]=42.36&filter[longitude]=-71.06&filter[radius]=0.01&api_key=${MBTA_API_KEY}",
     "requiredEnvVars": ["MBTA_API_KEY"]
   },
-  "attribution": [
+  "dataSources": [
     {
       "name": "MBTA",
-      "url": "https://www.mbta.com/",
-      "license": "Open Data",
-      "licenseUrl": "https://cdn.mbta.com/sites/default/files/2023-08/mbta-massdot-develop-license-agreement.pdf"
-    }
-  ],
-  "privacy": [
-    {
+      "url": "https://api-v3.mbta.com/",
+      "license": "Proprietary (MassDOT Developers License)",
+      "licenseUrl": "https://www.mbta.com/developers/v3-api",
+      "attribution": "Transit data by <a href=\"https://www.mbta.com/\">MBTA</a>",
+      "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.mbta.com/policies/privacy-policy",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

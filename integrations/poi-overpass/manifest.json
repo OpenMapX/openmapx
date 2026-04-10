@@ -28,19 +28,20 @@
   },
   "quality": "built-in",
   "category": "Geocoding",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "OpenStreetMap/Overpass",
+      "name": "OpenStreetMap (Overpass)",
       "url": "https://overpass-api.de/",
-      "license": "ODbL",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "DE",
+      "license": "ODbL 1.0",
+      "licenseUrl": "https://www.openstreetmap.org/copyright",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "commercialUse": "yes",
+      "providerCountry": "UK",
       "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

@@ -147,8 +147,8 @@ export default function TermsContentDe({
           </li>
           <li>
             <Typography>
-              Reverse Engineering, Dekompilierung oder den Versuch, den Quellcode des Dienstes zu
-              extrahieren.
+              API-Schl&uuml;ssel, Zugangsdaten oder andere in der Dienst-Infrastruktur eingebettete
+              Authentifizierungsgeheimnisse zu extrahieren, kopieren oder zu missbrauchen.
             </Typography>
           </li>
           <li>

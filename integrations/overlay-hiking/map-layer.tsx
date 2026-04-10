@@ -1,6 +1,10 @@
 "use client";
 
-import { useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
@@ -14,6 +18,9 @@ const RASTER_LAYER_ID = "openmapx-hiking-trails-layer";
 export function HikingTrailsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-hiking");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useHikingStore((s) => s.layerVisible);
   useOverlayExclusion("hiking", layerVisible);
   useLayerReanchor(RASTER_LAYER_ID, layerVisible);
@@ -32,8 +39,7 @@ export function HikingTrailsLayer() {
           tiles: [`${env.apiUrl}/api/integrations/overlay-hiking/tiles/{z}/{x}/{y}.png`],
           tileSize: 256,
           maxzoom: 18,
-          attribution:
-            '© <a href="https://hiking.waymarkedtrails.org" target="_blank">Waymarked Trails</a> / <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank">CC BY-SA 3.0</a>)',
+          attribution: attributionHtml,
         });
       }
 

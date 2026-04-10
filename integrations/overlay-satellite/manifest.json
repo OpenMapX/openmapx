@@ -39,20 +39,20 @@
   },
   "quality": "built-in",
   "category": "Data Overlays",
-  "attribution": [
+  "dataSources": [
     {
       "name": "NASA GIBS",
-      "url": "https://nasa-gibs.github.io/gibs-api-docs/",
-      "license": "CC0 1.0",
-      "licenseUrl": "https://earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"
-    }
-  ],
-  "privacy": [
-    {
+      "url": "https://gibs.earthdata.nasa.gov/",
+      "license": "U.S. Public Domain",
+      "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+      "attribution": "Satellite imagery by <a href=\"https://earthdata.nasa.gov/\">NASA Earthdata</a>",
+      "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.nasa.gov/privacy/",
+      "endUserExposure": "proxied",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

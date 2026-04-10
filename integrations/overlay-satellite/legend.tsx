@@ -7,7 +7,7 @@ import Slider from "@mui/material/Slider";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useIntegrationRegistry } from "@openmapx/core";
+import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEnv } from "@/lib/EnvProvider";
 import { GIBS_LAYERS, today, useSatelliteStore, yesterday } from "./store";
@@ -16,7 +16,8 @@ export function SatelliteLegend() {
   const t = useTranslations("satelliteImagery");
   const env = useEnv();
   const registry = useIntegrationRegistry();
-  const attribution = registry.get("overlay-satellite")?.attribution;
+  const meta = registry.get("overlay-satellite");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useSatelliteStore((s) => s.panelOpen);
   const layerVisible = useSatelliteStore((s) => s.layerVisible);
   const setLayerVisible = useSatelliteStore((s) => s.setLayerVisible);
@@ -158,32 +159,15 @@ export function SatelliteLegend() {
         />
       </Box>
 
-      {/* Attribution */}
-      {attribution?.map((attr) => (
-        <Typography key={attr.name} sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.5 }}>
-          {t("data")}{" "}
-          <a href={attr.url} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
-            {attr.name}
-          </a>
-          {attr.licenseUrl ? (
-            <>
-              {" "}
-              (
-              <a
-                href={attr.licenseUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "inherit" }}
-              >
-                {attr.license}
-              </a>
-              )
-            </>
-          ) : (
-            ` (${attr.license})`
-          )}
-        </Typography>
-      ))}
+      {/* Attribution (from manifest dataSources — trusted, not user-generated) */}
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 1 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

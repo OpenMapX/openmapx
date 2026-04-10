@@ -1,11 +1,16 @@
 {
   "name": "MOTIS/Transitous Geocoding",
   "description": "Transit stop geocoding",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Transitous/MOTIS",
-      "purpose": "Transit stop geocoding",
-      "dataSent": "Search query text"
+      "purpose": "Forward geocoding and autocomplete for transit stops and addresses",
+      "dataSent": "Search query text, language",
+      "dataReceived": "Matches with type (STOP/ADDRESS/PLACE), name, coordinates, transport modes, score"
+    },
+    {
+      "purpose": "Forward and reverse geocoding via self-hosted MOTIS instance",
+      "dataSent": "Search query text or coordinates (latitude, longitude), language",
+      "dataReceived": "Matches with type, name, coordinates, street, house number, transport modes"
     }
   ]
 }

@@ -23,19 +23,32 @@
   },
   "quality": "built-in",
   "category": "External",
-  "attribution": [
+  "dataSources": [
     {
       "name": "Wikipedia",
       "url": "https://www.wikipedia.org/",
-      "license": "CC BY-SA 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "CC BY-SA 4.0 / GFDL",
+      "licenseUrl": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "commercialUse": "yes",
       "providerCountry": "US",
-      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Privacy_policy",
-      "personalData": false
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "Wikimedia Commons",
+      "url": "https://commons.wikimedia.org/",
+      "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

@@ -6,6 +6,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
+import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
 
@@ -57,6 +58,9 @@ const SENSOR_CHIPS: { key: EnvironmentSensorType }[] = [
 
 export function EnvironmentLegend() {
   const t = useTranslations("environment");
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-environment");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useEnvironmentStore((s) => s.panelOpen);
   const layerVisible = useEnvironmentStore((s) => s.layerVisible);
   const setLayerVisible = useEnvironmentStore((s) => s.setLayerVisible);
@@ -160,28 +164,15 @@ export function EnvironmentLegend() {
             : t("noStations")}
       </Typography>
 
-      {/* Attribution */}
-      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.5 }}>
-        {t("attribution")}{" "}
-        <a
-          href="https://opensensemap.org/"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          openSenseMap
-        </a>{" "}
-        (
-        <a
-          href="https://opendatacommons.org/licenses/odbl/1-0/"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          ODbL 1.0
-        </a>
-        )
-      </Typography>
+      {/* Attribution (from manifest dataSources, trusted HTML) */}
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

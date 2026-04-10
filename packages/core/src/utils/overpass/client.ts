@@ -12,6 +12,13 @@ export class OverpassRateLimitError extends Error {
   }
 }
 
+export class OverpassTimeoutError extends Error {
+  constructor() {
+    super("Overpass API query timed out");
+    this.name = "OverpassTimeoutError";
+  }
+}
+
 /**
  * Execute an Overpass QL query and return the parsed response.
  *
@@ -31,6 +38,9 @@ export async function overpassQuery(query: string): Promise<OverpassResponse> {
 
   if (res.status === 429) {
     throw new OverpassRateLimitError();
+  }
+  if (res.status === 504 || res.status === 408) {
+    throw new OverpassTimeoutError();
   }
   if (!res.ok) {
     throw new Error(`Overpass API error: ${res.status}`);

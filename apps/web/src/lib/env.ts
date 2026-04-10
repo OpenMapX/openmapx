@@ -21,6 +21,7 @@ export interface ClientEnv {
   trafficMinZoom: number;
   trafficTileUrlTemplate: string;
   cyclOsmTileUrlTemplate: string;
+  terrainTileUrlTemplate: string;
 }
 
 /**
@@ -53,5 +54,10 @@ export function buildClientEnv(): ClientEnv {
       (apiBase
         ? `${apiBase}/api/tiles/cyclosm/{z}/{x}/{y}.png`
         : "/api/tiles/cyclosm/{z}/{x}/{y}.png"),
+    terrainTileUrlTemplate:
+      process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE ||
+      (apiBase
+        ? `${apiBase}/api/tiles/terrain/{z}/{x}/{y}.png`
+        : "/api/tiles/terrain/{z}/{x}/{y}.png"),
   };
 }

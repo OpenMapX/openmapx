@@ -265,7 +265,11 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
 
       const adminSession = getAdminSession(request);
 
-      await addCatalogSource(url, label);
+      try {
+        await addCatalogSource(url, label);
+      } catch (err) {
+        return reply.status(400).send({ error: (err as Error).message });
+      }
 
       await writeAuditLog({
         actorId: adminSession.user.id,

@@ -1,4 +1,9 @@
-export { OverpassRateLimitError, overpassQuery, overpassQuerySafe } from "./client";
+export {
+  OverpassRateLimitError,
+  OverpassTimeoutError,
+  overpassQuery,
+  overpassQuerySafe,
+} from "./client";
 export {
   buildNodeMap,
   buildWayMap,

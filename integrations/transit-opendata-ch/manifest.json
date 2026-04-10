@@ -24,19 +24,20 @@
     "type": "http",
     "url": "https://transport.opendata.ch/v1/locations?query=Bern&type=station"
   },
-  "attribution": [
+  "dataSources": [
     {
-      "name": "transport.opendata.ch",
+      "name": "OpenData.ch Transport API",
       "url": "https://transport.opendata.ch/",
-      "license": "Open Data",
-      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "MIT (software)",
+      "licenseUrl": "https://github.com/OpendataCH/Transport/blob/master/LICENSE",
+      "attribution": "Swiss transport data by <a href=\"https://transport.opendata.ch/\">OpenData.ch</a>",
+      "commercialUse": "yes",
       "providerCountry": "CH",
-      "providerPrivacyUrl": "https://transport.opendata.ch/",
-      "personalData": false
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

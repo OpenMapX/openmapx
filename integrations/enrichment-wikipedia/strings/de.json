@@ -1,11 +1,16 @@
 {
   "name": "Wikipedia-Anreicherung",
-  "description": "Ortsdetails mit Wikipedia-Beschreibungen und Vorschaubildern anreichern",
-  "privacy": [
+  "description": "Beschreibungs- und Vorschaubild-Anreicherung für Ortsdetails",
+  "dataSources": [
     {
-      "service": "Wikipedia",
-      "purpose": "Ortsdetails mit Wikipedia-Beschreibungen und Vorschaubildern anreichern",
-      "dataSent": "Wikipedia-Artikeltitel (aus OSM-Tags)"
+      "purpose": "Wikipedia-Beschreibung und Hauptbild auf der Ortsdetailseite anzeigen",
+      "dataSent": "Artikeltitel und Sprachcode (aus OSM-Tag `wikipedia` extrahiert)",
+      "dataReceived": "Artikelbeschreibung, Vorschaubild-/Originalbild-URL, Desktop-Seiten-URL"
+    },
+    {
+      "purpose": "Korrekte Quellenangabe und Lizenzierung für das Wikipedia-Artikelhauptbild abrufen",
+      "dataSent": "Bilddateiname (aus der Vorschaubild-URL des Wikipedia-Artikels extrahiert)",
+      "dataReceived": "Bild-Metadaten: Künstler, Lizenz, Vorschaubild-URL, Aufnahmedatum, Koordinaten"
     }
   ]
 }

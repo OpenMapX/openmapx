@@ -1,11 +1,11 @@
 {
   "name": "Overpass POI Search",
   "description": "Category-based point of interest search",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "OpenStreetMap/Overpass",
-      "purpose": "Category-based point of interest search",
-      "dataSent": "Bounding box coordinates, OSM tag queries"
+      "purpose": "Category-based POI search (46 categories, e.g. restaurants, pharmacies, ATMs) using OpenStreetMap data",
+      "dataSent": "Bounding box coordinates, POI category (OSM tag filters)",
+      "dataReceived": "OSM elements with name, coordinates, tags (address, phone, website, opening_hours, category)"
     }
   ]
 }

@@ -8,6 +8,7 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useWildfireStore } from "./store";
 
@@ -30,6 +31,9 @@ const FRP_SIZES = [
 
 export function WildfireLegend() {
   const t = useTranslations("wildfires");
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-wildfires");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWildfireStore((s) => s.panelOpen);
   const layerVisible = useWildfireStore((s) => s.layerVisible);
   const loading = useWildfireStore((s) => s.loading);
@@ -213,24 +217,23 @@ export function WildfireLegend() {
       </Box>
 
       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
-        {t("attribution")} ·{" "}
         {lastUpdated &&
           t("lastUpdated", {
             time: new Date(lastUpdated).toLocaleTimeString(undefined, {
               hour: "2-digit",
               minute: "2-digit",
             }),
-          })}{" "}
-        ·{" "}
-        <a
-          href="https://firms.modaps.eosdis.nasa.gov/"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          NASA FIRMS
-        </a>
+          })}
       </Typography>
+      {/* Attribution (from manifest dataSources, trusted) */}
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.5 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

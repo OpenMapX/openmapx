@@ -29,19 +29,20 @@
   },
   "quality": "built-in",
   "category": "Routing",
-  "attribution": [
+  "dataSources": [
     {
       "name": "OSRM",
       "url": "https://project-osrm.org/",
-      "license": "BSD-2-Clause",
-      "licenseUrl": "https://opensource.org/licenses/BSD-2-Clause"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "BSD 2-Clause (software); custom demo server policy",
+      "licenseUrl": "https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy",
+      "attribution": "Routing by <a href=\"https://project-osrm.org/\">OSRM</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OSM contributors</a>",
+      "commercialUse": "conditional",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.openstreetmap.de/impressum/datenschutz/",
-      "personalData": false
+      "providerPrivacyUrl": "https://www.fossgis.de/datenschutzerkl%C3%A4rung/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

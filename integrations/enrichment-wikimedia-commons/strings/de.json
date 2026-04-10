@@ -1,11 +1,11 @@
 {
   "name": "Wikimedia-Commons-Anreicherung",
-  "description": "Ortsdetails mit Fotos aus Wikimedia-Commons-Kategorien und -Dateien anreichern",
-  "privacy": [
+  "description": "Foto-Anreicherung für Ortsdetails",
+  "dataSources": [
     {
-      "service": "Wikimedia Commons",
-      "purpose": "Ortsdetails mit Fotos aus Wikimedia-Commons-Kategorien und -Dateien anreichern",
-      "dataSent": "Wikimedia-Commons-Kategorie-/Dateinamen (aus OSM-Tags)"
+      "purpose": "Fotos aus der Wikimedia-Commons-Kategorie eines Ortes mit korrekter Quellenangabe anzeigen",
+      "dataSent": "Wikimedia-Commons-Dateiname oder Kategoriename (aus OSM-Tag `wikimedia_commons`)",
+      "dataReceived": "Dateiseiten mit Vorschaubild-URL, Künstler, Lizenz, Aufnahmedatum, Koordinaten (bis zu 6 Dateien pro Kategorie)"
     }
   ]
 }

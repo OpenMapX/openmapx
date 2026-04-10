@@ -1,3 +1,4 @@
+import { buildAttributionHtml } from "@openmapx/core/server";
 import { Suspense } from "react";
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
@@ -37,7 +38,32 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/lib/MapContext";
 
+const SATELLITE_ATTRIBUTION = buildAttributionHtml({
+  name: "MapTiler",
+  url: "https://www.maptiler.com/copyright/",
+  license: "Proprietary",
+  licenseUrl: "https://www.maptiler.com/copyright/",
+});
+
+const TERRAIN_ATTRIBUTION = buildAttributionHtml({
+  name: "OpenTopoMap",
+  url: "https://opentopomap.org/about",
+  license: "CC-BY-SA",
+  licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+});
+
+function getTerrainTileUrl(): string {
+  if (process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE) {
+    return process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE;
+  }
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+  return apiBase
+    ? `${apiBase}/api/tiles/terrain/{z}/{x}/{y}.png`
+    : "/api/tiles/terrain/{z}/{x}/{y}.png";
+}
+
 export default function HomePage() {
+  const terrainTileUrl = getTerrainTileUrl();
   return (
     <MapProvider>
       <ElevationHoverProvider>
@@ -56,15 +82,15 @@ export default function HomePage() {
             }
             activeWhen="satellite"
             maxzoom={20}
-            attribution='© <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> (<a href="https://www.maptiler.com/copyright/" target="_blank">Proprietary</a>)'
+            attribution={SATELLITE_ATTRIBUTION}
           />
           <RasterBaseLayer
             sourceId="openmapx-terrain-source"
             layerId="openmapx-terrain-layer"
-            tiles={["https://tile.opentopomap.org/{z}/{x}/{y}.png"]}
+            tiles={[terrainTileUrl]}
             activeWhen="terrain"
             maxzoom={17}
-            attribution='© <a href="https://opentopomap.org/about" target="_blank">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC-BY-SA</a>)'
+            attribution={TERRAIN_ATTRIBUTION}
             paint={{ "raster-opacity": 0.95, "raster-saturation": -0.15 }}
           />
           <CyclingBaseLayer />

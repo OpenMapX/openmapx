@@ -3,24 +3,31 @@
 import Link from "@mui/material/Link";
 import type { PlacePhoto } from "@openmapx/core";
 
-const SOURCE_LABELS: Record<string, string> = {
-  wikimedia: "Wikimedia Commons",
-  wikipedia: "Wikipedia",
-  mapillary: "Mapillary",
-  flickr: "Flickr",
-  panoramax: "Panoramax",
-  osm: "OpenStreetMap",
-  "google-photos": "Google Photos",
+/** Photo source metadata keyed by source identifier. */
+const PHOTO_SOURCES: Record<string, { name: string; url: string }> = {
+  wikimedia: {
+    name: "Wikimedia Commons",
+    url: "https://commons.wikimedia.org/wiki/Wikimedia_Commons",
+  },
+  wikipedia: { name: "Wikipedia", url: "https://en.wikipedia.org" },
+  mapillary: { name: "Mapillary", url: "https://www.mapillary.com" },
+  flickr: { name: "Flickr", url: "https://www.flickr.com" },
+  panoramax: { name: "Panoramax", url: "https://panoramax.xyz" },
+  osm: { name: "OpenStreetMap", url: "https://www.openstreetmap.org" },
+  "google-photos": { name: "Google Photos", url: "" },
 };
 
-const SOURCE_URLS: Record<string, string> = {
-  wikimedia: "https://commons.wikimedia.org/wiki/Wikimedia_Commons",
-  wikipedia: "https://en.wikipedia.org",
-  mapillary: "https://www.mapillary.com",
-  flickr: "https://www.flickr.com",
-  panoramax: "https://panoramax.xyz",
-  osm: "https://www.openstreetmap.org",
-};
+/** Display name for a photo source (fallback: raw source key). */
+const SOURCE_LABELS: Record<string, string> = Object.fromEntries(
+  Object.entries(PHOTO_SOURCES).map(([k, v]) => [k, v.name]),
+);
+
+/** Homepage URL for a photo source (only entries with a URL). */
+const SOURCE_URLS: Record<string, string> = Object.fromEntries(
+  Object.entries(PHOTO_SOURCES)
+    .filter(([, v]) => v.url)
+    .map(([k, v]) => [k, v.url]),
+);
 
 interface Props {
   photo: PlacePhoto;

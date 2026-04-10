@@ -268,10 +268,10 @@ describe("wikidataEnricher", () => {
     expect(founder?.value).toBe("Frederick II");
   });
 
-  it("extracts external IDs: P2397 → yelp, P7566 → foursquare", async () => {
+  it("extracts external IDs: P3108 → yelp, P3134 → tripadvisor, P3749 → google_maps", async () => {
     const entity = makeEntity({
       claims: {
-        P2397: [
+        P3108: [
           {
             rank: "normal",
             mainsnak: {
@@ -280,12 +280,21 @@ describe("wikidataEnricher", () => {
             },
           },
         ],
-        P7566: [
+        P3134: [
           {
             rank: "normal",
             mainsnak: {
               snaktype: "value",
-              datavalue: { type: "string", value: "4bf58dd8d48988d1" },
+              datavalue: { type: "string", value: "187323" },
+            },
+          },
+        ],
+        P3749: [
+          {
+            rank: "normal",
+            mainsnak: {
+              snaktype: "value",
+              datavalue: { type: "string", value: "10222232094831998944" },
             },
           },
         ],
@@ -297,7 +306,8 @@ describe("wikidataEnricher", () => {
     const result = await wikidataEnricher.enrich({ wikidata: "Q64" }, "en");
     expect(result?.externalIds).toEqual({
       yelp: "biz-berlin-kebab",
-      foursquare: "4bf58dd8d48988d1",
+      tripadvisor: "187323",
+      google_maps: "10222232094831998944",
     });
   });
 

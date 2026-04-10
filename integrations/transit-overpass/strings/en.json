@@ -1,8 +1,11 @@
 {
   "name": "OSM Overpass Transit",
   "description": "Transit stop locations from OpenStreetMap as fallback",
-  "privacy": {
-    "purpose": "Transit stop locations from OpenStreetMap as fallback",
-    "dataSent": "Bounding box, OSM query"
-  }
+  "dataSources": [
+    {
+      "purpose": "Fallback transit stop discovery using OpenStreetMap when no other provider covers the area",
+      "dataSent": "Bounding box coordinates",
+      "dataReceived": "OSM nodes with name, ref, transport mode tags (train, tram, bus, subway, ferry, etc.)"
+    }
+  ]
 }

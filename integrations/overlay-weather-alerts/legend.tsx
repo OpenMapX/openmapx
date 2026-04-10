@@ -6,7 +6,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { relativeTime, useIntegrationRegistry } from "@openmapx/core";
+import { buildIntegrationAttribution, relativeTime, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { SEVERITY_COLORS } from "./map-layer";
 import { ALL_SEVERITIES, useWeatherAlertStore } from "./store";
@@ -14,7 +14,8 @@ import { ALL_SEVERITIES, useWeatherAlertStore } from "./store";
 export function WeatherAlertLegend() {
   const t = useTranslations("weatherAlerts");
   const registry = useIntegrationRegistry();
-  const attribution = registry.get("overlay-weather-alerts")?.attribution;
+  const meta = registry.get("overlay-weather-alerts");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWeatherAlertStore((s) => s.panelOpen);
   const layerVisible = useWeatherAlertStore((s) => s.layerVisible);
   const setLayerVisible = useWeatherAlertStore((s) => s.setLayerVisible);
@@ -128,31 +129,13 @@ export function WeatherAlertLegend() {
         </Typography>
       )}
 
-      {/* Attribution */}
-      {attribution?.map((attr) => (
-        <Typography key={attr.name} sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.5 }}>
-          <a href={attr.url} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
-            {attr.name}
-          </a>
-          {attr.licenseUrl ? (
-            <>
-              {" "}
-              (
-              <a
-                href={attr.licenseUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "inherit" }}
-              >
-                {attr.license}
-              </a>
-              )
-            </>
-          ) : (
-            ` (${attr.license})`
-          )}
-        </Typography>
-      ))}
+      {/* Attribution — trusted static content from integration manifest */}
+      {attributionHtml && (
+        <Typography
+          sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.5, "& a": { color: "inherit" } }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

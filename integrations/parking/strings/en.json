@@ -1,24 +1,26 @@
 {
   "name": "Parking Facilities",
   "description": "Parking facility locations, capacity, and occupancy",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "DB BahnPark (Deutsche Bahn)",
-      "purpose": "Parking facilities at German train stations (capacity, occupancy, pricing)",
-      "dataSent": "API credentials (server-side)",
-      "dataReceived": "Parking facility locations, capacity, occupancy, pricing"
+      "purpose": "Real-time parking lot availability across European cities",
+      "dataSent": "No user data (static city list endpoint); city name for lot retrieval",
+      "dataReceived": "City list with coordinates and source info; per-city lots with name, address, coordinates, total/free capacity"
     },
     {
-      "service": "ParkAPI v3 (MobiData BW)",
-      "purpose": "Parking site data with occupancy",
-      "dataSent": "Bounding box, filter parameters",
-      "dataReceived": "Parking site locations, capacity, occupancy"
+      "purpose": "German parking sites with real-time occupancy data",
+      "dataSent": "No user data (fetches entire dataset); site ID for detail lookup",
+      "dataReceived": "Parking sites with name, address, coordinates, capacity, realtime free capacity, type, fee info, opening hours"
     },
     {
-      "service": "ParkenDD",
-      "purpose": "Multi-city parking occupancy data",
-      "dataSent": "City and lot lookup requests",
-      "dataReceived": "Parking lot locations, capacity, real-time occupancy"
+      "purpose": "Deutsche Bahn station parking facilities (~312 facilities across Germany)",
+      "dataSent": "No user data (fetches entire dataset); facility ID for detail lookup",
+      "dataReceived": "Parking facilities with name, address, coordinates, capacity, tariff/pricing, accessibility, EV charging info"
+    },
+    {
+      "purpose": "Parking facilities from OpenStreetMap (static data, no real-time availability)",
+      "dataSent": "Bounding box coordinates, OSM element type and ID for detail lookup",
+      "dataReceived": "OSM elements with name, coordinates, capacity, fee, access, operator, opening hours"
     }
   ]
 }

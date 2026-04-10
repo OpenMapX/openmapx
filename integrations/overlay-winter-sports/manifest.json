@@ -37,20 +37,20 @@
   },
   "quality": "built-in",
   "category": "Map Overlays",
-  "attribution": [
+  "dataSources": [
     {
       "name": "OpenSnowMap",
       "url": "https://www.opensnowmap.org/",
-      "license": "ODbL (OSM data)",
-      "licenseUrl": "https://www.openstreetmap.org/copyright"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "CC BY-SA (tiles); ODbL (OSM data)",
+      "licenseUrl": "https://www.opensnowmap.org/iframes/about.eng.html",
+      "attribution": "Ski data: <a href=\"https://www.opensnowmap.org/\">OpenSnowMap</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OSM contributors</a>",
+      "commercialUse": "yes",
       "providerCountry": "FR",
-      "providerPrivacyUrl": "https://www.opensnowmap.org/",
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "proxied",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

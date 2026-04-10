@@ -5,6 +5,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
+import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useWinterSportsStore } from "./store";
 
@@ -19,6 +20,9 @@ const DIFFICULTY_ITEMS = [
 
 export function WinterSportsLegend() {
   const t = useTranslations("winterSports");
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-winter-sports");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useWinterSportsStore((s) => s.panelOpen);
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
   const loading = useWinterSportsStore((s) => s.loading);
@@ -86,26 +90,15 @@ export function WinterSportsLegend() {
         ))}
       </Box>
 
-      <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
-        {t("attribution")} ·{" "}
-        <a
-          href="https://www.opensnowmap.org"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          OpenSnowMap
-        </a>{" "}
-        /{" "}
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          OSM
-        </a>
-      </Typography>
+      {/* Attribution (from manifest dataSources, trusted HTML) */}
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.75, display: "block", fontSize: 10.5 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

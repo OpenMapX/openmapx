@@ -1,8 +1,16 @@
 {
   "name": "MOTIS/Transitous Transit",
   "description": "Global transit routing and stop data",
-  "privacy": {
-    "purpose": "Public transit routing, stop departures, and trip planning",
-    "dataSent": "Origin/destination coordinates, departure time"
-  }
+  "dataSources": [
+    {
+      "purpose": "Global transit data — stops, departures, journey planning with fares, live vehicle radar, trip tracking",
+      "dataSent": "Stop ID, time window, search text, origin and destination coordinates, departure/arrival time, bounding box (for vehicle positions), trip ID",
+      "dataReceived": "Stops with modes, departures/arrivals with delays/cancellations/tracks, itineraries with fares and leg geometry, vehicle positions"
+    },
+    {
+      "purpose": "Self-hosted transit data — same capabilities as Transitous, coverage depends on loaded GTFS/OSM data",
+      "dataSent": "Stop ID, time window, search text, origin and destination coordinates, departure/arrival time, bounding box (for vehicle positions), trip ID",
+      "dataReceived": "Same data structure as Transitous"
+    }
+  ]
 }

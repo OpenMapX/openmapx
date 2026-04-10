@@ -1,9 +1,4 @@
 {
   "name": "Cycling Infrastructure",
-  "description": "Cycling infrastructure visualization on the map",
-  "privacy": {
-    "purpose": "Cycling infrastructure visualization",
-    "dataSent": "Map tile requests",
-    "dataReceived": "Cycling infrastructure overlay tiles"
-  }
+  "description": "Cycling infrastructure visualization on the map"
 }

@@ -1,11 +1,11 @@
 {
   "name": "Flickr Photos",
   "description": "Geotagged place photos",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Flickr",
-      "purpose": "Place photos from Flickr",
-      "dataSent": "Coordinates, search radius, API key"
+      "purpose": "Openly-licensed photos near a place for the place detail panel",
+      "dataSent": "Coordinates (latitude, longitude), search radius (0.5 km), result limit",
+      "dataReceived": "Photos with multiple size URLs, owner name, license ID (mapped to CC name/URL), capture date"
     }
   ]
 }

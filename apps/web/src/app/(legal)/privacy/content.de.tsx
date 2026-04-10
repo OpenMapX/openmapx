@@ -25,7 +25,7 @@ export default function PrivacyContentDe({
         Datenschutzerkl&auml;rung
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        Zuletzt aktualisiert: M&auml;rz 2026
+        Zuletzt aktualisiert: April 2026
       </Typography>
 
       <Section title="1. Verantwortlicher und Kontakt">
@@ -230,37 +230,7 @@ export default function PrivacyContentDe({
         ))}
 
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
-          6.15 Ortsanreicherung
-        </Typography>
-        <ServiceTable
-          rows={[
-            {
-              service: "Wikipedia (Wikimedia Foundation)",
-              purpose: "Ortsbeschreibungen, Artikelzusammenfassungen, Vorschaubilder",
-              dataSent: "Artikeltitel, Sprachcode",
-              country: "USA",
-              privacy: "https://foundation.wikimedia.org/wiki/Privacy_policy",
-            },
-            {
-              service: "Wikidata (Wikimedia Foundation)",
-              purpose:
-                "Strukturierte Ortsfakten (Einwohnerzahl, Gr\u00fcndungsdatum, Architekt usw.)",
-              dataSent: "Wikidata-Entity-IDs",
-              country: "USA",
-              privacy: "https://foundation.wikimedia.org/wiki/Privacy_policy",
-            },
-            {
-              service: "Wikimedia Commons (Wikimedia Foundation)",
-              purpose: "Bild-Metadaten, Namensnennung und Lizenzinformationen",
-              dataSent: "Dateinamen",
-              country: "USA",
-              privacy: "https://foundation.wikimedia.org/wiki/Privacy_policy",
-            },
-          ]}
-        />
-
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
-          6.16 Authentifizierungsanbieter
+          Authentifizierungsanbieter
         </Typography>
         <ServiceTable
           rows={[
@@ -282,7 +252,7 @@ export default function PrivacyContentDe({
         />
 
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
-          6.17 Software-Verzeichnisse und Kataloge
+          Software-Verzeichnisse und Kataloge
         </Typography>
         <ServiceTable
           rows={[
@@ -290,8 +260,7 @@ export default function PrivacyContentDe({
               service: "GitHub API (Microsoft)",
               purpose:
                 "Abruf des Nahverkehrs-API-Verzeichnisses und GTFS-Feed-Katalogs aus Open-Source-Repositories (nur serverseitig)",
-              dataSent:
-                "Repository-Dateipfade; optional ein GitHub-Token zur Erh\u00f6hung der Rate-Limits",
+              dataSent: "Keine Nutzerdaten (serverseitige Repository-Dateiabfragen)",
               country: "USA",
               privacy:
                 "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
@@ -300,13 +269,13 @@ export default function PrivacyContentDe({
         />
 
         <Typography sx={{ mt: 2 }}>
-          <strong>Hinweis zum Datenfluss:</strong> F&uuml;r die meisten der oben genannten Dienste
-          werden Anfragen &uuml;ber unseren Backend-Server geleitet (API-Proxy). Das bedeutet, dass
-          der Drittanbieter in der Regel die IP-Adresse unseres Servers und nicht die Ihres Browsers
-          erh&auml;lt. Ausnahmen sind Kartenkacheln, die direkt von Ihrem Browser geladen werden
-          (MapTiler, OpenTopoMap, CyclOSM, Waymarked-Trails-Kachel-Overlays) sowie der
-          MapillaryJS-Stra&szlig;enansicht-Viewer, bei dem Ihr Browser direkt mit dem Anbieter
-          verbunden wird.
+          <strong>Hinweis zum Datenfluss:</strong> Die Spalte &quot;Datenzugriff&quot; oben zeigt
+          an, wie jeder Dienst kontaktiert wird. &quot;Nur Server&quot; und &quot;&Uuml;ber Server
+          (Proxy)&quot; bedeuten, dass Anfragen &uuml;ber unseren Backend-Server geleitet werden
+          &mdash; der Drittanbieter sieht nur die IP-Adresse unseres Servers, nicht Ihre.
+          &quot;Direkt (Browser)&quot; bedeutet, dass Ihr Browser direkt mit dem Anbieter verbunden
+          wird, wobei Ihre IP-Adresse und Ihr Browser-Fingerabdruck offengelegt werden. Die
+          &uuml;berwiegende Mehrheit der Dienste ist serverseitig oder &uuml;ber Proxy angebunden.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>
@@ -606,9 +575,11 @@ interface ServiceRow {
   dataSent: string;
   country: string;
   privacy: string;
+  endUserExposure?: string;
 }
 
 function ServiceTable({ rows }: { rows: ServiceRow[] }) {
+  const hasExposure = rows.some((r) => r.endUserExposure);
   return (
     <TableContainer sx={{ mt: 1, mb: 1 }}>
       <Table size="small">
@@ -617,6 +588,7 @@ function ServiceTable({ rows }: { rows: ServiceRow[] }) {
             <TableCell sx={{ fontWeight: 600 }}>Dienst</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Zweck</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>&Uuml;bermittelte Daten</TableCell>
+            {hasExposure && <TableCell sx={{ fontWeight: 600 }}>Datenzugriff</TableCell>}
             <TableCell sx={{ fontWeight: 600 }}>Land</TableCell>
             <TableCell sx={{ fontWeight: 600 }}>Datenschutzinfo</TableCell>
           </TableRow>
@@ -627,6 +599,7 @@ function ServiceTable({ rows }: { rows: ServiceRow[] }) {
               <TableCell>{row.service}</TableCell>
               <TableCell>{row.purpose}</TableCell>
               <TableCell>{row.dataSent}</TableCell>
+              {hasExposure && <TableCell>{row.endUserExposure}</TableCell>}
               <TableCell>{row.country}</TableCell>
               <TableCell>
                 {row.privacy.startsWith("http") ? (

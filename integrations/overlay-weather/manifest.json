@@ -59,47 +59,34 @@
       "url": "https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m"
     }
   ],
-  "attribution": [
+  "dataSources": [
     {
       "name": "RainViewer",
       "url": "https://www.rainviewer.com/",
-      "license": "Free (attribution required)",
-      "licenseUrl": "https://www.rainviewer.com/api.html"
+      "license": "Proprietary (personal/educational use only)",
+      "licenseUrl": "https://www.rainviewer.com/terms.html",
+      "attribution": "Radar by <a href=\"https://www.rainviewer.com/\">RainViewer</a>",
+      "commercialUse": "no",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.rainviewer.com/privacy.html",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "OpenWeatherMap",
       "url": "https://openweathermap.org/",
-      "license": "CC BY-SA 4.0",
-      "licenseUrl": "https://openweathermap.org/terms"
-    },
-    {
-      "name": "Open-Meteo",
-      "url": "https://open-meteo.com/",
-      "license": "CC BY 4.0",
-      "licenseUrl": "https://open-meteo.com/en/terms"
-    }
-  ],
-  "privacy": [
-    {
-      "service": "RainViewer",
-      "providerCountry": "UA",
-      "providerPrivacyUrl": "https://www.rainviewer.com/privacy.html",
-      "personalData": false,
-      "cookies": false
-    },
-    {
-      "service": "OpenWeatherMap",
+      "license": "ODbL",
+      "licenseUrl": "https://openweathermap.org/full-price",
+      "attribution": "Weather data © <a href=\"https://openweathermap.org/\">OpenWeather</a>",
+      "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://openweather.co.uk/privacy-policy",
+      "endUserExposure": "proxied",
       "personalData": false,
-      "cookies": false
-    },
-    {
-      "service": "Open-Meteo",
-      "providerCountry": "CH",
-      "providerPrivacyUrl": "https://open-meteo.com/en/terms",
-      "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

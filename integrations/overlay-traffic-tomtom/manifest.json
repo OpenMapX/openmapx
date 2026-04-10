@@ -45,20 +45,21 @@
   },
   "quality": "built-in",
   "category": "Traffic",
-  "attribution": [
+  "dataSources": [
     {
       "name": "TomTom",
-      "url": "https://www.tomtom.com/",
+      "url": "https://developer.tomtom.com/",
       "license": "Proprietary",
-      "licenseUrl": "https://developer.tomtom.com/terms-and-conditions"
-    }
-  ],
-  "privacy": [
-    {
+      "licenseUrl": "https://developer.tomtom.com/terms-and-conditions",
+      "attribution": "© <a href=\"https://www.tomtom.com/\">TomTom</a>",
+      "commercialUse": "yes",
       "providerCountry": "NL",
-      "providerPrivacyUrl": "https://www.tomtom.com/privacy/",
+      "providerPrivacyUrl": "https://www.tomtom.com/en_us/privacy/general/",
+      "endUserExposure": "proxied",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": true,
+      "dpaUrl": "https://www.tomtom.com/legal/en_gb/third-party-product-terms/data-processing-schedule/"
     }
   ]
 }

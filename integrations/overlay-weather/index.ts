@@ -59,6 +59,50 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
+  ctx.registerRoute("GET", "/radar/tile/:z/:x/:y", async (req, reply) => {
+    const framePath = req.query.path;
+    if (!framePath) {
+      reply.status(400).send({ message: "Missing path query parameter" });
+      return;
+    }
+
+    const cached = await ctx.cache.get<RadarMeta>("weather:radar:meta");
+    if (!cached) {
+      reply.status(503).send({ message: "Radar metadata not available" });
+      return;
+    }
+
+    const allowedPaths = [...cached.past, ...cached.nowcast].map((f) => f.path);
+    if (!allowedPaths.includes(framePath as string)) {
+      reply.status(400).send({ message: "Invalid radar frame path" });
+      return;
+    }
+
+    const { z, x, y } = req.params as Record<string, string>;
+    const tileUrl = `${cached.host}${framePath}/256/${z}/${x}/${y}/1/1_1.png`;
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const tileRes = await fetch(tileUrl, {
+        headers: { "User-Agent": "OpenMapX/1.0" },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!tileRes.ok) {
+        reply.status(tileRes.status).send({ message: "Radar tile fetch failed" });
+        return;
+      }
+
+      reply.header("Content-Type", "image/png");
+      reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
+      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+      reply.send(Buffer.from(await tileRes.arrayBuffer()));
+    } catch {
+      reply.status(502).send({ message: "Radar tile fetch failed" });
+    }
+  });
+
   ctx.registerRoute("GET", "/tiles/:layer/:z/:x/:y.png", async (req, reply) => {
     if (!owmApiKey) {
       reply.status(503).send({ message: "OWM not configured" });

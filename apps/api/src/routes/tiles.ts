@@ -110,6 +110,50 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
     },
   });
 
+  // OpenTopoMap terrain tile proxy
+  fastify.get<{
+    Params: { z: string; x: string; y: string };
+  }>("/tiles/terrain/:z/:x/:y.png", {
+    schema: { params: TILE_PARAMS_SCHEMA },
+    handler: async (req, reply) => {
+      const coords = validateTileCoords(req.params.z, req.params.x, req.params.y);
+      if (!coords) {
+        return reply.status(400).send({ message: "Invalid tile coordinates" });
+      }
+      const [z, x, y] = coords;
+
+      const baseUrl =
+        process.env.OPENTOPOMAP_TILE_URL ?? "https://tile.opentopomap.org/{z}/{x}/{y}.png";
+
+      const url = baseUrl
+        .replace("{z}", String(z))
+        .replace("{x}", String(x))
+        .replace("{y}", String(y));
+
+      try {
+        const response = await fetch(url, {
+          headers: {
+            "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
+          },
+          signal: AbortSignal.timeout(15_000),
+        });
+
+        if (!response.ok) {
+          return reply.status(response.status).send({ message: "Upstream tile fetch failed" });
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
+        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+        reply.type("image/png");
+        return reply.send(buffer);
+      } catch (error) {
+        req.log.warn({ err: error, z, x, y }, "OpenTopoMap tile fetch failed");
+        return reply.status(502).send({ message: "OpenTopoMap tile provider unavailable" });
+      }
+    },
+  });
+
   // Waymarked Trails cycling routes tile proxy
   fastify.get<{
     Params: { z: string; x: string; y: string };

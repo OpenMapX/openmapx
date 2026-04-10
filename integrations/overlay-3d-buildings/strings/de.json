@@ -1,8 +1,4 @@
 {
   "name": "3D-Gebäude",
-  "description": "3D-Gebäudeextrusionen aus vorhandenen Kartenkacheldaten",
-  "privacy": {
-    "purpose": "3D-Gebäudehöhenextrusionen auf der Karte",
-    "dataSent": "Keine zusätzlichen Daten — nutzt vorhandene Kartenkacheln"
-  }
+  "description": "3D-Gebäudeextrusionen aus vorhandenen Kartenkacheldaten"
 }

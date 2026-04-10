@@ -1,9 +1,11 @@
 {
   "name": "Live-Zugpositionen",
   "description": "Echtzeit-Zugpositionen im deutschen Schienennetz über die Deutsche Bahn RIS API",
-  "privacy": {
-    "purpose": "Echtzeit-Zugpositionen im deutschen Schienennetz",
-    "dataSent": "API-Zugangsdaten, Begrenzungsrahmen",
-    "dataReceived": "Zugpositionen, Verspätungen und Routeninformationen"
-  }
+  "dataSources": [
+    {
+      "purpose": "Live-GPS-Positionen aktiver Deutsche-Bahn-Züge",
+      "dataSent": "Eisenbahnverwaltungs-IDs (Betreiberfilter)",
+      "dataReceived": "Live- + emulierte Zugpositionen mit Journey-ID, Koordinaten, Richtung, Geschwindigkeit, Zugkategorie, Start/Ziel"
+    }
+  ]
 }

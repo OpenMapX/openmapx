@@ -1,18 +1,16 @@
 {
   "name": "EV Charging Stations",
   "description": "Electric vehicle charging station locations and connector details",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "OpenChargeMap",
-      "purpose": "EV charging station locations, connector types, and availability",
-      "dataSent": "Bounding box, filter parameters (connector type, usage type), API key",
-      "dataReceived": "Station locations, operators, connector types, power levels, status"
+      "purpose": "EV charging station locations with connector details, power levels, and availability",
+      "dataSent": "Bounding box coordinates (south, west, north, east), optional filters (connector type, usage type, status)",
+      "dataReceived": "Charging stations with connector types, power levels, operator info, pricing, availability status"
     },
     {
-      "service": "Overpass API (OSM)",
-      "purpose": "Supplement charging station data from OpenStreetMap",
-      "dataSent": "Bounding box, OSM query",
-      "dataReceived": "POI locations and tags"
+      "purpose": "EV charging station locations from OpenStreetMap (secondary source, global fallback)",
+      "dataSent": "No user data (static reference dataset)",
+      "dataReceived": "OSM charging station nodes with name, operator, socket types, capacity, fee info"
     }
   ]
 }

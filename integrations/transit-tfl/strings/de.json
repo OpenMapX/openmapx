@@ -1,8 +1,11 @@
 {
   "name": "TfL (Transport for London)",
   "description": "Londoner öffentliche Verkehrsdaten",
-  "privacy": {
-    "purpose": "Londoner Haltestellen und Abfahrten",
-    "dataSent": "Haltestellen-IDs, Koordinaten, API-Schlüssel"
-  }
+  "dataSources": [
+    {
+      "purpose": "Londoner Nahverkehrsdaten — Haltestellen, Ankünfte, Störungen, Linienstatus, Routenhaltefolgen",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius, Haltestellentypen; Linien-ID oder Verkehrsmittelfilter; Haltestellen-ID",
+      "dataReceived": "Haltestellen mit Verkehrsmitteln; Live-Ankunftsvorhersagen; Linien-Störungsstatus; Routen-Haltestellenfolgen"
+    }
+  ]
 }

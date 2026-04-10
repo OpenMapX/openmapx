@@ -1,24 +1,28 @@
 import z from "zod/v4";
 
-const attributionSchema = z.object({
+const dataSourceSchema = z.object({
+  // Identity
   name: z.string(),
   url: z.string(),
+
+  // License & Attribution
   license: z.string(),
   licenseUrl: z.string().optional(),
-  dynamic: z.boolean().optional(),
-  dynamicEndpoint: z.string().optional(),
-});
+  attribution: z.string().optional(),
+  commercialUse: z.enum(["yes", "no", "conditional", "unknown"]).optional(),
 
-const privacyEntrySchema = z.object({
-  service: z.string().optional(),
-  purpose: z.string().optional(),
-  dataSent: z.string().optional(),
-  dataReceived: z.string().optional(),
+  // Privacy
   providerCountry: z.string(),
   providerPrivacyUrl: z.string(),
-  dataRetention: z.string().optional(),
+  endUserExposure: z.enum(["direct", "proxied", "server-only", "build-time"]).optional(),
   personalData: z.boolean().optional(),
   cookies: z.boolean().optional(),
+  dpaAvailable: z.boolean().optional(),
+  dpaUrl: z.string().optional(),
+
+  // Dynamic attribution (fetched from endpoint at runtime)
+  dynamic: z.boolean().optional(),
+  dynamicEndpoint: z.string().optional(),
 });
 
 const healthCheckSchema = z.object({
@@ -96,15 +100,13 @@ export const integrationManifestSchema = z.object({
   healthCheck: z.union([healthCheckSchema, z.array(healthCheckSchema)]).optional(),
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
 
-  attribution: z.array(attributionSchema).optional(),
-  privacy: z.union([privacyEntrySchema, z.array(privacyEntrySchema)]).optional(),
+  dataSources: z.array(dataSourceSchema).optional(),
 
   infrastructure: infrastructureSchema.optional(),
 });
 
 export type IntegrationManifest = z.infer<typeof integrationManifestSchema>;
-export type IntegrationAttribution = z.infer<typeof attributionSchema>;
-export type IntegrationPrivacy = z.infer<typeof privacyEntrySchema>;
+export type IntegrationDataSource = z.infer<typeof dataSourceSchema>;
 export type IntegrationHealthCheck = z.infer<typeof healthCheckSchema>;
 export type IntegrationFrontend = z.infer<typeof frontendSchema>;
 export type IntegrationLayerSelector = z.infer<typeof layerSelectorSchema>;
@@ -128,11 +130,8 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
     if (!manifest.domains?.length) {
       errors.push("manifest.domains must contain at least one domain");
     }
-    if (manifest.backend?.routes && !manifest.attribution?.length) {
-      errors.push("manifest.attribution is required for integrations with backend routes");
-    }
-    if (manifest.backend?.routes && !manifest.privacy) {
-      errors.push("manifest.privacy is required for integrations that call external APIs");
+    if (manifest.backend?.routes && !manifest.dataSources?.length) {
+      errors.push("manifest.dataSources is required for integrations with backend routes");
     }
     // Health check policy: required for integrations with envVars (external APIs)
     // or backend services (databases, etc.)
@@ -146,10 +145,12 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
         "manifest.healthCheck is required for integrations with infrastructure dependencies (services)",
       );
     }
-    for (const attr of manifest.attribution ?? []) {
-      if (!attr.name) errors.push("attribution.name is required");
-      if (!attr.url) errors.push("attribution.url is required");
-      if (!attr.license) errors.push("attribution.license is required");
+    for (const ds of manifest.dataSources ?? []) {
+      if (!ds.name) errors.push("dataSources[].name is required");
+      if (!ds.url) errors.push("dataSources[].url is required");
+      if (!ds.license) errors.push("dataSources[].license is required");
+      if (!ds.providerCountry) errors.push("dataSources[].providerCountry is required");
+      if (!ds.providerPrivacyUrl) errors.push("dataSources[].providerPrivacyUrl is required");
     }
 
     return { valid: errors.length === 0, errors };

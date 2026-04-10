@@ -1,30 +1,31 @@
 {
   "name": "Kraftstoffpreise",
   "description": "Tankstellenpreise von Tankerkoenig (DE), E-Control (AT), prix-carburants (FR), Minetur (ES) und OpenStreetMap",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Tankerkoenig (MTS-K)",
       "purpose": "Deutsche Tankstellenpreise (E5, E10, Diesel)",
-      "dataSent": "Koordinaten, Suchradius, API-Schlüssel",
-      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise, Öffnungszeiten"
+      "dataSent": "Zentrumskoordinaten (Breitengrad, Längengrad), Suchradius (max. 25 km)",
+      "dataReceived": "Tankstellen mit Name, Marke, Adresse, Koordinaten, Live-Diesel/E5/E10-Preisen, Öffnungsstatus"
     },
     {
-      "service": "E-Control Spritpreisrechner",
-      "purpose": "Österreichische Tankstellenpreise",
-      "dataSent": "Adresse oder Koordinaten",
-      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise"
+      "purpose": "Österreichische Tankstellenpreise (Diesel, Super 95)",
+      "dataSent": "Zentrumskoordinaten (Breitengrad, Längengrad), Suchradius, Kraftstoffart (Diesel und Super 95 separat abgefragt)",
+      "dataReceived": "Tankstellen mit Name, Adresse, Koordinaten, Preise pro Kraftstoffart, Öffnungsstatus"
     },
     {
-      "service": "Französische Kraftstoffpreisdaten der Regierung",
-      "purpose": "Französische Tankstellenpreise",
-      "dataSent": "Koordinaten oder Regionskennungen",
-      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise"
+      "purpose": "Französische Tankstellenpreise (6 Kraftstoffarten)",
+      "dataSent": "Zentrumskoordinaten (Breitengrad, Längengrad), Suchradius",
+      "dataReceived": "Tankstellen mit Adresse, Koordinaten, Preise für 6 Kraftstoffarten mit Aktualisierungszeitstempeln"
     },
     {
-      "service": "Spanische Kraftstoffpreisdaten der Regierung",
-      "purpose": "Spanische Tankstellenpreise",
-      "dataSent": "Koordinaten oder Regionskennungen",
-      "dataReceived": "Tankstellenstandorte, Kraftstoffarten, Preise"
+      "purpose": "Spanische Tankstellenpreise (5 Kraftstoffarten)",
+      "dataSent": "Keine Nutzerdaten (ruft den gesamten nationalen Datensatz ab)",
+      "dataReceived": "Alle spanischen Tankstellen mit Name, Adresse, Koordinaten, Preise für 5 Kraftstoffarten"
+    },
+    {
+      "purpose": "Tankstellenstandorte (globaler Fallback, keine Preise)",
+      "dataSent": "Begrenzungsrahmen-Koordinaten",
+      "dataReceived": "OSM-Tankstellenknoten mit Name, Betreiber, Adresse"
     }
   ]
 }

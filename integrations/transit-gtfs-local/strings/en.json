@@ -1,8 +1,4 @@
 {
   "name": "Local GTFS Feeds",
-  "description": "Locally imported transit schedule data",
-  "privacy": {
-    "purpose": "Local transit stop and departure data from imported GTFS feeds",
-    "dataSent": "No external data sent (local database queries)"
-  }
+  "description": "Locally imported transit schedule data"
 }

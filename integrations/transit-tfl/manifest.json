@@ -30,19 +30,20 @@
     "urlTemplate": "https://api.tfl.gov.uk/StopPoint/search?query=victoria&app_key=${TFL_API_KEY}",
     "requiredEnvVars": ["TFL_API_KEY"]
   },
-  "attribution": [
+  "dataSources": [
     {
       "name": "Transport for London",
-      "url": "https://tfl.gov.uk/",
-      "license": "Open Government Licence",
-      "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
-    }
-  ],
-  "privacy": [
-    {
+      "url": "https://api.tfl.gov.uk/",
+      "license": "Proprietary (OGL v2 with TfL amendments)",
+      "licenseUrl": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service",
+      "attribution": "Powered by <a href=\"https://tfl.gov.uk/\">TfL Open Data</a>",
+      "commercialUse": "yes",
       "providerCountry": "UK",
-      "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
-      "personalData": false
+      "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/privacy-and-data-protection-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

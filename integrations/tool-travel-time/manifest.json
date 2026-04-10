@@ -42,19 +42,20 @@
   },
   "quality": "built-in",
   "category": "Map Tools",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Valhalla",
+      "name": "Valhalla (Isochrone)",
       "url": "https://github.com/valhalla/valhalla",
-      "license": "MIT",
-      "licenseUrl": "https://opensource.org/licenses/MIT"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "MIT (software); fair-use demo server",
+      "licenseUrl": "https://github.com/valhalla/valhalla/blob/master/COPYING",
+      "attribution": "Isochrones by <a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OSM contributors</a>",
+      "commercialUse": "yes",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.openstreetmap.de/impressum/datenschutz/",
-      "personalData": false
+      "providerPrivacyUrl": "https://www.fossgis.de/datenschutzerkl%C3%A4rung/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

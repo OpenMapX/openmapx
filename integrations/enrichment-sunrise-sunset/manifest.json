@@ -19,21 +19,20 @@
     "type": "http",
     "url": "https://api.sunrise-sunset.org/json?lat=0&lng=0&formatted=0"
   },
-  "attribution": [
+  "dataSources": [
     {
       "name": "Sunrise-Sunset.org",
       "url": "https://sunrise-sunset.org/",
-      "license": "Free, attribution required",
-      "licenseUrl": "https://sunrise-sunset.org/api"
-    }
-  ],
-  "privacy": [
-    {
-      "service": "Sunrise-Sunset.org",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://sunrise-sunset.org/api",
+      "license": "Proprietary (free with attribution)",
+      "licenseUrl": "https://sunrise-sunset.org/terms",
+      "attribution": "Sunrise/sunset data by <a href=\"https://sunrise-sunset.org/\">Sunrise-Sunset.org</a>",
+      "commercialUse": "unknown",
+      "providerCountry": "Unknown",
+      "providerPrivacyUrl": "https://sunrise-sunset.org/privacy",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

@@ -36,21 +36,20 @@
     "urlTemplate": "https://api.openweathermap.org/data/2.5/weather?lat=0&lon=0&appid=${OWM_API_KEY}",
     "requiredEnvVars": ["OWM_API_KEY"]
   },
-  "attribution": [
+  "dataSources": [
     {
       "name": "OpenWeatherMap",
       "url": "https://openweathermap.org/",
-      "license": "CC BY-SA 4.0",
-      "licenseUrl": "https://openweathermap.org/terms"
-    }
-  ],
-  "privacy": [
-    {
-      "service": "OpenWeatherMap",
+      "license": "ODbL",
+      "licenseUrl": "https://openweathermap.org/full-price",
+      "attribution": "Weather data © <a href=\"https://openweathermap.org/\">OpenWeather</a>",
+      "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://openweather.co.uk/privacy-policy",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

@@ -1,8 +1,11 @@
 {
   "name": "OSM-Overpass-Nahverkehr",
   "description": "Haltestellenstandorte aus OpenStreetMap als Fallback",
-  "privacy": {
-    "purpose": "Haltestellenstandorte aus OpenStreetMap als Fallback",
-    "dataSent": "Begrenzungsrahmen, OSM-Abfrage"
-  }
+  "dataSources": [
+    {
+      "purpose": "Fallback-Haltestellenerkennung über OpenStreetMap, wenn kein anderer Anbieter das Gebiet abdeckt",
+      "dataSent": "Begrenzungsrahmen-Koordinaten",
+      "dataReceived": "OSM-Knoten mit Name, Referenz, Verkehrsmittel-Tags (Zug, Straßenbahn, Bus, U-Bahn, Fähre etc.)"
+    }
+  ]
 }

@@ -36,19 +36,19 @@
     "url": "https://apis.deutschebahn.com/db/apis/ris-routing/v2",
     "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"]
   },
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Deutsche Bahn RIS",
-      "url": "https://developers.deutschebahn.com/",
-      "license": "Proprietary",
-      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen"
-    }
-  ],
-  "privacy": [
-    {
+      "name": "Deutsche Bahn RIS Routing",
+      "url": "https://apis.deutschebahn.com/",
+      "license": "Proprietary (bilateral license)",
+      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
+      "commercialUse": "conditional",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.bahn.de/datenschutz",
-      "personalData": false
+      "providerPrivacyUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

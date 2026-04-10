@@ -1,8 +1,16 @@
 {
   "name": "Dynamisches Nahverkehrsregister",
   "description": "Automatische Erkennung von Nahverkehrs-APIs aus dem public-transport/transport-apis GitHub-Repository",
-  "privacy": {
-    "purpose": "Erkennung und Weiterleitung von Nahverkehrs-APIs weltweit",
-    "dataSent": "Variiert je nach erkanntem Anbieter"
-  }
+  "dataSources": [
+    {
+      "purpose": "Transit-API-Anbieterdefinitionen aus dem public-transport/transport-apis-Register laden",
+      "dataSent": "Keine Nutzerdaten (statische Register-Metadaten)",
+      "dataReceived": "Anbieterkonfigurationen mit Name, Protokolltyp, Abdeckungsgebiet (GeoJSON), Endpunkt-URL, Auth-Konfiguration, Produkte"
+    },
+    {
+      "purpose": "Fallback zum Laden des Transit-Registers, wenn JSDelivr nicht verfügbar ist",
+      "dataSent": "Keine Nutzerdaten (Fallback-Registerquelle)",
+      "dataReceived": "Gleiche Anbieterkonfigurations-JSON wie JSDelivr"
+    }
+  ]
 }

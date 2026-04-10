@@ -8,7 +8,7 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { relativeTime, useIntegrationRegistry } from "@openmapx/core";
+import { buildIntegrationAttribution, relativeTime, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { CATEGORY_COLORS } from "./map-layer";
 import { ALL_CATEGORIES, useNaturalEventStore } from "./store";
@@ -23,7 +23,8 @@ const DAY_OPTIONS: { value: number | null; labelKey: string }[] = [
 export function NaturalEventLegend() {
   const t = useTranslations("naturalEvents");
   const registry = useIntegrationRegistry();
-  const attribution = registry.get("overlay-natural-events")?.attribution;
+  const meta = registry.get("overlay-natural-events");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useNaturalEventStore((s) => s.panelOpen);
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
   const setLayerVisible = useNaturalEventStore((s) => s.setLayerVisible);
@@ -167,32 +168,15 @@ export function NaturalEventLegend() {
         </Typography>
       )}
 
-      {/* Attribution */}
-      {attribution?.map((attr) => (
-        <Typography key={attr.name} sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.5 }}>
-          {t("data")}{" "}
-          <a href={attr.url} target="_blank" rel="noreferrer" style={{ color: "inherit" }}>
-            {attr.name}
-          </a>
-          {attr.licenseUrl ? (
-            <>
-              {" "}
-              (
-              <a
-                href={attr.licenseUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "inherit" }}
-              >
-                {attr.license}
-              </a>
-              )
-            </>
-          ) : (
-            ` (${attr.license})`
-          )}
-        </Typography>
-      ))}
+      {/* Attribution (from manifest dataSources, trusted HTML) */}
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

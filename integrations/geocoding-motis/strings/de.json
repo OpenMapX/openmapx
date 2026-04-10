@@ -1,11 +1,16 @@
 {
   "name": "MOTIS/Transitous-Geokodierung",
   "description": "Geokodierung von Haltestellen über MOTIS/Transitous",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Transitous/MOTIS",
-      "purpose": "Geokodierung von Haltestellen",
-      "dataSent": "Suchanfragetext"
+      "purpose": "Vorwärts-Geokodierung und Autovervollständigung für Haltestellen und Adressen",
+      "dataSent": "Suchtext, Sprache",
+      "dataReceived": "Treffer mit Typ (STOP/ADDRESS/PLACE), Name, Koordinaten, Verkehrsmittel, Bewertung"
+    },
+    {
+      "purpose": "Vorwärts- und Rückwärts-Geokodierung über selbst gehostete MOTIS-Instanz",
+      "dataSent": "Suchtext oder Koordinaten (Breitengrad, Längengrad), Sprache",
+      "dataReceived": "Treffer mit Typ, Name, Koordinaten, Straße, Hausnummer, Verkehrsmittel"
     }
   ]
 }

@@ -1,9 +1,11 @@
 {
   "name": "Wintersport",
   "description": "Wintersport-Pisten- und Liftvisualisierung über OpenSnowMap",
-  "privacy": {
-    "purpose": "Wintersport-Pisten- und Liftvisualisierung",
-    "dataSent": "Kartenkachel-Anfragen",
-    "dataReceived": "Pisten- und Lift-Overlay-Kacheln"
-  }
+  "dataSources": [
+    {
+      "purpose": "Skipisten-Overlay-Kacheln und interaktive Pisten-/Lift-Vektordaten",
+      "dataSent": "Kachelkoordinaten (z/x/y)",
+      "dataReceived": "PNG-Pisten-Overlay-Kacheln; OSM-Pisten-/Lift-Features mit Schwierigkeit, Präparierung, Beschneiung, Kapazität"
+    }
+  ]
 }

@@ -643,13 +643,13 @@ export function getTransitProviderAttribution(): Record<
       if (!integration.enabled) continue;
       const domainProviders = integration.providers.get("transit") ?? [];
       if (domainProviders.includes(provider)) {
-        const attr = integration.manifest.attribution?.[0];
-        if (attr) {
+        const ds = integration.manifest.dataSources?.[0];
+        if (ds) {
           result[prefix] = {
-            label: attr.name,
-            url: attr.url,
-            license: attr.license,
-            licenseUrl: attr.licenseUrl,
+            label: ds.name,
+            url: ds.url,
+            license: ds.license,
+            licenseUrl: ds.licenseUrl,
           };
         }
         break;

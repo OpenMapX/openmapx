@@ -1,8 +1,11 @@
 {
   "name": "HAFAS-Nahverkehr (DB/VBB/BVG)",
   "description": "Deutsche Bahn-, VBB- und BVG-Nahverkehrsdaten über HAFAS",
-  "privacy": {
-    "purpose": "Haltestellenabfahrten, Ankünfte und Reiseplanung",
-    "dataSent": "Haltestellen-IDs, Koordinaten, Abfahrtszeiten"
-  }
+  "dataSources": [
+    {
+      "purpose": "Deutsche Nahverkehrsdaten über Community-HAFAS-REST-Wrapper (DB, VBB, BVG-Instanzen)",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius, Haltestellen-ID, Suchbegriff, Start- und Zielkoordinaten, Abfahrts-/Ankunftszeit, Fahrt-ID, Begrenzungsrahmen (für Fahrzeugradar)",
+      "dataReceived": "FPTF-Haltestellen, Abfahrten/Ankünfte mit Verspätungen/Hinweisen, Reisen mit GeoJSON-Polylinien und Zwischenhalten, Live-Fahrzeugpositionen"
+    }
+  ]
 }

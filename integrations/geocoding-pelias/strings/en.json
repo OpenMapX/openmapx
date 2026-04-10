@@ -1,11 +1,11 @@
 {
   "name": "Pelias Geocoding",
   "description": "Self-hosted forward and reverse geocoding",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Pelias",
-      "purpose": "Self-hosted geocoding",
-      "dataSent": "Search query text (to self-hosted instance)"
+      "purpose": "Forward geocoding, autocomplete, and reverse geocoding via self-hosted Pelias instance",
+      "dataSent": "Search query text or coordinates (latitude, longitude), result limit, language",
+      "dataReceived": "GeoJSON features with gid, label, name, layer (venue/address/street/locality), confidence, coordinates"
     }
   ]
 }

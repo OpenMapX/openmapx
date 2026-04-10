@@ -141,7 +141,8 @@ export default function TermsContent({
           </li>
           <li>
             <Typography>
-              Reverse engineer, decompile, or attempt to extract the source code of the service.
+              Extract, copy, or misuse API keys, credentials, or other authentication secrets
+              embedded in the service infrastructure.
             </Typography>
           </li>
           <li>

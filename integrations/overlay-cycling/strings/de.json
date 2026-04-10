@@ -1,9 +1,4 @@
 {
   "name": "Radinfrastruktur",
-  "description": "Visualisierung der Radinfrastruktur auf der Karte",
-  "privacy": {
-    "purpose": "Visualisierung der Radinfrastruktur",
-    "dataSent": "Kartenkachel-Anfragen",
-    "dataReceived": "Radinfrastruktur-Overlay-Kacheln"
-  }
+  "description": "Visualisierung der Radinfrastruktur auf der Karte"
 }

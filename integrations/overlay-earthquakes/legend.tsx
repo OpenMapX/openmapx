@@ -8,6 +8,7 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEarthquakeStore } from "./store";
 
@@ -43,6 +44,9 @@ const MAG_SIZES = [
 
 export function EarthquakeLegend() {
   const t = useTranslations("earthquakes");
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-earthquakes");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const panelOpen = useEarthquakeStore((s) => s.panelOpen);
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
   const loading = useEarthquakeStore((s) => s.loading);
@@ -273,24 +277,22 @@ export function EarthquakeLegend() {
       </Box>
 
       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
-        {t("attribution")} ·{" "}
         {lastUpdated &&
           t("lastUpdated", {
             time: new Date(lastUpdated).toLocaleTimeString(undefined, {
               hour: "2-digit",
               minute: "2-digit",
             }),
-          })}{" "}
-        ·{" "}
-        <a
-          href="https://earthquake.usgs.gov/"
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: "inherit" }}
-        >
-          USGS
-        </a>
+          })}
       </Typography>
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.5 }}
+          dangerouslySetInnerHTML={{ __html: attributionHtml }}
+        />
+      )}
     </Paper>
   );
 }

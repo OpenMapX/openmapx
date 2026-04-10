@@ -1,6 +1,11 @@
 "use client";
 
-import { relativeTime, useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  relativeTime,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -80,6 +85,9 @@ function confidenceLabel(conf: string): string {
 export function WildfireLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-wildfires");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useWildfireStore((s) => s.layerVisible);
   const dayRange = useWildfireStore((s) => s.dayRange);
   const source = useWildfireStore((s) => s.source);
@@ -142,8 +150,7 @@ export function WildfireLayer() {
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution:
-              '© <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank">NASA FIRMS</a> (<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank">CC0</a>)',
+            attribution: attributionHtml,
           });
         }
 
@@ -322,7 +329,6 @@ export function WildfireLayer() {
         <div style="font-size:12px;color:#666">${t("detected")}: ${relativeTime(ageMs)} (${acqDate} ${formattedTime})</div>
         <div style="font-size:12px;color:#666">${t("observation")}: ${dayNight === "D" ? t("daytime") : t("nighttime")}</div>
         <div style="font-size:12px;color:#666">${t("coordinates")}: ${coords[1].toFixed(4)}, ${coords[0].toFixed(4)}</div>
-        <div style="font-size:11px;color:#999;border-top:1px solid #eee;padding-top:5px;margin-top:5px">${t("data")}: <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">NASA FIRMS</a> (LANCE) · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">CC0</a></div>
       </div>`;
 
       popupRef.current?.remove();

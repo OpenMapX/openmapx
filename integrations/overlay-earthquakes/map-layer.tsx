@@ -1,6 +1,13 @@
 "use client";
 
-import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  escapeHtml,
+  relativeTime,
+  sanitizeUrl,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -135,6 +142,9 @@ function depthLabel(depth: number): string {
 export function EarthquakeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-earthquakes");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
   const timeRange = useEarthquakeStore((s) => s.timeRange);
   const minMagnitude = useEarthquakeStore((s) => s.minMagnitude);
@@ -204,8 +214,7 @@ export function EarthquakeLayer() {
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution:
-              '© <a href="https://earthquake.usgs.gov/" target="_blank">USGS</a> Earthquake Hazards Program',
+            attribution: attributionHtml,
           });
         }
 
@@ -479,7 +488,6 @@ export function EarthquakeLayer() {
         <div style="font-size:13px;font-weight:600;margin-bottom:6px">${place}</div>
         ${details}
         ${url ? `<div style="margin-top:6px;font-size:12px"><a href="${url}" target="_blank" rel="noreferrer" style="color:#1a73e8;text-decoration:none">${t("viewOnUSGS")} →</a></div>` : ""}
-        <div style="font-size:11px;color:#999;border-top:1px solid #eee;padding-top:5px;margin-top:5px">${t("data")}: <a href="https://earthquake.usgs.gov/" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">USGS Earthquake Hazards Program</a></div>
       </div>`;
 
       popupRef.current?.remove();

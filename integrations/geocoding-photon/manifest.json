@@ -27,19 +27,20 @@
   },
   "quality": "built-in",
   "category": "Geocoding",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Photon/Komoot",
+      "name": "Photon (Komoot)",
       "url": "https://photon.komoot.io/",
-      "license": "Apache 2.0",
-      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "Apache License 2.0 (software); ODbL (OSM data)",
+      "licenseUrl": "https://github.com/komoot/photon/blob/master/LICENSE",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.komoot.com/privacy",
-      "personalData": false
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

@@ -1,21 +1,16 @@
 {
   "name": "Weather Overlay",
   "description": "Precipitation radar, temperature, and other weather map layers",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "RainViewer",
-      "purpose": "Precipitation radar animation on the map",
-      "dataSent": "Tile coordinates (zoom, x, y)"
+      "purpose": "Precipitation radar animation (metadata server-only, but radar TILES loaded directly by browser)",
+      "dataSent": "No user data (static metadata feed)",
+      "dataReceived": "CDN host URL, past radar frames and nowcast predictions; PNG radar tiles"
     },
     {
-      "service": "OpenWeatherMap",
-      "purpose": "Temperature, cloud, wind, and pressure tile layers on the map",
-      "dataSent": "Tile coordinates (zoom, x, y)"
-    },
-    {
-      "service": "Open-Meteo",
-      "purpose": "Current weather conditions for map widget and place details",
-      "dataSent": "Location coordinates (latitude, longitude), timezone, unit preferences"
+      "purpose": "Weather parameter overlay tiles (temperature, clouds, wind, pressure, precipitation)",
+      "dataSent": "Weather layer name, tile coordinates (z/x/y)",
+      "dataReceived": "PNG tiles showing the selected weather parameter"
     }
   ]
 }

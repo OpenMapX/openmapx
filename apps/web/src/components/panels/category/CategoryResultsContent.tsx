@@ -12,6 +12,7 @@ import Typography from "@mui/material/Typography";
 import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
 import {
   categoryPlaceToPlace,
+  isAreaTooLarge,
   PANEL,
   parseOpeningHours,
   resolveProvider,
@@ -211,7 +212,8 @@ export function CategoryResultsContent() {
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
 
-  const { filtered, isLoading, isError, isTransitCategory } = useFilteredCategoryResults();
+  const { filtered, isLoading, isError, error, partial, isTransitCategory } =
+    useFilteredCategoryResults();
   const { data: transitStops, isPending: transitPending } = useTransitStops(
     isTransitCategory ? searchBbox : null,
   );
@@ -288,8 +290,16 @@ export function CategoryResultsContent() {
 
       {!isTransitCategory && isError && (
         <Box sx={{ px: 2, py: 2 }}>
-          <Alert severity="error" variant="outlined">
-            {ts("failedToLoad")}
+          <Alert severity={isAreaTooLarge(error) ? "info" : "error"} variant="outlined">
+            {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
+          </Alert>
+        </Box>
+      )}
+
+      {!isTransitCategory && !isError && partial && (
+        <Box sx={{ px: 2, pt: 1.5 }}>
+          <Alert severity="info" variant="outlined">
+            {ts("partialResults")}
           </Alert>
         </Box>
       )}

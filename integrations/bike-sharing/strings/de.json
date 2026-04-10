@@ -1,30 +1,31 @@
 {
   "name": "Bikesharing",
-  "description": "Bikesharing-Stationen von GBFS-Feeds, Nextbike, CityBikes und Deutsche Bahn",
-  "privacy": [
+  "description": "Bikesharing-Stationen und Verfügbarkeit",
+  "dataSources": [
     {
-      "service": "GBFS Catalog (MobilityData)",
-      "purpose": "Weltweite Erkennung von Bikesharing-Systemen",
-      "dataSent": "Systemerkennungsanfragen (keine Nutzerdaten)",
-      "dataReceived": "GBFS-Feed-URLs für Bikesharing-Betreiber"
-    },
-    {
-      "service": "Nextbike",
-      "purpose": "Bikesharing-Stationsstandorte und Verfügbarkeit",
-      "dataSent": "Begrenzungsrahmen-Koordinaten",
-      "dataReceived": "Stationsstandorte, Fahrradanzahl, Stationsnamen"
-    },
-    {
-      "service": "CityBikes",
       "purpose": "Weltweite Bikesharing-Netzwerk- und Stationsdaten",
-      "dataSent": "Netzwerkliste und Einzelnetzwerk-Stationsabfragen (keine Standortdaten)",
-      "dataReceived": "Stationsstandorte, Fahrrad-/E-Bike-Anzahl, Netzwerk-Metadaten"
+      "dataSent": "Keine Nutzerdaten (Netzwerkindex mit Feldfilter); Stationsdaten pro Netzwerk über Netzwerk-URL",
+      "dataReceived": "Stationsstandorte, verfügbare Fahrräder, freie Stellplätze, Netzwerk-Metadaten"
     },
     {
-      "service": "Donkey Republic",
-      "purpose": "Fahrrad- und E-Bike-Hub-Standorte und Verfügbarkeit",
-      "dataSent": "Begrenzungsrahmen-Koordinaten",
-      "dataReceived": "Hub-Standorte, Fahrzeuganzahl, Fahrzeugtypen"
+      "purpose": "Fahrrad- und E-Bike-Hub-Standorte und Verfügbarkeit in europäischen Städten",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (Breitengrad/Längengrad-Paare der oberen rechten und unteren linken Ecke)",
+      "dataReceived": "Hub-Standorte, verfügbare Fahrräder/E-Bikes/E-Scooter, Radius"
+    },
+    {
+      "purpose": "Bikesharing-Stationsstandorte und Verfügbarkeit weltweit",
+      "dataSent": "Keine Nutzerdaten (ruft den gesamten globalen Datensatz ab)",
+      "dataReceived": "Stationsstandorte, verfügbare Fahrradanzahl, freie Stellplätze, Stationsnamen"
+    },
+    {
+      "purpose": "Call-a-Bike und StadtRad-Stationen und Freifahrzeuge in deutschen Städten",
+      "dataSent": "Keine Nutzerdaten (ruft vollständige GBFS-Feeds pro Anbieter ab)",
+      "dataReceived": "Stationsstandorte, Fahrradverfügbarkeit, Freifahrzeug-Positionen, Fahrzeugtypen"
+    },
+    {
+      "purpose": "Erkennung GBFS-kompatibler Bikesharing-Systeme weltweit",
+      "dataSent": "Keine Nutzerdaten (statischer Katalog)",
+      "dataReceived": "GBFS-Feed-URLs für Bikesharing-Betreiber"
     }
   ]
 }

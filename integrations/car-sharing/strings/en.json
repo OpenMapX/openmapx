@@ -1,24 +1,31 @@
 {
   "name": "Car Sharing",
   "description": "Car sharing station locations and vehicle availability",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "GBFS Catalog (MobilityData)",
-      "purpose": "Discover car-sharing systems worldwide",
-      "dataSent": "System discovery requests (no user data)",
+      "purpose": "Station-based car sharing in Germany and Belgium",
+      "dataSent": "Region code in URL path (matched by proximity to viewport center, up to 14 regions). No user location data sent directly",
+      "dataReceived": "Station locations, vehicle counts, vehicle classes, addresses"
+    },
+    {
+      "purpose": "Car sharing stations and vehicles in Münster (open data)",
+      "dataSent": "No user data (static dataset, fetches all stations)",
+      "dataReceived": "Station locations, vehicle counts, vehicle classes, pricing"
+    },
+    {
+      "purpose": "Car sharing stations in Bielefeld (open data)",
+      "dataSent": "No user data (static dataset, fetched in parallel with stations)",
+      "dataReceived": "Station locations, capacity, booking URLs"
+    },
+    {
+      "purpose": "Car sharing stations in Wuppertal from multiple operators (open data)",
+      "dataSent": "No user data (static WFS query with fixed parameters for carsharing layer)",
+      "dataReceived": "Station locations, vehicle counts, provider names, vehicle classes"
+    },
+    {
+      "purpose": "Discover GBFS-compliant car-sharing systems worldwide",
+      "dataSent": "No user data (static dataset, fetches all stations)",
       "dataReceived": "GBFS feed URLs for car-sharing operators"
-    },
-    {
-      "service": "Cambio CarSharing",
-      "purpose": "Car sharing station locations and vehicle availability",
-      "dataSent": "Region identifier (no user location data)",
-      "dataReceived": "Station locations, vehicle counts, booking URLs"
-    },
-    {
-      "service": "Stadt Münster Open Data",
-      "purpose": "Car sharing station locations in Münster",
-      "dataSent": "No user data sent; pre-defined API queries only",
-      "dataReceived": "Station locations, vehicle classes"
     }
   ]
 }

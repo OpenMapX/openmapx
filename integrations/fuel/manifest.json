@@ -56,58 +56,76 @@
   ],
   "quality": "built-in",
   "category": "Fuel Prices",
-  "attribution": [
+  "dataSources": [
     {
       "name": "Tankerkoenig (MTS-K)",
       "url": "https://creativecommons.tankerkoenig.de/",
       "license": "CC BY 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Fuel prices: <a href=\"https://creativecommons.tankerkoenig.de/\">Tankerkoenig</a> (CC BY 4.0)",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://onboarding.tankerkoenig.de/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "E-Control Spritpreisrechner",
       "url": "https://www.e-control.at/",
-      "license": "Public API (Preistransparenzgesetz)",
-      "licenseUrl": "https://www.e-control.at/en/spritpreisrechner"
+      "license": "No formal license",
+      "licenseUrl": "https://api.e-control.at/sprit/1.0/doc/index.html",
+      "attribution": "Fuel prices: <a href=\"https://www.e-control.at/\">E-Control Austria</a>",
+      "commercialUse": "unknown",
+      "providerCountry": "AT",
+      "providerPrivacyUrl": "https://www.e-control.at/tarifkalkulator/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "prix-carburants.gouv.fr",
       "url": "https://www.prix-carburants.gouv.fr/",
-      "license": "Open Licence 2.0",
-      "licenseUrl": "https://www.etalab.gouv.fr/wp-content/uploads/2017/04/ETALAB-Licence-Ouverte-v2.0.pdf"
+      "license": "Licence Ouverte v2.0",
+      "licenseUrl": "https://www.etalab.gouv.fr/wp-content/uploads/2017/04/ETALAB-Licence-Ouverte-v2.0.pdf",
+      "attribution": "Fuel prices: <a href=\"https://www.prix-carburants.gouv.fr/\">prix-carburants.gouv.fr</a> (Licence Ouverte 2.0)",
+      "commercialUse": "yes",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://data.economie.gouv.fr/terms/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "Minetur (Spain)",
       "url": "https://sedeaplicaciones.minetur.gob.es/",
-      "license": "Reuse Authorization",
-      "licenseUrl": "https://sede.serviciosmin.gob.es/es-ES/Paginas/aviso.aspx"
+      "license": "Reuse Authorization (Ley 37/2007)",
+      "licenseUrl": "https://sede.serviciosmin.gob.es/es-ES/Paginas/aviso.aspx#Reutilizacion",
+      "attribution": "Fuel prices: <a href=\"https://sedeaplicaciones.minetur.gob.es/\">Ministerio de Industria y Turismo</a>",
+      "commercialUse": "yes",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://sede.serviciosmin.gob.es/es-es/paginas/proteccion-datos-personales.aspx",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
-      "name": "OpenStreetMap",
+      "name": "OpenStreetMap (Overpass)",
       "url": "https://www.openstreetmap.org/",
       "license": "ODbL",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://creativecommons.tankerkoenig.de/#datenschutz",
-      "personalData": false
-    },
-    {
-      "providerCountry": "AT",
-      "providerPrivacyUrl": "https://meine.e-control.org/privacy-policy/",
-      "personalData": false
-    },
-    {
-      "providerCountry": "FR",
-      "providerPrivacyUrl": "https://www.prix-carburants.gouv.fr/rubrique/donnees-personnelles/",
-      "personalData": false
-    },
-    {
-      "providerCountry": "ES",
-      "providerPrivacyUrl": "https://www.red.es/en/data-protection",
-      "personalData": false
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "commercialUse": "yes",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

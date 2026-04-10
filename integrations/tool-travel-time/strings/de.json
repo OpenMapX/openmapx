@@ -1,8 +1,11 @@
 {
   "name": "Reisezeit (Isochrone)",
   "description": "Reisezeit-Isochronen-Visualisierung mit vorhandenen Routing-APIs",
-  "privacy": {
-    "purpose": "Berechnung und Anzeige erreichbarer Gebiete nach Reisezeit auf der Karte",
-    "dataSent": "Ausgangskoordinaten, Verkehrsmittel, Zeitintervalle"
-  }
+  "dataSources": [
+    {
+      "purpose": "Reisezeit-Erreichbarkeit von einem Punkt auf der Karte visualisieren (Isochronen-Polygone)",
+      "dataSent": "Mittelpunkt-Koordinaten (Breitengrad, Längengrad), Reisemodus, Zeitkontur-Schwellenwerte in Minuten",
+      "dataReceived": "GeoJSON-Isochronen-Polygone, die den erreichbaren Bereich innerhalb der angegebenen Zeit-/Entfernungsschwellen zeigen"
+    }
+  ]
 }

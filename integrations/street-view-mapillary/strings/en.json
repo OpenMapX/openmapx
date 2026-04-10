@@ -1,9 +1,11 @@
 {
   "name": "Mapillary Street View",
   "description": "Street-level imagery and navigation",
-  "privacy": {
-    "purpose": "Street-level imagery",
-    "dataSent": "Coordinates, image IDs, API token",
-    "dataReceived": "Street-level images and sequence metadata"
-  }
+  "dataSources": [
+    {
+      "purpose": "Street-level imagery. Image search is server-only, but MapillaryJS viewer contacts graph.mapillary.com and fbcdn.net DIRECTLY from the browser. Vector tiles proxied via BFF.",
+      "dataSent": "Bounding box coordinates (~1 km around click point), result limit",
+      "dataReceived": "Nearest image ID for viewer; vector tiles (sequence lines + image points); panoramic imagery via MapillaryJS"
+    }
+  ]
 }

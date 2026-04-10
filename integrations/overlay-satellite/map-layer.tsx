@@ -1,6 +1,10 @@
 "use client";
 
-import { useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
@@ -18,6 +22,9 @@ function getLayerDef(id: string) {
 export function SatelliteLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-satellite");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useSatelliteStore((s) => s.layerVisible);
   const activeLayer = useSatelliteStore((s) => s.activeLayer);
   const date = useSatelliteStore((s) => s.date);
@@ -135,8 +142,7 @@ export function SatelliteLayer() {
         tiles: [tileUrl],
         tileSize: 256,
         maxzoom: def.maxZoom,
-        attribution:
-          '© <a href="https://nasa-gibs.github.io/gibs-api-docs/" target="_blank">NASA GIBS</a>',
+        attribution: attributionHtml,
       });
     }
 

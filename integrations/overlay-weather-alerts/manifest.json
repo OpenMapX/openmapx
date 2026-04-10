@@ -57,56 +57,61 @@
   ],
   "quality": "built-in",
   "category": "Data Overlays",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "NOAA National Weather Service",
-      "url": "https://www.weather.gov/",
-      "license": "Public Domain",
-      "licenseUrl": "https://www.weather.gov/disclaimer"
+      "name": "NOAA Weather Service",
+      "url": "https://api.weather.gov/",
+      "license": "U.S. Public Domain",
+      "licenseUrl": "https://www.weather.gov/disclaimer",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.weather.gov/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "ECCC (Environment Canada)",
-      "url": "https://weather.gc.ca/",
-      "license": "Open Government Licence - Canada",
-      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada"
+      "url": "https://api.weather.gc.ca/",
+      "license": "ECCC End-use Licence v2.1",
+      "licenseUrl": "https://eccc-msc.github.io/open-data/licence/readme_en/",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "DWD (Deutscher Wetterdienst)",
       "url": "https://www.dwd.de/",
-      "license": "GeoNutzV",
-      "licenseUrl": "https://www.dwd.de/EN/service/copyright/copyright_node.html"
-    },
-    {
-      "name": "MeteoAlarm / EUMETNET",
-      "url": "https://www.meteoalarm.org/",
       "license": "CC BY 4.0",
-      "licenseUrl": "https://www.meteoalarm.org/en/terms-of-use/"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.weather.gov/privacy",
-      "personalData": false,
-      "cookies": false
-    },
-    {
-      "providerCountry": "CA",
-      "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
-      "personalData": false,
-      "cookies": false
-    },
-    {
+      "licenseUrl": "https://www.dwd.de/DE/leistungen/opendata/faqs_opendata.html",
+      "attribution": "Wetterdaten: <a href=\"https://www.dwd.de/\">DWD</a> (CC BY 4.0)",
+      "commercialUse": "yes",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.dwd.de/DE/service/datenschutz/datenschutz_node.html",
+      "providerPrivacyUrl": "https://www.dwd.de/EN/service/dataprotection/dataprotection_node.html",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": true,
+      "dpaUrl": "https://www.dwd.de/DE/derdwd/_functions/Boxen/vereinbarung_auftragsverarbeitung.html"
     },
     {
-      "providerCountry": "EU",
-      "providerPrivacyUrl": "https://www.meteoalarm.org/en/privacy-policy/",
+      "name": "MeteoAlarm (EUMETNET)",
+      "url": "https://feeds.meteoalarm.org/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://feeds.meteoalarm.org/",
+      "attribution": "Weather alerts by <a href=\"https://meteoalarm.org/\">MeteoAlarm</a> / EUMETNET",
+      "commercialUse": "yes",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://www.eumetnet.eu/legal-information/",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

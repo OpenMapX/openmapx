@@ -28,19 +28,19 @@
   },
   "quality": "built-in",
   "category": "Geocoding",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Pelias",
-      "url": "https://pelias.io/",
+      "name": "Pelias (self-hosted)",
+      "url": "https://github.com/pelias/pelias",
       "license": "MIT",
-      "licenseUrl": "https://opensource.org/licenses/MIT"
-    }
-  ],
-  "privacy": [
-    {
-      "providerCountry": "Self-hosted",
-      "providerPrivacyUrl": "https://pelias.io/",
-      "personalData": false
+      "licenseUrl": "https://github.com/pelias/pelias/blob/master/LICENSE",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "-",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

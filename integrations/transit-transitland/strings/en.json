@@ -1,8 +1,11 @@
 {
   "name": "TransitLand",
   "description": "Global transit stop and route data",
-  "privacy": {
-    "purpose": "Global transit stop and route data",
-    "dataSent": "Coordinates, API key"
-  }
+  "dataSources": [
+    {
+      "purpose": "Global transit data — stops, routes, departures via Transitland aggregator",
+      "dataSent": "Bounding box coordinates, optional route type filter; stop ID, time window for departures",
+      "dataReceived": "Stops with onestop_id, name, coordinates, route types; routes with geometry, colors; departures with real-time times"
+    }
+  ]
 }

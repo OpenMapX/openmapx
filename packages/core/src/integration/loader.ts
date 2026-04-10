@@ -24,8 +24,7 @@ export interface LoadedIntegrationMeta {
   configured: boolean;
   domains: string[];
   frontend?: IntegrationManifest["frontend"];
-  attribution?: IntegrationManifest["attribution"];
-  privacy?: IntegrationManifest["privacy"];
+  dataSources?: IntegrationManifest["dataSources"];
   healthCheck?: IntegrationManifest["healthCheck"];
   strings?: IntegrationStrings;
 }
@@ -48,8 +47,7 @@ export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegra
     configured,
     domains: integration.manifest.domains,
     frontend: integration.manifest.frontend,
-    attribution: integration.manifest.attribution,
-    privacy: integration.manifest.privacy,
+    dataSources: integration.manifest.dataSources,
     healthCheck: integration.manifest.healthCheck,
     strings: Object.keys(integration.strings).length > 0 ? integration.strings : undefined,
   };

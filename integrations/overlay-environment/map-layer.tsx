@@ -1,6 +1,12 @@
 "use client";
 
-import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  escapeHtml,
+  useDebouncedCallback,
+  useIntegrationRegistry,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -141,6 +147,9 @@ function buildColorExpr(scale: ColorScale): unknown[] {
 export function EnvironmentLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-environment");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useEnvironmentStore((s) => s.layerVisible);
   const sensorType = useEnvironmentStore((s) => s.sensorType);
   const setLoading = useEnvironmentStore((s) => s.setLoading);
@@ -219,8 +228,7 @@ export function EnvironmentLayer() {
         map.addSource(ENV_SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution:
-            '© <a href="https://opensensemap.org/" target="_blank">openSenseMap</a> (<a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank">ODbL 1.0</a>)',
+          attribution: attributionHtml,
         });
       }
 

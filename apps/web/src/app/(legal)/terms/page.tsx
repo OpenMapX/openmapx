@@ -88,10 +88,10 @@ async function fetchDynamicAttribution(integrations: LoadedIntegrationMeta[]): P
   const results: unknown[] = [];
 
   for (const integration of integrations) {
-    for (const attr of integration.attribution ?? []) {
-      if (!attr.dynamic || !attr.dynamicEndpoint) continue;
+    for (const ds of integration.dataSources ?? []) {
+      if (!ds.dynamic || !ds.dynamicEndpoint) continue;
       try {
-        const res = await fetch(`${apiUrl}${attr.dynamicEndpoint}`, {
+        const res = await fetch(`${apiUrl}${ds.dynamicEndpoint}`, {
           next: { revalidate: 86400 },
         });
         if (res.ok) {

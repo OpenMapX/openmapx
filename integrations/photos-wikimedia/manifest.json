@@ -23,19 +23,20 @@
   },
   "quality": "built-in",
   "category": "External",
-  "attribution": [
+  "dataSources": [
     {
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
-      "license": "Various (free licenses)",
-      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing"
-    }
-  ],
-  "privacy": [
-    {
+      "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing",
+      "attribution": "© <a href=\"https://commons.wikimedia.org/\">Wikimedia Commons</a>",
+      "commercialUse": "yes",
       "providerCountry": "US",
-      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Privacy_policy",
-      "personalData": false
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

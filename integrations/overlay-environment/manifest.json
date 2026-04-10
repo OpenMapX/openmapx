@@ -37,34 +37,34 @@
       "url": "https://data.sensor.community/airrohr/v1/sensor/1/"
     }
   ],
-  "attribution": [
+  "dataSources": [
     {
       "name": "openSenseMap",
-      "url": "https://opensensemap.org/",
-      "license": "ODbL 1.0",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+      "url": "https://api.opensensemap.org/",
+      "license": "PDDL 1.0 (data); MIT (code)",
+      "licenseUrl": "https://opendatacommons.org/licenses/pddl/1-0/",
+      "attribution": "Sensor data by <a href=\"https://opensensemap.org/\">openSenseMap</a>",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://sensebox.de/en/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     },
     {
       "name": "Sensor.Community",
       "url": "https://sensor.community/",
-      "license": "ODbL 1.0",
-      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
-    }
-  ],
-  "privacy": [
-    {
-      "service": "openSenseMap",
+      "license": "DbCL 1.0",
+      "licenseUrl": "https://opendatacommons.org/licenses/dbcl/1-0/",
+      "attribution": "Sensor data by <a href=\"https://sensor.community/\">Sensor.Community</a>",
+      "commercialUse": "yes",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://opensensemap.org/privacy",
+      "providerPrivacyUrl": "https://sensor.community/en/privacy-terms/",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
-    },
-    {
-      "service": "Sensor.Community",
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://sensor.community/en/privacy/",
-      "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

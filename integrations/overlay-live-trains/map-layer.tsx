@@ -1,7 +1,13 @@
 "use client";
 
 import type { VehiclePosition } from "@openmapx/core";
-import { escapeHtml, useLiveTrains, useOverlayExclusion } from "@openmapx/core";
+import {
+  buildIntegrationAttribution,
+  escapeHtml,
+  useIntegrationRegistry,
+  useLiveTrains,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -97,6 +103,9 @@ function buildPopupHtml(t: ParsedTrain): string {
 
 export function LiveTrainsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
+  const registry = useIntegrationRegistry();
+  const meta = registry.get("overlay-live-trains");
+  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useLiveTrainsStore((s) => s.layerVisible);
   const selectTrain = useLiveTrainsStore((s) => s.selectTrain);
   useOverlayExclusion("live-trains", layerVisible);
@@ -201,8 +210,7 @@ export function LiveTrainsLayer() {
     map.addSource(SOURCE_ID, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
-      attribution:
-        '© <a href="https://developers.deutschebahn.com" target="_blank">Deutsche Bahn</a>',
+      attribution: attributionHtml,
     });
 
     const beforeLayer = getFirstSymbolLayerId(map);

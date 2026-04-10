@@ -28,21 +28,20 @@
   },
   "quality": "built-in",
   "category": "Weather",
-  "attribution": [
+  "dataSources": [
     {
-      "name": "Open-Meteo",
-      "url": "https://open-meteo.com/",
-      "license": "CC BY 4.0 (free non-commercial; paid commercial)",
-      "licenseUrl": "https://open-meteo.com/en/terms"
-    }
-  ],
-  "privacy": [
-    {
-      "service": "Open-Meteo",
-      "providerCountry": "DE",
+      "name": "Open-Meteo Air Quality",
+      "url": "https://air-quality-api.open-meteo.com/",
+      "license": "CC BY 4.0 (free tier: non-commercial only)",
+      "licenseUrl": "https://open-meteo.com/en/terms",
+      "attribution": "Air quality by <a href=\"https://open-meteo.com/\">Open-Meteo</a>",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
       "providerPrivacyUrl": "https://open-meteo.com/en/terms",
+      "endUserExposure": "server-only",
       "personalData": false,
-      "cookies": false
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

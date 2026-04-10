@@ -1,11 +1,11 @@
 {
   "name": "Panoramax Photos",
   "description": "Street-level photos near places",
-  "privacy": [
+  "dataSources": [
     {
-      "service": "Panoramax",
-      "purpose": "Street-level photos from Panoramax",
-      "dataSent": "Coordinates, search radius"
+      "purpose": "Open street-level imagery near a place",
+      "dataSent": "Bounding box coordinates (~660 m around point), result limit",
+      "dataReceived": "GeoJSON features with id, coordinates, datetime, license (SPDX), provider name, thumbnail/SD/HD asset URLs"
     }
   ]
 }
