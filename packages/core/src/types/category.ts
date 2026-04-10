@@ -475,7 +475,7 @@ export const HOURS_FILTER_CATEGORY_IDS: ReadonlySet<string> = new Set(
 
 /** Converts a CategoryPlace to a Place, using name as address fallback.
  *  When `categoryId` is provided it is stored as `rawCategory` so that
- *  `useDataSourceEnrichment` can resolve the matching data source. */
+ *  `useDataSourceMatch` can resolve the matching data source. */
 export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string): Place {
   return {
     id: place.id,

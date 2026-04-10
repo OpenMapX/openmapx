@@ -48,7 +48,7 @@ export interface Place {
   description?: string;
   /** Longer article summary (from Wikipedia extract). */
   wikipediaExtract?: string;
-  /** Integration ID(s) that supplied the Wikipedia extract (e.g. "enrichment-wikipedia" or "enrichment-wikidata"). */
+  /** Integration ID(s) that supplied the Wikipedia extract (e.g. "knowledge-wikipedia" or "knowledge-wikidata"). */
   wikipediaExtractSource?: string | string[];
   wikipediaUrl?: string;
   facts?: PlaceFact[];

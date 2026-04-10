@@ -31,12 +31,12 @@ export type {
   DataSourceProvider as DomainDataSourceProvider,
   DomainDefinition,
   DomainId,
-  EnrichmentProvider,
-  EnrichmentResult,
-  EnrichmentSource,
   GeocodingProvider,
   GeoJsonFeatureCollection,
   HourlyForecastPoint,
+  KnowledgeProvider,
+  KnowledgeResult,
+  KnowledgeSource,
   MapOverlayData,
   MapOverlayDetail,
   MapOverlayProvider,
@@ -92,7 +92,7 @@ export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities
 export { isAreaTooLarge, useCategorySearch } from "./hooks/useCategorySearch";
 // Hooks — General
 export { useCurrentWeather } from "./hooks/useCurrentWeather";
-export { useDataSourceEnrichment } from "./hooks/useDataSourceEnrichment";
+export { useDataSourceMatch } from "./hooks/useDataSourceMatch";
 // Hooks — Data Sources
 export {
   useDataSourceDetail,

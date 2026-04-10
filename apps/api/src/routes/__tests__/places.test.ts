@@ -13,12 +13,19 @@ vi.mock("../../services/nominatim-lookup.service.js", () => ({
   lookupByNameAndCoords: mockLookupByNameAndCoords,
 }));
 
-// Mock enrichment service
+// Mock knowledge service
 
-const mockEnrichPlace = vi.fn();
+const mockGetPlaceKnowledge = vi.fn();
 
-vi.mock("../../services/enrichment/index.js", () => ({
-  enrichPlace: mockEnrichPlace,
+vi.mock("../../services/knowledge/index.js", () => ({
+  getPlaceKnowledge: mockGetPlaceKnowledge,
+}));
+
+// Mock photo service
+
+vi.mock("../../services/photos/index.js", () => ({
+  searchHeroPhotos: vi.fn().mockResolvedValue([]),
+  deduplicatePhotos: vi.fn((photos: unknown[]) => photos),
 }));
 
 // Mock DB RIS service
@@ -106,9 +113,9 @@ describe("GET /places", () => {
 });
 
 describe("GET /places/:id", () => {
-  it("returns enriched place for OSM ref (node/12345)", async () => {
+  it("returns place with knowledge data for OSM ref (node/12345)", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
-    mockEnrichPlace.mockResolvedValue(MOCK_ENRICHMENT);
+    mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
     mockBuildReviewLinks.mockReturnValue(MOCK_REVIEW_LINKS);
 
     const res = await app.inject({
@@ -127,7 +134,7 @@ describe("GET /places/:id", () => {
       }),
     );
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "node/12345", undefined);
-    expect(mockEnrichPlace).toHaveBeenCalledWith(MOCK_PLACE, undefined);
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined);
     expect(mockBuildReviewLinks).toHaveBeenCalledWith(MOCK_PLACE, { wikidata: "Q82425" });
     expect(res.headers["cache-control"]).toBe("public, max-age=86400");
   });
@@ -182,7 +189,7 @@ describe("GET /places/:id", () => {
   it("prefers lookupByCoords for ds- prefix IDs", async () => {
     const coordPlace = { ...MOCK_PLACE, id: "ds-fuel-123" };
     mockLookupByCoords.mockResolvedValue(coordPlace);
-    mockEnrichPlace.mockResolvedValue({ externalIds: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
@@ -200,7 +207,7 @@ describe("GET /places/:id", () => {
   it("falls back to lookupByNameAndCoords for ds- prefix when coords returns null", async () => {
     mockLookupByCoords.mockResolvedValue(null);
     mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
-    mockEnrichPlace.mockResolvedValue({ externalIds: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
@@ -215,7 +222,7 @@ describe("GET /places/:id", () => {
 
   it("prefers lookupByNameAndCoords for non-ds prefix IDs", async () => {
     mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
-    mockEnrichPlace.mockResolvedValue({ externalIds: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
@@ -239,7 +246,7 @@ describe("GET /places/:id", () => {
   it("falls back to lookupByCoords for non-ds prefix when name+coords returns null", async () => {
     mockLookupByNameAndCoords.mockResolvedValue(null);
     mockLookupByCoords.mockResolvedValue(MOCK_PLACE);
-    mockEnrichPlace.mockResolvedValue({ externalIds: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
@@ -268,7 +275,7 @@ describe("GET /places/:id", () => {
 
   it("sets Cache-Control: public, max-age=86400 on success", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
-    mockEnrichPlace.mockResolvedValue({ externalIds: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
@@ -304,7 +311,7 @@ describe("GET /places/:id", () => {
 
   it("passes lang parameter through to services", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
-    mockEnrichPlace.mockResolvedValue({ externalIds: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     await app.inject({
@@ -313,12 +320,12 @@ describe("GET /places/:id", () => {
     });
 
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "node/12345", "de");
-    expect(mockEnrichPlace).toHaveBeenCalledWith(MOCK_PLACE, "de");
+    expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de");
   });
 
   it("handles way/ and relation/ OSM refs", async () => {
     mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, id: "way/67890" });
-    mockEnrichPlace.mockResolvedValue({ externalIds: {} });
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({

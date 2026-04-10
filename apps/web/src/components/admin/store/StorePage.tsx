@@ -82,7 +82,7 @@ const DOMAIN_OPTIONS = [
   { value: "map-overlay", label: "Map Overlay" },
   { value: "poi-search", label: "POI Search" },
   { value: "photos", label: "Photos" },
-  { value: "enrichment", label: "Enrichment" },
+  { value: "knowledge", label: "Knowledge" },
   { value: "data-source", label: "Data Source" },
 ];
 

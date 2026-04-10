@@ -48,7 +48,7 @@ export async function getJourneyOccupancy(
       }
     }
   } catch {
-    // Non-critical: occupancy is best-effort enrichment
+    // Non-critical: occupancy is best-effort supplemental data
   }
 
   return result;

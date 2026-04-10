@@ -27,7 +27,7 @@ export interface DataSourceMeta {
   showResultsList?: boolean;
   /** Human-readable category name for the Place panel (e.g., "Gas Station"). */
   placeCategory: string;
-  /** Raw category string for data source enrichment routing (e.g., "fuel"). */
+  /** Raw category string for data source matching (e.g., "fuel"). */
   placeCategoryRaw: string;
 }
 

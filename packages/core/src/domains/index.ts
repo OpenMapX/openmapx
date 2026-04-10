@@ -6,7 +6,7 @@ export type DomainId =
   | "map-overlay"
   | "poi-search"
   | "photos"
-  | "enrichment"
+  | "knowledge"
   | "street-view"
   | "weather";
 
@@ -68,10 +68,10 @@ export const DOMAIN_DEFINITIONS: Record<DomainId, DomainDefinition> = {
     supportsMultiple: true,
     mergeStrategy: "merge-all",
   },
-  enrichment: {
-    id: "enrichment",
-    description: "Place data enrichment (Wikipedia, Wikidata)",
-    providerInterface: "EnrichmentProvider",
+  knowledge: {
+    id: "knowledge",
+    description: "Place knowledge (Wikipedia, Wikidata)",
+    providerInterface: "KnowledgeProvider",
     supportsMultiple: true,
     mergeStrategy: "merge-all",
   },
@@ -91,8 +91,8 @@ export const DOMAIN_DEFINITIONS: Record<DomainId, DomainDefinition> = {
 };
 
 export type { DataSourceProvider } from "./data-source";
-export type { EnrichmentProvider, EnrichmentResult, EnrichmentSource } from "./enrichment";
 export type { GeocodingProvider } from "./geocoding";
+export type { KnowledgeProvider, KnowledgeResult, KnowledgeSource } from "./knowledge";
 export type {
   GeoJsonFeatureCollection,
   MapOverlayData,

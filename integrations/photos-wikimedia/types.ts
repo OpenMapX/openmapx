@@ -18,4 +18,6 @@ export interface PhotoProvider {
   readonly id: string;
   readonly name: string;
   search(query: PhotoQuery): Promise<PlacePhoto[]>;
+  /** Fast tag-based lookup (e.g. from OSM wikimedia_commons tag). Used for hero photos. */
+  searchByTags?(osmTags: Record<string, string>, limit?: number): Promise<PlacePhoto[]>;
 }

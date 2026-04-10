@@ -45,7 +45,7 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
   const setClickedLngLat = useMapClickStore((s) => s.setClickedLngLat);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
 
-  // Single API call — server handles enrichment + coordinate-based providers + dedup
+  // Single API call — server handles tag-based + coordinate-based providers + dedup
   const { data: allPhotos = [], isLoading } = usePlacePhotos(lat, lng, {
     name: placeName,
     placeId,

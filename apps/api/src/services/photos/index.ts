@@ -1,4 +1,4 @@
-import type { EnrichmentSource, PlacePhoto } from "@openmapx/core";
+import type { PlacePhoto } from "@openmapx/core";
 import { getIntegrationsByDomain } from "../../integration-host.js";
 import type { PhotoProvider, PhotoQuery } from "./types";
 
@@ -16,60 +16,58 @@ function getPhotoProviders(): PhotoProvider[] {
 }
 
 /**
- * Collect enrichment sources from all integrations registered under the "enrichment" domain.
- * These are tag-based enrichers that produce photos from OSM tags (e.g. wikidata=Q...).
- */
-function getTagEnrichers(): EnrichmentSource[] {
-  const enrichers: EnrichmentSource[] = [];
-  for (const integration of getIntegrationsByDomain("enrichment")) {
-    for (const e of (integration.providers.get("enrichment") ?? []) as EnrichmentSource[]) {
-      enrichers.push(e);
-    }
-  }
-  return enrichers;
-}
-
-/**
  * Queries all photo sources and returns a single merged, deduplicated list.
  *
- * When `osmTags` are provided, tag-based enrichers (Wikidata P18, Wikipedia
- * thumbnail, Wikimedia Commons tag) run alongside the coordinate-based providers.
- * Enrichment photos appear first so the hero image is always at index 0.
+ * Photo providers handle both coordinate-based and tag-based lookups internally.
+ * When `osmTags` are provided in the query, providers that support tag-based
+ * lookups will include those results with higher priority.
  *
- * Never throws — individual provider/enricher failures are silently dropped.
+ * Never throws — individual provider failures are silently dropped.
  */
 export async function searchPhotos(query: PhotoQuery): Promise<PlacePhoto[]> {
   const providers = getPhotoProviders();
-  const tagEnrichers = getTagEnrichers();
 
   const totalLimit = query.limit ?? 20;
   const perProvider = Math.max(6, Math.ceil(totalLimit / Math.max(providers.length, 1)));
 
-  // Run coordinate-based providers
-  const providerPromises = providers.map((p) => p.search({ ...query, limit: perProvider }));
+  const results = await Promise.allSettled(
+    providers.map((p) => p.search({ ...query, limit: perProvider })),
+  );
 
-  // Run tag-based enrichers if OSM tags are available
-  const tags = query.osmTags;
-  const enricherPromises = tags
-    ? tagEnrichers.map((e) => e.enrich(tags).then((r) => r?.photos ?? []))
-    : [];
-
-  const [enricherResults, providerResults] = await Promise.all([
-    Promise.allSettled(enricherPromises),
-    Promise.allSettled(providerPromises),
-  ]);
-
-  // OSM image tags first (highest priority), then enrichment, then providers
+  // OSM image tags first (highest priority), then provider results
   const all: PlacePhoto[] = [];
-  if (tags) all.push(...(await extractImageTagPhotos(tags)));
-  for (const result of enricherResults) {
-    if (result.status === "fulfilled") all.push(...result.value);
-  }
-  for (const result of providerResults) {
+  if (query.osmTags) all.push(...(await extractImageTagPhotos(query.osmTags)));
+  for (const result of results) {
     if (result.status === "fulfilled") all.push(...result.value);
   }
 
   return deduplicatePhotos(all, totalLimit);
+}
+
+/**
+ * Fast tag-based photo lookup for hero images on place detail pages.
+ * Only calls providers that support searchByTags — no geo-search, no coordinate queries.
+ * Never throws — individual provider failures are silently dropped.
+ */
+export async function searchHeroPhotos(osmTags: Record<string, string>): Promise<PlacePhoto[]> {
+  const providers = getPhotoProviders();
+
+  // OSM image tags first
+  const imageTagPhotos = await extractImageTagPhotos(osmTags);
+
+  // Tag-based lookups from providers that support it
+  const tagPromises: Promise<PlacePhoto[]>[] = [];
+  for (const p of providers) {
+    if (p.searchByTags) tagPromises.push(p.searchByTags(osmTags));
+  }
+  const results = await Promise.allSettled(tagPromises);
+
+  const all: PlacePhoto[] = [...imageTagPhotos];
+  for (const result of results) {
+    if (result.status === "fulfilled") all.push(...result.value);
+  }
+
+  return deduplicatePhotos(all, 6);
 }
 
 /**
@@ -272,7 +270,7 @@ function extractGoogleUserContentUrls(html: string): string[] {
  * Deduplicate photos by extracting a stable key from each URL.
  * Handles Wikimedia URL variants (Special:FilePath vs upload.wikimedia.org).
  */
-function deduplicatePhotos(photos: PlacePhoto[], limit: number): PlacePhoto[] {
+export function deduplicatePhotos(photos: PlacePhoto[], limit = 20): PlacePhoto[] {
   const seen = new Set<string>();
   const unique: PlacePhoto[] = [];
   for (const p of photos) {

@@ -1,7 +1,7 @@
 import type { DataSourceDetail } from "../types/dataSource";
 import type { Place } from "../types/place";
 import type { ReverseGeocodingResult } from "../types/search";
-import { useDataSourceEnrichment } from "./useDataSourceEnrichment";
+import { useDataSourceMatch } from "./useDataSourceMatch";
 import { usePlaceDetails } from "./usePlaceDetails";
 import { useReverseGeocoding } from "./useReverseGeocoding";
 
@@ -25,13 +25,13 @@ function prettifyCategory(raw: string): string {
  *  3. Reverse geocoding fills address/city only when both Nominatim and
  *     selectedPlace have nothing.
  *  4. dataSourceDetail: from selectedPlace if present, otherwise from
- *     useDataSourceEnrichment.
+ *     useDataSourceMatch.
  */
 function mergePlaceFields(
   selected: Place,
   nominatim: Place | null | undefined,
   reverseGeo: ReverseGeocodingResult | null | undefined,
-  enrichedDetail: DataSourceDetail | null,
+  matchedDetail: DataSourceDetail | null,
 ): Place {
   const nom = nominatim ?? null;
 
@@ -82,18 +82,18 @@ function mergePlaceFields(
     base.city = reverseGeo.city.split(",")[0].trim();
   }
 
-  // Data source detail: from the selection if present, otherwise from enrichment
+  // Data source detail: from the selection if present, otherwise from matching
   if (selected.dataSourceDetail) {
     base.dataSourceDetail = selected.dataSourceDetail;
     // Data source openingHours (e.g. Tankerkoenig) wins over Nominatim if present
     if (selected.openingHours) {
       base.openingHours = selected.openingHours;
     }
-  } else if (enrichedDetail) {
-    base.dataSourceDetail = enrichedDetail;
+  } else if (matchedDetail) {
+    base.dataSourceDetail = matchedDetail;
     // Data source hours (e.g. Tankerkoenig) are more authoritative than Nominatim OSM tags
-    if (enrichedDetail.openingHours) {
-      base.openingHours = enrichedDetail.openingHours;
+    if (matchedDetail.openingHours) {
+      base.openingHours = matchedDetail.openingHours;
     }
   }
 
@@ -101,7 +101,7 @@ function mergePlaceFields(
 }
 
 /**
- * Unified hook that enriches a selected Place from all available sources
+ * Unified hook that resolves a selected Place from all available sources
  * (Nominatim, reverse geocoding, data source APIs) and merges them with
  * deterministic priority.
  *
@@ -132,7 +132,7 @@ export function useMergedPlace(selectedPlace: Place | null): {
     ? selectedPlace?.address || selectedPlace?.name
     : selectedPlace?.name;
 
-  // 1. Nominatim enrichment (address, phone, website, openingHours, osmTags, etc.)
+  // 1. Nominatim lookup (address, phone, website, openingHours, osmTags, etc.)
   const { data: nominatimDetails, isLoading: nominatimLoading } = usePlaceDetails(
     placeDetailsId,
     selectedPlace?.coordinates,
@@ -146,11 +146,11 @@ export function useMergedPlace(selectedPlace: Place | null): {
     needsReverseGeo ? (selectedPlace?.coordinates ?? null) : null,
   );
 
-  // 3. Data source enrichment (EV charging, fuel — only when not already present).
+  // 3. Data source matching (EV charging, fuel — only when not already present).
   // Build an intermediate place that includes Nominatim-resolved osmTags/category
-  // so the enrichment hook can resolve the data source even when the original
+  // so the matching hook can resolve the data source even when the original
   // selectedPlace has no category info (e.g. from a share link).
-  const placeForEnrichment = (() => {
+  const placeForMatch = (() => {
     if (!selectedPlace || selectedPlace.dataSourceDetail) return null;
     if (nominatimDetails?.osmTags || nominatimDetails?.rawCategory) {
       return {
@@ -162,13 +162,13 @@ export function useMergedPlace(selectedPlace: Place | null): {
     }
     return selectedPlace;
   })();
-  const enrichedDetail = useDataSourceEnrichment(placeForEnrichment);
+  const matchedDetail = useDataSourceMatch(placeForMatch);
 
   if (!selectedPlace) {
     return { place: null, isLoading: false };
   }
 
-  const place = mergePlaceFields(selectedPlace, nominatimDetails, reverseGeo, enrichedDetail);
+  const place = mergePlaceFields(selectedPlace, nominatimDetails, reverseGeo, matchedDetail);
 
   return { place, isLoading: nominatimLoading && !nominatimDetails };
 }

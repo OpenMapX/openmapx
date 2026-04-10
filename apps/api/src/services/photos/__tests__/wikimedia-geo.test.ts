@@ -64,7 +64,7 @@ async function loadModule() {
   return import("@integrations/photos-wikimedia/provider.js");
 }
 
-describe("wikimediaGeoProvider", () => {
+describe("wikimediaProvider", () => {
   describe("rejected extensions", () => {
     const rejectedExts = [
       ".svg",
@@ -82,12 +82,12 @@ describe("wikimediaGeoProvider", () => {
 
     for (const ext of rejectedExts) {
       it(`filters out ${ext} files`, async () => {
-        const { wikimediaGeoProvider } = await loadModule();
+        const { wikimediaProvider } = await loadModule();
         const filename = `TestFile${ext}`;
         mockFetch.mockResolvedValue(mockOk(makeApiResponse({ "1": makePage(filename) })));
         vi.mocked(parseCommonsPage).mockReturnValue(mockPhoto("test"));
 
-        const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+        const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
         expect(results).toEqual([]);
         expect(parseCommonsPage).not.toHaveBeenCalled();
@@ -95,33 +95,33 @@ describe("wikimediaGeoProvider", () => {
     }
 
     it("filters case-insensitively (e.g., .SVG)", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       mockFetch.mockResolvedValue(mockOk(makeApiResponse({ "1": makePage("Diagram.SVG") })));
       vi.mocked(parseCommonsPage).mockReturnValue(mockPhoto("test"));
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([]);
     });
 
     it("allows valid photo extensions like .jpg", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       const photo = mockPhoto("good");
       mockFetch.mockResolvedValue(mockOk(makeApiResponse({ "1": makePage("Photo.jpg") })));
       vi.mocked(parseCommonsPage).mockReturnValue(photo);
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([photo]);
     });
 
     it("allows .png files", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       const photo = mockPhoto("good");
       mockFetch.mockResolvedValue(mockOk(makeApiResponse({ "1": makePage("Image.png") })));
       vi.mocked(parseCommonsPage).mockReturnValue(photo);
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([photo]);
     });
@@ -129,7 +129,7 @@ describe("wikimediaGeoProvider", () => {
 
   describe("file size filter", () => {
     it("filters out files larger than 50MB", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       const largeSize = 50 * 1024 * 1024 + 1;
       mockFetch.mockResolvedValue(
         mockOk(
@@ -142,14 +142,14 @@ describe("wikimediaGeoProvider", () => {
       );
       vi.mocked(parseCommonsPage).mockReturnValue(mockPhoto("test"));
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([]);
       expect(parseCommonsPage).not.toHaveBeenCalled();
     });
 
     it("allows files exactly at 50MB", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       const exactSize = 50 * 1024 * 1024;
       const photo = mockPhoto("exact");
       mockFetch.mockResolvedValue(
@@ -163,7 +163,7 @@ describe("wikimediaGeoProvider", () => {
       );
       vi.mocked(parseCommonsPage).mockReturnValue(photo);
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([photo]);
     });
@@ -171,7 +171,7 @@ describe("wikimediaGeoProvider", () => {
 
   describe("dimension filter", () => {
     it("filters out images with width > 8000px", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       mockFetch.mockResolvedValue(
         mockOk(
           makeApiResponse({
@@ -181,13 +181,13 @@ describe("wikimediaGeoProvider", () => {
       );
       vi.mocked(parseCommonsPage).mockReturnValue(mockPhoto("test"));
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([]);
     });
 
     it("filters out images with height > 8000px", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       mockFetch.mockResolvedValue(
         mockOk(
           makeApiResponse({
@@ -197,13 +197,13 @@ describe("wikimediaGeoProvider", () => {
       );
       vi.mocked(parseCommonsPage).mockReturnValue(mockPhoto("test"));
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([]);
     });
 
     it("allows images exactly at 8000px width", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       const photo = mockPhoto("exact-dim");
       mockFetch.mockResolvedValue(
         mockOk(
@@ -214,14 +214,14 @@ describe("wikimediaGeoProvider", () => {
       );
       vi.mocked(parseCommonsPage).mockReturnValue(photo);
 
-      const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       expect(results).toEqual([photo]);
     });
   });
 
   it("passes valid files through parseCommonsPage", async () => {
-    const { wikimediaGeoProvider } = await loadModule();
+    const { wikimediaProvider } = await loadModule();
     const photo1 = mockPhoto("photo1");
     const photo2 = mockPhoto("photo2");
     const page1 = makePage("Photo1.jpg");
@@ -229,14 +229,14 @@ describe("wikimediaGeoProvider", () => {
     mockFetch.mockResolvedValue(mockOk(makeApiResponse({ "1": page1, "2": page2 })));
     vi.mocked(parseCommonsPage).mockReturnValueOnce(photo1).mockReturnValueOnce(photo2);
 
-    const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+    const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
     expect(parseCommonsPage).toHaveBeenCalledTimes(2);
     expect(results).toHaveLength(2);
   });
 
   it("skips pages where parseCommonsPage returns undefined", async () => {
-    const { wikimediaGeoProvider } = await loadModule();
+    const { wikimediaProvider } = await loadModule();
     const photo = mockPhoto("good");
     mockFetch.mockResolvedValue(
       mockOk(
@@ -248,37 +248,37 @@ describe("wikimediaGeoProvider", () => {
     );
     vi.mocked(parseCommonsPage).mockReturnValueOnce(photo).mockReturnValueOnce(undefined);
 
-    const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+    const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
     expect(results).toEqual([photo]);
   });
 
   describe("API request parameters", () => {
     it("sets ggsradius=500 in the request", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       mockFetch.mockResolvedValue(mockOk({ query: { pages: {} } }));
 
-      await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       const fetchUrl = new URL(mockFetch.mock.calls[0][0] as string);
       expect(fetchUrl.searchParams.get("ggsradius")).toBe("500");
     });
 
     it("sets ggsnamespace=6 in the request", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       mockFetch.mockResolvedValue(mockOk({ query: { pages: {} } }));
 
-      await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+      await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
       const fetchUrl = new URL(mockFetch.mock.calls[0][0] as string);
       expect(fetchUrl.searchParams.get("ggsnamespace")).toBe("6");
     });
 
     it("sets ggscoord with lat|lng", async () => {
-      const { wikimediaGeoProvider } = await loadModule();
+      const { wikimediaProvider } = await loadModule();
       mockFetch.mockResolvedValue(mockOk({ query: { pages: {} } }));
 
-      await wikimediaGeoProvider.search({ lat: 52.52, lng: 13.405 });
+      await wikimediaProvider.search({ lat: 52.52, lng: 13.405 });
 
       const fetchUrl = new URL(mockFetch.mock.calls[0][0] as string);
       expect(fetchUrl.searchParams.get("ggscoord")).toBe("52.52|13.405");
@@ -286,43 +286,43 @@ describe("wikimediaGeoProvider", () => {
   });
 
   it("returns [] on HTTP error", async () => {
-    const { wikimediaGeoProvider } = await loadModule();
+    const { wikimediaProvider } = await loadModule();
     mockFetch.mockResolvedValue(mockNotOk(500));
 
-    const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+    const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
     expect(results).toEqual([]);
   });
 
   it("returns [] on network error (fetch throws)", async () => {
-    const { wikimediaGeoProvider } = await loadModule();
+    const { wikimediaProvider } = await loadModule();
     mockFetch.mockRejectedValue(new Error("Network error"));
 
-    const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+    const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
     expect(results).toEqual([]);
   });
 
   it("returns [] when pages is undefined (empty response)", async () => {
-    const { wikimediaGeoProvider } = await loadModule();
+    const { wikimediaProvider } = await loadModule();
     mockFetch.mockResolvedValue(mockOk({}));
 
-    const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+    const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
     expect(results).toEqual([]);
   });
 
   it("returns [] when pages is empty object", async () => {
-    const { wikimediaGeoProvider } = await loadModule();
+    const { wikimediaProvider } = await loadModule();
     mockFetch.mockResolvedValue(mockOk({ query: { pages: {} } }));
 
-    const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+    const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
     expect(results).toEqual([]);
   });
 
   it("skips pages with no imageinfo", async () => {
-    const { wikimediaGeoProvider } = await loadModule();
+    const { wikimediaProvider } = await loadModule();
     mockFetch.mockResolvedValue(
       mockOk(
         makeApiResponse({
@@ -331,7 +331,7 @@ describe("wikimediaGeoProvider", () => {
       ),
     );
 
-    const results = await wikimediaGeoProvider.search({ lat: 48.85, lng: 2.35 });
+    const results = await wikimediaProvider.search({ lat: 48.85, lng: 2.35 });
 
     expect(results).toEqual([]);
     expect(parseCommonsPage).not.toHaveBeenCalled();

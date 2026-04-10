@@ -22,8 +22,8 @@ interface TagGroup {
   keys: readonly string[];
 }
 
-// Keys consumed by enrichment — shown elsewhere, not as raw OSM strings
-const ENRICHMENT_KEYS = new Set(["wikidata", "wikipedia", "wikimedia_commons"]);
+// Keys consumed by knowledge providers — shown elsewhere, not as raw OSM strings
+const KNOWLEDGE_KEYS = new Set(["wikidata", "wikipedia", "wikimedia_commons"]);
 
 const TAG_GROUPS: TagGroup[] = [
   {
@@ -143,10 +143,10 @@ function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
     }
   }
 
-  // Catch-all for unassigned tags (excluding enrichment meta-keys and overview-consumed keys)
+  // Catch-all for unassigned tags (excluding knowledge meta-keys and overview-consumed keys)
   const other: Array<{ key: string; value: string }> = [];
   for (const [key, value] of Object.entries(osmTags)) {
-    if (!assigned.has(key) && !ENRICHMENT_KEYS.has(key) && !overviewKeys.has(key)) {
+    if (!assigned.has(key) && !KNOWLEDGE_KEYS.has(key) && !overviewKeys.has(key)) {
       other.push({ key, value });
     }
   }
@@ -219,7 +219,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
           {(() => {
             const sources =
               place.wikipediaExtractSource ??
-              (place.wikipediaExtract ? "enrichment-wikipedia" : "enrichment-wikidata");
+              (place.wikipediaExtract ? "knowledge-wikipedia" : "knowledge-wikidata");
             const ids = Array.isArray(sources) ? sources : [sources];
             const parts = ids
               .map((id) => {
@@ -270,7 +270,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
             </Box>
             {place.osmTags?.wikidata &&
               (() => {
-                const meta = registry.get("enrichment-wikidata");
+                const meta = registry.get("knowledge-wikidata");
                 const ds = meta?.dataSources?.[0];
                 const html = ds ? buildAttributionHtml(ds) : "";
                 if (!html) return null;

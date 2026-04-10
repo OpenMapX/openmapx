@@ -3,8 +3,8 @@
   "description": "German railway station geocoding",
   "dataSources": [
     {
-      "purpose": "Forward/reverse geocoding of German railway stations, plus station detail enrichment",
-      "dataSent": "Search query or coordinates (latitude, longitude, radius) for geocoding; EVA station number for detail enrichment",
+      "purpose": "Forward/reverse geocoding of German railway stations, plus station detail lookup",
+      "dataSent": "Search query or coordinates (latitude, longitude, radius) for geocoding; EVA station number for detail lookup",
       "dataReceived": "Stop places with EVA number, multilingual names, coordinates, transport modes; platforms, transfer times, local services"
     }
   ]

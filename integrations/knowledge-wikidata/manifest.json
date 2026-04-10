@@ -1,0 +1,54 @@
+{
+  "id": "knowledge-wikidata",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["knowledge"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&format=json&props=labels&languages=en"
+  },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "name": "Wikidata",
+      "url": "https://www.wikidata.org/",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "name": "Wikimedia Commons",
+      "url": "https://commons.wikimedia.org/",
+      "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Commons:Licensing",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

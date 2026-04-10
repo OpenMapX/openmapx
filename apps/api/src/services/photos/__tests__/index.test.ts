@@ -1,4 +1,4 @@
-import type { EnrichmentSource, PlacePhoto } from "@openmapx/core";
+import type { PlacePhoto } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PhotoProvider } from "../types";
 
@@ -18,49 +18,32 @@ const mockPanoramax: PhotoProvider = {
   name: "Panoramax",
   search: vi.fn().mockResolvedValue([]),
 };
-const mockWikimediaGeo: PhotoProvider = {
-  id: "wikimedia-geo",
+const mockWikimedia: PhotoProvider = {
+  id: "wikimedia",
   name: "Wikimedia Commons",
   search: vi.fn().mockResolvedValue([]),
+  searchByTags: vi.fn().mockResolvedValue([]),
 };
 
-// Mock enrichers
-const mockWikidataEnricher: EnrichmentSource = {
-  name: "wikidata",
-  enrich: vi.fn().mockResolvedValue(null),
-};
-const mockWikipediaEnricher: EnrichmentSource = {
-  name: "wikipedia",
-  enrich: vi.fn().mockResolvedValue(null),
-};
-const mockWikimediaCommonsEnricher: EnrichmentSource = {
-  name: "wikimedia-commons",
-  enrich: vi.fn().mockResolvedValue(null),
-};
+// Safe reference — searchByTags is always defined on the mock above
+const mockSearchByTags = vi.mocked(mockWikimedia.searchByTags as typeof mockWikimedia.search);
 
 // Mock integration-host to return our fake integrations
 vi.mock("../../../integration-host.js", () => ({
   getIntegrationsByDomain: vi.fn((domain: string) => {
     if (domain === "photos") {
       return [
-        { providers: new Map([["photos", [mockWikimediaGeo]]]) },
+        { providers: new Map([["photos", [mockWikimedia]]]) },
         { providers: new Map([["photos", [mockMapillary]]]) },
         { providers: new Map([["photos", [mockFlickr]]]) },
         { providers: new Map([["photos", [mockPanoramax]]]) },
-      ];
-    }
-    if (domain === "enrichment") {
-      return [
-        { providers: new Map([["enrichment", [mockWikidataEnricher]]]) },
-        { providers: new Map([["enrichment", [mockWikipediaEnricher]]]) },
-        { providers: new Map([["enrichment", [mockWikimediaCommonsEnricher]]]) },
       ];
     }
     return [];
   }),
 }));
 
-import { searchPhotos } from "../index.js";
+import { searchHeroPhotos, searchPhotos } from "../index.js";
 
 function makePhoto(id: string, source: string, url?: string): PlacePhoto {
   return {
@@ -74,10 +57,8 @@ beforeEach(() => {
   vi.mocked(mockMapillary.search).mockReset().mockResolvedValue([]);
   vi.mocked(mockFlickr.search).mockReset().mockResolvedValue([]);
   vi.mocked(mockPanoramax.search).mockReset().mockResolvedValue([]);
-  vi.mocked(mockWikimediaGeo.search).mockReset().mockResolvedValue([]);
-  vi.mocked(mockWikidataEnricher.enrich).mockReset().mockResolvedValue(null);
-  vi.mocked(mockWikipediaEnricher.enrich).mockReset().mockResolvedValue(null);
-  vi.mocked(mockWikimediaCommonsEnricher.enrich).mockReset().mockResolvedValue(null);
+  vi.mocked(mockWikimedia.search).mockReset().mockResolvedValue([]);
+  mockSearchByTags.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -91,7 +72,7 @@ describe("searchPhotos", () => {
   it("queries all 4 providers in parallel", async () => {
     await searchPhotos(baseQuery);
 
-    expect(mockWikimediaGeo.search).toHaveBeenCalledTimes(1);
+    expect(mockWikimedia.search).toHaveBeenCalledTimes(1);
     expect(mockMapillary.search).toHaveBeenCalledTimes(1);
     expect(mockFlickr.search).toHaveBeenCalledTimes(1);
     expect(mockPanoramax.search).toHaveBeenCalledTimes(1);
@@ -110,7 +91,7 @@ describe("searchPhotos", () => {
     await searchPhotos({ ...baseQuery, limit: 20 });
 
     // ceil(20/4) = 5, max(6, 5) = 6
-    for (const provider of [mockMapillary, mockFlickr, mockPanoramax, mockWikimediaGeo]) {
+    for (const provider of [mockMapillary, mockFlickr, mockPanoramax, mockWikimedia]) {
       expect(vi.mocked(provider.search)).toHaveBeenCalledWith(
         expect.objectContaining({ limit: 6 }),
       );
@@ -121,52 +102,27 @@ describe("searchPhotos", () => {
     await searchPhotos({ ...baseQuery, limit: 40 });
 
     // ceil(40/4) = 10, max(6, 10) = 10
-    for (const provider of [mockMapillary, mockFlickr, mockPanoramax, mockWikimediaGeo]) {
+    for (const provider of [mockMapillary, mockFlickr, mockPanoramax, mockWikimedia]) {
       expect(vi.mocked(provider.search)).toHaveBeenCalledWith(
         expect.objectContaining({ limit: 10 }),
       );
     }
   });
 
-  it("places enricher photos FIRST (hero image at index 0)", async () => {
-    const enricherPhoto = makePhoto("enricher-hero", "wikidata");
-    const providerPhoto = makePhoto("provider-1", "mapillary");
+  it("passes osmTags to providers in the query", async () => {
+    const osmTags = { wikidata: "Q90", wikimedia_commons: "Category:Paris" };
+    await searchPhotos({ ...baseQuery, osmTags });
 
-    vi.mocked(mockWikidataEnricher.enrich).mockResolvedValue({
-      photos: [enricherPhoto],
-    });
-    vi.mocked(mockMapillary.search).mockResolvedValue([providerPhoto]);
-
-    const results = await searchPhotos({
-      ...baseQuery,
-      osmTags: { wikidata: "Q90" },
-    });
-
-    expect(results[0]).toEqual(enricherPhoto);
-    expect(results[1]).toEqual(providerPhoto);
-  });
-
-  it("runs tag enrichers only when osmTags provided", async () => {
-    await searchPhotos({ ...baseQuery, osmTags: { wikidata: "Q90" } });
-
-    expect(mockWikidataEnricher.enrich).toHaveBeenCalledTimes(1);
-    expect(mockWikipediaEnricher.enrich).toHaveBeenCalledTimes(1);
-    expect(mockWikimediaCommonsEnricher.enrich).toHaveBeenCalledTimes(1);
-  });
-
-  it("does NOT run enrichers when osmTags not provided", async () => {
-    await searchPhotos(baseQuery);
-
-    expect(mockWikidataEnricher.enrich).not.toHaveBeenCalled();
-    expect(mockWikipediaEnricher.enrich).not.toHaveBeenCalled();
-    expect(mockWikimediaCommonsEnricher.enrich).not.toHaveBeenCalled();
+    expect(vi.mocked(mockWikimedia.search)).toHaveBeenCalledWith(
+      expect.objectContaining({ osmTags }),
+    );
   });
 
   it("returns results from other providers when one fails", async () => {
     vi.mocked(mockMapillary.search).mockRejectedValue(new Error("timeout"));
     vi.mocked(mockFlickr.search).mockResolvedValue([makePhoto("f1", "flickr")]);
     vi.mocked(mockPanoramax.search).mockResolvedValue([makePhoto("p1", "panoramax")]);
-    vi.mocked(mockWikimediaGeo.search).mockResolvedValue([makePhoto("w1", "wikimedia")]);
+    vi.mocked(mockWikimedia.search).mockResolvedValue([makePhoto("w1", "wikimedia")]);
 
     const results = await searchPhotos(baseQuery);
 
@@ -178,7 +134,7 @@ describe("searchPhotos", () => {
     vi.mocked(mockMapillary.search).mockRejectedValue(new Error("fail"));
     vi.mocked(mockFlickr.search).mockRejectedValue(new Error("fail"));
     vi.mocked(mockPanoramax.search).mockRejectedValue(new Error("fail"));
-    vi.mocked(mockWikimediaGeo.search).mockRejectedValue(new Error("fail"));
+    vi.mocked(mockWikimedia.search).mockRejectedValue(new Error("fail"));
 
     const results = await searchPhotos(baseQuery);
 
@@ -198,7 +154,7 @@ describe("searchPhotos", () => {
         "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Eiffel_Tower.jpg/800px-Eiffel_Tower.jpg",
       );
 
-      vi.mocked(mockWikimediaGeo.search).mockResolvedValue([photo1]);
+      vi.mocked(mockWikimedia.search).mockResolvedValue([photo1]);
       vi.mocked(mockFlickr.search).mockResolvedValue([photo2]);
 
       const results = await searchPhotos(baseQuery);
@@ -219,7 +175,7 @@ describe("searchPhotos", () => {
         "https://upload.wikimedia.org/wikipedia/commons/a/ab/tower.jpg",
       );
 
-      vi.mocked(mockWikimediaGeo.search).mockResolvedValue([photo1]);
+      vi.mocked(mockWikimedia.search).mockResolvedValue([photo1]);
       vi.mocked(mockMapillary.search).mockResolvedValue([photo2]);
 
       const results = await searchPhotos(baseQuery);
@@ -239,7 +195,7 @@ describe("searchPhotos", () => {
         "https://upload.wikimedia.org/wikipedia/commons/a/ab/Caf%C3%A9_Central.jpg",
       );
 
-      vi.mocked(mockWikimediaGeo.search).mockResolvedValue([photo1]);
+      vi.mocked(mockWikimedia.search).mockResolvedValue([photo1]);
       vi.mocked(mockFlickr.search).mockResolvedValue([photo2]);
 
       const results = await searchPhotos(baseQuery);
@@ -255,5 +211,35 @@ describe("searchPhotos", () => {
 
       expect(results).toHaveLength(5);
     });
+  });
+});
+
+describe("searchHeroPhotos", () => {
+  it("calls searchByTags on providers that support it", async () => {
+    const photo = makePhoto("hero", "wikimedia");
+    mockSearchByTags.mockResolvedValue([photo]);
+
+    const results = await searchHeroPhotos({ wikimedia_commons: "Category:Paris" });
+
+    expect(mockSearchByTags).toHaveBeenCalledWith({
+      wikimedia_commons: "Category:Paris",
+    });
+    expect(results[0]).toEqual(photo);
+  });
+
+  it("does not call search() on providers, only searchByTags", async () => {
+    await searchHeroPhotos({ wikimedia_commons: "Category:Paris" });
+
+    expect(mockWikimedia.search).not.toHaveBeenCalled();
+    expect(mockMapillary.search).not.toHaveBeenCalled();
+  });
+
+  it("limits results to 6", async () => {
+    const photos = Array.from({ length: 10 }, (_, i) => makePhoto(`h${i}`, "wikimedia"));
+    mockSearchByTags.mockResolvedValue(photos);
+
+    const results = await searchHeroPhotos({ wikimedia_commons: "Category:Big" });
+
+    expect(results).toHaveLength(6);
   });
 });

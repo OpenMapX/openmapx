@@ -1,7 +1,7 @@
 /**
  * Builds external review links for a place using three tiers:
  *   1. OSM extratags  — direct link when a platform ID is stored in OSM (e.g. ref:yelp)
- *   2. Wikidata IDs   — direct link from enriched external IDs (P3108 = Yelp, P3134 = TripAdvisor, etc.)
+ *   2. Wikidata IDs   — direct link from knowledge-sourced external IDs (P3108 = Yelp, P3134 = TripAdvisor, etc.)
  *   3. Search URL     — fallback using place name + coordinates (always available)
  */
 
@@ -11,7 +11,7 @@ interface PlatformDef {
   name: string;
   /** Keys in Place.osmTags to check (in priority order), e.g. ["ref:yelp", "contact:yelp"]. */
   osmTagKeys?: string[];
-  /** Key in enriched externalIds map, e.g. "yelp" */
+  /** Key in externalIds map, e.g. "yelp" */
   wikidataKey?: string;
   /** Constructs a direct link from a known platform ID or URL. */
   directUrl?: (id: string) => string;

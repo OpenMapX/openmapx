@@ -55,7 +55,7 @@ export default function TermsContent({
         <Typography>
           OpenMapX is a free, open-data mapping service that provides map viewing, address search,
           route planning (including isochrones and elevation profiles), public transit information,
-          street-level imagery, place photos and enrichment data, live traffic overlays, air quality
+          street-level imagery, place photos and knowledge data, live traffic overlays, air quality
           data, weather alerts, wildfire and earthquake monitoring, natural event tracking,
           satellite imagery, hiking and outdoor trail information, parking availability, EV charging
           station locations, fuel prices, shared mobility data (bike-sharing, e-scooters,

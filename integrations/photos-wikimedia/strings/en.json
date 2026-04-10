@@ -1,11 +1,11 @@
 {
   "name": "Wikimedia Photos",
-  "description": "Geotagged place photos",
+  "description": "Place photos from Wikimedia Commons (geo-search and tag-based lookup)",
   "dataSources": [
     {
-      "purpose": "Openly-licensed photographs geotagged near a place",
-      "dataSent": "Coordinates (latitude, longitude), search radius (500 m), result limit",
-      "dataReceived": "File pages with thumbnail URL (800px), artist, license, capture date, coordinates. Filtered: no SVG/PDF/TIFF, max 50MB."
+      "purpose": "Openly-licensed photographs near a place or from its Wikimedia Commons category",
+      "dataSent": "Coordinates (latitude, longitude) with 500 m radius for geo-search; Wikimedia Commons filename or category name (from OSM wikimedia_commons tag) for tag-based lookup",
+      "dataReceived": "File pages with thumbnail URL (800px), artist, license, capture date, coordinates. Geo-search filtered: no SVG/PDF/TIFF, max 50 MB. Tag-based: up to 6 files per category."
     }
   ]
 }

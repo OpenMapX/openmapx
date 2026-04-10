@@ -36,7 +36,8 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "capabilities": ["geo-search", "tag-lookup"]
     }
   ]
 }

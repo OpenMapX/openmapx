@@ -1,8 +1,8 @@
 /**
- * RIS::Stations geocoding provider and station enrichment service.
+ * RIS::Stations geocoding provider and station detail service.
  *
  * Geocoding: fuzzy station name search via /stop-places/by-name
- * Enrichment: full station data (platforms, transfer times, services) via multiple endpoints
+ * Detail: full station data (platforms, transfer times, services) via multiple endpoints
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
@@ -108,7 +108,7 @@ export const dbRisGeocodingService: GeocodingProvider = {
   },
 };
 
-// Station enrichment (used by places route for db-<evaNumber> IDs)
+// Station detail lookup (used by places route for db-<evaNumber> IDs)
 
 export async function lookupDbStation(
   evaNumber: string,

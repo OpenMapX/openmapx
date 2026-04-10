@@ -1,11 +1,11 @@
 {
   "name": "Wikimedia-Fotos",
-  "description": "Ortsfotos von Wikimedia Commons",
+  "description": "Ortsfotos von Wikimedia Commons (Geo-Suche und Tag-basierte Abfrage)",
   "dataSources": [
     {
-      "purpose": "Offen lizenzierte, georeferenzierte Fotografien in der Nähe eines Ortes",
-      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius (500 m), Ergebnislimit",
-      "dataReceived": "Dateiseiten mit Vorschaubild-URL (800px), Künstler, Lizenz, Aufnahmedatum, Koordinaten. Gefiltert: kein SVG/PDF/TIFF, max 50 MB."
+      "purpose": "Offen lizenzierte Fotografien in der Nähe eines Ortes oder aus dessen Wikimedia-Commons-Kategorie",
+      "dataSent": "Koordinaten (Breitengrad, Längengrad) mit 500 m Radius für Geo-Suche; Wikimedia-Commons-Dateiname oder Kategoriename (aus OSM-Tag wikimedia_commons) für Tag-basierte Abfrage",
+      "dataReceived": "Dateiseiten mit Vorschaubild-URL (800px), Künstler, Lizenz, Aufnahmedatum, Koordinaten. Geo-Suche gefiltert: kein SVG/PDF/TIFF, max 50 MB. Tag-basiert: bis zu 6 Dateien pro Kategorie."
     }
   ]
 }

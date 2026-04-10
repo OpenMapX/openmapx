@@ -20,7 +20,7 @@ export function useSunTimes(lat: number | null, lng: number | null, enabled = tr
   return useQuery({
     queryKey: ["sun-times", lat, lng],
     queryFn: () =>
-      apiClient.get<SunTimesResponse>("/api/integrations/enrichment-sunrise-sunset/times", {
+      apiClient.get<SunTimesResponse>("/api/integrations/knowledge-sunrise-sunset/times", {
         lat: String(lat),
         lng: String(lng),
       }),

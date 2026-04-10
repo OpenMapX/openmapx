@@ -37,7 +37,7 @@ function getPoiLayerIds(map: import("maplibre-gl").Map): string[] {
  * Makes the map style's built-in POI symbols (restaurants, hotels, hospitals,
  * parks, etc.) clickable. Clicking a named POI opens the place details panel
  * via the same flow as search results — name + coordinate lookup against
- * Nominatim, followed by enrichment.
+ * Nominatim, followed by knowledge lookup.
  */
 export function MapStylePoiClickHandler() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -104,7 +104,7 @@ export function MapStylePoiClickHandler() {
       const coords = feature.geometry.coordinates as [number, number];
 
       // Build a deterministic, non-OSM ID so the API uses name + coordinate
-      // lookup (which finds the correct OSM element for enrichment).
+      // lookup (which finds the correct OSM element for knowledge data).
       const featureId = feature.id ?? `${coords[0].toFixed(5)}-${coords[1].toFixed(5)}`;
       const id = `style-poi-${featureId}`;
 

@@ -9,7 +9,7 @@ export interface PhotoQuery {
   wikidataId?: string;
   /** Maximum number of photos to return from this provider. */
   limit?: number;
-  /** OSM tags — when provided, tag-based enrichers run and their results are merged. */
+  /** OSM tags — when provided, tag-based lookups (e.g. wikimedia_commons) are included. */
   osmTags?: Record<string, string>;
 }
 
@@ -18,4 +18,6 @@ export interface PhotoProvider {
   readonly id: string;
   readonly name: string;
   search(query: PhotoQuery): Promise<PlacePhoto[]>;
+  /** Fast tag-based lookup (e.g. from OSM wikimedia_commons tag). Used for hero photos. */
+  searchByTags?(osmTags: Record<string, string>, limit?: number): Promise<PlacePhoto[]>;
 }

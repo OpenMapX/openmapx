@@ -49,7 +49,7 @@ export const photosRoute: FastifyPluginAsync = async (fastify) => {
 
       try {
         const photos = await withCache(cacheKey, TTL.photos, async () => {
-          // If placeId is provided, resolve OSM tags for tag-based enrichment
+          // If placeId is provided, resolve OSM tags for tag-based photo lookups
           let osmTags: Record<string, string> | undefined;
           if (placeId) {
             osmTags = await resolveOsmTags(placeId, name, lat, lng);

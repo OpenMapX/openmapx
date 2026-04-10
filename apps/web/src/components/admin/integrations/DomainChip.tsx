@@ -13,7 +13,7 @@ const DOMAIN_COLOR: Record<string, ChipColor> = {
   "map-overlay": "warning",
   "poi-search": "error",
   photos: "primary",
-  enrichment: "secondary",
+  knowledge: "secondary",
   "data-source": "info",
 };
 
@@ -25,7 +25,7 @@ const DOMAIN_LABEL: Record<string, string> = {
   "map-overlay": "Map Overlay",
   "poi-search": "POI Search",
   photos: "Photos",
-  enrichment: "Enrichment",
+  knowledge: "Knowledge",
   "data-source": "Data Source",
 };
 

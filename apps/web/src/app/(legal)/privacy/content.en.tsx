@@ -363,7 +363,7 @@ export default function PrivacyContent({
         </Typography>
         <Typography sx={{ mt: 1 }}>
           We also operate a PostgreSQL database for user accounts, saved places, and cached place
-          enrichment data (e.g., Wikidata facts, Wikipedia summaries). If GTFS transit feeds are
+          knowledge data (e.g., Wikidata facts, Wikipedia summaries). If GTFS transit feeds are
           imported, schedule data (stop names, routes, departure times) is stored in separate
           database schemas. None of this data constitutes personal data of end users.
         </Typography>

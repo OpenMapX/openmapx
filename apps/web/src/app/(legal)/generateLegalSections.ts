@@ -40,10 +40,10 @@ const DOMAIN_TO_PRIVACY_SECTION: Record<string, { key: string; labelEn: string; 
       labelDe: "Straßenansicht",
     },
     photos: { key: "photos", labelEn: "Place Photos", labelDe: "Ortsfotos" },
-    enrichment: {
-      key: "enrichment",
-      labelEn: "Place Enrichment",
-      labelDe: "Ortsinformationen",
+    knowledge: {
+      key: "knowledge",
+      labelEn: "Place Knowledge",
+      labelDe: "Ortswissen",
     },
     "poi-search": {
       key: "poiSearch",
@@ -80,9 +80,9 @@ const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe
     headingDe: "Straßenansicht",
   },
   photos: { heading: "Place Photos", headingDe: "Ortsfotos" },
-  enrichment: {
-    heading: "Place Enrichment",
-    headingDe: "Ortsinformationen",
+  knowledge: {
+    heading: "Place Knowledge",
+    headingDe: "Ortswissen",
   },
   "poi-search": {
     heading: "Point of Interest Search",

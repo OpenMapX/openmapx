@@ -145,18 +145,17 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     );
   }
 
-  const enrichmentPhotos = place.photos ?? [];
+  const placePhotos = place.photos ?? [];
   const hasPhoto =
-    enrichmentPhotos.length > 0 &&
-    (enrichmentPhotos[0].url.startsWith("https://") ||
-      enrichmentPhotos[0].url.startsWith("http://"));
+    placePhotos.length > 0 &&
+    (placePhotos[0].url.startsWith("https://") || placePhotos[0].url.startsWith("http://"));
 
   return (
     <>
       {/* Header photo with "View photos" */}
       {hasPhoto ? (
         <PlacePhotoHero
-          photos={enrichmentPhotos}
+          photos={placePhotos}
           placeName={place.name}
           onClose={onClose}
           onViewPhotos={() => setGalleryOpen(true)}

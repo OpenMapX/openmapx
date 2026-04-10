@@ -1,0 +1,10 @@
+{
+  "name": "@openmapx/integration-knowledge-sunrise-sunset",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "geo-tz": "^8.1.6"
+  }
+}

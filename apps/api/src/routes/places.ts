@@ -1,11 +1,12 @@
 import { lookupDbStation } from "@integrations/geocoding-db-ris/provider.js";
 import type { FastifyPluginAsync } from "fastify";
-import { enrichPlace } from "../services/enrichment/index";
+import { getPlaceKnowledge } from "../services/knowledge/index";
 import {
   lookupByCoords,
   lookupByNameAndCoords,
   lookupByOsmRef,
 } from "../services/nominatim-lookup.service";
+import { deduplicatePhotos, searchHeroPhotos } from "../services/photos/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
 
@@ -59,7 +60,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       // be cached because browsers can cache them when Cache-Control: public is present.
       try {
         const result = await withCache(cacheKey, TTL.places.detail, async () => {
-          // DB station lookup (RIS::Stations enrichment)
+          // DB station lookup (RIS::Stations)
           if (rawId.startsWith("db-")) {
             const evaNumber = rawId.slice(3);
             if (!/^\d+$/.test(evaNumber)) {
@@ -74,8 +75,19 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           if (match) {
             const [, osmType, osmId] = match;
             const place = await lookupByOsmRef(osmType, osmId, rawId, lang);
-            const { externalIds, ...enrichment } = await enrichPlace(place, lang);
-            return { ...place, ...enrichment, reviewLinks: buildReviewLinks(place, externalIds) };
+            const {
+              externalIds,
+              photos: knowledgePhotos,
+              ...knowledge
+            } = await getPlaceKnowledge(place, lang);
+            const heroPhotos = place.osmTags ? await searchHeroPhotos(place.osmTags) : [];
+            const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
+            return {
+              ...place,
+              ...knowledge,
+              photos,
+              reviewLinks: buildReviewLinks(place, externalIds),
+            };
           }
 
           const lat = Number.parseFloat(req.query.lat ?? "");
@@ -108,8 +120,19 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             throw err;
           }
 
-          const { externalIds, ...enrichment } = await enrichPlace(place, lang);
-          return { ...place, ...enrichment, reviewLinks: buildReviewLinks(place, externalIds) };
+          const {
+            externalIds,
+            photos: knowledgePhotos,
+            ...knowledge
+          } = await getPlaceKnowledge(place, lang);
+          const heroPhotos = place.osmTags ? await searchHeroPhotos(place.osmTags) : [];
+          const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
+          return {
+            ...place,
+            ...knowledge,
+            photos,
+            reviewLinks: buildReviewLinks(place, externalIds),
+          };
         });
         reply.header("Cache-Control", "public, max-age=86400");
         return result;
