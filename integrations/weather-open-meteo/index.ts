@@ -7,6 +7,7 @@ import type {
   WeatherProvider,
   WeatherResponse,
 } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
 
 const BASE = "https://api.open-meteo.com/v1/forecast";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -81,7 +82,7 @@ async function fetchOpenMeteo(url: string): Promise<OpenMeteoResponse> {
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "OpenMapX/1.0" },
+      headers: { "User-Agent": USER_AGENT },
       signal: controller.signal,
     });
     clearTimeout(timer);

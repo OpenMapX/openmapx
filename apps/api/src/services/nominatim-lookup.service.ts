@@ -4,12 +4,12 @@
  * because lookups and reverse-geocode require different endpoints and params.
  */
 
-import type { Place } from "@openmapx/core";
+import { type Place, USER_AGENT } from "@openmapx/core";
 import { resolveOsmLabel } from "./osm-label.js";
 
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
 const DEFAULT_HEADERS = {
-  "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+  "User-Agent": USER_AGENT,
   "Accept-Language": "en",
 };
 

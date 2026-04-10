@@ -12,6 +12,7 @@ import type {
   RoutingProvider,
   TravelMode,
 } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
 
 const OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
 
@@ -157,7 +158,7 @@ export const osrmService: RoutingProvider = {
     if (exclude.length > 0) url.searchParams.set("exclude", exclude.join(","));
 
     const res = await fetch(url.toString(), {
-      headers: { "User-Agent": "OpenMapX/1.0" },
+      headers: { "User-Agent": USER_AGENT },
     });
     if (!res.ok) throw new Error(`OSRM error ${res.status}`);
 
@@ -195,7 +196,7 @@ export const osrmService: RoutingProvider = {
     if (exclude.length > 0) url.searchParams.set("exclude", exclude.join(","));
 
     const res = await fetch(url.toString(), {
-      headers: { "User-Agent": "OpenMapX/1.0" },
+      headers: { "User-Agent": USER_AGENT },
     });
     if (!res.ok) throw new Error(`OSRM trip error ${res.status}`);
 

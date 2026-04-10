@@ -3,11 +3,12 @@ import {
   fetchCommonsMetadata,
   type PlacePhoto,
   parseCommonsPage,
+  USER_AGENT,
 } from "@openmapx/core";
 import type { PhotoProvider, PhotoQuery } from "./types";
 
 const HEADERS = {
-  "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 

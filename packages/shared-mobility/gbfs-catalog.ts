@@ -3,7 +3,7 @@
  * GBFS feeds worldwide. Similar to the transit dynamic registry pattern.
  */
 
-import type { BoundingBox } from "@openmapx/core";
+import { type BoundingBox, USER_AGENT } from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
 import { fetchGbfsSystem } from "./gbfs-client.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types.js";
@@ -36,7 +36,7 @@ export async function loadCatalog(): Promise<GbfsCatalogEntry[]> {
     TTL.sharedMobility.catalog,
     async () => {
       const res = await fetch(CATALOG_URL, {
-        headers: { "User-Agent": "OpenMapX/1.0" },
+        headers: { "User-Agent": USER_AGENT },
       });
       if (!res.ok) throw new Error(`Failed to fetch GBFS catalog: ${res.status}`);
       const text = await res.text();

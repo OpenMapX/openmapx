@@ -1,9 +1,9 @@
 import { createConnection } from "node:net";
-import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/core";
+import { type LoadedIntegration, toIntegrationMeta, USER_AGENT } from "@openmapx/core";
 import { recordHealthResult } from "./health-history";
 
 const TIMEOUT = 5_000;
-const UA = "OpenMapX/1.0 (+https://openmapx.org)";
+const UA = USER_AGENT;
 
 function tcpCheck(
   host: string,

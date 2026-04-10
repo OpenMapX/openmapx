@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/core";
+import { PLATFORM_VERSION, satisfiesPlatformVersion, USER_AGENT_ADMIN } from "@openmapx/core";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { installedIntegration } from "../db/schema";
@@ -107,7 +107,7 @@ export async function listCatalogSources(): Promise<CatalogSource[]> {
 
 async function fetchCatalogFromUrl(url: string): Promise<CatalogEntry[]> {
   const res = await fetch(url, {
-    headers: { "User-Agent": "OpenMapX-Admin/1.0" },
+    headers: { "User-Agent": USER_AGENT_ADMIN },
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`Catalog fetch failed: HTTP ${res.status}`);

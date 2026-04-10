@@ -7,6 +7,7 @@ import type {
   WeatherProvider,
   WeatherResponse,
 } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
 
 const FETCH_TIMEOUT_MS = 10_000;
 const BASE = "https://api.openweathermap.org/data/2.5";
@@ -97,7 +98,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { "User-Agent": "OpenMapX/1.0" },
+      headers: { "User-Agent": USER_AGENT },
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`OWM HTTP ${res.status}`);

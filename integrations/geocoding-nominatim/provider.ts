@@ -6,11 +6,15 @@ import type { GeocodingProviderImpl } from "./types.js";
  * https://nominatim.org/release-docs/latest/api/Search/
  */
 
-import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
-import { resolvePoiIconPath } from "@openmapx/core";
+import {
+  type AutocompleteResult,
+  type ReverseGeocodingResult,
+  resolvePoiIconPath,
+  type SearchResult,
+  USER_AGENT,
+} from "@openmapx/core";
 
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
-const USER_AGENT = "OpenMapX/1.0 (https://github.com/openmapx)";
 
 interface NominatimResult {
   place_id: number;

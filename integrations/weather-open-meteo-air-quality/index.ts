@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
 
 const OPEN_METEO_AQ_BASE = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -71,7 +71,7 @@ export function setup(ctx: IntegrationContext): void {
 
       const res = await fetch(url, {
         headers: {
-          "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+          "User-Agent": USER_AGENT,
         },
         signal: controller.signal,
       });

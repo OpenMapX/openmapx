@@ -4,12 +4,11 @@
  * https://github.com/ubahnverleih/WoBike/blob/master/Felyx.md
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
-import { bboxContains } from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
 import type { SharedMobilityVehicle } from "./types.js";
 
 const FELYX_URL = "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/map/cars/";
-const HEADERS = { "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)" };
+const HEADERS = { "User-Agent": USER_AGENT };
 const FETCH_TIMEOUT_MS = 8_000;
 
 interface FelyxVehicle {

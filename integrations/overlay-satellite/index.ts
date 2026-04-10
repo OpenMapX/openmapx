@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
 import { XMLParser } from "fast-xml-parser";
 import { type Capabilities, GIBS_LAYERS, type GibsLayerId } from "./store";
 
@@ -19,7 +19,7 @@ async function fetchAndParseCapabilities(): Promise<Capabilities> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   const res = await fetch(CAPABILITIES_URL, {
-    headers: { "User-Agent": "OpenMapX/1.0" },
+    headers: { "User-Agent": USER_AGENT },
     signal: controller.signal,
   });
   clearTimeout(timer);
@@ -120,7 +120,7 @@ export function setup(ctx: IntegrationContext): void {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       const res = await fetch(`https://gibs.earthdata.nasa.gov/legends/${filename}`, {
-        headers: { "User-Agent": "OpenMapX/1.0" },
+        headers: { "User-Agent": USER_AGENT },
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -161,7 +161,7 @@ export function setup(ctx: IntegrationContext): void {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       const tileRes = await fetch(tileUrl, {
-        headers: { "User-Agent": "OpenMapX/1.0" },
+        headers: { "User-Agent": USER_AGENT },
         signal: controller.signal,
       });
       clearTimeout(timer);

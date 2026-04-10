@@ -1,3 +1,5 @@
+import { USER_AGENT } from "@openmapx/core";
+
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
 
 const cityNameCache = new Map<string, { city: string | null; expiresAt: number }>();
@@ -23,7 +25,7 @@ export async function reverseGeocodeCity(
     url.searchParams.set("accept-language", effectiveLang);
 
     const res = await fetch(url.toString(), {
-      headers: { "User-Agent": "OpenMapX/1.0" },
+      headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;

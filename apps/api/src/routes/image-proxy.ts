@@ -1,3 +1,4 @@
+import { USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { resolveGooglePhotosLink } from "../services/photos/index.js";
 
@@ -93,7 +94,7 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
       try {
         const upstream = await fetch(imageUrl, {
           signal: AbortSignal.timeout(10_000),
-          headers: { "User-Agent": "OpenMapX/1.0" },
+          headers: { "User-Agent": USER_AGENT },
           redirect: "follow",
         });
 

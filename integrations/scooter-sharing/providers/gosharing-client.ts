@@ -4,11 +4,11 @@
  * https://github.com/ubahnverleih/WoBike/blob/master/Go-Sharing.md
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
+import { type BoundingBox, type LngLat, USER_AGENT } from "@openmapx/core";
 import type { SharedMobilityVehicle } from "./types.js";
 
 const GOSHARING_URL = "https://greenmo.core.gourban-mobility.com/front/vehicles";
-const HEADERS = { "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)" };
+const HEADERS = { "User-Agent": USER_AGENT };
 const FETCH_TIMEOUT_MS = 8_000;
 
 interface GoSharingVehicle {

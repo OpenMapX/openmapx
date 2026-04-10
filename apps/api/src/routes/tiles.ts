@@ -1,3 +1,4 @@
+import { USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 
 const CYCLOSM_SUBDOMAINS = ["a", "b", "c"] as const;
@@ -57,7 +58,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
 
         try {
           const tfResponse = await fetch(tfUrl, {
-            headers: { "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)" },
+            headers: { "User-Agent": USER_AGENT },
             signal: AbortSignal.timeout(10_000),
           });
 
@@ -89,7 +90,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
 
       try {
         const response = await fetch(url, {
-          headers: { "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)" },
+          headers: { "User-Agent": USER_AGENT },
           signal: AbortSignal.timeout(10_000),
         });
 
@@ -133,7 +134,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
       try {
         const response = await fetch(url, {
           headers: {
-            "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
+            "User-Agent": USER_AGENT,
           },
           signal: AbortSignal.timeout(15_000),
         });
@@ -178,7 +179,7 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
       try {
         const response = await fetch(url, {
           headers: {
-            "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
+            "User-Agent": USER_AGENT,
           },
           signal: AbortSignal.timeout(15_000),
         });

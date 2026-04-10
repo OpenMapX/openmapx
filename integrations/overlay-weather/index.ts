@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
 
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -35,7 +35,7 @@ export function setup(ctx: IntegrationContext): void {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       const res = await fetch("https://api.rainviewer.com/public/weather-maps.json", {
-        headers: { "User-Agent": "OpenMapX/1.0" },
+        headers: { "User-Agent": USER_AGENT },
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -85,7 +85,7 @@ export function setup(ctx: IntegrationContext): void {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       const tileRes = await fetch(tileUrl, {
-        headers: { "User-Agent": "OpenMapX/1.0" },
+        headers: { "User-Agent": USER_AGENT },
         signal: controller.signal,
       });
       clearTimeout(timer);

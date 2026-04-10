@@ -1,3 +1,4 @@
+import { USER_AGENT } from "@openmapx/core";
 import type { TrafficProvider, TrafficTile } from "./traffic.provider";
 import { TrafficProviderHttpError } from "./traffic.provider";
 
@@ -32,7 +33,7 @@ async function fetchFlowTile(z: number, x: number, y: number): Promise<TrafficTi
   const res = await fetch(buildFlowTileUrl(z, x, y), {
     headers: {
       Accept: "image/png,image/*;q=0.8,*/*;q=0.5",
-      "User-Agent": "OpenMapX/1.0",
+      "User-Agent": USER_AGENT,
     },
   });
 

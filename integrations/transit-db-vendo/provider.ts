@@ -15,6 +15,7 @@ import {
   normalizeFptfDeparture,
   normalizeRemarks,
   productToMode,
+  USER_AGENT_TRANSIT,
 } from "@openmapx/core";
 import { createClient } from "db-vendo-client";
 import { profile as dbProfile } from "db-vendo-client/p/db/index.js";
@@ -22,11 +23,9 @@ import { profile as dbProfile } from "db-vendo-client/p/db/index.js";
 const PREFIX = "db:";
 
 // biome-ignore lint/suspicious/noExplicitAny: external untyped package
-const client: any = createClient(
-  dbProfile,
-  process.env.DB_USER_AGENT ?? "OpenMapX/1.0 (transit@openmapx.org)",
-  { enrichStations: true },
-);
+const client: any = createClient(dbProfile, process.env.DB_USER_AGENT ?? USER_AGENT_TRANSIT, {
+  enrichStations: true,
+});
 
 // biome-ignore lint/suspicious/noExplicitAny: external API response
 function normalizeStop(s: any): TransitStop {

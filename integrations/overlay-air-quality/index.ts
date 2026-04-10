@@ -1,4 +1,4 @@
-import type { CacheClient, IntegrationContext } from "@openmapx/core";
+import { type CacheClient, type IntegrationContext, USER_AGENT } from "@openmapx/core";
 
 const OPENAQ_BASE = "https://api.openaq.org/v3";
 const PM25_PARAM_ID = 2;
@@ -93,7 +93,7 @@ async function fetchOpenAQ<T>(path: string, apiKey: string): Promise<FetchResult
     const res = await fetch(`${OPENAQ_BASE}${path}`, {
       headers: {
         "X-API-Key": apiKey,
-        "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+        "User-Agent": USER_AGENT,
       },
       signal: controller.signal,
     });

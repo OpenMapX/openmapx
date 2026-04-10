@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/tiles/:z/:x/:y.png", async (req, reply) => {
@@ -19,7 +19,7 @@ export function setup(ctx: IntegrationContext): void {
 
     try {
       const response = await fetch(url, {
-        headers: { "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)" },
+        headers: { "User-Agent": USER_AGENT },
         signal: AbortSignal.timeout(15_000),
       });
       if (!response.ok) {

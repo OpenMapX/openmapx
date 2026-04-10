@@ -402,6 +402,12 @@ export { resolvePoiIconPath } from "./utils/poi-icon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";
 export {
+  USER_AGENT,
+  USER_AGENT_ADMIN,
+  USER_AGENT_TRANSIT,
+  userAgent,
+} from "./utils/userAgent";
+export {
   type WeatherCodeInfo,
   weatherCodeToDescription,
   weatherCodeToIcon,

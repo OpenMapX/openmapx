@@ -1,7 +1,8 @@
 import type { PlacePhoto } from "../types/place";
+import { USER_AGENT } from "./userAgent";
 
 const HEADERS = {
-  "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 

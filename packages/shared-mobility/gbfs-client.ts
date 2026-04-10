@@ -3,6 +3,7 @@
  * Fetches auto-discovery feed, then individual data feeds.
  */
 
+import { USER_AGENT } from "@openmapx/core";
 import type {
   GbfsPricingPlan,
   GbfsStationInfo,
@@ -14,7 +15,7 @@ import type {
 
 const FETCH_TIMEOUT_MS = 8_000;
 const HEADERS = {
-  "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 

@@ -7,8 +7,8 @@ import type {
   WeatherProvider,
   WeatherResponse,
 } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
 
-const USER_AGENT = "OpenMapX/1.0 github.com/openmapx/openmapx";
 const BASE_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
 const FETCH_TIMEOUT_MS = 10_000;
 

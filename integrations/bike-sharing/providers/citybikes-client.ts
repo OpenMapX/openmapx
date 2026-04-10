@@ -3,14 +3,13 @@
  * Provides station-based bike sharing data for ~900 networks worldwide.
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
-import { bboxContains } from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
 import type { SharedMobilityStation } from "./types.js";
 
 const CITYBIKES_BASE = "https://api.citybik.es";
 const HEADERS = {
-  "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 const FETCH_TIMEOUT_MS = 10_000;

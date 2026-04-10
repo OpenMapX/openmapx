@@ -5,8 +5,7 @@
  * https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
-import { bboxContains } from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
 const BASE_URL = "https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de";
@@ -17,7 +16,6 @@ const PROVIDER_IDS = [
   "StadtRADLueneburg",
 ] as const;
 const FETCH_TIMEOUT_MS = 10_000;
-const USER_AGENT = "OpenMapX/1.0 (https://github.com/openmapx)";
 
 // In-memory cache — DB systems are regional, TTL matches other shared-mobility clients
 interface CachedData {

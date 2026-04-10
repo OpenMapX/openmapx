@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
 import { XMLParser } from "fast-xml-parser";
 
 const NOAA_URL = "https://api.weather.gov/alerts/active?status=actual&message_type=alert";
@@ -9,8 +9,6 @@ const METEOALARM_FEED_URL = "https://feeds.meteoalarm.org/feeds/meteoalarm-legac
 
 const FETCH_TIMEOUT_MS = 15_000;
 const CACHE_TTL = 300; // 5 minutes
-
-const USER_AGENT = "OpenMapX/1.0 (https://github.com/openmapx)";
 
 // European countries to fetch from MeteoAlarm (exclude DE — DWD covers Germany with polygons)
 const METEOALARM_COUNTRIES = [

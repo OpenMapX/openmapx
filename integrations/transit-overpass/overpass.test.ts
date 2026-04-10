@@ -165,7 +165,7 @@ describe("overpass provider", () => {
       expect(init.method).toBe("POST");
       expect(init.headers).toEqual({
         "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
+        "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
       });
       expect(init.body).toContain("data=");
     });

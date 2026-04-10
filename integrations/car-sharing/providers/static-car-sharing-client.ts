@@ -3,14 +3,13 @@
  * Handles fetch, caching, and bbox filtering. Caller provides the parser.
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
-import { bboxContains } from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
 import { cacheGet, cacheSet, TTL } from "@openmapx/integration-shared-mobility/cache";
 import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
 const FETCH_TIMEOUT_MS = 10_000;
-const HEADERS = { "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)" };
+const HEADERS = { "User-Agent": USER_AGENT };
 
 export interface StaticCarSharingConfig {
   /** Unique client ID. */

@@ -1,7 +1,7 @@
+import { USER_AGENT } from "@openmapx/core";
 import { bboxToMercator } from "./coord-transform";
 
 const BASE_URL = "https://hiking.waymarkedtrails.org/api/v1";
-const USER_AGENT = "OpenMapX/1.0 (+https://openmapx.org)";
 
 interface WaymarkedSearchResult {
   type: string;

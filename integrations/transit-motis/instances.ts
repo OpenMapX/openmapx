@@ -1,8 +1,9 @@
 import { type Client, createClient } from "@hey-api/client-fetch";
+import { USER_AGENT_TRANSIT } from "@openmapx/core";
 
 const TIMEOUT_MS = 8_000;
 
-const USER_AGENT = process.env.TRANSITOUS_USER_AGENT ?? "OpenMapX/1.0 (transit@openmapx.org)";
+const USER_AGENT = process.env.TRANSITOUS_USER_AGENT ?? USER_AGENT_TRANSIT;
 
 export interface MotisInstance {
   client: Client;

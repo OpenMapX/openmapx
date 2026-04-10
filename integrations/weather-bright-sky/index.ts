@@ -7,10 +7,10 @@ import type {
   WeatherProvider,
   WeatherResponse,
 } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
 
 const BASE_URL = "https://api.brightsky.dev";
 const FETCH_TIMEOUT_MS = 10_000;
-const USER_AGENT = "OpenMapX/1.0 (https://github.com/openmapx)";
 
 function round4(n: number): number {
   return Math.round(n * 10000) / 10000;

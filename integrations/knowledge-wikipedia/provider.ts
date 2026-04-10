@@ -1,7 +1,12 @@
-import { fetchCommonsMetadata, type KnowledgeResult, type KnowledgeSource } from "@openmapx/core";
+import {
+  fetchCommonsMetadata,
+  type KnowledgeResult,
+  type KnowledgeSource,
+  USER_AGENT,
+} from "@openmapx/core";
 
 const HEADERS = {
-  "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+  "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
 

@@ -4,11 +4,11 @@
  * https://github.com/ubahnverleih/WoBike/blob/master/Donkey.md
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
+import { type BoundingBox, type LngLat, USER_AGENT } from "@openmapx/core";
 import type { SharedMobilityStation, VehicleFormFactor } from "./types.js";
 
 const HEADERS = {
-  "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)",
+  "User-Agent": USER_AGENT,
   Accept: "application/com.donkeyrepublic.v7",
 };
 const FETCH_TIMEOUT_MS = 8_000;

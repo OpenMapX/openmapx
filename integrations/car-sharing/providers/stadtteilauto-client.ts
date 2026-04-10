@@ -4,8 +4,7 @@
  * https://ckan.open.nrw.de/dataset/stadtteilauto-munster-carsharing-stationen-und-fahrzeuge-ms
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
-import { bboxContains } from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
 import { cacheGet, cacheSet, TTL } from "@openmapx/integration-shared-mobility/cache";
 import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
@@ -13,7 +12,7 @@ import type { RegionalCarSharingClient } from "./regional-client-types.js";
 const STATIONS_URL = "https://www.muenster01.de/stadtteilauto/stations.json";
 const VEHICLES_URL = "https://www.muenster01.de/stadtteilauto/vehicles.json";
 const FETCH_TIMEOUT_MS = 10_000;
-const HEADERS = { "User-Agent": "OpenMapX/1.0 (https://github.com/openmapx)" };
+const HEADERS = { "User-Agent": USER_AGENT };
 const CACHE_KEY = "cache:stadtteilauto:data";
 
 interface StadtteilAutoStation {

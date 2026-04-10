@@ -1,3 +1,4 @@
+import { USER_AGENT_TRANSIT } from "@openmapx/core";
 import type { BBox } from "../transit/types";
 import type { CatalogFeed } from "./types";
 
@@ -5,7 +6,6 @@ const GITHUB_API = "https://api.github.com";
 const RAW_BASE = "https://raw.githubusercontent.com/transitous/transitous/main";
 const TIMEOUT_MS = 15_000;
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const USER_AGENT = "OpenMapX/1.0 (transit@openmapx.org)";
 
 /** ISO country code → approximate bounding box. */
 const COUNTRY_BBOXES: Record<string, BBox> = {
@@ -51,7 +51,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const headers: Record<string, string> = { "User-Agent": USER_AGENT };
+    const headers: Record<string, string> = { "User-Agent": USER_AGENT_TRANSIT };
     if (process.env.GITHUB_TOKEN) {
       headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
@@ -69,7 +69,7 @@ async function fetchText(url: string): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const headers: Record<string, string> = { "User-Agent": USER_AGENT };
+    const headers: Record<string, string> = { "User-Agent": USER_AGENT_TRANSIT };
     if (process.env.GITHUB_TOKEN) {
       headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }

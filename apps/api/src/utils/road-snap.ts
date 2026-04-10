@@ -6,6 +6,8 @@
  * bus-only streets) and OSRM for driving/walking/cycling.
  */
 
+import { USER_AGENT } from "@openmapx/core";
+
 const OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
 const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 const TIMEOUT_MS = 10_000;
@@ -66,7 +68,7 @@ async function valhallaRoute(coords: [number, number][]): Promise<MatchResult | 
   try {
     const res = await fetch(`${VALHALLA_URL}/route`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "OpenMapX/1.0" },
+      headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
       body,
       signal: controller.signal,
     });
@@ -97,7 +99,7 @@ async function osrmRoute(coords: [number, number][], profile: string): Promise<M
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url.toString(), {
-      headers: { "User-Agent": "OpenMapX/1.0" },
+      headers: { "User-Agent": USER_AGENT },
       signal: controller.signal,
     });
     if (!res.ok) return null;

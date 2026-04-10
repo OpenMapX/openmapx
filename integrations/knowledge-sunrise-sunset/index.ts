@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
 import { find as findTimezone } from "geo-tz";
 
 const API_BASE = "https://api.sunrise-sunset.org/json";
@@ -58,7 +58,7 @@ export function setup(ctx: IntegrationContext): void {
 
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": "OpenMapX/1.0" },
+        headers: { "User-Agent": USER_AGENT },
         signal: controller.signal,
       });
       clearTimeout(timer);

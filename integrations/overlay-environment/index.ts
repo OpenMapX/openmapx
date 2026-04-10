@@ -1,4 +1,4 @@
-import type { IntegrationContext, Logger } from "@openmapx/core";
+import { type IntegrationContext, type Logger, USER_AGENT } from "@openmapx/core";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const STATION_CACHE_TTL = 600;
@@ -43,7 +43,7 @@ const SC_VALUE_TYPE_MAP: Record<
   noise_LAeq: { sensorType: "noise", unit: "dB(A)", title: "Noise LAeq" },
 };
 
-const SC_USER_AGENT = "OpenMapX/1.0 (https://github.com/openmapx)";
+const SC_USER_AGENT = USER_AGENT;
 
 // Distance threshold in degrees (~50m at mid-latitudes) for cross-provider deduplication
 const DEDUP_THRESHOLD_DEG = 0.00045;
