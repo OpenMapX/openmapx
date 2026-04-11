@@ -5,6 +5,7 @@
   "license": "MIT",
   "documentation": "https://openweathermap.org/current",
   "domains": ["weather"],
+  "dependencies": ["weather"],
   "frontend": {
     "mapLayer": false,
     "legend": false,

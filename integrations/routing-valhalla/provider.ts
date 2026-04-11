@@ -3,16 +3,9 @@
  * Default: public FOSSGIS Valhalla instance. Override with VALHALLA_URL env var.
  */
 
-import type {
-  DirectionsResult,
-  Route,
-  RouteLeg,
-  RouteStep,
-  RoutingOptions,
-  RoutingProvider,
-  TravelMode,
-} from "@openmapx/core";
+import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 import { decodePolyline } from "@openmapx/core";
+import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
 
 const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 

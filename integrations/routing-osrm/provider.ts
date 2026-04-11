@@ -3,16 +3,9 @@
  * Default: public OSRM demo server. Override with OSRM_URL env var.
  */
 
-import type {
-  DirectionsResult,
-  Route,
-  RouteLeg,
-  RouteStep,
-  RoutingOptions,
-  RoutingProvider,
-  TravelMode,
-} from "@openmapx/core";
+import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 import { USER_AGENT } from "@openmapx/core";
+import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
 
 const OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
 

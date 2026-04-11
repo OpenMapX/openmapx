@@ -35,12 +35,12 @@ const serwist = new Serwist({
     },
 
     // API geodata — StaleWhileRevalidate
-    // Covers: /api/geocode, /api/geocode/reverse, /api/places/:id, /api/directions
+    // Covers: /api/integrations/geocoding/geocode, /api/integrations/routing/directions, /api/places/:id
     // Excludes: /api/places/search (category search embeds live fuel prices)
     {
       matcher: ({ url }: { url: URL }) =>
-        /\/api\/(geocode|places|directions)/.test(url.pathname) &&
-        !url.pathname.includes("/places/search"),
+        /\/api\/integrations\/(geocoding\/geocode|routing\/directions)/.test(url.pathname) ||
+        (/\/api\/places\//.test(url.pathname) && !url.pathname.includes("/places/search")),
       handler: new StaleWhileRevalidate({
         cacheName: "api-geodata",
         plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
@@ -59,11 +59,29 @@ const serwist = new Serwist({
 
     // Autocomplete — NetworkFirst (fresh suggestions always preferred)
     {
-      matcher: /\/api\/autocomplete/,
+      matcher: /\/api\/integrations\/geocoding\/autocomplete/,
       handler: new NetworkFirst({
         cacheName: "api-autocomplete",
         networkTimeoutSeconds: 3,
         plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 })],
+      }),
+    },
+
+    // Weather — StaleWhileRevalidate (conditions change slowly)
+    {
+      matcher: /\/api\/integrations\/weather\//,
+      handler: new StaleWhileRevalidate({
+        cacheName: "api-weather",
+        plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 60 })],
+      }),
+    },
+
+    // Photos — StaleWhileRevalidate (photo results are stable)
+    {
+      matcher: /\/api\/integrations\/photos\//,
+      handler: new StaleWhileRevalidate({
+        cacheName: "api-photos",
+        plugins: [new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 })],
       }),
     },
 

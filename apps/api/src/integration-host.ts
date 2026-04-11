@@ -101,6 +101,21 @@ function createCacheClient(prefix: string): CacheClient {
       if (!redis) return;
       await redis.del(`int:${prefix}:${key}`);
     },
+    async withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
+      if (redis) {
+        const k = `int:${prefix}:${key}`;
+        try {
+          const cached = await redis.get(k);
+          if (cached) return JSON.parse(cached) as T;
+        } catch {
+          // cache miss
+        }
+        const result = await fn();
+        redis.setex(k, ttlSeconds, JSON.stringify(result)).catch(() => {});
+        return result;
+      }
+      return fn();
+    },
   };
 }
 
@@ -288,12 +303,14 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
 
   const visited = new Set<string>();
   const inStack = new Set<string>();
+  const skipped = new Set<string>();
   const result: DiscoveredEntry[] = [];
 
   function visit(id: string) {
-    if (visited.has(id)) return;
+    if (visited.has(id) || skipped.has(id)) return;
     if (inStack.has(id)) {
-      console.warn(`[integration-host] Dependency cycle detected involving "${id}" — skipping`);
+      console.warn(`[integration-host] Dependency cycle involving "${id}" — skipping`);
+      skipped.add(id);
       return;
     }
     inStack.add(id);
@@ -303,7 +320,25 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
       return;
     }
     const deps = (entry.manifest.dependencies ?? []) as string[];
-    for (const dep of deps) visit(dep);
+    for (const dep of deps) {
+      if (!byId.has(dep)) {
+        console.warn(
+          `[integration-host] Integration "${id}" requires "${dep}" which is not installed — skipping`,
+        );
+        skipped.add(id);
+        inStack.delete(id);
+        return;
+      }
+      visit(dep);
+      if (skipped.has(dep)) {
+        console.warn(
+          `[integration-host] Integration "${id}" skipped because dependency "${dep}" was skipped`,
+        );
+        skipped.add(id);
+        inStack.delete(id);
+        return;
+      }
+    }
     inStack.delete(id);
     visited.add(id);
     result.push(entry);
@@ -479,6 +514,9 @@ export async function initIntegrations(
       onShutdown(cleanup: () => Promise<void>) {
         shutdownHandlers.push(cleanup);
       },
+      getIntegrationsByDomain(domain: string) {
+        return getIntegrationsByDomain(domain);
+      },
     };
 
     // Try to load the integration's setup function
@@ -501,7 +539,7 @@ export async function initIntegrations(
       }
 
       // Geocoding providers are read directly from the integration framework
-      // by geocoding.factory.ts via getIntegrationsByDomain("geocoding")
+      // by the geocoding orchestrator via getIntegrationsByDomain("geocoding")
       const geocodingProviders = providers.get("geocoding") ?? [];
       if (geocodingProviders.length > 0) {
         log.info(`Registered ${geocodingProviders.length} geocoding provider(s)`);
@@ -814,6 +852,9 @@ export async function reloadIntegrations(): Promise<{
       },
       onShutdown(cleanup: () => Promise<void>) {
         shutdownHandlers.push(cleanup);
+      },
+      getIntegrationsByDomain(domain: string) {
+        return getIntegrationsByDomain(domain);
       },
     };
 

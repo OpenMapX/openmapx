@@ -1,0 +1,10 @@
+{
+  "id": "geocoding",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["geocoding"],
+  "backend": { "routes": true },
+  "quality": "built-in",
+  "category": "Geocoding"
+}

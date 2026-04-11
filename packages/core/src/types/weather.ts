@@ -1,12 +1,3 @@
-export type {
-  CurrentWeather,
-  DailyForecastPoint,
-  HourlyForecastPoint,
-  WeatherOptions,
-  WeatherProvider,
-  WeatherResponse,
-} from "../domains/weather";
-
 export interface RadarFrame {
   time: number;
   path: string;

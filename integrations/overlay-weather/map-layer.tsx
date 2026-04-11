@@ -271,8 +271,8 @@ export function WeatherLayer() {
     const lng = center.lng.toFixed(2);
     try {
       const [weatherRes, geoRes] = await Promise.all([
-        fetch(`${env.apiUrl}/api/weather/current?lat=${lat}&lng=${lng}`),
-        fetch(`${env.apiUrl}/api/geocode/reverse?lat=${lat}&lng=${lng}`),
+        fetch(`${env.apiUrl}/api/integrations/weather/current?lat=${lat}&lng=${lng}`),
+        fetch(`${env.apiUrl}/api/integrations/geocoding/geocode/reverse?lat=${lat}&lng=${lng}`),
       ]);
       if (weatherRes.ok) {
         const data = await weatherRes.json();

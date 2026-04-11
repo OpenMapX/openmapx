@@ -130,9 +130,8 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
     if (!manifest.domains?.length) {
       errors.push("manifest.domains must contain at least one domain");
     }
-    if (manifest.backend?.routes && !manifest.dataSources?.length) {
-      errors.push("manifest.dataSources is required for integrations with backend routes");
-    }
+    // dataSources is encouraged for integrations with backend routes but not enforced —
+    // orchestrator integrations aggregate providers that declare their own data sources.
     // Health check policy: required for integrations with envVars (external APIs)
     // or backend services (databases, etc.)
     if (manifest.envVars?.length && !manifest.healthCheck) {

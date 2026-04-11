@@ -1,10 +1,10 @@
 /** Centralised list of API endpoint paths. */
 export const API_ENDPOINTS = {
-  geocode: "/api/geocode",
-  geocodeReverse: "/api/geocode/reverse",
-  autocomplete: "/api/autocomplete",
-  directions: "/api/directions",
-  directionsOptimize: "/api/directions/optimize",
+  geocode: "/api/integrations/geocoding/geocode",
+  geocodeReverse: "/api/integrations/geocoding/geocode/reverse",
+  autocomplete: "/api/integrations/geocoding/autocomplete",
+  directions: "/api/integrations/routing/directions",
+  directionsOptimize: "/api/integrations/routing/directions/optimize",
   elevation: "/api/elevation",
   isochrone: "/api/isochrone",
   places: "/api/places",
@@ -41,7 +41,7 @@ export const API_ENDPOINTS = {
   dataSources: "/api/data-sources",
   dataSourceSearch: "/api/data-sources", // used as `${base}/${sourceId}/search`
   dataSourceDetail: "/api/data-sources", // used as `${base}/${sourceId}/detail/${itemId}`
-  photos: "/api/photos",
+  photos: "/api/integrations/photos/search",
   imageProxy: "/api/image-proxy",
   hikingSearch: "/api/integrations/overlay-hiking/hiking/search",
   hikingArea: "/api/integrations/overlay-hiking/hiking/area",

@@ -7,7 +7,7 @@ const mockLookupByOsmRef = vi.fn();
 const mockLookupByCoords = vi.fn();
 const mockLookupByNameAndCoords = vi.fn();
 
-vi.mock("../../services/nominatim-lookup.service.js", () => ({
+vi.mock("../../../../../integrations/geocoding/place-lookup.js", () => ({
   lookupByOsmRef: mockLookupByOsmRef,
   lookupByCoords: mockLookupByCoords,
   lookupByNameAndCoords: mockLookupByNameAndCoords,
@@ -23,7 +23,7 @@ vi.mock("../../services/knowledge/index.js", () => ({
 
 // Mock photo service
 
-vi.mock("../../services/photos/index.js", () => ({
+vi.mock("../../../../../integrations/photos/orchestrator.js", () => ({
   searchHeroPhotos: vi.fn().mockResolvedValue([]),
   deduplicatePhotos: vi.fn((photos: unknown[]) => photos),
 }));

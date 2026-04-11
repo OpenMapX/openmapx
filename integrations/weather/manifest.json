@@ -1,0 +1,10 @@
+{
+  "id": "weather",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["weather"],
+  "backend": { "routes": true },
+  "quality": "built-in",
+  "category": "Weather"
+}

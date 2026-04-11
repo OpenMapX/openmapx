@@ -1,12 +1,15 @@
 import { lookupDbStation } from "@integrations/geocoding-db-ris/provider.js";
 import type { FastifyPluginAsync } from "fastify";
-import { getPlaceKnowledge } from "../services/knowledge/index";
 import {
   lookupByCoords,
   lookupByNameAndCoords,
   lookupByOsmRef,
-} from "../services/nominatim-lookup.service";
-import { deduplicatePhotos, searchHeroPhotos } from "../services/photos/index";
+} from "../../../../integrations/geocoding/place-lookup.js";
+import {
+  deduplicatePhotos,
+  searchHeroPhotos,
+} from "../../../../integrations/photos/orchestrator.js";
+import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
 

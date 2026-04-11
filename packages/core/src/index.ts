@@ -26,33 +26,19 @@ export {
 } from "./constants/transit";
 // Domains
 export type {
-  CurrentWeather,
-  DailyForecastPoint,
   DataSourceProvider as DomainDataSourceProvider,
-  DomainDefinition,
-  DomainId,
-  GeocodingProvider,
   GeoJsonFeatureCollection,
-  HourlyForecastPoint,
   KnowledgeProvider,
   KnowledgeResult,
   KnowledgeSource,
   MapOverlayData,
   MapOverlayDetail,
   MapOverlayProvider,
-  PhotoProvider,
   PoiSearchProvider,
   PoiSearchResult,
-  RoutingOptions,
-  RoutingProvider,
   StreetViewProvider,
   TransitProvider,
-  WeatherAttribution,
-  WeatherOptions,
-  WeatherProvider,
-  WeatherResponse,
 } from "./domains";
-export { DOMAIN_DEFINITIONS } from "./domains";
 // Hooks — Transit
 export {
   useArrivals,
@@ -144,6 +130,7 @@ export type {
   CommunityIntegrationModule,
   CustomHealthCheckFn,
   DatabaseClient,
+  FallbackChainOptions,
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,
@@ -161,9 +148,13 @@ export type {
   LoadedIntegrationMeta,
   Logger,
   ManifestValidationResult,
+  MergeAllOptions,
   RouteHandler,
 } from "./integration";
 export {
+  createFallbackChain,
+  createFirstWins,
+  createMergeAll,
   getCommunityModule,
   getCommunityModuleIds,
   IntegrationEventBus,

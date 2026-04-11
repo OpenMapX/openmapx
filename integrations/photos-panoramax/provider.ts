@@ -1,5 +1,5 @@
 import type { PlacePhoto } from "@openmapx/core";
-import type { PhotoProvider, PhotoQuery } from "./types";
+import type { PhotoProvider, PhotoQuery } from "../photos/types.js";
 
 interface PanoramaxFeature {
   id?: string;

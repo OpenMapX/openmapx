@@ -1,5 +1,8 @@
+import {
+  expandSearchQuery,
+  getQueryVariants,
+} from "../../../../../integrations/geocoding/query-expansion.js";
 import { cacheGet, cacheSet, hashKey, TTL } from "../../utils/cache.js";
-import { expandSearchQuery, getQueryVariants } from "../../utils/query-expansion.js";
 import {
   bucketTimestamps,
   diceSimilarity,

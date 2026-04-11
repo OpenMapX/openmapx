@@ -6,7 +6,7 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
-import type { GeocodingProvider } from "../geocoding.provider.js";
+import type { GeocodingProvider } from "../../../../../integrations/geocoding/types.js";
 import { isRisConfigured, risGet } from "./client.js";
 import {
   buildStationDetail,

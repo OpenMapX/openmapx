@@ -5,6 +5,7 @@
   "license": "MIT",
   "documentation": "https://open-meteo.com/en/docs",
   "domains": ["weather"],
+  "dependencies": ["weather"],
   "frontend": {
     "mapLayer": false,
     "legend": false,

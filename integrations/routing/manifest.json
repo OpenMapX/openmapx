@@ -1,0 +1,10 @@
+{
+  "id": "routing",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["routing"],
+  "backend": { "routes": true },
+  "quality": "built-in",
+  "category": "Routing"
+}

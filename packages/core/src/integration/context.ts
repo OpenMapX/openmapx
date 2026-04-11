@@ -1,3 +1,4 @@
+import type { LoadedIntegration } from "./loader";
 import type { IntegrationManifest } from "./manifest";
 
 export interface HttpClientOptions {
@@ -15,6 +16,7 @@ export interface CacheClient {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
+  withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T>;
 }
 
 export interface Logger {
@@ -70,4 +72,7 @@ export interface IntegrationContext {
   on(event: string, handler: (data: unknown) => void): () => void;
 
   onShutdown(cleanup: () => Promise<void>): void;
+
+  /** Query all enabled integrations registered under a domain. */
+  getIntegrationsByDomain(domain: string): LoadedIntegration[];
 }

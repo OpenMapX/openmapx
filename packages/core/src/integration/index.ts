@@ -34,3 +34,10 @@ export type {
 export { integrationManifestSchema, validateManifest } from "./manifest";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export { IntegrationRegistry } from "./registry";
+export {
+  createFallbackChain,
+  createFirstWins,
+  createMergeAll,
+  type FallbackChainOptions,
+  type MergeAllOptions,
+} from "./strategies";

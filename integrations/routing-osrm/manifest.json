@@ -4,6 +4,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["routing"],
+  "dependencies": ["routing"],
   "infrastructure": {
     "dockerProfile": "routing",
     "services": ["osrm"],

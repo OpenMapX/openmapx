@@ -5,13 +5,8 @@ import {
   reverseGeocode as motisReverseGeocode,
 } from "@motis-project/motis-client";
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import type { GeocodingProvider as GeocodingProviderImpl } from "../geocoding/types.js";
 import { uniqueModes } from "./mode-map.js";
-
-interface GeocodingProviderImpl {
-  geocode(query: string, lang?: string): Promise<SearchResult[]>;
-  autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]>;
-  reverseGeocode(lat: number, lng: number, lang?: string): Promise<ReverseGeocodingResult | null>;
-}
 
 interface MotisInstance {
   client: Client;
