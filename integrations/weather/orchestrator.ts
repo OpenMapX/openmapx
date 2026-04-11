@@ -1,12 +1,13 @@
-import type { IntegrationContext, LngLat } from "@openmapx/core";
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
+  IntegrationContext,
+  LngLat,
   WeatherAttribution,
   WeatherOptions,
-  WeatherProvider,
   WeatherResponse,
-} from "./types.js";
+} from "@openmapx/core";
+import type { WeatherProvider } from "./types.js";
 
 interface ProviderWithAttribution {
   provider: WeatherProvider;

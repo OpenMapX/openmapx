@@ -1,6 +1,6 @@
+import type { RouteStop } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
-import type { RouteStop } from "../../types/transit";
 
 export function useRouteStops(routeId: string | null, hintStopId?: string | null) {
   // Routes with dedicated stop endpoints (mb:, tfl:) don't need a hint stop.
@@ -12,7 +12,7 @@ export function useRouteStops(routeId: string | null, hintStopId?: string | null
       const params: Record<string, string> = {};
       if (hintStopId) params.hint_stop_id = hintStopId;
       return apiClient.get<RouteStop[]>(
-        `/api/transit/routes/${encodeURIComponent(routeId as string)}/stops`,
+        `/api/integrations/transit/routes/${encodeURIComponent(routeId as string)}/stops`,
         Object.keys(params).length ? params : undefined,
       );
     },

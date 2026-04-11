@@ -5,8 +5,8 @@
  * merges live + emulated data, and returns normalized VehiclePositions.
  */
 
+import type { VehiclePosition } from "@openmapx/core";
 import { MemCache, TTL, withCacheStatus } from "../../utils/cache.js";
-import type { VehiclePosition } from "../transit/types.js";
 import { isRisConfigured, risPost } from "./client.js";
 import type {
   RisEmulatedEntry,

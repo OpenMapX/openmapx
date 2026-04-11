@@ -3,10 +3,10 @@ import type {
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
-  DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
+import type { DataSourceProvider } from "../../data-source/types.js";
 import { searchFuelStations } from "./factory.js";
 import {
   buildTankerkoenigDetail,

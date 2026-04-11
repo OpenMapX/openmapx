@@ -1,5 +1,5 @@
+import type { AutocompleteResult, SearchResult } from "@integrations/geocoding/types";
 import { create } from "zustand";
-import type { AutocompleteResult, SearchResult } from "../types/search";
 
 interface SearchState {
   query: string;

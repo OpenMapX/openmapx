@@ -1,8 +1,8 @@
+import type { TripPlan } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { LngLat } from "../../types/geometry";
-import type { TripPlan } from "../../types/transit";
 
 interface UseTransitPlanParams {
   origin: LngLat | null;

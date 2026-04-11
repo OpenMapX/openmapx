@@ -4,9 +4,9 @@
  * to avoid pulling in client-only hooks via the barrel export.
  */
 
+export { categoryPlaceToPlace } from "@integrations/poi-search/types";
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
 export { fetchIntegrations } from "./api/integrations";
-export { categoryPlaceToPlace } from "./types/category";
 export {
   buildAttributionHtml,
   buildIntegrationAttribution,

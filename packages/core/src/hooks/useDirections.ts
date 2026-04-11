@@ -1,7 +1,7 @@
+import type { DirectionsResult, TravelMode } from "@integrations/routing/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import type { DirectionsResult, TravelMode } from "../types/directions";
 import type { LngLat } from "../types/geometry";
 
 interface UseDirectionsParams {

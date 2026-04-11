@@ -1,5 +1,5 @@
+import type { BBox } from "@openmapx/core";
 import { USER_AGENT_TRANSIT } from "@openmapx/core";
-import type { BBox } from "../transit/types";
 import type { CatalogFeed } from "./types";
 
 const GITHUB_API = "https://api.github.com";

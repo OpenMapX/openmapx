@@ -1,7 +1,7 @@
+import type { VehicleJourney } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
-import type { VehicleJourney } from "../../types/transit";
 
 export function useVehicleJourney(tripId: string | null, fallbackIds?: string[]) {
   return useQuery({

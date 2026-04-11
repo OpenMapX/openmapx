@@ -1,10 +1,10 @@
+import type { SearchResult } from "@integrations/geocoding/types";
+import type { TransitStop } from "@integrations/transit/types";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { isTransitRawCategory } from "../hooks/transit/transitEligibility";
 import type { LngLat } from "../types/geometry";
 import type { Place } from "../types/place";
-import type { SearchResult } from "../types/search";
-import type { TransitStop } from "../types/transit";
 import { haversineDistance } from "./coordinates";
 
 /** Builds a minimal synthetic Place for a transit stop (used when geocoding finds no match). */

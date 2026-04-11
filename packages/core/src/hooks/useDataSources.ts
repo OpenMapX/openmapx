@@ -1,12 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
-import { API_ENDPOINTS } from "../api/endpoints";
 import type {
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
   DataSourceResult,
-} from "../types/dataSource";
+} from "@integrations/data-source/types";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "../api/client";
+import { API_ENDPOINTS } from "../api/endpoints";
 import type { BoundingBox } from "../types/geometry";
 
 interface DataSourcesResponse {

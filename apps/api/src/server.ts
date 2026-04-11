@@ -19,8 +19,6 @@ import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
 import { adminStoreRoute } from "./routes/admin-store";
 import { capabilitiesRoute } from "./routes/capabilities";
-import { categorySearchRoute } from "./routes/category-search";
-import { dataSourcesRoute } from "./routes/data-sources";
 import { elevationRoute } from "./routes/elevation";
 import { gtfsRoute } from "./routes/gtfs";
 import { imageProxyRoute } from "./routes/image-proxy";
@@ -33,7 +31,6 @@ import { savedRoute } from "./routes/saved";
 import { statusRoute } from "./routes/status";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
-import { transitRoute } from "./routes/transit";
 import { winterSportsRoute } from "./routes/winter-sports";
 import {
   buildTarget,
@@ -117,16 +114,14 @@ await server.register(capabilitiesRoute, { prefix: "/api" });
 
 // Routes
 await server.register(placesRoute, { prefix: "/api" });
-await server.register(categorySearchRoute, { prefix: "/api" });
+
 await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(tilesRoute, { prefix: "/api" });
 await server.register(mapillaryRoute, { prefix: "/api" });
-await server.register(transitRoute, { prefix: "/api" });
 await server.register(gtfsRoute, { prefix: "/api" });
 await server.register(isochroneRoute, { prefix: "/api" });
 await server.register(motisRoute, { prefix: "/api" });
-await server.register(dataSourcesRoute, { prefix: "/api" });
 await server.register(imageProxyRoute, { prefix: "/api" });
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });

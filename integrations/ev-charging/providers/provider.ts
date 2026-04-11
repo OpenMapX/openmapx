@@ -3,9 +3,9 @@ import type {
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
-  DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
+import type { DataSourceProvider } from "../../data-source/types.js";
 import { deduplicateByCoordinates } from "./dedup.js";
 import { getOcmDetail, searchOcm } from "./ocm.js";
 import { mapOcmToDetail, mapOcmToResult } from "./ocm-mapper.js";

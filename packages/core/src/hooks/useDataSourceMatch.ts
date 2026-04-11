@@ -1,7 +1,7 @@
+import type { DataSourceDetail, DataSourceResult } from "@integrations/data-source/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import type { DataSourceDetail, DataSourceResult } from "../types/dataSource";
 import type { Place } from "../types/place";
 import { haversineDistance } from "../utils/coordinates";
 

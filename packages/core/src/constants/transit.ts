@@ -1,4 +1,4 @@
-import type { TransportMode } from "../types/transit";
+import type { TransportMode } from "@integrations/transit/types";
 
 export const MODE_COLORS: Record<TransportMode, string> = {
   rail: "#1A73E8",

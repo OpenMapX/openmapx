@@ -26,5 +26,6 @@
   },
   "healthCheck": {
     "type": "custom"
-  }
+  },
+  "dependencies": ["transit"]
 }

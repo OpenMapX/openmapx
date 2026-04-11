@@ -4,6 +4,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["poi-search"],
+  "dependencies": ["poi-search"],
   "infrastructure": {
     "dockerProfile": "overpass",
     "services": ["overpass"],

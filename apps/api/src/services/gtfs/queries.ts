@@ -1,4 +1,4 @@
-import type { BBox } from "../transit/types";
+import type { BBox } from "@openmapx/core";
 import { sql } from "./db";
 import type { GtfsDepartureRow, GtfsStopRow } from "./types";
 

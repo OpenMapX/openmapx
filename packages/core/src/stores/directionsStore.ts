@@ -1,7 +1,7 @@
+import type { TravelMode, Waypoint } from "@integrations/routing/types";
+import type { TripItinerary } from "@integrations/transit/types";
 import { create } from "zustand";
-import type { TravelMode, Waypoint } from "../types/directions";
 import type { LngLat } from "../types/geometry";
-import type { TripItinerary } from "../types/transit";
 
 let waypointCounter = 0;
 function newWaypointId(): string {

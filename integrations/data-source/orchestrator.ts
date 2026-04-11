@@ -1,0 +1,79 @@
+import { createHash } from "node:crypto";
+import type { IntegrationContext } from "@openmapx/core";
+import type { DataSourceProvider } from "./types.js";
+
+const DEFAULT_SEARCH_TTL = 21600;
+const DEFAULT_DETAIL_TTL = 21600;
+const FILTER_TTL = 172800;
+
+function round(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+function hashKey(prefix: string, data: unknown): string {
+  const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex").slice(0, 16);
+  return `${prefix}:${hash}`;
+}
+
+export function createDataSourceOrchestrator(ctx: IntegrationContext) {
+  function getAllProviders(): DataSourceProvider[] {
+    const integrations = ctx.getIntegrationsByDomain("data-source");
+    const providers: DataSourceProvider[] = [];
+    for (const integration of integrations) {
+      const domainProviders = (integration.providers.get("data-source") ??
+        []) as DataSourceProvider[];
+      providers.push(...domainProviders);
+    }
+    return providers;
+  }
+
+  function getProvider(id: string): DataSourceProvider | undefined {
+    return getAllProviders().find((p) => p.id === id);
+  }
+
+  async function listWithFilters() {
+    const providers = getAllProviders();
+    return Promise.all(
+      providers.map(async (p) => {
+        const filters = await ctx.cache.withCache(`ds:filters:${p.id}`, FILTER_TTL, () =>
+          p.getFilters(),
+        );
+        return { ...p.meta, filters };
+      }),
+    );
+  }
+
+  function getSearchTtl(provider: DataSourceProvider): number {
+    return provider.searchCacheTtl ?? DEFAULT_SEARCH_TTL;
+  }
+
+  function getDetailTtl(provider: DataSourceProvider): number {
+    return provider.detailCacheTtl ?? DEFAULT_DETAIL_TTL;
+  }
+
+  function searchCacheKey(
+    providerId: string,
+    bbox: { south: number; west: number; north: number; east: number },
+    filters?: Record<string, unknown>,
+  ): string {
+    const roundedBbox = `${round(bbox.south, 2)},${round(bbox.west, 2)},${round(bbox.north, 2)},${round(bbox.east, 2)}`;
+    const filterHash = filters ? hashKey("f", filters) : "none";
+    return `ds:search:${providerId}:${roundedBbox}:${filterHash}`;
+  }
+
+  function detailCacheKey(providerId: string, itemId: string): string {
+    const safeItemId = itemId.length > 200 ? hashKey("", itemId) : itemId;
+    return `ds:detail:${providerId}:${safeItemId}`;
+  }
+
+  return {
+    getAllProviders,
+    getProvider,
+    listWithFilters,
+    getSearchTtl,
+    getDetailTtl,
+    searchCacheKey,
+    detailCacheKey,
+  };
+}

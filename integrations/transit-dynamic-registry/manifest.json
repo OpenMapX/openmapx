@@ -53,5 +53,6 @@
       "dpaAvailable": true,
       "dpaUrl": "https://github.com/customer-terms/github-data-protection-agreement"
     }
-  ]
+  ],
+  "dependencies": ["transit"]
 }

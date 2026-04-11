@@ -1,0 +1,10 @@
+{
+  "id": "poi-search",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["poi-search"],
+  "backend": { "routes": true },
+  "quality": "built-in",
+  "category": "Geocoding"
+}

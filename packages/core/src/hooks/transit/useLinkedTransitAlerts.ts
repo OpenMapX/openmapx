@@ -1,8 +1,8 @@
+import type { ServiceAlert } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { Place } from "../../types/place";
-import type { ServiceAlert } from "../../types/transit";
 import { isTransitEligiblePlace } from "./transitEligibility";
 
 export function useLinkedTransitAlerts(place: Place | null) {

@@ -8,7 +8,6 @@ import type {
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
-  DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
 import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
@@ -24,6 +23,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/integration-shared-mobility/types";
+import type { DataSourceProvider } from "../../data-source/types.js";
 import { mergeRegionalStations } from "./merge-stations.js";
 import { searchRegionalClients } from "./registry.js";
 

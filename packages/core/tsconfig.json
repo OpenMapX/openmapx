@@ -11,7 +11,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@integrations/*": ["../../integrations/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../integrations/*/types.ts"]
 }

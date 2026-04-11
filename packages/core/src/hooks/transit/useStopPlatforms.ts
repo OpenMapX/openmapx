@@ -1,7 +1,7 @@
+import type { TransitStop } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
-import type { TransitStop } from "../../types/transit";
 
 export function useStopPlatforms(stopId: string | null) {
   return useQuery({

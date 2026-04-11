@@ -1,6 +1,6 @@
+import type { MergedDeparture } from "@integrations/transit/types";
 import { create } from "zustand";
 import type { Place } from "../types/place";
-import type { MergedDeparture } from "../types/transit";
 
 interface PlaceState {
   selectedPlace: Place | null;

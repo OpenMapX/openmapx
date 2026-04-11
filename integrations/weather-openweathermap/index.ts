@@ -1,12 +1,13 @@
-import type { IntegrationContext, LngLat } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
+  IntegrationContext,
+  LngLat,
   WeatherOptions,
-  WeatherProvider,
   WeatherResponse,
-} from "../weather/types.js";
+} from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { WeatherProvider } from "../weather/types.js";
 
 const FETCH_TIMEOUT_MS = 10_000;
 const BASE = "https://api.openweathermap.org/data/2.5";

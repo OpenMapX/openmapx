@@ -1,5 +1,5 @@
+import type { CategoryId } from "@integrations/poi-search/types";
 import { create } from "zustand";
-import type { CategoryId } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import { useOpeningHoursStore } from "./openingHoursStore";
 

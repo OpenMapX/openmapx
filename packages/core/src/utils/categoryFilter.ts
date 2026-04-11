@@ -1,5 +1,5 @@
+import type { CategoryPlace } from "@integrations/poi-search/types";
 import type { OpeningHoursFilter } from "../stores/openingHoursStore";
-import type { CategoryPlace } from "../types/category";
 import { isAlwaysOpen, isOpenAt, parseOpeningHours } from "./openingHours";
 
 /** Builds a Date for a specific day index (0=Sun) and hour in the current week. */

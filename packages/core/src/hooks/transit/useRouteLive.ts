@@ -1,7 +1,7 @@
+import type { RouteLive } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
-import type { RouteLive } from "../../types/transit";
 
 /** Returns live vehicle positions and active alerts for a route. Refetches every 15s. */
 export function useRouteLive(routeId: string | null) {

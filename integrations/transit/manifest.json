@@ -1,0 +1,10 @@
+{
+  "id": "transit",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["transit"],
+  "backend": { "routes": true },
+  "quality": "built-in",
+  "category": "Transit"
+}

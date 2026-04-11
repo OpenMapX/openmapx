@@ -1,5 +1,5 @@
+import type { BBox } from "@openmapx/core";
 import { validatePublicUrl } from "../../utils/validate-url";
-import type { BBox } from "../transit/types";
 import { sql } from "./db";
 import { dropGtfsSchema, importGtfsFeed } from "./importer";
 import type { CatalogFeed, FeedStatus, ImportedFeed } from "./types";

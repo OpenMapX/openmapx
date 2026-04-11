@@ -1,6 +1,6 @@
-import type { DataSourceDetail } from "../types/dataSource";
+import type { DataSourceDetail } from "@integrations/data-source/types";
+import type { ReverseGeocodingResult } from "@integrations/geocoding/types";
 import type { Place } from "../types/place";
-import type { ReverseGeocodingResult } from "../types/search";
 import { useDataSourceMatch } from "./useDataSourceMatch";
 import { usePlaceDetails } from "./usePlaceDetails";
 import { useReverseGeocoding } from "./useReverseGeocoding";

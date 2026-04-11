@@ -1,7 +1,7 @@
+import type { Departure } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
-import type { Departure } from "../../types/transit";
 
 /** Returns all departures for a stop on a given date (YYYY-MM-DD). Defaults to today. */
 export function useStopTimetable(stopId: string | null, date?: string) {

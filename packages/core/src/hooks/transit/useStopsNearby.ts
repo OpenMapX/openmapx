@@ -1,8 +1,8 @@
+import type { TransitStop, TransportMode } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { LngLat } from "../../types/geometry";
-import type { TransitStop, TransportMode } from "../../types/transit";
 
 export function useStopsNearby(
   location: LngLat | null,

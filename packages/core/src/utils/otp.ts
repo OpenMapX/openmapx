@@ -1,4 +1,4 @@
-import type { TransportMode } from "../types/transit";
+import type { TransportMode } from "@integrations/transit/types";
 
 const OTP_MODE_MAP: Record<string, TransportMode> = {
   BUS: "bus",

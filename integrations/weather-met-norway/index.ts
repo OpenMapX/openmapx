@@ -1,12 +1,13 @@
-import type { IntegrationContext, LngLat } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
+  IntegrationContext,
+  LngLat,
   WeatherOptions,
-  WeatherProvider,
   WeatherResponse,
-} from "../weather/types.js";
+} from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { WeatherProvider } from "../weather/types.js";
 
 const BASE_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
 const FETCH_TIMEOUT_MS = 10_000;

@@ -24,9 +24,6 @@ import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
 import { getSecret, resolveVaultSecrets } from "./services/secrets";
-import { providerHealth } from "./services/transit/health";
-import type { TransitProvider } from "./services/transit/orchestrator";
-import { transitOrchestrator } from "./services/transit/orchestrator";
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
@@ -356,17 +353,6 @@ export async function initIntegrations(
   _fastify = fastify;
   _integrationDirs = integrationDirs;
 
-  // Reset transit provider health state when an integration is unloaded
-  // (prevents stale failure counters from poisoning reloaded providers)
-  eventBus.on("integration.unloaded", (event) => {
-    const integration = integrations.get(event.integrationId);
-    if (!integration) return;
-    const transitProviders = (integration.providers.get("transit") ?? []) as TransitProvider[];
-    for (const tp of transitProviders) {
-      providerHealth.reset(tp.id);
-    }
-  });
-
   const discovered = await discoverManifests(integrationDirs);
 
   // Topological sort by manifest.dependencies to ensure deps load first
@@ -426,7 +412,6 @@ export async function initIntegrations(
     const cache = createCacheClient(id);
     const shutdownHandlers: Array<() => Promise<void>> = [];
     const providers = new Map<string, unknown[]>();
-    let _customHealthCheck: CustomHealthCheckFn | undefined;
 
     const integration: LoadedIntegration = {
       id,
@@ -498,7 +483,6 @@ export async function initIntegrations(
         });
       },
       registerHealthCheck(fn: CustomHealthCheckFn) {
-        _customHealthCheck = fn;
         integration.customHealthCheck = fn;
       },
       emit(event: string, data: unknown) {
@@ -530,19 +514,6 @@ export async function initIntegrations(
         if (typeof mod.setup === "function") {
           await mod.setup(ctx);
         }
-      }
-
-      // Bridge transit providers into the orchestrator
-      const transitProviders = (providers.get("transit") ?? []) as TransitProvider[];
-      for (const tp of transitProviders) {
-        transitOrchestrator.register(tp);
-      }
-
-      // Geocoding providers are read directly from the integration framework
-      // by the geocoding orchestrator via getIntegrationsByDomain("geocoding")
-      const geocodingProviders = providers.get("geocoding") ?? [];
-      if (geocodingProviders.length > 0) {
-        log.info(`Registered ${geocodingProviders.length} geocoding provider(s)`);
       }
 
       integrations.set(id, integration);
@@ -658,47 +629,6 @@ export function getIntegrationProviders<T>(id: string, domain: string): T[] {
 }
 
 /**
- * Build a provider attribution map from transit integration manifests.
- * Keys are the provider prefixes (e.g. "db", "tfl") extracted from the
- * registered TransitProvider instances; values are attribution data
- * from the integration manifest.
- */
-export function getTransitProviderAttribution(): Record<
-  string,
-  { label: string; url: string; license?: string; licenseUrl?: string }
-> {
-  const result: Record<
-    string,
-    { label: string; url: string; license?: string; licenseUrl?: string }
-  > = {};
-
-  for (const provider of transitOrchestrator.getAll()) {
-    const prefix = provider.prefix.replace(/:$/, "");
-    if (result[prefix]) continue;
-
-    // Find the integration that registered this provider
-    for (const integration of integrations.values()) {
-      if (!integration.enabled) continue;
-      const domainProviders = integration.providers.get("transit") ?? [];
-      if (domainProviders.includes(provider)) {
-        const ds = integration.manifest.dataSources?.[0];
-        if (ds) {
-          result[prefix] = {
-            label: ds.name,
-            url: ds.url,
-            license: ds.license,
-            licenseUrl: ds.licenseUrl,
-          };
-        }
-        break;
-      }
-    }
-  }
-
-  return result;
-}
-
-/**
  * Reload all integrations: shutdown existing, re-discover manifests, re-setup.
  * Note: Fastify routes registered by integrations cannot be removed at runtime,
  * so only provider re-registration and lifecycle hooks are re-executed.
@@ -722,12 +652,6 @@ export async function reloadIntegrations(): Promise<{
       } catch {
         // best effort
       }
-    }
-
-    // Unregister transit providers from the orchestrator
-    const transitProviders = (integration.providers.get("transit") ?? []) as TransitProvider[];
-    for (const tp of transitProviders) {
-      transitOrchestrator.unregister(tp.id);
     }
   }
 
@@ -868,11 +792,6 @@ export async function reloadIntegrations(): Promise<{
         if (typeof mod.setup === "function") {
           await mod.setup(ctx);
         }
-      }
-
-      const transitProviders = (providers.get("transit") ?? []) as TransitProvider[];
-      for (const tp of transitProviders) {
-        transitOrchestrator.register(tp);
       }
 
       integrations.set(id, integration);

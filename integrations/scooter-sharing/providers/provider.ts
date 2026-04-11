@@ -9,7 +9,6 @@ import type {
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
-  DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
 import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
@@ -25,6 +24,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/integration-shared-mobility/types";
+import type { DataSourceProvider } from "../../data-source/types.js";
 import { searchFelyx } from "./felyx-client.js";
 import { searchGoSharing } from "./gosharing-client.js";
 import { searchLink } from "./link-client.js";

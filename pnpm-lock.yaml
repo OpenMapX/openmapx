@@ -280,6 +280,12 @@ importers:
         specifier: workspace:^
         version: link:../../packages/shared-mobility
 
+  integrations/data-source:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+
   integrations/ev-charging:
     dependencies:
       '@openmapx/core':
@@ -505,6 +511,12 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
 
+  integrations/poi-search:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+
   integrations/routing:
     dependencies:
       '@openmapx/core':
@@ -555,6 +567,12 @@ importers:
       zustand:
         specifier: ^5.0.12
         version: 5.0.12(@types/react@19.2.14)(immer@11.1.4)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+
+  integrations/transit:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
 
   integrations/transit-bvg:
     dependencies:

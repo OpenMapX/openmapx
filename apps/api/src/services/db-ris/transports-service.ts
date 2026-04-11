@@ -5,7 +5,7 @@
  * and maps them to the normalized OccupancyLevel used across the app.
  */
 
-import type { OccupancyLevel } from "../transit/types.js";
+import type { OccupancyLevel } from "@openmapx/core";
 import { isRisConfigured, risPost } from "./client.js";
 import type { RisOccupancyLevel, RisOccupancyResponse } from "./transports-types.js";
 

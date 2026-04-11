@@ -1,7 +1,7 @@
+import type { CategoryId, CategorySearchResponse } from "@integrations/poi-search/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import type { CategoryId, CategorySearchResponse } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 
 export function useCategorySearch(

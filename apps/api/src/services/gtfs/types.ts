@@ -1,4 +1,4 @@
-import type { BBox } from "../transit/types";
+import type { BBox } from "@openmapx/core";
 
 export interface CatalogFeed {
   id: string;

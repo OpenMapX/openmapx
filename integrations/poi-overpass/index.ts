@@ -1,10 +1,6 @@
-import type {
-  BoundingBox,
-  IntegrationContext,
-  PoiSearchProvider,
-  PoiSearchResult,
-} from "@openmapx/core";
+import type { BoundingBox, IntegrationContext } from "@openmapx/core";
 import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
+import type { PoiSearchProvider, PoiSearchResult } from "../poi-search/types.js";
 
 const overpassProvider: PoiSearchProvider = {
   id: "overpass",

@@ -3,9 +3,9 @@ import type {
   DataSourceDetail,
   DataSourceFilterDef,
   DataSourceMeta,
-  DomainDataSourceProvider as DataSourceProvider,
   DataSourceResult,
 } from "@openmapx/core";
+import type { DataSourceProvider } from "../../data-source/types.js";
 import { fetchDbBahnParkDetail, searchDbBahnPark } from "./db-bahnpark.js";
 import { deduplicateParking } from "./dedup.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";

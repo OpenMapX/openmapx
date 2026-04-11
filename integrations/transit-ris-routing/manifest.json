@@ -50,5 +50,6 @@
       "cookies": false,
       "dpaAvailable": false
     }
-  ]
+  ],
+  "dependencies": ["transit"]
 }

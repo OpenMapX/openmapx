@@ -1,6 +1,5 @@
-import type { IntegrationContext, LngLat } from "@openmapx/core";
+import type { IntegrationContext, LngLat, WeatherOptions } from "@openmapx/core";
 import { createWeatherOrchestrator } from "./orchestrator.js";
-import type { WeatherOptions } from "./types.js";
 
 function roundCoord2(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);

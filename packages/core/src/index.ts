@@ -1,5 +1,83 @@
 // Platform
 
+export type {
+  DataSourceAttribution,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceFilterDef,
+  DataSourceMarkerStyle,
+  DataSourceMeta,
+  DataSourceResult,
+} from "@integrations/data-source/types";
+export type {
+  AutocompleteResult,
+  ReverseGeocodingResult,
+  SearchResult,
+} from "@integrations/geocoding/types";
+// Types
+export type {
+  CategoryDefinition,
+  CategoryId,
+  CategoryPlace,
+  CategorySearchResponse,
+} from "@integrations/poi-search/types";
+export {
+  CATEGORY_DEFINITIONS,
+  categoryPlaceToPlace,
+  HOURS_FILTER_CATEGORY_IDS,
+} from "@integrations/poi-search/types";
+export type {
+  DirectionsResult,
+  IsochroneContour,
+  IsochroneGeometry,
+  IsochroneMultiPolygon,
+  IsochronePolygon,
+  IsochroneResult,
+  IsochroneTravelMode,
+  Route,
+  RouteLeg,
+  RouteStep,
+  TravelMode,
+  Waypoint,
+} from "@integrations/routing/types";
+export type {
+  AlertSeverity,
+  Departure,
+  Facility,
+  FareProduct,
+  GeoJSONLineString,
+  GeoJSONMultiLineString,
+  MergedDeparture,
+  MergedRoute,
+  OccupancyLevel,
+  RouteLive,
+  RouteStop,
+  ServiceAlert,
+  TransitRoute,
+  TransitStop,
+  TransportMode,
+  TripFare,
+  TripItinerary,
+  TripLeg,
+  TripPlan,
+  TripRemark,
+  VehicleJourney,
+  VehicleJourneyStop,
+  VehiclePosition,
+} from "@integrations/transit/types";
+export type {
+  CurrentWeather,
+  DailyForecastPoint,
+  HourlyForecastPoint,
+  RadarFrame,
+  RadarMeta,
+  TemperatureUnit,
+  WeatherAttribution,
+  WeatherOptions,
+  WeatherResponse,
+  WeatherSubLayer,
+  WindSpeedUnit,
+} from "@integrations/weather/types";
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
 // API
 export {
@@ -26,7 +104,6 @@ export {
 } from "./constants/transit";
 // Domains
 export type {
-  DataSourceProvider as DomainDataSourceProvider,
   GeoJsonFeatureCollection,
   KnowledgeProvider,
   KnowledgeResult,
@@ -34,10 +111,7 @@ export type {
   MapOverlayData,
   MapOverlayDetail,
   MapOverlayProvider,
-  PoiSearchProvider,
-  PoiSearchResult,
   StreetViewProvider,
-  TransitProvider,
 } from "./domains";
 // Hooks — Transit
 export {
@@ -205,35 +279,6 @@ export { usePlaceStore } from "./stores/placeStore";
 export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useSidebarStore } from "./stores/sidebarStore";
-// Types
-export type {
-  CategoryDefinition,
-  CategoryId,
-  CategoryPlace,
-  CategorySearchResponse,
-} from "./types/category";
-export {
-  CATEGORY_DEFINITIONS,
-  categoryPlaceToPlace,
-  HOURS_FILTER_CATEGORY_IDS,
-} from "./types/category";
-export type {
-  DataSourceAttribution,
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceFilterDef,
-  DataSourceMarkerStyle,
-  DataSourceMeta,
-  DataSourceResult,
-} from "./types/dataSource";
-export type {
-  DirectionsResult,
-  Route,
-  RouteLeg,
-  RouteStep,
-  TravelMode,
-  Waypoint,
-} from "./types/directions";
 export type {
   ElevationApiResponse,
   ElevationPoint,
@@ -252,49 +297,8 @@ export type {
   ShelterFeatureCollection,
 } from "./types/hiking";
 export { SAC_GRADES } from "./types/hiking";
-export type {
-  IsochroneContour,
-  IsochroneGeometry,
-  IsochroneMultiPolygon,
-  IsochronePolygon,
-  IsochroneResult,
-  IsochroneTravelMode,
-} from "./types/isochrone";
 export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";
 export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
-export type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "./types/search";
-export type {
-  AlertSeverity,
-  Departure,
-  Facility,
-  FareProduct,
-  GeoJSONLineString,
-  GeoJSONMultiLineString,
-  MergedDeparture,
-  MergedRoute,
-  OccupancyLevel,
-  RouteLive,
-  RouteStop,
-  ServiceAlert,
-  TransitRoute,
-  TransitStop,
-  TransportMode,
-  TripFare,
-  TripItinerary,
-  TripLeg,
-  TripPlan,
-  TripRemark,
-  VehicleJourney,
-  VehicleJourneyStop,
-  VehiclePosition,
-} from "./types/transit";
-export type {
-  RadarFrame,
-  RadarMeta,
-  TemperatureUnit,
-  WeatherSubLayer,
-  WindSpeedUnit,
-} from "./types/weather";
 export {
   buildAttributionHtml,
   buildIntegrationAttribution,

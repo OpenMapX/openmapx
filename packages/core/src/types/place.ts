@@ -1,4 +1,4 @@
-import type { DataSourceDetail } from "./dataSource";
+import type { DataSourceDetail } from "@integrations/data-source/types";
 import type { LngLat } from "./geometry";
 
 export interface PlacePhoto {

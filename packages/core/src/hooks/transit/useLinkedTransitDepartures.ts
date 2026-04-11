@@ -1,8 +1,8 @@
+import type { MergedDeparture } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { Place } from "../../types/place";
-import type { MergedDeparture } from "../../types/transit";
 import { isTransitEligiblePlace } from "./transitEligibility";
 
 export function useLinkedTransitDepartures(place: Place | null, minutes = 60) {

@@ -1,7 +1,7 @@
+import type { AutocompleteResult } from "@integrations/geocoding/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import type { AutocompleteResult } from "../types/search";
 import { usePrefixPlaceholder } from "./usePrefixPlaceholder";
 
 export function useAutocomplete(query: string, lang?: string) {

@@ -1,10 +1,10 @@
+// Arrivals share the same shape as departures (scheduledAt, headsign, route, platform);
+// no separate MergedArrival type is needed.
+import type { MergedDeparture } from "@integrations/transit/types";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { Place } from "../../types/place";
-// Arrivals share the same shape as departures (scheduledAt, headsign, route, platform);
-// no separate MergedArrival type is needed.
-import type { MergedDeparture } from "../../types/transit";
 import { isTransitEligiblePlace } from "./transitEligibility";
 
 export function useLinkedTransitArrivals(place: Place | null, minutes = 60) {

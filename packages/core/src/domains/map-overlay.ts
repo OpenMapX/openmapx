@@ -1,4 +1,4 @@
-import type { DataSourceDetailSection } from "../types/dataSource";
+import type { DataSourceDetailSection } from "@integrations/data-source/types";
 import type { BoundingBox, LngLat } from "../types/geometry";
 
 export interface GeoJsonFeatureCollection {

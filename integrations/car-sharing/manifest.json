@@ -4,6 +4,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "domains": ["data-source"],
+  "dependencies": ["data-source"],
   "frontend": {
     "searchCategory": {
       "id": "car-sharing",
