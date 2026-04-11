@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openmapx/core": "workspace:^"
+    "@openmapx/core": "workspace:^",
+    "@openstreetmap/id-tagging-schema": "^6.15.0"
   }
 }
