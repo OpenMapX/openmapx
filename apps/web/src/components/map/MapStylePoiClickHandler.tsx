@@ -92,6 +92,18 @@ export function MapStylePoiClickHandler() {
       const layerIds = poiLayerIdsRef.current.filter((id) => !!map.getLayer(id));
       if (layerIds.length === 0) return;
 
+      // Skip if the click landed on one of our own overlay layers (category results,
+      // data source markers, street view, etc.) — those have their own handlers.
+      const ownLayers = [...INTERACTIVE_LAYER_IDS].filter(
+        (id) => !layerIds.includes(id) && !!map.getLayer(id),
+      );
+      if (
+        ownLayers.length > 0 &&
+        map.queryRenderedFeatures(e.point, { layers: ownLayers }).length > 0
+      ) {
+        return;
+      }
+
       const features = map.queryRenderedFeatures(e.point, { layers: layerIds });
       if (!features.length) return;
 
@@ -121,7 +133,17 @@ export function MapStylePoiClickHandler() {
         category: poiSubclass ?? poiClass,
         rawCategory: poiSubclass ? `${poiClass}/${poiSubclass}` : poiClass,
       });
-      useSidebarStore.getState().openSidebar(PANEL.PLACE);
+      const sidebarId = useSidebarStore.getState().activeSidebarId;
+      if (!sidebarId || sidebarId === PANEL.PLACE) {
+        // Sidebar is empty or already showing a place — take it over and close any
+        // floating card so we don't show the same place in two panels at once.
+        useSidebarStore.getState().closeDetail();
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+      } else {
+        // Another panel (category results, data source, directions …) is active —
+        // keep it and show just the floating detail card.
+        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      }
     };
 
     map.on("click", onClick);

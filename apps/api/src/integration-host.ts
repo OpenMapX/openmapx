@@ -459,7 +459,8 @@ export async function initIntegrations(
         providers.set(domain, existing);
       },
       registerRoute(method: string, path: string, handler: RouteHandler) {
-        const fullPath = `/api/integrations/${id}${path.startsWith("/") ? path : `/${path}`}`;
+        const raw = `/api/integrations/${id}${path.startsWith("/") ? path : `/${path}`}`;
+        const fullPath = raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
         fastify.route({
           method: method.toUpperCase() as "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
           url: fullPath,

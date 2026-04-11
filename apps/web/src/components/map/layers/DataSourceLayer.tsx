@@ -19,6 +19,7 @@ import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
@@ -137,6 +138,21 @@ export function DataSourceLayer() {
     [activeSource],
   );
   useLayerReanchor(reanchorIds, activeSource !== null);
+
+  // Register this source's layers in the shared interactive-layer registry so
+  // MapStylePoiClickHandler (and MapClickHandler) know to defer to our own handlers.
+  useEffect(() => {
+    if (!activeSource) return;
+    const markersLid = markersLayerId(activeSource);
+    const labelsLid = labelsLayerId(activeSource);
+    INTERACTIVE_LAYER_IDS.add(markersLid);
+    INTERACTIVE_LAYER_IDS.add(labelsLid);
+    return () => {
+      INTERACTIVE_LAYER_IDS.delete(markersLid);
+      INTERACTIVE_LAYER_IDS.delete(labelsLid);
+    };
+  }, [activeSource]);
+
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
 
   const { data: sourcesData } = useDataSources();

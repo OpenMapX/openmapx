@@ -122,5 +122,11 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
     staleTime: 5 * 60 * 1000,
   });
 
+  // Filter out minimal fallback details that have no useful data (e.g. when
+  // the upstream provider is unavailable and only an Overpass stub is returned).
+  if (detail && detail.source === "unknown" && detail.sections.length === 0) {
+    return null;
+  }
+
   return detail ?? null;
 }

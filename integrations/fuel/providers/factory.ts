@@ -58,8 +58,13 @@ export async function searchFuelStations(bbox: BoundingBox): Promise<FuelStation
   const results = await Promise.allSettled(providers.map((p) => p.searchStations(bbox)));
 
   const stations: FuelStation[] = [];
-  for (const r of results) {
-    if (r.status === "fulfilled") stations.push(...r.value);
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.status === "fulfilled") {
+      stations.push(...r.value);
+    } else {
+      console.warn(`[fuel] Provider ${providers[i].name} failed:`, r.reason?.message ?? r.reason);
+    }
   }
 
   return stations.length > 0 ? deduplicate(stations) : null;
