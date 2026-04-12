@@ -13,6 +13,14 @@ import {
   searchCaltrans,
 } from "./caltrans.js";
 import { deduplicateByCoordinates } from "./dedup.js";
+import {
+  getDotDetail,
+  getDotSourceIds,
+  mapDotToDetail,
+  mapDotToResult,
+  searchDot,
+} from "./dot/index.js";
+import { getNpsDetail, mapNpsToDetail, mapNpsToResult, searchNps } from "./nps.js";
 import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } from "./osm.js";
 import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "./tfl.js";
 import type { RawWebcam } from "./types.js";
@@ -38,33 +46,41 @@ const META: DataSourceMeta = {
   },
 };
 
-const WEBCAM_FILTERS: DataSourceFilterDef[] = [
-  {
-    id: "category",
-    label: "Category",
-    type: "multi-select",
-    options: [
-      { id: "landscape", label: "Landscape" },
-      { id: "traffic", label: "Traffic" },
-      { id: "city", label: "City" },
-      { id: "weather", label: "Weather" },
-      { id: "beach", label: "Beach" },
-      { id: "other", label: "Other" },
-    ],
-  },
-  {
-    id: "source",
-    label: "Source",
-    type: "multi-select",
-    clientSide: true,
-    options: [
-      { id: "windy", label: "Windy" },
-      { id: "osm-webcam", label: "OpenStreetMap" },
-      { id: "caltrans", label: "Caltrans" },
-      { id: "tfl", label: "TfL London" },
-    ],
-  },
-];
+function buildSourceFilterOptions(): { id: string; label: string }[] {
+  return [
+    { id: "windy", label: "Windy" },
+    { id: "osm-webcam", label: "OpenStreetMap" },
+    { id: "caltrans", label: "Caltrans" },
+    { id: "tfl", label: "TfL London" },
+    { id: "nps", label: "US National Parks" },
+    ...getDotSourceIds(),
+  ];
+}
+
+function buildFilters(): DataSourceFilterDef[] {
+  return [
+    {
+      id: "category",
+      label: "Category",
+      type: "multi-select",
+      options: [
+        { id: "landscape", label: "Landscape" },
+        { id: "traffic", label: "Traffic" },
+        { id: "city", label: "City" },
+        { id: "weather", label: "Weather" },
+        { id: "beach", label: "Beach" },
+        { id: "other", label: "Other" },
+      ],
+    },
+    {
+      id: "source",
+      label: "Source",
+      type: "multi-select",
+      clientSide: true,
+      options: buildSourceFilterOptions(),
+    },
+  ];
+}
 
 type MapToResult = (raw: RawWebcam) => DataSourceResult;
 
@@ -76,27 +92,32 @@ class WebcamProvider implements DataSourceProvider {
   readonly detailCacheTtl = 300;
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
-    return WEBCAM_FILTERS;
+    return buildFilters();
   }
 
   async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
-    const [windyResult, osmResult, caltransResult, tflResult] = await Promise.allSettled([
-      searchWindy(bbox),
-      searchOsmWebcams(bbox),
-      searchCaltrans(bbox),
-      searchTfl(bbox),
-    ]);
+    const [windyResult, osmResult, caltransResult, tflResult, npsResult, dotResult] =
+      await Promise.allSettled([
+        searchWindy(bbox),
+        searchOsmWebcams(bbox),
+        searchCaltrans(bbox),
+        searchTfl(bbox),
+        searchNps(bbox),
+        searchDot(bbox),
+      ]);
 
     const mapAndCollect = (
       result: PromiseSettledResult<RawWebcam[]>,
       mapper: MapToResult,
     ): DataSourceResult[] => (result.status === "fulfilled" ? result.value.map(mapper) : []);
 
-    // Priority order: Windy > Caltrans > TfL > OSM
+    // Priority order: Windy > Caltrans > TfL > NPS > State DOTs > OSM
     const combined = [
       ...mapAndCollect(windyResult, mapWindyToResult),
       ...mapAndCollect(caltransResult, mapCaltransToResult),
       ...mapAndCollect(tflResult, mapTflToResult),
+      ...mapAndCollect(npsResult, mapNpsToResult),
+      ...mapAndCollect(dotResult, mapDotToResult),
       ...mapAndCollect(osmResult, mapOsmToResult),
     ];
 
@@ -144,6 +165,17 @@ class WebcamProvider implements DataSourceProvider {
       const cameraId = itemId.slice("tfl:".length);
       const raw = await getTflDetail(cameraId);
       return raw ? mapTflToDetail(raw) : null;
+    }
+
+    if (itemId.startsWith("nps:")) {
+      const webcamId = itemId.slice("nps:".length);
+      const raw = await getNpsDetail(webcamId);
+      return raw ? mapNpsToDetail(raw) : null;
+    }
+
+    if (itemId.startsWith("dot-")) {
+      const raw = await getDotDetail(itemId);
+      return raw ? mapDotToDetail(raw) : null;
     }
 
     return null;

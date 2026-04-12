@@ -13,67 +13,67 @@
       "dataReceived": "Parking sites with name, address, coordinates, capacity, realtime free capacity, type, fee info, opening hours"
     },
     {
-      "purpose": "Deutsche Bahn station parking facilities (~312 facilities across Germany)",
+      "purpose": "Deutsche Bahn station parking facilities",
       "dataSent": "No user data (fetches entire dataset); facility ID for detail lookup",
       "dataReceived": "Parking facilities with name, address, coordinates, capacity, tariff/pricing, accessibility, EV charging info"
     },
     {
-      "purpose": "Netherlands parking garages, Park & Ride, and carpool facilities (~498 locations)",
+      "purpose": "Netherlands parking garages, Park & Ride, and carpool facilities",
       "dataSent": "Bounding box coordinates for geographic filtering; area manager ID and area ID for detail lookup",
       "dataReceived": "Facility name, coordinates, type (garage/P+R/carpool), capacity, EV charging point count, disabled access flag, max vehicle height"
     },
     {
-      "purpose": "French parking facilities from the national BNLS register (~826 locations, static data)",
+      "purpose": "French parking facilities from the national BNLS register",
       "dataSent": "No user data (fetches entire dataset)",
       "dataReceived": "Facility ID, name, coordinates, total spaces, free/paid status, facility type, hourly/daily/monthly pricing, disabled/EV/P+R space counts, max height, address"
     },
     {
-      "purpose": "Real-time parking garage occupancy in Ghent, Belgium (13 garages)",
+      "purpose": "Real-time parking garage occupancy in Ghent, Belgium",
       "dataSent": "No user data (fetches entire dataset)",
       "dataReceived": "Garage name, coordinates, total/available capacity, occupancy percentage, open/closed status, occupancy trend, operator"
     },
     {
-      "purpose": "Static parking facility data for Brussels, Belgium (28 garages)",
+      "purpose": "Static parking facility data for Brussels, Belgium",
       "dataSent": "No user data (fetches entire dataset)",
       "dataReceived": "Facility name (FR/NL), coordinates, capacity, disabled capacity, max height, floors, operator, address"
     },
     {
-      "purpose": "Real-time parking garage occupancy in Basel, Switzerland (~20 garages)",
+      "purpose": "Real-time parking garage occupancy in Basel, Switzerland",
       "dataSent": "No user data (fetches entire dataset)",
       "dataReceived": "Garage name, coordinates, free/total spaces, address"
     },
     {
-      "purpose": "Real-time parking availability in Florence, Italy (13 facilities)",
+      "purpose": "Real-time parking availability in Florence, Italy",
       "dataSent": "No user data (fetches entire dataset)",
       "dataReceived": "Facility name, coordinates, free spaces count, last update timestamp"
     },
     {
-      "purpose": "Static parking facility data for Barcelona, Spain (~556 locations)",
+      "purpose": "Static parking facility data for Barcelona, Spain",
       "dataSent": "No user data (fetches entire dataset)",
       "dataReceived": "Facility name, coordinates, address, district, neighborhood, status"
     },
     {
-      "purpose": "Static parking garages and P+R facilities in Vienna, Austria (373 facilities)",
+      "purpose": "Static parking garages and P+R facilities in Vienna, Austria",
       "dataSent": "No user data (fetches entire WFS dataset)",
       "dataReceived": "Facility name, coordinates, operator, address, P+R flag, disabled access flag, website"
     },
     {
-      "purpose": "Static parking garage data for Copenhagen, Denmark (31 garages)",
+      "purpose": "Static parking garage data for Copenhagen, Denmark",
       "dataSent": "No user data (fetches entire WFS dataset)",
       "dataReceived": "Street name, house number, postal district, capacity, type (underground/garage), owner"
     },
     {
-      "purpose": "Real-time car park availability across Singapore (~1,994 HDB car parks)",
+      "purpose": "Real-time car park availability across Singapore",
       "dataSent": "No user data (fetches entire availability + static datasets)",
       "dataReceived": "Car park number, lot type, total/available lots, address, coordinates (SVY21 converted to WGS84), car park type"
     },
     {
-      "purpose": "Static parking facility data for Madrid, Spain (~189 facilities)",
+      "purpose": "Static parking facility data for Madrid, Spain",
       "dataSent": "No user data (fetches entire dataset)",
       "dataReceived": "Facility name, coordinates, address, capacity (from description), schedule, P+R designation, operator"
     },
     {
-      "purpose": "Real-time car park data for Newcastle/Tyne & Wear, UK (~16 car parks)",
+      "purpose": "Real-time car park data for Newcastle/Tyne & Wear, UK",
       "dataSent": "UTMC credentials (username/password) for authentication",
       "dataReceived": "Car park name, coordinates, capacity, free spaces, state (open/closed/full)"
     },
@@ -81,6 +81,21 @@
       "purpose": "Real-time Park & Ride car park data for Greater Sydney, Australia",
       "dataSent": "NSW Transport API key for authentication",
       "dataReceived": "Facility name, coordinates, capacity, available spaces, occupancy"
+    },
+    {
+      "purpose": "Real-time truck parking availability along Dutch highways",
+      "dataSent": "No user data (fetches entire static table + dynamic status XML feeds)",
+      "dataReceived": "Truck parking facilities with name, coordinates, capacity, real-time vacant/occupied spaces, amenities (charging, toilet, shower)"
+    },
+    {
+      "purpose": "German Autobahn rest area and truck parking facilities",
+      "dataSent": "No user data (fetches road list, then parking data per road)",
+      "dataReceived": "Rest area name, coordinates, car/truck parking capacity, blocked status, amenities (toilet, fuel, restaurant, WiFi, shower)"
+    },
+    {
+      "purpose": "Parking stations in South Tyrol, Italy",
+      "dataSent": "No user data (fetches entire station list + latest measurements)",
+      "dataReceived": "Station name (multilingual), coordinates, capacity, real-time occupied/free spaces, parking layout type, EV charging availability"
     },
     {
       "purpose": "Parking facilities from OpenStreetMap (static data, no real-time availability)",

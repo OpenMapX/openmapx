@@ -23,18 +23,173 @@
         "title": "Windy Webcams API Key",
         "description": "Get a free key at https://api.windy.com/keys",
         "x-openmapx-secret": true
+      },
+      "npsApiKey": {
+        "type": "string",
+        "title": "NPS API Key",
+        "description": "Get a free key at https://developer.nps.gov/signup/",
+        "x-openmapx-secret": true
+      },
+      "dotGaApiKey": {
+        "type": "string",
+        "title": "Georgia 511 API Key",
+        "description": "Register at https://511ga.org/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotFlApiKey": {
+        "type": "string",
+        "title": "Florida 511 API Key",
+        "description": "Register at https://fl511.com/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotAzApiKey": {
+        "type": "string",
+        "title": "Arizona 511 API Key",
+        "description": "Register at https://az511.com/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotIdApiKey": {
+        "type": "string",
+        "title": "Idaho 511 API Key",
+        "description": "Register at https://511.idaho.gov/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotUtApiKey": {
+        "type": "string",
+        "title": "Utah 511 API Key",
+        "description": "Register at https://prod-ut.ibi511.com/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotLaApiKey": {
+        "type": "string",
+        "title": "Louisiana 511 API Key",
+        "description": "Register at https://511la.org/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotPaApiKey": {
+        "type": "string",
+        "title": "Pennsylvania 511 API Key",
+        "description": "Register at https://www.511pa.com/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotScApiKey": {
+        "type": "string",
+        "title": "South Carolina 511 API Key",
+        "description": "Register at https://511sc.org/my511/register",
+        "x-openmapx-secret": true
+      },
+      "dotMaApiKey": {
+        "type": "string",
+        "title": "Massachusetts 511 API Key",
+        "description": "Register at https://www.mass511.com/my511/register",
+        "x-openmapx-secret": true
       }
     }
   },
-  "envVars": ["WINDY_WEBCAMS_API_KEY"],
-  "healthCheck": {
-    "type": "http",
-    "urlTemplate": "https://api.windy.com/webcams/api/v3/webcams?limit=1",
-    "headers": { "x-windy-api-key": "${WINDY_WEBCAMS_API_KEY}" },
-    "requiredEnvVars": ["WINDY_WEBCAMS_API_KEY"]
-  },
+  "envVars": [
+    "WINDY_WEBCAMS_API_KEY",
+    "NPS_API_KEY",
+    "DOT_GA_API_KEY",
+    "DOT_FL_API_KEY",
+    "DOT_AZ_API_KEY",
+    "DOT_ID_API_KEY",
+    "DOT_UT_API_KEY",
+    "DOT_LA_API_KEY",
+    "DOT_PA_API_KEY",
+    "DOT_SC_API_KEY",
+    "DOT_MA_API_KEY"
+  ],
+  "healthCheck": [
+    {
+      "name": "Windy Webcams",
+      "type": "http",
+      "urlTemplate": "https://api.windy.com/webcams/api/v3/webcams?limit=1",
+      "headers": { "x-windy-api-key": "${WINDY_WEBCAMS_API_KEY}" },
+      "requiredEnvVars": ["WINDY_WEBCAMS_API_KEY"]
+    },
+    {
+      "name": "NPS Webcams",
+      "type": "http",
+      "urlTemplate": "https://developer.nps.gov/api/v1/webcams?limit=1&api_key=${NPS_API_KEY}",
+      "requiredEnvVars": ["NPS_API_KEY"]
+    },
+    {
+      "name": "Caltrans CCTV",
+      "type": "http",
+      "url": "https://cwwp2.dot.ca.gov/data/d7/cctv/cctvStatusD07.json"
+    },
+    {
+      "name": "TfL JamCam",
+      "type": "http",
+      "url": "https://api.tfl.gov.uk/Place/Type/JamCam"
+    },
+    {
+      "name": "511NY",
+      "type": "http",
+      "url": "https://511ny.org/api/getcameras?format=json"
+    },
+    {
+      "name": "Oregon TripCheck",
+      "type": "http",
+      "url": "https://tripcheck.com/Scripts/map/data/cctvinventory.js"
+    },
+    {
+      "name": "511GA",
+      "type": "http",
+      "urlTemplate": "https://511ga.org/api/v2/get/cameras?key=${DOT_GA_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_GA_API_KEY"]
+    },
+    {
+      "name": "FL511",
+      "type": "http",
+      "urlTemplate": "https://fl511.com/api/v2/get/cameras?key=${DOT_FL_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_FL_API_KEY"]
+    },
+    {
+      "name": "AZ511",
+      "type": "http",
+      "urlTemplate": "https://az511.com/api/v2/get/cameras?key=${DOT_AZ_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_AZ_API_KEY"]
+    },
+    {
+      "name": "Idaho 511",
+      "type": "http",
+      "urlTemplate": "https://511.idaho.gov/api/v2/get/cameras?key=${DOT_ID_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_ID_API_KEY"]
+    },
+    {
+      "name": "Utah 511",
+      "type": "http",
+      "urlTemplate": "https://prod-ut.ibi511.com/api/v2/get/cameras?key=${DOT_UT_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_UT_API_KEY"]
+    },
+    {
+      "name": "511LA",
+      "type": "http",
+      "urlTemplate": "https://511la.org/api/v2/get/cameras?key=${DOT_LA_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_LA_API_KEY"]
+    },
+    {
+      "name": "511PA",
+      "type": "http",
+      "urlTemplate": "https://www.511pa.com/api/v2/get/cameras?key=${DOT_PA_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_PA_API_KEY"]
+    },
+    {
+      "name": "511SC",
+      "type": "http",
+      "urlTemplate": "https://511sc.org/api/v2/get/cameras?key=${DOT_SC_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_SC_API_KEY"]
+    },
+    {
+      "name": "Mass511",
+      "type": "http",
+      "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${DOT_MA_API_KEY}&format=json",
+      "requiredEnvVars": ["DOT_MA_API_KEY"]
+    }
+  ],
   "quality": "built-in",
-  "category": "Data Overlays",
+  "category": "Webcams",
   "dataSources": [
     {
       "sourceId": "windy",
@@ -42,7 +197,7 @@
       "url": "https://www.windy.com/webcams",
       "license": "Proprietary (free tier, attribution required)",
       "licenseUrl": "https://api.windy.com/webcams/terms",
-      "attribution": "Webcams provided by <a href=\"https://www.windy.com\">Windy.com</a> \u2014 <a href=\"https://www.windy.com/webcams/add\">add a webcam</a>",
+      "attribution": "Webcams provided by <a href=\"https://www.windy.com/\">windy.com</a> \u2014 <a href=\"https://www.windy.com/webcams/add\">add a webcam</a>",
       "commercialUse": "conditional",
       "providerCountry": "CZ",
       "providerPrivacyUrl": "https://account.windy.com/agreements/windy-privacy-policy",
@@ -70,7 +225,7 @@
       "sourceId": "caltrans",
       "name": "Caltrans CCTV",
       "url": "https://cwwp2.dot.ca.gov/",
-      "license": "Public domain (US government)",
+      "license": "Public domain",
       "licenseUrl": "https://dot.ca.gov/conditions-of-use",
       "commercialUse": "yes",
       "providerCountry": "US",
@@ -84,12 +239,180 @@
       "sourceId": "tfl",
       "name": "TfL JamCam",
       "url": "https://tfl.gov.uk/",
-      "license": "Open Government Licence v3.0",
-      "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+      "license": "Open Government Licence v2.0 (TfL amended)",
+      "licenseUrl": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service",
       "attribution": "Powered by <a href=\"https://tfl.gov.uk/\">TfL</a> Open Data",
       "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "nps",
+      "name": "National Park Service Webcams",
+      "url": "https://www.nps.gov/subjects/watchingwildlife/webcams.htm",
+      "license": "Public domain (US federal government)",
+      "licenseUrl": "https://www.nps.gov/aboutus/disclaimer.htm",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.nps.gov/aboutus/privacy.htm",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-ny",
+      "name": "NYSDOT 511NY",
+      "url": "https://511ny.org/",
+      "license": "Public data",
+      "licenseUrl": "https://511ny.org/privacy",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://511ny.org/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-or",
+      "name": "Oregon DOT TripCheck",
+      "url": "https://tripcheck.com/",
+      "license": "Government data",
+      "licenseUrl": "https://www.oregon.gov/pages/terms-and-conditions.aspx",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.oregon.gov/pages/terms-and-conditions.aspx",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-ga",
+      "name": "Georgia DOT 511",
+      "url": "https://511ga.org/",
+      "license": "Proprietary (state DOT terms)",
+      "licenseUrl": "https://511ga.org/privacy",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://511ga.org/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-fl",
+      "name": "Florida DOT 511",
+      "url": "https://fl511.com/",
+      "license": "Proprietary (state DOT terms, personal use only)",
+      "licenseUrl": "https://fl511.com/privacy",
+      "commercialUse": "no",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://fl511.com/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-az",
+      "name": "Arizona DOT 511",
+      "url": "https://az511.com/",
+      "license": "Proprietary (state DOT terms)",
+      "licenseUrl": "https://az511.com/about/disclaimer",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://az511.com/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-id",
+      "name": "Idaho DOT 511",
+      "url": "https://511.idaho.gov/",
+      "license": "Proprietary (state DOT terms, not for resale)",
+      "licenseUrl": "https://511.idaho.gov/privacy",
+      "commercialUse": "no",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.idaho.gov/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-ut",
+      "name": "Utah DOT 511",
+      "url": "https://prod-ut.ibi511.com/",
+      "license": "Proprietary (state DOT terms)",
+      "licenseUrl": "https://prod-ut.ibi511.com/about/disclaimer",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.utah.gov/privacypolicy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-la",
+      "name": "Louisiana DOT 511",
+      "url": "https://511la.org/",
+      "license": "Proprietary (state DOT terms)",
+      "licenseUrl": "https://511la.org/about/disclaimer",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://511la.org/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-pa",
+      "name": "Pennsylvania DOT 511",
+      "url": "https://www.511pa.com/",
+      "license": "Proprietary (state DOT terms, no commercial use)",
+      "licenseUrl": "https://www.511pa.com/about/disclaimer",
+      "commercialUse": "no",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.511pa.com/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-sc",
+      "name": "South Carolina DOT 511",
+      "url": "https://511sc.org/",
+      "license": "Proprietary (state DOT terms)",
+      "licenseUrl": "https://www.scdot.org/privacy",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.scdot.org/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dot-ma",
+      "name": "Massachusetts DOT 511",
+      "url": "https://www.mass511.com/",
+      "license": "Proprietary (state DOT terms)",
+      "licenseUrl": "https://www.mass.gov/privacypolicy",
+      "commercialUse": "unknown",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.mass.gov/privacypolicy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

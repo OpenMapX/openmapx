@@ -13,67 +13,67 @@
       "dataReceived": "Parkplätze mit Name, Adresse, Koordinaten, Kapazität, Echtzeit-Freie Kapazität, Typ, Gebühreninfo, Öffnungszeiten"
     },
     {
-      "purpose": "Deutsche-Bahn-Bahnhofsparkplätze (~312 Anlagen in Deutschland)",
+      "purpose": "Deutsche-Bahn-Bahnhofsparkplätze",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab); Anlagen-ID für Detailabfrage",
       "dataReceived": "Parkanlagen mit Name, Adresse, Koordinaten, Kapazität, Tarif/Preise, Barrierefreiheit, E-Ladeinfo"
     },
     {
-      "purpose": "Niederländische Parkhäuser, Park & Ride und Carpool-Anlagen (~498 Standorte)",
+      "purpose": "Niederländische Parkhäuser, Park & Ride und Carpool-Anlagen",
       "dataSent": "Begrenzungsrahmen-Koordinaten für geografische Filterung; Gebietsverwalter-ID und Gebiets-ID für Detailabfrage",
       "dataReceived": "Anlagenname, Koordinaten, Typ (Parkhaus/P+R/Carpool), Kapazität, Anzahl E-Ladepunkte, Barrierefreiheit, maximale Fahrzeughöhe"
     },
     {
-      "purpose": "Französische Parkeinrichtungen aus dem nationalen BNLS-Register (~826 Standorte, statische Daten)",
+      "purpose": "Französische Parkeinrichtungen aus dem nationalen BNLS-Register",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab)",
       "dataReceived": "Anlagen-ID, Name, Koordinaten, Stellplatzanzahl, Kostenlos/Kostenpflichtig-Status, Anlagentyp, Stunden-/Tages-/Monatspreise, Behinderten-/E-Auto-/P+R-Stellplätze, Maximalhöhe, Adresse"
     },
     {
-      "purpose": "Echtzeit-Parkhaus-Belegung in Gent, Belgien (13 Parkhäuser)",
+      "purpose": "Echtzeit-Parkhaus-Belegung in Gent, Belgien",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab)",
       "dataReceived": "Parkhausname, Koordinaten, Gesamt-/Freie Kapazität, Auslastung in Prozent, Offen/Geschlossen-Status, Belegungstrend, Betreiber"
     },
     {
-      "purpose": "Statische Parkdaten für Brüssel, Belgien (28 Parkhäuser)",
+      "purpose": "Statische Parkdaten für Brüssel, Belgien",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab)",
       "dataReceived": "Anlagenname (FR/NL), Koordinaten, Kapazität, Behindertenstellplätze, Maximalhöhe, Stockwerke, Betreiber, Adresse"
     },
     {
-      "purpose": "Echtzeit-Parkhaus-Belegung in Basel, Schweiz (~20 Parkhäuser)",
+      "purpose": "Echtzeit-Parkhaus-Belegung in Basel, Schweiz",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab)",
       "dataReceived": "Parkhausname, Koordinaten, Freie/Gesamt-Stellplätze, Adresse"
     },
     {
-      "purpose": "Echtzeit-Parkverfügbarkeit in Florenz, Italien (13 Anlagen)",
+      "purpose": "Echtzeit-Parkverfügbarkeit in Florenz, Italien",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab)",
       "dataReceived": "Anlagenname, Koordinaten, Freie Plätze, Zeitstempel der letzten Aktualisierung"
     },
     {
-      "purpose": "Statische Parkdaten für Barcelona, Spanien (~556 Standorte)",
+      "purpose": "Statische Parkdaten für Barcelona, Spanien",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab)",
       "dataReceived": "Anlagenname, Koordinaten, Adresse, Bezirk, Stadtviertel, Status"
     },
     {
-      "purpose": "Statische Parkhäuser und P+R-Anlagen in Wien, Österreich (373 Anlagen)",
+      "purpose": "Statische Parkhäuser und P+R-Anlagen in Wien, Österreich",
       "dataSent": "Keine Nutzerdaten (ruft gesamten WFS-Datensatz ab)",
       "dataReceived": "Anlagenname, Koordinaten, Betreiber, Adresse, P+R-Kennzeichnung, Barrierefreiheit, Webseite"
     },
     {
-      "purpose": "Statische Parkhausdaten für Kopenhagen, Dänemark (31 Parkhäuser)",
+      "purpose": "Statische Parkhausdaten für Kopenhagen, Dänemark",
       "dataSent": "Keine Nutzerdaten (ruft gesamten WFS-Datensatz ab)",
       "dataReceived": "Straßenname, Hausnummer, Postbezirk, Kapazität, Typ (Tiefgarage/Parkhaus), Eigentümer"
     },
     {
-      "purpose": "Echtzeit-Parkplatzverfügbarkeit in Singapur (~1.994 HDB-Parkplätze)",
+      "purpose": "Echtzeit-Parkplatzverfügbarkeit in Singapur",
       "dataSent": "Keine Nutzerdaten (ruft gesamte Verfügbarkeits- und Stammdaten ab)",
       "dataReceived": "Parkplatznummer, Stellplatztyp, Gesamt-/Freie Plätze, Adresse, Koordinaten (SVY21 zu WGS84 konvertiert), Parkplatztyp"
     },
     {
-      "purpose": "Statische Parkdaten für Madrid, Spanien (~189 Anlagen)",
+      "purpose": "Statische Parkdaten für Madrid, Spanien",
       "dataSent": "Keine Nutzerdaten (ruft gesamten Datensatz ab)",
       "dataReceived": "Anlagenname, Koordinaten, Adresse, Kapazität (aus Beschreibung), Öffnungszeiten, P+R-Kennzeichnung, Betreiber"
     },
     {
-      "purpose": "Echtzeit-Parkdaten für Newcastle/Tyne & Wear, UK (~16 Parkplätze)",
+      "purpose": "Echtzeit-Parkdaten für Newcastle/Tyne & Wear, UK",
       "dataSent": "UTMC-Zugangsdaten (Benutzername/Passwort) zur Authentifizierung",
       "dataReceived": "Parkplatzname, Koordinaten, Kapazität, Freie Plätze, Status (offen/geschlossen/voll)"
     },
@@ -81,6 +81,21 @@
       "purpose": "Echtzeit-P+R-Parkdaten für Greater Sydney, Australien",
       "dataSent": "NSW-Transport-API-Schlüssel zur Authentifizierung",
       "dataReceived": "Anlagenname, Koordinaten, Kapazität, Verfügbare Plätze, Auslastung"
+    },
+    {
+      "purpose": "Echtzeit-LKW-Parkverfügbarkeit an niederländischen Autobahnen",
+      "dataSent": "Keine Nutzerdaten (ruft gesamte statische Tabelle + dynamische Status-XML-Feeds ab)",
+      "dataReceived": "LKW-Parkplätze mit Name, Koordinaten, Kapazität, Echtzeit-Frei-/Belegtzahlen, Ausstattung (Ladestation, Toilette, Dusche)"
+    },
+    {
+      "purpose": "Deutsche Autobahn-Raststätten und LKW-Parkplätze",
+      "dataSent": "Keine Nutzerdaten (ruft Straßenliste ab, dann Parkdaten pro Straße)",
+      "dataReceived": "Raststättenname, Koordinaten, PKW-/LKW-Stellplatzkapazität, Sperrstatus, Ausstattung (Toilette, Tankstelle, Restaurant, WLAN, Dusche)"
+    },
+    {
+      "purpose": "Parkstationen in Südtirol, Italien",
+      "dataSent": "Keine Nutzerdaten (ruft gesamte Stationsliste + neueste Messwerte ab)",
+      "dataReceived": "Stationsname (mehrsprachig), Koordinaten, Kapazität, Echtzeit-Belegt-/Freiplätze, Parklayout-Typ, E-Ladeverfügbarkeit"
     },
     {
       "purpose": "Parkeinrichtungen aus OpenStreetMap (statische Daten, keine Echtzeit-Verfügbarkeit)",

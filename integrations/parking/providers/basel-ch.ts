@@ -7,7 +7,7 @@ import type { ParkingFacility, ParkingType } from "./types.js";
  * Uses the Kanton Basel-Stadt Opendatasoft v2.1 API for real-time parking
  * garage occupancy data. ~20 garages with live availability updates.
  *
- * License: CC0. No authentication required.
+ * License: CC BY 4.0. No authentication required.
  */
 
 interface BaselRecord {

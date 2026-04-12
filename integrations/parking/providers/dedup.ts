@@ -22,6 +22,9 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "madrid-es": 4,
   "utmc-newcastle": 4,
   "nsw-au": 4,
+  "ndw-truck-nl": 3,
+  "autobahn-de": 3,
+  "opendatahub-it": 4,
   "osm-parking": 5,
 };
 

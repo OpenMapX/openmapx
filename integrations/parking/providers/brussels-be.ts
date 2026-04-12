@@ -7,7 +7,7 @@ import type { ParkingFacility, ParkingType } from "./types.js";
  * Uses the Open Data Brussels Opendatasoft v2.1 API for static parking
  * facility information. No real-time availability data.
  *
- * License: Open Data. No authentication required.
+ * License: CC0 1.0. No authentication required.
  */
 
 interface BrusselsRecord {

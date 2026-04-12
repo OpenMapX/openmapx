@@ -6,6 +6,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
+import { fetchAutobahnDeDetail, searchAutobahnDe } from "./autobahn-de.js";
 import { fetchBarcelonaEsDetail, searchBarcelonaEs } from "./barcelona-es.js";
 import { fetchBaselChDetail, searchBaselCh } from "./basel-ch.js";
 import { fetchBnlsFrDetail, searchBnlsFr } from "./bnls-fr.js";
@@ -17,7 +18,9 @@ import { fetchFlorenceItDetail, searchFlorenceIt } from "./florence-it.js";
 import { fetchGhentBeDetail, searchGhentBe } from "./ghent-be.js";
 import { fetchMadridEsDetail, searchMadridEs } from "./madrid-es.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";
+import { fetchNdwTruckNlDetail, searchNdwTruckNl } from "./ndw-truck-nl.js";
 import { fetchNswAuDetail, searchNswAu } from "./nsw-au.js";
+import { fetchOdhItDetail, searchOdhIt } from "./opendatahub-it.js";
 import { fetchOsmParkingElement, searchOsmParking } from "./osm.js";
 import { fetchParkApiV2Detail, searchParkApiV2 } from "./parkapi-v2.js";
 import { fetchParkApiV3Detail, searchParkApiV3 } from "./parkapi-v3.js";
@@ -133,6 +136,9 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       searchMadridEs(bbox),
       searchUtmcNewcastle(bbox),
       searchNswAu(bbox),
+      searchNdwTruckNl(bbox),
+      searchAutobahnDe(bbox),
+      searchOdhIt(bbox),
       searchOsmParking(bbox),
     ]);
 
@@ -226,6 +232,12 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     if (itemId.startsWith("utmc:")) return fetchUtmcNewcastleDetail(itemId.slice("utmc:".length));
     if (itemId.startsWith("nsw:")) return fetchNswAuDetail(itemId.slice("nsw:".length));
 
+    if (itemId.startsWith("ndw-truck:"))
+      return fetchNdwTruckNlDetail(itemId.slice("ndw-truck:".length));
+    if (itemId.startsWith("autobahn:"))
+      return fetchAutobahnDeDetail(itemId.slice("autobahn:".length));
+    if (itemId.startsWith("odh:")) return fetchOdhItDetail(itemId.slice("odh:".length));
+
     if (itemId.startsWith("osm:")) {
       const rest = itemId.slice("osm:".length);
       const [elementType, idStr] = rest.split("/");
@@ -270,6 +282,9 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       searchMadridEs(bbox),
       searchUtmcNewcastle(bbox),
       searchNswAu(bbox),
+      searchNdwTruckNl(bbox),
+      searchAutobahnDe(bbox),
+      searchOdhIt(bbox),
       searchOsmParking(bbox),
     ]);
 

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openmapx/core": "workspace:^"
+    "@openmapx/core": "workspace:^",
+    "fast-xml-parser": "^5.5.10"
   }
 }

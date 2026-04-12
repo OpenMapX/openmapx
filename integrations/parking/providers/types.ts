@@ -188,3 +188,44 @@ export interface DbBahnParkFacility {
     }[];
   };
 }
+
+/** Raw parking item from the Autobahn API (verkehr.autobahn.de). */
+export interface AutobahnParkingLorry {
+  identifier: string;
+  isBlocked: string;
+  future: boolean;
+  subtitle: string;
+  title: string;
+  coordinate: { long: string; lat: string };
+  description: string[];
+  lorryParkingFeatureIcons: Array<{
+    icon: string;
+    description: string;
+    style: string;
+  }>;
+}
+
+/** Raw station record from Open Data Hub ParkingStation endpoint. */
+export interface OdhParkingStation {
+  scode: string;
+  sname: string;
+  scoordinate: { x: number; y: number; srid: number };
+  smetadata: Record<string, unknown> & {
+    capacity?: number;
+    municipality?: string;
+    standard_name?: string;
+    netex_parking?: {
+      type?: string;
+      layout?: string;
+      charging?: boolean;
+    };
+  };
+}
+
+/** Raw measurement from Open Data Hub latest endpoint. */
+export interface OdhParkingMeasurement {
+  scode: string;
+  tname: string;
+  mvalue: number;
+  mvalidtime: string;
+}

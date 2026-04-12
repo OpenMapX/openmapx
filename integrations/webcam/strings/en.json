@@ -21,6 +21,66 @@
       "purpose": "London traffic cameras (TfL JamCams)",
       "dataSent": "No user data (fetches entire JamCam dataset, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, still image URL"
+    },
+    {
+      "purpose": "US National Park webcams (NPS)",
+      "dataSent": "No user data (fetches entire webcam catalog with pagination, filtered server-side to bounding box)",
+      "dataReceived": "Webcams with title, coordinates, image URL, streaming status, related park name/state, tags"
+    },
+    {
+      "purpose": "New York State traffic cameras (511NY)",
+      "dataSent": "No user data (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, HLS video stream URL, roadway name, direction of travel"
+    },
+    {
+      "purpose": "Oregon highway traffic cameras (ODOT TripCheck)",
+      "dataSent": "No user data (fetches entire camera inventory, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with title, coordinates, still image URL, route name"
+    },
+    {
+      "purpose": "Georgia traffic cameras (511GA)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "Florida traffic cameras (FL511)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "Arizona traffic cameras (AZ511)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "Idaho traffic cameras (Idaho 511)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "Utah traffic cameras (Utah 511)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "Louisiana traffic cameras (511LA)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "Pennsylvania traffic cameras (511PA)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "South Carolina traffic cameras (511SC)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
+    },
+    {
+      "purpose": "Massachusetts traffic cameras (Mass511)",
+      "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     }
   ]
 }

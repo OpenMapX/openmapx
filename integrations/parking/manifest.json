@@ -34,6 +34,24 @@
         "description": "Deutsche Bahn Parking API key.",
         "x-openmapx-secret": true,
         "x-openmapx-sharedSecretName": "db-parking-api-key"
+      },
+      "utmcUsername": {
+        "type": "string",
+        "title": "UTMC Username",
+        "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk",
+        "x-openmapx-secret": true
+      },
+      "utmcPassword": {
+        "type": "string",
+        "title": "UTMC Password",
+        "description": "NE Travel Data (Newcastle) password.",
+        "x-openmapx-secret": true
+      },
+      "nswTransportApiKey": {
+        "type": "string",
+        "title": "NSW Transport API Key",
+        "description": "Register at https://opendata.transport.nsw.gov.au/",
+        "x-openmapx-secret": true
       }
     }
   },
@@ -68,7 +86,8 @@
     {
       "name": "RDW Open Data",
       "type": "http",
-      "url": "https://opendata.rdw.nl/resource/t5pc-eb34.json?$limit=1"
+      "url": "https://opendata.rdw.nl/resource/t5pc-eb34.json?$limit=1",
+      "headers": { "User-Agent": "Mozilla/5.0" }
     },
     {
       "name": "BNLS France",
@@ -98,12 +117,13 @@
     {
       "name": "Barcelona Open Data",
       "type": "http",
-      "url": "https://opendata-ajuntament.barcelona.cat/data/api/3/action/package_show?id=aparcaments-de-la-ciutat-de-barcelona"
+      "url": "https://opendata-ajuntament.barcelona.cat/data/api/3/action/package_show?id=aparcaments-sota-superficie"
     },
     {
       "name": "Stadt Wien",
       "type": "http",
-      "url": "https://data.wien.gv.at/daten/geo?service=WFS&request=GetFeature&version=1.1.0&typeName=ogdwien:GARAGENOGD&srsName=EPSG:4326&outputFormat=json&maxFeatures=1"
+      "url": "https://data.wien.gv.at/daten/geo?service=WFS&request=GetFeature&version=1.1.0&typeName=ogdwien:GARAGENOGD&srsName=EPSG:4326&outputFormat=json&maxFeatures=1",
+      "headers": { "User-Agent": "Mozilla/5.0" }
     },
     {
       "name": "Københavns Kommune",
@@ -119,6 +139,21 @@
       "name": "Ayuntamiento de Madrid",
       "type": "http",
       "url": "https://datos.madrid.es/egob/catalogo/202625-0-aparcamientos-publicos.json"
+    },
+    {
+      "name": "NDW Truck Parking (NL)",
+      "type": "http",
+      "url": "https://opendata.ndw.nu/Truckparking_Parking_Status.xml"
+    },
+    {
+      "name": "Autobahn GmbH (DE)",
+      "type": "http",
+      "url": "https://verkehr.autobahn.de/o/autobahn/"
+    },
+    {
+      "name": "Open Data Hub (South Tyrol)",
+      "type": "http",
+      "url": "https://mobility.api.opendatahub.com/v2/flat/ParkingStation?limit=1&where=sactive.eq.true"
     }
   ],
   "quality": "built-in",
@@ -129,7 +164,7 @@
       "name": "ParkenDD",
       "url": "https://api.parkendd.de/",
       "license": "MIT (software); data licenses vary by city",
-      "licenseUrl": "https://github.com/ParkenDD/park-api-v3",
+      "licenseUrl": "https://github.com/offenesdresden/ParkAPI",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://parkendd.de/impressum.html",
@@ -155,7 +190,7 @@
     {
       "sourceId": "db-bahnpark",
       "name": "DB BahnPark",
-      "url": "https://apis.deutschebahn.com/",
+      "url": "https://developers.deutschebahn.com/",
       "license": "Proprietary (bilateral license)",
       "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
       "commercialUse": "conditional",
@@ -188,7 +223,7 @@
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
       "commercialUse": "yes",
       "providerCountry": "FR",
-      "providerPrivacyUrl": "https://www.huwise.com/en/privacy-policy/",
+      "providerPrivacyUrl": "https://doc.transport.data.gouv.fr/le-point-d-acces-national/generalites/mentions-legales-et-conditions-generales-dutilisation",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
@@ -198,8 +233,8 @@
       "sourceId": "ghent-be",
       "name": "Stad Gent (Belgium)",
       "url": "https://data.stad.gent/",
-      "license": "Open Data",
-      "licenseUrl": "https://data.stad.gent/terms/terms-and-conditions/",
+      "license": "Modellicentie Gratis Hergebruik",
+      "licenseUrl": "https://www.vlaanderen.be/digitaal-vlaanderen/onze-oplossingen/open-data/voorwaarden-voor-het-hergebruik-van-overheidsinformatie/modellicentie-gratis-hergebruik",
       "commercialUse": "yes",
       "providerCountry": "BE",
       "providerPrivacyUrl": "https://stad.gent/nl/privacy",
@@ -212,7 +247,7 @@
       "sourceId": "brussels-be",
       "name": "Open Data Brussels (Belgium)",
       "url": "https://opendata.brussels.be/",
-      "license": "Open Data",
+      "license": "CC0 1.0",
       "licenseUrl": "https://opendata.brussels.be/pages/license",
       "commercialUse": "yes",
       "providerCountry": "BE",
@@ -226,8 +261,8 @@
       "sourceId": "basel-ch",
       "name": "Kanton Basel-Stadt (Switzerland)",
       "url": "https://data.bs.ch/",
-      "license": "CC0 1.0 Universal (Public Domain)",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "commercialUse": "yes",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://data.bs.ch/terms/privacy-policy/",
@@ -256,6 +291,7 @@
       "url": "https://opendata-ajuntament.barcelona.cat/",
       "license": "CC BY 4.0",
       "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Source of the data: <a href=\"https://opendata-ajuntament.barcelona.cat/\">Barcelona City Council</a>",
       "commercialUse": "yes",
       "providerCountry": "ES",
       "providerPrivacyUrl": "https://opendata-ajuntament.barcelona.cat/en/avis-legal",
@@ -270,6 +306,7 @@
       "url": "https://data.wien.gv.at/",
       "license": "CC BY 4.0",
       "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Datenquelle: Stadt Wien \u2013 <a href=\"https://data.wien.gv.at\">data.wien.gv.at</a>",
       "commercialUse": "yes",
       "providerCountry": "AT",
       "providerPrivacyUrl": "https://www.wien.gv.at/info/datenschutz/",
@@ -282,8 +319,8 @@
       "sourceId": "copenhagen-dk",
       "name": "Københavns Kommune (Denmark)",
       "url": "https://www.opendata.dk/city-of-copenhagen",
-      "license": "Open Data",
-      "licenseUrl": "https://www.opendata.dk/city-of-copenhagen",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "commercialUse": "yes",
       "providerCountry": "DK",
       "providerPrivacyUrl": "https://www.kk.dk/privatlivspolitik",
@@ -298,9 +335,10 @@
       "url": "https://data.gov.sg/",
       "license": "Singapore Open Data Licence",
       "licenseUrl": "https://data.gov.sg/open-data-licence",
+      "attribution": "Contains information from <a href=\"https://data.gov.sg\">data.gov.sg</a>, made available under the <a href=\"https://data.gov.sg/open-data-licence\">Singapore Open Data Licence 1.0</a>",
       "commercialUse": "yes",
       "providerCountry": "SG",
-      "providerPrivacyUrl": "https://www.tech.gov.sg/privacy/",
+      "providerPrivacyUrl": "https://data.gov.sg/privacy-and-terms",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
@@ -328,7 +366,7 @@
       "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
       "commercialUse": "yes",
       "providerCountry": "GB",
-      "providerPrivacyUrl": "https://www.netraveldata.co.uk/privacy",
+      "providerPrivacyUrl": "https://www.newcastle.gov.uk/local-government/access-information-and-data/open-data/privacy-notice",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
@@ -342,7 +380,49 @@
       "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
       "commercialUse": "yes",
       "providerCountry": "AU",
-      "providerPrivacyUrl": "https://www.transport.nsw.gov.au/about-us/transport-privacy/privacy-statement",
+      "providerPrivacyUrl": "https://transportnsw.info/about-us/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "ndw-truck-nl",
+      "name": "NDW Open Data (Netherlands)",
+      "url": "https://opendata.ndw.nu/",
+      "license": "CC0 1.0 Universal (Public Domain)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "commercialUse": "yes",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://www.ndw.nu/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "autobahn-de",
+      "name": "Autobahn GmbH (Germany)",
+      "url": "https://verkehr.autobahn.de/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.autobahn.de/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opendatahub-it",
+      "name": "Open Data Hub (South Tyrol, Italy)",
+      "url": "https://opendatahub.com/",
+      "license": "CC0 1.0 Universal (Public Domain)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "commercialUse": "yes",
+      "providerCountry": "IT",
+      "providerPrivacyUrl": "https://noi.bz.it/en/privacy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

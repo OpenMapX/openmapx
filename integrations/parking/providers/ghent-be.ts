@@ -7,7 +7,7 @@ import type { ParkingFacility, ParkingType } from "./types.js";
  * Uses the Stad Gent Opendatasoft v2.1 API for real-time parking garage
  * occupancy data. ~10 garages with live availability updates.
  *
- * License: Open Data. No authentication required.
+ * License: Modellicentie Gratis Hergebruik. No authentication required.
  */
 
 interface GhentRecord {

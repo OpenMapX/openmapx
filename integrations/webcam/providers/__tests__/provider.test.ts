@@ -29,6 +29,24 @@ vi.mock("../tfl.js", () => ({
   mapTflToDetail: vi.fn(),
 }));
 
+vi.mock("../nps.js", () => ({
+  searchNps: vi.fn(),
+  getNpsDetail: vi.fn(),
+  mapNpsToResult: vi.fn(),
+  mapNpsToDetail: vi.fn(),
+}));
+
+vi.mock("../dot/index.js", () => ({
+  searchDot: vi.fn(),
+  getDotDetail: vi.fn(),
+  mapDotToResult: vi.fn(),
+  mapDotToDetail: vi.fn(),
+  getDotSourceIds: vi.fn(() => [
+    { id: "dot-ny", label: "New York" },
+    { id: "dot-or", label: "Oregon" },
+  ]),
+}));
+
 vi.mock("../dedup.js", () => ({
   deduplicateByCoordinates: vi.fn((items: unknown[]) => items),
 }));
@@ -40,6 +58,8 @@ import {
   searchCaltrans,
 } from "../caltrans.js";
 import { deduplicateByCoordinates } from "../dedup.js";
+import { getDotDetail, mapDotToDetail, mapDotToResult, searchDot } from "../dot/index.js";
+import { getNpsDetail, mapNpsToDetail, mapNpsToResult, searchNps } from "../nps.js";
 import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } from "../osm.js";
 import { webcamProvider } from "../provider.js";
 import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "../tfl.js";
@@ -80,16 +100,20 @@ describe("webcamProvider meta", () => {
 });
 
 describe("webcamProvider.search", () => {
-  it("calls all 4 sources in parallel and combines results", async () => {
+  it("calls all 6 sources in parallel and combines results", async () => {
     const windyRaw = [{ id: "w1" }];
     const osmRaw = [{ id: "o1" }];
     const caltransRaw = [{ id: "c1" }];
     const tflRaw = [{ id: "t1" }];
+    const npsRaw = [{ id: "n1" }];
+    const dotRaw = [{ id: "d1" }];
 
     vi.mocked(searchWindy).mockResolvedValue(windyRaw as never);
     vi.mocked(searchOsmWebcams).mockResolvedValue(osmRaw as never);
     vi.mocked(searchCaltrans).mockResolvedValue(caltransRaw as never);
     vi.mocked(searchTfl).mockResolvedValue(tflRaw as never);
+    vi.mocked(searchNps).mockResolvedValue(npsRaw as never);
+    vi.mocked(searchDot).mockResolvedValue(dotRaw as never);
 
     vi.mocked(mapWindyToResult).mockReturnValue(makeResult("windy:1", "windy", "landscape"));
     vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm-webcam", "other"));
@@ -97,6 +121,8 @@ describe("webcamProvider.search", () => {
       makeResult("caltrans:7:1", "caltrans", "traffic"),
     );
     vi.mocked(mapTflToResult).mockReturnValue(makeResult("tfl:1", "tfl", "traffic"));
+    vi.mocked(mapNpsToResult).mockReturnValue(makeResult("nps:1", "nps", "landscape"));
+    vi.mocked(mapDotToResult).mockReturnValue(makeResult("dot-ny:1", "dot-ny", "traffic"));
 
     const results = await webcamProvider.search(makeBbox());
 
@@ -104,14 +130,18 @@ describe("webcamProvider.search", () => {
     expect(searchOsmWebcams).toHaveBeenCalledOnce();
     expect(searchCaltrans).toHaveBeenCalledOnce();
     expect(searchTfl).toHaveBeenCalledOnce();
-    expect(results).toHaveLength(4);
+    expect(searchNps).toHaveBeenCalledOnce();
+    expect(searchDot).toHaveBeenCalledOnce();
+    expect(results).toHaveLength(6);
   });
 
-  it("Windy is first in dedup order (highest priority)", async () => {
+  it("Windy is first in dedup order (highest priority), OSM is last", async () => {
     vi.mocked(searchWindy).mockResolvedValue([{ id: "w1" }] as never);
     vi.mocked(searchOsmWebcams).mockResolvedValue([{ id: "o1" }] as never);
     vi.mocked(searchCaltrans).mockResolvedValue([]);
     vi.mocked(searchTfl).mockResolvedValue([]);
+    vi.mocked(searchNps).mockResolvedValue([]);
+    vi.mocked(searchDot).mockResolvedValue([]);
 
     vi.mocked(mapWindyToResult).mockReturnValue(makeResult("windy:1", "windy", "landscape"));
     vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm-webcam", "other"));
@@ -120,7 +150,7 @@ describe("webcamProvider.search", () => {
 
     const call = vi.mocked(deduplicateByCoordinates).mock.calls[0][0];
     expect(call[0].id).toBe("windy:1");
-    expect(call[1].id).toBe("osm-webcam:1");
+    expect(call[call.length - 1].id).toBe("osm-webcam:1");
   });
 
   it("individual source failures do not break the search", async () => {
@@ -128,6 +158,8 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchOsmWebcams).mockRejectedValue(new Error("OSM down"));
     vi.mocked(searchCaltrans).mockResolvedValue([{ id: "c1" }] as never);
     vi.mocked(searchTfl).mockResolvedValue([{ id: "t1" }] as never);
+    vi.mocked(searchNps).mockRejectedValue(new Error("NPS down"));
+    vi.mocked(searchDot).mockRejectedValue(new Error("DOT down"));
 
     vi.mocked(mapCaltransToResult).mockReturnValue(
       makeResult("caltrans:7:1", "caltrans", "traffic"),
@@ -143,6 +175,8 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchOsmWebcams).mockRejectedValue(new Error("down"));
     vi.mocked(searchCaltrans).mockRejectedValue(new Error("down"));
     vi.mocked(searchTfl).mockRejectedValue(new Error("down"));
+    vi.mocked(searchNps).mockRejectedValue(new Error("down"));
+    vi.mocked(searchDot).mockRejectedValue(new Error("down"));
     vi.mocked(deduplicateByCoordinates).mockReturnValue([]);
 
     const results = await webcamProvider.search(makeBbox());
@@ -154,6 +188,8 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchOsmWebcams).mockResolvedValue([]);
     vi.mocked(searchCaltrans).mockResolvedValue([]);
     vi.mocked(searchTfl).mockResolvedValue([]);
+    vi.mocked(searchNps).mockResolvedValue([]);
+    vi.mocked(searchDot).mockResolvedValue([]);
 
     const items = [
       makeResult("a", "windy", "landscape"),
@@ -234,6 +270,40 @@ describe("webcamProvider.getDetail", () => {
 
     const result = await webcamProvider.getDetail("tfl:JamCams_00001");
     expect(getTflDetail).toHaveBeenCalledWith("JamCams_00001");
+    expect(result).toBe(detail);
+  });
+
+  it("nps prefix calls getNpsDetail", async () => {
+    const raw = { id: "nps:ABC-123" };
+    const detail = {
+      id: "nps:ABC-123",
+      sources: ["nps"],
+      name: "Yellowstone",
+      coordinates: [-110, 44] as [number, number],
+      sections: [],
+    };
+    vi.mocked(getNpsDetail).mockResolvedValue(raw as never);
+    vi.mocked(mapNpsToDetail).mockReturnValue(detail);
+
+    const result = await webcamProvider.getDetail("nps:ABC-123");
+    expect(getNpsDetail).toHaveBeenCalledWith("ABC-123");
+    expect(result).toBe(detail);
+  });
+
+  it("dot- prefix calls getDotDetail", async () => {
+    const raw = { id: "dot-ny:Skyline-123" };
+    const detail = {
+      id: "dot-ny:Skyline-123",
+      sources: ["dot-ny"],
+      name: "I-87 at Exit 5",
+      coordinates: [-73.8, 41.0] as [number, number],
+      sections: [],
+    };
+    vi.mocked(getDotDetail).mockResolvedValue(raw as never);
+    vi.mocked(mapDotToDetail).mockReturnValue(detail);
+
+    const result = await webcamProvider.getDetail("dot-ny:Skyline-123");
+    expect(getDotDetail).toHaveBeenCalledWith("dot-ny:Skyline-123");
     expect(result).toBe(detail);
   });
 

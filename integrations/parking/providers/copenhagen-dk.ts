@@ -8,7 +8,7 @@ import type { ParkingFacility, ParkingType } from "./types.js";
  * ~31 static parking garages across Copenhagen.
  * No real-time availability data.
  *
- * License: Open Data. No authentication required.
+ * License: CC BY 4.0. No authentication required.
  */
 
 interface CopenhagenFeatureProperties {

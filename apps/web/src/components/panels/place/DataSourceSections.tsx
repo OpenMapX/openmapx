@@ -34,6 +34,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
+import { HlsVideo } from "@/components/ui/HlsVideo";
 import { TEAL } from "@/lib/theme";
 
 /** Section header config per data source type. */
@@ -88,6 +89,9 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "utmc-newcastle": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "nsw-au": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "osm-parking": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "ndw-truck-nl": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "autobahn-de": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "opendatahub-it": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   // DB Station (RIS::Stations)
   "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
   // Webcam
@@ -96,6 +100,18 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "osm-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
   caltrans: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
   tfl: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  nps: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-ny": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-or": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-ga": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-fl": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-az": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-id": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-ut": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-la": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-pa": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-sc": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "dot-ma": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
 };
 
 function resolveSourceHeader(detail: DataSourceDetail): {
@@ -351,14 +367,12 @@ function SectionContent({ section }: { section: DataSourceDetailSection }) {
       if (section.embedType === "video") {
         return (
           <Box sx={{ mb: 1 }}>
-            <Box
-              component="video"
+            <HlsVideo
               src={section.embedUrl}
               controls
               autoPlay
               muted
-              loop
-              sx={{ width: "100%", borderRadius: 2, display: "block" }}
+              style={{ width: "100%", borderRadius: 8, display: "block" }}
             />
           </Box>
         );
@@ -451,6 +465,24 @@ const ROW_LABEL_KEYS: Record<string, string> = {
   "1 month": "dur1month",
   "1 month (long-term)": "dur1monthLong",
   "1 month (reserved)": "dur1monthReserved",
+  // Webcam row labels
+  City: "rowCity",
+  Region: "rowRegion",
+  Country: "rowCountry",
+  Categories: "rowCategories",
+  Views: "rowViews",
+  "Last Updated": "rowLastUpdated",
+  Direction: "rowDirection",
+  Nearby: "rowNearby",
+  County: "rowCounty",
+  "Live Stream": "rowLiveStream",
+  View: "rowView",
+  Park: "rowPark",
+  State: "rowState",
+  Tags: "rowTags",
+  "NPS Page": "rowNpsPage",
+  Road: "rowRoad",
+  Location: "rowLocation",
   // Common values
   Yes: "yes",
   Open: "open",
