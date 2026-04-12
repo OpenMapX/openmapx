@@ -26,6 +26,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "bvg",
       "name": "BVG HAFAS REST API (transport.rest)",
       "url": "https://v6.bvg.transport.rest/",
       "license": "ISC (software); no open license for data",

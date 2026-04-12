@@ -46,26 +46,6 @@ function updateCache(id: string, item: SharedMobilityStation | SharedMobilityVeh
 }
 
 const META: DataSourceMeta = {
-  id: "bike-sharing",
-  name: "Bike Sharing",
-  attribution: [
-    {
-      text: "CityBikes",
-      url: "https://citybik.es",
-      license: "Custom ToS",
-      licenseUrl: "https://docs.citybik.es/api/tos",
-    },
-    { text: "Nextbike", url: "https://www.nextbike.net" },
-    { text: "Donkey Republic", url: "https://www.donkey.bike" },
-    {
-      text: "Deutsche Bahn",
-      url: "https://www.deutschebahnconnect.com",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    },
-    { text: "GBFS", url: "https://gbfs.org" },
-  ],
-  categoryChipLabel: "Bike Sharing",
   minZoom: 12,
   markerStyle: {
     type: "icon",
@@ -86,7 +66,7 @@ const META: DataSourceMeta = {
 };
 
 class BikeSharingProvider implements DataSourceProvider {
-  readonly id = META.id;
+  readonly id = "bike-sharing";
   readonly meta = META;
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
@@ -173,21 +153,14 @@ class BikeSharingProvider implements DataSourceProvider {
     return results;
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail> {
+  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
     const cached = itemCache.get(itemId);
     if (cached) {
       if ("availableVehicles" in cached) return mapStationToDetail(cached);
       return mapVehicleToDetail(cached);
     }
 
-    return {
-      id: itemId,
-      source: "bike-sharing",
-      name: "Bike Sharing Station",
-      coordinates: [0, 0],
-      attribution: { text: "CityBikes", url: "https://citybik.es" },
-      sections: [],
-    };
+    return null;
   }
 }
 

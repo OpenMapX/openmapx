@@ -17,6 +17,7 @@
   "category": "Weather",
   "dataSources": [
     {
+      "sourceId": "met-norway",
       "name": "MET Norway",
       "url": "https://api.met.no/",
       "license": "CC BY 4.0 / NLOD 2.0",

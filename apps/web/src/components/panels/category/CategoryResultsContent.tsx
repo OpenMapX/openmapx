@@ -177,6 +177,13 @@ function CategoryPlaceCard({
           lon: place.coordinates[0],
         });
         if (hours) {
+          if (hours.isUnknown) {
+            return (
+              <Typography variant="caption" color="text.secondary">
+                {hours.detail}
+              </Typography>
+            );
+          }
           return (
             <Typography variant="caption" color={hours.isOpen ? "success.main" : "error.main"}>
               {hours.isOpen

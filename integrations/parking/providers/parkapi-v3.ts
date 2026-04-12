@@ -41,7 +41,7 @@ function siteToFacility(site: ParkApiV3Site): ParkingFacility | null {
     id: `parkapi-v3:${site.id}`,
     name: site.name,
     coordinates: [lon, lat],
-    source: "parkapi-v3",
+    sources: ["parkapi-v3"],
     parkingType: mapType(site.type),
     capacity: site.capacity ?? undefined,
     freeSpaces: hasRealtime ? (site.realtime_free_capacity ?? undefined) : undefined,
@@ -55,12 +55,6 @@ function siteToFacility(site: ParkApiV3Site): ParkingFacility | null {
     address: site.address ?? undefined,
     openingHours: site.opening_hours ?? undefined,
     url: site.public_url ?? undefined,
-    attribution: {
-      label: "MobiData BW",
-      url: "https://mobidata-bw.de",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    },
   };
 }
 

@@ -61,6 +61,7 @@
   ],
   "dataSources": [
     {
+      "sourceId": "rainviewer",
       "name": "RainViewer",
       "url": "https://www.rainviewer.com/",
       "license": "Proprietary (personal/educational use only)",
@@ -75,6 +76,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "openweathermap",
       "name": "OpenWeatherMap",
       "url": "https://openweathermap.org/",
       "license": "ODbL",

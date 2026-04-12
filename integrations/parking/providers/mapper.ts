@@ -1,10 +1,5 @@
-import type {
-  DataSourceAttribution,
-  DataSourceDetail,
-  DataSourceDetailSection,
-  DataSourceResult,
-} from "@openmapx/core";
-import type { ParkingAttribution, ParkingFacility, ParkingType } from "./types.js";
+import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
+import type { ParkingFacility, ParkingType } from "./types.js";
 
 /**
  * All string values emitted here must either:
@@ -54,24 +49,13 @@ export function mapParkingToResult(facility: ParkingFacility): DataSourceResult 
     id: facility.id,
     name: facility.name,
     coordinates: facility.coordinates,
-    source: facility.source,
+    source: facility.sources[0],
     variant: computeVariant(facility),
     status: facility.state === "closed" ? "non-operational" : undefined,
     summary: buildSummary(facility),
     operator: facility.operator,
     sortValues: buildSortValues(facility),
   };
-}
-
-function mapOneAttribution(a: ParkingAttribution): DataSourceAttribution {
-  return { text: a.label, url: a.url, license: a.license, licenseUrl: a.licenseUrl };
-}
-
-function mapAttribution(
-  attr: ParkingAttribution | ParkingAttribution[],
-): DataSourceAttribution | DataSourceAttribution[] {
-  if (Array.isArray(attr)) return attr.map(mapOneAttribution);
-  return mapOneAttribution(attr);
 }
 
 function capitalize(s: string): string {
@@ -172,13 +156,12 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
 
   return {
     id: facility.id,
-    source: facility.source,
+    sources: facility.sources,
     name: facility.name,
     coordinates: facility.coordinates,
     address: facility.address ? { line1: facility.address } : undefined,
     operator: facility.operator ? { name: facility.operator, url: facility.url } : undefined,
     openingHours: facility.openingHours,
-    attribution: mapAttribution(facility.attribution),
     sections,
   };
 }

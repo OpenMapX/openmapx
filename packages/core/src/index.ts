@@ -72,7 +72,6 @@ export type {
   RadarFrame,
   RadarMeta,
   TemperatureUnit,
-  WeatherAttribution,
   WeatherOptions,
   WeatherResponse,
   WeatherSubLayer,
@@ -302,7 +301,9 @@ export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
 export {
   buildAttributionHtml,
   buildIntegrationAttribution,
+  buildSourceAttribution,
   combineAttributions,
+  extractSourcePrefix,
 } from "./utils/attribution";
 export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
@@ -313,6 +314,7 @@ export {
   parseCommonsPage,
 } from "./utils/commons-metadata";
 export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";
+export { applyClientSideFilters, splitFilters } from "./utils/dataSourceFilters";
 export {
   buildElevationProfile,
   buildElevationProfileFromApi,
@@ -402,6 +404,7 @@ export {
   USER_AGENT_TRANSIT,
   userAgent,
 } from "./utils/userAgent";
+export { isPublicUrl, validatePublicUrl } from "./utils/validate-url";
 export {
   type WeatherCodeInfo,
   weatherCodeToDescription,

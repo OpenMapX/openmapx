@@ -11,7 +11,7 @@ const OSM_ATTRIBUTION = buildAttributionHtml({
   license: "CC-BY-SA",
   licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
   attribution:
-    '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noopener noreferrer">CC-BY-SA</a>)',
+    '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a> (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noopener noreferrer">CC-BY-SA</a>)',
 });
 
 const CYCLOSM_ATTRIBUTION = [

@@ -1,32 +1,28 @@
 "use client";
 
-import type {
-  DataSourceAttribution,
-  DataSourceMeta,
-  DataSourceResult,
-  LngLat,
-} from "@openmapx/core";
+import type { DataSourceMeta, DataSourceResult, LngLat } from "@openmapx/core";
 import {
+  applyClientSideFilters,
+  buildSourceAttribution,
   PANEL,
+  splitFilters,
   useDataSourceSearch,
   useDataSourceStore,
   useDataSources,
+  useIntegrationRegistry,
   useOpeningHoursStore,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
 import { useLayerReanchor } from "./useLayerReanchor";
-
-/** Filter IDs that are applied client-side instead of being sent to the API. */
-const CLIENT_SIDE_FILTER_IDS = new Set(["operator", "speed"]);
 
 function sourceId(dsId: string) {
   return `ds-${dsId}`;
@@ -40,21 +36,7 @@ function labelsLayerId(dsId: string) {
   return `ds-${dsId}-labels`;
 }
 
-function buildGeoJson(
-  results: DataSourceResult[],
-  attribution: DataSourceAttribution | DataSourceAttribution[],
-  imageId?: string,
-) {
-  const attrs = Array.isArray(attribution) ? attribution : [attribution];
-  const attrHtml = attrs
-    .map((a) => {
-      const name = `<a href="${a.url}">${a.text}</a>`;
-      if (!a.license) return name;
-      const license = a.licenseUrl ? `<a href="${a.licenseUrl}">${a.license}</a>` : a.license;
-      return `${name} (${license})`;
-    })
-    .join(", ");
-
+function buildGeoJson(results: DataSourceResult[], attributionHtml: string, imageId?: string) {
   return {
     type: "FeatureCollection" as const,
     features: results.map((r) => ({
@@ -74,7 +56,7 @@ function buildGeoJson(
         ...(imageId ? { imageId } : {}),
       },
     })),
-    attribution: attrHtml,
+    attribution: attributionHtml,
   };
 }
 
@@ -157,6 +139,7 @@ export function DataSourceLayer() {
 
   const { data: sourcesData } = useDataSources();
   const prevSourceRef = useRef<string | null>(null);
+  const prevAttrRef = useRef<string>("");
 
   // Find meta for the active source
   const activeMeta = useMemo(() => {
@@ -164,16 +147,15 @@ export function DataSourceLayer() {
     return sourcesData.sources.find((s) => s.id === activeSource) ?? null;
   }, [activeSource, sourcesData]);
 
-  // Separate client-side vs server-side filters
-  const serverFilters = useMemo(() => {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(filters)) {
-      if (!CLIENT_SIDE_FILTER_IDS.has(key)) {
-        result[key] = value;
-      }
-    }
-    return result;
-  }, [filters]);
+  const registry = useIntegrationRegistry();
+
+  // Separate server-side filters (sent to the API) from client-side filters
+  // (applied locally on the result set). Uses the `clientSide` flag from
+  // provider filter definitions instead of a hardcoded list.
+  const serverFilters = useMemo(
+    () => splitFilters(filters, activeMeta?.filters ?? []).serverFilters,
+    [filters, activeMeta?.filters],
+  );
 
   // Only fetch if zoom >= minZoom, using searchBbox (not viewportBbox)
   const shouldFetch =
@@ -187,71 +169,22 @@ export function DataSourceLayer() {
     serverFilters,
   );
 
-  // Accumulate results across searches (useState so map re-renders on new data)
-  const [accumulatedMap, setAccumulatedMap] = useState(() => new Map<string, DataSourceResult>());
-  const prevActiveRef = useRef(activeSource);
-  const prevFiltersRef = useRef(serverFilters);
-  const prevSearchBboxRef = useRef(searchBbox);
+  // Apply client-side filters (speed, operator, opening hours) to the search
+  // results from React Query. No manual accumulation — React Query is the
+  // single source of truth and handles caching/staleness.
+  const filteredResults = useMemo(
+    () => applyClientSideFilters(searchResults ?? [], filters, openingHoursFilter),
+    [searchResults, filters, openingHoursFilter],
+  );
 
-  useEffect(() => {
-    if (
-      prevActiveRef.current !== activeSource ||
-      prevFiltersRef.current !== serverFilters ||
-      prevSearchBboxRef.current !== searchBbox
-    ) {
-      setAccumulatedMap(new Map());
-      prevActiveRef.current = activeSource;
-      prevFiltersRef.current = serverFilters;
-      prevSearchBboxRef.current = searchBbox;
-      return;
-    }
-
-    if (searchResults) {
-      setAccumulatedMap((prev) => {
-        const next = new Map(prev);
-        for (const r of searchResults) next.set(r.id, r);
-        return next;
-      });
-    }
-  }, [activeSource, serverFilters, searchBbox, searchResults]);
-
-  const allResults = useMemo(() => Array.from(accumulatedMap.values()), [accumulatedMap]);
-
-  // Apply client-side operator/speed filters
-  const filteredResults = useMemo(() => {
-    if (allResults.length === 0) return [];
-
-    let results = allResults;
-
-    const speedFilter = filters.speed;
-    if (speedFilter) {
-      const speedValues = Array.isArray(speedFilter)
-        ? (speedFilter as string[])
-        : [String(speedFilter)];
-      if (speedValues.length > 0) {
-        const speedSet = new Set(speedValues);
-        results = results.filter((r) => speedSet.has(r.variant));
-      }
-    }
-
-    const operatorFilter = filters.operator;
-    if (operatorFilter) {
-      const operatorValues = Array.isArray(operatorFilter)
-        ? (operatorFilter as string[])
-        : [String(operatorFilter)];
-      if (operatorValues.length > 0) {
-        const operatorSet = new Set(operatorValues);
-        results = results.filter((r) => r.operator && operatorSet.has(r.operator));
-      }
-    }
-
-    // "Open now" filter from the opening hours chip
-    if (openingHoursFilter === "open_now") {
-      results = results.filter((r) => r.variant === "open");
-    }
-
-    return results;
-  }, [allResults, filters.speed, filters.operator, openingHoursFilter]);
+  // Build map attribution from only the sources present in visible results
+  const mapAttribution = useMemo(() => {
+    if (!activeSource || filteredResults.length === 0) return "";
+    const meta = registry.get(activeSource);
+    if (!meta?.dataSources) return "";
+    const visibleSources = [...new Set(filteredResults.map((r) => r.source))];
+    return buildSourceAttribution(meta.dataSources, visibleSources);
+  }, [activeSource, registry, filteredResults]);
 
   // Show pin marker for hovered item
   const hoveredResult = filteredResults.find((r) => r.id === hoveredItemId) ?? null;
@@ -339,9 +272,15 @@ export function DataSourceLayer() {
 
       const useIconMarkers = activeMeta.markerStyle.type === "icon";
       const imageId = useIconMarkers ? `ds-marker-${activeSource}` : undefined;
-      const geojson = buildGeoJson(filteredResults, activeMeta.attribution, imageId);
+      const geojson = buildGeoJson(filteredResults, mapAttribution, imageId);
 
-      // Update or create GeoJSON source
+      // MapLibre doesn't support updating source attribution after creation,
+      // so recreate the source when attribution changes.
+      if (map.getSource(sid) && prevAttrRef.current !== geojson.attribution) {
+        removeLayers(map, activeSource);
+      }
+      prevAttrRef.current = geojson.attribution;
+
       if (map.getSource(sid)) {
         (map.getSource(sid) as GeoJSONSource).setData(geojson);
       } else {
@@ -452,7 +391,16 @@ export function DataSourceLayer() {
     return () => {
       map.off("styledata", syncLayer);
     };
-  }, [activeSource, activeMeta, filteredResults, viewportZoom, mapReady, styleVersion, mapRef]);
+  }, [
+    activeSource,
+    activeMeta,
+    filteredResults,
+    viewportZoom,
+    mapReady,
+    styleVersion,
+    mapRef,
+    mapAttribution,
+  ]);
 
   const { setSelectedPlace } = usePlaceStore();
 

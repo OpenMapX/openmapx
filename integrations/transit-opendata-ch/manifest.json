@@ -26,6 +26,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "opendata-ch",
       "name": "OpenData.ch Transport API",
       "url": "https://transport.opendata.ch/",
       "license": "MIT (software)",

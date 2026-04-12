@@ -12,10 +12,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function makeAttribution(label: string) {
-  return { label, url: `https://${label}.example.com` };
-}
-
 function makeStation(overrides?: Partial<SharedMobilityStation>): SharedMobilityStation {
   return {
     id: "station-1",
@@ -25,9 +21,8 @@ function makeStation(overrides?: Partial<SharedMobilityStation>): SharedMobility
     emptySlots: 7,
     vehicleTypes: ["bicycle"],
     isActive: true,
-    source: "gbfs/test",
+    sources: ["gbfs/test"],
     operator: "TestBikes",
-    attribution: makeAttribution("GBFS"),
     ...overrides,
   };
 }
@@ -39,9 +34,8 @@ function makeVehicle(overrides?: Partial<SharedMobilityVehicle>): SharedMobility
     formFactor: "scooter_standing",
     isReserved: false,
     isDisabled: false,
-    source: "gbfs/lime",
+    sources: ["gbfs/lime"],
     operator: "Lime",
-    attribution: makeAttribution("GBFS"),
     ...overrides,
   };
 }
@@ -484,7 +478,7 @@ describe("mapStationToDetail", () => {
     );
 
     expect(detail.id).toBe("station-1");
-    expect(detail.source).toBe("gbfs/test");
+    expect(detail.sources).toEqual(["gbfs/test"]);
     expect(detail.name).toBe("Test Station");
     expect(detail.coordinates).toEqual([13.41, 52.52]);
     expect(detail.address).toEqual({
@@ -513,51 +507,6 @@ describe("mapStationToDetail", () => {
   it("omits usageInfo when station has no accessMethod", () => {
     const detail = mapStationToDetail(makeStation({ accessMethod: undefined }));
     expect(detail.usageInfo).toBeUndefined();
-  });
-
-  it("maps single attribution correctly", () => {
-    const detail = mapStationToDetail(
-      makeStation({
-        attribution: {
-          label: "GBFS",
-          url: "https://gbfs.org",
-          license: "MIT",
-          licenseUrl: "https://mit.license",
-        },
-      }),
-    );
-    expect(detail.attribution).toEqual({
-      text: "GBFS",
-      url: "https://gbfs.org",
-      license: "MIT",
-      licenseUrl: "https://mit.license",
-    });
-  });
-
-  it("maps multiple attributions correctly", () => {
-    const detail = mapStationToDetail(
-      makeStation({
-        attribution: [
-          { label: "GBFS", url: "https://gbfs.org" },
-          { label: "Cambio", url: "https://cambio.de" },
-        ],
-      }),
-    );
-    expect(Array.isArray(detail.attribution)).toBe(true);
-    const attrs = detail.attribution as { text: string; url: string }[];
-    expect(attrs).toHaveLength(2);
-    expect(attrs[0].text).toBe("GBFS");
-    expect(attrs[1].text).toBe("Cambio");
-  });
-
-  it("falls back to default GBFS attribution when station has no attribution", () => {
-    const detail = mapStationToDetail(makeStation({ attribution: undefined }));
-    expect(detail.attribution).toEqual({
-      text: "GBFS",
-      url: "https://gbfs.org",
-      license: undefined,
-      licenseUrl: undefined,
-    });
   });
 });
 
@@ -613,7 +562,7 @@ describe("mapVehicleToDetail", () => {
       makeVehicle({ operator: "Lime", formFactor: "scooter_standing" }),
     );
     expect(detail.id).toBe("vehicle-1");
-    expect(detail.source).toBe("gbfs/lime");
+    expect(detail.sources).toEqual(["gbfs/lime"]);
     expect(detail.name).toBe("Lime E-Scooter");
     expect(detail.coordinates).toEqual([13.41, 52.52]);
     expect(detail.operator).toEqual({ name: "Lime" });
@@ -623,46 +572,6 @@ describe("mapVehicleToDetail", () => {
     const detail = mapVehicleToDetail(makeVehicle({ operator: undefined, formFactor: "bicycle" }));
     expect(detail.name).toBe("Bicycle");
     expect(detail.operator).toBeUndefined();
-  });
-
-  it("maps single attribution correctly", () => {
-    const detail = mapVehicleToDetail(
-      makeVehicle({
-        attribution: { label: "Lime", url: "https://lime.me", license: "CC0" },
-      }),
-    );
-    expect(detail.attribution).toEqual({
-      text: "Lime",
-      url: "https://lime.me",
-      license: "CC0",
-      licenseUrl: undefined,
-    });
-  });
-
-  it("maps multiple attributions correctly", () => {
-    const detail = mapVehicleToDetail(
-      makeVehicle({
-        attribution: [
-          { label: "GBFS", url: "https://gbfs.org" },
-          { label: "Lime", url: "https://lime.me" },
-        ],
-      }),
-    );
-    expect(Array.isArray(detail.attribution)).toBe(true);
-    const attrs = detail.attribution as { text: string; url: string }[];
-    expect(attrs).toHaveLength(2);
-    expect(attrs[0].text).toBe("GBFS");
-    expect(attrs[1].text).toBe("Lime");
-  });
-
-  it("falls back to default GBFS attribution when vehicle has no attribution", () => {
-    const detail = mapVehicleToDetail(makeVehicle({ attribution: undefined }));
-    expect(detail.attribution).toEqual({
-      text: "GBFS",
-      url: "https://gbfs.org",
-      license: undefined,
-      licenseUrl: undefined,
-    });
   });
 
   it("maps all form factor labels correctly", () => {
@@ -715,7 +624,6 @@ describe("mapVehicleToDetail", () => {
         propulsion: undefined,
         batteryLevel: undefined,
         rangeMeters: undefined,
-        attribution: undefined,
       }),
     );
     expect(detail.name).toBe("E-Scooter");

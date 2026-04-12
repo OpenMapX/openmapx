@@ -103,7 +103,7 @@ function dbFacilityToParking(f: DbBahnParkFacility): ParkingFacility | null {
     id: `db-bahnpark:${f.id}`,
     name: extractName(f),
     coordinates: [loc.longitude, loc.latitude],
-    source: "db-bahnpark",
+    sources: ["db-bahnpark"],
     parkingType: mapType(f.type?.name),
     capacity: total,
     hasRealtimeData: false, // list endpoint doesn't include live occupancy
@@ -123,12 +123,6 @@ function dbFacilityToParking(f: DbBahnParkFacility): ParkingFacility | null {
     paymentMethods: f.tariff?.information?.dynamic?.tariffPaymentOptions ?? undefined,
     url: f.url ?? undefined,
     state: isOutOfService ? "closed" : "open",
-    attribution: {
-      label: "DB BahnPark",
-      url: "https://www.bahnhof.de/parken",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    },
   };
 }
 

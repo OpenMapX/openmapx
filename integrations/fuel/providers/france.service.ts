@@ -100,12 +100,6 @@ export class FranceService implements FuelPriceProvider {
         coordinates: [r.geom.lon, r.geom.lat],
         address,
         fuelPricesUpdatedAt: updatedAt,
-        attribution: {
-          label: "prix-carburants.gouv.fr",
-          url: "https://www.prix-carburants.gouv.fr",
-          license: "Licence Ouverte v2.0",
-          licenseUrl: "https://github.com/etalab/licence-ouverte/blob/master/LO.md",
-        },
         fuelPrices: {
           diesel: r.gazole_prix ?? undefined,
           e5: r.sp95_prix ?? undefined,

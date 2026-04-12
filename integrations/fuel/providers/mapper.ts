@@ -17,7 +17,7 @@ const FUEL_LABELS: Record<string, string> = {
   lpg: "LPG (Autogas)",
 };
 
-function extractSource(id: string): string {
+function extractSourcePrefix(id: string): string {
   const slashIndex = id.indexOf("/");
   return slashIndex > 0 ? id.slice(0, slashIndex) : "unknown";
 }
@@ -62,7 +62,7 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
     id: station.id,
     name: station.name,
     coordinates: station.coordinates,
-    source: extractSource(station.id),
+    source: extractSourcePrefix(station.id),
     variant,
     status: variant,
     summary: formatPriceSummary(station),
@@ -98,27 +98,12 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
   const priceTable = buildFuelPricesTable(station);
   if (priceTable) sections.push(priceTable);
 
-  const attribution = station.attribution
-    ? {
-        text: station.attribution.label,
-        url: station.attribution.url,
-        license: station.attribution.license,
-        licenseUrl: station.attribution.licenseUrl,
-      }
-    : {
-        text: "OpenStreetMap",
-        url: "https://www.openstreetmap.org",
-        license: "ODbL",
-        licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-      };
-
   return {
     id: station.id,
-    source: extractSource(station.id),
+    sources: [extractSourcePrefix(station.id)],
     name: station.name,
     coordinates: station.coordinates,
     address: station.address ? { line1: station.address } : undefined,
-    attribution,
     operator: station.brand ? { name: station.brand } : undefined,
     sections,
   };
@@ -195,27 +180,12 @@ export function buildTankerkoenigDetail(
   });
   if (priceTable) sections.push(priceTable);
 
-  const attribution = station.attribution
-    ? {
-        text: station.attribution.label,
-        url: station.attribution.url,
-        license: station.attribution.license,
-        licenseUrl: station.attribution.licenseUrl,
-      }
-    : {
-        text: "Tankerk\u00F6nig",
-        url: "https://www.tankerkoenig.de",
-        license: "CC BY 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-      };
-
   return {
     id: station.id,
-    source: "tankerkoenig",
+    sources: ["tankerkoenig"],
     name: station.name,
     coordinates: station.coordinates,
     address: station.address ? { line1: station.address } : undefined,
-    attribution,
     operator: station.brand ? { name: station.brand } : undefined,
     openingHours: tankerkoenigToOsmHours(tankerkoenigRaw),
     sections,

@@ -6,14 +6,10 @@
  * enriches it with extra fields from later occurrences that the first one lacks
  * (address, website, location hints, vehicle classes, etc.).
  *
- * Attributions from ALL merged sources are collected so every data contributor
- * is credited in the detail view.
- *
  * Registration order determines priority: Cambio (live API) should be registered
  * before open data sources so its live availability numbers are kept.
  */
 
-import { mergeAttributions } from "@openmapx/core";
 import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 
 /** Maximum distance in meters to consider two stations as the same location. */
@@ -48,8 +44,7 @@ function findNearby(stations: SharedMobilityStation[], lng: number, lat: number)
 /**
  * Merge stations by proximity (within 50m).
  * First-seen station wins for identity and availability.
- * Later stations at nearby coordinates contribute enrichment fields
- * and their attributions are collected.
+ * Later stations at nearby coordinates contribute enrichment fields.
  */
 export function mergeRegionalStations(stations: SharedMobilityStation[]): SharedMobilityStation[] {
   const merged: SharedMobilityStation[] = [];
@@ -65,8 +60,8 @@ export function mergeRegionalStations(stations: SharedMobilityStation[]): Shared
 
     const existing = merged[idx];
 
-    // Merge attributions from all contributing sources
-    existing.attribution = mergeAttributions(existing.attribution, s.attribution);
+    // Merge source identifiers
+    existing.sources = [...new Set([...existing.sources, ...s.sources])];
 
     // Enrich the primary station with fields from the secondary source.
     // Only copy fields that the primary source doesn't already have.
@@ -80,8 +75,8 @@ export function mergeRegionalStations(stations: SharedMobilityStation[]): Shared
       existing.vehicleClassNames = s.vehicleClassNames;
     if (!existing.stationType && s.stationType) existing.stationType = s.stationType;
     if (existing.capacity === undefined && s.capacity !== undefined) existing.capacity = s.capacity;
-    // Do NOT override: availableVehicles, isActive, operator, name, id, source
-    // These come from the primary (live) source.
+    // Do NOT override: availableVehicles, isActive, operator, name, id
+    // These come from the primary (live) source. Sources are merged above.
   }
 
   return merged;

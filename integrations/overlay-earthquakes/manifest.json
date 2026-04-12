@@ -44,6 +44,7 @@
   "category": "Data Overlays",
   "dataSources": [
     {
+      "sourceId": "usgs",
       "name": "USGS Earthquake Hazards",
       "url": "https://earthquake.usgs.gov/",
       "license": "U.S. Public Domain",

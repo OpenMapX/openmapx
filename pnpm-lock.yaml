@@ -715,6 +715,12 @@ importers:
         specifier: workspace:^
         version: link:../../packages/core
 
+  integrations/webcam:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+
   packages/core:
     dependencies:
       '@better-auth/passkey':

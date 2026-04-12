@@ -26,6 +26,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "irail",
       "name": "iRail",
       "url": "https://api.irail.be/",
       "license": "AGPL-3.0 (software); CC0 (log data)",

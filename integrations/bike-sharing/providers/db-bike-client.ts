@@ -148,12 +148,6 @@ async function fetchProvider(
 
   const operator = sysInfoRes?.data?.operator ?? sysInfoRes?.data?.name ?? providerId;
   const source = `db-bike/${providerId}`;
-  const attribution = {
-    label: operator,
-    url: "https://www.deutschebahnconnect.com",
-    license: "CC BY 4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-  };
 
   // Build station status lookup
   const statusMap = new Map<string, RawStationStatus>();
@@ -184,8 +178,7 @@ async function fetchProvider(
       operator,
       vehicleTypes: ["bicycle"],
       isActive: true,
-      source,
-      attribution,
+      sources: [source],
     });
   }
 
@@ -213,8 +206,7 @@ async function fetchProvider(
       isReserved: bike.is_reserved,
       isDisabled: bike.is_disabled,
       operator,
-      source,
-      attribution,
+      sources: [source],
     });
   }
 

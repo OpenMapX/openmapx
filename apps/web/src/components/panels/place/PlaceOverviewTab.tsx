@@ -430,19 +430,27 @@ export function PlaceOverviewTab({
               </ExpandableDetailRow>
             ) : (
               <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
-                <Typography
-                  variant="body2"
-                  component="span"
-                  fontWeight={500}
-                  color={hours.isOpen ? "success.main" : "error.main"}
-                >
-                  {hours.isOpen ? tc("open") : tc("closed")}
-                </Typography>
-                {hours.detail && (
+                {hours.isUnknown ? (
                   <Typography variant="body2" component="span" color="text.secondary">
-                    {" · "}
                     {hours.detail}
                   </Typography>
+                ) : (
+                  <>
+                    <Typography
+                      variant="body2"
+                      component="span"
+                      fontWeight={500}
+                      color={hours.isOpen ? "success.main" : "error.main"}
+                    >
+                      {hours.isOpen ? tc("open") : tc("closed")}
+                    </Typography>
+                    {hours.detail && (
+                      <Typography variant="body2" component="span" color="text.secondary">
+                        {" · "}
+                        {hours.detail}
+                      </Typography>
+                    )}
+                  </>
                 )}
               </DetailRow>
             ))

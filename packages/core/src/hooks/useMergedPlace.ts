@@ -1,5 +1,6 @@
 import type { DataSourceDetail } from "@integrations/data-source/types";
 import type { ReverseGeocodingResult } from "@integrations/geocoding/types";
+import { useDataSourceStore } from "../stores/dataSourceStore";
 import type { Place } from "../types/place";
 import { useDataSourceMatch } from "./useDataSourceMatch";
 import { usePlaceDetails } from "./usePlaceDetails";
@@ -116,9 +117,16 @@ export function useMergedPlace(selectedPlace: Place | null): {
   // Skip the place details lookup for those — reverse geocoding handles them.
   const isCoordinatePlace = selectedPlace?.id?.startsWith("coordinate-") ?? false;
 
-  // For data source places, use a synthetic key to force name+coord lookup
+  // For data source places, use a synthetic key to force coord-only lookup
   // (their IDs like "tankerkoenig/uuid" are not OSM IDs).
-  const isDataSourcePlace = selectedPlace?.dataSourceDetail !== undefined;
+  // Also detect data-source preview places: DataSourceLayer sets a preview
+  // place (no dataSourceDetail yet) before DataSourceDetailBridge resolves.
+  // Without this check, usePlaceDetails fires a name-based Nominatim lookup
+  // that can match a road/POI at the same coordinates and overwrite the panel.
+  const selectedItem = useDataSourceStore((s) => s.selectedItem);
+  const isDataSourcePlace =
+    selectedPlace?.dataSourceDetail !== undefined ||
+    (selectedItem !== null && selectedPlace?.id === selectedItem.itemId);
   const placeDetailsId = isCoordinatePlace
     ? null
     : isDataSourcePlace

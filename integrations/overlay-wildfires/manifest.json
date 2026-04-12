@@ -48,6 +48,7 @@
   "category": "Data Overlays",
   "dataSources": [
     {
+      "sourceId": "firms",
       "name": "NASA FIRMS",
       "url": "https://firms.modaps.eosdis.nasa.gov/",
       "license": "U.S. Public Domain",

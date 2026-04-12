@@ -26,6 +26,7 @@
   "category": "Imagery",
   "dataSources": [
     {
+      "sourceId": "panoramax",
       "name": "Panoramax",
       "url": "https://panoramax.xyz/",
       "license": "Licence Ouverte v2.0 (IGN); CC BY-SA 4.0 (OSM France)",

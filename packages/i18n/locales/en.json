@@ -472,12 +472,16 @@
     "onStreet": "On-Street",
     "freeParking": "Free Parking",
     "paidParking": "Paid Parking",
+    "unknownFee": "Unknown",
     "yes": "Yes",
     "open": "Open",
     "closed": "Closed",
     "customers": "Customers",
     "private": "Private",
-    "permit": "Permit"
+    "permit": "Permit",
+    "webcams": "Webcams",
+    "webcamCategory": "Category",
+    "webcamSource": "Source"
   },
   "account": {
     "language": "Language",

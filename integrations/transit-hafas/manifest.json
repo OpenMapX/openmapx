@@ -26,6 +26,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "hafas",
       "name": "HAFAS REST APIs (transport.rest)",
       "url": "https://v6.db.transport.rest/",
       "license": "ISC (software); no open license for data (unofficial HAFAS scraping)",

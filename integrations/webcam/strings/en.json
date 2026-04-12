@@ -1,0 +1,26 @@
+{
+  "name": "Webcams",
+  "description": "Live webcam streams and traffic cameras",
+  "dataSources": [
+    {
+      "purpose": "Webcam streams worldwide (tourism, weather, traffic)",
+      "dataSent": "Bounding box coordinates (north, south, east, west)",
+      "dataReceived": "Webcam clusters/points with name, coordinates, thumbnail URL, stream URL, view count, categories"
+    },
+    {
+      "purpose": "Webcam locations tagged in OpenStreetMap",
+      "dataSent": "Bounding box coordinates via Overpass API",
+      "dataReceived": "OSM nodes with webcam URL, name, operator, direction"
+    },
+    {
+      "purpose": "California highway traffic cameras (Caltrans CCTV)",
+      "dataSent": "No user data (fetches district datasets, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with location, name, still image URL, route/direction"
+    },
+    {
+      "purpose": "London traffic cameras (TfL JamCams)",
+      "dataSent": "No user data (fetches entire JamCam dataset, filtered server-side to bounding box)",
+      "dataReceived": "Traffic cameras with name, coordinates, still image URL"
+    }
+  ]
+}

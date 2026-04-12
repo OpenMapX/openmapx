@@ -61,7 +61,7 @@ function elementToFacility(el: OsmParkingElement): ParkingFacility | null {
     id: `osm:${el.type}/${el.id}`,
     name: tags.name ?? "Parking",
     coordinates: [lon, lat],
-    source: "osm-parking",
+    sources: ["osm-parking"],
     parkingType: mapParkingTag(tags.parking),
     capacity,
     hasRealtimeData: false,
@@ -75,12 +75,6 @@ function elementToFacility(el: OsmParkingElement): ParkingFacility | null {
       ? tags.park_ride === "yes" || tags.park_ride === "bus" || tags.park_ride === "train"
       : undefined,
     state: "unknown",
-    attribution: {
-      label: "OpenStreetMap",
-      url: "https://www.openstreetmap.org",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-    },
   };
 }
 

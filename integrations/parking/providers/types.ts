@@ -1,17 +1,10 @@
 export type ParkingType = "garage" | "surface" | "underground" | "on-street" | "unknown";
 
-export interface ParkingAttribution {
-  label: string;
-  url: string;
-  license?: string;
-  licenseUrl?: string;
-}
-
 export interface ParkingFacility {
   id: string;
   name: string;
   coordinates: [number, number]; // [lng, lat]
-  source: string;
+  sources: string[];
 
   parkingType: ParkingType;
 
@@ -40,8 +33,6 @@ export interface ParkingFacility {
   chargingDetails?: string;
   paymentMethods?: string;
   url?: string;
-
-  attribution: ParkingAttribution | ParkingAttribution[];
 }
 
 /** Raw response shape from the ParkenDD v2 root endpoint. */
@@ -92,6 +83,64 @@ export interface ParkApiV3Site {
   capacity_woman?: number | null;
   max_height?: number | null;
   source_uid?: string;
+}
+
+/** Raw record from RDW Socrata GEO parking datasets (t5pc-eb34, 6wzd-evwu, 9c54-cmfx). */
+export interface RdwGeoRecord {
+  areamanagerid: string;
+  areaid: string;
+  areadesc: string;
+  location: { latitude: string; longitude: string };
+  startdataarea?: string;
+  enddataarea?: string;
+  usageid: string;
+  /** Carpool-specific: number of parking spaces. */
+  aantal_parkeer_plaatsen?: string;
+  /** Carpool-specific: number of charging points. */
+  aantal_laad_punten?: string;
+  /** Carpool-specific: accessible for disabled ("Ja"/"Nee"). */
+  toegankelijk_voor_gehandicapten?: string;
+  /** Carpool-specific: maximum entry height. */
+  maximale_inrij_hoogte?: string;
+}
+
+/** Raw record from RDW Socrata SPECIFICATIES PARKEERGEBIED (b3us-f26s). */
+export interface RdwSpecsRecord {
+  areamanagerid: string;
+  areaid: string;
+  capacity?: string;
+  chargingpointcapacity?: string;
+  disabledaccess?: string;
+  maximumvehicleheight?: string;
+  limitedaccess?: string;
+}
+
+/** Raw properties from BNLS France Opendatasoft record. */
+export interface BnlsFrRecord {
+  id: string;
+  name: string | null;
+  geo_point_2d?: { lon: number; lat: number };
+  xlong?: number;
+  ylat?: number;
+  space_count?: number | null;
+  is_free?: number | null;
+  facilities_type?: string | null;
+  cost_1h?: number | null;
+  cost_2h?: number | null;
+  cost_3h?: number | null;
+  cost_4h?: number | null;
+  cost_24h?: number | null;
+  resident_sub?: number | null;
+  non_resident_sub?: number | null;
+  disable_count?: number | null;
+  electric_car_count?: number | null;
+  park_ride_count?: number | null;
+  max_height?: number | null;
+  address?: string | null;
+  url?: string | null;
+  com_name?: string | null;
+  user_type?: string | null;
+  info?: string | null;
 }
 
 /** Raw facility from DB BahnPark Parking Information API v2. */

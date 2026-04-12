@@ -1,10 +1,14 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import { useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
+import {
+  buildSourceAttribution,
+  useCurrentWeather,
+  useIntegrationRegistry,
+  weatherCodeToInfo,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
 import { windDirectionLabel } from "@/components/weather/weatherUtils";
@@ -18,6 +22,7 @@ interface Props {
 export function PlaceWeather({ lat, lng, enabled = true }: Props) {
   const t = useTranslations("weather");
   const { data, isLoading } = useCurrentWeather(lat, lng, enabled);
+  const registry = useIntegrationRegistry();
 
   if (isLoading)
     return (
@@ -29,8 +34,17 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
 
   if (!data) return null;
 
-  const { current, attribution } = data;
+  const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
+
+  const weatherMeta = data.source
+    ? registry
+        .getByDomain("weather")
+        .find((m) => m.dataSources?.some((ds) => ds.sourceId === data.source))
+    : undefined;
+  const attributionHtml = weatherMeta?.dataSources
+    ? buildSourceAttribution(weatherMeta.dataSources, [data.source])
+    : "";
 
   return (
     <Box sx={{ py: 1 }}>
@@ -58,36 +72,14 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
           {t("pressure")}: {current.pressure} hPa
         </Typography>
       </Box>
-      {attribution && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
-          {t("attribution")}{" "}
-          <Link
-            href={attribution.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            color="text.secondary"
-          >
-            {attribution.name}
-          </Link>
-          {attribution.licenseUrl ? (
-            <>
-              {" ("}
-              <Link
-                href={attribution.licenseUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                underline="hover"
-                color="text.secondary"
-              >
-                {attribution.license}
-              </Link>
-              {")"}
-            </>
-          ) : (
-            ` (${attribution.license})`
-          )}
-        </Typography>
+      {attributionHtml && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.5, display: "block", "& a": { color: "text.secondary" } }}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
+          dangerouslySetInnerHTML={{ __html: `${t("attribution")} ${attributionHtml}` }}
+        />
       )}
     </Box>
   );

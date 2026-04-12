@@ -72,16 +72,10 @@ function parse(body: string): SharedMobilityStation[] {
       operator: "Cambio Bielefeld",
       vehicleTypes: ["car"],
       isActive: true,
-      source: "bielefeld",
+      sources: ["bielefeld"],
       address: fullStreet ? { street: fullStreet, city: "Bielefeld", country: "DE" } : undefined,
       website: website || undefined,
       locationHint: description || undefined,
-      attribution: {
-        label: "Stadt Bielefeld",
-        url: "https://open-data.bielefeld.de",
-        license: "ODbL",
-        licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-      },
     });
   }
 

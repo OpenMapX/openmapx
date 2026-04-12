@@ -1,42 +1,55 @@
 import type { BoundingBox, DataSourceResult, ParkingFacility } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../db-bahnpark.js", () => ({
-  searchDbBahnPark: vi.fn(),
-  fetchDbBahnParkDetail: vi.fn(),
+vi.mock("../barcelona-es.js", () => ({
+  searchBarcelonaEs: vi.fn(),
+  fetchBarcelonaEsDetail: vi.fn(),
 }));
-
-vi.mock("../dedup.js", () => ({
-  deduplicateParking: vi.fn((items: unknown[]) => items),
+vi.mock("../basel-ch.js", () => ({ searchBaselCh: vi.fn(), fetchBaselChDetail: vi.fn() }));
+vi.mock("../bnls-fr.js", () => ({ searchBnlsFr: vi.fn(), fetchBnlsFrDetail: vi.fn() }));
+vi.mock("../brussels-be.js", () => ({ searchBrusselsBe: vi.fn(), fetchBrusselsBeDetail: vi.fn() }));
+vi.mock("../copenhagen-dk.js", () => ({
+  searchCopenhagenDk: vi.fn(),
+  fetchCopenhagenDkDetail: vi.fn(),
 }));
-
-vi.mock("../mapper.js", () => ({
-  mapParkingToResult: vi.fn(),
-  mapParkingToDetail: vi.fn(),
+vi.mock("../db-bahnpark.js", () => ({ searchDbBahnPark: vi.fn(), fetchDbBahnParkDetail: vi.fn() }));
+vi.mock("../dedup.js", () => ({ deduplicateParking: vi.fn((items: unknown[]) => items) }));
+vi.mock("../florence-it.js", () => ({ searchFlorenceIt: vi.fn(), fetchFlorenceItDetail: vi.fn() }));
+vi.mock("../ghent-be.js", () => ({ searchGhentBe: vi.fn(), fetchGhentBeDetail: vi.fn() }));
+vi.mock("../madrid-es.js", () => ({ searchMadridEs: vi.fn(), fetchMadridEsDetail: vi.fn() }));
+vi.mock("../mapper.js", () => ({ mapParkingToResult: vi.fn(), mapParkingToDetail: vi.fn() }));
+vi.mock("../nsw-au.js", () => ({ searchNswAu: vi.fn(), fetchNswAuDetail: vi.fn() }));
+vi.mock("../osm.js", () => ({ searchOsmParking: vi.fn(), fetchOsmParkingElement: vi.fn() }));
+vi.mock("../parkapi-v2.js", () => ({ searchParkApiV2: vi.fn(), fetchParkApiV2Detail: vi.fn() }));
+vi.mock("../parkapi-v3.js", () => ({ searchParkApiV3: vi.fn(), fetchParkApiV3Detail: vi.fn() }));
+vi.mock("../rdw-nl.js", () => ({ searchRdwNl: vi.fn(), fetchRdwNlDetail: vi.fn() }));
+vi.mock("../singapore.js", () => ({ searchSingapore: vi.fn(), fetchSingaporeDetail: vi.fn() }));
+vi.mock("../utmc-newcastle.js", () => ({
+  searchUtmcNewcastle: vi.fn(),
+  fetchUtmcNewcastleDetail: vi.fn(),
 }));
+vi.mock("../vienna-at.js", () => ({ searchViennaAt: vi.fn(), fetchViennaAtDetail: vi.fn() }));
 
-vi.mock("../osm.js", () => ({
-  searchOsmParking: vi.fn(),
-  fetchOsmParkingElement: vi.fn(),
-}));
-
-vi.mock("../parkapi-v2.js", () => ({
-  searchParkApiV2: vi.fn(),
-  fetchParkApiV2Detail: vi.fn(),
-}));
-
-vi.mock("../parkapi-v3.js", () => ({
-  searchParkApiV3: vi.fn(),
-  fetchParkApiV3Detail: vi.fn(),
-}));
-
+import { searchBarcelonaEs } from "../barcelona-es.js";
+import { searchBaselCh } from "../basel-ch.js";
+import { fetchBnlsFrDetail, searchBnlsFr } from "../bnls-fr.js";
+import { searchBrusselsBe } from "../brussels-be.js";
+import { searchCopenhagenDk } from "../copenhagen-dk.js";
 import { fetchDbBahnParkDetail, searchDbBahnPark } from "../db-bahnpark.js";
 import { deduplicateParking } from "../dedup.js";
+import { searchFlorenceIt } from "../florence-it.js";
+import { searchGhentBe } from "../ghent-be.js";
+import { searchMadridEs } from "../madrid-es.js";
 import { mapParkingToDetail, mapParkingToResult } from "../mapper.js";
+import { searchNswAu } from "../nsw-au.js";
 import { fetchOsmParkingElement, searchOsmParking } from "../osm.js";
 import { fetchParkApiV2Detail, searchParkApiV2 } from "../parkapi-v2.js";
 import { fetchParkApiV3Detail, searchParkApiV3 } from "../parkapi-v3.js";
 import { parkingProvider } from "../provider.js";
+import { fetchRdwNlDetail, searchRdwNl } from "../rdw-nl.js";
+import { searchSingapore } from "../singapore.js";
+import { searchUtmcNewcastle } from "../utmc-newcastle.js";
+import { searchViennaAt } from "../vienna-at.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,10 +65,9 @@ function makeFacility(overrides: Partial<ParkingFacility> = {}): ParkingFacility
     id: overrides.id ?? "test-id",
     name: overrides.name ?? "Test Parking",
     coordinates: overrides.coordinates ?? [11.5, 48.5],
-    source: overrides.source ?? "test",
+    sources: overrides.sources ?? ["test"],
     parkingType: overrides.parkingType ?? "garage",
     hasRealtimeData: overrides.hasRealtimeData ?? false,
-    attribution: overrides.attribution ?? { label: "Test", url: "" },
     ...overrides,
   };
 }
@@ -72,10 +84,27 @@ function makeResult(id: string): DataSourceResult {
 }
 
 function setupEmptySources() {
-  vi.mocked(searchParkApiV2).mockResolvedValue([]);
-  vi.mocked(searchParkApiV3).mockResolvedValue([]);
-  vi.mocked(searchDbBahnPark).mockResolvedValue([]);
-  vi.mocked(searchOsmParking).mockResolvedValue([]);
+  for (const fn of [
+    searchParkApiV2,
+    searchParkApiV3,
+    searchDbBahnPark,
+    searchRdwNl,
+    searchBnlsFr,
+    searchGhentBe,
+    searchBrusselsBe,
+    searchBaselCh,
+    searchFlorenceIt,
+    searchBarcelonaEs,
+    searchViennaAt,
+    searchCopenhagenDk,
+    searchSingapore,
+    searchMadridEs,
+    searchUtmcNewcastle,
+    searchNswAu,
+    searchOsmParking,
+  ]) {
+    vi.mocked(fn).mockResolvedValue([]);
+  }
 }
 
 // Meta
@@ -85,48 +114,51 @@ describe("parkingProvider meta", () => {
     expect(parkingProvider.id).toBe("parking");
   });
 
-  it("meta includes expected attribution sources", () => {
-    const attr = parkingProvider.meta.attribution;
-    expect(Array.isArray(attr)).toBe(true);
-    const texts = (attr as Array<{ text: string }>).map((a) => a.text);
-    expect(texts).toContain("ParkenDD");
-    expect(texts).toContain("DB BahnPark");
-    expect(texts).toContain("OpenStreetMap");
+  it("meta does not contain id, name, or attribution (sourced from manifest)", () => {
+    expect("id" in parkingProvider.meta).toBe(false);
+    expect("name" in parkingProvider.meta).toBe(false);
+    expect("attribution" in parkingProvider.meta).toBe(false);
   });
 });
 
 // search()
 
 describe("parkingProvider.search", () => {
-  it("queries 4 sources in parallel and combines in priority order DB > v3 > v2 > OSM", async () => {
+  it("queries all sources in parallel and combines in priority order", async () => {
+    setupEmptySources();
     vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id));
-    const db = [makeFacility({ id: "db-bahnpark:1", source: "db" })];
-    const v3 = [makeFacility({ id: "parkapi-v3:2", source: "v3" })];
-    const v2 = [makeFacility({ id: "parkapi-v2:city/3", source: "v2" })];
-    const osm = [makeFacility({ id: "osm:node/4", source: "osm" })];
+    const db = [makeFacility({ id: "db-bahnpark:1", sources: ["db"] })];
+    const v3 = [makeFacility({ id: "parkapi-v3:2", sources: ["v3"] })];
+    const osm = [makeFacility({ id: "osm:node/4", sources: ["osm"] })];
 
-    vi.mocked(searchParkApiV2).mockResolvedValue(v2);
     vi.mocked(searchParkApiV3).mockResolvedValue(v3);
     vi.mocked(searchDbBahnPark).mockResolvedValue(db);
     vi.mocked(searchOsmParking).mockResolvedValue(osm);
 
     const results = await parkingProvider.search(makeBbox());
 
-    // Verify priority order passed to dedup: DB first, then v3, v2, OSM
+    // DB appears before v3, both before OSM (last source)
     const dedupCall = vi.mocked(deduplicateParking).mock.calls[0][0];
-    expect(dedupCall[0].id).toBe("db-bahnpark:1");
-    expect(dedupCall[1].id).toBe("parkapi-v3:2");
-    expect(dedupCall[2].id).toBe("parkapi-v2:city/3");
-    expect(dedupCall[3].id).toBe("osm:node/4");
-    expect(results).toHaveLength(4);
+    const ids = dedupCall.map((f: ParkingFacility) => f.id);
+    expect(ids.indexOf("db-bahnpark:1")).toBeLessThan(ids.indexOf("parkapi-v3:2"));
+    expect(ids.indexOf("parkapi-v3:2")).toBeLessThan(ids.indexOf("osm:node/4"));
+    expect(results).toHaveLength(3);
   });
 
   it("individual source failures handled gracefully", async () => {
+    setupEmptySources();
     vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id));
-    vi.mocked(searchParkApiV2).mockRejectedValue(new Error("v2 down"));
-    vi.mocked(searchParkApiV3).mockRejectedValue(new Error("v3 down"));
+    // Fail most sources but keep DB alive
+    for (const fn of [
+      searchParkApiV2,
+      searchParkApiV3,
+      searchRdwNl,
+      searchBnlsFr,
+      searchOsmParking,
+    ]) {
+      vi.mocked(fn).mockRejectedValue(new Error("down"));
+    }
     vi.mocked(searchDbBahnPark).mockResolvedValue([makeFacility({ id: "db:1" })]);
-    vi.mocked(searchOsmParking).mockRejectedValue(new Error("osm down"));
 
     const results = await parkingProvider.search(makeBbox());
 
@@ -135,10 +167,27 @@ describe("parkingProvider.search", () => {
   });
 
   it("all sources fail → returns empty array", async () => {
-    vi.mocked(searchParkApiV2).mockRejectedValue(new Error("down"));
-    vi.mocked(searchParkApiV3).mockRejectedValue(new Error("down"));
-    vi.mocked(searchDbBahnPark).mockRejectedValue(new Error("down"));
-    vi.mocked(searchOsmParking).mockRejectedValue(new Error("down"));
+    for (const fn of [
+      searchParkApiV2,
+      searchParkApiV3,
+      searchDbBahnPark,
+      searchRdwNl,
+      searchBnlsFr,
+      searchGhentBe,
+      searchBrusselsBe,
+      searchBaselCh,
+      searchFlorenceIt,
+      searchBarcelonaEs,
+      searchViennaAt,
+      searchCopenhagenDk,
+      searchSingapore,
+      searchMadridEs,
+      searchUtmcNewcastle,
+      searchNswAu,
+      searchOsmParking,
+    ]) {
+      vi.mocked(fn).mockRejectedValue(new Error("down"));
+    }
     vi.mocked(deduplicateParking).mockReturnValue([]);
 
     const results = await parkingProvider.search(makeBbox());
@@ -150,9 +199,7 @@ describe("parkingProvider.search", () => {
 
 describe("parkingProvider.search filters", () => {
   function setupSources(facilities: ParkingFacility[]) {
-    vi.mocked(searchParkApiV2).mockResolvedValue([]);
-    vi.mocked(searchParkApiV3).mockResolvedValue([]);
-    vi.mocked(searchDbBahnPark).mockResolvedValue([]);
+    setupEmptySources();
     vi.mocked(searchOsmParking).mockResolvedValue(facilities);
     vi.mocked(deduplicateParking).mockReturnValue(facilities);
     vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id));
@@ -290,10 +337,9 @@ describe("parkingProvider.getDetail", () => {
 
     const detail = {
       id: "pk-cached-1",
-      source: "db",
+      sources: ["db"],
       name: "Parking",
       coordinates: [11.5, 48.5] as [number, number],
-      attribution: { text: "DB", url: "" },
       sections: [],
     };
     vi.mocked(mapParkingToDetail).mockReturnValue(detail);
@@ -313,10 +359,9 @@ describe("parkingProvider.getDetail", () => {
 
     const detail = {
       id: "parkapi-v2:berlin/lot42",
-      source: "parkapi-v2",
+      sources: ["parkapi-v2"],
       name: "Lot 42",
       coordinates: [11.5, 48.5] as [number, number],
-      attribution: { text: "ParkenDD", url: "" },
       sections: [],
     };
     vi.mocked(mapParkingToDetail).mockReturnValue(detail);
@@ -334,10 +379,9 @@ describe("parkingProvider.getDetail", () => {
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
       id: "parkapi-v3:123",
-      source: "parkapi-v3",
+      sources: ["parkapi-v3"],
       name: "P",
       coordinates: [0, 0],
-      attribution: { text: "", url: "" },
       sections: [],
     });
 
@@ -354,16 +398,53 @@ describe("parkingProvider.getDetail", () => {
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
       id: "db-bahnpark:ABC",
-      source: "db",
+      sources: ["db"],
       name: "P",
       coordinates: [0, 0],
-      attribution: { text: "", url: "" },
       sections: [],
     });
 
     const result = await parkingProvider.getDetail("db-bahnpark:ABC");
     expect(fetchDbBahnParkDetail).toHaveBeenCalledWith("ABC");
     expect(result.id).toBe("db-bahnpark:ABC");
+  });
+
+  it("cache miss with rdw: prefix fetches detail", async () => {
+    const facility = makeFacility({ id: "rdw:2459/P1_FLOW" });
+    vi.mocked(fetchRdwNlDetail).mockResolvedValue(facility);
+
+    setupEmptySources();
+    vi.mocked(deduplicateParking).mockReturnValue([facility]);
+    vi.mocked(mapParkingToDetail).mockReturnValue({
+      id: "rdw:2459/P1_FLOW",
+      sources: ["rdw-nl"],
+      name: "P",
+      coordinates: [0, 0],
+      sections: [],
+    });
+
+    const result = await parkingProvider.getDetail("rdw:2459/P1_FLOW");
+    expect(fetchRdwNlDetail).toHaveBeenCalledWith("2459", "P1_FLOW");
+    expect(result.id).toBe("rdw:2459/P1_FLOW");
+  });
+
+  it("cache miss with bnls: prefix fetches detail", async () => {
+    const facility = makeFacility({ id: "bnls:FR-75056-P-001" });
+    vi.mocked(fetchBnlsFrDetail).mockResolvedValue(facility);
+
+    setupEmptySources();
+    vi.mocked(deduplicateParking).mockReturnValue([facility]);
+    vi.mocked(mapParkingToDetail).mockReturnValue({
+      id: "bnls:FR-75056-P-001",
+      sources: ["bnls-fr"],
+      name: "P",
+      coordinates: [0, 0],
+      sections: [],
+    });
+
+    const result = await parkingProvider.getDetail("bnls:FR-75056-P-001");
+    expect(fetchBnlsFrDetail).toHaveBeenCalledWith("FR-75056-P-001");
+    expect(result.id).toBe("bnls:FR-75056-P-001");
   });
 
   it("cache miss with osm: prefix fetches element", async () => {
@@ -374,10 +455,9 @@ describe("parkingProvider.getDetail", () => {
     vi.mocked(deduplicateParking).mockReturnValue([facility]);
     vi.mocked(mapParkingToDetail).mockReturnValue({
       id: "osm:way/999",
-      source: "osm",
+      sources: ["osm"],
       name: "P",
       coordinates: [0, 0],
-      attribution: { text: "", url: "" },
       sections: [],
     });
 
@@ -389,7 +469,7 @@ describe("parkingProvider.getDetail", () => {
   it("unknown prefix returns fallback detail", async () => {
     const result = await parkingProvider.getDetail("xyz:totally-unknown-parking");
     expect(result.id).toBe("xyz:totally-unknown-parking");
-    expect(result.source).toBe("unknown");
+    expect(result.sources).toEqual(["unknown"]);
     expect(result.name).toBe("Parking");
     expect(result.coordinates).toEqual([0, 0]);
     expect(result.sections).toEqual([]);

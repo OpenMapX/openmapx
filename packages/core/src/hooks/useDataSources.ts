@@ -10,7 +10,12 @@ import { API_ENDPOINTS } from "../api/endpoints";
 import type { BoundingBox } from "../types/geometry";
 
 interface DataSourcesResponse {
-  sources: (DataSourceMeta & { filters: DataSourceFilterDef[] })[];
+  sources: (DataSourceMeta & {
+    id: string;
+    name: string;
+    categoryChipLabel: string;
+    filters: DataSourceFilterDef[];
+  })[];
 }
 
 export function useDataSources() {

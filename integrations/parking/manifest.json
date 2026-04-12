@@ -37,7 +37,13 @@
       }
     }
   },
-  "envVars": ["DB_PARKING_CLIENT_ID", "DB_PARKING_API_KEY"],
+  "envVars": [
+    "DB_PARKING_CLIENT_ID",
+    "DB_PARKING_API_KEY",
+    "UTMC_USERNAME",
+    "UTMC_PASSWORD",
+    "NSW_TRANSPORT_API_KEY"
+  ],
   "healthCheck": [
     {
       "name": "ParkAPI",
@@ -58,12 +64,68 @@
       "name": "ParkenDD",
       "type": "http",
       "url": "https://api.parkendd.de"
+    },
+    {
+      "name": "RDW Open Data",
+      "type": "http",
+      "url": "https://opendata.rdw.nl/resource/t5pc-eb34.json?$limit=1"
+    },
+    {
+      "name": "BNLS France",
+      "type": "http",
+      "url": "https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/mobilityref-france-base-nationale-des-lieux-de-stationnement/records?limit=1"
+    },
+    {
+      "name": "Stad Gent",
+      "type": "http",
+      "url": "https://data.stad.gent/api/explore/v2.1/catalog/datasets/bezetting-parkeergarages-real-time/records?limit=1"
+    },
+    {
+      "name": "Open Data Brussels",
+      "type": "http",
+      "url": "https://opendata.brussels.be/api/explore/v2.1/catalog/datasets/bruxelles_parkings_publics/records?limit=1"
+    },
+    {
+      "name": "Basel-Stadt",
+      "type": "http",
+      "url": "https://data.bs.ch/api/explore/v2.1/catalog/datasets/100014/records?limit=1"
+    },
+    {
+      "name": "Comune di Firenze",
+      "type": "http",
+      "url": "https://datastore.comune.fi.it/od/ParkFreeSpot.json"
+    },
+    {
+      "name": "Barcelona Open Data",
+      "type": "http",
+      "url": "https://opendata-ajuntament.barcelona.cat/data/api/3/action/package_show?id=aparcaments-de-la-ciutat-de-barcelona"
+    },
+    {
+      "name": "Stadt Wien",
+      "type": "http",
+      "url": "https://data.wien.gv.at/daten/geo?service=WFS&request=GetFeature&version=1.1.0&typeName=ogdwien:GARAGENOGD&srsName=EPSG:4326&outputFormat=json&maxFeatures=1"
+    },
+    {
+      "name": "Københavns Kommune",
+      "type": "http",
+      "url": "https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=k101:p_hus&outputFormat=json&SRSNAME=EPSG:4326&maxFeatures=1"
+    },
+    {
+      "name": "data.gov.sg",
+      "type": "http",
+      "url": "https://api.data.gov.sg/v1/transport/carpark-availability"
+    },
+    {
+      "name": "Ayuntamiento de Madrid",
+      "type": "http",
+      "url": "https://datos.madrid.es/egob/catalogo/202625-0-aparcamientos-publicos.json"
     }
   ],
   "quality": "built-in",
   "category": "Parking",
   "dataSources": [
     {
+      "sourceId": "parkapi-v2",
       "name": "ParkenDD",
       "url": "https://api.parkendd.de/",
       "license": "MIT (software); data licenses vary by city",
@@ -77,11 +139,11 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "parkapi-v3",
       "name": "MobiData BW (ParkAPI)",
       "url": "https://api.mobidata-bw.de/",
       "license": "Datenlizenz Deutschland Namensnennung 2.0",
       "licenseUrl": "https://www.mobidata-bw.de/pages/nutzungsbedingungen",
-      "attribution": "Parking data: <a href=\"https://www.mobidata-bw.de/\">MobiData BW</a> / NVBW",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.mobidata-bw.de/pages/datenschutz",
@@ -91,6 +153,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "db-bahnpark",
       "name": "DB BahnPark",
       "url": "https://apis.deutschebahn.com/",
       "license": "Proprietary (bilateral license)",
@@ -104,6 +167,189 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "rdw-nl",
+      "name": "RDW Open Data (Netherlands)",
+      "url": "https://opendata.rdw.nl/",
+      "license": "CC0 1.0 Universal (Public Domain)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "commercialUse": "yes",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://www.rdw.nl/over-rdw/privacy-en-security/privacyverklaring",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "bnls-fr",
+      "name": "BNLS France (Opendatasoft)",
+      "url": "https://transport.data.gouv.fr/",
+      "license": "ODbL 1.0",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "commercialUse": "yes",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://www.huwise.com/en/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "ghent-be",
+      "name": "Stad Gent (Belgium)",
+      "url": "https://data.stad.gent/",
+      "license": "Open Data",
+      "licenseUrl": "https://data.stad.gent/terms/terms-and-conditions/",
+      "commercialUse": "yes",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://stad.gent/nl/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "brussels-be",
+      "name": "Open Data Brussels (Belgium)",
+      "url": "https://opendata.brussels.be/",
+      "license": "Open Data",
+      "licenseUrl": "https://opendata.brussels.be/pages/license",
+      "commercialUse": "yes",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://opendata.brussels.be/terms/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "basel-ch",
+      "name": "Kanton Basel-Stadt (Switzerland)",
+      "url": "https://data.bs.ch/",
+      "license": "CC0 1.0 Universal (Public Domain)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "commercialUse": "yes",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://data.bs.ch/terms/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "florence-it",
+      "name": "Comune di Firenze (Italy)",
+      "url": "https://opendata.comune.fi.it/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "commercialUse": "yes",
+      "providerCountry": "IT",
+      "providerPrivacyUrl": "https://www.comune.firenze.it/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "barcelona-es",
+      "name": "Ajuntament de Barcelona (Spain)",
+      "url": "https://opendata-ajuntament.barcelona.cat/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "commercialUse": "yes",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://opendata-ajuntament.barcelona.cat/en/avis-legal",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "vienna-at",
+      "name": "Stadt Wien (Austria)",
+      "url": "https://data.wien.gv.at/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "commercialUse": "yes",
+      "providerCountry": "AT",
+      "providerPrivacyUrl": "https://www.wien.gv.at/info/datenschutz/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "copenhagen-dk",
+      "name": "Københavns Kommune (Denmark)",
+      "url": "https://www.opendata.dk/city-of-copenhagen",
+      "license": "Open Data",
+      "licenseUrl": "https://www.opendata.dk/city-of-copenhagen",
+      "commercialUse": "yes",
+      "providerCountry": "DK",
+      "providerPrivacyUrl": "https://www.kk.dk/privatlivspolitik",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "singapore",
+      "name": "data.gov.sg (Singapore)",
+      "url": "https://data.gov.sg/",
+      "license": "Singapore Open Data Licence",
+      "licenseUrl": "https://data.gov.sg/open-data-licence",
+      "commercialUse": "yes",
+      "providerCountry": "SG",
+      "providerPrivacyUrl": "https://www.tech.gov.sg/privacy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "madrid-es",
+      "name": "Ayuntamiento de Madrid (Spain)",
+      "url": "https://datos.madrid.es/",
+      "license": "Open Data",
+      "licenseUrl": "https://datos.madrid.es/pages/aviso-legal",
+      "commercialUse": "yes",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://www.madrid.es/portales/munimadrid/proteccionDatos.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "utmc-newcastle",
+      "name": "NE Travel Data (UK)",
+      "url": "https://www.netraveldata.co.uk/",
+      "license": "OGL v3",
+      "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+      "commercialUse": "yes",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://www.netraveldata.co.uk/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "nsw-au",
+      "name": "Transport for NSW (Australia)",
+      "url": "https://opendata.transport.nsw.gov.au/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "commercialUse": "yes",
+      "providerCountry": "AU",
+      "providerPrivacyUrl": "https://www.transport.nsw.gov.au/about-us/transport-privacy/privacy-statement",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "osm-parking",
       "name": "OpenStreetMap (Overpass)",
       "url": "https://www.openstreetmap.org/",
       "license": "ODbL",

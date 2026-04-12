@@ -49,6 +49,7 @@
   "category": "Data Overlays",
   "dataSources": [
     {
+      "sourceId": "eonet",
       "name": "NASA EONET",
       "url": "https://eonet.gsfc.nasa.gov/",
       "license": "U.S. Public Domain",
@@ -63,6 +64,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "gdacs",
       "name": "GDACS",
       "url": "https://www.gdacs.org/",
       "license": "Proprietary (disclaimer-based)",

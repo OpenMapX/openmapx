@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import {
   type PlacePhoto,
   proxyImageUrl,
+  useIntegrationRegistry,
   useMapClickStore,
   usePlacePhotos,
   usePlaceStore,
@@ -25,7 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { maptilerStyleUrl } from "@/lib/map";
-import { PhotoAttribution, SOURCE_LABELS } from "./PhotoAttribution";
+import { PhotoAttribution } from "./PhotoAttribution";
 
 interface Props {
   open: boolean;
@@ -44,7 +45,6 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
   const { flyTo } = useMap();
   const setClickedLngLat = useMapClickStore((s) => s.setClickedLngLat);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
-
   // Single API call — server handles tag-based + coordinate-based providers + dedup
   const { data: allPhotos = [], isLoading } = usePlacePhotos(lat, lng, {
     name: placeName,
@@ -348,6 +348,13 @@ function GalleryThumbnail({
   isSelected: boolean;
   onClick: () => void;
 }) {
+  const registry = useIntegrationRegistry();
+  const resolveSourceName = (sid: string) =>
+    registry
+      .getByDomain("photos")
+      .flatMap((m) => m.dataSources ?? [])
+      .find((d) => d.sourceId === sid)?.name ?? sid;
+
   // 0 = try thumbnailUrl, 1 = try full url, 2 = broken
   const [attempt, setAttempt] = useState(0);
 
@@ -414,7 +421,7 @@ function GalleryThumbnail({
         }}
       >
         <Typography sx={{ fontSize: 10, color: "rgba(255,255,255,0.8)", lineHeight: 1 }}>
-          {SOURCE_LABELS[photo.source] ?? photo.source}
+          {resolveSourceName(photo.source)}
         </Typography>
       </Box>
       {/* Author */}

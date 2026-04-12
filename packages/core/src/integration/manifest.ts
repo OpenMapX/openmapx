@@ -1,6 +1,9 @@
 import z from "zod/v4";
 
 const dataSourceSchema = z.object({
+  // Source matching — connects this entry to provider source values
+  sourceId: z.string(),
+
   // Identity
   name: z.string(),
   url: z.string(),
@@ -145,6 +148,7 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
       );
     }
     for (const ds of manifest.dataSources ?? []) {
+      if (!ds.sourceId) errors.push("dataSources[].sourceId is required");
       if (!ds.name) errors.push("dataSources[].name is required");
       if (!ds.url) errors.push("dataSources[].url is required");
       if (!ds.license) errors.push("dataSources[].license is required");

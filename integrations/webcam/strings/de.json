@@ -1,0 +1,26 @@
+{
+  "name": "Webcams",
+  "description": "Live-Webcam-Streams und Verkehrskameras",
+  "dataSources": [
+    {
+      "purpose": "Webcam-Streams weltweit (Tourismus, Wetter, Verkehr)",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (Nord, Süd, Ost, West)",
+      "dataReceived": "Webcam-Cluster/Punkte mit Name, Koordinaten, Vorschau-URL, Stream-URL, Aufrufzahl, Kategorien"
+    },
+    {
+      "purpose": "In OpenStreetMap getaggte Webcam-Standorte",
+      "dataSent": "Begrenzungsrahmen-Koordinaten über Overpass-API",
+      "dataReceived": "OSM-Knoten mit Webcam-URL, Name, Betreiber, Richtung"
+    },
+    {
+      "purpose": "Kalifornische Autobahnkameras (Caltrans CCTV)",
+      "dataSent": "Keine Nutzerdaten (Bezirksdatensätze werden abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
+      "dataReceived": "Verkehrskameras mit Standort, Name, Standbild-URL, Route/Richtung"
+    },
+    {
+      "purpose": "Londoner Verkehrskameras (TfL JamCams)",
+      "dataSent": "Keine Nutzerdaten (gesamter JamCam-Datensatz wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
+      "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL"
+    }
+  ]
+}

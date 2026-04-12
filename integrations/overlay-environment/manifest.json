@@ -39,6 +39,7 @@
   ],
   "dataSources": [
     {
+      "sourceId": "opensensemap",
       "name": "openSenseMap",
       "url": "https://api.opensensemap.org/",
       "license": "PDDL 1.0 (data); MIT (code)",
@@ -53,6 +54,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "sensor-community",
       "name": "Sensor.Community",
       "url": "https://sensor.community/",
       "license": "DbCL 1.0",

@@ -166,10 +166,6 @@ async function fetchSystemData(
   } = systemData;
   const operator = systemInfo?.operator ?? systemInfo?.name ?? systemName;
   const source = `gbfs/${systemId}`;
-  const attribution = {
-    label: operator,
-    url: systemInfo?.url ?? "https://gbfs.org",
-  };
 
   // When a system has no vehicle_types feed, use the caller-specified default.
   // Bike-sharing passes "bicycle", scooter-sharing passes "other".
@@ -340,8 +336,7 @@ async function fetchSystemData(
       operator,
       vehicleTypes: stationVehicleTypes,
       isActive: true,
-      source,
-      attribution,
+      sources: [source],
       website: stInfo.rentalUris?.web,
       rentalUris: stInfo.rentalUris,
       vehicleTypeDetails: vtDetails.length > 0 ? vtDetails : undefined,
@@ -375,8 +370,7 @@ async function fetchSystemData(
       isReserved: v.isReserved,
       isDisabled: v.isDisabled,
       operator,
-      source,
-      attribution,
+      sources: [source],
     });
   }
 

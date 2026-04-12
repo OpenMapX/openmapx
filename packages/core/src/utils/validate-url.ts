@@ -1,6 +1,6 @@
 /**
  * Validates that a URL is a public HTTP(S) URL (not targeting internal/private addresses).
- * Used to prevent SSRF attacks when downloading user-supplied URLs.
+ * Used to prevent SSRF attacks when fetching user-supplied or externally-sourced URLs.
  */
 export function validatePublicUrl(url: string): void {
   let parsed: URL;
@@ -36,5 +36,18 @@ export function validatePublicUrl(url: string): void {
     privateRanges.some((re) => re.test(hostname))
   ) {
     throw new Error("URLs targeting internal/private addresses are not allowed");
+  }
+}
+
+/**
+ * Check whether a URL is safe for server-side fetching (public, non-private).
+ * Returns true if safe, false if the URL targets internal/private addresses.
+ */
+export function isPublicUrl(url: string): boolean {
+  try {
+    validatePublicUrl(url);
+    return true;
+  } catch {
+    return false;
   }
 }

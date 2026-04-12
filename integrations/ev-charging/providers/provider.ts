@@ -14,23 +14,6 @@ import { mapOsmToDetail, mapOsmToResult } from "./osm-mapper.js";
 import { getEvChargingFilters } from "./reference.js";
 
 const META: DataSourceMeta = {
-  id: "ev-charging",
-  name: "EV Charging",
-  attribution: [
-    {
-      text: "OpenChargeMap",
-      url: "https://openchargemap.org",
-      license: "CC BY-SA 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
-    },
-    {
-      text: "OpenStreetMap",
-      url: "https://www.openstreetmap.org",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-    },
-  ],
-  categoryChipLabel: "EV Charging",
   minZoom: 8,
   placeCategory: "Charging Station",
   placeCategoryRaw: "charging_station",
@@ -48,7 +31,7 @@ const META: DataSourceMeta = {
 };
 
 class EvChargingProvider implements DataSourceProvider {
-  readonly id = META.id;
+  readonly id = "ev-charging";
   readonly meta = META;
   readonly serviceIds = [];
 
@@ -71,23 +54,10 @@ class EvChargingProvider implements DataSourceProvider {
 
     // OCM first for dedup priority
     const combined = [...ocmResults, ...osmResults];
-    const deduped = deduplicateByCoordinates(combined);
-
-    // Apply speed filter client-side (OCM doesn't natively filter by power range)
-    if (filters?.speed) {
-      const speedValues = Array.isArray(filters.speed)
-        ? (filters.speed as string[])
-        : [String(filters.speed)];
-      if (speedValues.length > 0) {
-        const speedSet = new Set(speedValues);
-        return deduped.filter((r) => speedSet.has(r.variant));
-      }
-    }
-
-    return deduped;
+    return deduplicateByCoordinates(combined);
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail> {
+  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
     if (itemId.startsWith("ocm:")) {
       const ocmId = itemId.slice(4);
       const poi = await getOcmDetail(ocmId);
@@ -103,15 +73,7 @@ class EvChargingProvider implements DataSourceProvider {
       if (node) return mapOsmToDetail(node);
     }
 
-    // Fallback if nothing found
-    return {
-      id: itemId,
-      source: "unknown",
-      name: "EV Charging Station",
-      coordinates: [0, 0],
-      attribution: Array.isArray(META.attribution) ? META.attribution[0] : META.attribution,
-      sections: [],
-    };
+    return null;
   }
 }
 

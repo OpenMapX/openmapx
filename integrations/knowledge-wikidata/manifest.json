@@ -25,6 +25,7 @@
   "category": "External",
   "dataSources": [
     {
+      "sourceId": "wikidata",
       "name": "Wikidata",
       "url": "https://www.wikidata.org/",
       "license": "CC0 1.0",
@@ -38,6 +39,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "wikimedia-commons",
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
       "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",

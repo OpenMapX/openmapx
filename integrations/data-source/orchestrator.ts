@@ -33,15 +33,29 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
   }
 
   async function listWithFilters() {
-    const providers = getAllProviders();
-    return Promise.all(
-      providers.map(async (p) => {
+    const integrations = ctx.getIntegrationsByDomain("data-source");
+    const results: {
+      id: string;
+      name: string;
+      categoryChipLabel: string;
+      filters: unknown;
+    }[] = [];
+
+    for (const integration of integrations) {
+      const domainProviders = (integration.providers.get("data-source") ??
+        []) as DataSourceProvider[];
+      const id = integration.manifest.id;
+      const name = integration.manifest.frontend?.searchCategory?.label ?? id;
+
+      for (const p of domainProviders) {
         const filters = await ctx.cache.withCache(`ds:filters:${p.id}`, FILTER_TTL, () =>
           p.getFilters(),
         );
-        return { ...p.meta, filters };
-      }),
-    );
+        results.push({ ...p.meta, id, name, categoryChipLabel: name, filters });
+      }
+    }
+
+    return results;
   }
 
   function getSearchTtl(provider: DataSourceProvider): number {

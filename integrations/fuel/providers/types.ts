@@ -7,13 +7,6 @@ export interface FuelPrices {
   lpg?: number;
 }
 
-export interface FuelAttribution {
-  label: string;
-  url: string;
-  license?: string;
-  licenseUrl?: string;
-}
-
 export interface FuelStation {
   id: string;
   name: string;
@@ -24,5 +17,4 @@ export interface FuelStation {
   fuelPrices: FuelPrices;
   /** ISO 8601 timestamp of the most recent price update, if available. */
   fuelPricesUpdatedAt?: string;
-  attribution?: FuelAttribution;
 }

@@ -93,13 +93,7 @@ async function fetchRegionStations(
           operator: `Cambio ${region.name}`,
           vehicleTypes: ["car"],
           isActive: (s.vehicleCount ?? 0) > 0,
-          source: `cambio/${region.code}`,
-          attribution: {
-            label: "Cambio",
-            url: "https://www.cambio-carsharing.de",
-            license: "ODbL",
-            licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-          },
+          sources: [`cambio/${region.code}`],
         };
       });
   } catch {

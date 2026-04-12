@@ -34,6 +34,7 @@
   "category": "Imagery",
   "dataSources": [
     {
+      "sourceId": "mapillary",
       "name": "Mapillary",
       "url": "https://www.mapillary.com/",
       "license": "CC BY-SA 4.0 (imagery); Proprietary (API)",

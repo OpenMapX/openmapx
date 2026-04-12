@@ -26,6 +26,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "db-vendo",
       "name": "Deutsche Bahn (db-vendo-client)",
       "url": "https://www.bahn.de/",
       "license": "ISC (client software); no open license for data",

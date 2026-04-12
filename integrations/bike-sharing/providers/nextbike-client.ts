@@ -95,8 +95,7 @@ export async function searchNextbike(bbox: BoundingBox): Promise<SharedMobilityS
           operator,
           vehicleTypes: ["bicycle"],
           isActive: place.bikes > 0 || place.free_racks > 0,
-          source: `nextbike/${city.uid}`,
-          attribution: { label: "Nextbike", url: "https://www.nextbike.net" },
+          sources: [`nextbike/${city.uid}`],
         });
       }
     }

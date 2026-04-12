@@ -64,3 +64,42 @@ export function combineAttributions(attributions: string[]): string {
   }
   return parts.join(" · ");
 }
+
+/**
+ * Extract source prefix from a source string (before first "/" or ":").
+ * Examples: "tankerkoenig/uuid" → "tankerkoenig", "ocm:123" → "ocm", "felyx" → "felyx"
+ */
+export function extractSourcePrefix(source: string): string {
+  const slashIdx = source.indexOf("/");
+  const colonIdx = source.indexOf(":");
+  if (slashIdx < 0 && colonIdx < 0) return source;
+  if (slashIdx < 0) return source.slice(0, colonIdx);
+  if (colonIdx < 0) return source.slice(0, slashIdx);
+  return source.slice(0, Math.min(slashIdx, colonIdx));
+}
+
+/**
+ * Build attribution HTML for specific source(s) within an integration.
+ * Filters dataSources entries whose `sourceId` matches one of the given
+ * source strings (after prefix extraction). Falls back to full integration
+ * attribution if no sourceId matches.
+ */
+export function buildSourceAttribution(
+  dataSources: IntegrationDataSource[],
+  sources: string[],
+): string {
+  const prefixes = new Set(sources.map(extractSourcePrefix));
+  const matching = dataSources.filter((ds) => prefixes.has(ds.sourceId));
+  const entries = matching.length > 0 ? matching : dataSources;
+
+  const seen = new Set<string>();
+  return entries
+    .filter((ds) => !ds.dynamic)
+    .map((ds) => buildAttributionHtml(ds))
+    .filter((html) => {
+      if (seen.has(html)) return false;
+      seen.add(html);
+      return true;
+    })
+    .join(" · ");
+}

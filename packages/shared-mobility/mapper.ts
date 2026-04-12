@@ -48,7 +48,7 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     id: station.id,
     name: station.name,
     coordinates: station.coordinates,
-    source: station.source,
+    source: station.sources[0],
     variant,
     status: variant,
     summary: stationSummary(station),
@@ -198,19 +198,6 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     });
   }
 
-  const rawAttrs = station.attribution
-    ? Array.isArray(station.attribution)
-      ? station.attribution
-      : [station.attribution]
-    : [{ label: "GBFS", url: "https://gbfs.org" }];
-  const mappedAttrs = rawAttrs.map((a) => ({
-    text: a.label,
-    url: a.url,
-    license: a.license,
-    licenseUrl: a.licenseUrl,
-  }));
-  const attribution = mappedAttrs.length === 1 ? mappedAttrs[0] : mappedAttrs;
-
   // Address
   const address = station.address
     ? {
@@ -226,11 +213,10 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   return {
     id: station.id,
-    source: station.source,
+    sources: station.sources,
     name: station.name,
     coordinates: station.coordinates,
     address,
-    attribution,
     operator: station.operator ? { name: station.operator, url: station.website } : undefined,
     usageInfo,
     sections,
@@ -267,7 +253,7 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     id: vehicle.id,
     name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,
-    source: vehicle.source,
+    source: vehicle.sources[0],
     variant,
     status: variant,
     summary: vehicleSummary(vehicle),
@@ -306,27 +292,13 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
     sectionIcon: "info",
   });
 
-  const vRawAttrs = vehicle.attribution
-    ? Array.isArray(vehicle.attribution)
-      ? vehicle.attribution
-      : [vehicle.attribution]
-    : [{ label: "GBFS", url: "https://gbfs.org" }];
-  const vMappedAttrs = vRawAttrs.map((a) => ({
-    text: a.label,
-    url: a.url,
-    license: a.license,
-    licenseUrl: a.licenseUrl,
-  }));
-  const attribution = vMappedAttrs.length === 1 ? vMappedAttrs[0] : vMappedAttrs;
-
   return {
     id: vehicle.id,
-    source: vehicle.source,
+    sources: vehicle.sources,
     name: vehicle.operator
       ? `${vehicle.operator} ${FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"}`
       : (FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"),
     coordinates: vehicle.coordinates,
-    attribution,
     operator: vehicle.operator ? { name: vehicle.operator } : undefined,
     sections,
   };

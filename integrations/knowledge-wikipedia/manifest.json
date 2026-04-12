@@ -25,6 +25,7 @@
   "category": "External",
   "dataSources": [
     {
+      "sourceId": "wikipedia",
       "name": "Wikipedia",
       "url": "https://www.wikipedia.org/",
       "license": "CC BY-SA 4.0 / GFDL",
@@ -38,6 +39,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "wikimedia-commons",
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
       "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",

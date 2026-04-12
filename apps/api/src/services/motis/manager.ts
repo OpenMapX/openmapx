@@ -5,9 +5,8 @@ import { promisify } from "node:util";
 import { motisLocalInstance } from "@integrations/transit-motis/instances.js";
 import type { MotisFeed, MotisStatus } from "@integrations/transit-motis/types";
 import { stops } from "@motis-project/motis-client";
-import type { BBox } from "@openmapx/core";
+import { type BBox, validatePublicUrl } from "@openmapx/core";
 import { cacheGet, cacheSet } from "../../utils/cache.js";
-import { validatePublicUrl } from "../../utils/validate-url";
 
 const execFileAsync = promisify(execFile);
 

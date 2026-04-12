@@ -1,12 +1,5 @@
 import type { LngLat } from "@openmapx/core";
 
-export type StationAttribution = {
-  label: string;
-  url: string;
-  license?: string;
-  licenseUrl?: string;
-};
-
 export interface SharedMobilityStation {
   id: string;
   name: string;
@@ -22,9 +15,8 @@ export interface SharedMobilityStation {
   vehicleTypes: VehicleFormFactor[];
   /** Whether the station is currently operational. */
   isActive: boolean;
-  /** Source system identifier (e.g., "citybikes/velib", "gbfs/lime-paris"). */
-  source: string;
-  attribution?: StationAttribution | StationAttribution[];
+  /** Source system identifiers — all data sources that contributed to this station. */
+  sources: string[];
   /** How to access the station (e.g., "App", "Chipkarte", "Bordcomputer"). */
   accessMethod?: string;
   /** Nearby public transit connections. */
@@ -93,8 +85,7 @@ export interface SharedMobilityVehicle {
   /** Whether currently disabled. */
   isDisabled: boolean;
   operator?: string;
-  source: string;
-  attribution?: StationAttribution | StationAttribution[];
+  sources: string[];
 }
 
 export type VehicleFormFactor =

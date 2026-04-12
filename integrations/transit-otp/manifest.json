@@ -33,6 +33,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "otp",
       "name": "OpenTripPlanner (self-hosted)",
       "url": "http://localhost:8090/",
       "license": "LGPL v3+",

@@ -30,7 +30,9 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { DataSourceFilterDef, DataSourceResult } from "@openmapx/core";
 import {
+  applyClientSideFilters,
   PANEL,
+  splitFilters,
   useDataSourceSearch,
   useDataSourceStore,
   useDataSources,
@@ -41,9 +43,6 @@ import {
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { TEAL } from "@/lib/theme";
-
-/** Filter IDs that are applied client-side instead of being sent to the API. */
-const CLIENT_SIDE_FILTER_IDS = new Set(["operator", "speed"]);
 
 /** Matches 3-decimal Euro prices like "2.119" within a summary string. */
 const EURO_PRICE_GLOBAL_RE = /(\d+\.\d{2})(\d)\s*\u20ac/g;
@@ -188,38 +187,6 @@ function deriveOperatorOptions(results: DataSourceResult[]): string[] {
   return Array.from(names).sort((a, b) => a.localeCompare(b));
 }
 
-/** Apply client-side operator/speed filters -- same logic as DataSourceLayer. */
-function applyClientFilters(
-  results: DataSourceResult[],
-  filters: Record<string, unknown>,
-): DataSourceResult[] {
-  let out = results;
-
-  const speedFilter = filters.speed;
-  if (speedFilter) {
-    const speedValues = Array.isArray(speedFilter)
-      ? (speedFilter as string[])
-      : [String(speedFilter)];
-    if (speedValues.length > 0) {
-      const speedSet = new Set(speedValues);
-      out = out.filter((r) => speedSet.has(r.variant));
-    }
-  }
-
-  const operatorFilter = filters.operator;
-  if (operatorFilter) {
-    const opValues = Array.isArray(operatorFilter)
-      ? (operatorFilter as string[])
-      : [String(operatorFilter)];
-    if (opValues.length > 0) {
-      const operatorSet = new Set(opValues);
-      out = out.filter((r) => typeof r.operator === "string" && operatorSet.has(r.operator));
-    }
-  }
-
-  return out;
-}
-
 export function DataSourceFilterContent() {
   const t = useTranslations("dataSources");
   const tc = useTranslations("common");
@@ -246,16 +213,11 @@ export function DataSourceFilterContent() {
     return sourcesData.sources.find((s) => s.id === activeSource) ?? null;
   }, [activeSource, sourcesData]);
 
-  // Separate client-side vs server-side filters (same logic as DataSourceLayer)
-  const serverFilters = useMemo(() => {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(filters)) {
-      if (!CLIENT_SIDE_FILTER_IDS.has(key)) {
-        result[key] = value;
-      }
-    }
-    return result;
-  }, [filters]);
+  // Separate server-side filters using provider filter definitions
+  const serverFilters = useMemo(
+    () => splitFilters(filters, sourceMeta?.filters ?? []).serverFilters,
+    [filters, sourceMeta?.filters],
+  );
 
   // Only fetch when zoom is sufficient -- use searchBbox (not viewportBbox)
   const shouldFetch =
@@ -281,14 +243,10 @@ export function DataSourceFilterContent() {
   const operatorOptions = useMemo(() => deriveOperatorOptions(rawResults ?? []), [rawResults]);
 
   // Apply client-side filters for display count
-  const filteredResults = useMemo(() => {
-    let results = applyClientFilters(rawResults ?? [], filters);
-    // "Open now" filter from the opening hours chip
-    if (openingHoursFilter === "open_now") {
-      results = results.filter((r) => r.variant === "open");
-    }
-    return results;
-  }, [rawResults, filters, openingHoursFilter]);
+  const filteredResults = useMemo(
+    () => applyClientSideFilters(rawResults ?? [], filters, openingHoursFilter),
+    [rawResults, filters, openingHoursFilter],
+  );
 
   // Available sort options per data source
   const sortOptions = useMemo(() => {

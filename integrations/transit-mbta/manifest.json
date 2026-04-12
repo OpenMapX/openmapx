@@ -32,6 +32,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "mbta",
       "name": "MBTA",
       "url": "https://api-v3.mbta.com/",
       "license": "Proprietary (MassDOT Developers License)",

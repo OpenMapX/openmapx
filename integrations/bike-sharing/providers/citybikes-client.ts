@@ -119,13 +119,7 @@ export async function fetchNetworkStations(
           operator,
           vehicleTypes: ["bicycle"],
           isActive: true,
-          source: `citybikes/${network.id}`,
-          attribution: {
-            label: "CityBikes",
-            url: "https://citybik.es",
-            license: "Custom ToS",
-            licenseUrl: "https://docs.citybik.es/api/tos",
-          },
+          sources: [`citybikes/${network.id}`],
         }),
       );
     },

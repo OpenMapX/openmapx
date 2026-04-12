@@ -6,44 +6,28 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
+import { fetchBarcelonaEsDetail, searchBarcelonaEs } from "./barcelona-es.js";
+import { fetchBaselChDetail, searchBaselCh } from "./basel-ch.js";
+import { fetchBnlsFrDetail, searchBnlsFr } from "./bnls-fr.js";
+import { fetchBrusselsBeDetail, searchBrusselsBe } from "./brussels-be.js";
+import { fetchCopenhagenDkDetail, searchCopenhagenDk } from "./copenhagen-dk.js";
 import { fetchDbBahnParkDetail, searchDbBahnPark } from "./db-bahnpark.js";
 import { deduplicateParking } from "./dedup.js";
+import { fetchFlorenceItDetail, searchFlorenceIt } from "./florence-it.js";
+import { fetchGhentBeDetail, searchGhentBe } from "./ghent-be.js";
+import { fetchMadridEsDetail, searchMadridEs } from "./madrid-es.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";
+import { fetchNswAuDetail, searchNswAu } from "./nsw-au.js";
 import { fetchOsmParkingElement, searchOsmParking } from "./osm.js";
 import { fetchParkApiV2Detail, searchParkApiV2 } from "./parkapi-v2.js";
 import { fetchParkApiV3Detail, searchParkApiV3 } from "./parkapi-v3.js";
+import { fetchRdwNlDetail, searchRdwNl } from "./rdw-nl.js";
+import { fetchSingaporeDetail, searchSingapore } from "./singapore.js";
 import type { ParkingFacility } from "./types.js";
+import { fetchUtmcNewcastleDetail, searchUtmcNewcastle } from "./utmc-newcastle.js";
+import { fetchViennaAtDetail, searchViennaAt } from "./vienna-at.js";
 
 const META: DataSourceMeta = {
-  id: "parking",
-  name: "Parking",
-  attribution: [
-    {
-      text: "ParkenDD",
-      url: "https://parkendd.de",
-      license: "Various",
-      licenseUrl: "https://github.com/offenesdresden/ParkAPI",
-    },
-    {
-      text: "MobiData BW",
-      url: "https://mobidata-bw.de",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    },
-    {
-      text: "DB BahnPark",
-      url: "https://www.bahnhof.de/parken",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    },
-    {
-      text: "OpenStreetMap",
-      url: "https://www.openstreetmap.org",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-    },
-  ],
-  categoryChipLabel: "Parking",
   minZoom: 12,
   showResultsList: true,
   placeCategory: "Parking",
@@ -83,6 +67,7 @@ const PARKING_FILTERS: DataSourceFilterDef[] = [
     options: [
       { id: "free", label: "Free" },
       { id: "paid", label: "Paid" },
+      { id: "unknown", label: "Unknown" },
     ],
   },
   {
@@ -109,7 +94,7 @@ const PARKING_FILTERS: DataSourceFilterDef[] = [
 const MAX_CACHE_SIZE = 3000;
 
 class ParkingDataSourceProvider implements DataSourceProvider {
-  readonly id = META.id;
+  readonly id = "parking";
   readonly meta = META;
   readonly serviceIds = [];
   readonly searchCacheTtl = 60;
@@ -130,21 +115,28 @@ class ParkingDataSourceProvider implements DataSourceProvider {
   }
 
   async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
-    // Query all sources in parallel
-    const [v2Result, v3Result, dbResult, osmResult] = await Promise.allSettled([
-      searchParkApiV2(bbox),
-      searchParkApiV3(bbox),
+    // Query all sources in parallel, ordered by priority (DB > v3 > v2 > regional > OSM)
+    const results = await Promise.allSettled([
       searchDbBahnPark(bbox),
+      searchParkApiV3(bbox),
+      searchParkApiV2(bbox),
+      searchRdwNl(bbox),
+      searchBnlsFr(bbox),
+      searchGhentBe(bbox),
+      searchBrusselsBe(bbox),
+      searchBaselCh(bbox),
+      searchFlorenceIt(bbox),
+      searchBarcelonaEs(bbox),
+      searchViennaAt(bbox),
+      searchCopenhagenDk(bbox),
+      searchSingapore(bbox),
+      searchMadridEs(bbox),
+      searchUtmcNewcastle(bbox),
+      searchNswAu(bbox),
       searchOsmParking(bbox),
     ]);
 
-    const v2 = v2Result.status === "fulfilled" ? v2Result.value : [];
-    const v3 = v3Result.status === "fulfilled" ? v3Result.value : [];
-    const db = dbResult.status === "fulfilled" ? dbResult.value : [];
-    const osm = osmResult.status === "fulfilled" ? osmResult.value : [];
-
-    // Combine in priority order (DB > v3 > v2 > OSM)
-    const allFacilities = [...db, ...v3, ...v2, ...osm];
+    const allFacilities = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
     const deduped = deduplicateParking(allFacilities);
 
     // Cache for detail lookups
@@ -162,7 +154,7 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     return filtered.map(mapParkingToResult);
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail> {
+  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
     // Try in-memory cache first — contains merged data from search
     const cached = this.facilityCache.get(itemId);
     if (cached) return mapParkingToDetail(cached);
@@ -173,10 +165,9 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     if (!primary) {
       return {
         id: itemId,
-        source: "unknown",
+        sources: ["unknown"],
         name: "Parking",
         coordinates: [0, 0],
-        attribution: Array.isArray(META.attribution) ? META.attribution[0] : META.attribution,
         sections: [],
       };
     }
@@ -208,6 +199,33 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       return fetchDbBahnParkDetail(facilityId);
     }
 
+    if (itemId.startsWith("rdw:")) {
+      const rest = itemId.slice("rdw:".length);
+      const slashIdx = rest.indexOf("/");
+      if (slashIdx > 0) {
+        const areamanagerid = rest.slice(0, slashIdx);
+        const areaid = rest.slice(slashIdx + 1);
+        return fetchRdwNlDetail(areamanagerid, areaid);
+      }
+    }
+
+    if (itemId.startsWith("bnls:")) return fetchBnlsFrDetail(itemId.slice("bnls:".length));
+    if (itemId.startsWith("ghent:")) return fetchGhentBeDetail(itemId.slice("ghent:".length));
+    if (itemId.startsWith("brussels:"))
+      return fetchBrusselsBeDetail(itemId.slice("brussels:".length));
+    if (itemId.startsWith("basel:")) return fetchBaselChDetail(itemId.slice("basel:".length));
+    if (itemId.startsWith("florence:"))
+      return fetchFlorenceItDetail(itemId.slice("florence:".length));
+    if (itemId.startsWith("barcelona:"))
+      return fetchBarcelonaEsDetail(itemId.slice("barcelona:".length));
+    if (itemId.startsWith("vienna:")) return fetchViennaAtDetail(itemId.slice("vienna:".length));
+    if (itemId.startsWith("copenhagen:"))
+      return fetchCopenhagenDkDetail(itemId.slice("copenhagen:".length));
+    if (itemId.startsWith("sg:")) return fetchSingaporeDetail(itemId.slice("sg:".length));
+    if (itemId.startsWith("madrid:")) return fetchMadridEsDetail(itemId.slice("madrid:".length));
+    if (itemId.startsWith("utmc:")) return fetchUtmcNewcastleDetail(itemId.slice("utmc:".length));
+    if (itemId.startsWith("nsw:")) return fetchNswAuDetail(itemId.slice("nsw:".length));
+
     if (itemId.startsWith("osm:")) {
       const rest = itemId.slice("osm:".length);
       const [elementType, idStr] = rest.split("/");
@@ -235,19 +253,27 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     };
 
     // Fetch all sources in parallel for the tiny bbox
-    const [v2Result, v3Result, dbResult, osmResult] = await Promise.allSettled([
+    const enrichResults = await Promise.allSettled([
       searchParkApiV2(bbox),
       searchParkApiV3(bbox),
       searchDbBahnPark(bbox),
+      searchRdwNl(bbox),
+      searchBnlsFr(bbox),
+      searchGhentBe(bbox),
+      searchBrusselsBe(bbox),
+      searchBaselCh(bbox),
+      searchFlorenceIt(bbox),
+      searchBarcelonaEs(bbox),
+      searchViennaAt(bbox),
+      searchCopenhagenDk(bbox),
+      searchSingapore(bbox),
+      searchMadridEs(bbox),
+      searchUtmcNewcastle(bbox),
+      searchNswAu(bbox),
       searchOsmParking(bbox),
     ]);
 
-    const nearby = [
-      ...(v2Result.status === "fulfilled" ? v2Result.value : []),
-      ...(v3Result.status === "fulfilled" ? v3Result.value : []),
-      ...(dbResult.status === "fulfilled" ? dbResult.value : []),
-      ...(osmResult.status === "fulfilled" ? osmResult.value : []),
-    ];
+    const nearby = enrichResults.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 
     // Merge: run dedup on the primary + all nearby results
     const merged = deduplicateParking([facility, ...nearby]);
@@ -283,7 +309,10 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     const fees = Array.isArray(filters.fee) ? (filters.fee as string[]) : [String(filters.fee)];
     if (fees.length === 0) return facilities;
     const feeSet = new Set(fees);
-    return facilities.filter((f) => f.fee !== undefined && feeSet.has(f.fee));
+    return facilities.filter((f) => {
+      const fee = f.fee === undefined || f.fee === "unknown" ? "unknown" : f.fee;
+      return feeSet.has(fee);
+    });
   }
 
   private applyAvailabilityFilter(

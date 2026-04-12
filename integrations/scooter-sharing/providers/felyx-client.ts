@@ -45,8 +45,7 @@ export async function searchFelyx(bbox: BoundingBox): Promise<SharedMobilityVehi
           isReserved: false,
           isDisabled: v.isActivated === false,
           operator: "Felyx",
-          source: "felyx",
-          attribution: { label: "Felyx", url: "https://felyx.com" },
+          sources: ["felyx"],
         }),
       );
   } catch {

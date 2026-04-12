@@ -42,6 +42,7 @@ export async function getEvChargingFilters(): Promise<DataSourceFilterDef[]> {
         id: "speed",
         label: "Charging Speed",
         type: "multi-select",
+        clientSide: true,
         options: [
           { id: "slow", label: "Slow (\u226422 kW)" },
           { id: "fast", label: "Fast (\u2264100 kW)" },
@@ -74,6 +75,7 @@ export async function getEvChargingFilters(): Promise<DataSourceFilterDef[]> {
         id: "speed",
         label: "Charging Speed",
         type: "multi-select",
+        clientSide: true,
         options: [
           { id: "slow", label: "Slow (\u226422 kW)" },
           { id: "fast", label: "Fast (\u2264100 kW)" },

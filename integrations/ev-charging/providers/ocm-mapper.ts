@@ -1,13 +1,6 @@
 import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
 import type { OcmPoi } from "./ocm-types.js";
 
-const ATTRIBUTION = {
-  text: "OpenChargeMap",
-  url: "https://openchargemap.org",
-  license: "CC BY-SA 4.0",
-  licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
-} as const;
-
 function getMaxPower(poi: OcmPoi): number {
   if (!poi.Connections?.length) return 0;
   let max = 0;
@@ -132,7 +125,7 @@ export function mapOcmToDetail(poi: OcmPoi): DataSourceDetail {
 
   return {
     id: `ocm:${poi.ID}`,
-    source: "ocm",
+    sources: ["ocm"],
     name: poi.AddressInfo.Title || "EV Charging Station",
     coordinates: [poi.AddressInfo.Longitude, poi.AddressInfo.Latitude],
     address: {
@@ -155,7 +148,6 @@ export function mapOcmToDetail(poi: OcmPoi): DataSourceDetail {
           membershipRequired: poi.UsageType.IsMembershipRequired,
         }
       : undefined,
-    attribution: ATTRIBUTION,
     sections,
   };
 }

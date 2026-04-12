@@ -32,6 +32,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "tfl",
       "name": "Transport for London",
       "url": "https://api.tfl.gov.uk/",
       "license": "Proprietary (OGL v2 with TfL amendments)",

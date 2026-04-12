@@ -42,7 +42,6 @@ import type {
   VehiclePropulsion,
 } from "./types.js";
 
-const ATTRIBUTION = { label: "Transitous", url: "https://transitous.org" };
 const SOURCE = "transitous";
 
 function mapFormFactor(ff: RentalFormFactor): VehicleFormFactor {
@@ -106,8 +105,7 @@ function mapStation(s: RentalStation): SharedMobilityStation {
     operator: s.providerId,
     vehicleTypes: vehicleTypes.length > 0 ? vehicleTypes : ["other"],
     isActive: s.isRenting || s.isReturning,
-    source: SOURCE,
-    attribution: ATTRIBUTION,
+    sources: [SOURCE],
     website: s.rentalUriWeb,
   };
 }
@@ -123,8 +121,7 @@ function mapVehicle(v: RentalVehicle): SharedMobilityVehicle {
     isReserved: v.isReserved,
     isDisabled: v.isDisabled,
     operator: v.providerId,
-    source: SOURCE,
-    attribution: ATTRIBUTION,
+    sources: [SOURCE],
   };
 }
 

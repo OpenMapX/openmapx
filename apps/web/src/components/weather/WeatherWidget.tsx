@@ -4,7 +4,13 @@ import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useCurrentWeather, useDebouncedCallback, weatherCodeToInfo } from "@openmapx/core";
+import {
+  buildSourceAttribution,
+  useCurrentWeather,
+  useDebouncedCallback,
+  useIntegrationRegistry,
+  weatherCodeToInfo,
+} from "@openmapx/core";
 import { useCallback, useEffect, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { WeatherIcon } from "./WeatherIcon";
@@ -40,11 +46,20 @@ export function WeatherWidget() {
     center && zoom >= 8 ? center.lng : null,
   );
 
+  const registry = useIntegrationRegistry();
+
   if (!data || zoom < 8) return null;
 
-  const { current, attribution } = data;
+  const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
-  const attrText = attribution ? `${attribution.name} (${attribution.license})` : data.source;
+  const weatherMeta = data.source
+    ? registry
+        .getByDomain("weather")
+        .find((m) => m.dataSources?.some((ds) => ds.sourceId === data.source))
+    : undefined;
+  const attrText = weatherMeta?.dataSources
+    ? buildSourceAttribution(weatherMeta.dataSources, [data.source]).replace(/<[^>]*>/g, "")
+    : data.source;
 
   return (
     <Box

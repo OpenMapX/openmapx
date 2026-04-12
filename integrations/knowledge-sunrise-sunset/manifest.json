@@ -21,6 +21,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "sunrise-sunset",
       "name": "Sunrise-Sunset.org",
       "url": "https://sunrise-sunset.org/",
       "license": "Proprietary (free with attribution)",

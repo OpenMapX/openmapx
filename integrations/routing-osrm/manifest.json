@@ -32,11 +32,12 @@
   "category": "Routing",
   "dataSources": [
     {
+      "sourceId": "osrm",
       "name": "OSRM",
       "url": "https://project-osrm.org/",
       "license": "BSD 2-Clause (software); custom demo server policy",
       "licenseUrl": "https://github.com/Project-OSRM/osrm-backend/wiki/Api-usage-policy",
-      "attribution": "Routing by <a href=\"https://project-osrm.org/\">OSRM</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OSM contributors</a>",
+      "attribution": "Routing by <a href=\"https://project-osrm.org/\">OSRM</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "conditional",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.fossgis.de/datenschutzerkl%C3%A4rung/",

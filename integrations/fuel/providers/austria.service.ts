@@ -101,12 +101,6 @@ export class AustriaService implements FuelPriceProvider {
         coordinates: [s.location.longitude, s.location.latitude],
         address,
         isOpen: s.open,
-        attribution: {
-          label: "E-Control Spritpreisrechner",
-          url: "https://www.spritpreisrechner.at",
-          license: "Public Data",
-          licenseUrl: "https://www.e-control.at/spritpreisrechner",
-        },
         fuelPrices: {
           diesel: dieselPrice,
           e5: superPriceById.get(s.id),

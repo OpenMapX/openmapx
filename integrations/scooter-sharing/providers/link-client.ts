@@ -59,8 +59,7 @@ export async function searchLink(bbox: BoundingBox): Promise<SharedMobilityVehic
           isReserved: false,
           isDisabled: false,
           operator: "Link",
-          source: "link",
-          attribution: { label: "Link", url: "https://www.link.city" },
+          sources: ["link"],
         }),
       );
   } catch {

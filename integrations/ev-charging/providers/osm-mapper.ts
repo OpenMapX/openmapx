@@ -99,7 +99,7 @@ export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
 
   return {
     id: `osm:${station.id}`,
-    source: "osm-ev",
+    sources: ["osm-ev"],
     name,
     coordinates: [station.lon, station.lat],
     address: {
@@ -122,12 +122,6 @@ export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
           cost: station.tags.fee === "no" ? "Free" : (station.tags.charge ?? "Paid"),
         }
       : undefined,
-    attribution: {
-      text: "OpenStreetMap contributors",
-      url: "https://www.openstreetmap.org",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-    },
     sections:
       connectorRows.length > 0
         ? [

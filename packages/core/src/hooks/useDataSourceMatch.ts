@@ -124,7 +124,7 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
 
   // Filter out minimal fallback details that have no useful data (e.g. when
   // the upstream provider is unavailable and only an Overpass stub is returned).
-  if (detail && detail.source === "unknown" && detail.sections.length === 0) {
+  if (detail && detail.sources[0] === "unknown" && detail.sections.length === 0) {
     return null;
   }
 

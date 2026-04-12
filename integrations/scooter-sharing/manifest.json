@@ -34,6 +34,7 @@
   "category": "Shared Mobility",
   "dataSources": [
     {
+      "sourceId": "gbfs",
       "name": "GBFS Catalog (MobilityData)",
       "url": "https://github.com/MobilityData/gbfs",
       "license": "CC BY 3.0 (spec); per-operator data licenses",
@@ -47,6 +48,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "felyx",
       "name": "Felyx",
       "url": "https://felyx.com/",
       "license": "Proprietary (undocumented API)",
@@ -60,6 +62,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "gosharing",
       "name": "GO Sharing",
       "url": "https://go-sharing.com/",
       "license": "Proprietary (undocumented API)",
@@ -73,6 +76,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "link",
       "name": "Link/Superpedestrian",
       "url": "https://superpedestrian.com/",
       "license": "Proprietary (undocumented API; company defunct Dec 2023)",

@@ -26,6 +26,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "jsdelivr",
       "name": "JSDelivr CDN",
       "url": "https://cdn.jsdelivr.net/",
       "license": "MIT",
@@ -40,6 +41,7 @@
       "dpaUrl": "https://www.jsdelivr.com/documents/data-processing-agreement.pdf"
     },
     {
+      "sourceId": "github",
       "name": "GitHub API",
       "url": "https://api.github.com/",
       "license": "Proprietary (GitHub ToS)",

@@ -56,12 +56,7 @@ export async function searchGoSharing(bbox: BoundingBox): Promise<SharedMobility
           isReserved: false,
           isDisabled: false,
           operator: "GO Sharing",
-          source: "gosharing",
-          attribution: {
-            label: "GO Sharing",
-            url: "https://go-sharing.com",
-            license: "Proprietary",
-          },
+          sources: ["gosharing"],
         }),
       );
   } catch {

@@ -165,7 +165,6 @@ describe("fuelProvider.getDetail", () => {
       source: "tankerkoenig",
       name: "Aral",
       coordinates: [0, 0] as [number, number],
-      attribution: { text: "Tankerkoenig", url: "" },
       sections: [],
     };
     vi.mocked(buildTankerkoenigDetail).mockReturnValue(enrichedDetail);
@@ -214,7 +213,6 @@ describe("fuelProvider.getDetail", () => {
       source: "tankerkoenig",
       name: "Station",
       coordinates: [11.5, 48.5] as [number, number],
-      attribution: { text: "Tankerkoenig", url: "" },
       sections: [],
     };
     vi.mocked(mapFuelStationToDetail).mockReturnValue(detail);

@@ -3,45 +3,11 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { validatePublicUrl } from "@openmapx/core";
 import { gtfsDate, parseCsv, streamCsvBatches } from "./csv";
 import { sql } from "./db";
 
 const BATCH_SIZE = 5_000;
-
-// URL Validation
-
-const PRIVATE_IP_RANGES = [
-  /^127\./, // loopback
-  /^10\./, // 10.0.0.0/8
-  /^172\.(1[6-9]|2\d|3[01])\./, // 172.16.0.0/12
-  /^192\.168\./, // 192.168.0.0/16
-  /^169\.254\./, // link-local (AWS metadata)
-  /^0\./, // 0.0.0.0/8
-  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // 100.64.0.0/10 (CGNAT)
-  /^::1$/, // IPv6 loopback
-  /^f[cd]/, // IPv6 private
-  /^fe80:/, // IPv6 link-local
-];
-
-function validateDownloadUrl(url: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error("Invalid URL");
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error("Only HTTP(S) URLs are allowed");
-  }
-  const hostname = parsed.hostname;
-  if (
-    hostname === "localhost" ||
-    hostname === "" ||
-    PRIVATE_IP_RANGES.some((re) => re.test(hostname))
-  ) {
-    throw new Error("URLs targeting internal/private addresses are not allowed");
-  }
-}
 
 // Schema DDL
 
@@ -191,7 +157,7 @@ function createServiceDaysDDL(schema: string): string {
 // Download & Extract
 
 function downloadAndExtract(url: string, tempDir: string): string {
-  validateDownloadUrl(url);
+  validatePublicUrl(url);
   mkdirSync(tempDir, { recursive: true });
   const zipPath = join(tempDir, "feed.zip");
 

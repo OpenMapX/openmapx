@@ -69,7 +69,7 @@ function parse(body: string): SharedMobilityStation[] {
       operator: provider,
       vehicleTypes: ["car"],
       isActive: vehicleCount > 0,
-      source: "wuppertal",
+      sources: ["wuppertal"],
       address: parseAddress(props.ADRESSE, props.ORT),
       website: props.URL || undefined,
       vehicleClassNames: props.KLASSEN_FZ
@@ -77,12 +77,6 @@ function parse(body: string): SharedMobilityStation[] {
             .map((s) => s.trim())
             .filter(Boolean)
         : undefined,
-      attribution: {
-        label: "Stadt Wuppertal",
-        url: "https://www.offenedaten-wuppertal.de",
-        license: "CC BY 4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-      },
     });
   }
 

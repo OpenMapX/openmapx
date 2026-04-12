@@ -26,6 +26,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "vbb",
       "name": "VBB HAFAS REST API (transport.rest)",
       "url": "https://v6.vbb.transport.rest/",
       "license": "ISC (software); no open license for data",

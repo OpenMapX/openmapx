@@ -26,6 +26,7 @@
   "category": "External",
   "dataSources": [
     {
+      "sourceId": "wikimedia",
       "name": "Wikimedia Commons",
       "url": "https://commons.wikimedia.org/",
       "license": "Per-file (CC BY-SA, CC BY, or Public Domain)",

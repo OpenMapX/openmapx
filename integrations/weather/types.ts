@@ -43,20 +43,12 @@ export interface DailyForecastPoint {
   sunset?: string;
 }
 
-export interface WeatherAttribution {
-  name: string;
-  url: string;
-  license: string;
-  licenseUrl?: string;
-}
-
 export interface WeatherResponse {
   location: LngLat;
   current: CurrentWeather;
   hourly?: HourlyForecastPoint[];
   daily?: DailyForecastPoint[];
   source: string;
-  attribution?: WeatherAttribution;
 }
 
 export interface RadarFrame {

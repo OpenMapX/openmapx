@@ -1,5 +1,4 @@
-import { mergeAttributions } from "@openmapx/core";
-import type { ParkingAttribution, ParkingFacility } from "./types.js";
+import type { ParkingFacility } from "./types.js";
 
 /**
  * Source priority for deduplication (lower = higher priority).
@@ -10,7 +9,20 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "db-bahnpark": 0,
   "parkapi-v3": 1,
   "parkapi-v2": 2, // prefix match — actual source is "parkapi-v2/CityName"
-  "osm-parking": 3,
+  "rdw-nl": 3,
+  "bnls-fr": 4,
+  "ghent-be": 4,
+  "brussels-be": 4,
+  "basel-ch": 4,
+  "florence-it": 4,
+  "barcelona-es": 4,
+  "vienna-at": 4,
+  "copenhagen-dk": 4,
+  singapore: 4,
+  "madrid-es": 4,
+  "utmc-newcastle": 4,
+  "nsw-au": 4,
+  "osm-parking": 5,
 };
 
 function getSourcePriority(source: string): number {
@@ -22,7 +34,6 @@ function getSourcePriority(source: string): number {
 /**
  * Merge two facilities. The `primary` provides the base identity;
  * the `secondary` fills in any missing fields.
- * Attributions from both sources are combined.
  */
 function mergeFacilities(primary: ParkingFacility, secondary: ParkingFacility): ParkingFacility {
   return {
@@ -30,10 +41,7 @@ function mergeFacilities(primary: ParkingFacility, secondary: ParkingFacility): 
     id: primary.id,
     name: primary.name,
     coordinates: primary.coordinates,
-    source: primary.source,
-    attribution: mergeAttributions(primary.attribution, secondary.attribution) as
-      | ParkingAttribution
-      | ParkingAttribution[],
+    sources: [...new Set([...primary.sources, ...secondary.sources])],
 
     // Real-time data: prefer whichever has it
     hasRealtimeData: primary.hasRealtimeData || secondary.hasRealtimeData,
@@ -83,8 +91,8 @@ export function deduplicateParking(facilities: ParkingFacility[]): ParkingFacili
       continue;
     }
 
-    const existingPriority = getSourcePriority(existing.source);
-    const newPriority = getSourcePriority(facility.source);
+    const existingPriority = getSourcePriority(existing.sources[0]);
+    const newPriority = getSourcePriority(facility.sources[0]);
 
     if (newPriority < existingPriority) {
       // New source is higher priority — it becomes the primary

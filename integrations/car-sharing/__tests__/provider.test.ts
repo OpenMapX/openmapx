@@ -64,7 +64,7 @@ function makeStation(id: string, source: string): SharedMobilityStation {
     availableVehicles: 3,
     vehicleTypes: ["car"],
     isActive: true,
-    source,
+    sources: [source],
   };
 }
 
@@ -75,7 +75,7 @@ function makeVehicle(id: string, source: string): SharedMobilityVehicle {
     formFactor: "car",
     isReserved: false,
     isDisabled: false,
-    source,
+    sources: [source],
   };
 }
 
@@ -212,10 +212,9 @@ describe("carSharingProvider.getDetail", () => {
 
     const detail = {
       id: "cs-cached-station",
-      source: "cambio",
+      sources: ["cambio"],
       name: "Station",
       coordinates: [11.5, 48.5] as [number, number],
-      attribution: { text: "Cambio", url: "" },
       sections: [],
     };
     vi.mocked(mapStationToDetail).mockReturnValue(detail);
@@ -236,10 +235,9 @@ describe("carSharingProvider.getDetail", () => {
 
     const detail = {
       id: "cs-gbfs-v1",
-      source: "gbfs",
+      sources: ["gbfs"],
       name: "Car",
       coordinates: [11.5, 48.5] as [number, number],
-      attribution: { text: "GBFS", url: "" },
       sections: [],
     };
     vi.mocked(mapVehicleToDetail).mockReturnValue(detail);
@@ -249,12 +247,8 @@ describe("carSharingProvider.getDetail", () => {
     expect(result).toBe(detail);
   });
 
-  it("cache miss returns fallback detail", async () => {
+  it("cache miss returns null", async () => {
     const result = await carSharingProvider.getDetail("totally-unknown-cs-id");
-    expect(result.id).toBe("totally-unknown-cs-id");
-    expect(result.source).toBe("car-sharing");
-    expect(result.name).toBe("Car Sharing Station");
-    expect(result.coordinates).toEqual([0, 0]);
-    expect(result.sections).toEqual([]);
+    expect(result).toBeNull();
   });
 });

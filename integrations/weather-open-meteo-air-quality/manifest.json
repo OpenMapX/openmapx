@@ -31,6 +31,7 @@
   "category": "Weather",
   "dataSources": [
     {
+      "sourceId": "open-meteo-air-quality",
       "name": "Open-Meteo Air Quality",
       "url": "https://air-quality-api.open-meteo.com/",
       "license": "CC BY 4.0 (free tier: non-commercial only)",

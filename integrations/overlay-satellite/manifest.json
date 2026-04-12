@@ -41,6 +41,7 @@
   "category": "Data Overlays",
   "dataSources": [
     {
+      "sourceId": "nasa-gibs",
       "name": "NASA GIBS",
       "url": "https://gibs.earthdata.nasa.gov/",
       "license": "U.S. Public Domain",

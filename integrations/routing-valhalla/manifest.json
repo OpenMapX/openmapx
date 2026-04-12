@@ -31,11 +31,12 @@
   "category": "Routing",
   "dataSources": [
     {
+      "sourceId": "valhalla",
       "name": "Valhalla",
       "url": "https://github.com/valhalla/valhalla",
       "license": "MIT (software); fair-use demo server",
       "licenseUrl": "https://github.com/valhalla/valhalla/blob/master/COPYING",
-      "attribution": "Routing by <a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OSM contributors</a>",
+      "attribution": "Routing by <a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.fossgis.de/datenschutzerkl%C3%A4rung/",

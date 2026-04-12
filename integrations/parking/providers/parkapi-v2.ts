@@ -93,7 +93,7 @@ async function fetchCityLots(cityName: string): Promise<ParkApiV2Lot[]> {
 function lotToFacility(
   lot: ParkApiV2Lot,
   cityName: string,
-  cityData: ParkApiV2City,
+  _cityData: ParkApiV2City,
 ): ParkingFacility | null {
   if (!lot.coords) return null;
 
@@ -102,18 +102,13 @@ function lotToFacility(
     id: `parkapi-v2:${cityName}/${lot.id}`,
     name: lot.name,
     coordinates: [lot.coords.lng, lot.coords.lat],
-    source: `parkapi-v2/${cityName}`,
+    sources: [`parkapi-v2/${cityName}`],
     parkingType: mapLotType(lot.lot_type),
     capacity: lot.total ?? undefined,
     freeSpaces: hasRealtime ? lot.free : undefined,
     hasRealtimeData: hasRealtime,
     state: mapState(lot.state),
     address: lot.address ?? undefined,
-    attribution: {
-      label: cityData.attribution?.contributor ?? "ParkenDD",
-      url: cityData.attribution?.url ?? "https://parkendd.de",
-      license: cityData.attribution?.license,
-    },
   };
 }
 

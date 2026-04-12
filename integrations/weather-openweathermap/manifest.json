@@ -39,6 +39,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "openweathermap",
       "name": "OpenWeatherMap",
       "url": "https://openweathermap.org/",
       "license": "ODbL",

@@ -17,13 +17,21 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import PedalBikeIcon from "@mui/icons-material/PedalBike";
 import TrainIcon from "@mui/icons-material/Train";
+import VideocamIcon from "@mui/icons-material/Videocam";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import type { DataSourceDetail, DataSourceDetailSection } from "@openmapx/core";
+import {
+  buildSourceAttribution,
+  type DataSourceDetail,
+  type DataSourceDetailSection,
+  extractSourcePrefix,
+  useIntegrationRegistry,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { TEAL } from "@/lib/theme";
@@ -66,9 +74,28 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "parkapi-v2": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "parkapi-v3": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "db-bahnpark": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "rdw-nl": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "bnls-fr": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "ghent-be": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "brussels-be": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "basel-ch": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "florence-it": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "barcelona-es": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "vienna-at": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "copenhagen-dk": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  singapore: { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "madrid-es": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "utmc-newcastle": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "nsw-au": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "osm-parking": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   // DB Station (RIS::Stations)
   "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
+  // Webcam
+  webcam: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  windy: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  "osm-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  caltrans: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
+  tfl: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
 };
 
 function resolveSourceHeader(detail: DataSourceDetail): {
@@ -76,12 +103,14 @@ function resolveSourceHeader(detail: DataSourceDetail): {
   titleKey: string | null;
   titleFallback: string | null;
 } {
+  const primarySource = detail.sources[0] ?? "";
+
   // Try exact source match first
-  const exactMatch = SOURCE_HEADERS[detail.source];
+  const exactMatch = SOURCE_HEADERS[primarySource];
   if (exactMatch) return { ...exactMatch, titleFallback: null };
 
   // Try prefix (e.g., "tankerkoenig" from "tankerkoenig/uuid", "nextbike" from "nextbike/362/1234")
-  const prefix = detail.source.split("/")[0];
+  const prefix = primarySource.split("/")[0];
   const prefixMatch = SOURCE_HEADERS[prefix];
   if (prefixMatch) return { ...prefixMatch, titleFallback: null };
 
@@ -89,7 +118,7 @@ function resolveSourceHeader(detail: DataSourceDetail): {
   return {
     icon: <InfoIcon sx={{ fontSize: 20 }} />,
     titleKey: null,
-    titleFallback: detail.source.charAt(0).toUpperCase() + detail.source.slice(1),
+    titleFallback: primarySource.charAt(0).toUpperCase() + primarySource.slice(1),
   };
 }
 
@@ -112,6 +141,10 @@ function getSectionIcon(sectionIcon?: string): React.ReactNode {
       return <EnergySavingsLeafIcon />;
     case "open_in_new":
       return <OpenInNewIcon />;
+    case "videocam":
+      return <VideocamIcon sx={{ fontSize: 18 }} />;
+    case "warning":
+      return <WarningAmberIcon sx={{ fontSize: 18 }} />;
     default:
       return <BoltIcon />;
   }
@@ -289,6 +322,65 @@ function SectionContent({ section }: { section: DataSourceDetailSection }) {
       );
     }
 
+    case "image": {
+      if (!section.imageUrl) return null;
+      const img = (
+        <Box
+          component="img"
+          src={section.imageUrl}
+          alt={section.imageAlt ?? section.title}
+          sx={{ width: "100%", borderRadius: 2, display: "block" }}
+        />
+      );
+      return section.linkUrl ? (
+        <Link
+          href={section.linkUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{ display: "block", mb: 1 }}
+        >
+          {img}
+        </Link>
+      ) : (
+        <Box sx={{ mb: 1 }}>{img}</Box>
+      );
+    }
+
+    case "embed": {
+      if (!section.embedUrl) return null;
+      if (section.embedType === "video") {
+        return (
+          <Box sx={{ mb: 1 }}>
+            <Box
+              component="video"
+              src={section.embedUrl}
+              controls
+              autoPlay
+              muted
+              loop
+              sx={{ width: "100%", borderRadius: 2, display: "block" }}
+            />
+          </Box>
+        );
+      }
+      return (
+        <Box sx={{ mb: 1 }}>
+          <Box
+            component="iframe"
+            src={section.embedUrl}
+            sandbox="allow-scripts allow-same-origin"
+            sx={{
+              width: "100%",
+              aspectRatio: "16/9",
+              border: "none",
+              borderRadius: 2,
+              display: "block",
+            }}
+          />
+        </Box>
+      );
+    }
+
     default:
       return null;
   }
@@ -347,6 +439,7 @@ const ROW_LABEL_KEYS: Record<string, string> = {
   // Fee values
   "Free Parking": "freeParking",
   "Paid Parking": "paidParking",
+  Unknown: "unknownFee",
   // Parking tariff durations
   "20 min": "dur20min",
   "30 min": "dur30min",
@@ -418,14 +511,40 @@ function SectionWrapper({ section }: { section: DataSourceDetailSection }) {
   );
 }
 
+function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
+  const tc = useTranslations("common");
+  const registry = useIntegrationRegistry();
+
+  // Find the integration whose dataSources contain a matching sourceId.
+  // This is independent of UI selection state so it works for both
+  // data-source layer clicks and useDataSourceMatch (regular POI).
+  const prefixes = new Set(detail.sources.map(extractSourcePrefix));
+  const meta = registry
+    .getByDomain("data-source")
+    .find((m) => m.dataSources?.some((ds) => prefixes.has(ds.sourceId)));
+  const html = meta?.dataSources ? buildSourceAttribution(meta.dataSources, detail.sources) : "";
+
+  if (!html) return null;
+
+  return (
+    <Box sx={{ px: 2, py: 1.25 }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: attribution HTML from trusted integration manifests
+        dangerouslySetInnerHTML={{ __html: `${tc("data")}: ${html}` }}
+      />
+    </Box>
+  );
+}
+
 export function DataSourceSections({ detail }: Props) {
   const t = useTranslations("dataSources");
-  const tc = useTranslations("common");
   const header = resolveSourceHeader(detail);
 
   return (
     <Box>
-      <Divider />
+      <Divider sx={{ mx: 2, my: 1 }} />
 
       {/* Section header — like Transit section */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
@@ -487,46 +606,8 @@ export function DataSourceSections({ detail }: Props) {
         detail.sections.map((section) => <SectionWrapper key={section.title} section={section} />)}
 
       {/* Attribution footer */}
-      <Divider />
-      <Box sx={{ px: 2, py: 1.25 }}>
-        <Typography variant="caption" color="text.secondary">
-          {tc("data")}:{" "}
-          {(Array.isArray(detail.attribution) ? detail.attribution : [detail.attribution]).map(
-            (attr, i) => (
-              <span key={attr.text}>
-                {i > 0 && " · "}
-                <Link
-                  href={attr.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  underline="hover"
-                  color="text.secondary"
-                >
-                  {attr.text}
-                </Link>
-                {attr.license &&
-                  (attr.licenseUrl ? (
-                    <>
-                      {" ("}
-                      <Link
-                        href={attr.licenseUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        underline="hover"
-                        color="text.secondary"
-                      >
-                        {attr.license}
-                      </Link>
-                      {")"}
-                    </>
-                  ) : (
-                    ` (${attr.license})`
-                  ))}
-              </span>
-            ),
-          )}
-        </Typography>
-      </Box>
+      <Divider sx={{ mx: 2 }} />
+      <AttributionFooter detail={detail} />
     </Box>
   );
 }

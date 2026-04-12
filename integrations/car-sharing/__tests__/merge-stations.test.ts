@@ -1,11 +1,5 @@
+import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@openmapx/core", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, mergeAttributions: vi.fn((a: unknown, b: unknown) => [a, b].flat()) };
-});
-
-import type { SharedMobilityStation } from "@openmapx/core";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
 
 afterEach(() => {
@@ -13,19 +7,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function makeAttribution(label: string) {
-  return { label, url: `https://${label}.example.com` };
-}
-
 function makeStation(
   overrides: Partial<SharedMobilityStation> &
-    Pick<SharedMobilityStation, "id" | "name" | "coordinates" | "source">,
+    Pick<SharedMobilityStation, "id" | "name" | "coordinates" | "sources">,
 ): SharedMobilityStation {
   return {
     availableVehicles: 3,
     vehicleTypes: ["car"],
     isActive: true,
-    attribution: makeAttribution(overrides.source),
     ...overrides,
   };
 }
@@ -40,7 +29,7 @@ describe("mergeRegionalStations", () => {
       id: "c1",
       name: "Cambio Station",
       coordinates: [13.377, 52.52],
-      source: "cambio",
+      sources: ["cambio"],
     });
     const result = mergeRegionalStations([station]);
     expect(result).toHaveLength(1);
@@ -58,17 +47,16 @@ describe("mergeRegionalStations", () => {
       id: "cambio-1",
       name: "Cambio Alexanderplatz",
       coordinates: [13.41, 52.52],
-      source: "cambio",
+      sources: ["cambio"],
       availableVehicles: 5,
       isActive: true,
       operator: "Cambio",
-      attribution: makeAttribution("Cambio"),
     });
     const secondary = makeStation({
       id: "open-1",
       name: "Open Data Alex",
       coordinates: [13.41, 52.52003],
-      source: "open-data",
+      sources: ["open-data"],
       availableVehicles: 0,
       isActive: false,
       operator: "OpenData Provider",
@@ -81,7 +69,6 @@ describe("mergeRegionalStations", () => {
       vehicleClassNames: ["Mini", "Kombi"],
       stationType: "fixed" as const,
       capacity: 10,
-      attribution: makeAttribution("OpenData"),
     });
 
     const result = mergeRegionalStations([primary, secondary]);
@@ -92,7 +79,8 @@ describe("mergeRegionalStations", () => {
     expect(merged.id).toBe("cambio-1");
     expect(merged.name).toBe("Cambio Alexanderplatz");
     expect(merged.coordinates).toEqual([13.41, 52.52]);
-    expect(merged.source).toBe("cambio");
+    expect(merged.sources).toContain("cambio");
+    expect(merged.sources).toContain("open-data");
     expect(merged.availableVehicles).toBe(5);
     expect(merged.isActive).toBe(true);
     expect(merged.operator).toBe("Cambio");
@@ -111,9 +99,6 @@ describe("mergeRegionalStations", () => {
     expect(merged.vehicleClassNames).toEqual(["Mini", "Kombi"]);
     expect(merged.stationType).toBe("fixed");
     expect(merged.capacity).toBe(10);
-
-    // Attribution merged from both
-    expect(merged.attribution).toEqual([makeAttribution("Cambio"), makeAttribution("OpenData")]);
   });
 
   it("does NOT override primary fields with secondary values", () => {
@@ -121,7 +106,7 @@ describe("mergeRegionalStations", () => {
       id: "p1",
       name: "Primary Station",
       coordinates: [13.41, 52.52],
-      source: "cambio",
+      sources: ["cambio"],
       availableVehicles: 5,
       isActive: true,
       operator: "Cambio",
@@ -138,7 +123,7 @@ describe("mergeRegionalStations", () => {
       id: "s1",
       name: "Secondary Station",
       coordinates: [13.41, 52.52003],
-      source: "open-data",
+      sources: ["open-data"],
       availableVehicles: 0,
       isActive: false,
       operator: "Other",
@@ -158,7 +143,8 @@ describe("mergeRegionalStations", () => {
     // Primary keeps all its own fields
     expect(merged.id).toBe("p1");
     expect(merged.name).toBe("Primary Station");
-    expect(merged.source).toBe("cambio");
+    expect(merged.sources[0]).toBe("cambio");
+    expect(merged.sources).toContain("open-data");
     expect(merged.availableVehicles).toBe(5);
     expect(merged.isActive).toBe(true);
     expect(merged.operator).toBe("Cambio");
@@ -178,13 +164,13 @@ describe("mergeRegionalStations", () => {
       id: "a",
       name: "Station A",
       coordinates: [13.41, 52.52],
-      source: "cambio",
+      sources: ["cambio"],
     });
     const b = makeStation({
       id: "b",
       name: "Station B",
       coordinates: [13.41, 52.53],
-      source: "open-data",
+      sources: ["open-data"],
     });
 
     const result = mergeRegionalStations([a, b]);
@@ -198,28 +184,25 @@ describe("mergeRegionalStations", () => {
       id: "live-1",
       name: "Live Station",
       coordinates: [13.41, 52.52],
-      source: "cambio-live",
+      sources: ["cambio-live"],
       availableVehicles: 4,
-      attribution: makeAttribution("Cambio"),
     });
     const openA = makeStation({
       id: "open-a",
       name: "Open A",
       coordinates: [13.41, 52.52001],
-      source: "open-data-a",
+      sources: ["open-data-a"],
       address: { street: "Hauptstr. 5", city: "Berlin" },
       transitInfo: { lines: "M10" },
-      attribution: makeAttribution("OpenA"),
     });
     const openB = makeStation({
       id: "open-b",
       name: "Open B",
       coordinates: [13.41, 52.52002],
-      source: "open-data-b",
+      sources: ["open-data-b"],
       website: "https://booking.example.com",
       operatorNotes: "Park in marked spaces only",
       vehicleClassNames: ["Compact", "Estate"],
-      attribution: makeAttribution("OpenB"),
     });
 
     const result = mergeRegionalStations([live, openA, openB]);
@@ -229,7 +212,9 @@ describe("mergeRegionalStations", () => {
     // Identity from first (live)
     expect(merged.id).toBe("live-1");
     expect(merged.name).toBe("Live Station");
-    expect(merged.source).toBe("cambio-live");
+    expect(merged.sources).toContain("cambio-live");
+    expect(merged.sources).toContain("open-data-a");
+    expect(merged.sources).toContain("open-data-b");
     expect(merged.availableVehicles).toBe(4);
 
     // Enrichment from second source (openA)
@@ -247,7 +232,7 @@ describe("mergeRegionalStations", () => {
       id: "s1",
       name: "Station",
       coordinates: [13.41, 52.52],
-      source: "test",
+      sources: ["test"],
     });
     const original = { ...station };
     const input = [station];
@@ -264,14 +249,14 @@ describe("mergeRegionalStations", () => {
       id: "p1",
       name: "Primary",
       coordinates: [13.41, 52.52],
-      source: "cambio",
+      sources: ["cambio"],
       // capacity is undefined by default
     });
     const secondary = makeStation({
       id: "s1",
       name: "Secondary",
       coordinates: [13.41, 52.52001],
-      source: "open-data",
+      sources: ["open-data"],
       capacity: 15,
     });
 
@@ -284,14 +269,14 @@ describe("mergeRegionalStations", () => {
       id: "p1",
       name: "Primary",
       coordinates: [13.41, 52.52],
-      source: "cambio",
+      sources: ["cambio"],
       capacity: 8,
     });
     const secondary = makeStation({
       id: "s1",
       name: "Secondary",
       coordinates: [13.41, 52.52001],
-      source: "open-data",
+      sources: ["open-data"],
       capacity: 20,
     });
 

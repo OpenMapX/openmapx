@@ -66,8 +66,7 @@ export async function searchDonkey(bbox: BoundingBox): Promise<SharedMobilitySta
         operator: "Donkey Republic",
         vehicleTypes,
         isActive: totalBikes > 0,
-        source: "donkey",
-        attribution: { label: "Donkey Republic", url: "https://www.donkey.bike" },
+        sources: ["donkey"],
       };
     });
   } catch {

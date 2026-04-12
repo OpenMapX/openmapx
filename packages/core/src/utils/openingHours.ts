@@ -21,6 +21,8 @@ export interface OpeningHoursStatus {
   comment?: string;
   /** True if the schedule is the same every week (no seasonal or date-specific rules). */
   isWeekStable?: boolean;
+  /** True when hours are ambiguous (e.g. "by appointment", cinema showtimes). */
+  isUnknown?: boolean;
 }
 
 export interface LocationContext {
@@ -74,11 +76,18 @@ function buildWeekSchedule(oh: opening_hours, now: Date): DaySchedule[] {
     const intervals = oh.getOpenIntervals(dayStart, dayEnd);
     const dayIdx = dayStart.getDay();
 
+    // Filter out intervals in "unknown" state (ambiguous hours like
+    // "by appointment" or cinema showtimes) so they don't display as definite
+    const definiteIntervals = intervals.filter(([start]) => {
+      const t = new Date(Math.max(start.getTime(), dayStart.getTime()));
+      return !oh.getUnknown(t);
+    });
+
     let hours: string;
-    if (intervals.length === 0) {
+    if (definiteIntervals.length === 0) {
       hours = "Closed";
     } else {
-      const parts = intervals.map(([start, end]) => {
+      const parts = definiteIntervals.map(([start, end]) => {
         const s = start < dayStart ? "00:00" : fmt(start);
         const e = end >= dayEnd ? "24:00" : fmt(end);
         if (s === "00:00" && e === "24:00") return "Open 24 hours";
@@ -116,7 +125,21 @@ export function parseOpeningHours(
     const comment = oh.getComment(now);
     const nextChange = oh.getNextChange(now);
 
-    const effectiveOpen = isOpen && !isUnknown;
+    // When the current state is unknown (ambiguous hours like "by appointment",
+    // cinema showtimes, etc.), don't show a definitive "Open" or "Closed" status
+    if (isUnknown) {
+      const unknownDetail = comment || raw;
+      return {
+        isOpen: false,
+        isUnknown: true,
+        label: unknownDetail,
+        detail: unknownDetail,
+        comment: comment ?? undefined,
+        isWeekStable: oh.isWeekStable(),
+      };
+    }
+
+    const effectiveOpen = isOpen;
 
     // Build detail string based on next state change
     let detail: string;

@@ -32,36 +32,6 @@ const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>
 const MAX_CACHE_SIZE = 3000;
 
 const META: DataSourceMeta = {
-  id: "car-sharing",
-  name: "Car Sharing",
-  attribution: [
-    { text: "GBFS", url: "https://gbfs.org" },
-    {
-      text: "Cambio",
-      url: "https://www.cambio-carsharing.de",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-    },
-    {
-      text: "Stadtteilauto Münster",
-      url: "https://opendata.stadt-muenster.de",
-      license: "dl-de/by-2-0",
-      licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
-    },
-    {
-      text: "Stadt Wuppertal",
-      url: "https://www.offenedaten-wuppertal.de",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    },
-    {
-      text: "Stadt Bielefeld",
-      url: "https://open-data.bielefeld.de",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-    },
-  ],
-  categoryChipLabel: "Car Sharing",
   minZoom: 12,
   markerStyle: {
     type: "icon",
@@ -84,7 +54,7 @@ const META: DataSourceMeta = {
 const CAR_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>(["car"]);
 
 class CarSharingProvider implements DataSourceProvider {
-  readonly id = META.id;
+  readonly id = "car-sharing";
   readonly meta = META;
   readonly searchCacheTtl = 300;
   readonly detailCacheTtl = 300;
@@ -159,21 +129,14 @@ class CarSharingProvider implements DataSourceProvider {
     return results;
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail> {
+  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
     const cached = itemCache.get(itemId);
     if (cached) {
       if ("availableVehicles" in cached) return mapStationToDetail(cached);
       return mapVehicleToDetail(cached);
     }
 
-    return {
-      id: itemId,
-      source: "car-sharing",
-      name: "Car Sharing Station",
-      coordinates: [0, 0],
-      attribution: { text: "GBFS", url: "https://gbfs.org" },
-      sections: [],
-    };
+    return null;
   }
 }
 

@@ -25,7 +25,7 @@ function makeStation(
     availableVehicles: 3,
     vehicleTypes: ["bicycle"],
     isActive: true,
-    source: "citybikes/test",
+    sources: ["citybikes/test"],
     ...overrides,
   };
 }
@@ -53,19 +53,19 @@ describe("dedupStations", () => {
       id: "s1",
       name: "Station A",
       coordinates: [13.37700001, 52.52000001],
-      source: "gbfs/lime",
+      sources: ["gbfs/lime"],
     });
     const b = makeStation({
       id: "s2",
       name: "Station B",
       coordinates: [13.37700002, 52.52000002],
-      source: "gbfs/bolt",
+      sources: ["gbfs/bolt"],
     });
     // haversineMeters should not even be called for exact coord match
     const result = dedupStations([a, b]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("s1");
-    expect(result[0].source).toBe("gbfs/lime");
+    expect(result[0].sources).toEqual(["gbfs/lime"]);
   });
 
   it("deduplicates when within 50m and name similarity > 0.6", () => {
@@ -73,13 +73,13 @@ describe("dedupStations", () => {
       id: "s1",
       name: "Alexanderplatz Station",
       coordinates: [13.41, 52.521],
-      source: "gbfs/lime",
+      sources: ["gbfs/lime"],
     });
     const b = makeStation({
       id: "s2",
       name: "Alexanderplatz Bikes",
       coordinates: [13.4103, 52.5213],
-      source: "citybikes/nextbike",
+      sources: ["citybikes/nextbike"],
     });
 
     // Different 4dp keys, so fuzzy check runs
@@ -96,13 +96,13 @@ describe("dedupStations", () => {
       id: "s1",
       name: "Lime Bikes Central",
       coordinates: [13.41, 52.521],
-      source: "gbfs/lime",
+      sources: ["gbfs/lime"],
     });
     const b = makeStation({
       id: "s2",
       name: "Hauptbahnhof Parking",
       coordinates: [13.4103, 52.5213],
-      source: "citybikes/nextbike",
+      sources: ["citybikes/nextbike"],
     });
 
     mockHaversine.mockReturnValue(30); // within 50m
@@ -137,14 +137,14 @@ describe("dedupStations", () => {
       id: "live-1",
       name: "Cambio Station",
       coordinates: [13.41, 52.521],
-      source: "cambio-live",
+      sources: ["cambio-live"],
       availableVehicles: 5,
     });
     const secondary = makeStation({
       id: "open-1",
       name: "Cambio Station",
       coordinates: [13.4103, 52.5213],
-      source: "open-data",
+      sources: ["open-data"],
       availableVehicles: 0,
     });
 
@@ -154,7 +154,7 @@ describe("dedupStations", () => {
     const result = dedupStations([primary, secondary]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("live-1");
-    expect(result[0].source).toBe("cambio-live");
+    expect(result[0].sources).toEqual(["cambio-live"]);
     expect(result[0].availableVehicles).toBe(5);
   });
 

@@ -73,7 +73,7 @@ function makeStation(id: string, source: string): SharedMobilityStation {
     availableVehicles: 5,
     vehicleTypes: ["bicycle"],
     isActive: true,
-    source,
+    sources: [source],
   };
 }
 
@@ -84,7 +84,7 @@ function makeVehicle(id: string, source: string): SharedMobilityVehicle {
     formFactor: "bicycle",
     isReserved: false,
     isDisabled: false,
-    source,
+    sources: [source],
   };
 }
 
@@ -238,10 +238,9 @@ describe("bikeSharingProvider.getDetail", () => {
 
     const detail = {
       id: "bs-cached-station",
-      source: "nextbike",
+      sources: ["nextbike"],
       name: "Station",
       coordinates: [11.5, 48.5] as [number, number],
-      attribution: { text: "Nextbike", url: "" },
       sections: [],
     };
     vi.mocked(mapStationToDetail).mockReturnValue(detail);
@@ -265,10 +264,9 @@ describe("bikeSharingProvider.getDetail", () => {
 
     const detail = {
       id: "bs-db-vehicle-1",
-      source: "db",
+      sources: ["db"],
       name: "Bike",
       coordinates: [11.5, 48.5] as [number, number],
-      attribution: { text: "DB", url: "" },
       sections: [],
     };
     vi.mocked(mapVehicleToDetail).mockReturnValue(detail);
@@ -278,12 +276,8 @@ describe("bikeSharingProvider.getDetail", () => {
     expect(result).toBe(detail);
   });
 
-  it("cache miss returns fallback detail", async () => {
+  it("cache miss returns null", async () => {
     const result = await bikeSharingProvider.getDetail("totally-unknown-id-xyz");
-    expect(result.id).toBe("totally-unknown-id-xyz");
-    expect(result.source).toBe("bike-sharing");
-    expect(result.name).toBe("Bike Sharing Station");
-    expect(result.coordinates).toEqual([0, 0]);
-    expect(result.sections).toEqual([]);
+    expect(result).toBeNull();
   });
 });

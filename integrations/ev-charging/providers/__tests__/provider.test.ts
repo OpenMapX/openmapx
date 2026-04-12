@@ -64,12 +64,10 @@ describe("evChargingProvider meta", () => {
     expect(evChargingProvider.id).toBe("ev-charging");
   });
 
-  it("meta includes OCM and OSM attribution", () => {
-    const attr = evChargingProvider.meta.attribution;
-    expect(Array.isArray(attr)).toBe(true);
-    const texts = (attr as Array<{ text: string }>).map((a) => a.text);
-    expect(texts).toContain("OpenChargeMap");
-    expect(texts).toContain("OpenStreetMap");
+  it("meta does not contain id, name, or attribution (sourced from manifest)", () => {
+    expect("id" in evChargingProvider.meta).toBe(false);
+    expect("name" in evChargingProvider.meta).toBe(false);
+    expect("attribution" in evChargingProvider.meta).toBe(false);
   });
 });
 
@@ -145,10 +143,10 @@ describe("evChargingProvider.search", () => {
   });
 });
 
-// Speed filter
+// Speed filter (client-side only — provider does not filter by speed)
 
 describe("evChargingProvider.search speed filter", () => {
-  it("filters by single speed variant", async () => {
+  it("ignores speed filter (applied client-side)", async () => {
     vi.mocked(searchOcm).mockResolvedValue([]);
     vi.mocked(searchOsmCharging).mockResolvedValue([]);
     const items = [
@@ -159,45 +157,7 @@ describe("evChargingProvider.search speed filter", () => {
     vi.mocked(deduplicateByCoordinates).mockReturnValue(items);
 
     const results = await evChargingProvider.search(makeBbox(), { speed: "fast" });
-    expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("b");
-  });
-
-  it("filters by array of speed variants", async () => {
-    vi.mocked(searchOcm).mockResolvedValue([]);
-    vi.mocked(searchOsmCharging).mockResolvedValue([]);
-    const items = [
-      makeResult("a", "slow"),
-      makeResult("b", "fast"),
-      makeResult("c", "ultra-rapid"),
-    ];
-    vi.mocked(deduplicateByCoordinates).mockReturnValue(items);
-
-    const results = await evChargingProvider.search(makeBbox(), {
-      speed: ["slow", "ultra-rapid"],
-    });
-    expect(results).toHaveLength(2);
-    expect(results.map((r) => r.id)).toEqual(["a", "c"]);
-  });
-
-  it("returns all when speed filter is absent", async () => {
-    vi.mocked(searchOcm).mockResolvedValue([]);
-    vi.mocked(searchOsmCharging).mockResolvedValue([]);
-    const items = [makeResult("x", "slow"), makeResult("y", "fast")];
-    vi.mocked(deduplicateByCoordinates).mockReturnValue(items);
-
-    const results = await evChargingProvider.search(makeBbox());
-    expect(results).toHaveLength(2);
-  });
-
-  it("returns none when speed filter matches nothing", async () => {
-    vi.mocked(searchOcm).mockResolvedValue([]);
-    vi.mocked(searchOsmCharging).mockResolvedValue([]);
-    const items = [makeResult("a", "slow"), makeResult("b", "fast")];
-    vi.mocked(deduplicateByCoordinates).mockReturnValue(items);
-
-    const results = await evChargingProvider.search(makeBbox(), { speed: "ultra-rapid" });
-    expect(results).toHaveLength(0);
+    expect(results).toHaveLength(3);
   });
 });
 
@@ -212,7 +172,6 @@ describe("evChargingProvider.getDetail", () => {
       source: "ocm",
       name: "Station",
       coordinates: [11, 48] as [number, number],
-      attribution: { text: "OCM", url: "" },
       sections: [],
     };
     vi.mocked(mapOcmToDetail).mockReturnValue(mapped);
@@ -231,7 +190,6 @@ describe("evChargingProvider.getDetail", () => {
       source: "osm",
       name: "Charger",
       coordinates: [11, 48] as [number, number],
-      attribution: { text: "OSM", url: "" },
       sections: [],
     };
     vi.mocked(mapOsmToDetail).mockReturnValue(mapped);
@@ -242,29 +200,22 @@ describe("evChargingProvider.getDetail", () => {
     expect(result).toBe(mapped);
   });
 
-  it("'ocm:' prefix returns fallback when getOcmDetail returns null", async () => {
+  it("'ocm:' prefix returns null when getOcmDetail returns null", async () => {
     vi.mocked(getOcmDetail).mockResolvedValue(null as never);
 
     const result = await evChargingProvider.getDetail("ocm:999");
-    expect(result.id).toBe("ocm:999");
-    expect(result.source).toBe("unknown");
-    expect(result.name).toBe("EV Charging Station");
+    expect(result).toBeNull();
   });
 
-  it("'osm:' prefix returns fallback when getOsmChargingNode returns null", async () => {
+  it("'osm:' prefix returns null when getOsmChargingNode returns null", async () => {
     vi.mocked(getOsmChargingNode).mockResolvedValue(null as never);
 
     const result = await evChargingProvider.getDetail("osm:888");
-    expect(result.id).toBe("osm:888");
-    expect(result.source).toBe("unknown");
+    expect(result).toBeNull();
   });
 
-  it("unknown prefix returns fallback detail", async () => {
+  it("unknown prefix returns null", async () => {
     const result = await evChargingProvider.getDetail("xyz:100");
-    expect(result.id).toBe("xyz:100");
-    expect(result.source).toBe("unknown");
-    expect(result.name).toBe("EV Charging Station");
-    expect(result.coordinates).toEqual([0, 0]);
-    expect(result.sections).toEqual([]);
+    expect(result).toBeNull();
   });
 });

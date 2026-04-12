@@ -95,13 +95,6 @@ export class SpainService implements FuelPriceProvider {
           name: s.Rótulo || address || s.IDEESS,
           coordinates: [lng, lat],
           address,
-          attribution: {
-            label: "Ministerio para la Transición Ecológica",
-            url: "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/help",
-            license: "Government Open Data",
-            licenseUrl:
-              "https://sede.serviciosmin.gob.es/es-es/datosabiertos/paginas/modalidades-reutilizacion.aspx",
-          },
           fuelPrices: {
             diesel: parseSpanishPrice(s["Precio Gasoleo A"]),
             e5: parseSpanishPrice(s["Precio Gasolina 95 E5"]),

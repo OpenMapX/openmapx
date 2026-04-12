@@ -120,7 +120,7 @@ async function fetchData(): Promise<SharedMobilityStation[]> {
         operator: "Stadtteilauto Münster",
         vehicleTypes: ["car"],
         isActive: (raw.vehicleCount ?? 0) > 0,
-        source: "stadtteilauto",
+        sources: ["stadtteilauto"],
         accessMethod: raw.information?.access,
         transitInfo:
           raw.information?.ptLines || raw.information?.ptStops
@@ -140,7 +140,6 @@ async function fetchData(): Promise<SharedMobilityStation[]> {
               country: raw.address.addressCountry,
             }
           : undefined,
-        attribution: ATTRIBUTION,
       });
     }
 

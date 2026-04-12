@@ -31,6 +31,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "overpass",
       "name": "OpenStreetMap (Overpass)",
       "url": "https://overpass-api.de/",
       "license": "ODbL 1.0",

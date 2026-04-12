@@ -51,6 +51,7 @@
   "category": "Data Overlays",
   "dataSources": [
     {
+      "sourceId": "openaq",
       "name": "OpenAQ",
       "url": "https://api.openaq.org/",
       "license": "CC BY 4.0 (varies per source)",

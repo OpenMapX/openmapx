@@ -47,6 +47,7 @@
   "category": "Traffic",
   "dataSources": [
     {
+      "sourceId": "tomtom",
       "name": "TomTom",
       "url": "https://developer.tomtom.com/",
       "license": "Proprietary",

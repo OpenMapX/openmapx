@@ -31,6 +31,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "transitous",
       "name": "Transitous (Cloud MOTIS)",
       "url": "https://api.transitous.org/",
       "license": "AGPL-3.0-or-later",
@@ -44,6 +45,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "motis",
       "name": "MOTIS (self-hosted)",
       "url": "https://github.com/motis-project/motis",
       "license": "MIT",

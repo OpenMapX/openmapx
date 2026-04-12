@@ -1,29 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("../../../utils/geo.js", () => ({
-  mergeAttributions: vi.fn((a: unknown, b: unknown) => [a, b].flat()),
-}));
-
-import type { ParkingFacility } from "@openmapx/core";
 import { deduplicateParking } from "../dedup.js";
+import type { ParkingFacility } from "../types.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-function makeAttribution(label: string) {
-  return { label, url: `https://${label}.example.com` };
-}
-
 function makeFacility(
-  overrides: Partial<ParkingFacility> & Pick<ParkingFacility, "id" | "coordinates" | "source">,
+  overrides: Partial<ParkingFacility> & Pick<ParkingFacility, "id" | "coordinates" | "sources">,
 ): ParkingFacility {
   return {
     name: "Parking Lot",
     parkingType: "unknown",
     hasRealtimeData: false,
-    attribution: makeAttribution(overrides.source),
     ...overrides,
   };
 }
@@ -34,7 +24,7 @@ describe("deduplicateParking", () => {
   });
 
   it("returns single facility unchanged", () => {
-    const f = makeFacility({ id: "p1", coordinates: [13.377, 52.52], source: "osm-parking" });
+    const f = makeFacility({ id: "p1", coordinates: [13.377, 52.52], sources: ["osm-parking"] });
     const result = deduplicateParking([f]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("p1");
@@ -44,13 +34,13 @@ describe("deduplicateParking", () => {
     const a = makeFacility({
       id: "db-1",
       coordinates: [13.3771, 52.5201],
-      source: "db-bahnpark",
+      sources: ["db-bahnpark"],
       name: "DB Parking",
     });
     const b = makeFacility({
       id: "osm-1",
       coordinates: [13.3774, 52.5204],
-      source: "osm-parking",
+      sources: ["osm-parking"],
       name: "OSM Parking",
     });
     // Both round to key: 52520,13377
@@ -62,12 +52,12 @@ describe("deduplicateParking", () => {
     const a = makeFacility({
       id: "p1",
       coordinates: [13.377, 52.52],
-      source: "osm-parking",
+      sources: ["osm-parking"],
     });
     const b = makeFacility({
       id: "p2",
       coordinates: [13.39, 52.54],
-      source: "osm-parking",
+      sources: ["osm-parking"],
     });
     const result = deduplicateParking([a, b]);
     expect(result).toHaveLength(2);
@@ -78,71 +68,71 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         name: "DB Station Parking",
       });
       const parkapi = makeFacility({
         id: "pv3-1",
         coordinates: [13.3774, 52.5204],
-        source: "parkapi-v3",
+        sources: ["parkapi-v3"],
         name: "ParkAPI Parking",
       });
       const result = deduplicateParking([parkapi, db]);
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("db-1");
       expect(result[0].name).toBe("DB Station Parking");
-      expect(result[0].source).toBe("db-bahnpark");
+      expect(result[0].sources[0]).toBe("db-bahnpark");
     });
 
     it("parkapi-v3 (1) wins over parkapi-v2 (2)", () => {
       const v3 = makeFacility({
         id: "pv3-1",
         coordinates: [13.377, 52.52],
-        source: "parkapi-v3",
+        sources: ["parkapi-v3"],
         name: "V3 Parking",
       });
       const v2 = makeFacility({
         id: "pv2-1",
         coordinates: [13.3774, 52.5204],
-        source: "parkapi-v2/Dresden",
+        sources: ["parkapi-v2/Dresden"],
         name: "V2 Parking",
       });
       const result = deduplicateParking([v2, v3]);
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("pv3-1");
-      expect(result[0].source).toBe("parkapi-v3");
+      expect(result[0].sources[0]).toBe("parkapi-v3");
     });
 
     it("parkapi-v2 (2) wins over osm-parking (3)", () => {
       const v2 = makeFacility({
         id: "pv2-1",
         coordinates: [13.377, 52.52],
-        source: "parkapi-v2/Berlin",
+        sources: ["parkapi-v2/Berlin"],
         name: "V2 Parking",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         name: "OSM Parking",
       });
       const result = deduplicateParking([osm, v2]);
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("pv2-1");
-      expect(result[0].source).toBe("parkapi-v2/Berlin");
+      expect(result[0].sources[0]).toBe("parkapi-v2/Berlin");
     });
 
     it("prefix match: parkapi-v2/CityName gets priority 2", () => {
       const v2 = makeFacility({
         id: "pv2-1",
         coordinates: [13.377, 52.52],
-        source: "parkapi-v2/Dresden",
+        sources: ["parkapi-v2/Dresden"],
         name: "Dresden P+R",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         name: "OSM Lot",
       });
       const result = deduplicateParking([osm, v2]);
@@ -155,13 +145,13 @@ describe("deduplicateParking", () => {
       const unknown = makeFacility({
         id: "unk-1",
         coordinates: [13.377, 52.52],
-        source: "some-new-provider",
+        sources: ["some-new-provider"],
         name: "Unknown Lot",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         name: "OSM Lot",
       });
       const result = deduplicateParking([unknown, osm]);
@@ -176,32 +166,32 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         name: "DB Parking Hbf",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         name: "OSM Parking Hbf",
       });
       const result = deduplicateParking([db, osm]);
       expect(result[0].id).toBe("db-1");
       expect(result[0].name).toBe("DB Parking Hbf");
       expect(result[0].coordinates).toEqual([13.377, 52.52]);
-      expect(result[0].source).toBe("db-bahnpark");
+      expect(result[0].sources[0]).toBe("db-bahnpark");
     });
 
     it("merges freeSpaces from secondary when primary lacks it", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         freeSpaces: 42,
       });
       const result = deduplicateParking([db, osm]);
@@ -212,13 +202,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         freeSpaces: 10,
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         freeSpaces: 42,
       });
       const result = deduplicateParking([db, osm]);
@@ -229,12 +219,12 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         capacity: 200,
       });
       const result = deduplicateParking([db, osm]);
@@ -245,13 +235,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         hasRealtimeData: false,
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         hasRealtimeData: true,
       });
       const result = deduplicateParking([db, osm]);
@@ -262,13 +252,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         hasRealtimeData: false,
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         hasRealtimeData: false,
       });
       const result = deduplicateParking([db, osm]);
@@ -279,13 +269,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         state: "open",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         state: "closed",
       });
       const result = deduplicateParking([db, osm]);
@@ -296,13 +286,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         state: "unknown",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         state: "closed",
       });
       const result = deduplicateParking([db, osm]);
@@ -313,13 +303,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         state: "unknown",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
       });
       const result = deduplicateParking([db, osm]);
       expect(result[0].state).toBe("unknown");
@@ -329,13 +319,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         parkingType: "garage",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         parkingType: "surface",
       });
       const result = deduplicateParking([db, osm]);
@@ -346,47 +336,29 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         parkingType: "unknown",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         parkingType: "underground",
       });
       const result = deduplicateParking([db, osm]);
       expect(result[0].parkingType).toBe("underground");
     });
 
-    it("merges attribution from both sources", () => {
-      const db = makeFacility({
-        id: "db-1",
-        coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
-        attribution: makeAttribution("DB"),
-      });
-      const osm = makeFacility({
-        id: "osm-1",
-        coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
-        attribution: makeAttribution("OSM"),
-      });
-      const result = deduplicateParking([db, osm]);
-      // mergeAttributions mock returns [a, b].flat()
-      expect(result[0].attribution).toEqual([makeAttribution("DB"), makeAttribution("OSM")]);
-    });
-
     it("enriches optional fields from secondary when primary lacks them", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         disabledSpaces: 5,
         chargingSpaces: 3,
         maxHeight: 200,
@@ -423,13 +395,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         fee: "free",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         fee: "paid",
       });
       const result = deduplicateParking([db, osm]);
@@ -440,13 +412,13 @@ describe("deduplicateParking", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
-        source: "db-bahnpark",
+        sources: ["db-bahnpark"],
         fee: "unknown",
       });
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
         fee: "paid",
       });
       const result = deduplicateParking([db, osm]);
@@ -460,12 +432,12 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.3771, 52.5201],
-        source: "osm-parking",
+        sources: ["osm-parking"],
       });
       const b = makeFacility({
         id: "b",
         coordinates: [13.3774, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
       });
       const result = deduplicateParking([a, b]);
       expect(result).toHaveLength(1);
@@ -477,12 +449,12 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.5204],
-        source: "osm-parking",
+        sources: ["osm-parking"],
       });
       const b = makeFacility({
         id: "b",
         coordinates: [13.377, 52.5206],
-        source: "osm-parking",
+        sources: ["osm-parking"],
       });
       const result = deduplicateParking([a, b]);
       expect(result).toHaveLength(2);
@@ -493,21 +465,21 @@ describe("deduplicateParking", () => {
     const osm = makeFacility({
       id: "osm-1",
       coordinates: [13.377, 52.52],
-      source: "osm-parking",
+      sources: ["osm-parking"],
       name: "OSM Lot",
       capacity: 100,
     });
     const v3 = makeFacility({
       id: "pv3-1",
       coordinates: [13.3774, 52.5204],
-      source: "parkapi-v3",
+      sources: ["parkapi-v3"],
       name: "V3 Lot",
       freeSpaces: 25,
     });
     const db = makeFacility({
       id: "db-1",
       coordinates: [13.3772, 52.5202],
-      source: "db-bahnpark",
+      sources: ["db-bahnpark"],
       name: "DB Lot",
       state: "open",
     });
@@ -517,7 +489,7 @@ describe("deduplicateParking", () => {
     // db-bahnpark has highest priority (0), so it should be the primary
     expect(result[0].id).toBe("db-1");
     expect(result[0].name).toBe("DB Lot");
-    expect(result[0].source).toBe("db-bahnpark");
+    expect(result[0].sources[0]).toBe("db-bahnpark");
     expect(result[0].state).toBe("open");
   });
 });

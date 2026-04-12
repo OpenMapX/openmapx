@@ -41,6 +41,7 @@
   "category": "Data Overlays",
   "dataSources": [
     {
+      "sourceId": "ocm",
       "name": "OpenChargeMap",
       "url": "https://api.openchargemap.io/",
       "license": "CC BY 4.0",
@@ -55,6 +56,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "osm-ev",
       "name": "OpenStreetMap (Overpass)",
       "url": "https://www.openstreetmap.org/",
       "license": "ODbL",

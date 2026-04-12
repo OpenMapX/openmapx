@@ -59,6 +59,7 @@
   "category": "Data Overlays",
   "dataSources": [
     {
+      "sourceId": "noaa",
       "name": "NOAA Weather Service",
       "url": "https://api.weather.gov/",
       "license": "U.S. Public Domain",
@@ -72,6 +73,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "eccc",
       "name": "ECCC (Environment Canada)",
       "url": "https://api.weather.gc.ca/",
       "license": "ECCC End-use Licence v2.1",
@@ -85,6 +87,7 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "dwd",
       "name": "DWD (Deutscher Wetterdienst)",
       "url": "https://www.dwd.de/",
       "license": "CC BY 4.0",
@@ -100,6 +103,7 @@
       "dpaUrl": "https://www.dwd.de/DE/derdwd/_functions/Boxen/vereinbarung_auftragsverarbeitung.html"
     },
     {
+      "sourceId": "meteoalarm",
       "name": "MeteoAlarm (EUMETNET)",
       "url": "https://feeds.meteoalarm.org/",
       "license": "CC BY 4.0",

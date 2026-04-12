@@ -34,15 +34,6 @@ const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>
 const MAX_CACHE_SIZE = 5000;
 
 const META: DataSourceMeta = {
-  id: "scooter-sharing",
-  name: "E-Scooters",
-  attribution: [
-    { text: "GBFS", url: "https://gbfs.org" },
-    { text: "Felyx", url: "https://felyx.com" },
-    { text: "GO Sharing", url: "https://go-sharing.com", license: "Proprietary" },
-    { text: "Link", url: "https://www.link.city" },
-  ],
-  categoryChipLabel: "E-Scooters",
   minZoom: 13,
   markerStyle: {
     type: "circle",
@@ -74,7 +65,7 @@ const SCOOTER_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>([
 ]);
 
 class ScooterSharingProvider implements DataSourceProvider {
-  readonly id = META.id;
+  readonly id = "scooter-sharing";
   readonly meta = META;
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
@@ -163,21 +154,14 @@ class ScooterSharingProvider implements DataSourceProvider {
     return results;
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail> {
+  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
     const cached = itemCache.get(itemId);
     if (cached) {
       if ("availableVehicles" in cached) return mapStationToDetail(cached);
       return mapVehicleToDetail(cached);
     }
 
-    return {
-      id: itemId,
-      source: "scooter-sharing",
-      name: "E-Scooter",
-      coordinates: [0, 0],
-      attribution: { text: "GBFS", url: "https://gbfs.org" },
-      sections: [],
-    };
+    return null;
   }
 }
 

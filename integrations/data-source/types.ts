@@ -17,10 +17,6 @@ export interface DataSourceMarkerStyle {
 }
 
 export interface DataSourceMeta {
-  id: string;
-  name: string;
-  attribution: DataSourceAttribution | DataSourceAttribution[];
-  categoryChipLabel: string;
   minZoom: number;
   markerStyle: DataSourceMarkerStyle;
   /** When true, the filter panel shows individual result cards below the filters. */
@@ -36,6 +32,10 @@ export interface DataSourceFilterDef {
   label: string;
   type: "multi-select" | "toggle";
   options?: { id: string | number; label: string; icon?: string }[];
+  /** When true, this filter is applied client-side on the result set rather than
+   *  being sent to the API. Providers set this for filters that cannot be
+   *  efficiently evaluated server-side (e.g. speed derived from mapped variants). */
+  clientSide?: boolean;
 }
 
 export interface DataSourceResult {
@@ -53,12 +53,22 @@ export interface DataSourceResult {
 
 export interface DataSourceDetailSection {
   title: string;
-  type: "table" | "list" | "text";
+  type: "table" | "list" | "text" | "image" | "embed";
   columns?: string[];
   rows?: (string | number)[][];
   items?: string[];
   content?: string;
-  /** Icon type for the section header. Defaults to "bolt" for backward compatibility. */
+  /** Image URL for type "image". Rendered as a safe <img> element. */
+  imageUrl?: string;
+  /** Alt text for image sections. */
+  imageAlt?: string;
+  /** Link URL. For "image" sections, wraps the image in an anchor tag. */
+  linkUrl?: string;
+  /** Embed URL for type "embed". Rendered as a sandboxed iframe or video element. */
+  embedUrl?: string;
+  /** Embed content type. Defaults to "iframe". "video" renders a video element. */
+  embedType?: "iframe" | "video";
+  /** Icon type for the section header. */
   sectionIcon?:
     | "bolt"
     | "fuel"
@@ -68,14 +78,16 @@ export interface DataSourceDetailSection {
     | "directions_car"
     | "payments"
     | "eco"
-    | "open_in_new";
+    | "open_in_new"
+    | "videocam"
+    | "warning";
   /** When true, the section renders collapsed by default with a toggle to expand. */
   collapsed?: boolean;
 }
 
 export interface DataSourceDetail {
   id: string;
-  source: string;
+  sources: string[];
   name: string;
   coordinates: LngLat;
   address?: {
@@ -89,7 +101,6 @@ export interface DataSourceDetail {
   usageInfo?: { type: string; cost?: string; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
-  attribution: DataSourceAttribution | DataSourceAttribution[];
   sections: DataSourceDetailSection[];
   osmTags?: Record<string, string>;
 }
@@ -103,5 +114,5 @@ export interface DataSourceProvider {
   readonly coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
   getFilters(): Promise<DataSourceFilterDef[]>;
   search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]>;
-  getDetail(itemId: string): Promise<DataSourceDetail>;
+  getDetail(itemId: string): Promise<DataSourceDetail | null>;
 }

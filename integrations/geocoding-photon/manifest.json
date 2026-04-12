@@ -30,6 +30,7 @@
   "category": "Geocoding",
   "dataSources": [
     {
+      "sourceId": "photon",
       "name": "Photon (Komoot)",
       "url": "https://photon.komoot.io/",
       "license": "Apache License 2.0 (software); ODbL (OSM data)",

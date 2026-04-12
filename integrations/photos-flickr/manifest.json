@@ -33,6 +33,7 @@
   "category": "External",
   "dataSources": [
     {
+      "sourceId": "flickr",
       "name": "Flickr",
       "url": "https://www.flickr.com/",
       "license": "Proprietary",

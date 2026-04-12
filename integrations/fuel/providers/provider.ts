@@ -37,42 +37,6 @@ interface TankerkoenigDetailResponse {
 }
 
 const META: DataSourceMeta = {
-  id: "fuel",
-  name: "Gas Stations",
-  attribution: [
-    {
-      text: "Tankerkönig",
-      url: "https://www.tankerkoenig.de",
-      license: "CC BY 4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    },
-    {
-      text: "prix-carburants.gouv.fr",
-      url: "https://www.prix-carburants.gouv.fr",
-      license: "Licence Ouverte v2.0",
-      licenseUrl: "https://github.com/etalab/licence-ouverte/blob/master/LO.md",
-    },
-    {
-      text: "MITEco",
-      url: "https://energia.gob.es",
-      license: "Government Open Data",
-      licenseUrl:
-        "https://sede.serviciosmin.gob.es/es-es/datosabiertos/paginas/modalidades-reutilizacion.aspx",
-    },
-    {
-      text: "E-Control",
-      url: "https://www.spritpreisrechner.at",
-      license: "Public Data",
-      licenseUrl: "https://www.e-control.at/spritpreisrechner",
-    },
-    {
-      text: "OpenStreetMap",
-      url: "https://www.openstreetmap.org",
-      license: "ODbL",
-      licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-    },
-  ],
-  categoryChipLabel: "Gas Stations",
   minZoom: 8,
   showResultsList: true,
   placeCategory: "Gas Station",
@@ -90,7 +54,7 @@ const META: DataSourceMeta = {
 const MAX_CACHE_SIZE = 2000;
 
 class FuelDataSourceProvider implements DataSourceProvider {
-  readonly id = META.id;
+  readonly id = "fuel";
   readonly meta = META;
   readonly serviceIds = [];
   readonly searchCacheTtl = 120;
@@ -174,7 +138,7 @@ class FuelDataSourceProvider implements DataSourceProvider {
     return results;
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail> {
+  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
     // Tankerkoenig stations: fetch enriched detail from their API
     if (itemId.startsWith("tankerkoenig/")) {
       const uuid = itemId.replace(/^tankerkoenig\//, "");
@@ -201,12 +165,6 @@ class FuelDataSourceProvider implements DataSourceProvider {
                   e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
                   e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,
                   diesel: s.diesel != null && s.diesel !== false ? s.diesel : undefined,
-                },
-                attribution: {
-                  label: "Tankerk\u00F6nig",
-                  url: "https://www.tankerkoenig.de",
-                  license: "CC BY 4.0",
-                  licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
                 },
               };
 
@@ -235,15 +193,7 @@ class FuelDataSourceProvider implements DataSourceProvider {
       return mapFuelStationToDetail(cached);
     }
 
-    // Fallback: minimal detail
-    return {
-      id: itemId,
-      source: "unknown",
-      name: "Gas Station",
-      coordinates: [0, 0],
-      attribution: Array.isArray(META.attribution) ? META.attribution[0] : META.attribution,
-      sections: [],
-    };
+    return null;
   }
 }
 

@@ -227,7 +227,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         sx={{
           position: "sticky",
           top: 0,
-          bgcolor: "inherit",
+          bgcolor: "background.paper",
           zIndex: 1,
           minHeight: 48,
           "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },

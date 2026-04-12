@@ -44,11 +44,12 @@
   "category": "Map Tools",
   "dataSources": [
     {
+      "sourceId": "valhalla",
       "name": "Valhalla (Isochrone)",
       "url": "https://github.com/valhalla/valhalla",
       "license": "MIT (software); fair-use demo server",
       "licenseUrl": "https://github.com/valhalla/valhalla/blob/master/COPYING",
-      "attribution": "Isochrones by <a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OSM contributors</a>",
+      "attribution": "Isochrones by <a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, Data © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.fossgis.de/datenschutzerkl%C3%A4rung/",

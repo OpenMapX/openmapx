@@ -472,12 +472,16 @@
     "onStreet": "Straßenparkplatz",
     "freeParking": "Kostenloses Parken",
     "paidParking": "Kostenpflichtiges Parken",
+    "unknownFee": "Unbekannt",
     "yes": "Ja",
     "open": "Geöffnet",
     "closed": "Geschlossen",
     "customers": "Kunden",
     "private": "Privat",
-    "permit": "Genehmigung"
+    "permit": "Genehmigung",
+    "webcams": "Webcams",
+    "webcamCategory": "Kategorie",
+    "webcamSource": "Quelle"
   },
   "account": {
     "language": "Sprache",

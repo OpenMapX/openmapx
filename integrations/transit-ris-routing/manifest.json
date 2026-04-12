@@ -38,6 +38,7 @@
   },
   "dataSources": [
     {
+      "sourceId": "db-ris",
       "name": "Deutsche Bahn RIS Routing",
       "url": "https://apis.deutschebahn.com/",
       "license": "Proprietary (bilateral license)",

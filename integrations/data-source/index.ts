@@ -76,6 +76,10 @@ export function setup(ctx: IntegrationContext): void {
       const detail = await ctx.cache.withCache(cacheKey, detailTtl, () =>
         provider.getDetail(itemId),
       );
+      if (!detail) {
+        reply.status(404).send({ error: "Item not found" });
+        return;
+      }
       reply.header("Cache-Control", `public, max-age=${Math.min(detailTtl, 300)}`);
       reply.send(detail);
     } catch (err) {
