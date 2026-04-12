@@ -115,7 +115,7 @@ function buildFacilities(
   }
 
   return stations
-    .map((station) => {
+    .map((station): ParkingFacility | null => {
       const lng = station.scoordinate?.x;
       const lat = station.scoordinate?.y;
       if (lng == null || lat == null || Number.isNaN(lng) || Number.isNaN(lat)) return null;
