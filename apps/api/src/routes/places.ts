@@ -1,8 +1,11 @@
 import { lookupDbStation } from "@integrations/geocoding-db-ris/provider.js";
+import type { Place } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import {
+  lookupAddressByCoords,
   lookupByCoords,
   lookupByNameAndCoords,
+  lookupByOsmFilters,
   lookupByOsmRef,
 } from "../../../../integrations/geocoding/place-lookup.js";
 import {
@@ -21,6 +24,7 @@ interface PlaceByIdQuery {
   lng?: string;
   name?: string;
   lang?: string;
+  osmFilters?: string;
 }
 
 interface CacheableError {
@@ -50,6 +54,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           lng: { type: "string" },
           name: { type: "string" },
           lang: { type: "string" },
+          osmFilters: { type: "string" },
         },
       },
     },
@@ -97,28 +102,87 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           const lng = Number.parseFloat(req.query.lng ?? "");
           const name = req.query.name?.trim() ?? "";
 
-          if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) {
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
             const err: CacheableError = {
               statusCode: 400,
-              message: "Non-OSM place ID requires lat, lng, and name query parameters",
+              message: "Non-OSM place ID requires lat and lng query parameters",
             };
             throw err;
           }
 
-          // For data source places (ds- prefix), prefer coords-only reverse geocode
-          // because data source names/addresses often match the wrong OSM element
-          // (e.g. house "373" instead of fuel station at "Rheinberger Str. 373").
-          // For regular places, try name+coords first for precise disambiguation.
           const isDataSourceLookup = rawId.startsWith("ds-");
-          const place = isDataSourceLookup
-            ? ((await lookupByCoords(lat, lng, rawId, lang)) ??
-              (await lookupByNameAndCoords(name, lat, lng, rawId, lang)))
-            : ((await lookupByNameAndCoords(name, lat, lng, rawId, lang)) ??
-              (await lookupByCoords(lat, lng, rawId, lang)));
+
+          let place: Place | null = null;
+          if (isDataSourceLookup) {
+            // Data source items: Overpass category search finds the correct OSM node
+            // by type rather than returning the nearest element of any type.
+            const osmFiltersRaw = req.query.osmFilters;
+            if (!osmFiltersRaw) {
+              const err: CacheableError = {
+                statusCode: 400,
+                message: "Data source place lookup requires osmFilters query parameter",
+              };
+              throw err;
+            }
+            let osmFilters: Array<{ key: string; value: string }>;
+            try {
+              const parsed: unknown = JSON.parse(osmFiltersRaw);
+              if (
+                !Array.isArray(parsed) ||
+                !parsed.every(
+                  (f) =>
+                    typeof f === "object" &&
+                    f !== null &&
+                    typeof (f as Record<string, unknown>).key === "string" &&
+                    typeof (f as Record<string, unknown>).value === "string",
+                )
+              ) {
+                throw new Error("shape");
+              }
+              osmFilters = parsed as Array<{ key: string; value: string }>;
+            } catch {
+              const err: CacheableError = {
+                statusCode: 400,
+                message: "Invalid osmFilters: expected Array<{key,value}>",
+              };
+              throw err;
+            }
+            place = await lookupByOsmFilters(lat, lng, osmFilters, rawId);
+
+            // OSM nodes for data source items (bike sharing, parking, etc.) rarely carry
+            // addr:* tags. If the Overpass result has no address, fall back to a structured
+            // reverse geocode at zoom=18 for address/city only — never for POI details.
+            if (!place?.address) {
+              const addrOnly = await lookupAddressByCoords(lat, lng);
+              if (addrOnly) {
+                place = place
+                  ? { ...place, address: addrOnly.address, city: addrOnly.city ?? place.city }
+                  : {
+                      id: rawId,
+                      name: "",
+                      address: addrOnly.address,
+                      city: addrOnly.city,
+                      coordinates: [lng, lat],
+                    };
+              }
+            }
+          } else {
+            if (!name) {
+              const err: CacheableError = {
+                statusCode: 400,
+                message: "Non-OSM place ID requires lat, lng, and name query parameters",
+              };
+              throw err;
+            }
+            place =
+              (await lookupByNameAndCoords(name, lat, lng, rawId, lang)) ??
+              (await lookupByCoords(lat, lng, rawId, lang));
+          }
+
           if (!place) {
             const err: CacheableError = {
               statusCode: 404,
-              message: `No OSM match found for "${name}" near [${lat}, ${lng}]`,
+              message: `No OSM match found near [${lat}, ${lng}]`,
             };
             throw err;
           }

@@ -67,12 +67,27 @@ function buildStrokeColorExpr(): maplibregl.ExpressionSpecification {
 
 function buildStrokeWidthExpr(): maplibregl.ExpressionSpecification {
   return [
-    "case",
-    ["==", ["get", "alertLevel"], "red"],
-    ["interpolate", ["linear"], ["zoom"], 2, 2.5, 8, 4],
-    ["==", ["get", "alertLevel"], "orange"],
-    ["interpolate", ["linear"], ["zoom"], 2, 2, 8, 3],
-    ["interpolate", ["linear"], ["zoom"], 2, 1, 8, 2],
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    2,
+    [
+      "case",
+      ["==", ["get", "alertLevel"], "red"],
+      2.5,
+      ["==", ["get", "alertLevel"], "orange"],
+      2,
+      1,
+    ],
+    8,
+    [
+      "case",
+      ["==", ["get", "alertLevel"], "red"],
+      4,
+      ["==", ["get", "alertLevel"], "orange"],
+      3,
+      2,
+    ],
   ] as maplibregl.ExpressionSpecification;
 }
 

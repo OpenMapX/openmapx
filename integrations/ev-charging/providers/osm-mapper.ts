@@ -1,4 +1,5 @@
 import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import { formatAddress } from "../../geocoding/format-address.js";
 import type { OsmChargingStation } from "./osm.js";
 
 /** Maps OSM socket:* tags to human-readable connector labels. */
@@ -104,7 +105,14 @@ export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
     coordinates: [station.lon, station.lat],
     address: {
       line1: station.tags["addr:street"]
-        ? `${station.tags["addr:housenumber"] ?? ""} ${station.tags["addr:street"]}`.trim()
+        ? formatAddress(
+            {
+              road: station.tags["addr:street"],
+              house_number: station.tags["addr:housenumber"],
+              country_code: station.tags["addr:country"]?.toLowerCase(),
+            },
+            { appendCountry: false },
+          )
         : undefined,
       town: station.tags["addr:city"],
       postcode: station.tags["addr:postcode"],

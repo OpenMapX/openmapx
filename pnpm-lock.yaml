@@ -306,6 +306,9 @@ importers:
 
   integrations/geocoding:
     dependencies:
+      '@fragaria/address-formatter':
+        specifier: ^6.7.1
+        version: 6.7.1
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -2311,6 +2314,10 @@ packages:
 
   '@formatjs/intl-localematcher@0.8.2':
     resolution: {integrity: sha512-q05KMYGJLyqFNFtIb8NhWLF5X3aK/k0wYt7dnRFuy6aLQL+vUwQ1cg5cO4qawEiINybeCPXAWlprY2mSBjSXAQ==}
+
+  '@fragaria/address-formatter@6.7.1':
+    resolution: {integrity: sha512-ttCuFClh1dlZTljgkGvwGdUDHlq3WsfHi6S641uzjAY0S4NOrYksECqKW6J1JFbBhBcQRs+DO7ujA49A2sVA/Q==}
+    engines: {node: '>=20.0.0'}
 
   '@hexagon/base64@1.1.28':
     resolution: {integrity: sha512-lhqDEAvWixy3bZ+UOYbPwUbBkwBq5C1LAJ/xPC8Oi+lL54oyakv/npbA0aU2hgCsx/1NUd4IBvV03+aUBWxerw==}
@@ -5943,6 +5950,10 @@ packages:
   murmurhash-js@1.0.0:
     resolution: {integrity: sha512-TvmkNhkv8yct0SVBSy+o8wYzXjE4Zz3PCesbfs8HiCXXdcTuocApFv11UWlNFWKYsP2okqrhb7JNlSm9InBhIw==}
 
+  mustache@4.2.0:
+    resolution: {integrity: sha512-71ippSywq5Yb7/tVYyGbkBggbU8H3u5Rz56fH60jGFgr8uHwxs+aSKeqmluIVzM0m0kB7xQjKS6qPfd0b2ZoqQ==}
+    hasBin: true
+
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -9360,6 +9371,10 @@ snapshots:
   '@formatjs/intl-localematcher@0.8.2':
     dependencies:
       '@formatjs/fast-memoize': 3.1.1
+
+  '@fragaria/address-formatter@6.7.1':
+    dependencies:
+      mustache: 4.2.0
 
   '@hexagon/base64@1.1.28': {}
 
@@ -13547,6 +13562,8 @@ snapshots:
     optional: true
 
   murmurhash-js@1.0.0: {}
+
+  mustache@4.2.0: {}
 
   nanoid@3.3.11: {}
 

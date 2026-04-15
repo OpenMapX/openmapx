@@ -5,6 +5,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
+import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
 import { fetchAutobahnDeDetail, searchAutobahnDe } from "./autobahn-de.js";
 import { fetchBarcelonaEsDetail, searchBarcelonaEs } from "./barcelona-es.js";
@@ -35,6 +36,7 @@ const META: DataSourceMeta = {
   showResultsList: true,
   placeCategory: "Parking",
   placeCategoryRaw: "parking",
+  osmFilters: CATEGORY_FILTERS.parking,
   markerStyle: {
     type: "circle",
     variantColors: {

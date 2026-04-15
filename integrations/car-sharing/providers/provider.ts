@@ -10,6 +10,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
+import { CATEGORY_FILTERS } from "@openmapx/core";
 import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
 import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
@@ -49,6 +50,7 @@ const META: DataSourceMeta = {
   showResultsList: true,
   placeCategory: "Car Sharing Station",
   placeCategoryRaw: "car_sharing",
+  osmFilters: CATEGORY_FILTERS.car_sharing,
 };
 
 const CAR_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>(["car"]);

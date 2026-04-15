@@ -421,7 +421,7 @@ export function DataSourceLayer() {
       if (!features.length) return;
       const props = features[0].properties as { id: string; name: string; summary?: string };
       const coords = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
-      selectItem(currentSource, props.id);
+      selectItem(currentSource, props.id, activeMeta?.osmFilters);
       // Set a preview place immediately so the floating card shows without waiting for detail API
       setSelectedPlace({
         id: props.id,

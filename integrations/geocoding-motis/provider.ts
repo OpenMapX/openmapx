@@ -5,6 +5,7 @@ import {
   reverseGeocode as motisReverseGeocode,
 } from "@motis-project/motis-client";
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import { formatAddress } from "../geocoding/format-address.js";
 import type { GeocodingProvider as GeocodingProviderImpl } from "../geocoding/types.js";
 import { uniqueModes } from "./mode-map.js";
 
@@ -167,8 +168,11 @@ export const motisGeocodingService: GeocodingProviderImpl = {
         const match = data?.[0];
         if (!match) continue;
 
-        const addressParts = [match.street, match.houseNumber].filter(Boolean);
-        const address = addressParts.length > 0 ? addressParts.join(" ") : match.name;
+        const address =
+          formatAddress(
+            { road: match.street, house_number: match.houseNumber },
+            { appendCountry: false },
+          ) || match.name;
         const defaultArea = match.areas.find((a) => a.default === true);
         const city = defaultArea?.name ?? "";
 

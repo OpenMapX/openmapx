@@ -1,4 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
+import { formatAddress } from "../../geocoding/format-address.js";
 import type { FuelPriceProvider } from "./price-provider";
 import type { FuelStation } from "./types";
 
@@ -79,9 +80,17 @@ export class TankerkoenigService implements FuelPriceProvider {
     if (!data.ok) throw new Error(`Tankerkoenig: ${data.message ?? "ok=false"}`);
 
     return data.stations.map((s) => {
-      const streetPart = [s.street, s.houseNumber].filter(Boolean).join(" ");
-      const cityPart = [s.postCode, s.place].filter(Boolean).join(" ");
-      const address = [streetPart, cityPart].filter(Boolean).join(", ") || undefined;
+      const address =
+        formatAddress(
+          {
+            road: s.street,
+            house_number: s.houseNumber,
+            postcode: s.postCode,
+            city: s.place,
+            country_code: "de",
+          },
+          { appendCountry: false },
+        ) || undefined;
 
       const nameStartsWithBrand = s.brand && s.name.toLowerCase().startsWith(s.brand.toLowerCase());
       const displayName = s.brand && !nameStartsWithBrand ? `${s.brand} ${s.name}` : s.name;

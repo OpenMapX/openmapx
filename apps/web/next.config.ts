@@ -11,9 +11,6 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: resolve(import.meta.dirname, "../.."),
   },
-  experimental: {
-    turbopackFileSystemCacheForDev: false,
-  },
 };
 
 export default withNextIntl(nextConfig);

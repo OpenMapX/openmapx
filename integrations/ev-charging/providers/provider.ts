@@ -5,6 +5,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
+import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
 import { deduplicateByCoordinates } from "./dedup.js";
 import { getOcmDetail, searchOcm } from "./ocm.js";
@@ -17,6 +18,7 @@ const META: DataSourceMeta = {
   minZoom: 8,
   placeCategory: "Charging Station",
   placeCategoryRaw: "charging_station",
+  osmFilters: CATEGORY_FILTERS.ev_charging,
   markerStyle: {
     variantColors: {
       slow: "#4CAF50",

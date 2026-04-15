@@ -6,6 +6,7 @@
 
 import type { LngLat } from "@openmapx/core";
 import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
+import { formatAddress } from "../../geocoding/format-address.js";
 import { createStaticCarSharingClient } from "./static-car-sharing-client.js";
 
 const WFS_URL =
@@ -61,7 +62,10 @@ function parse(body: string): SharedMobilityStation[] {
 
     const [lng, lat] = coords;
     const capacity = capacityStr ? Number.parseInt(capacityStr, 10) : undefined;
-    const fullStreet = [street, houseNumber].filter(Boolean).join(" ");
+    const fullStreet = formatAddress(
+      { road: street, house_number: houseNumber, country_code: "de" },
+      { appendCountry: false },
+    );
 
     stations.push({
       id: `bielefeld/${gid}`,

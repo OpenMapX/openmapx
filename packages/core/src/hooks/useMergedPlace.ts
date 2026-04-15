@@ -22,8 +22,8 @@ function prettifyCategory(raw: string): string {
  *     selectedPlace always wins — these define what the user clicked.
  *  2. OSM-sourced fields (address, city, phone, website, openingHours, osmTags,
  *     description, wikipediaUrl, photos, facts, reviewLinks, rating, reviewCount):
- *     Nominatim details win when available, selectedPlace fills gaps.
- *  3. Reverse geocoding fills address/city only when both Nominatim and
+ *     Nominatim/Overpass details win when available, selectedPlace fills gaps.
+ *  3. Reverse geocoding fills address/city only when both OSM lookup and
  *     selectedPlace have nothing.
  *  4. dataSourceDetail: from selectedPlace if present, otherwise from
  *     useDataSourceMatch.
@@ -33,10 +33,11 @@ function mergePlaceFields(
   nominatim: Place | null | undefined,
   reverseGeo: ReverseGeocodingResult | null | undefined,
   matchedDetail: DataSourceDetail | null,
+  isDataSourceItem: boolean,
 ): Place {
   const nom = nominatim ?? null;
 
-  const isDataSourcePlace = selected.dataSourceDetail !== undefined;
+  const isDataSourcePlace = isDataSourceItem || selected.dataSourceDetail !== undefined;
 
   // Start with Nominatim as the rich base (if available), then overlay identity fields.
   // For data source places, the data source's own name/category always win because
@@ -117,34 +118,32 @@ export function useMergedPlace(selectedPlace: Place | null): {
   // Skip the place details lookup for those — reverse geocoding handles them.
   const isCoordinatePlace = selectedPlace?.id?.startsWith("coordinate-") ?? false;
 
-  // For data source places, use a synthetic key to force coord-only lookup
-  // (their IDs like "tankerkoenig/uuid" are not OSM IDs).
-  // Also detect data-source preview places: DataSourceLayer sets a preview
-  // place (no dataSourceDetail yet) before DataSourceDetailBridge resolves.
-  // Without this check, usePlaceDetails fires a name-based Nominatim lookup
-  // that can match a road/POI at the same coordinates and overwrite the panel.
+  // Detect data source places, including the preview state before DataSourceDetailBridge resolves.
   const selectedItem = useDataSourceStore((s) => s.selectedItem);
   const isDataSourcePlace =
     selectedPlace?.dataSourceDetail !== undefined ||
     (selectedItem !== null && selectedPlace?.id === selectedItem.itemId);
+
+  // osmFilters drives whether we do an Overpass category search for this data source item.
+  // When absent (webcams, scooters) we skip the backend lookup entirely and rely on
+  // reverse geocoding for address/city only.
+  const osmFilters = isDataSourcePlace ? (selectedItem?.osmFilters ?? null) : null;
+
   const placeDetailsId = isCoordinatePlace
     ? null
     : isDataSourcePlace
-      ? `ds-${selectedPlace?.id ?? ""}`
+      ? osmFilters !== null
+        ? `ds-${selectedPlace?.id ?? ""}`
+        : null
       : (selectedPlace?.id ?? null);
 
-  // For Nominatim lookup, use the address as the search term for data source places
-  // because data source names (e.g. "PM Rheinberg Rheinberger Str. 373" from Tankerkoenig)
-  // often don't match OSM names (e.g. "Freie Tankstelle"), but addresses match reliably.
-  const nominatimName = isDataSourcePlace
-    ? selectedPlace?.address || selectedPlace?.name
-    : selectedPlace?.name;
-
-  // 1. Nominatim lookup (address, phone, website, openingHours, osmTags, etc.)
+  // 1. OSM lookup — Overpass category search for data source items, Nominatim for regular places
   const { data: nominatimDetails, isLoading: nominatimLoading } = usePlaceDetails(
     placeDetailsId,
     selectedPlace?.coordinates,
-    nominatimName,
+    selectedPlace?.name,
+    undefined,
+    osmFilters ?? undefined,
   );
 
   // 2. Reverse geocoding (address/city fallback — always runs for coordinates,
@@ -176,7 +175,13 @@ export function useMergedPlace(selectedPlace: Place | null): {
     return { place: null, isLoading: false };
   }
 
-  const place = mergePlaceFields(selectedPlace, nominatimDetails, reverseGeo, matchedDetail);
+  const place = mergePlaceFields(
+    selectedPlace,
+    nominatimDetails,
+    reverseGeo,
+    matchedDetail,
+    isDataSourcePlace,
+  );
 
   return { place, isLoading: nominatimLoading && !nominatimDetails };
 }

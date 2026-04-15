@@ -381,6 +381,7 @@ export type {
   OverpassWay,
   PolygonGeometry,
 } from "./utils/overpass/types";
+export type { OsmFilter } from "./utils/overpass.service";
 export { CATEGORY_FILTERS, searchByCategory } from "./utils/overpass.service";
 export {
   parseCoordinateInput,

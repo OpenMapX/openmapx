@@ -10,6 +10,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
+import { CATEGORY_FILTERS } from "@openmapx/core";
 import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
 import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
@@ -63,6 +64,7 @@ const META: DataSourceMeta = {
   showResultsList: true,
   placeCategory: "Bike Sharing Station",
   placeCategoryRaw: "bicycle_rental",
+  osmFilters: CATEGORY_FILTERS.bicycle_rental,
 };
 
 class BikeSharingProvider implements DataSourceProvider {

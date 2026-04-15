@@ -478,7 +478,7 @@ export function DataSourceFilterContent() {
                   type="button"
                   onClick={() => {
                     if (!activeSource) return;
-                    selectItem(activeSource, result.id);
+                    selectItem(activeSource, result.id, sourceMeta?.osmFilters);
                     setSelectedPlace({
                       id: result.id,
                       name: result.name,

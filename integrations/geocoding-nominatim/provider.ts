@@ -1,3 +1,4 @@
+import { formatAddress } from "../geocoding/format-address.js";
 import type { GeocodingProviderImpl } from "./types.js";
 /**
  * Nominatim geocoding client.
@@ -48,6 +49,7 @@ interface NominatimReverseResult {
     county?: string;
     postcode?: string;
     country?: string;
+    country_code?: string;
   };
 }
 
@@ -119,13 +121,19 @@ export const nominatimService: GeocodingProviderImpl = {
     if (data.error) return null;
 
     const a = data.address ?? {};
-    const road = a.road ?? "";
-    const houseNumber = a.house_number ?? "";
-    const streetPart = [houseNumber, road].filter(Boolean).join(" ");
+    const address = formatAddress({
+      house_number: a.house_number,
+      road: a.road,
+      city: a.city,
+      town: a.town,
+      village: a.village,
+      county: a.county,
+      state: a.state,
+      postcode: a.postcode,
+      country: a.country,
+      country_code: a.country_code,
+    });
     const cityName = a.city ?? a.town ?? a.village ?? "";
-    const address = [streetPart || data.display_name.split(",")[0], cityName, a.postcode, a.country]
-      .filter(Boolean)
-      .join(", ");
     const city = [cityName, a.state ?? a.county ?? ""].filter(Boolean).join(", ");
     return { address, city };
   },

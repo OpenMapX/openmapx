@@ -4,7 +4,15 @@
  * because lookups and reverse-geocode require different endpoints and params.
  */
 
-import { type Place, USER_AGENT } from "@openmapx/core";
+import {
+  type OsmFilter,
+  type OverpassNode,
+  type OverpassWay,
+  overpassQuery,
+  type Place,
+  USER_AGENT,
+} from "@openmapx/core";
+import { formatAddress } from "./format-address.js";
 import { resolveOsmLabel } from "./osm-label.js";
 
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
@@ -44,13 +52,6 @@ interface NominatimDetailResult {
   extratags?: Record<string, string | undefined>;
 }
 
-function buildAddress(addr: NominatimAddress): string {
-  const street = [addr.house_number, addr.road].filter(Boolean).join(" ");
-  const city = addr.city ?? addr.town ?? addr.village ?? addr.county ?? "";
-  const parts = [street, city, addr.postcode, addr.country].filter(Boolean);
-  return parts.join(", ");
-}
-
 function toPlace(r: NominatimDetailResult, id: string): Place {
   const {
     opening_hours,
@@ -66,7 +67,7 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
     if (v !== undefined) osmTags[k] = v;
   }
 
-  const address = buildAddress(r.address) || r.display_name;
+  const address = formatAddress(r.address) || r.display_name;
   const name = r.display_name.split(",")[0].trim();
   const city = r.address.city ?? r.address.town ?? r.address.village ?? r.address.county;
 
@@ -251,4 +252,193 @@ export async function lookupByNameAndCoords(
   if (best.dist > MAX_DISTANCE_M) return null;
 
   return toPlace(best.r, originalId);
+}
+
+/**
+ * Reverse-geocode coordinates to a structured street address (zoom=18, building level).
+ * Returns only the address string and city — no POI name, phone, or business details.
+ *
+ * When Nominatim finds the road but no house number (common for sidewalk/corner locations),
+ * falls back to an Overpass query for the nearest addr:housenumber node on that street
+ * within 50 m — where the actual mapped building addresses are.
+ */
+export async function lookupAddressByCoords(
+  lat: number,
+  lng: number,
+): Promise<{ address: string; city?: string } | null> {
+  const url = new URL(`${NOMINATIM_URL}/reverse`);
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("zoom", "18");
+
+  let addr: NominatimAddress | undefined;
+
+  try {
+    const result = await fetchNominatim<NominatimDetailResult>(url);
+    if (!result?.osm_id) return null;
+    addr = result.address;
+  } catch {
+    return null;
+  }
+
+  if (!addr?.road) return null;
+
+  const city = addr.city ?? addr.town ?? addr.village ?? addr.county;
+
+  // If Nominatim didn't return a house number, search for the nearest
+  // address on the same street via a structured Nominatim query (50 m radius).
+  const houseNumber =
+    addr.house_number ?? (await lookupNearestHouseNumber(lat, lng, addr.road, 50));
+
+  return {
+    address: formatAddress({ ...addr, house_number: houseNumber }),
+    city,
+  };
+}
+
+/**
+ * Query Overpass for the nearest node/way with addr:housenumber + addr:street
+ * matching the given road name, within radiusM metres of [lat, lng].
+ */
+async function lookupNearestHouseNumber(
+  lat: number,
+  lng: number,
+  road: string,
+  radiusM: number,
+): Promise<string | undefined> {
+  const escapedRoad = road.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const query = `[out:json][timeout:5];(node["addr:housenumber"]["addr:street"="${escapedRoad}"](around:${radiusM},${lat},${lng});way["addr:housenumber"]["addr:street"="${escapedRoad}"](around:${radiusM},${lat},${lng}););out center 5;`;
+
+  try {
+    const data = await overpassQuery(query);
+    if (!data.elements.length) return undefined;
+
+    const best = data.elements
+      .filter((el): el is OverpassNode | OverpassWay => el.type === "node" || el.type === "way")
+      .map((el) => {
+        let elLat: number;
+        let elLon: number;
+        if (el.type === "node") {
+          elLat = el.lat;
+          elLon = el.lon;
+        } else if (el.center) {
+          elLat = el.center.lat;
+          elLon = el.center.lon;
+        } else {
+          return null;
+        }
+        return {
+          hn: el.tags?.["addr:housenumber"],
+          dist: distanceMetres(lat, lng, elLat, elLon),
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null && !!c.hn)
+      .sort((a, b) => a.dist - b.dist)[0];
+
+    return best?.hn;
+  } catch {
+    return undefined;
+  }
+}
+
+const OVERPASS_BBOX_DEG = 0.002; // ~220 m half-width — tight enough to avoid neighbouring stations
+const OVERPASS_MAX_DISTANCE_M = 150;
+
+/**
+ * Find the OSM element nearest to [lat, lng] that matches one of the given
+ * tag filters, using Overpass. Returns null if nothing is found within
+ * OVERPASS_MAX_DISTANCE_M metres or if Overpass is unavailable.
+ *
+ * Used to enrich data-source items (fuel, EV, bike sharing, parking, car sharing)
+ * with the correct OSM node/way rather than a plain reverse geocode which returns
+ * whatever element is geometrically closest regardless of type.
+ */
+export async function lookupByOsmFilters(
+  lat: number,
+  lng: number,
+  filters: OsmFilter[],
+  originalId: string,
+): Promise<Place | null> {
+  const bboxStr = `${lat - OVERPASS_BBOX_DEG},${lng - OVERPASS_BBOX_DEG},${lat + OVERPASS_BBOX_DEG},${lng + OVERPASS_BBOX_DEG}`;
+
+  const escapeOql = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const lines = filters
+    .flatMap((f) => [
+      `node["${escapeOql(f.key)}"="${escapeOql(f.value)}"](${bboxStr});`,
+      `way["${escapeOql(f.key)}"="${escapeOql(f.value)}"](${bboxStr});`,
+    ])
+    .join("\n  ");
+  const query = `[out:json][timeout:10];\n(\n  ${lines}\n);\nout center 10;`;
+
+  try {
+    const data = await overpassQuery(query);
+    if (!data.elements.length) return null;
+
+    const candidates = data.elements
+      .filter((el): el is OverpassNode | OverpassWay => el.type === "node" || el.type === "way")
+      .map((el) => {
+        let elLat: number;
+        let elLon: number;
+        if (el.type === "node") {
+          elLat = el.lat;
+          elLon = el.lon;
+        } else if (el.center) {
+          elLat = el.center.lat;
+          elLon = el.center.lon;
+        } else {
+          return null;
+        }
+        return { el, elLat, elLon, dist: distanceMetres(lat, lng, elLat, elLon) };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .sort((a, b) => a.dist - b.dist);
+
+    const best = candidates[0];
+    if (!best || best.dist > OVERPASS_MAX_DISTANCE_M) return null;
+
+    return overpassElementToPlace(best.el, best.elLat, best.elLon, originalId);
+  } catch {
+    return null;
+  }
+}
+
+function overpassElementToPlace(
+  el: OverpassNode | OverpassWay,
+  lat: number,
+  lng: number,
+  originalId: string,
+): Place | null {
+  const tags = el.tags ?? {};
+  const name = tags.name ?? "";
+  const housenumber = tags["addr:housenumber"];
+  const street = tags["addr:street"];
+  const phone = tags.phone ?? tags["contact:phone"];
+  const website = tags.website ?? tags["contact:website"];
+  const openingHours = tags.opening_hours;
+
+  const city = tags["addr:city"] ?? tags["addr:town"] ?? undefined;
+  const countryCode = tags["addr:country"]?.toLowerCase() ?? undefined;
+  // Address from structured addr:* tags only — don't fall back to the element name
+  // because data source items use selectedPlace.name for identity already.
+  const address = formatAddress(
+    { road: street, house_number: housenumber, country_code: countryCode },
+    { appendCountry: false },
+  );
+
+  const osmTags: Record<string, string> = { ...tags };
+
+  return {
+    id: originalId,
+    name,
+    address,
+    city,
+    countryCode,
+    coordinates: [lng, lat],
+    phone,
+    website,
+    openingHours,
+    osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
+  };
 }

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@fragaria/address-formatter": "^6.7.1",
     "@openmapx/core": "workspace:^",
     "@openstreetmap/id-tagging-schema": "^6.15.0"
   }

@@ -41,6 +41,7 @@ const META: DataSourceMeta = {
   showResultsList: true,
   placeCategory: "Gas Station",
   placeCategoryRaw: "fuel",
+  osmFilters: CATEGORY_FILTERS.fuel,
   markerStyle: {
     type: "icon",
     variantColors: {},

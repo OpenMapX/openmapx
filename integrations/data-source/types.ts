@@ -1,4 +1,4 @@
-import type { BoundingBox, LngLat } from "@openmapx/core";
+import type { BoundingBox, LngLat, OsmFilter } from "@openmapx/core";
 
 export interface DataSourceAttribution {
   text: string;
@@ -25,6 +25,10 @@ export interface DataSourceMeta {
   placeCategory: string;
   /** Raw category string for data source matching (e.g., "fuel"). */
   placeCategoryRaw: string;
+  /** Overpass OSM tag filters used to find the corresponding OSM node near a clicked item.
+   *  When set, the place panel enriches with data from the matching OSM element instead
+   *  of a plain reverse geocode. Omit for sources with no reliable OSM equivalent (webcams, scooters). */
+  osmFilters?: OsmFilter[];
 }
 
 export interface DataSourceFilterDef {

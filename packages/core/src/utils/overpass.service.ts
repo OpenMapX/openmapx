@@ -145,6 +145,7 @@ export const CATEGORY_FILTERS: Record<string, OsmFilter[]> = {
   ],
   recycling: [{ key: "amenity", value: "recycling" }],
   car_rental: [{ key: "amenity", value: "car_rental" }],
+  car_sharing: [{ key: "amenity", value: "car_sharing" }],
   bicycle_rental: [{ key: "amenity", value: "bicycle_rental" }],
   airports: [
     { key: "aeroway", value: "aerodrome" },
