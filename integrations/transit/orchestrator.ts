@@ -201,7 +201,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         const plan = await provider.planTrip?.(params);
         if (plan?.itineraries?.length) {
           providerHealth.recordSuccess(provider.id);
-          return plan;
+          return { ...plan, provider: provider.prefix.replace(/:$/, "") };
         }
       } catch {
         providerHealth.recordFailure(provider.id);
