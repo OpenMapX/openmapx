@@ -53,7 +53,6 @@
       "url": "https://firms.modaps.eosdis.nasa.gov/",
       "license": "U.S. Public Domain",
       "licenseUrl": "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
-      "attribution": "Fire data by <a href=\"https://firms.modaps.eosdis.nasa.gov/\">NASA FIRMS</a>",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.nasa.gov/privacy/",

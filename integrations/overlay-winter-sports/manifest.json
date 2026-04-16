@@ -44,7 +44,7 @@
       "url": "https://www.opensnowmap.org/",
       "license": "CC BY-SA (tiles); ODbL (OSM data)",
       "licenseUrl": "https://www.opensnowmap.org/iframes/about.eng.html",
-      "attribution": "Ski data: <a href=\"https://www.opensnowmap.org/\">OpenSnowMap</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "attribution": "<a href=\"https://www.opensnowmap.org/\">OpenSnowMap</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",
       "providerCountry": "FR",
       "providerPrivacyUrl": "-",

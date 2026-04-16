@@ -56,7 +56,6 @@
       "url": "https://api.openaq.org/",
       "license": "CC BY 4.0 (varies per source)",
       "licenseUrl": "https://docs.openaq.org/resources/licenses",
-      "attribution": "Air quality data by <a href=\"https://openaq.org/\">OpenAQ</a>",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://openaq.org/privacy/",

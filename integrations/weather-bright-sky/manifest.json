@@ -36,7 +36,7 @@
       "url": "https://brightsky.dev/",
       "license": "MIT (software); CC BY 4.0 (DWD data)",
       "licenseUrl": "https://brightsky.dev/",
-      "attribution": "Weather data: <a href=\"https://www.dwd.de/\">DWD</a> via <a href=\"https://brightsky.dev/\">Bright Sky</a>",
+      "attribution": "<a href=\"https://www.dwd.de/\">DWD</a> via <a href=\"https://brightsky.dev/\">Bright Sky</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "-",

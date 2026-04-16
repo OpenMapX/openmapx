@@ -49,7 +49,6 @@
       "url": "https://earthquake.usgs.gov/",
       "license": "U.S. Public Domain",
       "licenseUrl": "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
-      "attribution": "Earthquake data by <a href=\"https://earthquake.usgs.gov/\">USGS</a>",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.doi.gov/privacy",

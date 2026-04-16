@@ -46,7 +46,6 @@
       "url": "https://api.openchargemap.io/",
       "license": "CC BY 4.0",
       "licenseUrl": "https://openchargemap.org/site/about/terms",
-      "attribution": "EV charging data by <a href=\"https://openchargemap.io/\">OpenChargeMap</a> (CC BY 4.0)",
       "commercialUse": "yes",
       "providerCountry": "AU",
       "providerPrivacyUrl": "https://www.openchargemap.org/about/terms",

@@ -31,7 +31,6 @@
       "url": "https://api.irail.be/",
       "license": "AGPL-3.0 (software); CC0 (log data)",
       "licenseUrl": "https://hello.irail.be/api/",
-      "attribution": "Belgian rail data by <a href=\"https://irail.be/\">iRail</a>",
       "commercialUse": "yes",
       "providerCountry": "BE",
       "providerPrivacyUrl": "-",

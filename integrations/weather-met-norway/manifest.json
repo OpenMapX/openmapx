@@ -22,7 +22,6 @@
       "url": "https://api.met.no/",
       "license": "CC BY 4.0 / NLOD 2.0",
       "licenseUrl": "https://api.met.no/doc/TermsOfService",
-      "attribution": "Weather data by <a href=\"https://api.met.no/\">MET Norway</a> (CC BY 4.0)",
       "commercialUse": "yes",
       "providerCountry": "NO",
       "providerPrivacyUrl": "https://www.met.no/en/About-us/privacy",

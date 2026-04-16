@@ -36,7 +36,6 @@
       "url": "https://air-quality-api.open-meteo.com/",
       "license": "CC BY 4.0 (free tier: non-commercial only)",
       "licenseUrl": "https://open-meteo.com/en/terms",
-      "attribution": "Air quality by <a href=\"https://open-meteo.com/\">Open-Meteo</a>",
       "commercialUse": "conditional",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://open-meteo.com/en/terms",

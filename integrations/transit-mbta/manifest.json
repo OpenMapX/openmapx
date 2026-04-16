@@ -37,7 +37,6 @@
       "url": "https://api-v3.mbta.com/",
       "license": "Proprietary (MassDOT Developers License)",
       "licenseUrl": "https://www.mbta.com/developers/v3-api",
-      "attribution": "Transit data by <a href=\"https://www.mbta.com/\">MBTA</a>",
       "commercialUse": "yes",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.mbta.com/policies/privacy-policy",

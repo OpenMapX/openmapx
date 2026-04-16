@@ -31,7 +31,6 @@
       "url": "https://transport.opendata.ch/",
       "license": "MIT (software)",
       "licenseUrl": "https://github.com/OpendataCH/Transport/blob/master/LICENSE",
-      "attribution": "Swiss transport data by <a href=\"https://transport.opendata.ch/\">OpenData.ch</a>",
       "commercialUse": "yes",
       "providerCountry": "CH",
       "providerPrivacyUrl": "-",
