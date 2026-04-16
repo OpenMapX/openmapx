@@ -46,6 +46,9 @@ interface RemarkChipProps {
 export function RemarkChip({ remark, inline = false }: RemarkChipProps) {
   const config = REMARK_CONFIG[remark.type];
   const Icon = config.icon;
+  const text = remark.text
+    ? remark.text.charAt(0).toUpperCase() + remark.text.slice(1)
+    : remark.text;
 
   if (inline) {
     return (
@@ -55,7 +58,7 @@ export function RemarkChip({ remark, inline = false }: RemarkChipProps) {
           variant="caption"
           sx={{ color: config.color, fontSize: "0.68rem", lineHeight: 1.4 }}
         >
-          {remark.text}
+          {text}
         </Typography>
       </Box>
     );
@@ -76,7 +79,7 @@ export function RemarkChip({ remark, inline = false }: RemarkChipProps) {
     >
       <Icon sx={{ fontSize: 15, color: config.color, mt: 0.1, flexShrink: 0 }} />
       <Typography variant="caption" sx={{ color: config.color, lineHeight: 1.4 }}>
-        {remark.text}
+        {text}
       </Typography>
     </Box>
   );
