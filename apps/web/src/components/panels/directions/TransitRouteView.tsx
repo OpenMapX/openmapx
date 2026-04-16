@@ -15,7 +15,7 @@ import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { formatTime } from "@/lib/formatTime";
-import { TEAL } from "@/lib/theme";
+import { TEAL, TEAL_HEX } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
@@ -79,7 +79,7 @@ function TransitLiveBadge({ tripId }: { tripId: string }) {
         px: 0.75,
         py: 0.25,
         borderRadius: 99,
-        bgcolor: `${TEAL}1a`,
+        bgcolor: `${TEAL_HEX}1a`,
       }}
     >
       <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#4caf50", flexShrink: 0 }} />
