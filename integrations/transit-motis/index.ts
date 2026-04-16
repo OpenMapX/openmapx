@@ -80,7 +80,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     id: "transit-motis-transitous",
     prefix: "mo:",
     coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
-    priority: 4,
+    priority: 3,
     getStopsNearby: (lat: number, lng: number, radiusMeters: number) => {
       const deg = radiusMeters / 111_320;
       return motis.getStops(transitousInstance, [lng - deg, lat - deg, lng + deg, lat + deg]);
@@ -120,7 +120,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
       id: "transit-motis-local",
       prefix: "ms:",
       coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
-      priority: 3,
+      priority: 2,
       getStopsNearby: (lat: number, lng: number, radiusMeters: number) => {
         const deg = radiusMeters / 111_320;
         return motis.getStops(motisLocalInstance, [lng - deg, lat - deg, lng + deg, lat + deg]);

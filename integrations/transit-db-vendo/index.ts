@@ -6,7 +6,7 @@ export function setup(ctx: IntegrationContext): void {
     id: "transit-db-vendo",
     prefix: "db:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
-    priority: 2,
+    priority: 4,
     getStopsNearby: (lat: number, lng: number, r: number) => dbVendo.getStopsNearby(lat, lng, r),
     getStop: (id: string) => dbVendo.getStop(id),
     getDepartures: (id: string, min: number) => dbVendo.getDepartures(id, min),
