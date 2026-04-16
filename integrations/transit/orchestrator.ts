@@ -10,7 +10,7 @@ import type {
 } from "@openmapx/core";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { providerHealth } from "./health.js";
-import type { TransitProvider } from "./types.js";
+import type { GeoJSONLineString, TransitProvider } from "./types.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -458,6 +458,23 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     }
   }
 
+  async function getLegGeometry(
+    tripId: string,
+    fromStopId?: string,
+    toStopId?: string,
+  ): Promise<GeoJSONLineString | null> {
+    const provider = resolveByPrefix(tripId);
+    if (!provider?.getLegGeometry) return null;
+    try {
+      const result = await provider.getLegGeometry(tripId, fromStopId, toStopId);
+      providerHealth.recordSuccess(provider.id);
+      return result;
+    } catch {
+      providerHealth.recordFailure(provider.id);
+      return null;
+    }
+  }
+
   async function getVehicleJourney(vehicleId: string, fallbackIds?: string[]): Promise<unknown> {
     const provider = resolveByPrefix(vehicleId);
     if (!provider?.getVehicleJourney) return null;
@@ -538,6 +555,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     getStopAlerts,
     getRouteAlerts,
     getVehiclePositions,
+    getLegGeometry,
     getVehicleJourney,
     getFacilities,
     getReachableStops,

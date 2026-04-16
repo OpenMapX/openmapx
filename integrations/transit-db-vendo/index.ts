@@ -34,5 +34,7 @@ export function setup(ctx: IntegrationContext): void {
     async getVehicleJourney(tripId: string) {
       return dbVendo.getTrip(tripId);
     },
+    getLegGeometry: (tripId: string, fromStopId?: string, toStopId?: string) =>
+      dbVendo.getLegGeometry(tripId, fromStopId, toStopId),
   });
 }

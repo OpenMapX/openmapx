@@ -32,6 +32,7 @@ export const API_ENDPOINTS = {
   transitRouteAlerts: "/api/integrations/transit/routes/:id/alerts",
   transitRouteLive: "/api/integrations/transit/routes/:id/live",
   transitPlan: "/api/integrations/transit/plan",
+  transitLegGeometry: "/api/integrations/transit/leg-geometry",
   transitAlerts: "/api/integrations/transit/alerts",
   transitVehicles: "/api/integrations/transit/vehicles",
   transitVehicleJourney: "/api/integrations/transit/vehicles/:id",

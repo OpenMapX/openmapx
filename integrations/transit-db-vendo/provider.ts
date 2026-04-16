@@ -18,14 +18,42 @@ import {
   USER_AGENT_TRANSIT,
 } from "@openmapx/core";
 import { createClient } from "db-vendo-client";
-import { profile as dbProfile } from "db-vendo-client/p/db/index.js";
+// dbnav uses app.services-bahn.de — documented as more stable than the db
+// profile (app.vendo.noncd.db.de, "possibly shut off soon" per readme).
+// @ts-expect-error — no type declarations for the dbnav profile sub-path
+import { profile as dbnavProfile } from "db-vendo-client/p/dbnav/index.js";
+// @ts-expect-error — no type declarations for the dbweb profile sub-path
+import { profile as dbwebProfile } from "db-vendo-client/p/dbweb/index.js";
+// @ts-expect-error — no type declarations for throttle/retry sub-paths
+import { withRetrying } from "db-vendo-client/retry.js";
+// @ts-expect-error — no type declarations for throttle/retry sub-paths
+import { withThrottling } from "db-vendo-client/throttle.js";
 
 const PREFIX = "db:";
+const UA = process.env.DB_USER_AGENT ?? USER_AGENT_TRANSIT;
 
+// Primary client for journey planning, departures, stops, etc.
+// dbnav quota: 60 req/min → throttle to 1/s. Retry up to 3× on transient
+// failures (network timeouts, 5xx); HafasErrors are never retried.
 // biome-ignore lint/suspicious/noExplicitAny: external untyped package
-const client: any = createClient(dbProfile, process.env.DB_USER_AGENT ?? USER_AGENT_TRANSIT, {
+const client: any = createClient(withRetrying(withThrottling(dbnavProfile, 1, 1000)), UA, {
   enrichStations: true,
 });
+
+// Secondary client for polyline geometry via /reiseloesung/fahrt?poly=true.
+// dbweb is "aggressively blocked" per docs, so we:
+//   • throttle to 1 req/2 s (very conservative)
+//   • retry up to 2× with a short backoff (3 s, 6 s) so the UI doesn't stall
+//   • randomize the User-Agent to reduce fingerprinting-based blocking
+// biome-ignore lint/suspicious/noExplicitAny: external untyped package
+const dbwebClient: any = createClient(
+  withRetrying(withThrottling({ ...dbwebProfile, randomizeUserAgent: true }, 1, 2000), {
+    retries: 2,
+    minTimeout: 3_000,
+    factor: 2,
+  }),
+  UA,
+);
 
 // biome-ignore lint/suspicious/noExplicitAny: external API response
 function normalizeStop(s: any): TransitStop {
@@ -175,9 +203,23 @@ function legToTripLeg(leg: any): TripLeg {
       [toLng, toLat],
     ],
   };
-  const polyFeature = leg.polyline?.features?.[0]?.geometry;
-  if (polyFeature?.type === "LineString" && Array.isArray(polyFeature.coordinates)) {
-    geometry = polyFeature as GeoJSONLineString;
+  if (Array.isArray(leg.stopovers) && leg.stopovers.length >= 2) {
+    // db-vendo-client does not support polylines in journeys(); use stopover
+    // coordinates as a multi-point fallback so the route passes through real
+    // intermediate stations instead of drawing a single straight line.
+    const coords: [number, number][] = [];
+    for (const s of leg.stopovers) {
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      const sv = s as any;
+      const lat = sv.stop?.location?.latitude ?? sv.location?.latitude;
+      const lng = sv.stop?.location?.longitude ?? sv.location?.longitude;
+      if (typeof lat === "number" && typeof lng === "number") {
+        coords.push([lng, lat]);
+      }
+    }
+    if (coords.length >= 2) {
+      geometry = { type: "LineString", coordinates: coords };
+    }
   }
 
   // stopovers includes origin + destination; subtract 2 for intermediate count
@@ -237,8 +279,11 @@ export async function planJourney(
         results: numItineraries ?? 3,
         stopovers: true,
         remarks: true,
-        // Note: polylines are NOT supported in journeys() for db-vendo-client;
-        // only in refreshJourney() and trip(). Geometry falls back to straight lines.
+        // polylines are not supported in journeys() for db-vendo-client; only
+        // refreshJourney() accepts the option, but the DB vendo API no longer
+        // returns polylineGroup data there either. We use stopover coordinates
+        // as a multi-point fallback (see legToTripLeg), and refine per-leg via
+        // getLegGeometry() when the user selects an itinerary.
       },
     );
     if (!data.journeys?.length) return null;
@@ -290,6 +335,120 @@ export async function planJourney(
       },
       itineraries,
     };
+  } catch {
+    return null;
+  }
+}
+
+// Leg Geometry
+
+/** Return the index in `coords` closest to `[lng, lat]` (squared equirectangular distance). */
+function closestIndex(coords: [number, number][], lng: number, lat: number): number {
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const d = (coords[i][0] - lng) ** 2 + (coords[i][1] - lat) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * Fetch the exact track shape for a single transit leg.
+ *
+ * Uses the bahn.de web client whose /reiseloesung/fahrt endpoint supports
+ * poly=true and returns the full polyline as a FeatureCollection of Points.
+ * The result is clipped to the user's boarding/alighting stops. Falls back to
+ * stopover coordinates if the polyline is not available.
+ */
+export async function getLegGeometry(
+  tripId: string,
+  fromStopId?: string,
+  toStopId?: string,
+): Promise<GeoJSONLineString | null> {
+  const rawId = stripPrefix(tripId);
+  const rawFrom = fromStopId ? stripPrefix(fromStopId) : undefined;
+  const rawTo = toStopId ? stripPrefix(toStopId) : undefined;
+  try {
+    // Use the bahn.de web client: its /reiseloesung/fahrt endpoint accepts
+    // poly=true and returns the full track polyline as a FeatureCollection of
+    // Point features. The HAFAS trip IDs from the db profile are compatible.
+    // biome-ignore lint/suspicious/noExplicitAny: external API response
+    const data: any = await dbwebClient.trip(rawId, { stopovers: true, polyline: true });
+    const trip = data.trip ?? data;
+
+    // The polyline comes back as a GeoJSON FeatureCollection of Point features.
+    // Convert to a LineString and clip to the boarding / alighting stops.
+    // biome-ignore lint/suspicious/noExplicitAny: external API response
+    const stopovers: any[] = trip.stopovers ?? [];
+    const polyCollection = trip.polyline;
+
+    if (
+      polyCollection?.type === "FeatureCollection" &&
+      Array.isArray(polyCollection.features) &&
+      polyCollection.features.length >= 2
+    ) {
+      const allCoords: [number, number][] = [];
+      // biome-ignore lint/suspicious/noExplicitAny: external API response
+      for (const f of polyCollection.features as any[]) {
+        if (f.geometry?.type === "Point" && Array.isArray(f.geometry.coordinates)) {
+          allCoords.push(f.geometry.coordinates as [number, number]);
+        }
+      }
+
+      if (allCoords.length >= 2) {
+        // Clip to the user's leg using the boarding/alighting stop coordinates
+        // as anchor points (find the nearest polyline point to each station).
+        const fromStop = rawFrom ? stopovers.find((s) => s.stop?.id === rawFrom) : null;
+        const toStop = rawTo ? stopovers.find((s) => s.stop?.id === rawTo) : null;
+
+        let startIdx = 0;
+        let endIdx = allCoords.length - 1;
+
+        if (fromStop?.stop?.location) {
+          startIdx = closestIndex(
+            allCoords,
+            fromStop.stop.location.longitude,
+            fromStop.stop.location.latitude,
+          );
+        }
+        if (toStop?.stop?.location) {
+          endIdx = closestIndex(
+            allCoords,
+            toStop.stop.location.longitude,
+            toStop.stop.location.latitude,
+          );
+        }
+
+        // Ensure correct order (trains always run origin→destination in the polyline)
+        if (startIdx > endIdx) [startIdx, endIdx] = [endIdx, startIdx];
+
+        const clipped = allCoords.slice(startIdx, endIdx + 1);
+        if (clipped.length >= 2) {
+          return { type: "LineString", coordinates: clipped };
+        }
+      }
+    }
+
+    // Fallback: use stopover coordinates clipped to the leg's stop range.
+    let fromIdx = rawFrom ? stopovers.findIndex((s) => s.stop?.id === rawFrom) : -1;
+    let toIdx = rawTo ? stopovers.findIndex((s) => s.stop?.id === rawTo) : -1;
+    if (fromIdx === -1) fromIdx = 0;
+    if (toIdx === -1) toIdx = stopovers.length - 1;
+
+    const slice = stopovers.slice(fromIdx, toIdx + 1);
+    const coords: [number, number][] = [];
+    for (const s of slice) {
+      const lat = s.stop?.location?.latitude;
+      const lng = s.stop?.location?.longitude;
+      if (typeof lat === "number" && typeof lng === "number") {
+        coords.push([lng, lat]);
+      }
+    }
+    return coords.length >= 2 ? { type: "LineString", coordinates: coords } : null;
   } catch {
     return null;
   }

@@ -9,6 +9,7 @@ import {
   getMergedRoutes,
   initTransitOrchestrator,
 } from "./place-transit.js";
+import type { GeoJSONLineString } from "./types.js";
 
 function parseBBox(q: Record<string, string>): BBox | null {
   const sw_lat = Number(q.sw_lat);
@@ -246,6 +247,39 @@ export function setup(ctx: IntegrationContext): void {
       orchestrator.getRouteAlerts(routeId),
     ]);
     reply.send({ vehicles, alerts });
+  });
+
+  // GET /leg-geometry
+  ctx.registerRoute("GET", "/leg-geometry", async (req, reply) => {
+    const tripId = req.query.trip_id?.trim();
+    if (!tripId) {
+      reply.status(400).send({ error: "Required: trip_id" });
+      return;
+    }
+    const fromStopId = req.query.from_stop_id?.trim() || undefined;
+    const toStopId = req.query.to_stop_id?.trim() || undefined;
+    // Trip polylines are static (trains always follow the same track), so cache
+    // aggressively in Redis to avoid hammering the dbweb endpoint on every request.
+    // Throw inside the callback when geometry is null so withCache does not
+    // persist the failure — a transient dbweb timeout would otherwise lock the
+    // trip into a 24h 404.
+    const cacheKey = `leg-geo:${tripId}:${fromStopId ?? ""}:${toStopId ?? ""}`;
+    let geometry: GeoJSONLineString | null = null;
+    try {
+      geometry = await ctx.cache.withCache(cacheKey, 86400, async () => {
+        const geo = await orchestrator.getLegGeometry(tripId, fromStopId, toStopId);
+        if (!geo) throw new Error("geometry unavailable");
+        return geo;
+      });
+    } catch {
+      // geometry remains null — transient failure, not cached
+    }
+    if (!geometry) {
+      reply.status(404).send({ error: "Geometry not available for this trip" });
+      return;
+    }
+    reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
+    reply.send(geometry);
   });
 
   // GET /plan

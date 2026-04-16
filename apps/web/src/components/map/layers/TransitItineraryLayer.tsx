@@ -1,7 +1,8 @@
 "use client";
 
-import { MODE_COLORS, useDirectionsStore } from "@openmapx/core";
-import { useEffect } from "react";
+import type { GeoJSONLineString } from "@integrations/transit/types";
+import { API_ENDPOINTS, apiClient, MODE_COLORS, useDirectionsStore } from "@openmapx/core";
+import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
 
@@ -14,6 +15,52 @@ const POINTS_LAYER_ID = "transit-itinerary-points";
 export function TransitItineraryLayer() {
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const { mode, transitItineraries, activeItineraryIndex } = useDirectionsStore();
+
+  // Refined per-leg geometries fetched lazily from /leg-geometry after the
+  // itinerary is selected. Keyed by tripId; replaces stopovers geometry when available.
+  const [legGeometries, setLegGeometries] = useState<Record<string, GeoJSONLineString>>({});
+  // Track the fetch generation so stale responses from a previous itinerary are discarded.
+  const fetchGenRef = useRef(0);
+  // Track which (itinerary list, index) pair has already had bounds fitted.
+  // Keying on the list reference catches new searches that reset the index back
+  // to 0, which a bare index comparison would miss.
+  const fittedRef = useRef<{ list: typeof transitItineraries; index: number } | null>(null);
+
+  useEffect(() => {
+    if (mode !== "transit") {
+      setLegGeometries({});
+      return;
+    }
+    const itinerary = transitItineraries[activeItineraryIndex];
+    if (!itinerary) return;
+
+    const gen = ++fetchGenRef.current;
+    setLegGeometries({});
+
+    const transitLegs = itinerary.legs.filter((leg) => leg.tripId && leg.mode !== "walking");
+    if (transitLegs.length === 0) return;
+
+    void Promise.allSettled(
+      transitLegs.map(async (leg) => {
+        if (!leg.tripId) return;
+        const { tripId } = leg;
+        try {
+          const params: Record<string, string> = { trip_id: tripId };
+          if (leg.from.stopId) params.from_stop_id = leg.from.stopId;
+          if (leg.to.stopId) params.to_stop_id = leg.to.stopId;
+          const geo = await apiClient.get<GeoJSONLineString>(
+            API_ENDPOINTS.transitLegGeometry,
+            params,
+          );
+          if (fetchGenRef.current === gen && geo?.coordinates?.length >= 2) {
+            setLegGeometries((prev) => ({ ...prev, [tripId]: geo }));
+          }
+        } catch {
+          // geometry not available for this leg — stopovers geometry is used
+        }
+      }),
+    );
+  }, [mode, transitItineraries, activeItineraryIndex]);
 
   useEffect(() => {
     void styleVersion;
@@ -38,7 +85,7 @@ export function TransitItineraryLayer() {
 
     cleanup();
 
-    // Build line features for each leg
+    // Build line features for each leg; use refined trip geometry when available
     const lineFeatures = itinerary.legs.map((leg, i) => {
       const isWalk = leg.mode === "walking";
       const color = isWalk
@@ -46,11 +93,12 @@ export function TransitItineraryLayer() {
         : leg.route?.color
           ? `#${leg.route.color.replace("#", "")}`
           : (MODE_COLORS[leg.mode] ?? PRIMARY_BLUE_HEX);
+      const geometry = (leg.tripId ? legGeometries[leg.tripId] : undefined) ?? leg.geometry;
 
       return {
         type: "Feature" as const,
         properties: { isWalk, color, index: i },
-        geometry: leg.geometry,
+        geometry,
       };
     });
 
@@ -126,27 +174,44 @@ export function TransitItineraryLayer() {
       },
     });
 
-    // Fit bounds to itinerary
-    const allCoords: [number, number][] = [];
-    for (const leg of itinerary.legs) {
-      for (const coord of leg.geometry.coordinates) {
-        allCoords.push(coord);
+    // Fit bounds only when the itinerary set or selected index changes, not on
+    // every legGeometries update. Comparing the list reference catches new
+    // searches that reset the index to 0 (a bare index check would miss them).
+    const alreadyFitted =
+      fittedRef.current?.list === transitItineraries &&
+      fittedRef.current?.index === activeItineraryIndex;
+    if (!alreadyFitted) {
+      fittedRef.current = { list: transitItineraries, index: activeItineraryIndex };
+      const allCoords: [number, number][] = [];
+      for (const leg of itinerary.legs) {
+        for (const coord of leg.geometry.coordinates) {
+          allCoords.push(coord);
+        }
       }
-    }
-    if (allCoords.length >= 2) {
-      const lngs = allCoords.map((c) => c[0]);
-      const lats = allCoords.map((c) => c[1]);
-      fitBounds(
-        [
-          [Math.min(...lngs), Math.min(...lats)],
-          [Math.max(...lngs), Math.max(...lats)],
-        ],
-        80,
-      );
+      if (allCoords.length >= 2) {
+        const lngs = allCoords.map((c) => c[0]);
+        const lats = allCoords.map((c) => c[1]);
+        fitBounds(
+          [
+            [Math.min(...lngs), Math.min(...lats)],
+            [Math.max(...lngs), Math.max(...lats)],
+          ],
+          80,
+        );
+      }
     }
 
     return cleanup;
-  }, [mapRef, mapReady, styleVersion, mode, transitItineraries, activeItineraryIndex, fitBounds]);
+  }, [
+    mapRef,
+    mapReady,
+    styleVersion,
+    mode,
+    transitItineraries,
+    activeItineraryIndex,
+    fitBounds,
+    legGeometries,
+  ]);
 
   return null;
 }

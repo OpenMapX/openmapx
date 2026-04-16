@@ -252,6 +252,11 @@ export interface TransitProvider {
   getRoute?(routeId: string): Promise<TransitRoute | null>;
   getRouteStops?(routeId: string, hintStopId?: string): Promise<TransitStop[]>;
   planTrip?(params: TripPlanParams): Promise<TripPlan | null>;
+  getLegGeometry?(
+    tripId: string,
+    fromStopId?: string,
+    toStopId?: string,
+  ): Promise<GeoJSONLineString | null>;
   getAlerts?(bbox: BBox): Promise<ServiceAlert[]>;
   getStopAlerts?(stopId: string): Promise<ServiceAlert[]>;
   getRouteAlerts?(routeId: string): Promise<ServiceAlert[]>;
