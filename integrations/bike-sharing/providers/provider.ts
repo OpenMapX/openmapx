@@ -11,7 +11,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
 import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
@@ -136,20 +136,14 @@ class BikeSharingProvider implements DataSourceProvider {
       results.push(mapStationToResult(s));
     }
 
-    // DB free-floating bikes
-    if (dbBikeResult.status === "fulfilled") {
-      for (const v of dbBikeResult.value.vehicles) {
-        updateCache(v.id, v);
-        results.push(mapVehicleToResult(v));
-      }
-    }
+    // Collect all free-floating bikes: direct sources first, MOTIS last.
+    const allVehicles: SharedMobilityVehicle[] = [];
+    if (dbBikeResult.status === "fulfilled") allVehicles.push(...dbBikeResult.value.vehicles);
+    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
 
-    // MOTIS/Transitous free-floating bikes
-    if (motisResult.status === "fulfilled") {
-      for (const v of motisResult.value.vehicles) {
-        updateCache(v.id, v);
-        results.push(mapVehicleToResult(v));
-      }
+    for (const v of dedupVehicles(allVehicles)) {
+      updateCache(v.id, v);
+      results.push(mapVehicleToResult(v));
     }
 
     return results;

@@ -2,8 +2,21 @@
  * Maps shared mobility stations and vehicles to DataSource types.
  */
 
-import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
+import type {
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+  PricingPlanEntry,
+} from "@openmapx/core";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
+
+/** Detects raw slugs like "berlin-scooter-system-pricing-plan" (no spaces, all lowercase). */
+const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
+
+function cleanPlanName(name: string, description?: string): string {
+  if (SLUG_RE.test(name.trim())) return description?.trim() ?? "";
+  return name.trim();
+}
 
 function stationVariant(station: SharedMobilityStation): string {
   if (!station.isActive) return "inactive";
@@ -108,7 +121,10 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   if (station.vehicleTypeDetails && station.vehicleTypeDetails.length > 0) {
     const vtRows: (string | number)[][] = [];
     for (const vt of station.vehicleTypeDetails) {
-      const label = vt.make && vt.model ? `${vt.make} ${vt.model}` : vt.name || "Vehicle";
+      const label =
+        (vt.make && vt.model ? `${vt.make} ${vt.model}` : vt.name) ||
+        (vt.formFactor ? FORM_FACTOR_LABELS[vt.formFactor] : null) ||
+        "Vehicle";
       const propLabel = vt.propulsion
         ? (PROPULSION_LABELS[vt.propulsion] ?? vt.propulsion)
         : undefined;
@@ -142,19 +158,19 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Pricing
   if (station.pricingDetails && station.pricingDetails.length > 0) {
-    const sym =
-      station.pricingDetails[0].currency === "EUR" ? "€" : station.pricingDetails[0].currency;
-    const priceItems = station.pricingDetails.map((p) => {
-      const rates: string[] = [];
-      if (p.flatRate) rates.push(`${p.flatRate.toFixed(2)} ${sym}`);
-      if (p.perKmRate !== undefined) rates.push(`${p.perKmRate.toFixed(2)} ${sym}/km`);
-      if (p.perHourRate !== undefined) rates.push(`${p.perHourRate.toFixed(2)} ${sym}/h`);
-      return `${p.name}: ${rates.join(" + ") || "Free"}`;
-    });
+    const pricingPlans: PricingPlanEntry[] = station.pricingDetails.map((p) => ({
+      name: cleanPlanName(p.name, p.description),
+      description: p.description,
+      currency: p.currency,
+      unlockFee: p.flatRate,
+      perKm: p.perKmRate,
+      perHour: p.perHourRate,
+      free: !p.flatRate && p.perKmRate === undefined && p.perHourRate === undefined,
+    }));
     sections.push({
       title: "Pricing",
-      type: "list",
-      items: priceItems,
+      type: "pricing",
+      pricingPlans,
       sectionIcon: "payments",
       collapsed: true,
     });

@@ -30,6 +30,7 @@ import {
   type DataSourceDetail,
   type DataSourceDetailSection,
   extractSourcePrefix,
+  type PricingPlanEntry,
   useIntegrationRegistry,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -290,6 +291,74 @@ function KeyValueRow({ row }: { row: (string | number)[] }) {
   );
 }
 
+function PricingPlanRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "space-between",
+        py: 0.5,
+        "&:not(:last-child)": { borderBottom: 1, borderColor: "divider" },
+      }}
+    >
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="body2" fontWeight={500}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function PricingPlansSection({ plans }: { plans: PricingPlanEntry[] }) {
+  const t = useTranslations("dataSources");
+  return (
+    <Box>
+      {plans.map((plan, i) => {
+        const sym = plan.currency === "EUR" ? "€" : plan.currency;
+        const name = plan.name || t("pricingStandardPlan");
+        const showName = plans.length > 1 || !!plan.name;
+        const planKey = `${plan.name}-${plan.currency}-${plan.unlockFee ?? ""}-${plan.perKm ?? ""}-${plan.perHour ?? ""}`;
+        return (
+          <Box key={planKey}>
+            {i > 0 && <Divider sx={{ my: 1 }} />}
+            {showName && (
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                {name}
+              </Typography>
+            )}
+            {plan.free ? (
+              <PricingPlanRow label={t("pricingUnlockFee")} value={t("pricingFree")} />
+            ) : (
+              <>
+                {plan.unlockFee !== undefined && (
+                  <PricingPlanRow
+                    label={t("pricingUnlockFee")}
+                    value={`${plan.unlockFee.toFixed(2)} ${sym}`}
+                  />
+                )}
+                {plan.perKm !== undefined && (
+                  <PricingPlanRow
+                    label={t("pricingPerKm")}
+                    value={`${plan.perKm.toFixed(2)} ${sym}/km`}
+                  />
+                )}
+                {plan.perHour !== undefined && (
+                  <PricingPlanRow
+                    label={t("pricingPerHour")}
+                    value={`${plan.perHour.toFixed(2)} ${sym}/h`}
+                  />
+                )}
+              </>
+            )}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 function SectionContent({ section }: { section: DataSourceDetailSection }) {
   switch (section.type) {
     case "table": {
@@ -314,6 +383,11 @@ function SectionContent({ section }: { section: DataSourceDetailSection }) {
           ))}
         </Box>
       );
+    }
+
+    case "pricing": {
+      if (!section.pricingPlans || section.pricingPlans.length === 0) return null;
+      return <PricingPlansSection plans={section.pricingPlans} />;
     }
 
     case "list": {

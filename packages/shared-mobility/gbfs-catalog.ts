@@ -168,7 +168,7 @@ export function filterCatalogByBbox(
 
 /** Known GBFS operator keywords for scooter/moped systems. */
 const SCOOTER_KEYWORDS =
-  /\b(tier|voi|lime|bird|bolt|spin|circ|link|zeus|hive|wind|flash|scooter|kick|e-scoot|escoot|superpedestrian|neuron|beam|zipp|gosharing|felyx|moped)\b/i;
+  /\b(tier|voi|lime|bird|bolt|dott|spin|circ|link|zeus|hive|wind|flash|scooter|kick|e-scoot|escoot|superpedestrian|neuron|beam|zipp|gosharing|felyx|moped)\b/i;
 
 function entryMatchesCity(entry: GbfsCatalogEntry, cityLower: string): boolean {
   return (

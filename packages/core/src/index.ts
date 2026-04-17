@@ -8,6 +8,7 @@ export type {
   DataSourceMarkerStyle,
   DataSourceMeta,
   DataSourceResult,
+  PricingPlanEntry,
 } from "@integrations/data-source/types";
 export type {
   AutocompleteResult,

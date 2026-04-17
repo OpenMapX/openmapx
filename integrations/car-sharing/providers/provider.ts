@@ -11,7 +11,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
 import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
@@ -112,20 +112,14 @@ class CarSharingProvider implements DataSourceProvider {
       results.push(mapStationToResult(station));
     }
 
-    // GBFS free-floating vehicles
-    if (gbfsResult.status === "fulfilled") {
-      for (const vehicle of gbfsResult.value.vehicles) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
-      }
-    }
+    // Collect all free-floating vehicles: GBFS first, MOTIS last.
+    const allVehicles: SharedMobilityVehicle[] = [];
+    if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
+    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
 
-    // MOTIS/Transitous free-floating cars
-    if (motisResult.status === "fulfilled") {
-      for (const vehicle of motisResult.value.vehicles) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
-      }
+    for (const vehicle of dedupVehicles(allVehicles)) {
+      updateCache(vehicle.id, vehicle);
+      results.push(mapVehicleToResult(vehicle));
     }
 
     return results;

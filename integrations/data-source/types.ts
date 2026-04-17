@@ -55,9 +55,20 @@ export interface DataSourceResult {
   sortValues?: Record<string, number>;
 }
 
+export interface PricingPlanEntry {
+  /** Human-readable plan name, or empty string to render a generic fallback label. */
+  name: string;
+  description?: string;
+  currency: string;
+  unlockFee?: number;
+  perKm?: number;
+  perHour?: number;
+  free?: boolean;
+}
+
 export interface DataSourceDetailSection {
   title: string;
-  type: "table" | "list" | "text" | "image" | "embed";
+  type: "table" | "list" | "text" | "image" | "embed" | "pricing";
   columns?: string[];
   rows?: (string | number)[][];
   items?: string[];
@@ -85,6 +96,8 @@ export interface DataSourceDetailSection {
     | "open_in_new"
     | "videocam"
     | "warning";
+  /** Structured pricing plans for type "pricing". */
+  pricingPlans?: PricingPlanEntry[];
   /** When true, the section renders collapsed by default with a toggle to expand. */
   collapsed?: boolean;
 }

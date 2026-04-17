@@ -164,7 +164,9 @@ async function fetchSystemData(
     vehicleTypes,
     pricingPlans,
   } = systemData;
-  const operator = systemInfo?.operator ?? systemInfo?.name ?? systemName;
+  const operator = (systemInfo?.operator ?? systemInfo?.name ?? systemName).replace(/\b\w/g, (c) =>
+    c.toUpperCase(),
+  );
   const source = `gbfs/${systemId}`;
 
   // When a system has no vehicle_types feed, use the caller-specified default.
@@ -180,11 +182,10 @@ async function fetchSystemData(
     console.log(
       `[gbfs] ${systemId}: ${stationInfos.length} stations, ${rawVehicles.length} raw vehicles, vtypes=[${vtSummary}], default=${defaultFormFactor}`,
     );
-    // Count vehicles by filter reason
+    // Count vehicles by filter reason (for logging only)
     let noCoords = 0;
     let reserved = 0;
     let atStation = 0;
-    let formMismatch = 0;
     let outsideBbox = 0;
     let passed = 0;
     for (const v of rawVehicles) {
@@ -200,11 +201,6 @@ async function fetchSystemData(
         atStation++;
         continue;
       }
-      const ff = getFormFactor(v.vehicleTypeId);
-      if (!targetFormFactors.has(ff)) {
-        formMismatch++;
-        continue;
-      }
       if (!bboxContains(bbox, v.lat, v.lon)) {
         outsideBbox++;
         continue;
@@ -212,7 +208,7 @@ async function fetchSystemData(
       passed++;
     }
     console.log(
-      `[gbfs] ${systemId} vehicles: ${passed} pass, ${outsideBbox} outside bbox, ${formMismatch} form mismatch, ${atStation} at station, ${noCoords} no coords, ${reserved} reserved/disabled`,
+      `[gbfs] ${systemId} vehicles: ${passed} pass for bbox, ${outsideBbox} outside bbox, ${atStation} at station, ${noCoords} no coords, ${reserved} reserved/disabled`,
     );
   } else {
     console.log(`[gbfs] ${systemId}: 0 stations, 0 vehicles`);
@@ -272,7 +268,8 @@ async function fetchSystemData(
       const vt = vehicleTypes.get(vtId);
       if (!vt || !targetFormFactors.has(normalizeFormFactor(vt.formFactor))) continue;
       vtDetails.push({
-        name: vt.name ?? (`${vt.make ?? ""} ${vt.model ?? ""}`.trim() || "Vehicle"),
+        name: vt.name ?? `${vt.make ?? ""} ${vt.model ?? ""}`.trim(),
+        formFactor: normalizeFormFactor(vt.formFactor),
         make: vt.make,
         model: vt.model,
         propulsion: vt.propulsionType,
@@ -287,6 +284,7 @@ async function fetchSystemData(
 
     // Collect pricing details
     const pricingDetails: PricingDetail[] = [];
+    let cheapestUnlock: number | undefined;
     let cheapestPerKm: number | undefined;
     let cheapestPerHour: number | undefined;
     for (const pid of pricingPlanIds) {
@@ -299,6 +297,9 @@ async function fetchSystemData(
         minPricing && minPricing.interval > 0
           ? (minPricing.rate / minPricing.interval) * 60
           : undefined;
+      const flatRate = pp.price > 0 ? pp.price : undefined;
+      if (flatRate !== undefined && (cheapestUnlock === undefined || flatRate < cheapestUnlock))
+        cheapestUnlock = flatRate;
       if (perKmRate !== undefined && (cheapestPerKm === undefined || perKmRate < cheapestPerKm))
         cheapestPerKm = perKmRate;
       if (
@@ -313,17 +314,22 @@ async function fetchSystemData(
         currency: pp.currency,
         perKmRate,
         perHourRate: perHourRate && perHourRate > 0 ? perHourRate : undefined,
-        flatRate: pp.price > 0 ? pp.price : undefined,
+        flatRate,
       });
     }
 
-    // Build pricing summary
+    // Build compact pricing summary (shown in the Availability table row)
     let pricingSummary: string | undefined;
-    if (cheapestPerKm !== undefined || cheapestPerHour !== undefined) {
+    if (
+      cheapestUnlock !== undefined ||
+      cheapestPerKm !== undefined ||
+      cheapestPerHour !== undefined
+    ) {
       const parts: string[] = [];
+      if (cheapestUnlock !== undefined) parts.push(`${cheapestUnlock.toFixed(2)} €`);
       if (cheapestPerKm !== undefined) parts.push(`${cheapestPerKm.toFixed(2)} €/km`);
       if (cheapestPerHour !== undefined) parts.push(`${cheapestPerHour.toFixed(2)} €/h`);
-      pricingSummary = `from ${parts.join(" + ")}`;
+      pricingSummary = parts.join(" + ");
     }
 
     stations.push({
@@ -345,7 +351,9 @@ async function fetchSystemData(
     });
   }
 
-  // Map free-floating vehicles
+  // Map free-floating vehicles — include ALL form factors so the cached entry can be
+  // shared across providers (bike-sharing, scooter-sharing, car-sharing). Form factor
+  // filtering happens on cache retrieval below.
   const vehicles: SharedMobilityVehicle[] = [];
   for (const v of rawVehicles) {
     if (v.isReserved || v.isDisabled) continue;
@@ -353,8 +361,6 @@ async function fetchSystemData(
     if (v.stationId) continue; // Skip vehicles at stations (already counted)
 
     const formFactor = getFormFactor(v.vehicleTypeId);
-    if (!targetFormFactors.has(formFactor)) continue;
-
     const vt = v.vehicleTypeId ? vehicleTypes.get(v.vehicleTypeId) : null;
 
     vehicles.push({
@@ -374,12 +380,20 @@ async function fetchSystemData(
     });
   }
 
-  // Cache all data (pre-bbox-filter) in Redis for reuse across different bboxes
+  // Cache all data (pre-bbox-filter, all form factors) in Redis for reuse across providers/bboxes
   await cacheSet(cacheKey, { stations, vehicles }, SYSTEM_CACHE_TTL);
 
-  // Filter to bbox
+  // Filter to bbox and target form factors
   return {
-    stations: stations.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0])),
-    vehicles: vehicles.filter((v) => bboxContains(bbox, v.coordinates[1], v.coordinates[0])),
+    stations: stations.filter(
+      (s) =>
+        bboxContains(bbox, s.coordinates[1], s.coordinates[0]) &&
+        s.vehicleTypes.some((vt) => targetFormFactors.has(vt)),
+    ),
+    vehicles: vehicles.filter(
+      (v) =>
+        bboxContains(bbox, v.coordinates[1], v.coordinates[0]) &&
+        targetFormFactors.has(v.formFactor),
+    ),
   };
 }

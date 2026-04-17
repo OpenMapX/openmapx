@@ -11,7 +11,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
 import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
@@ -111,44 +111,18 @@ class ScooterSharingProvider implements DataSourceProvider {
       results.push(mapStationToResult(station));
     }
 
-    // GBFS free-floating vehicles
-    if (gbfsResult.status === "fulfilled") {
-      for (const vehicle of gbfsResult.value.vehicles) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
-      }
-    }
+    // Collect all free-floating vehicles: direct sources first, MOTIS last.
+    // dedupVehicles drops MOTIS vehicles that have a direct-source counterpart nearby.
+    const allVehicles: SharedMobilityVehicle[] = [];
+    if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
+    if (felyxResult.status === "fulfilled") allVehicles.push(...felyxResult.value);
+    if (goSharingResult.status === "fulfilled") allVehicles.push(...goSharingResult.value);
+    if (linkResult.status === "fulfilled") allVehicles.push(...linkResult.value);
+    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
 
-    // Felyx mopeds
-    if (felyxResult.status === "fulfilled") {
-      for (const vehicle of felyxResult.value) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
-      }
-    }
-
-    // GO Sharing scooters
-    if (goSharingResult.status === "fulfilled") {
-      for (const vehicle of goSharingResult.value) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
-      }
-    }
-
-    // Link e-scooters
-    if (linkResult.status === "fulfilled") {
-      for (const vehicle of linkResult.value) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
-      }
-    }
-
-    // MOTIS/Transitous free-floating scooters
-    if (motisResult.status === "fulfilled") {
-      for (const vehicle of motisResult.value.vehicles) {
-        updateCache(vehicle.id, vehicle);
-        results.push(mapVehicleToResult(vehicle));
-      }
+    for (const vehicle of dedupVehicles(allVehicles)) {
+      updateCache(vehicle.id, vehicle);
+      results.push(mapVehicleToResult(vehicle));
     }
 
     return results;

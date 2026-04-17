@@ -1,5 +1,10 @@
 import { type Client, createClient } from "@hey-api/client-fetch";
-import type { RentalFormFactor, RentalStation, RentalVehicle } from "@motis-project/motis-client";
+import type {
+  RentalFormFactor,
+  RentalProvider,
+  RentalStation,
+  RentalVehicle,
+} from "@motis-project/motis-client";
 import { rentals } from "@motis-project/motis-client";
 import type { LngLat } from "@openmapx/core";
 
@@ -86,7 +91,11 @@ function mapPropulsion(p: string): VehiclePropulsion | undefined {
   }
 }
 
-function mapStation(s: RentalStation): SharedMobilityStation {
+function resolveOperator(providerId: string, providerNames: Map<string, string>): string {
+  return providerNames.get(providerId) ?? providerId;
+}
+
+function mapStation(s: RentalStation, providerNames: Map<string, string>): SharedMobilityStation {
   const coordinates: LngLat = [s.lon, s.lat];
   const vehicleTypes = s.formFactors.map(mapFormFactor);
 
@@ -102,7 +111,7 @@ function mapStation(s: RentalStation): SharedMobilityStation {
     coordinates,
     availableVehicles: totalAvailable,
     emptySlots: totalDocks > 0 ? totalDocks : undefined,
-    operator: s.providerId,
+    operator: resolveOperator(s.providerId, providerNames),
     vehicleTypes: vehicleTypes.length > 0 ? vehicleTypes : ["other"],
     isActive: s.isRenting || s.isReturning,
     sources: [SOURCE],
@@ -110,7 +119,7 @@ function mapStation(s: RentalStation): SharedMobilityStation {
   };
 }
 
-function mapVehicle(v: RentalVehicle): SharedMobilityVehicle {
+function mapVehicle(v: RentalVehicle, providerNames: Map<string, string>): SharedMobilityVehicle {
   const coordinates: LngLat = [v.lon, v.lat];
 
   return {
@@ -120,9 +129,18 @@ function mapVehicle(v: RentalVehicle): SharedMobilityVehicle {
     propulsion: mapPropulsion(v.propulsionType),
     isReserved: v.isReserved,
     isDisabled: v.isDisabled,
-    operator: v.providerId,
+    operator: resolveOperator(v.providerId, providerNames),
     sources: [SOURCE],
   };
+}
+
+function buildProviderNames(providers: RentalProvider[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const p of providers) {
+    const displayName = (p.name || p.operator || p.id).replace(/\b\w/g, (c) => c.toUpperCase());
+    map.set(p.id, displayName);
+  }
+  return map;
 }
 
 export async function fetchMotisRentals(
@@ -143,7 +161,7 @@ export async function fetchMotisRentals(
       query: {
         min: `${south},${west}`,
         max: `${north},${east}`,
-        withProviders: false,
+        withProviders: true,
         withStations: true,
         withVehicles: true,
       },
@@ -158,7 +176,8 @@ export async function fetchMotisRentals(
     return { stations: [], vehicles: [] };
   }
 
-  const { stations: rawStations, vehicles: rawVehicles } = responseData;
+  const { providers: rawProviders, stations: rawStations, vehicles: rawVehicles } = responseData;
+  const providerNames = buildProviderNames(rawProviders ?? []);
 
   let filteredStations = rawStations;
   if (formFactors && formFactors.length > 0) {
@@ -167,7 +186,7 @@ export async function fetchMotisRentals(
     );
   }
 
-  const stations = filteredStations.map(mapStation);
+  const stations = filteredStations.map((s) => mapStation(s, providerNames));
 
   const activeVehicles = rawVehicles.filter((v) => !v.isReserved && !v.isDisabled);
   let filteredVehicles = activeVehicles;
@@ -176,7 +195,7 @@ export async function fetchMotisRentals(
       formFactors.includes(mapFormFactor(v.formFactor)),
     );
   }
-  const vehicles = filteredVehicles.map(mapVehicle);
+  const vehicles = filteredVehicles.map((v) => mapVehicle(v, providerNames));
 
   return { stations, vehicles };
 }

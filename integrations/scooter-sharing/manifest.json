@@ -88,6 +88,20 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    },
+    {
+      "sourceId": "transitous",
+      "name": "Transitous",
+      "url": "https://api.transitous.org/",
+      "license": "AGPL-3.0-or-later",
+      "licenseUrl": "https://transitous.org/api/",
+      "commercialUse": "no",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://transitous.org/privacy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

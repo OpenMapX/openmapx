@@ -32,7 +32,7 @@
   "dataSources": [
     {
       "sourceId": "transitous",
-      "name": "Transitous (Cloud MOTIS)",
+      "name": "Transitous",
       "url": "https://api.transitous.org/",
       "license": "AGPL-3.0-or-later",
       "licenseUrl": "https://transitous.org/api/",

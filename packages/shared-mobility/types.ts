@@ -50,6 +50,7 @@ export interface SharedMobilityStation {
 
 export interface VehicleTypeDetail {
   name: string;
+  formFactor?: VehicleFormFactor;
   make?: string;
   model?: string;
   propulsion?: string;

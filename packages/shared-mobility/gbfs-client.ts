@@ -54,15 +54,18 @@ async function fetchJson<T>(url: string): Promise<T | null> {
 
 function resolveFeedUrl(discovery: GbfsDiscoveryResponse, feedName: string): string | null {
   // v2: data.en.feeds[] or data.<lang>.feeds[]
-  const v2Feeds =
-    discovery.data?.en?.feeds ??
+  // We need the language container object (which has a `feeds` property), not the feeds array itself
+  const langContainer =
+    discovery.data?.en ??
     (discovery.data
-      ? Object.values(discovery.data).find(
+      ? (Object.values(discovery.data).find(
           (v) => typeof v === "object" && v !== null && "feeds" in v,
-        )
+        ) as { feeds: GbfsDiscoveryFeed[] } | undefined)
       : null);
-  if (v2Feeds && typeof v2Feeds === "object" && "feeds" in v2Feeds) {
-    const feed = (v2Feeds as { feeds: GbfsDiscoveryFeed[] }).feeds.find((f) => f.name === feedName);
+  if (langContainer && "feeds" in langContainer) {
+    const feed = (langContainer as { feeds: GbfsDiscoveryFeed[] }).feeds.find(
+      (f) => f.name === feedName,
+    );
     if (feed) return feed.url;
   }
   // v3: data.feeds[]

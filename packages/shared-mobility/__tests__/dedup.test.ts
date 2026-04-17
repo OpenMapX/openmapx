@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../../utils/geo.js", () => ({
-  diceSimilarity: vi.fn(),
-  haversineMeters: vi.fn(),
-}));
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core")>();
+  return { ...actual, haversineMeters: vi.fn(), diceSimilarity: vi.fn() };
+});
 
 import type { SharedMobilityStation } from "@openmapx/core";
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
-import { dedupStations } from "../dedup.js";
+import { dedupStations, dedupVehicles } from "../dedup.js";
+import type { SharedMobilityVehicle } from "../types.js";
 
 const mockHaversine = vi.mocked(haversineMeters);
 const mockDice = vi.mocked(diceSimilarity);
@@ -239,5 +240,178 @@ describe("dedupStations", () => {
     // Source code calls haversineMeters(s.coordinates[1], s.coordinates[0], existing.coordinates[1], existing.coordinates[0])
     // b is the new station (s), a is existing
     expect(mockHaversine).toHaveBeenCalledWith(52.53, 13.42, 52.52, 13.41);
+  });
+});
+
+function makeVehicle(
+  overrides: Partial<SharedMobilityVehicle> &
+    Pick<SharedMobilityVehicle, "id" | "coordinates" | "sources">,
+): SharedMobilityVehicle {
+  return {
+    formFactor: "scooter_standing",
+    isReserved: false,
+    isDisabled: false,
+    ...overrides,
+  };
+}
+
+describe("dedupVehicles", () => {
+  // ID formats used throughout:
+  //   GBFS:       "gbfs/<system>/<uuid>"  →  raw ID = "<uuid>"
+  //   Transitous: "motis:<uuid>"          →  raw ID = "<uuid>"
+
+  it("returns empty array for empty input", () => {
+    expect(dedupVehicles([])).toEqual([]);
+  });
+
+  it("keeps a single direct-source vehicle", () => {
+    const v = makeVehicle({
+      id: "gbfs/dott-berlin/uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/dott-berlin"],
+    });
+    expect(dedupVehicles([v])).toHaveLength(1);
+  });
+
+  it("keeps a single aggregator vehicle when there is no direct-source counterpart", () => {
+    const v = makeVehicle({
+      id: "motis:uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["transitous"],
+    });
+    expect(dedupVehicles([v])).toHaveLength(1);
+  });
+
+  it("merges sources when GBFS and Transitous share the same raw vehicle ID", () => {
+    const gbfs = makeVehicle({
+      id: "gbfs/dott-berlin/uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/dott-berlin"],
+    });
+    const transitous = makeVehicle({
+      id: "motis:uuid-1",
+      coordinates: [13.5, 52.6],
+      sources: ["transitous"],
+    });
+    // Coordinates deliberately differ — ID match is the only criterion
+
+    const result = dedupVehicles([gbfs, transitous]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("gbfs/dott-berlin/uuid-1");
+    expect(result[0].sources).toEqual(["gbfs/dott-berlin", "transitous"]);
+  });
+
+  it("keeps both when raw IDs differ (genuinely different vehicles)", () => {
+    const gbfs = makeVehicle({
+      id: "gbfs/dott-berlin/uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/dott-berlin"],
+    });
+    const transitous = makeVehicle({
+      id: "motis:uuid-2",
+      coordinates: [13.41, 52.52],
+      sources: ["transitous"],
+    });
+
+    const result = dedupVehicles([gbfs, transitous]);
+    expect(result).toHaveLength(2);
+  });
+
+  it("never deduplicates two direct-source vehicles even if their raw IDs match", () => {
+    // Same UUID appearing in two different GBFS systems would be unusual but must not be deduped
+    const a = makeVehicle({
+      id: "gbfs/dott-berlin/uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/dott-berlin"],
+    });
+    const b = makeVehicle({
+      id: "gbfs/dott-aachen/uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/dott-aachen"],
+    });
+
+    const result = dedupVehicles([a, b]);
+    expect(result).toHaveLength(2);
+    expect(result.map((v) => v.id)).toEqual(["gbfs/dott-berlin/uuid-1", "gbfs/dott-aachen/uuid-1"]);
+  });
+
+  it("treats 'motis' source the same as 'transitous'", () => {
+    const gbfs = makeVehicle({
+      id: "gbfs/foo/uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/foo"],
+    });
+    const motis = makeVehicle({
+      id: "motis:uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["motis"],
+    });
+
+    const result = dedupVehicles([gbfs, motis]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("gbfs/foo/uuid-1");
+    expect(result[0].sources).toEqual(["gbfs/foo", "motis"]);
+  });
+
+  it("merges sources when two aggregator vehicles share a raw ID and no direct-source exists", () => {
+    const mo1 = makeVehicle({
+      id: "motis:uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["transitous"],
+    });
+    const mo2 = makeVehicle({
+      id: "motis:uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["motis"],
+    });
+
+    const result = dedupVehicles([mo1, mo2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("motis:uuid-1");
+    expect(result[0].sources).toEqual(["transitous", "motis"]);
+  });
+
+  it("keeps non-duplicate aggregator vehicles alongside merged ones", () => {
+    const gbfs = makeVehicle({
+      id: "gbfs/dott/uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/dott"],
+    });
+    const mo1 = makeVehicle({
+      id: "motis:uuid-1",
+      coordinates: [13.41, 52.52],
+      sources: ["transitous"],
+    }); // matches gbfs
+    const mo2 = makeVehicle({
+      id: "motis:uuid-2",
+      coordinates: [13.5, 52.6],
+      sources: ["transitous"],
+    }); // no match
+
+    const result = dedupVehicles([gbfs, mo1, mo2]);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("gbfs/dott/uuid-1");
+    expect(result[0].sources).toEqual(["gbfs/dott", "transitous"]);
+    expect(result[1].id).toBe("motis:uuid-2");
+    expect(result[1].sources).toEqual(["transitous"]);
+  });
+
+  it("extracts raw ID correctly from various ID formats", () => {
+    // "gbfs/system/uuid" → "uuid"
+    const a = makeVehicle({
+      id: "gbfs/dott-berlin/2850b11e-abc",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/dott-berlin"],
+    });
+    // "motis:uuid" → "uuid"
+    const b = makeVehicle({
+      id: "motis:2850b11e-abc",
+      coordinates: [13.41, 52.52],
+      sources: ["transitous"],
+    });
+
+    const result = dedupVehicles([a, b]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("gbfs/dott-berlin/2850b11e-abc");
   });
 });
