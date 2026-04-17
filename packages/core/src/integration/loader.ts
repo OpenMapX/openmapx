@@ -1,5 +1,6 @@
 import type { CustomHealthCheckFn } from "./context";
 import type { IntegrationManifest } from "./manifest";
+import { normalizeEnvVars } from "./manifest";
 
 export type IntegrationStrings = Record<string, Record<string, unknown>>;
 
@@ -30,11 +31,12 @@ export interface LoadedIntegrationMeta {
 }
 
 export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegrationMeta {
-  const envVars = integration.manifest.envVars;
+  // Only required env vars gate `configured`. Optional overrides don't block the UI.
+  const required = normalizeEnvVars(integration.manifest.envVars).filter((v) => v.required);
   const configured =
-    !envVars?.length ||
-    envVars.every((v) => {
-      const val = process.env[v];
+    required.length === 0 ||
+    required.every((v) => {
+      const val = process.env[v.name];
       return val !== undefined && val !== "";
     });
 

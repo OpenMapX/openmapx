@@ -1,6 +1,6 @@
 /**
  * Scooter Sharing data source provider.
- * Combines GBFS scooter feeds + Felyx + GO Sharing + Link.
+ * Combines GBFS scooter feeds + Felyx + GO Sharing + Link + NRW Mobidrom + MOTIS/Transitous.
  * Handles both free-floating vehicles and docked stations.
  */
 
@@ -28,6 +28,7 @@ import type { DataSourceProvider } from "../../data-source/types.js";
 import { searchFelyx } from "./felyx-client.js";
 import { searchGoSharing } from "./gosharing-client.js";
 import { searchLink } from "./link-client.js";
+import { searchNrwMobidrom } from "./nrw-mobidrom-client.js";
 
 // In-memory cache for detail lookups
 const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();
@@ -83,12 +84,13 @@ class ScooterSharingProvider implements DataSourceProvider {
     ];
 
     // Fetch from all sources in parallel
-    const [gbfsResult, felyxResult, goSharingResult, linkResult, motisResult] =
+    const [gbfsResult, felyxResult, goSharingResult, linkResult, nrwResult, motisResult] =
       await Promise.allSettled([
         fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
         searchFelyx(bbox),
         searchGoSharing(bbox),
         searchLink(bbox),
+        searchNrwMobidrom(bbox),
         fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
       ]);
 
@@ -99,7 +101,10 @@ class ScooterSharingProvider implements DataSourceProvider {
     if (gbfsResult.status === "fulfilled") {
       allStations.push(...gbfsResult.value.stations);
     }
-    // MOTIS/Transitous stations (appended last so existing sources take dedup priority)
+    // Aggregator stations (appended last so direct GBFS takes dedup priority)
+    if (nrwResult.status === "fulfilled") {
+      allStations.push(...nrwResult.value.stations);
+    }
     if (motisResult.status === "fulfilled") {
       allStations.push(...motisResult.value.stations);
     }
@@ -111,13 +116,15 @@ class ScooterSharingProvider implements DataSourceProvider {
       results.push(mapStationToResult(station));
     }
 
-    // Collect all free-floating vehicles: direct sources first, MOTIS last.
-    // dedupVehicles drops MOTIS vehicles that have a direct-source counterpart nearby.
+    // Collect all free-floating vehicles: direct sources first, aggregators last.
+    // dedupVehicles drops aggregator (NRW Mobidrom, MOTIS/Transitous) vehicles that have a
+    // direct-source counterpart with the same raw vehicle ID.
     const allVehicles: SharedMobilityVehicle[] = [];
     if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
     if (felyxResult.status === "fulfilled") allVehicles.push(...felyxResult.value);
     if (goSharingResult.status === "fulfilled") allVehicles.push(...goSharingResult.value);
     if (linkResult.status === "fulfilled") allVehicles.push(...linkResult.value);
+    if (nrwResult.status === "fulfilled") allVehicles.push(...nrwResult.value.vehicles);
     if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
 
     for (const vehicle of dedupVehicles(allVehicles)) {

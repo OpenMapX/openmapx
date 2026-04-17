@@ -14,7 +14,7 @@ import type {
 } from "./types.js";
 
 const FETCH_TIMEOUT_MS = 8_000;
-const HEADERS = {
+const BASE_HEADERS: Record<string, string> = {
   "User-Agent": USER_AGENT,
   Accept: "application/json",
 };
@@ -39,11 +39,12 @@ interface GbfsFeedResponse<T> {
   ttl?: number;
 }
 
-async function fetchJson<T>(url: string): Promise<T | null> {
+async function fetchJson<T>(url: string, extraHeaders?: Record<string, string>): Promise<T | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, { headers: HEADERS, signal: controller.signal });
+    const headers = extraHeaders ? { ...BASE_HEADERS, ...extraHeaders } : BASE_HEADERS;
+    const res = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timer);
     if (!res.ok) return null;
     return (await res.json()) as T;
@@ -88,9 +89,13 @@ export interface GbfsSystemData {
 
 /**
  * Fetches all relevant GBFS feeds for a system given its auto-discovery URL.
+ * Pass `extraHeaders` (e.g. `{ Authorization: "Bearer …" }`) for authenticated feeds.
  */
-export async function fetchGbfsSystem(autoDiscoveryUrl: string): Promise<GbfsSystemData | null> {
-  const discovery = await fetchJson<GbfsDiscoveryResponse>(autoDiscoveryUrl);
+export async function fetchGbfsSystem(
+  autoDiscoveryUrl: string,
+  extraHeaders?: Record<string, string>,
+): Promise<GbfsSystemData | null> {
+  const discovery = await fetchJson<GbfsDiscoveryResponse>(autoDiscoveryUrl, extraHeaders);
   if (!discovery?.data) return null;
 
   const systemInfoUrl = resolveFeedUrl(discovery, "system_information");
@@ -114,24 +119,30 @@ export async function fetchGbfsSystem(autoDiscoveryUrl: string): Promise<GbfsSys
               timezone: string;
               opening_hours?: string;
             }>
-          >(systemInfoUrl)
+          >(systemInfoUrl, extraHeaders)
         : null,
       stationInfoUrl
-        ? fetchJson<GbfsFeedResponse<{ stations: RawStationInfo[] }>>(stationInfoUrl)
+        ? fetchJson<GbfsFeedResponse<{ stations: RawStationInfo[] }>>(stationInfoUrl, extraHeaders)
         : null,
       stationStatusUrl
-        ? fetchJson<GbfsFeedResponse<{ stations: RawStationStatus[] }>>(stationStatusUrl)
+        ? fetchJson<GbfsFeedResponse<{ stations: RawStationStatus[] }>>(
+            stationStatusUrl,
+            extraHeaders,
+          )
         : null,
       vehicleStatusUrl
         ? fetchJson<
             GbfsFeedResponse<{ bikes?: RawVehicleStatus[]; vehicles?: RawVehicleStatus[] }>
-          >(vehicleStatusUrl)
+          >(vehicleStatusUrl, extraHeaders)
         : null,
       vehicleTypesUrl
-        ? fetchJson<GbfsFeedResponse<{ vehicle_types: RawVehicleType[] }>>(vehicleTypesUrl)
+        ? fetchJson<GbfsFeedResponse<{ vehicle_types: RawVehicleType[] }>>(
+            vehicleTypesUrl,
+            extraHeaders,
+          )
         : null,
       pricingPlansUrl
-        ? fetchJson<GbfsFeedResponse<{ plans: RawPricingPlan[] }>>(pricingPlansUrl)
+        ? fetchJson<GbfsFeedResponse<{ plans: RawPricingPlan[] }>>(pricingPlansUrl, extraHeaders)
         : null,
     ],
   );

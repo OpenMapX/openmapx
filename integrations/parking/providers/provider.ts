@@ -7,6 +7,8 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
+import { fetchApagDetail, searchApag } from "./apag.js";
+import { fetchApcoaDetail, searchApcoa } from "./apcoa.js";
 import { fetchAutobahnDeDetail, searchAutobahnDe } from "./autobahn-de.js";
 import { fetchBarcelonaEsDetail, searchBarcelonaEs } from "./barcelona-es.js";
 import { fetchBaselChDetail, searchBaselCh } from "./basel-ch.js";
@@ -14,12 +16,15 @@ import { fetchBnlsFrDetail, searchBnlsFr } from "./bnls-fr.js";
 import { fetchBrusselsBeDetail, searchBrusselsBe } from "./brussels-be.js";
 import { fetchCopenhagenDkDetail, searchCopenhagenDk } from "./copenhagen-dk.js";
 import { fetchDbBahnParkDetail, searchDbBahnPark } from "./db-bahnpark.js";
-import { deduplicateParking } from "./dedup.js";
+import { deduplicateParking, haversineMeters } from "./dedup.js";
 import { fetchFlorenceItDetail, searchFlorenceIt } from "./florence-it.js";
 import { fetchGhentBeDetail, searchGhentBe } from "./ghent-be.js";
+import { fetchGoldbeckDetail, searchGoldbeck } from "./goldbeck.js";
 import { fetchMadridEsDetail, searchMadridEs } from "./madrid-es.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";
 import { fetchNdwTruckNlDetail, searchNdwTruckNl } from "./ndw-truck-nl.js";
+import { fetchNrwMobidromDetail, searchNrwMobidrom } from "./nrw-mobidrom.js";
+import { fetchNrwPrDetail, searchNrwPr } from "./nrw-pr.js";
 import { fetchNswAuDetail, searchNswAu } from "./nsw-au.js";
 import { fetchOdhItDetail, searchOdhIt } from "./opendatahub-it.js";
 import { fetchOsmParkingElement, searchOsmParking } from "./osm.js";
@@ -124,6 +129,9 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     const results = await Promise.allSettled([
       searchDbBahnPark(bbox),
       searchParkApiV3(bbox),
+      searchNrwMobidrom(bbox),
+      searchNrwPr(bbox),
+      searchApag(bbox),
       searchParkApiV2(bbox),
       searchRdwNl(bbox),
       searchBnlsFr(bbox),
@@ -141,6 +149,8 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       searchNdwTruckNl(bbox),
       searchAutobahnDe(bbox),
       searchOdhIt(bbox),
+      searchApcoa(bbox),
+      searchGoldbeck(bbox),
       searchOsmParking(bbox),
     ]);
 
@@ -240,6 +250,13 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       return fetchAutobahnDeDetail(itemId.slice("autobahn:".length));
     if (itemId.startsWith("odh:")) return fetchOdhItDetail(itemId.slice("odh:".length));
 
+    if (itemId.startsWith("nrw-pr:")) return fetchNrwPrDetail(itemId.slice("nrw-pr:".length));
+    if (itemId.startsWith("nrw:")) return fetchNrwMobidromDetail(itemId.slice("nrw:".length));
+    if (itemId.startsWith("apcoa:")) return fetchApcoaDetail(itemId.slice("apcoa:".length));
+    if (itemId.startsWith("apag:")) return fetchApagDetail(itemId.slice("apag:".length));
+    if (itemId.startsWith("goldbeck:"))
+      return fetchGoldbeckDetail(itemId.slice("goldbeck:".length));
+
     if (itemId.startsWith("osm:")) {
       const rest = itemId.slice("osm:".length);
       const [elementType, idStr] = rest.split("/");
@@ -270,6 +287,9 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     const enrichResults = await Promise.allSettled([
       searchParkApiV2(bbox),
       searchParkApiV3(bbox),
+      searchNrwMobidrom(bbox),
+      searchNrwPr(bbox),
+      searchApag(bbox),
       searchDbBahnPark(bbox),
       searchRdwNl(bbox),
       searchBnlsFr(bbox),
@@ -287,6 +307,8 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       searchNdwTruckNl(bbox),
       searchAutobahnDe(bbox),
       searchOdhIt(bbox),
+      searchApcoa(bbox),
+      searchGoldbeck(bbox),
       searchOsmParking(bbox),
     ]);
 
@@ -295,12 +317,12 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     // Merge: run dedup on the primary + all nearby results
     const merged = deduplicateParking([facility, ...nearby]);
 
-    // Find the merged version of our facility (same grid cell)
-    const key = `${Math.round(lat * 1000)},${Math.round(lng * 1000)}`;
-    const enriched = merged.find((f) => {
-      const [fLng, fLat] = f.coordinates;
-      return `${Math.round(fLat * 1000)},${Math.round(fLng * 1000)}` === key;
-    });
+    // Find the merged version of our facility. The merged cluster may have
+    // adopted a higher-priority member's coordinates/id, so match by the
+    // cluster that contains our source, falling back to spatial proximity.
+    const enriched =
+      merged.find((f) => f.sources.some((s) => facility.sources.includes(s))) ??
+      merged.find((f) => haversineMeters(f.coordinates, facility.coordinates) <= 150);
 
     return enriched ?? facility;
   }

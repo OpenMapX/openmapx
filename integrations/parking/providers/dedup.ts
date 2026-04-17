@@ -1,13 +1,17 @@
-import type { ParkingFacility } from "./types.js";
+import type { ParkingFacility, ParkingType } from "./types.js";
 
 /**
  * Source priority for deduplication (lower = higher priority).
- * Higher-priority sources provide the base identity (name, coordinates, source, id),
- * but fields from all matching sources are merged to maximize information.
+ * Within a cluster, the highest-priority member provides the base identity.
+ * Individual fields may be sourced from lower-priority members when that
+ * source has richer or more authoritative information (see mergeCluster).
  */
 const SOURCE_PRIORITY: Record<string, number> = {
   "db-bahnpark": 0,
   "parkapi-v3": 1,
+  "nrw-mobidrom-parking": 1,
+  "nrw-mobidrom-pr": 2,
+  apag: 2,
   "parkapi-v2": 2, // prefix match — actual source is "parkapi-v2/CityName"
   "rdw-nl": 3,
   "bnls-fr": 4,
@@ -25,6 +29,8 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "ndw-truck-nl": 3,
   "autobahn-de": 3,
   "opendatahub-it": 4,
+  apcoa: 4,
+  goldbeck: 4,
   "osm-parking": 5,
 };
 
@@ -34,77 +40,408 @@ function getSourcePriority(source: string): number {
   return SOURCE_PRIORITY[prefix] ?? 99;
 }
 
+function facilityPriority(f: ParkingFacility): number {
+  return getSourcePriority(f.sources[0]);
+}
+
+// -- Clustering parameters ---------------------------------------------------
+
+/** Distance below which two facilities are considered the same regardless of name. */
+const ALWAYS_MERGE_M = 40;
+/** Distance above which two facilities are never merged. */
+const NEVER_MERGE_M = 150;
+/** At medium distances (40–150m), names must agree to this Jaccard-over-min score. */
+const NAME_SIM_THRESHOLD = 0.5;
+
 /**
- * Merge two facilities. The `primary` provides the base identity;
- * the `secondary` fills in any missing fields.
+ * Bucket cell size in degrees, applied to both latitude and longitude.
+ * The longitude neighbour range is derived dynamically from latitude (see
+ * `lngNeighborRange`) because a degree of longitude shrinks toward the poles.
  */
-function mergeFacilities(primary: ParkingFacility, secondary: ParkingFacility): ParkingFacility {
-  return {
-    // Identity fields always from primary
-    id: primary.id,
-    name: primary.name,
-    coordinates: primary.coordinates,
-    sources: [...new Set([...primary.sources, ...secondary.sources])],
+const BUCKET_DEG = 0.002;
+const METERS_PER_DEG_LAT = 111_320;
+/** Clamp cos(lat) to keep the neighbour range bounded near the poles. */
+const MIN_LAT_COS = 0.01;
 
-    // Real-time data: prefer whichever has it
-    hasRealtimeData: primary.hasRealtimeData || secondary.hasRealtimeData,
-    freeSpaces: primary.freeSpaces ?? secondary.freeSpaces,
-    state:
-      primary.state && primary.state !== "unknown"
-        ? primary.state
-        : (secondary.state ?? primary.state),
+// -- Haversine distance ------------------------------------------------------
 
-    // Enrich from either source — primary wins when both have data
-    parkingType: primary.parkingType !== "unknown" ? primary.parkingType : secondary.parkingType,
-    capacity: primary.capacity ?? secondary.capacity,
-    disabledSpaces: primary.disabledSpaces ?? secondary.disabledSpaces,
-    chargingSpaces: primary.chargingSpaces ?? secondary.chargingSpaces,
-    maxHeight: primary.maxHeight ?? secondary.maxHeight,
-    fee: primary.fee && primary.fee !== "unknown" ? primary.fee : (secondary.fee ?? primary.fee),
-    feeDescription: primary.feeDescription ?? secondary.feeDescription,
-    tariffRows: primary.tariffRows ?? secondary.tariffRows,
-    access: primary.access ?? secondary.access,
-    operator: primary.operator ?? secondary.operator,
-    address: primary.address ?? secondary.address,
-    openingHours: primary.openingHours ?? secondary.openingHours,
-    parkAndRide: primary.parkAndRide ?? secondary.parkAndRide,
-    nearestStation: primary.nearestStation ?? secondary.nearestStation,
-    chargingDetails: primary.chargingDetails ?? secondary.chargingDetails,
-    paymentMethods: primary.paymentMethods ?? secondary.paymentMethods,
-    url: primary.url ?? secondary.url,
-  };
+const EARTH_M = 6_371_000;
+
+export function haversineMeters(a: [number, number], b: [number, number]): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const [lng1, lat1] = a;
+  const [lng2, lat2] = b;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const s1 = Math.sin(dLat / 2);
+  const s2 = Math.sin(dLng / 2);
+  const h = s1 * s1 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * s2 * s2;
+  return 2 * EARTH_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// -- Name similarity ---------------------------------------------------------
+
+/**
+ * Generic parking-related tokens stripped before comparing names. These appear
+ * in most sources and would inflate similarity if counted.
+ */
+const NAME_STOPWORDS = new Set([
+  "parkhaus",
+  "parkplatz",
+  "parkplaetze",
+  "tiefgarage",
+  "garage",
+  "parking",
+  "parkobjekt",
+  "parkzone",
+  "parken",
+  "stellplatz",
+  "stellplaetze",
+  "lot",
+  "carpark",
+  "p+r",
+  "pr",
+  "park",
+  "ride",
+  "parkandride",
+  "parkride",
+  "hof",
+  "platz",
+  "strasse",
+  "straße",
+  "str",
+  "center",
+  "centre",
+  "de",
+  "der",
+  "die",
+  "das",
+  "am",
+  "an",
+  "im",
+  "in",
+  "the",
+  "a",
+]);
+
+function tokenizeName(name: string | undefined): string[] {
+  if (!name) return [];
+  return (name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter(
+    (t) => t.length >= 2 && !NAME_STOPWORDS.has(t),
+  );
+}
+
+function nameSimilarity(a: string | undefined, b: string | undefined): number {
+  const ta = tokenizeName(a);
+  const tb = tokenizeName(b);
+  if (ta.length === 0 || tb.length === 0) return 0;
+  const setA = new Set(ta);
+  const setB = new Set(tb);
+  let intersect = 0;
+  for (const t of setA) if (setB.has(t)) intersect++;
+  return intersect / Math.min(setA.size, setB.size);
+}
+
+// -- Type compatibility ------------------------------------------------------
+
+/**
+ * On-street parking is a distinct physical category — merging it with a
+ * garage or surface lot produces a nonsensical result. All other types may
+ * overlap at ground level (garages often have a surface overflow lot).
+ */
+function typesCompatible(a: ParkingType, b: ParkingType): boolean {
+  if (a === "unknown" || b === "unknown") return true;
+  if (a === "on-street" || b === "on-street") return a === b;
+  return true;
+}
+
+// -- Cluster predicate -------------------------------------------------------
+
+function shouldCluster(a: ParkingFacility, b: ParkingFacility): boolean {
+  if (!typesCompatible(a.parkingType, b.parkingType)) return false;
+  const d = haversineMeters(a.coordinates, b.coordinates);
+  if (d >= NEVER_MERGE_M) return false;
+  if (d <= ALWAYS_MERGE_M) return true;
+  return nameSimilarity(a.name, b.name) >= NAME_SIM_THRESHOLD;
+}
+
+// -- Union-find --------------------------------------------------------------
+
+class UnionFind {
+  private parent: number[];
+  private rank: number[];
+
+  constructor(n: number) {
+    this.parent = Array.from({ length: n }, (_, i) => i);
+    this.rank = new Array(n).fill(0);
+  }
+
+  find(x: number): number {
+    if (this.parent[x] !== x) this.parent[x] = this.find(this.parent[x]);
+    return this.parent[x];
+  }
+
+  union(a: number, b: number): void {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra === rb) return;
+    if (this.rank[ra] < this.rank[rb]) this.parent[ra] = rb;
+    else if (this.rank[ra] > this.rank[rb]) this.parent[rb] = ra;
+    else {
+      this.parent[rb] = ra;
+      this.rank[ra]++;
+    }
+  }
+}
+
+// -- Spatial bucketing -------------------------------------------------------
+
+function bucketKey(f: ParkingFacility): string {
+  const [lng, lat] = f.coordinates;
+  const bx = Math.floor(lng / BUCKET_DEG);
+  const by = Math.floor(lat / BUCKET_DEG);
+  return `${bx},${by}`;
 }
 
 /**
- * Deduplicates and merges parking facilities by rounding coordinates
- * to 3 decimal places (~111m). When two facilities collide, the one
- * with higher source priority provides the base identity but fields
- * are merged from both to maximize information.
+ * How many longitude buckets away we must scan to be sure any pair within
+ * NEVER_MERGE_M is visited. A degree of longitude is 111.32 km * cos(lat)
+ * wide, so at 50°N a 0.002° bucket is only ~143m across — less than the
+ * 150m threshold. In that case ±1 isn't enough; this widens the search.
+ */
+function lngNeighborRange(lat: number): number {
+  const cosLat = Math.max(Math.cos((lat * Math.PI) / 180), MIN_LAT_COS);
+  const maxLngDiffDeg = NEVER_MERGE_M / (METERS_PER_DEG_LAT * cosLat);
+  // +1 to absorb cell-boundary offsets (points at opposite edges of their buckets).
+  return Math.ceil(maxLngDiffDeg / BUCKET_DEG) + 1;
+}
+
+function neighborKeys(key: string, lat: number): string[] {
+  const [bx, by] = key.split(",").map(Number);
+  const lngRange = lngNeighborRange(lat);
+  const out: string[] = [];
+  for (let dx = -lngRange; dx <= lngRange; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      out.push(`${bx + dx},${by + dy}`);
+    }
+  }
+  return out;
+}
+
+// -- Field-level merge helpers ----------------------------------------------
+
+/**
+ * Return the highest-priority member's value that passes `pick`, else
+ * fall back to any member that does.
+ */
+function pickByPriority<T>(
+  members: ParkingFacility[],
+  pick: (m: ParkingFacility) => T | undefined | null,
+): T | undefined {
+  // members are already sorted by priority ascending
+  for (const m of members) {
+    const v = pick(m);
+    if (v !== undefined && v !== null) return v;
+  }
+  return undefined;
+}
+
+/**
+ * Pick the longest non-empty string across members. Intended for descriptive
+ * free-text fields (feeDescription, openingHours, address) where more text
+ * generally means more useful detail.
+ */
+function pickRichestString(values: Array<string | undefined>): string | undefined {
+  let best: string | undefined;
+  for (const v of values) {
+    if (!v) continue;
+    if (best === undefined || v.length > best.length) best = v;
+  }
+  return best;
+}
+
+function pickRichestArray<T>(values: Array<T[] | undefined>): T[] | undefined {
+  let best: T[] | undefined;
+  for (const v of values) {
+    if (!v || v.length === 0) continue;
+    if (best === undefined || v.length > best.length) best = v;
+  }
+  return best;
+}
+
+function maxDefined(values: Array<number | undefined>): number | undefined {
+  let best: number | undefined;
+  for (const v of values) {
+    if (v === undefined || v === null) continue;
+    if (best === undefined || v > best) best = v;
+  }
+  return best;
+}
+
+function minDefined(values: Array<number | undefined>): number | undefined {
+  let best: number | undefined;
+  for (const v of values) {
+    if (v === undefined || v === null) continue;
+    if (best === undefined || v < best) best = v;
+  }
+  return best;
+}
+
+/**
+ * Collapse source strings to a canonical set for display. Keeps the primary's
+ * full source (e.g. "parkapi-v2/Dresden") but deduplicates variants of the
+ * same provider across the cluster.
+ */
+function dedupeSources(primary: string, all: string[]): string[] {
+  const seen = new Map<string, string>(); // prefix → full label
+  seen.set(primary.split("/")[0], primary);
+  for (const s of all) {
+    const prefix = s.split("/")[0];
+    if (!seen.has(prefix)) seen.set(prefix, s);
+  }
+  return Array.from(seen.values());
+}
+
+// -- Cluster merge -----------------------------------------------------------
+
+function mergeCluster(cluster: ParkingFacility[]): ParkingFacility {
+  const members = [...cluster].sort((a, b) => facilityPriority(a) - facilityPriority(b));
+  const primary = members[0];
+
+  const realtimeMembers = members.filter((m) => m.hasRealtimeData);
+  const realtime = realtimeMembers[0];
+
+  const freeSpaces = realtime?.freeSpaces ?? pickByPriority(members, (m) => m.freeSpaces);
+
+  const state =
+    realtime?.state && realtime.state !== "unknown"
+      ? realtime.state
+      : (pickByPriority(members, (m) => (m.state && m.state !== "unknown" ? m.state : undefined)) ??
+        primary.state);
+
+  const parkingType: ParkingType =
+    pickByPriority(members, (m) => (m.parkingType !== "unknown" ? m.parkingType : undefined)) ??
+    "unknown";
+
+  const fee =
+    pickByPriority(members, (m) => (m.fee && m.fee !== "unknown" ? m.fee : undefined)) ??
+    primary.fee;
+
+  const allSources = members.flatMap((m) => m.sources);
+
+  return {
+    id: primary.id,
+    name: primary.name,
+    coordinates: primary.coordinates,
+    sources: dedupeSources(primary.sources[0], allSources),
+
+    parkingType,
+    hasRealtimeData: realtimeMembers.length > 0,
+    freeSpaces,
+    capacity: pickByPriority(members, (m) => m.capacity),
+    state,
+
+    // Richer info wins for accessibility/EV counts — operator-reported counts
+    // are generally higher than equipment-tag sentinels (1).
+    disabledSpaces: maxDefined(members.map((m) => m.disabledSpaces)),
+    chargingSpaces: maxDefined(members.map((m) => m.chargingSpaces)),
+    // Most restrictive height wins — safer for routing taller vehicles.
+    maxHeight: minDefined(members.map((m) => m.maxHeight)),
+
+    fee,
+    feeDescription: pickRichestString(members.map((m) => m.feeDescription)),
+    tariffRows: pickRichestArray(members.map((m) => m.tariffRows)),
+
+    access: pickByPriority(members, (m) => m.access),
+    operator: pickByPriority(members, (m) => m.operator),
+    address: pickRichestString(members.map((m) => m.address)),
+    openingHours: pickRichestString(members.map((m) => m.openingHours)),
+
+    parkAndRide: members.some((m) => m.parkAndRide) || undefined,
+    nearestStation: pickByPriority(members, (m) => m.nearestStation),
+    chargingDetails: pickRichestString(members.map((m) => m.chargingDetails)),
+    paymentMethods: pickRichestString(members.map((m) => m.paymentMethods)),
+    url: pickByPriority(members, (m) => m.url),
+  };
+}
+
+// -- Public API --------------------------------------------------------------
+
+/**
+ * Deduplicates and merges parking facilities by clustering nearby entries.
+ *
+ * Clustering uses haversine distance plus a name similarity gate to catch
+ * same-site duplicates across sources without collapsing unrelated neighbours.
+ * The whole cluster is merged in one pass (not pairwise), so field-level
+ * choices see every member at once.
  */
 export function deduplicateParking(facilities: ParkingFacility[]): ParkingFacility[] {
-  const seen = new Map<string, ParkingFacility>();
+  const n = facilities.length;
+  if (n === 0) return [];
 
-  for (const facility of facilities) {
-    const [lng, lat] = facility.coordinates;
-    const key = `${Math.round(lat * 1000)},${Math.round(lng * 1000)}`;
+  const buckets = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    const key = bucketKey(facilities[i]);
+    const arr = buckets.get(key);
+    if (arr) arr.push(i);
+    else buckets.set(key, [i]);
+  }
 
-    const existing = seen.get(key);
-    if (!existing) {
-      seen.set(key, facility);
-      continue;
-    }
+  const uf = new UnionFind(n);
+  // Track each cluster's current members so we can enforce that every pair
+  // within a cluster passes `shouldCluster`. Without this check, a chain
+  // A↔B, B↔C could union A and C even when they lie beyond NEVER_MERGE_M.
+  const clusterMembers = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) clusterMembers.set(i, [i]);
 
-    const existingPriority = getSourcePriority(existing.sources[0]);
-    const newPriority = getSourcePriority(facility.sources[0]);
-
-    if (newPriority < existingPriority) {
-      // New source is higher priority — it becomes the primary
-      seen.set(key, mergeFacilities(facility, existing));
-    } else {
-      // Existing is higher or equal priority — merge new data into it
-      seen.set(key, mergeFacilities(existing, facility));
+  for (let i = 0; i < n; i++) {
+    const selfKey = bucketKey(facilities[i]);
+    for (const nKey of neighborKeys(selfKey, facilities[i].coordinates[1])) {
+      const candidates = buckets.get(nKey);
+      if (!candidates) continue;
+      for (const j of candidates) {
+        if (j <= i) continue;
+        if (!shouldCluster(facilities[i], facilities[j])) continue;
+        const ri = uf.find(i);
+        const rj = uf.find(j);
+        if (ri === rj) continue;
+        const ma = clusterMembers.get(ri);
+        const mb = clusterMembers.get(rj);
+        if (!ma || !mb) continue;
+        // All pairs across the two clusters must also pass shouldCluster.
+        // Cluster sizes are typically tiny (~1–5) so this is cheap.
+        let ok = true;
+        for (const a of ma) {
+          for (const b of mb) {
+            if (!shouldCluster(facilities[a], facilities[b])) {
+              ok = false;
+              break;
+            }
+          }
+          if (!ok) break;
+        }
+        if (!ok) continue;
+        uf.union(i, j);
+        const newRoot = uf.find(i);
+        const merged = [...ma, ...mb];
+        if (newRoot !== ri) clusterMembers.delete(ri);
+        if (newRoot !== rj) clusterMembers.delete(rj);
+        clusterMembers.set(newRoot, merged);
+      }
     }
   }
 
-  return Array.from(seen.values());
+  const clusters = new Map<number, ParkingFacility[]>();
+  for (let i = 0; i < n; i++) {
+    const root = uf.find(i);
+    const existing = clusters.get(root);
+    if (existing) existing.push(facilities[i]);
+    else clusters.set(root, [facilities[i]]);
+  }
+
+  const out: ParkingFacility[] = [];
+  for (const cluster of clusters.values()) {
+    out.push(cluster.length === 1 ? cluster[0] : mergeCluster(cluster));
+  }
+  return out;
 }

@@ -52,6 +52,8 @@ interface CredentialStatus {
   updatedAt?: string;
   updatedBy?: string | null;
   isLegacyEnvVar: boolean;
+  /** False for optional env-var overrides (built-in default exists). */
+  required: boolean;
 }
 
 interface IntegrationDetailData {
@@ -439,17 +441,19 @@ function CredentialsTab({
 
   return (
     <Stack gap={2}>
-      {!data.secretsConfigured && (
+      {!data.secretsConfigured && secretCredentials.length > 0 && (
         <Alert severity="warning" variant="outlined">
           Vault not configured — secrets cannot be stored. Set <code>OPENMAPX_SECRETS_KEY</code>{" "}
           (generate with <code>openssl rand -hex 32</code>) to enable the credential vault.
         </Alert>
       )}
 
-      <Alert severity="info" variant="outlined">
-        For production deployments, prefer setting credentials via environment variables. Vault
-        credentials are encrypted at rest using AES-256-GCM.
-      </Alert>
+      {secretCredentials.length > 0 && (
+        <Alert severity="info" variant="outlined">
+          For production deployments, prefer setting credentials via environment variables. Vault
+          credentials are encrypted at rest using AES-256-GCM.
+        </Alert>
+      )}
 
       {secretCredentials.length > 0 && (
         <Card variant="outlined">
@@ -556,38 +560,62 @@ function CredentialsTab({
                 <TableHead>
                   <TableRow>
                     <TableCell>Variable</TableCell>
+                    <TableCell>Requirement</TableCell>
                     <TableCell>Status</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {legacyEnvVars.map((entry) => (
-                    <TableRow key={entry.key}>
-                      <TableCell>
-                        <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
-                          {entry.key}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Stack direction="row" alignItems="center" gap={0.75}>
-                          {entry.source === "env" ? (
-                            <>
-                              <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
-                              <Typography variant="body2" color="success.main">
-                                Set
+                  {legacyEnvVars.map((entry) => {
+                    const isSet = entry.source === "env";
+                    return (
+                      <TableRow key={entry.key}>
+                        <TableCell>
+                          <Stack gap={0.25}>
+                            <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
+                              {entry.key}
+                            </Typography>
+                            {entry.description && (
+                              <Typography variant="caption" color="text.secondary">
+                                {entry.description}
                               </Typography>
-                            </>
-                          ) : (
-                            <>
-                              <ErrorIcon fontSize="small" color="error" />
-                              <Typography variant="body2" color="error.main">
-                                Not set
+                            )}
+                          </Stack>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={entry.required ? "Required" : "Optional"}
+                            size="small"
+                            color={entry.required ? "default" : "info"}
+                            variant="outlined"
+                            sx={{ fontSize: "0.7rem" }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" alignItems="center" gap={0.75}>
+                            {isSet ? (
+                              <>
+                                <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
+                                <Typography variant="body2" color="success.main">
+                                  Set
+                                </Typography>
+                              </>
+                            ) : entry.required ? (
+                              <>
+                                <ErrorIcon fontSize="small" color="error" />
+                                <Typography variant="body2" color="error.main">
+                                  Not set
+                                </Typography>
+                              </>
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                Using default
                               </Typography>
-                            </>
-                          )}
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            )}
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

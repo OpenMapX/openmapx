@@ -1,6 +1,12 @@
 import type { BoundingBox, DataSourceResult, ParkingFacility } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../apag.js", () => ({ searchApag: vi.fn(), fetchApagDetail: vi.fn() }));
+vi.mock("../apcoa.js", () => ({ searchApcoa: vi.fn(), fetchApcoaDetail: vi.fn() }));
+vi.mock("../autobahn-de.js", () => ({
+  searchAutobahnDe: vi.fn(),
+  fetchAutobahnDeDetail: vi.fn(),
+}));
 vi.mock("../barcelona-es.js", () => ({
   searchBarcelonaEs: vi.fn(),
   fetchBarcelonaEsDetail: vi.fn(),
@@ -16,7 +22,21 @@ vi.mock("../db-bahnpark.js", () => ({ searchDbBahnPark: vi.fn(), fetchDbBahnPark
 vi.mock("../dedup.js", () => ({ deduplicateParking: vi.fn((items: unknown[]) => items) }));
 vi.mock("../florence-it.js", () => ({ searchFlorenceIt: vi.fn(), fetchFlorenceItDetail: vi.fn() }));
 vi.mock("../ghent-be.js", () => ({ searchGhentBe: vi.fn(), fetchGhentBeDetail: vi.fn() }));
+vi.mock("../goldbeck.js", () => ({ searchGoldbeck: vi.fn(), fetchGoldbeckDetail: vi.fn() }));
 vi.mock("../madrid-es.js", () => ({ searchMadridEs: vi.fn(), fetchMadridEsDetail: vi.fn() }));
+vi.mock("../ndw-truck-nl.js", () => ({
+  searchNdwTruckNl: vi.fn(),
+  fetchNdwTruckNlDetail: vi.fn(),
+}));
+vi.mock("../nrw-mobidrom.js", () => ({
+  searchNrwMobidrom: vi.fn(),
+  fetchNrwMobidromDetail: vi.fn(),
+}));
+vi.mock("../nrw-pr.js", () => ({
+  searchNrwPr: vi.fn(),
+  fetchNrwPrDetail: vi.fn(),
+}));
+vi.mock("../opendatahub-it.js", () => ({ searchOdhIt: vi.fn(), fetchOdhItDetail: vi.fn() }));
 vi.mock("../mapper.js", () => ({ mapParkingToResult: vi.fn(), mapParkingToDetail: vi.fn() }));
 vi.mock("../nsw-au.js", () => ({ searchNswAu: vi.fn(), fetchNswAuDetail: vi.fn() }));
 vi.mock("../osm.js", () => ({ searchOsmParking: vi.fn(), fetchOsmParkingElement: vi.fn() }));
@@ -30,6 +50,9 @@ vi.mock("../utmc-newcastle.js", () => ({
 }));
 vi.mock("../vienna-at.js", () => ({ searchViennaAt: vi.fn(), fetchViennaAtDetail: vi.fn() }));
 
+import { searchApag } from "../apag.js";
+import { searchApcoa } from "../apcoa.js";
+import { searchAutobahnDe } from "../autobahn-de.js";
 import { searchBarcelonaEs } from "../barcelona-es.js";
 import { searchBaselCh } from "../basel-ch.js";
 import { fetchBnlsFrDetail, searchBnlsFr } from "../bnls-fr.js";
@@ -39,9 +62,14 @@ import { fetchDbBahnParkDetail, searchDbBahnPark } from "../db-bahnpark.js";
 import { deduplicateParking } from "../dedup.js";
 import { searchFlorenceIt } from "../florence-it.js";
 import { searchGhentBe } from "../ghent-be.js";
+import { searchGoldbeck } from "../goldbeck.js";
 import { searchMadridEs } from "../madrid-es.js";
 import { mapParkingToDetail, mapParkingToResult } from "../mapper.js";
+import { searchNdwTruckNl } from "../ndw-truck-nl.js";
+import { searchNrwMobidrom } from "../nrw-mobidrom.js";
+import { searchNrwPr } from "../nrw-pr.js";
 import { searchNswAu } from "../nsw-au.js";
+import { searchOdhIt } from "../opendatahub-it.js";
 import { fetchOsmParkingElement, searchOsmParking } from "../osm.js";
 import { fetchParkApiV2Detail, searchParkApiV2 } from "../parkapi-v2.js";
 import { fetchParkApiV3Detail, searchParkApiV3 } from "../parkapi-v3.js";
@@ -101,6 +129,14 @@ function setupEmptySources() {
     searchMadridEs,
     searchUtmcNewcastle,
     searchNswAu,
+    searchNdwTruckNl,
+    searchAutobahnDe,
+    searchOdhIt,
+    searchNrwMobidrom,
+    searchNrwPr,
+    searchApag,
+    searchApcoa,
+    searchGoldbeck,
     searchOsmParking,
   ]) {
     vi.mocked(fn).mockResolvedValue([]);
@@ -184,6 +220,13 @@ describe("parkingProvider.search", () => {
       searchMadridEs,
       searchUtmcNewcastle,
       searchNswAu,
+      searchNdwTruckNl,
+      searchAutobahnDe,
+      searchOdhIt,
+      searchNrwMobidrom,
+      searchApag,
+      searchApcoa,
+      searchGoldbeck,
       searchOsmParking,
     ]) {
       vi.mocked(fn).mockRejectedValue(new Error("down"));

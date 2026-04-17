@@ -353,6 +353,35 @@ describe("dedupVehicles", () => {
     expect(result[0].sources).toEqual(["gbfs/foo", "motis"]);
   });
 
+  it("treats 'nrw-mobidrom-scooter' as an aggregator source", () => {
+    const gbfs = makeVehicle({
+      id: "gbfs/voi-berlin/uuid-nrw-1",
+      coordinates: [13.41, 52.52],
+      sources: ["gbfs/voi-berlin"],
+    });
+    const nrw = makeVehicle({
+      id: "nrw-mobidrom-scooter/source-voi-dortmund/uuid-nrw-1",
+      coordinates: [13.41, 52.52],
+      sources: ["nrw-mobidrom-scooter"],
+    });
+
+    const result = dedupVehicles([gbfs, nrw]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("gbfs/voi-berlin/uuid-nrw-1");
+    expect(result[0].sources).toEqual(["gbfs/voi-berlin", "nrw-mobidrom-scooter"]);
+  });
+
+  it("keeps NRW Mobidrom vehicle when no direct-source counterpart exists", () => {
+    const nrw = makeVehicle({
+      id: "nrw-mobidrom-scooter/source-lime-dortmund/uuid-nrw-only",
+      coordinates: [7.47, 51.51],
+      sources: ["nrw-mobidrom-scooter"],
+    });
+    const result = dedupVehicles([nrw]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("nrw-mobidrom-scooter/source-lime-dortmund/uuid-nrw-only");
+  });
+
   it("merges sources when two aggregator vehicles share a raw ID and no direct-source exists", () => {
     const mo1 = makeVehicle({
       id: "motis:uuid-1",

@@ -21,6 +21,11 @@
       "purpose": "Link-E-Scooter (mehrere europäische Städte). Unternehmen eingestellt Dez. 2023.",
       "dataSent": "Koordinaten (Breitengrad, Längengrad)",
       "dataReceived": "Fahrzeuge mit ID, Koordinaten, Akkustand, Fahrzeugtyp"
+    },
+    {
+      "purpose": "NRW.Mobidrom gebündelter E-Scooter-Feed (Voi + Lime in Nordrhein-Westfalen)",
+      "dataSent": "OAuth2-Client-Credentials (keine Nutzerdaten; nur serverseitig)",
+      "dataReceived": "GBFS-Feeds je Anbieter mit Fahrzeugpositionen, Akkustand, Fahrzeugtypen, Preisplänen"
     }
   ]
 }

@@ -11,6 +11,7 @@ import {
   type IntegrationStrings,
   type LoadedIntegration,
   type Logger,
+  normalizeEnvVars,
   PLATFORM_VERSION,
   type RouteHandler,
   satisfiesPlatformVersion,
@@ -207,7 +208,7 @@ async function resolveConfig(
   manifest: {
     id: string;
     configSchema?: Record<string, unknown>;
-    envVars?: string[];
+    envVars?: IntegrationManifest["envVars"];
   },
   directory: string,
 ): Promise<Record<string, unknown>> {
@@ -218,10 +219,10 @@ async function resolveConfig(
   }
 
   // Also load env vars declared in manifest (legacy direct-access pattern)
-  for (const envVar of manifest.envVars ?? []) {
-    const val = process.env[envVar];
+  for (const entry of normalizeEnvVars(manifest.envVars)) {
+    const val = process.env[entry.name];
     if (val !== undefined) {
-      config[envVar] = val;
+      config[entry.name] = val;
     }
   }
 

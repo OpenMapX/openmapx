@@ -79,6 +79,20 @@ const infrastructureSchema = z.object({
   planetScale: z.boolean().optional(),
 });
 
+/**
+ * Per-env-var metadata. When a bare string is used in `envVars`, the variable is
+ * treated as required (historical default).
+ */
+const envVarEntrySchema = z.object({
+  name: z.string(),
+  /** Whether the variable must be set for the integration to function. Defaults to true. */
+  required: z.boolean().optional(),
+  /** Human-readable purpose shown in the admin UI. */
+  description: z.string().optional(),
+});
+
+const envVarSchema = z.union([z.string(), envVarEntrySchema]);
+
 export const integrationManifestSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
@@ -98,7 +112,7 @@ export const integrationManifestSchema = z.object({
   backend: backendSchema.optional(),
 
   configSchema: z.record(z.string(), z.unknown()).optional(),
-  envVars: z.array(z.string()).optional(),
+  envVars: z.array(envVarSchema).optional(),
 
   healthCheck: z.union([healthCheckSchema, z.array(healthCheckSchema)]).optional(),
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
@@ -115,6 +129,26 @@ export type IntegrationFrontend = z.infer<typeof frontendSchema>;
 export type IntegrationLayerSelector = z.infer<typeof layerSelectorSchema>;
 export type IntegrationOverlay = z.infer<typeof overlaySchema>;
 export type IntegrationSearchCategory = z.infer<typeof searchCategorySchema>;
+export type IntegrationEnvVar = z.infer<typeof envVarSchema>;
+
+export interface NormalizedEnvVar {
+  name: string;
+  required: boolean;
+  description?: string;
+}
+
+/**
+ * Normalize `manifest.envVars` to the object form. Bare strings are treated as
+ * required variables (historical behavior).
+ */
+export function normalizeEnvVars(envVars: IntegrationManifest["envVars"]): NormalizedEnvVar[] {
+  if (!envVars) return [];
+  return envVars.map((v) =>
+    typeof v === "string"
+      ? { name: v, required: true }
+      : { name: v.name, required: v.required ?? true, description: v.description },
+  );
+}
 
 export interface ManifestValidationResult {
   valid: boolean;

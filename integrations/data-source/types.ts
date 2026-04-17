@@ -120,6 +120,12 @@ export interface DataSourceDetail {
   openingHours?: string;
   sections: DataSourceDetailSection[];
   osmTags?: Record<string, string>;
+  /**
+   * When true, the detail view should render a "Nearby Transit" section that
+   * fetches public transit lines within walking distance of the coordinates.
+   * Set by data sources that produce Park+Ride facilities.
+   */
+  parkAndRide?: boolean;
 }
 
 export interface DataSourceProvider {

@@ -154,6 +154,31 @@
       "name": "Open Data Hub (South Tyrol)",
       "type": "http",
       "url": "https://mobility.api.opendatahub.com/v2/flat/ParkingStation?limit=1&where=sactive.eq.true"
+    },
+    {
+      "name": "NRW Mobidrom (Parken NRW)",
+      "type": "http",
+      "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parken-nrw.json"
+    },
+    {
+      "name": "NRW Mobidrom (Park+Ride NRW)",
+      "type": "http",
+      "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/gebndelte-daten-parkride-nrw.json"
+    },
+    {
+      "name": "NRW Mobidrom (APCOA)",
+      "type": "http",
+      "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parking-apcoa.json"
+    },
+    {
+      "name": "NRW Mobidrom (APAG)",
+      "type": "http",
+      "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-apag.json"
+    },
+    {
+      "name": "NRW Mobidrom (GOLDBECK)",
+      "type": "http",
+      "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-goldbeck-parking-services.json"
     }
   ],
   "quality": "built-in",
@@ -422,6 +447,76 @@
       "commercialUse": "yes",
       "providerCountry": "IT",
       "providerPrivacyUrl": "https://noi.bz.it/en/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "nrw-mobidrom-pr",
+      "name": "NRW.Mobidrom – Park+Ride NRW",
+      "url": "https://www.mobilitaetsdaten.nrw/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "nrw-mobidrom-parking",
+      "name": "NRW.Mobidrom – Parken NRW",
+      "url": "https://www.mobilitaetsdaten.nrw/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "apcoa",
+      "name": "APCOA Deutschland (via NRW.Mobidrom)",
+      "url": "https://www.mobilitaetsdaten.nrw/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "apag",
+      "name": "APAG – Aachener Parkhaus (via NRW.Mobidrom)",
+      "url": "https://www.mobilitaetsdaten.nrw/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "goldbeck",
+      "name": "GOLDBECK Parking Services (via NRW.Mobidrom)",
+      "url": "https://www.mobilitaetsdaten.nrw/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

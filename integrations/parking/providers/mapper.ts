@@ -163,5 +163,6 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     operator: facility.operator ? { name: facility.operator, url: facility.url } : undefined,
     openingHours: facility.openingHours,
     sections,
+    parkAndRide: facility.parkAndRide ? true : undefined,
   };
 }

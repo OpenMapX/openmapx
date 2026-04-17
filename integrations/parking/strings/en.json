@@ -98,6 +98,31 @@
       "dataReceived": "Station name (multilingual), coordinates, capacity, real-time occupied/free spaces, parking layout type, EV charging availability"
     },
     {
+      "purpose": "NRW Mobidrom bundled parking data (Düsseldorf, Köln, Bielefeld, Krefeld, Wuppertal, Aachen plus operator static data)",
+      "dataSent": "No user data (fetches entire aggregate DATEX II Parking Light feed)",
+      "dataReceived": "Parking site name, coordinates, capacity, real-time availability, occupancy trend, parking type, fee/tariff, opening hours, address, disabled and EV assignments"
+    },
+    {
+      "purpose": "NRW Mobidrom bundled Park+Ride data (VRR, Bielefeld, Bonn, Köln, Münster, Oberhausen)",
+      "dataSent": "No user data (fetches entire aggregate DATEX II Parking Light feed)",
+      "dataReceived": "Park+Ride site name, coordinates, capacity, real-time availability where provided, fee info, address; every record flagged as P+R"
+    },
+    {
+      "purpose": "APCOA Deutschland parking facilities via NRW Mobidrom",
+      "dataSent": "No user data (fetches operator feed)",
+      "dataReceived": "Facility name, coordinates, capacity, address, tariff info, opening hours, equipment tags"
+    },
+    {
+      "purpose": "APAG Aachener Parkhaus real-time garage data via NRW Mobidrom",
+      "dataSent": "No user data (fetches operator feed)",
+      "dataReceived": "Garage name, coordinates, capacity, real-time available spaces, occupancy trend, address, tariff info, equipment tags"
+    },
+    {
+      "purpose": "GOLDBECK Parking Services static garage data via NRW Mobidrom",
+      "dataSent": "No user data (fetches operator feed)",
+      "dataReceived": "Garage name, coordinates, address, tariff info, opening hours"
+    },
+    {
       "purpose": "Parking facilities from OpenStreetMap (static data, no real-time availability)",
       "dataSent": "Bounding box coordinates, OSM element type and ID for detail lookup",
       "dataReceived": "OSM elements with name, coordinates, capacity, fee, access, operator, opening hours"

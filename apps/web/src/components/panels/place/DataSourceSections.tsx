@@ -37,6 +37,7 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
 import { TEAL } from "@/lib/theme";
+import { DataSourceNearbyTransit } from "./DataSourceNearbyTransit";
 
 /** Section header config per data source type. */
 const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
@@ -63,6 +64,10 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   felyx: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
   gosharing: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
   link: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
+  "nrw-mobidrom-scooter": {
+    icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />,
+    titleKey: "eScooterSharing",
+  },
   // Car Sharing
   "car-sharing": { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
   cambio: { icon: <DirectionsCarIcon sx={{ fontSize: 20 }} />, titleKey: "carSharing" },
@@ -93,6 +98,14 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "ndw-truck-nl": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "autobahn-de": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "opendatahub-it": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "nrw-mobidrom-parking": {
+    icon: <LocalParkingIcon sx={{ fontSize: 20 }} />,
+    titleKey: "parking",
+  },
+  "nrw-mobidrom-pr": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  apcoa: { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  apag: { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  goldbeck: { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   // DB Station (RIS::Stations)
   "db-station": { icon: <TrainIcon sx={{ fontSize: 20 }} />, titleKey: "dbStation" },
   // Webcam
@@ -710,6 +723,9 @@ export function DataSourceSections({ detail }: Props) {
       {/* Dynamic sections (connectors, etc.) */}
       {detail.sections.length > 0 &&
         detail.sections.map((section) => <SectionWrapper key={section.title} section={section} />)}
+
+      {/* Park+Ride: list nearby transit lines. Silent when no routes found. */}
+      {detail.parkAndRide && <DataSourceNearbyTransit coordinates={detail.coordinates} />}
 
       {/* Attribution footer */}
       <Divider sx={{ mx: 2 }} />

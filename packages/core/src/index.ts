@@ -210,6 +210,7 @@ export type {
   HttpClientOptions,
   IntegrationContext,
   IntegrationDataSource,
+  IntegrationEnvVar,
   IntegrationEvent,
   IntegrationFrontend,
   IntegrationHealthCheck,
@@ -223,6 +224,7 @@ export type {
   Logger,
   ManifestValidationResult,
   MergeAllOptions,
+  NormalizedEnvVar,
   RouteHandler,
 } from "./integration";
 export {
@@ -235,6 +237,7 @@ export {
   IntegrationRegistry,
   initCommunityIntegrationRegistry,
   integrationManifestSchema,
+  normalizeEnvVars,
   PLATFORM_VERSION,
   registerCommunityModule,
   satisfiesPlatformVersion,

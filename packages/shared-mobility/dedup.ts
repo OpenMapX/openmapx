@@ -46,10 +46,11 @@ export function dedupStations(stations: SharedMobilityStation[]): SharedMobility
 }
 
 /**
- * Aggregator sources that re-publish GBFS data (Transitous indexes GBFS feeds directly).
+ * Aggregator sources that re-publish GBFS data (Transitous indexes GBFS feeds directly,
+ * NRW Mobidrom bundles operator feeds).
  * Vehicles from these sources are dropped when a direct-source vehicle with the same ID exists.
  */
-const AGGREGATOR_SOURCES = new Set(["transitous", "motis"]);
+const AGGREGATOR_SOURCES = new Set(["transitous", "motis", "nrw-mobidrom-scooter"]);
 
 function isAggregator(vehicle: SharedMobilityVehicle): boolean {
   return vehicle.sources.length > 0 && vehicle.sources.every((s) => AGGREGATOR_SOURCES.has(s));

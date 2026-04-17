@@ -461,6 +461,8 @@
     "rowAccess": "Zugang",
     "rowNearestStation": "Nächster Bahnhof",
     "sectionPayment": "Bezahlung",
+    "sectionNearbyTransit": "ÖPNV in der Nähe",
+    "openStop": "{name} öffnen",
     "dur20min": "20 Min.",
     "dur30min": "30 Min.",
     "dur1h": "1 Std.",

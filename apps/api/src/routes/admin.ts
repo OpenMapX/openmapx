@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { type IntegrationManifest, normalizeEnvVars } from "@openmapx/core";
 import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -46,14 +47,19 @@ function getIntegrationDisplayName(integration: {
   return (en?.name as string) ?? integration.manifest.name ?? integration.id;
 }
 
-function getEnvVarsSet(envVars: string[] | undefined): Record<string, boolean> {
-  if (!envVars?.length) return {};
-  return Object.fromEntries(envVars.map((v) => [v, !!(process.env[v] && process.env[v] !== "")]));
+function getEnvVarsSet(envVars: IntegrationManifest["envVars"]): Record<string, boolean> {
+  const normalized = normalizeEnvVars(envVars);
+  if (normalized.length === 0) return {};
+  return Object.fromEntries(
+    normalized.map((v) => [v.name, !!(process.env[v.name] && process.env[v.name] !== "")]),
+  );
 }
 
-function isConfigured(envVars: string[] | undefined): boolean {
-  if (!envVars?.length) return true;
-  return envVars.every((v) => process.env[v] !== undefined && process.env[v] !== "");
+/** True when all required env vars are set. Optional vars don't gate this. */
+function isConfigured(envVars: IntegrationManifest["envVars"]): boolean {
+  const required = normalizeEnvVars(envVars).filter((v) => v.required);
+  if (required.length === 0) return true;
+  return required.every((v) => process.env[v.name] !== undefined && process.env[v.name] !== "");
 }
 
 function maskSensitiveConfig(
@@ -102,41 +108,34 @@ function getSecretFields(configSchema?: Record<string, unknown>): Array<{
   return result;
 }
 
+interface CredentialStatusEntry {
+  key: string;
+  title: string;
+  description?: string;
+  source: "vault" | "env" | "missing";
+  sharedSecretName?: string;
+  updatedAt?: string;
+  updatedBy?: string | null;
+  isLegacyEnvVar: boolean;
+  /** False for optional env-var overrides (secret-field credentials are always required). */
+  required: boolean;
+}
+
 /** Compute credential status for an integration (secret fields + legacy envVars). */
 async function computeCredentialStatus(integration: {
   id: string;
   manifest: {
     configSchema?: Record<string, unknown>;
-    envVars?: string[];
+    envVars?: IntegrationManifest["envVars"];
   };
-}): Promise<
-  Array<{
-    key: string;
-    title: string;
-    description?: string;
-    source: "vault" | "env" | "missing";
-    sharedSecretName?: string;
-    updatedAt?: string;
-    updatedBy?: string | null;
-    isLegacyEnvVar: boolean;
-  }>
-> {
+}): Promise<CredentialStatusEntry[]> {
   const secretFields = getSecretFields(integration.manifest.configSchema);
   const vaultList = secretFields.length > 0 ? await listSecrets(integration.id) : [];
   const vaultMap = new Map(vaultList.map((v) => [v.key, v]));
 
-  const result: Array<{
-    key: string;
-    title: string;
-    description?: string;
-    source: "vault" | "env" | "missing";
-    sharedSecretName?: string;
-    updatedAt?: string;
-    updatedBy?: string | null;
-    isLegacyEnvVar: boolean;
-  }> = [];
+  const result: CredentialStatusEntry[] = [];
 
-  // Secret fields from configSchema
+  // Secret fields from configSchema — always required (nothing to authenticate with otherwise)
   for (const field of secretFields) {
     const vaultEntry = vaultMap.get(field.key);
     const envKey = `INTEGRATION_${integration.id.replace(/-/g, "_").toUpperCase()}_${field.key.toUpperCase()}`;
@@ -155,19 +154,22 @@ async function computeCredentialStatus(integration: {
       updatedAt: vaultEntry?.updatedAt?.toISOString(),
       updatedBy: vaultEntry?.updatedBy ?? null,
       isLegacyEnvVar: false,
+      required: true,
     });
   }
 
   // Legacy envVars not already covered by a secret field
   const secretFieldKeys = new Set(secretFields.map((f) => f.key));
-  for (const envVar of integration.manifest.envVars ?? []) {
-    if (secretFieldKeys.has(envVar)) continue;
-    const hasEnv = !!(process.env[envVar] && process.env[envVar] !== "");
+  for (const entry of normalizeEnvVars(integration.manifest.envVars)) {
+    if (secretFieldKeys.has(entry.name)) continue;
+    const hasEnv = !!(process.env[entry.name] && process.env[entry.name] !== "");
     result.push({
-      key: envVar,
-      title: envVar,
+      key: entry.name,
+      title: entry.name,
+      description: entry.description,
       source: hasEnv ? "env" : "missing",
       isLegacyEnvVar: true,
+      required: entry.required,
     });
   }
 
@@ -381,9 +383,11 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       return { id: depId, loaded: !!dep, enabled: dep?.enabled ?? false };
     });
 
-    const envVarEntries = (envVars ?? []).map((name) => ({
-      name,
-      present: !!(process.env[name] && process.env[name] !== ""),
+    const envVarEntries = normalizeEnvVars(envVars).map((entry) => ({
+      name: entry.name,
+      present: !!(process.env[entry.name] && process.env[entry.name] !== ""),
+      required: entry.required,
+      description: entry.description,
     }));
 
     return {

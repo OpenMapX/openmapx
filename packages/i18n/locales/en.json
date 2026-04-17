@@ -461,6 +461,8 @@
     "rowAccess": "Access",
     "rowNearestStation": "Nearest Station",
     "sectionPayment": "Payment",
+    "sectionNearbyTransit": "Nearby Transit",
+    "openStop": "Open {name}",
     "dur20min": "20 min",
     "dur30min": "30 min",
     "dur1h": "1 hour",

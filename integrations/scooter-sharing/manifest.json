@@ -25,7 +25,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://gbfs.api.ridedott.com/public/v2/brussels/gbfs.json"
@@ -102,6 +101,32 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    },
+    {
+      "sourceId": "nrw-mobidrom-scooter",
+      "name": "NRW.Mobidrom E-Scooter Sharing",
+      "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
+      "license": "Per-operator licenses (Voi, Lime) republished by NRW.Mobidrom GmbH",
+      "licenseUrl": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobilitaetsdaten.nrw/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ],
+  "envVars": [
+    {
+      "name": "NRW_MOBIDROM_CLIENT_ID",
+      "required": false,
+      "description": "OAuth2 client ID override for the NRW Mobidrom GBFS API. Defaults to the publicly documented 'gbfs-api' client."
+    },
+    {
+      "name": "NRW_MOBIDROM_CLIENT_SECRET",
+      "required": false,
+      "description": "OAuth2 client secret override for the NRW Mobidrom GBFS API. Defaults to the publicly documented secret (see dataset page)."
     }
   ]
 }

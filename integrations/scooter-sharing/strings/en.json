@@ -21,6 +21,11 @@
       "purpose": "Link e-scooters (multiple European cities). Company shut down Dec 2023.",
       "dataSent": "Coordinates (latitude, longitude)",
       "dataReceived": "Vehicles with id, coordinates, battery level, vehicle type"
+    },
+    {
+      "purpose": "NRW.Mobidrom bundled e-scooter feed (Voi + Lime in North Rhine-Westphalia)",
+      "dataSent": "OAuth2 client credentials (no user data; server-only)",
+      "dataReceived": "Per-operator GBFS feeds with vehicle positions, battery levels, vehicle types, pricing plans"
     }
   ]
 }

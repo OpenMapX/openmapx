@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deduplicateParking } from "../dedup.js";
+import { deduplicateParking, haversineMeters } from "../dedup.js";
 import type { ParkingFacility } from "../types.js";
 
 afterEach(() => {
@@ -30,7 +30,7 @@ describe("deduplicateParking", () => {
     expect(result[0].id).toBe("p1");
   });
 
-  it("deduplicates two facilities in the same 3dp grid cell (~111m)", () => {
+  it("clusters two facilities within the always-merge distance (~30m)", () => {
     const a = makeFacility({
       id: "db-1",
       coordinates: [13.3771, 52.5201],
@@ -43,12 +43,11 @@ describe("deduplicateParking", () => {
       sources: ["osm-parking"],
       name: "OSM Parking",
     });
-    // Both round to key: 52520,13377
     const result = deduplicateParking([a, b]);
     expect(result).toHaveLength(1);
   });
 
-  it("keeps facilities in different grid cells", () => {
+  it("keeps facilities that are far apart", () => {
     const a = makeFacility({
       id: "p1",
       coordinates: [13.377, 52.52],
@@ -63,6 +62,96 @@ describe("deduplicateParking", () => {
     expect(result).toHaveLength(2);
   });
 
+  describe("distance-based clustering", () => {
+    it("merges facilities <40m apart regardless of name", () => {
+      // Δlat 0.0002 ≈ 22m, Δlng 0.0002 ≈ 14m → ~26m
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.5201],
+        sources: ["osm-parking"],
+        name: "Totally Different Name",
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.3772, 52.5203],
+        sources: ["osm-parking"],
+        name: "Another Unrelated Lot",
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result).toHaveLength(1);
+    });
+
+    it("merges facilities 40–150m apart when names agree", () => {
+      // ~80m apart
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.521],
+        sources: ["parkapi-v2/Köln"],
+        name: "Parkhaus Rathaus",
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.377, 52.5217],
+        sources: ["osm-parking"],
+        name: "Rathaus P1",
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result).toHaveLength(1);
+    });
+
+    it("does not merge 40–150m apart when names disagree", () => {
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.521],
+        sources: ["osm-parking"],
+        name: "Parkhaus Rathaus",
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.377, 52.5217],
+        sources: ["osm-parking"],
+        name: "Parkhaus Kaufhof",
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result).toHaveLength(2);
+    });
+
+    it("never merges beyond ~150m", () => {
+      // ~250m apart
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.521],
+        sources: ["osm-parking"],
+        name: "Rathaus",
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.377, 52.5233],
+        sources: ["osm-parking"],
+        name: "Rathaus",
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result).toHaveLength(2);
+    });
+
+    it("does not merge on-street with a garage even at close range", () => {
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.521],
+        sources: ["osm-parking"],
+        parkingType: "on-street",
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.3771, 52.5211],
+        sources: ["osm-parking"],
+        parkingType: "garage",
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result).toHaveLength(2);
+    });
+  });
+
   describe("source priority", () => {
     it("db-bahnpark (0) wins over parkapi-v3 (1)", () => {
       const db = makeFacility({
@@ -73,7 +162,7 @@ describe("deduplicateParking", () => {
       });
       const parkapi = makeFacility({
         id: "pv3-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["parkapi-v3"],
         name: "ParkAPI Parking",
       });
@@ -93,7 +182,7 @@ describe("deduplicateParking", () => {
       });
       const v2 = makeFacility({
         id: "pv2-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["parkapi-v2/Dresden"],
         name: "V2 Parking",
       });
@@ -103,7 +192,7 @@ describe("deduplicateParking", () => {
       expect(result[0].sources[0]).toBe("parkapi-v3");
     });
 
-    it("parkapi-v2 (2) wins over osm-parking (3)", () => {
+    it("parkapi-v2 (2) wins over osm-parking (5)", () => {
       const v2 = makeFacility({
         id: "pv2-1",
         coordinates: [13.377, 52.52],
@@ -112,7 +201,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         name: "OSM Parking",
       });
@@ -127,17 +216,16 @@ describe("deduplicateParking", () => {
         id: "pv2-1",
         coordinates: [13.377, 52.52],
         sources: ["parkapi-v2/Dresden"],
-        name: "Dresden P+R",
+        name: "Rathaus",
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
-        name: "OSM Lot",
+        name: "Rathaus",
       });
       const result = deduplicateParking([osm, v2]);
       expect(result).toHaveLength(1);
-      // parkapi-v2/Dresden (priority 2) beats osm-parking (priority 3)
       expect(result[0].id).toBe("pv2-1");
     });
 
@@ -146,17 +234,16 @@ describe("deduplicateParking", () => {
         id: "unk-1",
         coordinates: [13.377, 52.52],
         sources: ["some-new-provider"],
-        name: "Unknown Lot",
+        name: "Rathaus",
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
-        name: "OSM Lot",
+        name: "Rathaus",
       });
       const result = deduplicateParking([unknown, osm]);
       expect(result).toHaveLength(1);
-      // osm-parking (priority 3) beats unknown (priority 99)
       expect(result[0].id).toBe("osm-1");
     });
   });
@@ -171,7 +258,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         name: "OSM Parking Hbf",
       });
@@ -190,7 +277,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         freeSpaces: 42,
       });
@@ -198,7 +285,47 @@ describe("deduplicateParking", () => {
       expect(result[0].freeSpaces).toBe(42);
     });
 
-    it("primary freeSpaces wins over secondary", () => {
+    it("real-time freeSpaces wins over a higher-priority static source", () => {
+      // Primary has no realtime; secondary has realtime — secondary's count wins.
+      const db = makeFacility({
+        id: "db-1",
+        coordinates: [13.377, 52.52],
+        sources: ["db-bahnpark"],
+        hasRealtimeData: false,
+        freeSpaces: 10,
+      });
+      const osm = makeFacility({
+        id: "osm-1",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+        hasRealtimeData: true,
+        freeSpaces: 42,
+      });
+      const result = deduplicateParking([db, osm]);
+      expect(result[0].freeSpaces).toBe(42);
+      expect(result[0].hasRealtimeData).toBe(true);
+    });
+
+    it("real-time state wins when primary has no real-time data", () => {
+      const db = makeFacility({
+        id: "db-1",
+        coordinates: [13.377, 52.52],
+        sources: ["db-bahnpark"],
+        hasRealtimeData: false,
+        state: "unknown",
+      });
+      const osm = makeFacility({
+        id: "osm-1",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+        hasRealtimeData: true,
+        state: "open",
+      });
+      const result = deduplicateParking([db, osm]);
+      expect(result[0].state).toBe("open");
+    });
+
+    it("primary freeSpaces wins when both sides are static", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
@@ -207,7 +334,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         freeSpaces: 42,
       });
@@ -223,7 +350,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         capacity: 200,
       });
@@ -231,7 +358,7 @@ describe("deduplicateParking", () => {
       expect(result[0].capacity).toBe(200);
     });
 
-    it("hasRealtimeData is true if either source has it", () => {
+    it("hasRealtimeData is true if any member has it", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
@@ -240,7 +367,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         hasRealtimeData: true,
       });
@@ -248,7 +375,7 @@ describe("deduplicateParking", () => {
       expect(result[0].hasRealtimeData).toBe(true);
     });
 
-    it("hasRealtimeData is false if neither source has it", () => {
+    it("hasRealtimeData is false if no member has it", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
@@ -257,7 +384,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         hasRealtimeData: false,
       });
@@ -265,74 +392,7 @@ describe("deduplicateParking", () => {
       expect(result[0].hasRealtimeData).toBe(false);
     });
 
-    it("state: primary wins when not 'unknown'", () => {
-      const db = makeFacility({
-        id: "db-1",
-        coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
-        state: "open",
-      });
-      const osm = makeFacility({
-        id: "osm-1",
-        coordinates: [13.3774, 52.5204],
-        sources: ["osm-parking"],
-        state: "closed",
-      });
-      const result = deduplicateParking([db, osm]);
-      expect(result[0].state).toBe("open");
-    });
-
-    it("state: falls back to secondary when primary is 'unknown'", () => {
-      const db = makeFacility({
-        id: "db-1",
-        coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
-        state: "unknown",
-      });
-      const osm = makeFacility({
-        id: "osm-1",
-        coordinates: [13.3774, 52.5204],
-        sources: ["osm-parking"],
-        state: "closed",
-      });
-      const result = deduplicateParking([db, osm]);
-      expect(result[0].state).toBe("closed");
-    });
-
-    it("state: keeps primary 'unknown' when secondary has no state", () => {
-      const db = makeFacility({
-        id: "db-1",
-        coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
-        state: "unknown",
-      });
-      const osm = makeFacility({
-        id: "osm-1",
-        coordinates: [13.3774, 52.5204],
-        sources: ["osm-parking"],
-      });
-      const result = deduplicateParking([db, osm]);
-      expect(result[0].state).toBe("unknown");
-    });
-
-    it("parkingType: primary wins when not 'unknown'", () => {
-      const db = makeFacility({
-        id: "db-1",
-        coordinates: [13.377, 52.52],
-        sources: ["db-bahnpark"],
-        parkingType: "garage",
-      });
-      const osm = makeFacility({
-        id: "osm-1",
-        coordinates: [13.3774, 52.5204],
-        sources: ["osm-parking"],
-        parkingType: "surface",
-      });
-      const result = deduplicateParking([db, osm]);
-      expect(result[0].parkingType).toBe("garage");
-    });
-
-    it("parkingType: falls back to secondary when primary is 'unknown'", () => {
+    it("parkingType: highest-priority non-unknown wins", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
@@ -341,7 +401,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         parkingType: "underground",
       });
@@ -349,7 +409,106 @@ describe("deduplicateParking", () => {
       expect(result[0].parkingType).toBe("underground");
     });
 
-    it("enriches optional fields from secondary when primary lacks them", () => {
+    it("disabledSpaces: max wins (richer count beats sentinel)", () => {
+      const v3 = makeFacility({
+        id: "v3-1",
+        coordinates: [13.377, 52.52],
+        sources: ["parkapi-v3"],
+        disabledSpaces: 1,
+      });
+      const nrw = makeFacility({
+        id: "nrw-1",
+        coordinates: [13.3772, 52.5202],
+        sources: ["nrw-mobidrom-parking"],
+        disabledSpaces: 12,
+      });
+      const result = deduplicateParking([v3, nrw]);
+      expect(result[0].disabledSpaces).toBe(12);
+    });
+
+    it("maxHeight: most restrictive (minimum) wins", () => {
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.52],
+        sources: ["db-bahnpark"],
+        maxHeight: 220,
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+        maxHeight: 200,
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result[0].maxHeight).toBe(200);
+    });
+
+    it("address: richest (longest) string wins", () => {
+      const db = makeFacility({
+        id: "db-1",
+        coordinates: [13.377, 52.52],
+        sources: ["db-bahnpark"],
+        address: "Hauptstr.",
+      });
+      const osm = makeFacility({
+        id: "osm-1",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+        address: "Hauptstraße 123, 10115 Berlin",
+      });
+      const result = deduplicateParking([db, osm]);
+      expect(result[0].address).toBe("Hauptstraße 123, 10115 Berlin");
+    });
+
+    it("openingHours: richest string wins", () => {
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.52],
+        sources: ["db-bahnpark"],
+        openingHours: "24/7",
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+        openingHours: "Mo-Fr 06:00-22:00; Sa 08:00-20:00; Su closed",
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result[0].openingHours).toContain("Mo-Fr");
+    });
+
+    it("parkAndRide: any true becomes true", () => {
+      const a = makeFacility({
+        id: "a",
+        coordinates: [13.377, 52.52],
+        sources: ["db-bahnpark"],
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+        parkAndRide: true,
+      });
+      const result = deduplicateParking([a, b]);
+      expect(result[0].parkAndRide).toBe(true);
+    });
+
+    it("sources: deduplicated per provider prefix, primary's full label kept", () => {
+      const v2 = makeFacility({
+        id: "v2-1",
+        coordinates: [13.377, 52.52],
+        sources: ["parkapi-v2/Dresden"],
+      });
+      const osm = makeFacility({
+        id: "osm-1",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+      });
+      const result = deduplicateParking([v2, osm]);
+      expect(result[0].sources).toEqual(["parkapi-v2/Dresden", "osm-parking"]);
+    });
+
+    it("enriches optional fields from lower-priority members when primary lacks them", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
@@ -357,7 +516,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         disabledSpaces: 5,
         chargingSpaces: 3,
@@ -391,7 +550,7 @@ describe("deduplicateParking", () => {
       expect(result[0].url).toBe("https://example.com");
     });
 
-    it("fee: primary wins when not 'unknown'", () => {
+    it("fee: highest-priority non-unknown wins", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
@@ -400,7 +559,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         fee: "paid",
       });
@@ -408,7 +567,7 @@ describe("deduplicateParking", () => {
       expect(result[0].fee).toBe("free");
     });
 
-    it("fee: falls back to secondary when primary is 'unknown'", () => {
+    it("fee: falls back when primary is unknown", () => {
       const db = makeFacility({
         id: "db-1",
         coordinates: [13.377, 52.52],
@@ -417,7 +576,7 @@ describe("deduplicateParking", () => {
       });
       const osm = makeFacility({
         id: "osm-1",
-        coordinates: [13.3774, 52.5204],
+        coordinates: [13.3772, 52.5202],
         sources: ["osm-parking"],
         fee: "paid",
       });
@@ -426,70 +585,86 @@ describe("deduplicateParking", () => {
     });
   });
 
-  describe("coordinate rounding at 3dp", () => {
-    it("rounds coordinates to 3 decimal places for grid key", () => {
-      // 52.5201 and 52.5204 both round to 52520 at 3dp
+  describe("groupwise merge (3+ members)", () => {
+    it("highest priority across a cluster becomes primary", () => {
+      const osm = makeFacility({
+        id: "osm-1",
+        coordinates: [13.377, 52.52],
+        sources: ["osm-parking"],
+        name: "OSM Lot",
+        capacity: 100,
+      });
+      const v3 = makeFacility({
+        id: "pv3-1",
+        coordinates: [13.3772, 52.5202],
+        sources: ["parkapi-v3"],
+        name: "V3 Lot",
+        freeSpaces: 25,
+        hasRealtimeData: true,
+      });
+      const db = makeFacility({
+        id: "db-1",
+        coordinates: [13.3771, 52.5201],
+        sources: ["db-bahnpark"],
+        name: "DB Lot",
+        state: "open",
+      });
+      const result = deduplicateParking([osm, v3, db]);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("db-1");
+      expect(result[0].name).toBe("DB Lot");
+      expect(result[0].sources[0]).toBe("db-bahnpark");
+      // Groupwise merge still enriches from all lower-priority members
+      expect(result[0].capacity).toBe(100);
+      expect(result[0].freeSpaces).toBe(25);
+      expect(result[0].hasRealtimeData).toBe(true);
+      expect(result[0].state).toBe("open");
+    });
+
+    it("groupwise merge sees all members at once (not pairwise)", () => {
+      // Three members, each has one unique field. A pairwise merge could
+      // lose the third's field depending on iteration order; groupwise wins.
       const a = makeFacility({
         id: "a",
+        coordinates: [13.377, 52.52],
+        sources: ["osm-parking"],
+        capacity: 200,
+      });
+      const b = makeFacility({
+        id: "b",
+        coordinates: [13.3772, 52.5202],
+        sources: ["osm-parking"],
+        disabledSpaces: 5,
+      });
+      const c = makeFacility({
+        id: "c",
         coordinates: [13.3771, 52.5201],
         sources: ["osm-parking"],
+        chargingSpaces: 3,
       });
-      const b = makeFacility({
-        id: "b",
-        coordinates: [13.3774, 52.5204],
-        sources: ["osm-parking"],
-      });
-      const result = deduplicateParking([a, b]);
+      const result = deduplicateParking([a, b, c]);
       expect(result).toHaveLength(1);
-    });
-
-    it("separates coordinates in different 3dp cells", () => {
-      // 52.5204 → round(52520.4) = 52520
-      // 52.5206 → round(52520.6) = 52521  different cell
-      const a = makeFacility({
-        id: "a",
-        coordinates: [13.377, 52.5204],
-        sources: ["osm-parking"],
-      });
-      const b = makeFacility({
-        id: "b",
-        coordinates: [13.377, 52.5206],
-        sources: ["osm-parking"],
-      });
-      const result = deduplicateParking([a, b]);
-      expect(result).toHaveLength(2);
+      expect(result[0].capacity).toBe(200);
+      expect(result[0].disabledSpaces).toBe(5);
+      expect(result[0].chargingSpaces).toBe(3);
     });
   });
+});
 
-  it("handles three-way merge: highest priority becomes primary", () => {
-    const osm = makeFacility({
-      id: "osm-1",
-      coordinates: [13.377, 52.52],
-      sources: ["osm-parking"],
-      name: "OSM Lot",
-      capacity: 100,
-    });
-    const v3 = makeFacility({
-      id: "pv3-1",
-      coordinates: [13.3774, 52.5204],
-      sources: ["parkapi-v3"],
-      name: "V3 Lot",
-      freeSpaces: 25,
-    });
-    const db = makeFacility({
-      id: "db-1",
-      coordinates: [13.3772, 52.5202],
-      sources: ["db-bahnpark"],
-      name: "DB Lot",
-      state: "open",
-    });
-    // All three land in the same 3dp cell
-    const result = deduplicateParking([osm, v3, db]);
-    expect(result).toHaveLength(1);
-    // db-bahnpark has highest priority (0), so it should be the primary
-    expect(result[0].id).toBe("db-1");
-    expect(result[0].name).toBe("DB Lot");
-    expect(result[0].sources[0]).toBe("db-bahnpark");
-    expect(result[0].state).toBe("open");
+describe("haversineMeters", () => {
+  it("returns 0 for identical points", () => {
+    expect(haversineMeters([13.377, 52.52], [13.377, 52.52])).toBe(0);
+  });
+
+  it("returns reasonable distance for Berlin–Munich (~504 km)", () => {
+    const d = haversineMeters([13.405, 52.52], [11.582, 48.135]);
+    expect(d).toBeGreaterThan(490_000);
+    expect(d).toBeLessThan(520_000);
+  });
+
+  it("returns ~22m for a 0.0002° latitude step near 52°N", () => {
+    const d = haversineMeters([13.377, 52.52], [13.377, 52.5202]);
+    expect(d).toBeGreaterThan(15);
+    expect(d).toBeLessThan(30);
   });
 });
