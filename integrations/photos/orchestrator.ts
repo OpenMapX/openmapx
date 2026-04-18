@@ -1,8 +1,7 @@
 import type { IntegrationContext, PlacePhoto } from "@openmapx/core";
+import { parseId } from "@openmapx/core";
 import { lookupByNameAndCoords, lookupByOsmRef } from "../geocoding/place-lookup.js";
 import type { PhotoProvider, PhotoQuery } from "./types.js";
-
-const OSM_ID_RE = /^(node|way|relation)\/(\d+)$/;
 
 let _ctx: IntegrationContext | null = null;
 
@@ -327,11 +326,14 @@ export async function resolveOsmTags(
   lng: number,
 ): Promise<Record<string, string> | undefined> {
   try {
-    const match = placeId.match(OSM_ID_RE);
-    if (match) {
-      const [, osmType, osmId] = match;
-      const place = await lookupByOsmRef(osmType, osmId, placeId);
-      return place.osmTags ?? undefined;
+    const parsed = parseId(placeId);
+    if (parsed?.scheme === "osm") {
+      const osmMatch = parsed.value.match(/^(node|way|relation)\/(\d+)/);
+      if (osmMatch) {
+        const [, osmType, osmId] = osmMatch;
+        const place = await lookupByOsmRef(osmType, osmId, placeId);
+        return place.osmTags ?? undefined;
+      }
     }
     if (name) {
       const place = await lookupByNameAndCoords(name, lat, lng, placeId);

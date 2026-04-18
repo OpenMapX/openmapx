@@ -1,4 +1,4 @@
-import type { BBox } from "@openmapx/core";
+import type { BBox, Ids } from "@openmapx/core";
 
 export type TransportMode =
   | "bus"
@@ -13,7 +13,27 @@ export type TransportMode =
   | "walking";
 
 export interface TransitStop {
+  /**
+   * Canonical `scheme:value` id, typically `<provider>:<nativeId>`
+   * (`tfl:490G00099A`, `mb:place-brntn`, `dyn:de/vrs:de:05315:11111`).
+   * Duplicates `primaryScheme` + `ids[primaryScheme]` for convenience; use
+   * the helpers in `@openmapx/core` to derive it consistently.
+   */
   id: string;
+  /**
+   * Scheme key in `ids` that is canonical for this stop. Usually equal to
+   * `provider`. Optional because many existing producers only set `id`
+   * today; consumers that need the split should fall back to `parseId(id)`.
+   */
+  primaryScheme?: string;
+  /**
+   * Cross-reference map of every known identifier for this stop — native
+   * provider id, plus any linked OSM/Wikidata refs a provider has matched.
+   * Optional; when present, `geocodeStopAsPlace` carries entries forward
+   * onto the resulting `Place.ids` so downstream panels can dispatch to
+   * any of them.
+   */
+  ids?: Ids;
   name: string;
   lat: number;
   lng: number;

@@ -1,7 +1,15 @@
-import type { LngLat } from "@openmapx/core";
+import type { Ids, LngLat } from "@openmapx/core";
 
 export interface SharedMobilityStation {
+  /**
+   * Canonical `scheme:value` id, typically `<system-id>:<native>`. See
+   * `primaryScheme` / `ids` for the underlying multi-id map.
+   */
   id: string;
+  /** Scheme key in `ids` that is canonical for this station. */
+  primaryScheme?: string;
+  /** Cross-reference map — native system id plus any OSM/wikidata refs. */
+  ids?: Ids;
   name: string;
   coordinates: LngLat;
   /** Number of available vehicles at the station. */
@@ -71,7 +79,12 @@ export interface PricingDetail {
 }
 
 export interface SharedMobilityVehicle {
+  /** Canonical `scheme:value` id, typically `<system-id>:<native>`. */
   id: string;
+  /** Scheme key in `ids` that is canonical for this vehicle. */
+  primaryScheme?: string;
+  /** Cross-reference map — native system id plus any other known refs. */
+  ids?: Ids;
   coordinates: LngLat;
   /** Vehicle form factor. */
   formFactor: VehicleFormFactor;

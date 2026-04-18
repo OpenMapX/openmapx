@@ -1,8 +1,9 @@
 "use client";
 
-import type { Place } from "@openmapx/core";
 import {
+  createPlace,
   PANEL,
+  type Place,
   useDataSourceDetail,
   useDataSourceStore,
   useDataSources,
@@ -27,7 +28,7 @@ export function DataSourceDetailBridge() {
   );
 
   useEffect(() => {
-    if (!detail) return;
+    if (!detail || !selectedItem) return;
 
     // Skip fallback details with invalid coordinates (station not in cache)
     if (detail.coordinates[0] === 0 && detail.coordinates[1] === 0) return;
@@ -38,8 +39,13 @@ export function DataSourceDetailBridge() {
       detail.address?.country,
     ].filter(Boolean);
 
-    const place: Place = {
-      id: detail.id,
+    // Data-source places use the provider id as the primary scheme — each
+    // data-source integration registers a resolver under its own id
+    // (ev-charging, parking, fuel, …).
+    const scheme = selectedItem.sourceId;
+    const place: Place = createPlace({
+      primaryScheme: scheme,
+      ids: { [scheme]: detail.id },
       name: detail.name,
       address: addressParts.join(", "),
       city: detail.address?.town,
@@ -49,11 +55,11 @@ export function DataSourceDetailBridge() {
       website: detail.operator?.url,
       openingHours: detail.openingHours,
       dataSourceDetail: detail,
-    };
+    });
 
     setSelectedPlace(place);
     useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-  }, [detail, setSelectedPlace, sourceMeta]);
+  }, [detail, selectedItem, setSelectedPlace, sourceMeta]);
 
   return null;
 }

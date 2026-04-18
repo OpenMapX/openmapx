@@ -43,6 +43,11 @@ export const API_ENDPOINTS = {
   dataSourceSearch: "/api/integrations/data-source", // used as `${base}/${sourceId}/search`
   dataSourceDetail: "/api/integrations/data-source", // used as `${base}/${sourceId}/detail/${itemId}`
   photos: "/api/integrations/photos/search",
+  reviews: "/api/integrations/reviews/reviews",
+  reviewAggregate: "/api/integrations/reviews/aggregate",
+  reviewSubmit: "/api/integrations/reviews/submit",
+  reviewImage: "/api/integrations/reviews/image",
+  reviewKeypair: "/api/reviews/keypair",
   imageProxy: "/api/image-proxy",
   hikingSearch: "/api/integrations/overlay-hiking/hiking/search",
   hikingArea: "/api/integrations/overlay-hiking/hiking/area",

@@ -349,11 +349,7 @@ function GalleryThumbnail({
   onClick: () => void;
 }) {
   const registry = useIntegrationRegistry();
-  const resolveSourceName = (sid: string) =>
-    registry
-      .getByDomain("photos")
-      .flatMap((m) => m.dataSources ?? [])
-      .find((d) => d.sourceId === sid)?.name ?? sid;
+  const resolveSourceName = (sid: string) => registry.findDataSource(sid)?.name ?? sid;
 
   // 0 = try thumbnailUrl, 1 = try full url, 2 = broken
   const [attempt, setAttempt] = useState(0);

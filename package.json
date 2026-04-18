@@ -14,11 +14,11 @@
     "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.10",
-    "@changesets/cli": "^2.30.0",
+    "@biomejs/biome": "^2.4.12",
+    "@changesets/cli": "^2.31.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "turbo": "^2.9.4",
+    "turbo": "^2.9.6",
     "typescript": "^5.9.3"
   },
   "pnpm": {

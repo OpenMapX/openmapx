@@ -67,7 +67,7 @@ function extractPistes(elements: OverpassElement[]): WinterSportsPiste[] {
     if (!geometry) continue;
 
     pistes.push({
-      id: `${el.type}/${el.id}`,
+      id: `osm:${el.type}/${el.id}`,
       name: tags["piste:name"] || tags.name || "",
       type: tags["piste:type"],
       difficulty: tags["piste:difficulty"] || "",
@@ -95,7 +95,7 @@ function extractLifts(elements: OverpassElement[]): WinterSportsLift[] {
     if (!geometry) continue;
 
     lifts.push({
-      id: `way/${el.id}`,
+      id: `osm:way/${el.id}`,
       name: tags.name || "",
       aerialway: tags.aerialway,
       occupancy: parseNullableInt(tags, "aerialway:occupancy"),
@@ -131,7 +131,7 @@ function extractAreas(elements: OverpassElement[]): WinterSportsArea[] {
     if (!geometry) continue;
 
     areas.push({
-      id: `${el.type}/${el.id}`,
+      id: `osm:${el.type}/${el.id}`,
       name: tags.name || "",
       geometry,
     });

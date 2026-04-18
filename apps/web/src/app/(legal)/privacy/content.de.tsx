@@ -188,6 +188,62 @@ export default function PrivacyContentDe({
               k&ouml;nnen
             </Typography>
           </li>
+          <li>
+            <Typography>
+              <strong>Mangrove-Bewertungs-Schl&uuml;sselpaar</strong> &mdash; wenn Sie die
+              Bewertungsfunktion aktivieren, wird ein ECDSA-P-256-Signatur-Schl&uuml;sselpaar
+              erzeugt und f&uuml;r Sie gespeichert. Der &ouml;ffentliche Schl&uuml;ssel wird im
+              Klartext auf unserem Server abgelegt (er ist konzeptionell &ouml;ffentlich). Der
+              private Schl&uuml;ssel wird je nach von Ihnen gew&auml;hltem Schutzmodus gespeichert:
+            </Typography>
+            <ul>
+              <li>
+                <Typography>
+                  <strong>Passphrase (empfohlen)</strong> &mdash; der private Schl&uuml;ssel wird in
+                  Ihrem Browser mit einer von Ihnen gew&auml;hlten Passphrase verschl&uuml;sselt,
+                  und zwar mit dem auditierten{" "}
+                  <Link
+                    href="https://age-encryption.org/v1"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    age-Verschl&uuml;sselungsformat
+                  </Link>{" "}
+                  (scrypt-Schl&uuml;sselableitung und ChaCha20-Poly1305). Uns liegt
+                  ausschlie&szlig;lich das Chiffrat vor.
+                </Typography>
+              </li>
+              <li>
+                <Typography>
+                  <strong>Passphrase und/oder WebAuthn-Passkey</strong> &mdash; zus&auml;tzlich oder
+                  alternativ k&ouml;nnen Sie den privaten Schl&uuml;ssel mit einem oder mehreren
+                  registrierten Passkeys entsperren (z.&nbsp;B. Biometrie Ihres Ger&auml;ts,
+                  Hardware-Sicherheitsschl&uuml;ssel). Wir speichern pro Passkey eine
+                  age-plugin-fido2prf-Identit&auml;tskennung. Diese enth&auml;lt Credential-ID,
+                  Relying-Party-ID und Transporthinweis, jedoch kein geheimes Material.
+                </Typography>
+              </li>
+              <li>
+                <Typography>
+                  <strong>Unverschl&uuml;sselt (ausdr&uuml;ckliches Opt-in)</strong> &mdash; nur
+                  wenn Sie dies aktiv w&auml;hlen, wird der private Schl&uuml;ssel im Klartext auf
+                  unserem Server gespeichert. In diesem Modus k&ouml;nnten Personen mit
+                  Datenbankzugriff (einschlie&szlig;lich des Betreibers) kryptografisch Bewertungen
+                  in Ihrem Namen signieren. Wir zeigen vor dieser Wahl eine Warnung an.
+                </Typography>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <Typography>
+              <strong>Bewertungsinhalte</strong> &mdash; wenn Sie eine Bewertung abgeben, werden die
+              von Ihnen bereitgestellten Inhalte (Sternebewertung, Freitext, optionale Bilder,
+              optionale Interessenangaben, optionaler Erlebniskontext, Ortsreferenz) in Ihrem
+              Browser kryptografisch signiert und anschlie&szlig;end von unserem Server an das
+              Mangrove.reviews-Netzwerk weitergeleitet. Siehe Abschnitt&nbsp;6 zur
+              Ver&ouml;ffentlichung.
+            </Typography>
+          </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
           Sie k&ouml;nnen sich auch &uuml;ber OAuth-Drittanbieter anmelden (OpenStreetMap,
@@ -209,7 +265,96 @@ export default function PrivacyContentDe({
         </Typography>
       </Section>
 
-      <Section title="6. Drittanbieter-Dienste und Daten&uuml;bermittlungen">
+      <Section title="6. Bewertungen (Mangrove Open Reviews Standard)">
+        <Typography>
+          OpenMapX bindet das dezentrale Bewertungsnetzwerk{" "}
+          <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
+            Mangrove.reviews
+          </Link>{" "}
+          (Open Reviews Standard, betrieben von der Open Reviews Association, Z&uuml;rich, Schweiz)
+          ein. Die Nutzung der Bewertungsfunktion hat Auswirkungen, die &uuml;ber unsere eigenen
+          Server hinausgehen. Bitte lesen Sie diesen Abschnitt daher sorgf&auml;ltig, bevor Sie eine
+          Bewertung abgeben.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Bewertungen sind &ouml;ffentlich und dauerhaft.</strong> Wenn Sie eine
+              Bewertung abgeben, wird diese mit Ihrem Schl&uuml;sselpaar (siehe Abschnitt&nbsp;5)
+              signiert und an <code>api.mangrove.reviews</code> &uuml;bermittelt. Von dort wird sie
+              von unabh&auml;ngigen Aggregatoren gespiegelt und weiterver&ouml;ffentlicht, die nicht
+              unserer Kontrolle unterliegen. Die L&ouml;schung einer Bewertung ist eine
+              Best-Effort-Anfrage an Aggregatoren; wir k&ouml;nnen die Entfernung aus bereits
+              verbreiteten Kopien nicht garantieren.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Ihr &ouml;ffentlicher Schl&uuml;ssel ist ein dauerhaftes Pseudonym.</strong>{" "}
+              Jede von Ihnen abgegebene Bewertung wird mit Ihrem &ouml;ffentlichen Schl&uuml;ssel
+              signiert und mit ihm verkn&uuml;pft. Der &ouml;ffentliche Schl&uuml;ssel wird von
+              Mangrove und den Aggregatoren im Klartext gespeichert und bindet alle Ihre Bewertungen
+              sitzungs- und ger&auml;te&uuml;bergreifend zu einer pseudonymen Identit&auml;t
+              zusammen. Jede Person, die eine Verbindung zwischen Ihrem &ouml;ffentlichen
+              Schl&uuml;ssel und Ihrer realen Identit&auml;t herstellt, kann alle fr&uuml;heren und
+              zuk&uuml;nftigen von Ihnen signierten Bewertungen zuordnen. Der Schl&uuml;ssel ist
+              kein direkter Identifikator (Name, E-Mail usw.), ihn als anonym zu behandeln w&auml;re
+              jedoch irref&uuml;hrend.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Was &uuml;bermittelt wird.</strong> Eine Bewertung enth&auml;lt: die
+              Subjektkennung (f&uuml;r Orte ein <code>geo:</code>-URI mit Koordinaten und
+              Unsicherheitsradius), Ihre Sternebewertung, einen optionalen Freitext, optionale
+              Erlebnis-Tags, optionale Interessenangaben, optional hochgeladene Bilder, Ihren
+              &ouml;ffentlichen Schl&uuml;ssel und Ihre Signatur.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Bild-Uploads.</strong> Optionale Bewertungsbilder werden an den Bilddienst von
+              Mangrove hochgeladen (<code>files.mangrove.reviews</code>) und sind nach dem Hochladen
+              &ouml;ffentlich abrufbar. Bevor Ihr Bild Ihren Browser verl&auml;sst, kodieren wir es
+              &uuml;ber ein HTML-Canvas neu und entfernen dabei EXIF-, XMP-, IPTC-, GPS- und
+              &auml;hnliche eingebettete Metadaten, die Kameras h&auml;ufig anh&auml;ngen. Der
+              sichtbare Bildinhalt selbst bleibt erhalten und wird unver&auml;ndert
+              ver&ouml;ffentlicht.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Abruf von Bewertungen.</strong> Wenn Sie einen Ort in OpenMapX ansehen, ruft
+              unser Backend etwaige vorhandene Bewertungen zu diesem Ort von{" "}
+              <code>api.mangrove.reviews</code> ab und &uuml;bermittelt dabei den <code>geo:</code>
+              -URI des Orts (Koordinaten). Ihre IP-Adresse wird f&uuml;r Lesevorg&auml;nge nicht an
+              Mangrove &uuml;bertragen, da diese &uuml;ber unseren Server laufen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Bearbeiten und L&ouml;schen eigener Bewertungen.</strong> Bearbeitungen und
+              L&ouml;schungen sind selbst signierte Folgebewertungen. Sie werden auf dieselbe Weise
+              wie die urspr&uuml;ngliche Bewertung verbreitet und unterliegen denselben Vorbehalten
+              hinsichtlich Spiegelungen und Aufbewahrung durch Dritte.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          Rechtsgrundlage f&uuml;r die Speicherung und Signatur Ihres Schl&uuml;sselpaars ist
+          Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO (Durchf&uuml;hrung des von Ihnen angeforderten
+          Bewertungsdienstes). Rechtsgrundlage f&uuml;r die Ver&ouml;ffentlichung der
+          Bewertungsinhalte im Mangrove-Netzwerk ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;a DSGVO (Ihre
+          ausdr&uuml;ckliche Einwilligung, erteilt durch Annahme der in der
+          Bewertungs-Oberfl&auml;che eingeblendeten Nutzungsbedingungen/Datenschutz-Checkboxen und
+          Best&auml;tigung &uuml;ber &bdquo;Ver&ouml;ffentlichen&ldquo;). Sie k&ouml;nnen eine
+          zuk&uuml;nftige Einwilligung jederzeit widerrufen, indem Sie keine weiteren Bewertungen
+          ver&ouml;ffentlichen; bereits ver&ouml;ffentlichte Bewertungen k&ouml;nnen aufgrund des
+          dezentralen Designs des Systems nicht einseitig zur&uuml;ckgezogen werden.
+        </Typography>
+      </Section>
+
+      <Section title="7. Drittanbieter-Dienste und Daten&uuml;bermittlungen">
         <Typography>
           Um seine Kartenfunktionen bereitzustellen, sendet OpenMapX Anfragen an verschiedene
           Drittanbieter-APIs. Wenn Sie eine Funktion nutzen, werden bestimmte Daten (typischerweise
@@ -322,7 +467,7 @@ export default function PrivacyContentDe({
         </Typography>
       </Section>
 
-      <Section title="7. Cookies und lokaler Speicher">
+      <Section title="8. Cookies und lokaler Speicher">
         <Typography>
           OpenMapX verwendet ausschlie&szlig;lich technisch notwendige Speichermechanismen. Jeder
           nachfolgende Punkt ist f&uuml;r die Bereitstellung des vom Nutzer angeforderten Dienstes
@@ -384,7 +529,7 @@ export default function PrivacyContentDe({
         </Typography>
       </Section>
 
-      <Section title="8. Serverseitiges Caching und Datenbanken">
+      <Section title="9. Serverseitiges Caching und Datenbanken">
         <Typography>
           Um die Leistung zu verbessern und die Last auf Drittanbieter-APIs zu reduzieren, speichert
           unser Server API-Antworten in Redis (einem In-Memory-Datenspeicher) zwischen.
@@ -402,7 +547,7 @@ export default function PrivacyContentDe({
         </Typography>
       </Section>
 
-      <Section title="9. E-Mail-Kommunikation">
+      <Section title="10. E-Mail-Kommunikation">
         <Typography>
           Wenn Sie ein Konto registrieren, k&ouml;nnen wir transaktionale E-Mails senden f&uuml;r:
         </Typography>
@@ -425,7 +570,7 @@ export default function PrivacyContentDe({
         </Typography>
       </Section>
 
-      <Section title="10. Ihre Rechte nach der DSGVO">
+      <Section title="11. Ihre Rechte nach der DSGVO">
         <Typography>
           Sie haben folgende Rechte bez&uuml;glich Ihrer personenbezogenen Daten:
         </Typography>
@@ -491,7 +636,7 @@ export default function PrivacyContentDe({
         </Typography>
       </Section>
 
-      <Section title="11. Datenspeicherung">
+      <Section title="12. Datenspeicherung">
         <Typography>Wir speichern personenbezogene Daten nur so lange wie n&ouml;tig:</Typography>
         <ul>
           <li>
@@ -503,6 +648,22 @@ export default function PrivacyContentDe({
             <Typography>
               <strong>Gespeicherte Orte</strong> &mdash; werden aufbewahrt, bis Sie sie entfernen
               oder Ihr Konto l&ouml;schen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Mangrove-Schl&uuml;sselpaar</strong> &mdash; wird aufbewahrt, bis Sie es neu
+              generieren oder Ihr Konto l&ouml;schen. Das L&ouml;schen des Schl&uuml;sselpaars auf
+              unseren Servern <strong>widerruft nicht</strong> bereits ver&ouml;ffentlichte
+              Bewertungen aus dem Mangrove-Netzwerk.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Ver&ouml;ffentlichte Bewertungsinhalte</strong> &mdash; verbleiben im
+              Mangrove-Netzwerk und seinen Spiegeln au&szlig;erhalb unserer Kontrolle. Innerhalb der
+              Anzeige von OpenMapX k&ouml;nnen Bewertungen auf Wunsch ausgeblendet werden; bei
+              externen Aggregatoren richtet sich die Aufbewahrung nach deren jeweiligen Richtlinien.
             </Typography>
           </li>
           <li>
@@ -527,7 +688,7 @@ export default function PrivacyContentDe({
         </ul>
       </Section>
 
-      <Section title="12. Sicherheit">
+      <Section title="13. Sicherheit">
         <Typography>
           Wir setzen angemessene technische und organisatorische Ma&szlig;nahmen zum Schutz Ihrer
           Daten ein, darunter verschl&uuml;sselte Verbindungen (TLS/HTTPS), gehashte Passw&ouml;rter
@@ -535,9 +696,23 @@ export default function PrivacyContentDe({
           parametrisierte Datenbankabfragen. Jedoch ist keine Methode der &Uuml;bertragung &uuml;ber
           das Internet zu 100&nbsp;% sicher.
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>
+            Vertrauensmodell f&uuml;r das Mangrove-Schl&uuml;sselpaar (Abschnitt&nbsp;5).
+          </strong>{" "}
+          Im Passphrase-Modus sowie im kombinierten Passphrase- und Passkey-Modus verl&auml;sst der
+          private Signaturschl&uuml;ssel Ihren Browser niemals im Klartext. Selbst eine
+          vollst&auml;ndige Kompromittierung unserer Datenbank w&uuml;rde nur
+          age-verschl&uuml;sseltes Chiffrat offenlegen, das ohne Ihre Passphrase oder einen
+          registrierten Passkey nicht entschl&uuml;sselt werden kann. Im
+          &bdquo;unverschl&uuml;sselten Opt-in-Modus&ldquo; hingegen wird der private Schl&uuml;ssel
+          im Klartext gespeichert; Personen mit Datenbankzugriff k&ouml;nnten daher Bewertungen in
+          Ihrem Namen signieren. Wir empfehlen, einen der verschl&uuml;sselten Modi zu w&auml;hlen
+          und Ihre Passphrase niemals weiterzugeben.
+        </Typography>
       </Section>
 
-      <Section title="13. Datenschutz von Kindern">
+      <Section title="14. Datenschutz von Kindern">
         <Typography>
           OpenMapX richtet sich nicht an Kinder unter 16&nbsp;Jahren. Wir erheben wissentlich keine
           personenbezogenen Daten von Kindern. Wenn Sie glauben, dass ein Kind uns personenbezogene
@@ -546,7 +721,7 @@ export default function PrivacyContentDe({
         </Typography>
       </Section>
 
-      <Section title="14. &Auml;nderungen dieser Erkl&auml;rung">
+      <Section title="15. &Auml;nderungen dieser Erkl&auml;rung">
         <Typography>
           Wir k&ouml;nnen diese Datenschutzerkl&auml;rung von Zeit zu Zeit aktualisieren. Die
           aktuelle Version ist stets unter <Link href="/privacy">/privacy</Link> verf&uuml;gbar.

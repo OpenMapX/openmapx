@@ -9,6 +9,7 @@ import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import {
+  createPlace,
   PANEL,
   useDirectionsStore,
   useMapClickStore,
@@ -43,12 +44,15 @@ export function MapClickFloatingCard() {
     flyTo(clickedLngLat, 15);
     setQuery(coordLabel);
     setIsFocused(false);
-    setSelectedPlace({
-      id: `coordinate-${lat.toFixed(6)}-${lng.toFixed(6)}`,
-      name: placeName,
-      address: reverseGeo?.address ?? coordLabel,
-      coordinates: clickedLngLat,
-    });
+    setSelectedPlace(
+      createPlace({
+        primaryScheme: "coordinate",
+        ids: { coordinate: `${lat.toFixed(6)}-${lng.toFixed(6)}` },
+        name: placeName,
+        address: reverseGeo?.address ?? coordLabel,
+        coordinates: clickedLngLat,
+      }),
+    );
     useSidebarStore.getState().openSidebar(PANEL.PLACE);
     setClickedLngLat(null);
   };

@@ -274,7 +274,7 @@ export async function searchByCategory(
     }
 
     results.push({
-      id: `${el.type}/${el.id}`,
+      id: `osm:${el.type}/${el.id}`,
       name,
       coordinates: [lon, lat],
       category: getCategoryValue(tags),

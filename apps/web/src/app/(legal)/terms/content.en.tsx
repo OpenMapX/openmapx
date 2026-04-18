@@ -60,7 +60,7 @@ export default function TermsContent({
           satellite imagery, hiking and outdoor trail information, parking availability, EV charging
           station locations, fuel prices, shared mobility data (bike-sharing, e-scooters,
           car-sharing), and general place information. The service aggregates data from multiple
-          open-data sources and third-party APIs as listed in Section 10 below.
+          open-data sources and third-party APIs as listed in Section 11 below.
         </Typography>
       </Section>
 
@@ -154,6 +154,26 @@ export default function TermsContent({
             <Typography>
               Circumvent rate limits, access controls, or other security measures implemented by the
               service or its upstream data providers.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Submit fake, misleading, paid, or incentivized reviews; post reviews on behalf of a
+              business you own or work for (undisclosed astroturfing); or review a place you have no
+              first-hand experience with.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Use the review feature to defame, threaten, harass, dox, or out-identify other people
+              or businesses, or to post content that is unlawful, hateful, sexually explicit, or
+              otherwise inappropriate.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Attempt to forge Mangrove signatures, impersonate another reviewer, or publish content
+              under a keypair you are not authorized to use.
             </Typography>
           </li>
         </ul>
@@ -283,10 +303,15 @@ export default function TermsContent({
         <Typography>
           The OpenMapX application code, design, and branding are the property of the operator. The
           map data, transit information, and other content displayed through the service is sourced
-          from third parties and is subject to their respective licenses (see Section 10 below).
+          from third parties and is subject to their respective licenses (see Section 11 below).
         </Typography>
         <Typography sx={{ mt: 1 }}>
           You may not use the OpenMapX name, logo, or branding without prior written consent.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>Reviews you submit remain your own work.</strong> We do not claim ownership of
+          review content you create. The licensing of reviews published through the Mangrove network
+          is governed by Section&nbsp;10 below.
         </Typography>
       </Section>
 
@@ -297,7 +322,91 @@ export default function TermsContent({
         </Typography>
       </Section>
 
-      <Section title="10. Data Sources and Attribution" id="data-sources">
+      <Section title="10. User-Generated Content (Reviews)">
+        <Typography>
+          OpenMapX integrates the{" "}
+          <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
+            Mangrove Open Reviews Standard
+          </Link>
+          . Reviews you submit through OpenMapX are signed in your browser and published to the
+          Mangrove network. The following terms apply specifically to review content you create.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Ownership and license.</strong> You retain all rights in the review content
+              you submit (text, rating, uploaded images, experience tags). By publishing a review,
+              you license the review content to Mangrove.reviews and to the general public under{" "}
+              <Link
+                href="https://creativecommons.org/licenses/by/4.0/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Creative Commons Attribution 4.0 International (CC&nbsp;BY&nbsp;4.0)
+              </Link>{" "}
+              or, where you explicitly select a different Mangrove-compatible license at submission
+              time, that license. This grant is worldwide, royalty-free, perpetual, and irrevocable,
+              to the extent necessary for aggregators to redistribute and display the review as
+              intended by the Mangrove standard.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Warranties you give.</strong> By submitting a review you warrant that: (i) the
+              review reflects your genuine, first-hand experience of the subject; (ii) you are not
+              being paid or otherwise incentivized by the subject to post a positive or negative
+              review without disclosing it in the affiliation field; (iii) any photos you upload are
+              your own work, or you hold all rights necessary to publish them under the license
+              above, and no third party&apos;s likeness, copyright, trademark, or privacy rights are
+              violated; (iv) the review is lawful and contains no defamation, threats, hate speech,
+              or protected personal data about identifiable third parties.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Publication is decentralized and partly irreversible.</strong> Once a review
+              is signed and submitted, it is propagated through the Mangrove aggregator network and
+              may be mirrored by third parties. We can hide a review from the OpenMapX display, and
+              we will forward any retraction you sign to <code>api.mangrove.reviews</code>, but we
+              cannot guarantee removal from external mirrors, caches, or archives. You accept this
+              limitation as a fundamental characteristic of the Mangrove system before submitting.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Moderation.</strong> We may hide, down-rank, or refuse to display any review
+              that, in our reasonable judgment, violates these Terms or applicable law. Hiding a
+              review on OpenMapX does not automatically retract it from the Mangrove network.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Reporting abuse.</strong> You can flag an abusive review through the in-app
+              report action, or contact us at the email address in Section&nbsp;1. Abusive behaviour
+              may also lead to account suspension under Section&nbsp;4.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Third-party reviews.</strong> Reviews you view in OpenMapX but did not author
+              are third-party user content. The operator does not endorse and is not responsible for
+              statements made by other reviewers.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Signing key responsibility.</strong> You are responsible for safeguarding your
+              review passphrase and any registered passkeys. Anyone who holds these can sign reviews
+              in your name. If you opt in to the unencrypted keypair mode, you additionally accept
+              that the operator technically has access to your signing key. Lost passphrases and
+              passkeys cannot be recovered; you may regenerate a new keypair, but existing reviews
+              will remain linked to the old public key.
+            </Typography>
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="11. Data Sources and Attribution" id="data-sources">
         <Typography>
           OpenMapX is built on open data. We gratefully acknowledge the following data sources and
           their respective licenses. Where a license applies, clicking the license name will take
@@ -336,7 +445,7 @@ export default function TermsContent({
         />
       </Section>
 
-      <Section title="11. Third-Party Terms">
+      <Section title="12. Third-Party Terms">
         <Typography>
           Your use of data displayed through OpenMapX may be subject to the terms and conditions of
           the respective third-party data providers listed above. By using features powered by these
@@ -346,7 +455,7 @@ export default function TermsContent({
         </Typography>
       </Section>
 
-      <Section title="12. Severability">
+      <Section title="13. Severability">
         <Typography>
           If any provision of these Terms is found to be invalid or unenforceable, the remaining
           provisions shall continue in full force and effect. The invalid provision shall be
@@ -354,7 +463,7 @@ export default function TermsContent({
         </Typography>
       </Section>
 
-      <Section title="13. Governing Law and Jurisdiction">
+      <Section title="14. Governing Law and Jurisdiction">
         <Typography>
           These Terms are governed by the laws of the Federal Republic of Germany, excluding the UN
           Convention on Contracts for the International Sale of Goods (CISG). If you are a consumer
@@ -365,7 +474,7 @@ export default function TermsContent({
         </Typography>
       </Section>
 
-      <Section title="14. Changes to These Terms">
+      <Section title="15. Changes to These Terms">
         <Typography>
           We reserve the right to update these Terms at any time. The current version is always
           available at <Link href="/terms">/terms</Link>. We will notify registered users of
@@ -376,14 +485,14 @@ export default function TermsContent({
         </Typography>
       </Section>
 
-      <Section title="15. Language">
+      <Section title="16. Language">
         <Typography>
           These Terms are available in German and English. In case of discrepancies between the two
           versions, the German version shall prevail.
         </Typography>
       </Section>
 
-      <Section title="16. Contact">
+      <Section title="17. Contact">
         <Typography>
           If you have questions about these Terms, please contact us at{" "}
           <Link href={`mailto:${email}`}>{email}</Link>.

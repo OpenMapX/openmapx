@@ -1,0 +1,11 @@
+{
+  "id": "reviews",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["reviews"],
+  "dependencies": ["geocoding"],
+  "backend": { "routes": true },
+  "quality": "built-in",
+  "category": "External"
+}

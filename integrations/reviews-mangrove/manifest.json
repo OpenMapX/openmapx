@@ -1,0 +1,44 @@
+{
+  "id": "reviews-mangrove",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["reviews"],
+  "dependencies": ["reviews"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "envVars": [],
+  "healthCheck": {
+    "type": "http",
+    "url": "https://api.mangrove.reviews/reviews?limit=1"
+  },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "mangrove",
+      "name": "Mangrove.reviews",
+      "url": "https://mangrove.reviews/",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "commercialUse": "yes",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://mangrove.reviews/terms",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "capabilities": ["read", "aggregate", "write", "image-upload"]
+    }
+  ]
+}

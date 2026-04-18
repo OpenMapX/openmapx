@@ -17,6 +17,7 @@ import type { LngLat, TransitStop, TransportMode } from "@openmapx/core";
 import {
   haversineMeters,
   PANEL,
+  resolveStopAsPlace,
   usePlaceStore,
   useSidebarStore,
   useStopsNearby,
@@ -55,31 +56,6 @@ function primaryMode(modes: TransportMode[]): TransportMode | undefined {
     if (modes.includes(m)) return m;
   }
   return modes[0];
-}
-
-/**
- * Map a transit mode to OpenMapTiles-style `class/subclass` values so the
- * resulting place passes `isTransitRawCategory` and renders the full place
- * panel (not the minimal stop-mode fallback).
- */
-function placeCategoryForMode(mode: TransportMode | undefined): {
-  category: string;
-  rawCategory: string;
-} {
-  switch (mode) {
-    case "rail":
-      return { category: "station", rawCategory: "railway/station" };
-    case "subway":
-      return { category: "subway", rawCategory: "railway/subway" };
-    case "tram":
-      return { category: "tram_stop", rawCategory: "railway/tram_stop" };
-    case "bus":
-      return { category: "bus_stop", rawCategory: "highway/bus_stop" };
-    case "ferry":
-      return { category: "ferry_terminal", rawCategory: "amenity/ferry_terminal" };
-    default:
-      return { category: "station", rawCategory: "public_transport/stop_position" };
-  }
 }
 
 function formatDistance(meters: number): string {
@@ -132,30 +108,23 @@ export function DataSourceNearbyTransit({
 
   const handleOpen = (stop: TransitStop) => {
     flyTo([stop.lng, stop.lat], 16);
-    // Use a synthetic `style-poi-*` id (same shape as a map-click on a style
-    // POI) so PlaceDetailContent renders the full place view — reverse
-    // geocoding fills in the address, operator, plus-code etc. A `stop:` id
-    // would trigger the minimal stop-only panel.
-    const { category, rawCategory } = placeCategoryForMode(primaryMode(stop.modes));
-    setSelectedPlace({
-      id: `style-poi-stop-${stop.id}`,
-      name: stop.name,
-      address: stop.name,
-      coordinates: [stop.lng, stop.lat],
-      category,
-      rawCategory,
+    // Resolve the stop to a Place via OSM reverse geocoding when available
+    // (ids.osm), falling back to a synthetic stop-backed Place. Matches the
+    // pattern used by SearchBar's transit result handler.
+    void resolveStopAsPlace(stop).then((place) => {
+      setSelectedPlace(place);
+      // Match the map-click behaviour in MapStylePoiClickHandler: if the
+      // sidebar is empty or already showing a place, take it over; otherwise
+      // (category results, directions …) keep that panel and show the
+      // floating detail card only, so we never render the same place twice.
+      const sidebarId = useSidebarStore.getState().activeSidebarId;
+      if (!sidebarId || sidebarId === PANEL.PLACE) {
+        useSidebarStore.getState().closeDetail();
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+      } else {
+        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      }
     });
-    // Match the map-click behaviour in MapStylePoiClickHandler: if the sidebar
-    // is empty or already showing a place, take it over; otherwise (category
-    // results, directions …) keep that panel and show the floating detail card
-    // only, so we never render the same place twice.
-    const sidebarId = useSidebarStore.getState().activeSidebarId;
-    if (!sidebarId || sidebarId === PANEL.PLACE) {
-      useSidebarStore.getState().closeDetail();
-      useSidebarStore.getState().openSidebar(PANEL.PLACE);
-    } else {
-      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-    }
   };
 
   if (isLoading && !stops) {

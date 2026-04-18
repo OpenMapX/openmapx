@@ -59,7 +59,7 @@ describe("geocode", () => {
     const results = await maptilerGeocodingService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("place.123");
+    expect(results[0].id).toBe("maptiler:place.123");
     expect(results[0].label).toBe("Berlin, Germany");
     expect(results[0].coordinates).toEqual([13.37, 52.52]);
     expect(results[0].type).toBe("poi");

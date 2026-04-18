@@ -1,30 +1,104 @@
-import { lookupDbStation } from "@integrations/geocoding-db-ris/provider.js";
 import type { Place } from "@openmapx/core";
+import {
+  getPlaceResolver,
+  type PlaceIds,
+  type PlaceResolverContext,
+  parseId,
+} from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import {
-  lookupAddressByCoords,
   lookupByCoords,
   lookupByNameAndCoords,
-  lookupByOsmFilters,
-  lookupByOsmRef,
 } from "../../../../integrations/geocoding/place-lookup.js";
 import {
   deduplicatePhotos,
   searchHeroPhotos,
 } from "../../../../integrations/photos/orchestrator.js";
+import { fetchAggregate } from "../../../../integrations/reviews/orchestrator.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
 
-// Matches "node/12345", "way/678", "relation/99"
-const OSM_ID_RE = /^(node|way|relation)\/(\d+)$/;
+/**
+ * Merge Wikidata-sourced external identifiers (Yelp / TripAdvisor / Google
+ * Maps / Foursquare / Instagram / Facebook, plus the OSM `wikidata` tag)
+ * into `place.ids`. We only overlay — never overwrite — so producer-level
+ * ids stay authoritative.
+ */
+function foldExternalIdsIntoPlace(
+  place: Place,
+  externalIds: Record<string, string> | undefined,
+): Place {
+  const ids: PlaceIds = { ...place.ids };
+  const wd = place.osmTags?.wikidata;
+  if (wd && !ids.wikidata) ids.wikidata = wd;
+  if (externalIds) {
+    if (externalIds.yelp && !ids.yelp) ids.yelp = externalIds.yelp;
+    if (externalIds.tripadvisor && !ids.tripadvisor) ids.tripadvisor = externalIds.tripadvisor;
+    if (externalIds.google_maps && !ids.googleMaps) ids.googleMaps = externalIds.google_maps;
+    if (externalIds.foursquare && !ids.foursquare) ids.foursquare = externalIds.foursquare;
+    if (externalIds.instagram && !ids.instagram) ids.instagram = externalIds.instagram;
+    if (externalIds.facebook && !ids.facebook) ids.facebook = externalIds.facebook;
+  }
+  return { ...place, ids };
+}
+
+/**
+ * Fetches Mangrove aggregate in a short window, returning null on timeout or
+ * when the place has fewer than 3 reviews — too few to show a confident
+ * rating summary. Never throws.
+ */
+async function safeAggregate(
+  lat: number,
+  lng: number,
+  name: string,
+): Promise<{ stars: number; count: number } | null> {
+  if (!name) return null;
+  try {
+    const result = await Promise.race([
+      fetchAggregate({ lat, lng, name }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+    ]);
+    if (!result || result.count < 3 || result.stars <= 0) return null;
+    return { stars: result.stars, count: result.count };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Knowledge + photos + review-links + Mangrove-aggregate pipeline applied
+ * to every resolved Place, regardless of which scheme's resolver produced
+ * it. Extracted so the resolver branch and the coord-fallback branch
+ * share identical enrichment.
+ */
+async function enrichPlace(place: Place, lang: string | undefined): Promise<Place> {
+  const {
+    externalIds,
+    photos: knowledgePhotos,
+    ...knowledge
+  } = await getPlaceKnowledge(place, lang);
+  const enriched = foldExternalIdsIntoPlace(place, externalIds);
+  const heroPhotos = enriched.osmTags ? await searchHeroPhotos(enriched.osmTags) : [];
+  const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
+  const [plng, plat] = enriched.coordinates;
+  const reviewStats = await safeAggregate(plat, plng, enriched.name);
+  return {
+    ...enriched,
+    ...knowledge,
+    photos,
+    reviewLinks: buildReviewLinks(enriched),
+    rating: reviewStats?.stars,
+    reviewCount: reviewStats?.count,
+  };
+}
 
 interface PlaceByIdQuery {
   lat?: string;
   lng?: string;
   name?: string;
   lang?: string;
-  osmFilters?: string;
+  hasAddress?: string;
 }
 
 interface CacheableError {
@@ -54,7 +128,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           lng: { type: "string" },
           name: { type: "string" },
           lang: { type: "string" },
-          osmFilters: { type: "string" },
+          hasAddress: { type: "string" },
         },
       },
     },
@@ -62,122 +136,66 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       const rawId = decodeURIComponent(req.params.id);
       const lang = req.query.lang;
       const effectiveLang = lang ?? "en";
-      const cacheKey = `cache:place:${rawId}:${effectiveLang}`;
+      const hasAddress = req.query.hasAddress === "1";
+      const cacheKey = `cache:place:${rawId}:${effectiveLang}${hasAddress ? ":ha" : ""}`;
 
-      // Cache-Control is set only on success — error responses (400/404) must not
-      // be cached because browsers can cache them when Cache-Control: public is present.
       try {
         const result = await withCache(cacheKey, TTL.places.detail, async () => {
-          // DB station lookup (RIS::Stations)
-          if (rawId.startsWith("db-")) {
-            const evaNumber = rawId.slice(3);
-            if (!/^\d+$/.test(evaNumber)) {
-              const err: CacheableError = { statusCode: 400, message: "Invalid EVA number" };
-              throw err;
+          const parsedId = parseId(rawId);
+          const latQ = Number.parseFloat(req.query.lat ?? "");
+          const lngQ = Number.parseFloat(req.query.lng ?? "");
+          const resolverCtx: PlaceResolverContext = {
+            lang,
+            lat: Number.isFinite(latQ) ? latQ : undefined,
+            lng: Number.isFinite(lngQ) ? lngQ : undefined,
+            hasAddress,
+          };
+
+          // Registered resolver dispatch — each scheme's owner integration
+          // registers a resolver at boot (see `integrations/geocoding`,
+          // `integrations/geocoding-db-ris`, and the per-provider data-source
+          // resolvers registered via `createDataSourceResolver`).
+          if (parsedId) {
+            const resolver = getPlaceResolver(parsedId.scheme);
+            if (resolver) {
+              const resolved = await resolver(parsedId.value, resolverCtx);
+              if (!resolved) {
+                const err: CacheableError = {
+                  statusCode: 404,
+                  message: `No match for ${rawId}`,
+                };
+                throw err;
+              }
+              return enrichPlace(resolved, lang);
             }
-            return lookupDbStation(evaNumber, lang);
           }
 
-          const match = rawId.match(OSM_ID_RE);
-
-          if (match) {
-            const [, osmType, osmId] = match;
-            const place = await lookupByOsmRef(osmType, osmId, rawId, lang);
-            const {
-              externalIds,
-              photos: knowledgePhotos,
-              ...knowledge
-            } = await getPlaceKnowledge(place, lang);
-            const heroPhotos = place.osmTags ? await searchHeroPhotos(place.osmTags) : [];
-            const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
-            return {
-              ...place,
-              ...knowledge,
-              photos,
-              reviewLinks: buildReviewLinks(place, externalIds),
-            };
-          }
-
-          const lat = Number.parseFloat(req.query.lat ?? "");
-          const lng = Number.parseFloat(req.query.lng ?? "");
+          // Coord-fallback path for schemes without a registered resolver
+          // (saved-label handles, coordinate fallbacks, opaque deep-link
+          // ids). Requires lat/lng/name — without them there's nothing to do.
+          const lat = latQ;
+          const lng = lngQ;
           const name = req.query.name?.trim() ?? "";
 
           if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
             const err: CacheableError = {
               statusCode: 400,
-              message: "Non-OSM place ID requires lat and lng query parameters",
+              message: "Non-resolvable place ID requires lat and lng query parameters",
             };
             throw err;
           }
 
-          const isDataSourceLookup = rawId.startsWith("ds-");
-
-          let place: Place | null = null;
-          if (isDataSourceLookup) {
-            // Data source items: Overpass category search finds the correct OSM node
-            // by type rather than returning the nearest element of any type.
-            const osmFiltersRaw = req.query.osmFilters;
-            if (!osmFiltersRaw) {
-              const err: CacheableError = {
-                statusCode: 400,
-                message: "Data source place lookup requires osmFilters query parameter",
-              };
-              throw err;
-            }
-            let osmFilters: Array<{ key: string; value: string }>;
-            try {
-              const parsed: unknown = JSON.parse(osmFiltersRaw);
-              if (
-                !Array.isArray(parsed) ||
-                !parsed.every(
-                  (f) =>
-                    typeof f === "object" &&
-                    f !== null &&
-                    typeof (f as Record<string, unknown>).key === "string" &&
-                    typeof (f as Record<string, unknown>).value === "string",
-                )
-              ) {
-                throw new Error("shape");
-              }
-              osmFilters = parsed as Array<{ key: string; value: string }>;
-            } catch {
-              const err: CacheableError = {
-                statusCode: 400,
-                message: "Invalid osmFilters: expected Array<{key,value}>",
-              };
-              throw err;
-            }
-            place = await lookupByOsmFilters(lat, lng, osmFilters, rawId);
-
-            // OSM nodes for data source items (bike sharing, parking, etc.) rarely carry
-            // addr:* tags. If the Overpass result has no address, fall back to a structured
-            // reverse geocode at zoom=18 for address/city only — never for POI details.
-            if (!place?.address) {
-              const addrOnly = await lookupAddressByCoords(lat, lng);
-              if (addrOnly) {
-                place = place
-                  ? { ...place, address: addrOnly.address, city: addrOnly.city ?? place.city }
-                  : {
-                      id: rawId,
-                      name: "",
-                      address: addrOnly.address,
-                      city: addrOnly.city,
-                      coordinates: [lng, lat],
-                    };
-              }
-            }
-          } else {
-            if (!name) {
-              const err: CacheableError = {
-                statusCode: 400,
-                message: "Non-OSM place ID requires lat, lng, and name query parameters",
-              };
-              throw err;
-            }
-            place =
-              (await lookupByNameAndCoords(name, lat, lng, rawId, lang)) ??
-              (await lookupByCoords(lat, lng, rawId, lang));
+          if (!name) {
+            const err: CacheableError = {
+              statusCode: 400,
+              message: "Non-resolvable place ID requires lat, lng, and name query parameters",
+            };
+            throw err;
           }
+
+          const place =
+            (await lookupByNameAndCoords(name, lat, lng, rawId, lang)) ??
+            (await lookupByCoords(lat, lng, rawId, lang));
 
           if (!place) {
             const err: CacheableError = {
@@ -187,19 +205,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             throw err;
           }
 
-          const {
-            externalIds,
-            photos: knowledgePhotos,
-            ...knowledge
-          } = await getPlaceKnowledge(place, lang);
-          const heroPhotos = place.osmTags ? await searchHeroPhotos(place.osmTags) : [];
-          const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
-          return {
-            ...place,
-            ...knowledge,
-            photos,
-            reviewLinks: buildReviewLinks(place, externalIds),
-          };
+          return enrichPlace(place, lang);
         });
         reply.header("Cache-Control", "public, max-age=86400");
         return result;

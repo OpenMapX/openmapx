@@ -15,6 +15,8 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { LabeledPlace } from "@openmapx/core";
 import {
+  createPlace,
+  idsFromPrimary,
   PANEL,
   useDeleteLabel,
   useLabeledPlaces,
@@ -44,12 +46,18 @@ export function SavedLabeledTab() {
   const { flyTo } = useMap();
 
   const handleLabelClick = (label: LabeledPlace) => {
-    setSelectedPlace({
-      id: label.placeId ?? `label:${label.id}`,
-      name: label.name,
-      address: label.address ?? "",
-      coordinates: [label.lng, label.lat],
-    });
+    const identity = (label.placeId ? idsFromPrimary(label.placeId) : null) ?? {
+      primaryScheme: "label",
+      ids: { label: label.id },
+    };
+    setSelectedPlace(
+      createPlace({
+        ...identity,
+        name: label.name,
+        address: label.address ?? "",
+        coordinates: [label.lng, label.lat],
+      }),
+    );
     useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     flyTo([label.lng, label.lat], 15);
   };

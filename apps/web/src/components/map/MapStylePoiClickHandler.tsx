@@ -1,6 +1,6 @@
 "use client";
 
-import { PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
+import { createPlace, PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import type { MapMouseEvent, StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
@@ -115,24 +115,26 @@ export function MapStylePoiClickHandler() {
 
       const coords = feature.geometry.coordinates as [number, number];
 
-      // Build a deterministic, non-OSM ID so the API uses name + coordinate
+      // Build a deterministic, non-OSM id so the API uses name + coordinate
       // lookup (which finds the correct OSM element for knowledge data).
       const featureId = feature.id ?? `${coords[0].toFixed(5)}-${coords[1].toFixed(5)}`;
-      const id = `style-poi-${featureId}`;
 
       const poiClass = feature.properties?.class as string | undefined;
       const poiSubclass = feature.properties?.subclass as string | undefined;
 
-      setSelectedPlace({
-        id,
-        name,
-        address: name,
-        coordinates: coords,
-        // Use subclass as category (more specific, e.g. "charging_station")
-        // and fall back to class (broader, e.g. "car")
-        category: poiSubclass ?? poiClass,
-        rawCategory: poiSubclass ? `${poiClass}/${poiSubclass}` : poiClass,
-      });
+      setSelectedPlace(
+        createPlace({
+          primaryScheme: "stylePoi",
+          ids: { stylePoi: String(featureId) },
+          name,
+          address: name,
+          coordinates: coords,
+          // Use subclass as category (more specific, e.g. "charging_station")
+          // and fall back to class (broader, e.g. "car")
+          category: poiSubclass ?? poiClass,
+          rawCategory: poiSubclass ? `${poiClass}/${poiSubclass}` : poiClass,
+        }),
+      );
       const sidebarId = useSidebarStore.getState().activeSidebarId;
       if (!sidebarId || sidebarId === PANEL.PLACE) {
         // Sidebar is empty or already showing a place — take it over and close any

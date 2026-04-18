@@ -33,7 +33,9 @@ export async function getStops(bbox: BBox): Promise<TransitStop[]> {
   return nodes.map((node) => {
     const tags = node.tags ?? {};
     return {
-      id: `osm:${node.id}`,
+      // Canonical OSM ref form so the `osm:` place resolver can round-trip
+      // it — transit stops from Overpass are always nodes.
+      id: `osm:node/${node.id}`,
       name: tags.name ?? tags["name:en"] ?? "Unknown",
       lat: node.lat,
       lng: node.lon,

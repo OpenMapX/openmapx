@@ -26,6 +26,8 @@ export { installedIntegration } from "./installed-integration-schema";
 export { integrationConfig } from "./integration-config-schema";
 // Integration secrets
 export { integrationSecret } from "./integration-secret-schema";
+// Mangrove.reviews user keypair
+export { mangroveKeypair, mangroveKeypairWrap } from "./mangrove-keypair-schema";
 // Saved places tables
 export {
   labeledPlace,

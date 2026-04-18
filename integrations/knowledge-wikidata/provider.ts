@@ -195,6 +195,9 @@ export const wikidataSource: KnowledgeSource = {
       P3108: "yelp", // Yelp business ID
       P3134: "tripadvisor", // TripAdvisor location ID
       P3749: "google_maps", // Google Maps CID
+      P2464: "foursquare", // Foursquare venue ID
+      P2003: "instagram", // Instagram username
+      P2013: "facebook", // Facebook page/profile ID
     };
     const externalIds: Record<string, string> = {};
     for (const [prop, key] of Object.entries(EXTERNAL_ID_PROPS)) {

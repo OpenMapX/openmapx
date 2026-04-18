@@ -1,6 +1,13 @@
 "use client";
 
-import { PANEL, usePlaceStore, useSearchStore, useSidebarStore } from "@openmapx/core";
+import {
+  createPlace,
+  idsFromPrimaryOrCoords,
+  PANEL,
+  usePlaceStore,
+  useSearchStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -28,7 +35,16 @@ export function PlaceDeepLink() {
 
     const coordinates: [number, number] = [lng, lat];
     flyTo(coordinates);
-    setSelectedPlace({ id, name, address: name, coordinates, category, rawCategory });
+    setSelectedPlace(
+      createPlace({
+        ...idsFromPrimaryOrCoords(id, coordinates),
+        name,
+        address: name,
+        coordinates,
+        category,
+        rawCategory,
+      }),
+    );
     useSidebarStore.getState().openSidebar(PANEL.PLACE);
     setQuery(name);
 

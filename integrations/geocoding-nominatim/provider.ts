@@ -38,10 +38,13 @@ function mapType(cls: string, type: string): SearchResult["type"] {
 
 interface NominatimReverseResult {
   display_name: string;
+  name?: string;
   error?: string;
   address?: {
     road?: string;
     house_number?: string;
+    neighbourhood?: string;
+    suburb?: string;
     city?: string;
     town?: string;
     village?: string;
@@ -50,6 +53,17 @@ interface NominatimReverseResult {
     postcode?: string;
     country?: string;
     country_code?: string;
+    // POI / landmark categories that Nominatim returns when the matched
+    // feature is a named place (Brandenburg Gate, a museum, a park, …).
+    // @fragaria/address-formatter understands these aliases and places them
+    // correctly per country template.
+    attraction?: string;
+    tourism?: string;
+    historic?: string;
+    amenity?: string;
+    leisure?: string;
+    building?: string;
+    shop?: string;
   };
 }
 
@@ -78,7 +92,7 @@ async function fetchNominatim(
 }
 
 function makeId(r: NominatimResult): string {
-  return `${r.osm_type}/${r.osm_id}`;
+  return `osm:${r.osm_type}/${r.osm_id}`;
 }
 
 export const nominatimService: GeocodingProviderImpl = {
@@ -121,9 +135,12 @@ export const nominatimService: GeocodingProviderImpl = {
     if (data.error) return null;
 
     const a = data.address ?? {};
+    const cityName = a.city ?? a.town ?? a.village ?? "";
     const address = formatAddress({
       house_number: a.house_number,
       road: a.road,
+      neighbourhood: a.neighbourhood,
+      suburb: a.suburb,
       city: a.city,
       town: a.town,
       village: a.village,
@@ -132,8 +149,16 @@ export const nominatimService: GeocodingProviderImpl = {
       postcode: a.postcode,
       country: a.country,
       country_code: a.country_code,
+      // POI/landmark fields — the formatter slots these into the correct
+      // position for each country template (typically before the street).
+      attraction: a.attraction,
+      tourism: a.tourism,
+      historic: a.historic,
+      amenity: a.amenity,
+      leisure: a.leisure,
+      building: a.building,
+      shop: a.shop,
     });
-    const cityName = a.city ?? a.town ?? a.village ?? "";
     const city = [cityName, a.state ?? a.county ?? ""].filter(Boolean).join(", ");
     return { address, city };
   },

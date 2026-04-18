@@ -33,6 +33,25 @@ interface PeliasResponse {
   features: PeliasFeature[];
 }
 
+/**
+ * Convert a Pelias gid to a canonical `scheme:value` place id.
+ *
+ * Pelias gids look like `<source>:<layer>:<id>` — e.g.
+ * `openstreetmap:venue:node/123456` or `whosonfirst:locality:85682183`.
+ * When the source is openstreetmap and the inner id is a canonical OSM
+ * ref, emit `osm:<ref>` so the place route's OSM resolver can enrich it;
+ * otherwise wrap under a `pelias-<source>:` scheme so the id still round-
+ * trips through `parseId` without colliding with other schemes.
+ */
+function makeIdFromGid(gid: string): string {
+  const [source, _layer, ...rest] = gid.split(":");
+  const inner = rest.join(":");
+  if (source === "openstreetmap" && /^(node|way|relation)\/\d+/.test(inner)) {
+    return `osm:${inner}`;
+  }
+  return `pelias-${source}:${inner || gid}`;
+}
+
 function mapLayer(layer: string): SearchResult["type"] {
   if (layer === "venue") return "poi";
   if (layer === "address") return "address";
@@ -70,7 +89,7 @@ export const peliasService: GeocodingProviderImpl = {
     if (lang) params.lang = lang;
     const data = await fetchPelias("/v1/search", params);
     return data.features.map((f) => ({
-      id: f.properties.gid,
+      id: makeIdFromGid(f.properties.gid),
       label: f.properties.label,
       coordinates: f.geometry.coordinates,
       type: mapLayer(f.properties.layer),
@@ -107,7 +126,7 @@ export const peliasService: GeocodingProviderImpl = {
       const sublabelParts = [p.locality, p.region, p.country].filter(Boolean);
       const sublabel = sublabelParts.length > 0 ? sublabelParts.join(", ") : undefined;
       return {
-        id: p.gid,
+        id: makeIdFromGid(p.gid),
         label: p.name,
         sublabel,
         coordinates: f.geometry.coordinates,

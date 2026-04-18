@@ -39,14 +39,16 @@ function mergePlaceFields(
 
   const isDataSourcePlace = isDataSourceItem || selected.dataSourceDetail !== undefined;
 
-  // Start with Nominatim as the rich base (if available), then overlay identity fields.
-  // For data source places, the data source's own name/category always win because
-  // Nominatim can resolve to the wrong OSM element (e.g. a house number instead of
-  // the fuel station at that address).
   const base: Place = nom
     ? {
         ...nom,
+        // Identity fields: selected wins so `id`/`primaryScheme`/`ids`
+        // stay coherent with what the client originally constructed —
+        // Nominatim's linked refs get folded into the ids map instead
+        // of rewriting the primary.
         id: selected.id,
+        primaryScheme: selected.primaryScheme,
+        ids: { ...(nom.ids ?? {}), ...selected.ids },
         name: isDataSourcePlace ? selected.name || nom.name : nom.name || selected.name,
         category: isDataSourcePlace
           ? prettifyCategory(selected.category ?? "") || nom.category
@@ -58,15 +60,26 @@ function mergePlaceFields(
         category: selected.category ? prettifyCategory(selected.category) : selected.category,
       };
 
-  // OSM-sourced fields: Nominatim wins, selectedPlace fills gaps
   if (nom) {
-    base.address = nom.address || selected.address;
-    base.city = nom.city || selected.city;
-    base.phone = nom.phone || selected.phone;
-    base.website = nom.website || selected.website;
-    base.openingHours = nom.openingHours || selected.openingHours;
+    // Data-source places (OCM, OSM-multisource, etc.) own their address,
+    // phone, website, and opening hours — the data source curates them and
+    // they shouldn't be overwritten by whatever Overpass happens to return
+    // for a nearby OSM node. Use data-source values first, fall back to
+    // OSM only to fill genuine gaps.
+    if (isDataSourcePlace) {
+      base.address = selected.address || nom.address;
+      base.city = selected.city || nom.city;
+      base.phone = selected.phone || nom.phone;
+      base.website = selected.website || nom.website;
+      base.openingHours = selected.openingHours || nom.openingHours;
+    } else {
+      base.address = nom.address || selected.address;
+      base.city = nom.city || selected.city;
+      base.phone = nom.phone || selected.phone;
+      base.website = nom.website || selected.website;
+      base.openingHours = nom.openingHours || selected.openingHours;
+    }
   } else {
-    // No Nominatim — keep selectedPlace fields, fill address from reverse geocoding
     if (!base.address && reverseGeo?.address) {
       base.address = reverseGeo.address;
     }
@@ -75,8 +88,6 @@ function mergePlaceFields(
     }
   }
 
-  // Reverse geocoding fills address/city gaps even when Nominatim is available
-  // (Nominatim name+coord lookup can return a match without a full address)
   if (!base.address && reverseGeo?.address) {
     base.address = reverseGeo.address;
   }
@@ -84,16 +95,13 @@ function mergePlaceFields(
     base.city = reverseGeo.city.split(",")[0].trim();
   }
 
-  // Data source detail: from the selection if present, otherwise from matching
   if (selected.dataSourceDetail) {
     base.dataSourceDetail = selected.dataSourceDetail;
-    // Data source openingHours (e.g. Tankerkoenig) wins over Nominatim if present
     if (selected.openingHours) {
       base.openingHours = selected.openingHours;
     }
   } else if (matchedDetail) {
     base.dataSourceDetail = matchedDetail;
-    // Data source hours (e.g. Tankerkoenig) are more authoritative than Nominatim OSM tags
     if (matchedDetail.openingHours) {
       base.openingHours = matchedDetail.openingHours;
     }
@@ -114,46 +122,37 @@ export function useMergedPlace(selectedPlace: Place | null): {
   place: Place | null;
   isLoading: boolean;
 } {
-  // Coordinate/Plus Code places have synthetic IDs that would 404 on Nominatim.
-  // Skip the place details lookup for those — reverse geocoding handles them.
-  const isCoordinatePlace = selectedPlace?.id?.startsWith("coordinate-") ?? false;
+  const isCoordinatePlace = selectedPlace?.primaryScheme === "coordinate";
 
-  // Detect data source places, including the preview state before DataSourceDetailBridge resolves.
+  // A place is a data-source place when the selection store's sourceId is
+  // keyed into its ids map, or when the Place already carries a resolved
+  // `dataSourceDetail` (arrives from DataSourceDetailBridge).
   const selectedItem = useDataSourceStore((s) => s.selectedItem);
   const isDataSourcePlace =
     selectedPlace?.dataSourceDetail !== undefined ||
-    (selectedItem !== null && selectedPlace?.id === selectedItem.itemId);
+    (selectedItem !== null && selectedPlace?.ids?.[selectedItem.sourceId] === selectedItem.itemId);
 
-  // osmFilters drives whether we do an Overpass category search for this data source item.
-  // When absent (webcams, scooters) we skip the backend lookup entirely and rely on
-  // reverse geocoding for address/city only.
-  const osmFilters = isDataSourcePlace ? (selectedItem?.osmFilters ?? null) : null;
+  // Skip the backend lookup for pure-coordinate places (synthetic id, no
+  // resolver) — reverse-geocoding covers them. For everything else,
+  // /api/places/:id dispatches to the registered scheme resolver, which
+  // reads any osmFilters from the provider's manifest itself.
+  const placeDetailsId = isCoordinatePlace ? null : (selectedPlace?.id ?? null);
 
-  const placeDetailsId = isCoordinatePlace
-    ? null
-    : isDataSourcePlace
-      ? osmFilters !== null
-        ? `ds-${selectedPlace?.id ?? ""}`
-        : null
-      : (selectedPlace?.id ?? null);
-
-  // 1. OSM lookup — Overpass category search for data source items, Nominatim for regular places
   const { data: nominatimDetails, isLoading: nominatimLoading } = usePlaceDetails(
     placeDetailsId,
     selectedPlace?.coordinates,
     selectedPlace?.name,
     undefined,
-    osmFilters ?? undefined,
+    // Skip the server's Nominatim/Overpass address fallback when the client
+    // already has one (data-source bridges populate address from the provider).
+    Boolean(selectedPlace?.address),
   );
 
-  // 2. Reverse geocoding (address/city fallback — always runs for coordinates,
-  //    also runs for data source places in case Nominatim name lookup fails)
   const needsReverseGeo = isCoordinatePlace || isDataSourcePlace;
   const { data: reverseGeo } = useReverseGeocoding(
     needsReverseGeo ? (selectedPlace?.coordinates ?? null) : null,
   );
 
-  // 3. Data source matching (EV charging, fuel — only when not already present).
   // Build an intermediate place that includes Nominatim-resolved osmTags/category
   // so the matching hook can resolve the data source even when the original
   // selectedPlace has no category info (e.g. from a share link).

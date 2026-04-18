@@ -42,8 +42,17 @@ function mapType(key: string): SearchResult["type"] {
   return "poi";
 }
 
+/**
+ * Photon encodes the OSM element type as a single character (`N`, `W`,
+ * `R`). Expand it to the canonical form so the id can round-trip through
+ * the `osm:` place resolver.
+ */
+const OSM_TYPE_EXPANSIONS: Record<string, string> = { n: "node", w: "way", r: "relation" };
+
 function makeId(p: PhotonProperties): string {
-  return `${p.osm_type.toLowerCase()}/${p.osm_id}`;
+  const short = p.osm_type.toLowerCase();
+  const full = OSM_TYPE_EXPANSIONS[short] ?? short;
+  return `osm:${full}/${p.osm_id}`;
 }
 
 function buildLabel(p: PhotonProperties): string {

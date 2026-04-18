@@ -11,6 +11,7 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
 import {
+  createPlace,
   PANEL,
   useDirectionsStore,
   usePlaceStore,
@@ -207,13 +208,18 @@ export default function StreetViewViewerInner() {
                     setQuery(label);
                     setIsFocused(false);
                     flyTo(debouncedMeta.lngLat, 17);
-                    setSelectedPlace({
-                      id: `streetview-${debouncedMeta.lngLat[0]},${debouncedMeta.lngLat[1]}`,
-                      name: label,
-                      address,
-                      coordinates: debouncedMeta.lngLat,
-                      category: "address",
-                    });
+                    setSelectedPlace(
+                      createPlace({
+                        primaryScheme: "streetView",
+                        ids: {
+                          streetView: `${debouncedMeta.lngLat[0]},${debouncedMeta.lngLat[1]}`,
+                        },
+                        name: label,
+                        address,
+                        coordinates: debouncedMeta.lngLat,
+                        category: "address",
+                      }),
+                    );
                     useSidebarStore.getState().openSidebar(PANEL.PLACE);
                   }
                   closeViewer();

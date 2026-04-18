@@ -1,5 +1,7 @@
 import type { IntegrationContext } from "@openmapx/core";
+import { registerPlaceResolver } from "@openmapx/core/server";
 import { initCache } from "@openmapx/integration-shared-mobility/cache";
+import { createDataSourceResolver } from "../data-source/resolver.js";
 import { bielefeldClient } from "./providers/bielefeld-client.js";
 import { cambioClient } from "./providers/cambio-client.js";
 import { carSharingProvider } from "./providers/provider.js";
@@ -16,4 +18,5 @@ export function setup(ctx: IntegrationContext): void {
   registerCarSharingClient(bielefeldClient);
 
   ctx.registerProvider("data-source", carSharingProvider);
+  registerPlaceResolver(carSharingProvider.id, createDataSourceResolver(carSharingProvider));
 }

@@ -2,14 +2,21 @@
 
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
+import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import { buildAttributionHtml, useIntegrationRegistry } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { buildExternalRefs, type ExternalRef } from "./externalIdLinks";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
 
 interface Props {
@@ -157,6 +164,74 @@ function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
   return groups;
 }
 
+function ExternalRefRow({ ref }: { ref: ExternalRef }) {
+  const tc = useTranslations("common");
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(ref.value).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+      () => {},
+    );
+  };
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        py: 0.5,
+        minWidth: 0,
+        "& .copy-btn": { opacity: 0 },
+        "&:hover .copy-btn": { opacity: 1 },
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, minWidth: 92 }}>
+        {ref.label}
+      </Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        {ref.url ? (
+          <Link
+            href={ref.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="hover"
+            variant="body2"
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.5,
+              color: "text.primary",
+              wordBreak: "break-all",
+            }}
+          >
+            {ref.value}
+            <OpenInNewIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+          </Link>
+        ) : (
+          <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+            {ref.value}
+          </Typography>
+        )}
+      </Box>
+      <Tooltip title={copied ? tc("copied") : tc("copy")}>
+        <IconButton
+          className="copy-btn"
+          size="small"
+          onClick={handleCopy}
+          sx={{ color: "text.secondary", flexShrink: 0, p: 0.25, transition: "opacity 0.15s" }}
+        >
+          {copied ? <CheckIcon sx={{ fontSize: 16 }} /> : <ContentCopyIcon sx={{ fontSize: 16 }} />}
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+}
+
 export function PlaceInfoTab({ place, isLoading }: Props) {
   const t = useTranslations("place");
   const registry = useIntegrationRegistry();
@@ -164,7 +239,9 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
   const hasDescription = Boolean(infoDescription);
   const hasFacts = Boolean(place.facts?.length);
   const hasOsmTags = Boolean(place.osmTags && Object.keys(place.osmTags).length > 0);
-  const hasAnyContent = hasDescription || hasFacts || hasOsmTags;
+  const externalRefs = buildExternalRefs(place.ids);
+  const hasExternalRefs = externalRefs.length > 0;
+  const hasAnyContent = hasDescription || hasFacts || hasOsmTags || hasExternalRefs;
 
   if (isLoading && !hasAnyContent) {
     return (
@@ -310,6 +387,23 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
           </Box>
         </Box>
       ))}
+
+      {/* External references */}
+      {hasExternalRefs && (
+        <>
+          {(hasDescription || hasFacts || osmGroups.length > 0) && <Divider />}
+          <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+              {t("externalReferences")}
+            </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column" }}>
+              {externalRefs.map((ref) => (
+                <ExternalRefRow key={ref.scheme} ref={ref} />
+              ))}
+            </Box>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

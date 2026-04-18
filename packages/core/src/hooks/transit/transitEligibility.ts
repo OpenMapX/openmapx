@@ -167,9 +167,12 @@ export function isTransitName(name: string): boolean {
  */
 export function isTransitEligiblePlace(place: Place | null): boolean {
   if (!place) return false;
-  if (place.id.startsWith("coordinate-")) return false;
-  // Synthetic/opened transit stops are explicitly transit places.
-  if (place.id.startsWith("stop:")) return true;
+  if (place.ids?.coordinate !== undefined) return false;
+  // Synthetic/opened transit stops are explicitly transit places. The
+  // synthetic-stop builder always sets `rawCategory: "transit_stop"` — use
+  // that as the canonical marker now that the old `transitStop` scheme is
+  // gone and per-provider schemes (tfl, mb, …) vary across providers.
+  if (place.rawCategory === "transit_stop") return true;
   if (!place.coordinates || !place.name) return false;
   // External data source places (e.g. EV charging) are never transit infrastructure
   if (place.dataSourceDetail) return false;

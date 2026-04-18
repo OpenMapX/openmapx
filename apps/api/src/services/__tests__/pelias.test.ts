@@ -57,7 +57,7 @@ describe("geocode", () => {
     const results = await peliasService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("whosonfirst:locality:101748799");
+    expect(results[0].id).toBe("pelias-whosonfirst:101748799");
     expect(results[0].label).toBe("Berlin, Germany");
     expect(results[0].coordinates).toEqual([13.37, 52.52]);
     expect(results[0].type).toBe("region");
@@ -232,12 +232,21 @@ describe("autocomplete", () => {
     expect(results[0].sublabel).toBe("London, United Kingdom");
   });
 
-  it("uses gid as id", async () => {
+  it("wraps gid under a pelias-<source> scheme", async () => {
     const feature = makeBerlinFeature({ gid: "pelias:venue:12345" });
     mockFetch.mockResolvedValueOnce(mockOk(makePeliasResponse([feature])));
     const { peliasService } = await loadModule();
 
     const results = await peliasService.autocomplete("Berlin");
-    expect(results[0].id).toBe("pelias:venue:12345");
+    expect(results[0].id).toBe("pelias-pelias:12345");
+  });
+
+  it("maps openstreetmap source to canonical osm scheme", async () => {
+    const feature = makeBerlinFeature({ gid: "openstreetmap:venue:node/123" });
+    mockFetch.mockResolvedValueOnce(mockOk(makePeliasResponse([feature])));
+    const { peliasService } = await loadModule();
+
+    const results = await peliasService.autocomplete("Berlin");
+    expect(results[0].id).toBe("osm:node/123");
   });
 });

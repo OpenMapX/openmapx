@@ -1,3 +1,4 @@
+import { registerPlaceResolver } from "@openmapx/core";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -6,11 +7,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 const mockLookupByOsmRef = vi.fn();
 const mockLookupByCoords = vi.fn();
 const mockLookupByNameAndCoords = vi.fn();
+const mockLookupByOsmFilters = vi.fn();
+const mockLookupAddressByCoords = vi.fn();
 
 vi.mock("../../../../../integrations/geocoding/place-lookup.js", () => ({
   lookupByOsmRef: mockLookupByOsmRef,
   lookupByCoords: mockLookupByCoords,
   lookupByNameAndCoords: mockLookupByNameAndCoords,
+  lookupByOsmFilters: mockLookupByOsmFilters,
+  lookupAddressByCoords: mockLookupAddressByCoords,
 }));
 
 // Mock knowledge service
@@ -26,6 +31,12 @@ vi.mock("../../services/knowledge/index.js", () => ({
 vi.mock("../../../../../integrations/photos/orchestrator.js", () => ({
   searchHeroPhotos: vi.fn().mockResolvedValue([]),
   deduplicatePhotos: vi.fn((photos: unknown[]) => photos),
+}));
+
+// Mock reviews orchestrator — `fetchAggregate` would otherwise hit the
+// real Mangrove service via safeAggregate on every `/places/:id` call.
+vi.mock("../../../../../integrations/reviews/orchestrator.js", () => ({
+  fetchAggregate: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock DB RIS service
@@ -56,6 +67,21 @@ vi.mock("../../utils/cache.js", () => ({
 let app: FastifyInstance;
 
 beforeAll(async () => {
+  // Register the built-in scheme resolvers the route depends on. In the
+  // running server these register themselves from each integration's
+  // setup() during initIntegrations; the test boots the route in
+  // isolation, so we wire them directly here.
+  registerPlaceResolver("osm", async (value, ctx) => {
+    const match = value.match(/^(node|way|relation)\/(\d+)/);
+    if (!match) return null;
+    const [, osmType, osmId] = match;
+    return mockLookupByOsmRef(osmType, osmId, `osm:${value}`, ctx.lang);
+  });
+  registerPlaceResolver("eva", async (value, ctx) => {
+    if (!/^\d+$/.test(value)) return null;
+    return mockLookupDbStation(value, ctx.lang);
+  });
+
   const { placesRoute } = await import("../places.js");
   app = Fastify({ logger: false });
   await app.register(placesRoute);
@@ -73,10 +99,14 @@ afterEach(() => {
 // Fixtures
 
 const MOCK_PLACE = {
-  id: "node/12345",
+  id: "osm:node/12345",
+  primaryScheme: "osm",
+  ids: { osm: "node/12345" },
   name: "Brandenburg Gate",
+  address: "Pariser Platz, Berlin",
   lat: 52.5163,
   lng: 13.3777,
+  coordinates: [13.3777, 52.5163] as [number, number],
   osmTags: { tourism: "attraction", name: "Brandenburger Tor" },
 };
 
@@ -90,10 +120,12 @@ const MOCK_ENRICHMENT = {
 const MOCK_REVIEW_LINKS = [{ platform: "google", url: "https://google.com/maps/place/..." }];
 
 const MOCK_DB_STATION = {
-  id: "db-8011160",
+  id: "eva:8011160",
+  primaryScheme: "eva",
+  ids: { eva: "8011160" },
   name: "Berlin Hbf",
-  lat: 52.525,
-  lng: 13.369,
+  address: "Berlin Hbf",
+  coordinates: [13.369, 52.525] as [number, number],
 };
 
 function qs(params: Record<string, string>): string {
@@ -113,58 +145,62 @@ describe("GET /places", () => {
 });
 
 describe("GET /places/:id", () => {
-  it("returns place with knowledge data for OSM ref (node/12345)", async () => {
+  it("returns place with knowledge data for OSM ref", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);
     mockBuildReviewLinks.mockReturnValue(MOCK_REVIEW_LINKS);
 
     const res = await app.inject({
       method: "GET",
-      url: `/places/${encodeURIComponent("node/12345")}`,
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
     });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toEqual(
       expect.objectContaining({
-        id: "node/12345",
+        id: "osm:node/12345",
         name: "Brandenburg Gate",
         description: "Famous landmark in Berlin",
         reviewLinks: MOCK_REVIEW_LINKS,
       }),
     );
-    expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "node/12345", undefined);
+    expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", undefined);
     expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, undefined);
-    expect(mockBuildReviewLinks).toHaveBeenCalledWith(MOCK_PLACE, { wikidata: "Q82425" });
+    expect(mockBuildReviewLinks).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "osm:node/12345" }),
+    );
     expect(res.headers["cache-control"]).toBe("public, max-age=86400");
   });
 
-  it("looks up DB station for db- prefix", async () => {
+  it("looks up DB station for eva: scheme", async () => {
     mockLookupDbStation.mockResolvedValue(MOCK_DB_STATION);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
       method: "GET",
-      url: "/places/db-8011160",
+      url: `/places/${encodeURIComponent("eva:8011160")}`,
     });
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body).toEqual(MOCK_DB_STATION);
+    expect(body).toEqual(expect.objectContaining({ id: "eva:8011160", name: "Berlin Hbf" }));
     expect(mockLookupDbStation).toHaveBeenCalledWith("8011160", undefined);
   });
 
-  it("returns 400 for db- prefix with non-numeric EVA number", async () => {
+  it("returns 404 for eva: scheme with non-numeric EVA number", async () => {
     const res = await app.inject({
       method: "GET",
-      url: "/places/db-abc",
+      url: `/places/${encodeURIComponent("eva:abc")}`,
     });
 
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(404);
     const body = res.json();
-    expect(body.error).toBe("Invalid EVA number");
+    expect(body.error).toContain("No match for eva:abc");
   });
 
-  it("returns 400 for non-OSM ID missing lat/lng/name", async () => {
+  it("returns 400 for opaque ID missing lat/lng/name", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/places/custom-123",
@@ -172,10 +208,10 @@ describe("GET /places/:id", () => {
 
     expect(res.statusCode).toBe(400);
     const body = res.json();
-    expect(body.error).toBe("Non-OSM place ID requires lat, lng, and name query parameters");
+    expect(body.error).toBe("Non-resolvable place ID requires lat and lng query parameters");
   });
 
-  it("returns 400 when name is missing for non-OSM ID", async () => {
+  it("returns 400 when name is missing for opaque ID", async () => {
     const res = await app.inject({
       method: "GET",
       url: `/places/custom-123?${qs({ lat: "52.52", lng: "13.37" })}`,
@@ -183,44 +219,39 @@ describe("GET /places/:id", () => {
 
     expect(res.statusCode).toBe(400);
     const body = res.json();
-    expect(body.error).toBe("Non-OSM place ID requires lat, lng, and name query parameters");
+    expect(body.error).toBe("Non-resolvable place ID requires lat, lng, and name query parameters");
   });
 
-  it("prefers lookupByCoords for ds- prefix IDs", async () => {
-    const coordPlace = { ...MOCK_PLACE, id: "ds-fuel-123" };
-    mockLookupByCoords.mockResolvedValue(coordPlace);
+  it("dispatches to a registered resolver for per-provider data-source schemes", async () => {
+    // A data-source integration registers a resolver under its provider id
+    // (e.g. "fuel") so `/places/fuel:...` routes straight to that resolver.
+    const fuelResolver = vi.fn().mockResolvedValue({
+      id: "fuel:shell-123",
+      primaryScheme: "fuel",
+      ids: { fuel: "shell-123" },
+      name: "Shell",
+      address: "Some Street 1, Berlin",
+      coordinates: [13.37, 52.52] as [number, number],
+    });
+    registerPlaceResolver("fuel", fuelResolver);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
       method: "GET",
-      url: `/places/ds-fuel-123?${qs({ lat: "52.52", lng: "13.37", name: "Shell Station" })}`,
+      url: `/places/${encodeURIComponent("fuel:shell-123")}?${qs({ lat: "52.52", lng: "13.37" })}`,
     });
 
     expect(res.statusCode).toBe(200);
-    // lookupByCoords should be called first for ds- prefix
-    expect(mockLookupByCoords).toHaveBeenCalledWith(52.52, 13.37, "ds-fuel-123", undefined);
-    // lookupByNameAndCoords should NOT have been called since coords returned a result
+    expect(fuelResolver).toHaveBeenCalledWith(
+      "shell-123",
+      expect.objectContaining({ lat: 52.52, lng: 13.37 }),
+    );
     expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
+    expect(mockLookupByCoords).not.toHaveBeenCalled();
   });
 
-  it("falls back to lookupByNameAndCoords for ds- prefix when coords returns null", async () => {
-    mockLookupByCoords.mockResolvedValue(null);
-    mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
-    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
-    mockBuildReviewLinks.mockReturnValue([]);
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/places/ds-fuel-123?${qs({ lat: "52.52", lng: "13.37", name: "Shell Station" })}`,
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(mockLookupByCoords).toHaveBeenCalled();
-    expect(mockLookupByNameAndCoords).toHaveBeenCalled();
-  });
-
-  it("prefers lookupByNameAndCoords for non-ds prefix IDs", async () => {
+  it("prefers lookupByNameAndCoords for non-scheme opaque ids", async () => {
     mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
@@ -231,7 +262,6 @@ describe("GET /places/:id", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    // lookupByNameAndCoords should be called first for non-ds prefix
     expect(mockLookupByNameAndCoords).toHaveBeenCalledWith(
       "Some Place",
       52.52,
@@ -239,7 +269,6 @@ describe("GET /places/:id", () => {
       "custom-123",
       undefined,
     );
-    // lookupByCoords should NOT have been called since name+coords returned a result
     expect(mockLookupByCoords).not.toHaveBeenCalled();
   });
 
@@ -280,7 +309,7 @@ describe("GET /places/:id", () => {
 
     const res = await app.inject({
       method: "GET",
-      url: `/places/${encodeURIComponent("node/12345")}`,
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
     });
 
     expect(res.headers["cache-control"]).toBe("public, max-age=86400");
@@ -289,7 +318,7 @@ describe("GET /places/:id", () => {
   it("does not set Cache-Control on 400 error", async () => {
     const res = await app.inject({
       method: "GET",
-      url: "/places/db-abc",
+      url: "/places/custom-123",
     });
 
     expect(res.statusCode).toBe(400);
@@ -316,25 +345,25 @@ describe("GET /places/:id", () => {
 
     await app.inject({
       method: "GET",
-      url: `/places/${encodeURIComponent("node/12345")}?lang=de`,
+      url: `/places/${encodeURIComponent("osm:node/12345")}?lang=de`,
     });
 
-    expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "node/12345", "de");
+    expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "12345", "osm:node/12345", "de");
     expect(mockGetPlaceKnowledge).toHaveBeenCalledWith(MOCK_PLACE, "de");
   });
 
   it("handles way/ and relation/ OSM refs", async () => {
-    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, id: "way/67890" });
+    mockLookupByOsmRef.mockResolvedValue({ ...MOCK_PLACE, id: "osm:way/67890" });
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
 
     const res = await app.inject({
       method: "GET",
-      url: `/places/${encodeURIComponent("way/67890")}`,
+      url: `/places/${encodeURIComponent("osm:way/67890")}`,
     });
 
     expect(res.statusCode).toBe(200);
-    expect(mockLookupByOsmRef).toHaveBeenCalledWith("way", "67890", "way/67890", undefined);
+    expect(mockLookupByOsmRef).toHaveBeenCalledWith("way", "67890", "osm:way/67890", undefined);
   });
 
   it("returns 500 with generic message on unexpected error", async () => {
@@ -342,7 +371,7 @@ describe("GET /places/:id", () => {
 
     const res = await app.inject({
       method: "GET",
-      url: `/places/${encodeURIComponent("node/12345")}`,
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
     });
 
     expect(res.statusCode).toBe(500);

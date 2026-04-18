@@ -3,6 +3,7 @@ import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { registry } from "@integrations/transit-dynamic-registry/registry";
+import { listIdSchemeViews, registerBuiltinIdSchemeViews } from "@openmapx/core/server";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
@@ -26,6 +27,7 @@ import { isochroneRoute } from "./routes/isochrone";
 import { mapillaryRoute } from "./routes/mapillary";
 import { motisRoute } from "./routes/motis";
 import { placesRoute } from "./routes/places";
+import { reviewsKeypairRoute } from "./routes/reviews-keypair";
 import { risMapsRoute } from "./routes/ris-maps";
 import { savedRoute } from "./routes/saved";
 import { statusRoute } from "./routes/status";
@@ -57,6 +59,9 @@ const server = Fastify({
     // DB HAFAS trip IDs can be ~300 chars when URL-encoded (default is 100)
     maxParamLength: 500,
   },
+  // Review image uploads post base64 data URLs up to ~6.7 MB for a 5 MB photo
+  // (4/3 base64 inflation). The orchestrator clamps the decoded size at 5 MB.
+  bodyLimit: 10 * 1024 * 1024,
 });
 
 // Run database migrations on startup (idempotent — skips already-applied migrations)
@@ -125,6 +130,7 @@ await server.register(motisRoute, { prefix: "/api" });
 await server.register(imageProxyRoute, { prefix: "/api" });
 await server.register(winterSportsRoute, { prefix: "/api" });
 await server.register(risMapsRoute, { prefix: "/api" });
+await server.register(reviewsKeypairRoute, { prefix: "/api" });
 await server.register(savedRoute, { prefix: "/api" });
 await server.register(statusRoute, { prefix: "/api" });
 await server.register(adminRoute, { prefix: "/api" });
@@ -169,7 +175,22 @@ const customIntegrationsDir = join(
   "..",
   "custom_integrations",
 );
+// Register core-owned id-scheme views (OSM, Wikidata, social platforms,
+// internal handles). Integrations can re-register their own schemes in
+// their setup functions — registration is idempotent.
+registerBuiltinIdSchemeViews();
+
 await initIntegrations(server, [integrationsDir, customIntegrationsDir]);
+
+// Debug endpoint — returns every registered id-scheme view. Replaces the
+// value a static `PLACE_ID_SCHEMES` constant used to carry; reflects what
+// integrations actually registered at boot.
+server.get("/api/id-schemes", async () =>
+  listIdSchemeViews().map(({ buildUrl, ...view }) => ({
+    ...view,
+    linkable: typeof buildUrl === "function",
+  })),
+);
 
 // Initialize job runner (picks up interrupted jobs from previous run)
 await jobRunner.initialize();

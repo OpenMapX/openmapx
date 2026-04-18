@@ -7,5 +7,34 @@
   "dependencies": ["geocoding"],
   "backend": { "routes": true },
   "quality": "built-in",
-  "category": "External"
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "osm",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "Per-file (external images)",
+      "licenseUrl": "https://wiki.openstreetmap.org/wiki/Key:image",
+      "commercialUse": "unknown",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://wiki.osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "google-photos",
+      "name": "Google Photos",
+      "url": "https://photos.google.com/",
+      "license": "Per-file (copyright holder)",
+      "commercialUse": "no",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://policies.google.com/privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
 }

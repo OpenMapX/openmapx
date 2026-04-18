@@ -39,7 +39,9 @@ afterEach(() => {
 
 function makePlace(osmTags?: Record<string, string>) {
   return {
-    id: "node/1",
+    id: "osm:node/1",
+    primaryScheme: "osm",
+    ids: { osm: "node/1" },
     name: "Test",
     address: "Somewhere",
     coordinates: [13.4, 52.5] as [number, number],

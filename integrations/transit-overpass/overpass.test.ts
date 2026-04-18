@@ -44,7 +44,7 @@ describe("overpass provider", () => {
       const stops = await getStops([11.5, 48.1, 11.6, 48.2]);
 
       expect(stops).toHaveLength(1);
-      expect(stops[0].id).toBe("osm:12345");
+      expect(stops[0].id).toBe("osm:node/12345");
       expect(stops[0].name).toBe("Hauptbahnhof");
       expect(stops[0].lat).toBe(48.14);
       expect(stops[0].lng).toBe(11.56);

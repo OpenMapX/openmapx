@@ -55,6 +55,11 @@ const DOMAIN_TO_PRIVACY_SECTION: Record<string, { key: string; labelEn: string; 
       labelEn: "Weather",
       labelDe: "Wetter",
     },
+    reviews: {
+      key: "reviews",
+      labelEn: "Reviews",
+      labelDe: "Bewertungen",
+    },
   };
 
 const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe: string }> = {
@@ -91,6 +96,10 @@ const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe
   weather: {
     heading: "Weather",
     headingDe: "Wetter",
+  },
+  reviews: {
+    heading: "Reviews",
+    headingDe: "Bewertungen",
   },
 };
 

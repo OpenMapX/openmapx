@@ -51,7 +51,7 @@ describe("geocode", () => {
     const results = await nominatimService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("node/123456");
+    expect(results[0].id).toBe("osm:node/123456");
     expect(results[0].label).toBe("Berlin, Germany");
     expect(results[0].coordinates).toEqual([13.37, 52.52]);
     expect(results[0].confidence).toBe(0.87);
@@ -64,7 +64,7 @@ describe("geocode", () => {
     const { nominatimService } = await loadModule();
 
     const results = await nominatimService.geocode("Berlin");
-    expect(results[0].id).toBe("way/999");
+    expect(results[0].id).toBe("osm:way/999");
   });
 
   it('maps class "highway" to "street"', async () => {
@@ -162,7 +162,10 @@ describe("geocode", () => {
 // reverseGeocode
 
 describe("reverseGeocode", () => {
-  it("builds address from house_number, road, city, postcode, country", async () => {
+  it("builds a country-aware address from components", async () => {
+    // Address formatting is delegated to @fragaria/address-formatter, which
+    // applies local conventions — German addresses place the house number
+    // AFTER the street name and combine postcode with city.
     const reverseResult = {
       display_name: "Alexanderplatz, Berlin, 10178, Germany",
       address: {
@@ -171,6 +174,7 @@ describe("reverseGeocode", () => {
         city: "Berlin",
         postcode: "10178",
         country: "Germany",
+        country_code: "de",
       },
     };
     mockFetch.mockResolvedValueOnce(mockOk(reverseResult));
@@ -179,7 +183,7 @@ describe("reverseGeocode", () => {
     const result = await nominatimService.reverseGeocode(52.52, 13.41);
 
     expect(result).not.toBeNull();
-    expect(result?.address).toBe("1 Alexanderplatz, Berlin, 10178, Germany");
+    expect(result?.address).toBe("Alexanderplatz 1, 10178 Berlin, Germany");
     expect(result?.city).toBe("Berlin");
   });
 
@@ -199,12 +203,18 @@ describe("reverseGeocode", () => {
     expect(result?.city).toContain("Dorfstadt");
   });
 
-  it("falls back to display_name first part when no street info", async () => {
+  it("includes the POI/landmark name from Nominatim address fields", async () => {
+    // Nominatim puts named features (attractions, monuments, etc.) into
+    // typed fields under `address`. @fragaria/address-formatter understands
+    // these aliases and positions them correctly per country template, so
+    // no bespoke display_name fallback is needed.
     const reverseResult = {
-      display_name: "Brandenburg Gate, Berlin, Germany",
+      display_name: "Brandenburg Gate, Pariser Platz, Berlin, Germany",
       address: {
+        tourism: "Brandenburg Gate",
         city: "Berlin",
         country: "Germany",
+        country_code: "de",
       },
     };
     mockFetch.mockResolvedValueOnce(mockOk(reverseResult));
@@ -212,7 +222,9 @@ describe("reverseGeocode", () => {
 
     const result = await nominatimService.reverseGeocode(52.52, 13.37);
 
-    expect(result?.address).toBe("Brandenburg Gate, Berlin, Germany");
+    expect(result?.address).toContain("Brandenburg Gate");
+    expect(result?.address).toContain("Berlin");
+    expect(result?.address).toContain("Germany");
   });
 
   it("includes state or county in city field", async () => {
@@ -272,7 +284,7 @@ describe("autocomplete", () => {
 
     const results = await nominatimService.autocomplete("restaurant");
 
-    expect(results[0].id).toBe("node/123456");
+    expect(results[0].id).toBe("osm:node/123456");
     expect(results[0].coordinates).toEqual([13.37, 52.52]);
     expect(results[0].type).toBe("poi");
     expect(results[0].rawCategory).toBe("amenity/restaurant");

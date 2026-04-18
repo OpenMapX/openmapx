@@ -26,6 +26,8 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { SavedPlace } from "@openmapx/core";
 import {
+  createPlace,
+  idsFromPrimary,
   PANEL,
   useDeleteList,
   usePlaceStore,
@@ -116,12 +118,18 @@ export function SavedListDetail() {
   };
 
   const handlePlaceClick = (place: SavedPlace) => {
-    setSelectedPlace({
-      id: place.placeId ?? `saved:${place.id}`,
-      name: place.name,
-      address: place.address ?? "",
-      coordinates: [place.lng, place.lat],
-    });
+    const identity = (place.placeId ? idsFromPrimary(place.placeId) : null) ?? {
+      primaryScheme: "saved",
+      ids: { saved: place.id },
+    };
+    setSelectedPlace(
+      createPlace({
+        ...identity,
+        name: place.name,
+        address: place.address ?? "",
+        coordinates: [place.lng, place.lat],
+      }),
+    );
     useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     flyTo([place.lng, place.lat], 15);
   };

@@ -174,6 +174,58 @@ export default function PrivacyContent({
               synchronized across devices
             </Typography>
           </li>
+          <li>
+            <Typography>
+              <strong>Mangrove review keypair</strong> — if you opt in to the review feature, an
+              ECDSA P-256 signing keypair is generated and stored for you. The public key is stored
+              in cleartext on our server (it is, by design, public). The private key is stored
+              according to the protection mode you choose:
+            </Typography>
+            <ul>
+              <li>
+                <Typography>
+                  <strong>Passphrase (recommended)</strong> — the private key is encrypted in your
+                  browser with a passphrase you choose, using the audited{" "}
+                  <Link
+                    href="https://age-encryption.org/v1"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    age encryption
+                  </Link>{" "}
+                  format (scrypt key-stretching plus ChaCha20-Poly1305). We only ever see the
+                  ciphertext.
+                </Typography>
+              </li>
+              <li>
+                <Typography>
+                  <strong>Passphrase and/or WebAuthn passkey</strong> — you may additionally or
+                  alternatively unlock the private key with one or more registered passkeys (e.g.
+                  your phone&apos;s biometrics, a hardware security key). We store one
+                  age-plugin-fido2prf identity string per passkey. That string encodes the
+                  credential id, relying-party id and transport hint — it contains no secret
+                  material.
+                </Typography>
+              </li>
+              <li>
+                <Typography>
+                  <strong>Unencrypted (explicit opt-in)</strong> — only if you actively choose this,
+                  the private key is stored in cleartext on our server. In this mode, anyone with
+                  access to the database (including the operator) could cryptographically sign
+                  reviews in your name. We show a warning before you make this choice.
+                </Typography>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <Typography>
+              <strong>Review content</strong> — if you submit a review, the content you provide
+              (rating, free-text review, optional images, optional affiliations, optional experience
+              context, place reference) is cryptographically signed in your browser and then
+              forwarded by our server to the Mangrove.reviews network. See Section&nbsp;6 below for
+              the publication model.
+            </Typography>
+          </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
           You may also sign in via third-party OAuth providers (OpenStreetMap, Mapillary). In that
@@ -192,7 +244,86 @@ export default function PrivacyContent({
         </Typography>
       </Section>
 
-      <Section title="6. Third-Party Services and Data Transfers">
+      <Section title="6. Reviews (Mangrove Open Reviews Standard)">
+        <Typography>
+          OpenMapX integrates the{" "}
+          <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
+            Mangrove.reviews
+          </Link>{" "}
+          decentralized review network (Open Reviews Standard, operated by the Open Reviews
+          Association, Z&uuml;rich, Switzerland). Using the review feature has privacy implications
+          that go beyond our own servers, so please read this section carefully before submitting a
+          review.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Reviews are public and permanent.</strong> When you submit a review, it is
+              cryptographically signed with your keypair (see Section&nbsp;5) and published to{" "}
+              <code>api.mangrove.reviews</code>. From there it is mirrored and re-published by
+              independent aggregators we do not control. Deletion of a review is a best-effort
+              request to aggregators; we cannot guarantee removal from all copies already
+              propagated.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Your public key is a persistent pseudonym.</strong> Every review you submit is
+              signed with, and linked to, your public key. The public key is stored in cleartext by
+              Mangrove and aggregators and ties all of your reviews together into a pseudonymous
+              identity, even across sessions and devices. Anyone who learns a connection between
+              your public key and your real-world identity can link it to all prior and future
+              reviews you sign. The key is not a direct identifier (name, email, etc.), but treating
+              it as anonymous would be misleading.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>What is submitted.</strong> Each review submission contains: the subject
+              identifier (for places this is a <code>geo:</code> URI with the place&apos;s
+              coordinates and uncertainty radius), your rating, optional free-text opinion, optional
+              experience tags, optional affiliation disclosures, optional uploaded images, your
+              public key, and your signature.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Image uploads.</strong> Optional review images are uploaded to Mangrove&apos;s
+              image service (<code>files.mangrove.reviews</code>). Images are served publicly once
+              uploaded. Before your image leaves your browser, we re-encode it through an HTML
+              canvas to strip EXIF, XMP, IPTC, GPS and similar embedded metadata that cameras often
+              attach. The visible pixel content of the photo itself is retained and published as-is.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Reading reviews.</strong> When you view a place in OpenMapX, our backend
+              fetches any existing reviews for that place from <code>api.mangrove.reviews</code>,
+              forwarding the place&apos;s <code>geo:</code> URI (coordinates). Your IP address is
+              not transmitted to Mangrove for read operations because these go through our server.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Editing and deleting your own reviews.</strong> Edits and deletions are
+              themselves signed follow-up reviews. They are propagated in the same way as the
+              original review and are subject to the same caveats about mirrors and retention by
+              third parties.
+            </Typography>
+          </li>
+        </ul>
+        <Typography sx={{ mt: 1 }}>
+          The legal basis for the storage and signing of your keypair is Art.&nbsp;6(1)(b) GDPR
+          (performance of the review service you requested). The legal basis for the publication of
+          review content to the Mangrove network is Art.&nbsp;6(1)(a) GDPR (your explicit consent,
+          given when you accept the in-app Terms/Privacy checkboxes in the review dialog and press
+          &ldquo;Publish&rdquo;). You may withdraw future consent at any time by not publishing
+          further reviews; already-published reviews cannot be unpublished unilaterally because of
+          the decentralized design of the system.
+        </Typography>
+      </Section>
+
+      <Section title="7. Third-Party Services and Data Transfers">
         <Typography>
           To provide its mapping features, OpenMapX sends requests to various third-party APIs. When
           you use a feature, certain data (typically map viewport coordinates, search queries, or
@@ -298,7 +429,7 @@ export default function PrivacyContent({
         </Typography>
       </Section>
 
-      <Section title="7. Cookies and Local Storage">
+      <Section title="8. Cookies and Local Storage">
         <Typography>
           OpenMapX uses only technically necessary storage mechanisms. Each item below is required
           for the service to function as requested by the user:
@@ -353,7 +484,7 @@ export default function PrivacyContent({
         </Typography>
       </Section>
 
-      <Section title="8. Server-Side Caching and Databases">
+      <Section title="9. Server-Side Caching and Databases">
         <Typography>
           To improve performance and reduce load on third-party APIs, our server caches API
           responses in Redis (an in-memory data store). Cached data typically includes map search
@@ -369,7 +500,7 @@ export default function PrivacyContent({
         </Typography>
       </Section>
 
-      <Section title="9. Email Communication">
+      <Section title="10. Email Communication">
         <Typography>If you register an account, we may send transactional emails for:</Typography>
         <ul>
           <li>
@@ -390,7 +521,7 @@ export default function PrivacyContent({
         </Typography>
       </Section>
 
-      <Section title="10. Your Rights Under the GDPR">
+      <Section title="11. Your Rights Under the GDPR">
         <Typography>You have the following rights regarding your personal data:</Typography>
         <ul>
           <li>
@@ -450,7 +581,7 @@ export default function PrivacyContent({
         </Typography>
       </Section>
 
-      <Section title="11. Data Retention">
+      <Section title="12. Data Retention">
         <Typography>We retain personal data only as long as necessary:</Typography>
         <ul>
           <li>
@@ -461,6 +592,21 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Saved places</strong> — retained until you remove them or delete your account.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Mangrove keypair</strong> — retained until you regenerate it or delete your
+              account. Deleting the keypair on our servers does <strong>not</strong> retract
+              previously published reviews from the Mangrove network.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Published review content</strong> — lives on the Mangrove network and its
+              mirrors, outside our control. Within OpenMapX&apos;s own display, reviews can be
+              hidden upon request; on external aggregators, retention is governed by their
+              respective policies.
             </Typography>
           </li>
           <li>
@@ -482,16 +628,25 @@ export default function PrivacyContent({
         </ul>
       </Section>
 
-      <Section title="12. Security">
+      <Section title="13. Security">
         <Typography>
           We implement appropriate technical and organizational measures to protect your data,
           including encrypted connections (TLS/HTTPS), hashed passwords (using modern key-derivation
           functions), secure session management, and parameterized database queries. However, no
           method of transmission over the Internet is 100% secure.
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>Trust model for the Mangrove keypair (Section&nbsp;5).</strong> In passphrase mode
+          and passphrase + passkey mode, the private signing key never leaves your browser in
+          cleartext. Even a full compromise of our database would only reveal age-encrypted
+          ciphertext, which cannot be decrypted without your passphrase or a registered passkey. In
+          contrast, the &ldquo;unencrypted&rdquo; opt-in mode stores the private key in cleartext;
+          anyone with database access could therefore sign reviews in your name. We recommend
+          choosing one of the encrypted modes and never sharing your passphrase.
+        </Typography>
       </Section>
 
-      <Section title="13. Children's Privacy">
+      <Section title="14. Children's Privacy">
         <Typography>
           OpenMapX is not directed at children under the age of 16. We do not knowingly collect
           personal data from children. If you believe that a child has provided us with personal
@@ -499,7 +654,7 @@ export default function PrivacyContent({
         </Typography>
       </Section>
 
-      <Section title="14. Changes to This Policy">
+      <Section title="15. Changes to This Policy">
         <Typography>
           We may update this privacy policy from time to time. The current version is always
           available at <Link href="/privacy">/privacy</Link>. Material changes will be indicated by

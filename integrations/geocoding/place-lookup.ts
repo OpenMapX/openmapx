@@ -5,15 +5,31 @@
  */
 
 import {
+  createPlace,
   type OsmFilter,
   type OverpassNode,
   type OverpassWay,
   overpassQuery,
   type Place,
+  type PlaceIds,
+  parseId,
   USER_AGENT,
 } from "@openmapx/core";
 import { formatAddress } from "./format-address.js";
 import { resolveOsmLabel } from "./osm-label.js";
+
+function buildIds(result: NominatimDetailResult, requestId: string): PlaceIds {
+  const osmRef = `${result.osm_type}/${result.osm_id}`;
+  const ids: PlaceIds = { osm: osmRef };
+  // Carry any non-OSM scheme from the request forward — e.g. a `dataSource:`
+  // item that maps to an OSM node still needs its original identity for
+  // client-side dispatch (filter lookup, reviews, saved-places, etc.).
+  const parsed = parseId(requestId);
+  if (parsed && parsed.scheme !== "osm" && !ids[parsed.scheme]) {
+    ids[parsed.scheme] = parsed.value;
+  }
+  return ids;
+}
 
 const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
 const DEFAULT_HEADERS = {
@@ -71,8 +87,9 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
   const name = r.display_name.split(",")[0].trim();
   const city = r.address.city ?? r.address.town ?? r.address.village ?? r.address.county;
 
-  return {
-    id,
+  return createPlace({
+    primaryScheme: "osm",
+    ids: buildIds(r, id),
     name,
     address,
     city,
@@ -83,7 +100,7 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
     website: website ?? contactWebsite,
     openingHours: opening_hours,
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
-  };
+  });
 }
 
 async function fetchNominatim<T>(url: URL, lang?: string): Promise<T> {
@@ -429,8 +446,16 @@ function overpassElementToPlace(
 
   const osmTags: Record<string, string> = { ...tags };
 
-  return {
-    id: originalId,
+  const osmRef = `${el.type}/${el.id}`;
+  const ids: PlaceIds = { osm: osmRef };
+  const parsed = parseId(originalId);
+  if (parsed && parsed.scheme !== "osm" && !ids[parsed.scheme]) {
+    ids[parsed.scheme] = parsed.value;
+  }
+
+  return createPlace({
+    primaryScheme: "osm",
+    ids,
     name,
     address,
     city,
@@ -440,5 +465,5 @@ function overpassElementToPlace(
     website,
     openingHours,
     osmTags: Object.keys(osmTags).length > 0 ? osmTags : undefined,
-  };
+  });
 }

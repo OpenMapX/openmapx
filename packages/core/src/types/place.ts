@@ -1,5 +1,6 @@
 import type { DataSourceDetail } from "@integrations/data-source/types";
 import type { LngLat } from "./geometry";
+import type { Identified, Ids } from "./identified";
 
 export interface PlacePhoto {
   url: string;
@@ -26,8 +27,18 @@ export interface PlaceReviewLink {
   url: string;
 }
 
-export interface Place {
-  id: string;
+/**
+ * Map of all known external identifiers for a place — keyed by scheme
+ * (`osm`, `wikidata`, `yelp`, `eva`, a provider id, …), valued by the
+ * opaque id string in that scheme's format. The `primaryScheme` field on
+ * `Place` tells downstream code which of these is canonical.
+ *
+ * Open-ended by design: integrations register their own schemes via the
+ * id-scheme registry rather than enumerating them in a central type.
+ */
+export type PlaceIds = Ids;
+
+export interface Place extends Identified {
   name: string;
   address: string;
   city?: string;

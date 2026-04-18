@@ -2,14 +2,16 @@
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { configureStorage } from "@openmapx/core";
+import { configureStorage, registerBuiltinIdSchemeViews } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { localStorageAdapter } from "../lib/storage";
 import { IntegrationProvider } from "../providers/IntegrationProvider";
+import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
 
 configureStorage(localStorageAdapter);
+registerBuiltinIdSchemeViews();
 
 const theme = createTheme({
   cssVariables: {
@@ -95,6 +97,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <ImpersonationBanner />
+        <KeypairSessionGuard />
         <IntegrationProvider>{children}</IntegrationProvider>
       </ThemeProvider>
     </QueryClientProvider>

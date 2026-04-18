@@ -103,7 +103,10 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     );
   }
 
-  const isStopMode = place.id.startsWith("stop:");
+  // A Place represents a transit stop when the geocoder/synthetic builder
+  // tagged it as such — makeSyntheticStopPlace + geocodeStopAsPlace always
+  // set rawCategory = "transit_stop".
+  const isStopMode = place.rawCategory === "transit_stop";
 
   if (isStopMode) {
     return (
@@ -216,7 +219,11 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           </Box>
         )}
         {place.category && (
-          <Chip label={place.category} size="small" sx={{ borderRadius: "4px", fontSize: 12 }} />
+          <Chip
+            label={place.category.toLowerCase() === "poi" ? "POI" : place.category}
+            size="small"
+            sx={{ borderRadius: "4px", fontSize: 12 }}
+          />
         )}
       </Box>
 

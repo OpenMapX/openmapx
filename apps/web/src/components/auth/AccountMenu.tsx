@@ -12,7 +12,7 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
-import { authClient, getInitials } from "@openmapx/core";
+import { authClient, getInitials, useKeypairStore } from "@openmapx/core";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -31,6 +31,11 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
 
   const handleSignOut = async () => {
     onClose();
+    // Wipe the in-memory Mangrove keypair before tearing down the session so
+    // the private JWK isn't reachable from any module after sign-out. The
+    // server is the source of truth for the encrypted envelope — we only
+    // hold decrypted material while a session is live.
+    useKeypairStore.getState().clear();
     await authClient.signOut();
   };
 

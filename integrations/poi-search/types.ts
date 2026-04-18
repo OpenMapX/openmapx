@@ -1,4 +1,8 @@
 import type { BoundingBox, LngLat, Place } from "@openmapx/core";
+// Import from the dedicated place-ids subpath (pure types + helpers, no hooks)
+// to avoid cycling back into @openmapx/core via the main barrel when this file
+// is consumed by server-only callers like packages/core/src/server.ts.
+import { createPlace, parseId } from "@openmapx/core/place-ids";
 
 export type CategoryId =
   | "restaurants"
@@ -476,8 +480,14 @@ export const HOURS_FILTER_CATEGORY_IDS: ReadonlySet<string> = new Set(
  *  When `categoryId` is provided it is stored as `rawCategory` so that
  *  `useDataSourceMatch` can resolve the matching data source. */
 export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string): Place {
-  return {
-    id: place.id,
+  // CategoryPlace.id is always an Overpass-derived canonical id
+  // (`osm:node/…`, `osm:way/…`). Parse it so `ids.osm` holds the bare
+  // OSM ref value expected by downstream consumers.
+  const parsed = parseId(place.id);
+  const osmRef = parsed?.scheme === "osm" ? parsed.value : place.id;
+  return createPlace({
+    primaryScheme: "osm",
+    ids: { osm: osmRef },
     name: place.name,
     address: place.address ?? place.name,
     coordinates: place.coordinates,
@@ -487,7 +497,7 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
     website: place.website,
     openingHours: place.openingHours,
     isOpen: place.isOpen,
-  };
+  });
 }
 
 export interface PoiSearchResult {

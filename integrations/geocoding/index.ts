@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import type { AutocompleteResult, IntegrationContext } from "@openmapx/core";
+import { registerPlaceResolver } from "@openmapx/core/server";
 import { MemCache } from "./mem-cache.js";
 import { getGeocodingProvider } from "./orchestrator.js";
+import { lookupByOsmRef } from "./place-lookup.js";
 import { expandSearchQuery, fetchWithVariants } from "./query-expansion.js";
 
 /** Build a short hash key from a prefix + arbitrary data. */
@@ -27,6 +29,15 @@ const MEM_HARD_MS = 2 * 3600_000;
 const memCache = new MemCache<AutocompleteResult[]>(1000);
 
 export function setup(ctx: IntegrationContext): void {
+  // OSM primary-id dispatch: when a Place.id arrives as `osm:node/123`,
+  // resolve it via Nominatim's OSM-ref detail lookup.
+  registerPlaceResolver("osm", async (value, resolverCtx) => {
+    const match = value.match(/^(node|way|relation)\/(\d+)/);
+    if (!match) return null;
+    const [, osmType, osmId] = match;
+    return lookupByOsmRef(osmType, osmId, `osm:${value}`, resolverCtx.lang);
+  });
+
   // GET /geocode
   ctx.registerRoute("GET", "/geocode", async (req, reply) => {
     const q = req.query.q;

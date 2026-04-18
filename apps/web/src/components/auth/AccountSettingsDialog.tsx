@@ -34,6 +34,7 @@ import { authClient, getInitials, oauthProviders } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
+import { MangroveAccountSection } from "./MangroveAccountSection";
 
 interface AccountSettingsDialogProps {
   open: boolean;
@@ -1061,6 +1062,10 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         >
           {t("addPasskey")}
         </Button>
+
+        <Divider sx={{ mb: 2 }} />
+
+        <MangroveAccountSection />
 
         <Divider sx={{ mb: 2 }} />
 

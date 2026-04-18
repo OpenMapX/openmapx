@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1774799903170,
-      "tag": "0000_initial-schema",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1774830132782,
-      "tag": "0001_add-normalized-email",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1774956529879,
-      "tag": "0002_add-integration-config",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1775312524272,
-      "tag": "0003_add-admin",
+      "when": 1776513206638,
+      "tag": "0000_initial",
       "breakpoints": true
     }
   ]

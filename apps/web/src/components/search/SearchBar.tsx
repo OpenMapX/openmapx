@@ -20,8 +20,11 @@ import {
   buildIntegrationAttribution,
   CATEGORY_DEFINITIONS,
   combineAttributions,
+  coordinateId,
+  createPlace,
   decodeShortPlusCode,
   detectShortPlusCodeCity,
+  idsFromPrimaryOrCoords,
   isTransitName,
   PANEL,
   parseCoordinateInput,
@@ -232,7 +235,7 @@ export function SearchBar() {
 
     if (parsed) {
       syntheticResult = {
-        id: `coordinate-${parsed.lngLat[1].toFixed(6)}-${parsed.lngLat[0].toFixed(6)}`,
+        id: `coordinate:${coordinateId(parsed.lngLat)}`,
         label: parsed.label,
         coordinates: parsed.lngLat,
         type: "address",
@@ -367,15 +370,12 @@ export function SearchBar() {
           name.toLowerCase().includes(s.name.toLowerCase().slice(0, 10)),
       );
       if (match) {
-        setSelectedPlace({
-          id: `stop:${match.id}`,
-          name: match.name,
-          address: match.name,
-          coordinates: [match.lng, match.lat] as [number, number],
-          category: "station",
-          rawCategory: "transit_stop",
+        // Reuse the shared synthetic-stop builder so the Place picks up
+        // the provider-scoped scheme (tfl, mb, dyn, …) from the stop id.
+        void resolveStopAsPlace(match).then((place) => {
+          setSelectedPlace(place);
+          useSidebarStore.getState().openSidebar(PANEL.PLACE);
         });
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
         return true;
       }
     } catch {
@@ -425,29 +425,23 @@ export function SearchBar() {
     if (first) {
       flyTo(first.coordinates, 15);
       const text = first.label.toLowerCase();
+      const firstPlace = createPlace({
+        ...idsFromPrimaryOrCoords(first.id, first.coordinates),
+        name: first.label,
+        address: first.label,
+        coordinates: first.coordinates,
+        category: first.type,
+        rawCategory: first.rawCategory,
+      });
       if (isTransitName(text)) {
         void tryOpenTransitStop(first.coordinates, first.label).then((found) => {
           if (!found) {
-            setSelectedPlace({
-              id: first.id,
-              name: first.label,
-              address: first.label,
-              coordinates: first.coordinates,
-              category: first.type,
-              rawCategory: first.rawCategory,
-            });
+            setSelectedPlace(firstPlace);
             useSidebarStore.getState().openSidebar(PANEL.PLACE);
           }
         });
       } else {
-        setSelectedPlace({
-          id: first.id,
-          name: first.label,
-          address: first.label,
-          coordinates: first.coordinates,
-          category: first.type,
-          rawCategory: first.rawCategory,
-        });
+        setSelectedPlace(firstPlace);
         useSidebarStore.getState().openSidebar(PANEL.PLACE);
       }
     }
@@ -458,12 +452,14 @@ export function SearchBar() {
       setQuery(result.label);
       setIsFocused(false);
       flyTo(result.coordinates, 15);
-      setSelectedPlace({
-        id: result.id,
-        name: result.sublabel?.split(" — ")[0] ?? result.label,
-        address: result.sublabel?.split(" — ")[1] ?? result.sublabel ?? result.label,
-        coordinates: result.coordinates,
-      });
+      setSelectedPlace(
+        createPlace({
+          ...idsFromPrimaryOrCoords(result.id, result.coordinates),
+          name: result.sublabel?.split(" — ")[0] ?? result.label,
+          address: result.sublabel?.split(" — ")[1] ?? result.sublabel ?? result.label,
+          coordinates: result.coordinates,
+        }),
+      );
       useSidebarStore.getState().openSidebar(PANEL.PLACE);
       return;
     }
@@ -504,29 +500,23 @@ export function SearchBar() {
       flyTo(coords, 15);
       // Try to open as transit stop
       const text = `${result.label} ${result.sublabel ?? ""}`.toLowerCase();
+      const suggestionPlace = createPlace({
+        ...idsFromPrimaryOrCoords(result.id, coords),
+        name: result.label,
+        address: result.sublabel ?? result.label,
+        coordinates: coords,
+        category: result.type,
+        rawCategory: result.rawCategory,
+      });
       if (isTransitName(text)) {
         void tryOpenTransitStop(coords, result.label).then((found) => {
           if (!found) {
-            setSelectedPlace({
-              id: result.id,
-              name: result.label,
-              address: result.sublabel ?? result.label,
-              coordinates: coords,
-              category: result.type,
-              rawCategory: result.rawCategory,
-            });
+            setSelectedPlace(suggestionPlace);
             useSidebarStore.getState().openSidebar(PANEL.PLACE);
           }
         });
       } else {
-        setSelectedPlace({
-          id: result.id,
-          name: result.label,
-          address: result.sublabel ?? result.label,
-          coordinates: result.coordinates,
-          category: result.type,
-          rawCategory: result.rawCategory,
-        });
+        setSelectedPlace(suggestionPlace);
         useSidebarStore.getState().openSidebar(PANEL.PLACE);
       }
     }

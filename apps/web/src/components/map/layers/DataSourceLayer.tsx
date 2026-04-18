@@ -4,6 +4,7 @@ import type { DataSourceMeta, DataSourceResult, LngLat } from "@openmapx/core";
 import {
   applyClientSideFilters,
   buildSourceAttribution,
+  createPlace,
   PANEL,
   splitFilters,
   useDataSourceSearch,
@@ -421,16 +422,19 @@ export function DataSourceLayer() {
       if (!features.length) return;
       const props = features[0].properties as { id: string; name: string; summary?: string };
       const coords = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
-      selectItem(currentSource, props.id, activeMeta?.osmFilters);
+      selectItem(currentSource, props.id);
       // Set a preview place immediately so the floating card shows without waiting for detail API
-      setSelectedPlace({
-        id: props.id,
-        name: props.name,
-        address: props.name,
-        coordinates: coords,
-        category: activeMeta?.placeCategory,
-        rawCategory: activeMeta?.placeCategoryRaw,
-      });
+      setSelectedPlace(
+        createPlace({
+          primaryScheme: currentSource,
+          ids: { [currentSource]: props.id },
+          name: props.name,
+          address: props.name,
+          coordinates: coords,
+          category: activeMeta?.placeCategory,
+          rawCategory: activeMeta?.placeCategoryRaw,
+        }),
+      );
       useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     };
 

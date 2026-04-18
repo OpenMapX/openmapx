@@ -31,7 +31,18 @@ export interface DatabaseClient {
 }
 
 export type RouteHandler = (
-  req: { query: Record<string, string>; params: Record<string, string>; body: unknown },
+  req: {
+    query: Record<string, string>;
+    params: Record<string, string>;
+    body: unknown;
+    /**
+     * Authenticated user id. Only populated when the route was registered
+     * with `{ requireAuth: true }`; the host rejects unauthenticated callers
+     * with 401 before invoking the handler, so this field is non-null inside
+     * auth-required handlers.
+     */
+    userId?: string;
+  },
   reply: {
     send: (data: unknown) => void;
     status: (code: number) => { send: (data: unknown) => void };
@@ -39,6 +50,11 @@ export type RouteHandler = (
     type: (contentType: string) => void;
   },
 ) => Promise<void> | void;
+
+export interface RouteOptions {
+  /** Require a valid session; respond 401 before invoking the handler otherwise. */
+  requireAuth?: boolean;
+}
 
 export interface HealthCheckResult {
   status: "up" | "down" | "unconfigured";
@@ -65,7 +81,7 @@ export interface IntegrationContext {
   readonly secrets: SecretsClient;
 
   registerProvider(domain: string, provider: unknown): void;
-  registerRoute(method: string, path: string, handler: RouteHandler): void;
+  registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
 
   emit(event: string, data: unknown): void;

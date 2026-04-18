@@ -3,7 +3,14 @@
  * Pure functions — no I/O.
  */
 
-import type { AutocompleteResult, SearchResult, TransitStop, TransportMode } from "@openmapx/core";
+import {
+  type AutocompleteResult,
+  createPlace,
+  type Place,
+  type SearchResult,
+  type TransitStop,
+  type TransportMode,
+} from "@openmapx/core";
 import type {
   RisConnectingTime,
   RisLocalService,
@@ -50,7 +57,7 @@ export function stopPlaceToSearchResult(stop: RisStopPlace, lang?: string): Sear
   const name = stopName(stop, lang);
   const city = stopCity(stop, lang);
   return {
-    id: `db-${stop.evaNumber}`,
+    id: `eva:${stop.evaNumber}`,
     label: city ? `${name}, ${city}` : name,
     coordinates: [stop.position.longitude, stop.position.latitude],
     type: "poi",
@@ -66,7 +73,7 @@ export function stopPlaceToAutocompleteResult(
   const name = stopName(stop, lang);
   const city = stopCity(stop, lang);
   const transitStop: TransitStop = {
-    id: `db-${stop.evaNumber}`,
+    id: `eva:${stop.evaNumber}`,
     name,
     lat: stop.position.latitude,
     lng: stop.position.longitude,
@@ -74,7 +81,7 @@ export function stopPlaceToAutocompleteResult(
     provider: "db-ris",
   };
   return {
-    id: `db-${stop.evaNumber}`,
+    id: `eva:${stop.evaNumber}`,
     label: name,
     sublabel: city || undefined,
     coordinates: [stop.position.longitude, stop.position.latitude],
@@ -84,28 +91,19 @@ export function stopPlaceToAutocompleteResult(
   };
 }
 
-interface Place {
-  id: string;
-  name: string;
-  address?: string;
-  city?: string;
-  coordinates: [number, number];
-  category?: string;
-  rawCategory?: string;
-}
-
 export function stopPlaceToPlace(stop: RisStopPlace, lang?: string): Place {
   const name = stopName(stop, lang);
   const city = stopCity(stop, lang);
-  return {
-    id: `db-${stop.evaNumber}`,
+  return createPlace({
+    primaryScheme: "eva",
+    ids: { eva: stop.evaNumber },
     name,
     address: name,
     city: city || undefined,
     coordinates: [stop.position.longitude, stop.position.latitude],
     category: "Train Station",
     rawCategory: "railway/station",
-  };
+  });
 }
 
 export interface StationDetail {

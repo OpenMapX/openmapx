@@ -14,6 +14,7 @@ import {
   normalizeEnvVars,
   PLATFORM_VERSION,
   type RouteHandler,
+  type RouteOptions,
   satisfiesPlatformVersion,
   toIntegrationMeta,
   validateManifest,
@@ -25,6 +26,7 @@ import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
 import { getSecret, resolveVaultSecrets } from "./services/secrets";
+import { requireAuth } from "./utils/require-auth";
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
@@ -459,18 +461,26 @@ export async function initIntegrations(
         existing.push(provider);
         providers.set(domain, existing);
       },
-      registerRoute(method: string, path: string, handler: RouteHandler) {
+      registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
         const raw = `/api/integrations/${id}${path.startsWith("/") ? path : `/${path}`}`;
         const fullPath = raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
+        const needsAuth = options?.requireAuth === true;
         fastify.route({
           method: method.toUpperCase() as "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
           url: fullPath,
           async handler(request, reply) {
+            let userId: string | undefined;
+            if (needsAuth) {
+              const authed = await requireAuth(request, reply);
+              if (!authed) return; // requireAuth already sent 401
+              userId = authed;
+            }
             await handler(
               {
                 query: request.query as Record<string, string>,
                 params: request.params as Record<string, string>,
                 body: request.body,
+                userId,
               },
               {
                 send: (data) => reply.send(data),
@@ -758,7 +768,12 @@ export async function reloadIntegrations(): Promise<{
         existing.push(provider);
         providers.set(domain, existing);
       },
-      registerRoute(_method: string, _path: string, _handler: RouteHandler) {
+      registerRoute(
+        _method: string,
+        _path: string,
+        _handler: RouteHandler,
+        _options?: RouteOptions,
+      ) {
         // Routes cannot be re-registered in Fastify at runtime.
         // The original routes from initIntegrations still work.
         log.debug("registerRoute skipped during reload (routes persist from init)");

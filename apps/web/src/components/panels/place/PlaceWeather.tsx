@@ -76,7 +76,15 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
         <Typography
           variant="caption"
           color="text.secondary"
-          sx={{ mt: 0.5, display: "block", "& a": { color: "text.secondary" } }}
+          sx={{
+            mt: 0.5,
+            display: "block",
+            "& a": {
+              color: "text.secondary",
+              textDecoration: "none",
+              "&:hover": { textDecoration: "underline" },
+            },
+          }}
           // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
           dangerouslySetInnerHTML={{ __html: `${t("attribution")} ${attributionHtml}` }}
         />

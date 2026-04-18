@@ -1,4 +1,5 @@
 import type { LoadedIntegrationMeta } from "./loader";
+import type { IntegrationDataSource } from "./manifest";
 
 export class IntegrationRegistry {
   private integrations: LoadedIntegrationMeta[];
@@ -21,6 +22,22 @@ export class IntegrationRegistry {
 
   get(id: string): LoadedIntegrationMeta | undefined {
     return this.integrations.find((i) => i.id === id);
+  }
+
+  /**
+   * Resolve a data source by its `sourceId` across all enabled integrations,
+   * regardless of which domain registered it. Source IDs are globally unique
+   * in the manifest schema, so integrations outside the consuming domain can
+   * still supply attribution (e.g. a `knowledge-wikipedia` source rendered in
+   * the photo gallery).
+   */
+  findDataSource(sourceId: string): IntegrationDataSource | undefined {
+    for (const integration of this.integrations) {
+      if (!integration.enabled) continue;
+      const match = integration.dataSources?.find((d) => d.sourceId === sourceId);
+      if (match) return match;
+    }
+    return undefined;
   }
 
   getWithMapLayer(): LoadedIntegrationMeta[] {

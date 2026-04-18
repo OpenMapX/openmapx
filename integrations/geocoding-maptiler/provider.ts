@@ -86,7 +86,7 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
   async geocode(query: string, lang?: string): Promise<SearchResult[]> {
     const data = await fetchMaptiler(query, { limit: "10" }, lang);
     return data.features.map((f) => ({
-      id: f.id,
+      id: `maptiler:${f.id}`,
       label: f.place_name,
       coordinates: f.geometry.coordinates,
       type: mapType(f.place_type),
@@ -117,7 +117,7 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
     return data.features.map((f) => {
       const category = f.properties?.categories?.[0];
       return {
-        id: f.id,
+        id: `maptiler:${f.id}`,
         label: f.text,
         sublabel: f.place_name,
         coordinates: f.geometry.coordinates,

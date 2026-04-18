@@ -5,9 +5,9 @@
  * merges live + emulated data, and returns normalized VehiclePositions.
  */
 
+import { isRisConfigured, risPost } from "@integrations/geocoding-db-ris/ris-client.js";
 import type { VehiclePosition } from "@openmapx/core";
 import { MemCache, TTL, withCacheStatus } from "../../utils/cache.js";
-import { isRisConfigured, risPost } from "./client.js";
 import type {
   RisEmulatedEntry,
   RisEmulatedResponse,

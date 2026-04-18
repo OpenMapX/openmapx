@@ -60,7 +60,7 @@ describe("geocode", () => {
     const results = await photonService.geocode("Berlin");
 
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("n/123456");
+    expect(results[0].id).toBe("osm:node/123456");
     expect(results[0].label).toBe("Berlin, Unter den Linden 1, Berlin, Germany");
     expect(results[0].coordinates).toEqual([13.37, 52.52]);
     expect(results[0].confidence).toBe(1);
@@ -73,7 +73,7 @@ describe("geocode", () => {
     const { photonService } = await loadModule();
 
     const results = await photonService.geocode("Berlin");
-    expect(results[0].id).toBe("w/999");
+    expect(results[0].id).toBe("osm:way/999");
   });
 
   it("builds label without housenumber when not present", async () => {

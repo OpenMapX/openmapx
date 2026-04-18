@@ -3,6 +3,8 @@
 import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
+  createPlace,
+  idsFromPrimaryOrCoords,
   PANEL,
   resolveStopAsPlace,
   useCategorySearchStore,
@@ -325,16 +327,18 @@ export function CategoryResultMarkers() {
       const coords = (features[0].geometry as unknown as { coordinates: [number, number] })
         .coordinates;
       flyTo(coords, 17);
-      setSelectedPlace({
-        id: props.id,
-        name: props.name,
-        address: props.address || props.name,
-        coordinates: coords,
-        category: props.category || undefined,
-        phone: props.phone || undefined,
-        website: props.website || undefined,
-        openingHours: props.openingHours || undefined,
-      });
+      setSelectedPlace(
+        createPlace({
+          ...idsFromPrimaryOrCoords(props.id, coords),
+          name: props.name,
+          address: props.address || props.name,
+          coordinates: coords,
+          category: props.category || undefined,
+          phone: props.phone || undefined,
+          website: props.website || undefined,
+          openingHours: props.openingHours || undefined,
+        }),
+      );
       useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     };
 

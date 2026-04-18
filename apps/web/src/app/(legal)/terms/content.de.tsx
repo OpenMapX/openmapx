@@ -61,7 +61,7 @@ export default function TermsContentDe({
           Outdoor-Informationen, Parkplatzverf&uuml;gbarkeit, E-Ladestation-Standorte,
           Kraftstoffpreise, geteilte Mobilit&auml;tsdaten (Bike-Sharing, E-Scooter, Carsharing) und
           allgemeine Ortsinformationen bietet. Der Dienst aggregiert Daten aus mehreren offenen
-          Datenquellen und Drittanbieter-APIs wie in Abschnitt&nbsp;10 aufgef&uuml;hrt.
+          Datenquellen und Drittanbieter-APIs wie in Abschnitt&nbsp;11 aufgef&uuml;hrt.
         </Typography>
       </Section>
 
@@ -161,6 +161,30 @@ export default function TermsContentDe({
             <Typography>
               Rate-Limits, Zugriffskontrollen oder andere Sicherheitsma&szlig;nahmen des Dienstes
               oder seiner vorgelagerten Datenanbieter zu umgehen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              F&auml;lschliche, irref&uuml;hrende, bezahlte oder incentivierte Bewertungen
+              abzugeben; Bewertungen f&uuml;r ein Gesch&auml;ft abzugeben, dessen Eigent&uuml;mer
+              oder Mitarbeiter Sie sind, ohne dies im Interessenangaben-Feld offenzulegen
+              (verdecktes Astroturfing); oder Bewertungen zu Orten abzugeben, zu denen Sie keine
+              eigene Erfahrung haben.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Die Bewertungsfunktion zu nutzen, um andere Personen oder Unternehmen zu verleumden,
+              zu bedrohen, zu bel&auml;stigen, zu doxen oder zu deanonymisieren, oder Inhalte zu
+              ver&ouml;ffentlichen, die rechtswidrig, hassgepr&auml;gt, sexuell eindeutig oder in
+              anderer Weise unangemessen sind.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              Zu versuchen, Mangrove-Signaturen zu f&auml;lschen, sich als andere/r Rezensent/in
+              auszugeben oder Inhalte unter einem Schl&uuml;sselpaar zu ver&ouml;ffentlichen, zu
+              dessen Nutzung Sie nicht berechtigt sind.
             </Typography>
           </li>
         </ul>
@@ -299,12 +323,18 @@ export default function TermsContentDe({
         <Typography>
           Der OpenMapX-Anwendungscode, das Design und die Marke sind Eigentum des Betreibers. Die
           Kartendaten, Nahverkehrsinformationen und sonstigen &uuml;ber den Dienst angezeigten
-          Inhalte stammen von Dritten und unterliegen deren jeweiligen Lizenzen (siehe Abschnitt 10
-          unten).
+          Inhalte stammen von Dritten und unterliegen deren jeweiligen Lizenzen (siehe
+          Abschnitt&nbsp;11 unten).
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Sie d&uuml;rfen den Namen, das Logo oder die Marke von OpenMapX nicht ohne vorherige
           schriftliche Zustimmung verwenden.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>Bewertungen, die Sie einreichen, bleiben Ihr eigenes Werk.</strong> Wir erheben
+          keinen Eigentumsanspruch auf von Ihnen erstellte Bewertungsinhalte. Die Lizenzierung
+          &uuml;ber das Mangrove-Netzwerk ver&ouml;ffentlichter Bewertungen richtet sich nach
+          Abschnitt&nbsp;10.
         </Typography>
       </Section>
 
@@ -316,7 +346,108 @@ export default function TermsContentDe({
         </Typography>
       </Section>
 
-      <Section title="10. Datenquellen und Quellenangaben" id="data-sources">
+      <Section title="10. Nutzergenerierte Inhalte (Bewertungen)">
+        <Typography>
+          OpenMapX bindet den{" "}
+          <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
+            Mangrove Open Reviews Standard
+          </Link>{" "}
+          ein. Bewertungen, die Sie &uuml;ber OpenMapX einreichen, werden in Ihrem Browser signiert
+          und im Mangrove-Netzwerk ver&ouml;ffentlicht. F&uuml;r die von Ihnen erstellten
+          Bewertungsinhalte gelten insbesondere die folgenden Bestimmungen.
+        </Typography>
+        <ul>
+          <li>
+            <Typography>
+              <strong>Eigentum und Lizenz.</strong> S&auml;mtliche Rechte an den von Ihnen
+              eingereichten Bewertungsinhalten (Text, Sternebewertung, hochgeladene Bilder,
+              Erlebnis-Tags) verbleiben bei Ihnen. Mit der Ver&ouml;ffentlichung einer Bewertung
+              lizenzieren Sie die Bewertungsinhalte an Mangrove.reviews und an die
+              &Ouml;ffentlichkeit unter{" "}
+              <Link
+                href="https://creativecommons.org/licenses/by/4.0/deed.de"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Creative Commons Namensnennung 4.0 International (CC&nbsp;BY&nbsp;4.0)
+              </Link>{" "}
+              oder, sofern Sie zum Zeitpunkt der Einreichung ausdr&uuml;cklich eine andere
+              Mangrove-kompatible Lizenz w&auml;hlen, unter dieser Lizenz. Diese Einr&auml;umung
+              erfolgt weltweit, unentgeltlich, dauerhaft und unwiderruflich, soweit erforderlich,
+              damit Aggregatoren die Bewertung im Sinne des Mangrove-Standards weiterverbreiten und
+              anzeigen k&ouml;nnen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Ihre Zusicherungen.</strong> Mit der Abgabe einer Bewertung sichern Sie zu,
+              dass: (i) die Bewertung Ihre ernsthafte, eigene Erfahrung mit dem Gegenstand der
+              Bewertung wiedergibt; (ii) Sie vom Gegenstand der Bewertung weder bezahlt noch
+              anderweitig incentiviert werden, eine positive oder negative Bewertung abzugeben, ohne
+              dies im Interessenangaben-Feld offenzulegen; (iii) etwaige hochgeladene Fotos Ihr
+              eigenes Werk sind oder Sie &uuml;ber alle erforderlichen Rechte verf&uuml;gen, sie
+              unter der oben genannten Lizenz zu ver&ouml;ffentlichen, und dass Pers&ouml;nlich
+              keitsrechte, Urheberrechte, Markenrechte oder Datenschutzrechte Dritter nicht verletzt
+              werden; (iv) die Bewertung rechtm&auml;&szlig;ig ist und keine Verleumdungen,
+              Drohungen, Hassrede oder besondere Kategorien personenbezogener Daten &uuml;ber
+              identifizierbare Dritte enth&auml;lt.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Ver&ouml;ffentlichung ist dezentral und teilweise unumkehrbar.</strong> Sobald
+              eine Bewertung signiert und eingereicht ist, wird sie im Mangrove-Aggregator-Netzwerk
+              verbreitet und kann von Dritten gespiegelt werden. Wir k&ouml;nnen eine Bewertung aus
+              der Anzeige von OpenMapX entfernen und einen von Ihnen signierten R&uuml;ckruf an{" "}
+              <code>api.mangrove.reviews</code> weiterleiten, k&ouml;nnen jedoch die Entfernung aus
+              externen Spiegeln, Caches oder Archiven nicht garantieren. Sie akzeptieren diese
+              Einschr&auml;nkung als grundlegendes Merkmal des Mangrove-Systems, bevor Sie eine
+              Bewertung abgeben.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Moderation.</strong> Wir k&ouml;nnen jede Bewertung, die nach unserer
+              verst&auml;ndigen Einsch&auml;tzung gegen diese Bedingungen oder geltendes Recht
+              verst&ouml;&szlig;t, ausblenden, geringer gewichten oder deren Anzeige verweigern. Das
+              Ausblenden einer Bewertung innerhalb von OpenMapX nimmt sie nicht automatisch aus dem
+              Mangrove-Netzwerk zur&uuml;ck.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Missbrauch melden.</strong> Sie k&ouml;nnen eine missbr&auml;uchliche
+              Bewertung &uuml;ber die in der Oberfl&auml;che integrierte Melde-Funktion kennzeichnen
+              oder uns unter der in Abschnitt&nbsp;1 genannten E-Mail-Adresse kontaktieren.
+              Missbr&auml;uchliches Verhalten kann zudem zur Sperrung des Kontos gem&auml;&szlig;
+              Abschnitt&nbsp;4 f&uuml;hren.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Bewertungen Dritter.</strong> In OpenMapX angezeigte Bewertungen, die nicht
+              von Ihnen stammen, sind nutzergenerierte Inhalte Dritter. Der Betreiber macht sich
+              Aussagen anderer Rezensenten nicht zu eigen und &uuml;bernimmt f&uuml;r diese keine
+              Verantwortung.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Verantwortung f&uuml;r den Signaturschl&uuml;ssel.</strong> Sie sind f&uuml;r
+              die sichere Aufbewahrung Ihrer Bewertungs-Passphrase und etwaiger registrierter
+              Passkeys verantwortlich. Wer diese besitzt, kann Bewertungen in Ihrem Namen signieren.
+              Wenn Sie den unverschl&uuml;sselten Schl&uuml;sselpaar-Modus ausw&auml;hlen,
+              akzeptieren Sie zus&auml;tzlich, dass der Betreiber technisch Zugriff auf Ihren
+              Signaturschl&uuml;ssel hat. Verlorene Passphrasen und Passkeys k&ouml;nnen nicht
+              wiederhergestellt werden; Sie k&ouml;nnen ein neues Schl&uuml;sselpaar generieren,
+              bestehende Bewertungen bleiben jedoch mit dem alten &ouml;ffentlichen Schl&uuml;ssel
+              verkn&uuml;pft.
+            </Typography>
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="11. Datenquellen und Quellenangaben" id="data-sources">
         <Typography>
           OpenMapX basiert auf offenen Daten. Wir danken den folgenden Datenquellen und ihren
           jeweiligen Lizenzen. Sofern eine Lizenz gilt, f&uuml;hrt ein Klick auf den Lizenznamen zum
@@ -355,7 +486,7 @@ export default function TermsContentDe({
         />
       </Section>
 
-      <Section title="11. Drittanbieter-Bedingungen">
+      <Section title="12. Drittanbieter-Bedingungen">
         <Typography>
           Ihre Nutzung der &uuml;ber OpenMapX angezeigten Daten kann den Nutzungsbedingungen der
           jeweiligen oben aufgef&uuml;hrten Drittanbieter-Datenquellen unterliegen. Durch die
@@ -366,7 +497,7 @@ export default function TermsContentDe({
         </Typography>
       </Section>
 
-      <Section title="12. Salvatorische Klausel">
+      <Section title="13. Salvatorische Klausel">
         <Typography>
           Sollte eine Bestimmung dieser Bedingungen f&uuml;r unwirksam oder undurchsetzbar befunden
           werden, bleiben die &uuml;brigen Bestimmungen in vollem Umfang g&uuml;ltig und wirksam.
@@ -375,7 +506,7 @@ export default function TermsContentDe({
         </Typography>
       </Section>
 
-      <Section title="13. Anwendbares Recht und Gerichtsstand">
+      <Section title="14. Anwendbares Recht und Gerichtsstand">
         <Typography>
           Diese Bedingungen unterliegen dem Recht der Bundesrepublik Deutschland unter Ausschluss
           des UN-Kaufrechts (CISG). Sind Sie Verbraucher innerhalb der EU, genie&szlig;en Sie
@@ -386,7 +517,7 @@ export default function TermsContentDe({
         </Typography>
       </Section>
 
-      <Section title="14. &Auml;nderungen dieser Bedingungen">
+      <Section title="15. &Auml;nderungen dieser Bedingungen">
         <Typography>
           Wir behalten uns das Recht vor, diese Bedingungen jederzeit zu aktualisieren. Die aktuelle
           Version ist stets unter <Link href="/terms">/terms</Link> verf&uuml;gbar. Wir werden
@@ -398,14 +529,14 @@ export default function TermsContentDe({
         </Typography>
       </Section>
 
-      <Section title="15. Sprache">
+      <Section title="16. Sprache">
         <Typography>
           Diese Bedingungen sind in deutscher und englischer Sprache verf&uuml;gbar. Bei
           Abweichungen zwischen den beiden Fassungen hat die deutsche Fassung Vorrang.
         </Typography>
       </Section>
 
-      <Section title="16. Kontakt">
+      <Section title="17. Kontakt">
         <Typography>
           Wenn Sie Fragen zu diesen Bedingungen haben, kontaktieren Sie uns bitte unter{" "}
           <Link href={`mailto:${email}`}>{email}</Link>.

@@ -28,6 +28,16 @@ export {
   HOURS_FILTER_CATEGORY_IDS,
 } from "@integrations/poi-search/types";
 export type {
+  Review,
+  ReviewAction,
+  ReviewAggregate,
+  ReviewAuthor,
+  ReviewImage,
+  ReviewMetadata,
+  ReviewProvider,
+  ReviewSubject,
+} from "@integrations/reviews/types";
+export type {
   DirectionsResult,
   IsochroneContour,
   IsochroneGeometry,
@@ -182,6 +192,8 @@ export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { usePlacePhotos } from "./hooks/usePlacePhotos";
+// Hooks — Reviews (Mangrove)
+export { usePlaceReviews, useReviewAggregate } from "./hooks/usePlaceReviews";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export {
   useCreateList,
@@ -197,7 +209,49 @@ export {
   useUpdateList,
   useUpdatePlace,
 } from "./hooks/useSavedPlaces";
+export { type SubmitReviewInput, useSubmitReview } from "./hooks/useSubmitReview";
 export { type SunTimesResponse, useSunTimes } from "./hooks/useSunTimes";
+export { useUploadReviewImage } from "./hooks/useUploadReviewImage";
+export {
+  type AddPassphraseWrapInput,
+  type AddWebAuthnWrapInput,
+  type AddWrapInput,
+  type EnvelopeState,
+  type KeypairEncryptionMode,
+  type KeypairEnvelope,
+  type KeypairEnvelopeEncrypted,
+  type KeypairEnvelopeUnencrypted,
+  type KeypairWrap,
+  type KeypairWrapType,
+  type SetupInput,
+  type SetupPassphraseAndWebAuthnInput,
+  type SetupPassphraseInput,
+  type SetupUnencryptedInput,
+  type UnlockInput,
+  type UnlockPassphraseInput,
+  type UnlockWebAuthnInput,
+  useAddWrap,
+  useChangePassphrase,
+  useImportMangroveKeypair,
+  useKeypairState,
+  useMangroveKeypairExport,
+  useRefreshKeypair,
+  useRegenerateMangroveKeypair,
+  useRemoveWrap,
+  useSetupKeypair,
+  useUnlockKeypair,
+  useUserKeypair,
+} from "./hooks/useUserKeypair";
+export type { IdSchemeView, PlaceResolver, PlaceResolverContext } from "./ids";
+export {
+  getIdSchemeView,
+  getPlaceResolver,
+  listIdSchemeViews,
+  listPlaceResolverSchemes,
+  registerBuiltinIdSchemeViews,
+  registerIdSchemeView,
+  registerPlaceResolver,
+} from "./ids";
 // Integration framework
 export type {
   CacheClient,
@@ -226,6 +280,7 @@ export type {
   MergeAllOptions,
   NormalizedEnvVar,
   RouteHandler,
+  RouteOptions,
 } from "./integration";
 export {
   createFallbackChain,
@@ -244,6 +299,35 @@ export {
   toIntegrationMeta,
   validateManifest,
 } from "./integration";
+// Mangrove (Open Reviews Standard)
+export {
+  base64UrlToBytes,
+  buildMangroveSubjectUri,
+  bytesToBase64Url,
+  createWebAuthnIdentity,
+  DEFAULT_UNCERTAINTY_METERS,
+  decryptWithPassphrase,
+  decryptWithWebAuthn,
+  EXPERIENCE_CONTEXT_GEO,
+  encryptForWebAuthnIdentities,
+  encryptWithPassphrase,
+  fingerprintPem,
+  type GeoExperienceContext,
+  generateKeypair,
+  isWebAuthnAvailable,
+  jwkToKeypair,
+  keypairToJwk,
+  MANGROVE_JWK_METADATA,
+  type MangroveExportJwk,
+  type MangroveKeypair,
+  type MangroveReviewPayload,
+  type MangroveSubject,
+  publicKeyToPem,
+  type SerializedMangroveKeypair,
+  signMangroveReview,
+  toMangroveExportJwk,
+  WEBAUTHN_CREDENTIAL_KEY_NAME,
+} from "./mangrove";
 export type { PanelId } from "./panels/ids";
 export { PANEL } from "./panels/ids";
 export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
@@ -261,6 +345,7 @@ export {
 export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
+export { useKeypairStore } from "./stores/keypairStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
@@ -300,7 +385,15 @@ export type {
   ShelterFeatureCollection,
 } from "./types/hiking";
 export { SAC_GRADES } from "./types/hiking";
-export type { Place, PlaceFact, PlacePhoto, PlaceReviewLink } from "./types/place";
+export type { Identified, Ids } from "./types/identified";
+export { makeId, parseId, withId } from "./types/identified";
+export type { Place, PlaceFact, PlaceIds, PlacePhoto, PlaceReviewLink } from "./types/place";
+export {
+  coordinateId,
+  createPlace,
+  idsFromPrimary,
+  idsFromPrimaryOrCoords,
+} from "./types/placeIds";
 export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
 export {
   buildAttributionHtml,

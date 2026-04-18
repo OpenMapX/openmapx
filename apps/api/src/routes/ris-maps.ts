@@ -1,6 +1,6 @@
+import { isRisConfigured } from "@integrations/geocoding-db-ris/ris-client.js";
 import type { FastifyPluginAsync } from "fastify";
-import { isRisConfigured } from "../services/db-ris/client.js";
-import { getJourneyGeometry, getTrainPositions } from "../services/db-ris/maps-service.js";
+import { getJourneyGeometry, getTrainPositions } from "../services/db-maps/maps-service.js";
 
 export const risMapsRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get("/ris-maps/positions", async (_req, reply) => {

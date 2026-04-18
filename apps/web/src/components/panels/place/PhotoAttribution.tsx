@@ -12,10 +12,7 @@ interface Props {
 export function PhotoAttribution({ photo, color = "#fff" }: Props) {
   const registry = useIntegrationRegistry();
 
-  const ds = registry
-    .getByDomain("photos")
-    .flatMap((m) => m.dataSources ?? [])
-    .find((d) => d.sourceId === photo.source);
+  const ds = registry.findDataSource(photo.source);
 
   const sourceName = ds?.name ?? photo.source;
   const sourceUrl = ds?.url;

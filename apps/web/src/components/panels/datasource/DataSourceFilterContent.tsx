@@ -31,6 +31,7 @@ import Typography from "@mui/material/Typography";
 import type { DataSourceFilterDef, DataSourceResult } from "@openmapx/core";
 import {
   applyClientSideFilters,
+  createPlace,
   PANEL,
   splitFilters,
   useDataSourceSearch,
@@ -478,15 +479,18 @@ export function DataSourceFilterContent() {
                   type="button"
                   onClick={() => {
                     if (!activeSource) return;
-                    selectItem(activeSource, result.id, sourceMeta?.osmFilters);
-                    setSelectedPlace({
-                      id: result.id,
-                      name: result.name,
-                      address: result.name,
-                      coordinates: result.coordinates,
-                      category: sourceMeta?.placeCategory,
-                      rawCategory: sourceMeta?.placeCategoryRaw,
-                    });
+                    selectItem(activeSource, result.id);
+                    setSelectedPlace(
+                      createPlace({
+                        primaryScheme: activeSource,
+                        ids: { [activeSource]: result.id },
+                        name: result.name,
+                        address: result.name,
+                        coordinates: result.coordinates,
+                        category: sourceMeta?.placeCategory,
+                        rawCategory: sourceMeta?.placeCategoryRaw,
+                      }),
+                    );
                     useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
                   }}
                   onMouseEnter={() => setHoveredItemId(result.id)}
