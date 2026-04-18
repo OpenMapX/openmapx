@@ -6,8 +6,6 @@
   "domains": ["geocoding"],
   "dependencies": ["geocoding"],
   "infrastructure": {
-    "dockerProfile": "pelias",
-    "services": ["pelias-api", "pelias-placeholder", "pelias-pip", "elasticsearch"],
     "dataRequirements": ["osm-pbf"]
   },
   "backend": {
@@ -43,6 +41,12 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    }
+  ],
+  "requires": [
+    {
+      "service": "pelias",
+      "optional": true
     }
   ]
 }

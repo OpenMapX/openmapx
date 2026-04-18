@@ -91,4 +91,15 @@ export interface IntegrationContext {
 
   /** Query all enabled integrations registered under a domain. */
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
+
+  /**
+   * Returns the resolved target for a `requires:` entry declared by this integration.
+   *
+   * @param key - Either a specific service slug ("valhalla") for `{ service: "valhalla" }`
+   *   requirements, or a capability name ("routing-engine") for `{ capability: "routing-engine" }`
+   *   requirements.
+   * @returns `{ serviceId, url, enabled }` when the requirement is satisfied and the service
+   *   is reachable, `null` otherwise.
+   */
+  getRequiredService(key: string): { serviceId: string; url: string; enabled: boolean } | null;
 }

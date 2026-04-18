@@ -7,7 +7,6 @@
   "category": "Transit",
   "domains": ["transit"],
   "infrastructure": {
-    "services": ["postgres"],
     "dataRequirements": ["gtfs-feeds"]
   },
   "configSchema": {
@@ -27,5 +26,11 @@
   "healthCheck": {
     "type": "custom"
   },
-  "dependencies": ["transit"]
+  "dependencies": ["transit"],
+  "requires": [
+    {
+      "service": "postgis",
+      "optional": false
+    }
+  ]
 }

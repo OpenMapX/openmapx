@@ -15,7 +15,10 @@
     "restart": "unless-stopped"
   },
   "provides": ["tile-server"],
-  "consumes": [{ "type": "tileserver-data", "mountAt": "/data", "required": true }],
+  "consumes": [
+    { "type": "tile-fonts", "mountAt": "/data/fonts", "readOnly": true, "required": true },
+    { "type": "tile-sprites", "mountAt": "/data/sprites", "readOnly": true, "required": true }
+  ],
   "bindMounts": [{ "source": "config/config.json", "target": "/data/config.json" }],
   "exposure": {
     "hostPorts": [{ "container": 8080, "host": 8080, "bindAddress": "127.0.0.1" }],

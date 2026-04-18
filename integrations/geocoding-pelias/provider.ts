@@ -7,7 +7,12 @@ import type { GeocodingProviderImpl } from "./types.js";
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 
-const PELIAS_URL = process.env.PELIAS_URL ?? "http://localhost:4000";
+let PELIAS_URL = process.env.PELIAS_URL ?? "http://localhost:4000";
+
+/** Update the Pelias base URL (called from setup() when service registry resolves it). */
+export function setPeliasUrl(url: string): void {
+  PELIAS_URL = url;
+}
 
 interface PeliasGeometry {
   coordinates: [number, number];

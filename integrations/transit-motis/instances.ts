@@ -34,3 +34,8 @@ export const motisLocalInstance: MotisInstance = (() => {
   withTimeout(client);
   return { client, prefix: "ms:", provider: "ms" };
 })();
+
+/** Update the local MOTIS base URL (called from setup() when service registry resolves it). */
+export function setMotisLocalUrl(url: string): void {
+  motisLocalInstance.client.setConfig({ baseUrl: url });
+}

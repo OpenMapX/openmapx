@@ -2,4 +2,5 @@ packages:
   - "apps/*"
   - "packages/*"
   - "integrations/*"
+  - "services/data-manager"
 

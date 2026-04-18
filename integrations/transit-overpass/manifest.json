@@ -6,8 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "infrastructure": {
-    "dockerProfile": "overpass",
-    "services": ["overpass"],
     "dataRequirements": ["osm-pbf"]
   },
   "category": "Transit",
@@ -46,5 +44,11 @@
       "dpaAvailable": false
     }
   ],
-  "dependencies": ["transit"]
+  "dependencies": ["transit"],
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
+    }
+  ]
 }

@@ -1,0 +1,37 @@
+{
+  "id": "data-manager",
+  "name": "Data Manager",
+  "version": "1.0.0",
+  "description": "Downloads and shares source data (OSM PBFs, GTFS feeds, tile assets) with consumer services.",
+  "license": "MIT",
+  "quality": "built-in",
+  "container": {
+    "image": "openmapx/data-manager",
+    "tag": "latest",
+    "expose": [4000],
+    "environment": {
+      "DATA_DIR": "/data",
+      "PORT": "4000"
+    },
+    "memory": "1g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/status",
+      "port": 4000,
+      "interval": "30s",
+      "timeout": "5s",
+      "retries": 3
+    }
+  },
+  "provides": ["osm-data", "gtfs-data", "tile-fonts"],
+  "produces": [
+    { "type": "osm-pbf", "sourceDir": "data/osm" },
+    { "type": "gtfs", "sourceDir": "data/gtfs" },
+    { "type": "tile-fonts", "sourceDir": "data/tileserver/fonts" },
+    { "type": "tile-sprites", "sourceDir": "data/tileserver/sprites" },
+    { "type": "osm-pbf-bz2", "sourceDir": "data/osm-bz2" }
+  ],
+  "volumes": [{ "name": "openmapx-data", "mountAt": "/data", "backup": false }],
+  "ui": { "category": "infrastructure" }
+}

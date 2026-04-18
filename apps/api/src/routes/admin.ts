@@ -360,6 +360,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
           ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
           : null,
         dependencies: integration.manifest.dependencies ?? [],
+        requires: integration.manifest.requires ?? [],
         infrastructure: integration.manifest.infrastructure ?? null,
       };
     });
@@ -408,6 +409,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
         : null,
       dependencies: integration.manifest.dependencies ?? [],
+      requires: integration.manifest.requires ?? [],
       infrastructure: integration.manifest.infrastructure ?? null,
       manifest: integration.manifest,
       resolvedConfig,

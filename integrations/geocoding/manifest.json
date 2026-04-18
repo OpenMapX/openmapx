@@ -6,5 +6,6 @@
   "domains": ["geocoding"],
   "backend": { "routes": true },
   "quality": "built-in",
-  "category": "Geocoding"
+  "category": "Geocoding",
+  "requires": [{ "capability": "geocoder", "optional": true }]
 }

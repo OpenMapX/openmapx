@@ -16,6 +16,7 @@ import {
 } from "./integration-host";
 import { redis } from "./redis";
 import { adminRoute } from "./routes/admin";
+import { registerCapabilityBindingRoutes } from "./routes/admin-capability-bindings";
 import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
 import { adminStoreRoute } from "./routes/admin-store";
@@ -47,6 +48,7 @@ import { gtfsManager } from "./services/gtfs/index";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
 import { motisManager } from "./services/motis/manager";
+import { initServiceRegistry } from "./services/service-registry";
 import { handleInstallJob, handleRemoveJob, handleUpdateJob } from "./services/store";
 
 const { default: pino } = await import("pino");
@@ -137,6 +139,7 @@ await server.register(adminRoute, { prefix: "/api" });
 await server.register(adminServicesRoute, { prefix: "/api" });
 await server.register(adminSettingsRoute, { prefix: "/api" });
 await server.register(adminStoreRoute, { prefix: "/api" });
+await registerCapabilityBindingRoutes(server);
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {
@@ -163,6 +166,15 @@ try {
   motisManager.initialize();
 } catch (err) {
   server.log.warn(err, "MOTIS manager initialization failed");
+}
+
+// Service registry — load service manifests from services/ directory
+// Must run before initIntegrations so requires: blocks can be resolved
+try {
+  await initServiceRegistry();
+  server.log.info("Service registry initialized");
+} catch (err) {
+  server.log.warn(err, "Service registry initialization failed (non-fatal)");
 }
 
 // Integration framework

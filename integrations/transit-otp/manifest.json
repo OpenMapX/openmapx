@@ -6,8 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "infrastructure": {
-    "dockerProfile": "transit",
-    "services": ["otp"],
     "dataRequirements": ["osm-pbf", "gtfs-feeds"],
     "planetScale": false
   },
@@ -47,5 +45,11 @@
       "dpaAvailable": false
     }
   ],
-  "dependencies": ["transit"]
+  "dependencies": ["transit"],
+  "requires": [
+    {
+      "service": "otp",
+      "optional": true
+    }
+  ]
 }

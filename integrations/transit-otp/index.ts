@@ -1,9 +1,18 @@
 import type { IntegrationContext } from "@openmapx/core";
-import * as otp from "./provider.js";
+import { isOtpAvailable, plan, setOtpUrl } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  // Resolve OTP URL from the service registry if available.
+  const resolved = ctx.getRequiredService("otp");
+  const url =
+    resolved?.url ??
+    (ctx.config.endpoint as string | undefined) ??
+    process.env.OTP_URL ??
+    "http://localhost:8090";
+  setOtpUrl(url);
+
   // Only register if OTP is available
-  otp.isOtpAvailable().then((available) => {
+  isOtpAvailable().then((available) => {
     if (!available) return;
     ctx.registerProvider("transit", {
       id: "transit-otp",
@@ -16,7 +25,7 @@ export function setup(ctx: IntegrationContext): void {
         departureTime?: string;
       }) {
         const now = new Date();
-        return otp.plan({
+        return plan({
           fromLat: params.from.lat,
           fromLng: params.from.lng,
           toLat: params.to.lat,

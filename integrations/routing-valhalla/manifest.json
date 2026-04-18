@@ -6,8 +6,6 @@
   "domains": ["routing"],
   "dependencies": ["routing"],
   "infrastructure": {
-    "dockerProfile": "routing",
-    "services": ["valhalla"],
     "dataRequirements": ["osm-pbf"]
   },
   "backend": {
@@ -44,6 +42,12 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    }
+  ],
+  "requires": [
+    {
+      "service": "valhalla",
+      "optional": true
     }
   ]
 }

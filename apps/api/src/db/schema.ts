@@ -1,3 +1,5 @@
+// Capability bindings — explicit (integration, capability) → service mappings
+
 // Admin audit log
 export { adminAuditLog } from "./admin-audit-schema";
 // Admin jobs
@@ -18,6 +20,7 @@ export {
   userRelations,
   verification,
 } from "./auth-schema";
+export { type CapabilityBindingRow, capabilityBinding } from "./capability-binding-schema";
 // Health history
 export { healthHistory } from "./health-history-schema";
 // Installed community integrations

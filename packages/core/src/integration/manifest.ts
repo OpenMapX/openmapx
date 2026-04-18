@@ -73,11 +73,19 @@ const backendSchema = z.object({
 });
 
 const infrastructureSchema = z.object({
-  dockerProfile: z.string().optional(),
-  services: z.array(z.string()).optional(),
   dataRequirements: z.array(z.string()).optional(),
   planetScale: z.boolean().optional(),
 });
+
+const requireEntrySchema = z
+  .object({
+    service: z.string().optional(),
+    capability: z.string().optional(),
+    optional: z.boolean().optional(),
+  })
+  .refine((v) => !!v.service !== !!v.capability, {
+    message: "each requires entry must set exactly one of 'service' or 'capability'",
+  });
 
 /**
  * Per-env-var metadata. When a bare string is used in `envVars`, the variable is
@@ -107,6 +115,7 @@ export const integrationManifestSchema = z.object({
 
   dependencies: z.array(z.string()).optional(),
   npmDependencies: z.record(z.string(), z.string()).optional(),
+  requires: z.array(requireEntrySchema).optional(),
 
   frontend: frontendSchema.optional(),
   backend: backendSchema.optional(),
@@ -123,6 +132,7 @@ export const integrationManifestSchema = z.object({
 });
 
 export type IntegrationManifest = z.infer<typeof integrationManifestSchema>;
+export type IntegrationRequireEntry = z.infer<typeof requireEntrySchema>;
 export type IntegrationDataSource = z.infer<typeof dataSourceSchema>;
 export type IntegrationHealthCheck = z.infer<typeof healthCheckSchema>;
 export type IntegrationFrontend = z.infer<typeof frontendSchema>;
@@ -176,9 +186,12 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
         "manifest.healthCheck is required for integrations with external API dependencies (envVars)",
       );
     }
-    if (manifest.infrastructure?.services?.length && !manifest.healthCheck) {
+    // Only enforce healthCheck for required (non-optional) service dependencies.
+    // Optional capability requirements (e.g. on orchestrator integrations) don't mandate a healthCheck.
+    const hasRequiredServiceDep = manifest.requires?.some((r) => r.optional !== true && r.service);
+    if (hasRequiredServiceDep && !manifest.healthCheck) {
       errors.push(
-        "manifest.healthCheck is required for integrations with infrastructure dependencies (services)",
+        "manifest.healthCheck is required for integrations with infrastructure dependencies (requires)",
       );
     }
     for (const ds of manifest.dataSources ?? []) {

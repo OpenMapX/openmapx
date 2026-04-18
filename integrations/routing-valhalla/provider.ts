@@ -7,7 +7,12 @@ import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@
 import { decodePolyline } from "@openmapx/core";
 import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
 
-const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
+let VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
+
+/** Update the Valhalla base URL (called from setup() when service registry resolves it). */
+export function setValhallaUrl(url: string): void {
+  VALHALLA_URL = url;
+}
 
 const COSTING_MAP: Record<string, string> = {
   driving: "auto",

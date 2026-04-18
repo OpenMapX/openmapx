@@ -15,7 +15,12 @@ import {
   USER_AGENT,
 } from "@openmapx/core";
 
-const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
+let NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
+
+/** Update the Nominatim base URL (called from setup() when service registry resolves it). */
+export function setNominatimUrl(url: string): void {
+  NOMINATIM_URL = url;
+}
 
 interface NominatimResult {
   place_id: number;

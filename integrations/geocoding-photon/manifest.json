@@ -5,10 +5,6 @@
   "license": "MIT",
   "domains": ["geocoding"],
   "dependencies": ["geocoding"],
-  "infrastructure": {
-    "dockerProfile": "photon",
-    "services": ["photon"]
-  },
   "backend": {
     "routes": false
   },
@@ -43,6 +39,12 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    }
+  ],
+  "requires": [
+    {
+      "service": "photon",
+      "optional": true
     }
   ]
 }

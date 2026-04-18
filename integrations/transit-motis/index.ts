@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
 import type { IntegrationContext } from "@openmapx/core";
 import * as motis from "./adapter.js";
-import { motisLocalInstance, transitousInstance } from "./instances.js";
+import { motisLocalInstance, setMotisLocalUrl, transitousInstance } from "./instances.js";
 
 const MOTIS_DATA_DIR =
   process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis");
@@ -75,6 +75,15 @@ export function getFeedProviders(): Record<
 }
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
+  // Resolve local MOTIS URL from the service registry if available.
+  const resolved = ctx.getRequiredService("motis");
+  const motisUrl =
+    resolved?.url ??
+    (ctx.config.endpoint as string | undefined) ??
+    process.env.MOTIS_URL ??
+    "http://localhost:8081";
+  setMotisLocalUrl(motisUrl);
+
   // Register Transitous (cloud MOTIS) as a transit provider
   ctx.registerProvider("transit", {
     id: "transit-motis-transitous",

@@ -19,7 +19,14 @@ interface TripPlanParams {
   arriveBy?: boolean;
 }
 
-const OTP_URL = () => process.env.OTP_URL ?? "http://localhost:8090";
+let OTP_BASE_URL: string | null = null;
+
+/** Update the OTP base URL (called from setup() when service registry resolves it). */
+export function setOtpUrl(url: string): void {
+  OTP_BASE_URL = url;
+}
+
+const OTP_URL = () => OTP_BASE_URL ?? process.env.OTP_URL ?? "http://localhost:8090";
 
 export async function isOtpAvailable(): Promise<boolean> {
   try {

@@ -6,5 +6,6 @@
   "domains": ["routing"],
   "backend": { "routes": true },
   "quality": "built-in",
-  "category": "Routing"
+  "category": "Routing",
+  "requires": [{ "capability": "routing-engine", "optional": true }]
 }

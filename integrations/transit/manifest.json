@@ -6,5 +6,6 @@
   "domains": ["transit"],
   "backend": { "routes": true },
   "quality": "built-in",
-  "category": "Transit"
+  "category": "Transit",
+  "requires": [{ "capability": "transit-engine", "optional": true }]
 }

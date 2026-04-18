@@ -16,7 +16,10 @@
     "restart": "unless-stopped"
   },
   "provides": ["transit-engine"],
-  "consumes": [{ "type": "otp-data", "mountAt": "/var/opentripplanner", "required": true }],
+  "consumes": [
+    { "type": "osm-pbf", "mountAt": "/var/opentripplanner/osm", "required": true },
+    { "type": "gtfs", "mountAt": "/var/opentripplanner/gtfs", "required": true }
+  ],
   "bindMounts": [
     { "source": "config/build-config.json", "target": "/var/opentripplanner/build-config.json" },
     { "source": "config/router-config.json", "target": "/var/opentripplanner/router-config.json" }

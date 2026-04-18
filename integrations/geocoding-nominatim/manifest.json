@@ -6,8 +6,6 @@
   "domains": ["geocoding"],
   "dependencies": ["geocoding"],
   "infrastructure": {
-    "dockerProfile": "nominatim",
-    "services": ["nominatim"],
     "dataRequirements": ["osm-pbf"]
   },
   "backend": {
@@ -44,6 +42,12 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    }
+  ],
+  "requires": [
+    {
+      "service": "nominatim",
+      "optional": true
     }
   ]
 }

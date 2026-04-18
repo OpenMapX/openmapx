@@ -4,6 +4,7 @@ export {
   renderCompose,
   renderServiceSnippet,
 } from "./compose-renderer";
+export { DataManagerClient, type DataManagerClientOptions } from "./data-manager-client";
 export {
   type ManifestValidationResult,
   serviceManifestSchema,

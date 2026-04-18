@@ -1,6 +1,15 @@
 import type { IntegrationContext } from "@openmapx/core";
-import { nominatimService } from "./provider.js";
+import { nominatimService, setNominatimUrl } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  const resolved = ctx.getRequiredService("nominatim");
+  const url =
+    resolved?.url ??
+    (ctx.config.endpoint as string | undefined) ??
+    process.env.NOMINATIM_URL ??
+    "https://nominatim.openstreetmap.org";
+
+  setNominatimUrl(url);
+
   ctx.registerProvider("geocoding", nominatimService);
 }

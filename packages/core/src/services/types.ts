@@ -173,6 +173,30 @@ export interface ResolutionResult {
   reason?: "ambiguous" | "no-providers" | "service-not-installed" | "service-disabled";
 }
 
+/**
+ * Supported dataset types that the data-manager can produce / track. Must stay
+ * aligned with the data-manager service's `produces:` declarations and with
+ * `services/data-manager/src/state.ts` where this is mirrored for the service.
+ */
+export type DatasetType =
+  | "osm-pbf"
+  | "osm-pbf-bz2"
+  | "gtfs"
+  | "tile-fonts"
+  | "tile-sprites"
+  | "tile-style";
+
+export interface DatasetMetadata {
+  type: DatasetType;
+  id: string;
+  region?: string;
+  url?: string;
+  sizeBytes: number;
+  downloadedAt: string;
+  sha256?: string;
+  path: string;
+}
+
 export interface HardlinkEntry {
   source: string;
   target: string;

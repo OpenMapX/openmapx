@@ -72,9 +72,8 @@ interface IntegrationDetailData {
   hasHealthCheck: boolean;
   health: { status: "up" | "down" | "unconfigured"; responseTime?: number; error?: string } | null;
   dependencies: string[];
+  requires: Array<{ service?: string; capability?: string; optional?: boolean }>;
   infrastructure: {
-    dockerProfile?: string;
-    services?: string[];
     dataRequirements?: string[];
     planetScale?: boolean;
   } | null;
@@ -231,35 +230,48 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
         </Card>
       )}
 
-      {data.infrastructure && (
+      {(data.requires.length > 0 ||
+        data.infrastructure?.dataRequirements?.length ||
+        data.infrastructure?.planetScale) && (
         <Card variant="outlined">
           <CardContent>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Required Infrastructure
             </Typography>
             <Stack gap={0.75}>
-              {data.infrastructure.dockerProfile && (
-                <MetaRow
-                  label="Docker profile"
-                  value={
+              {data.requires.map((req, idx) => {
+                const label = req.service
+                  ? req.service
+                  : req.capability
+                    ? `any ${req.capability}`
+                    : "unknown";
+                const flavour = req.service
+                  ? req.service.startsWith("http") || req.service.includes("github.com")
+                    ? "community service"
+                    : "service"
+                  : "capability";
+                // Key uses the service/capability identifier; the schema's refine()
+                // guarantees exactly one of service/capability is set per entry, and
+                // duplicate entries for the same identifier would already be a manifest
+                // authoring bug (the resolver would bind twice to the same slot).
+                const key = req.service ?? req.capability ?? `unknown-${idx}`;
+                return (
+                  <Stack key={key} direction="row" alignItems="center" gap={1}>
+                    <CheckCircleIcon
+                      fontSize="small"
+                      sx={{ color: req.optional ? "text.disabled" : "info.main" }}
+                    />
                     <Typography variant="body2" fontFamily="monospace">
-                      {data.infrastructure.dockerProfile}
+                      {label}
                     </Typography>
-                  }
-                />
-              )}
-              {data.infrastructure.services?.map((svc) => (
-                <Stack key={svc} direction="row" alignItems="center" gap={1}>
-                  <CheckCircleIcon fontSize="small" sx={{ color: "info.main" }} />
-                  <Typography variant="body2" fontFamily="monospace">
-                    {svc}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    required service
-                  </Typography>
-                </Stack>
-              ))}
-              {data.infrastructure.dataRequirements?.map((req) => (
+                    <Typography variant="caption" color="text.secondary">
+                      {flavour}
+                      {req.optional ? " · optional" : " · required"}
+                    </Typography>
+                  </Stack>
+                );
+              })}
+              {data.infrastructure?.dataRequirements?.map((req) => (
                 <Stack key={req} direction="row" alignItems="center" gap={1}>
                   <CheckCircleIcon fontSize="small" sx={{ color: "text.disabled" }} />
                   <Typography variant="body2" fontFamily="monospace">
@@ -270,6 +282,17 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                   </Typography>
                 </Stack>
               ))}
+              {data.infrastructure?.planetScale && (
+                <Stack direction="row" alignItems="center" gap={1}>
+                  <CheckCircleIcon fontSize="small" sx={{ color: "warning.main" }} />
+                  <Typography variant="body2" fontFamily="monospace">
+                    planet-scale
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    may require large resources
+                  </Typography>
+                </Stack>
+              )}
             </Stack>
           </CardContent>
         </Card>

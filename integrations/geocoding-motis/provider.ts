@@ -22,16 +22,24 @@ const transitousInstance: MotisInstance = (() => {
   return { client, prefix: "mo:", provider: "mo" };
 })();
 
+let motisLocalBaseUrl = process.env.MOTIS_URL ?? "http://localhost:8081";
+
 const motisLocalInstance: MotisInstance = (() => {
   const client = createClient({
-    baseUrl: process.env.MOTIS_URL ?? "http://localhost:8081",
+    baseUrl: motisLocalBaseUrl,
   });
   return { client, prefix: "ms:", provider: "ms" };
 })();
 
+/** Update the local MOTIS base URL (called from setup() when service registry resolves it). */
+export function setMotisLocalUrl(url: string): void {
+  motisLocalBaseUrl = url;
+  motisLocalInstance.client.setConfig({ baseUrl: url });
+}
+
 async function isMotisLocalReachable(): Promise<boolean> {
   try {
-    const res = await fetch(`${process.env.MOTIS_URL ?? "http://localhost:8081"}/api/v1/plan`, {
+    const res = await fetch(`${motisLocalBaseUrl}/api/v1/plan`, {
       method: "HEAD",
       signal: AbortSignal.timeout(2000),
     });

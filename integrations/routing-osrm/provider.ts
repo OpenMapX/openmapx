@@ -7,7 +7,12 @@ import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@
 import { USER_AGENT } from "@openmapx/core";
 import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
 
-const OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
+let OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
+
+/** Update the OSRM base URL (called from setup() when service registry resolves it). */
+export function setOsrmUrl(url: string): void {
+  OSRM_URL = url;
+}
 
 interface OsrmManeuver {
   type: string;

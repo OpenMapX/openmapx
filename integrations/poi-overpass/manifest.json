@@ -6,8 +6,6 @@
   "domains": ["poi-search"],
   "dependencies": ["poi-search"],
   "infrastructure": {
-    "dockerProfile": "overpass",
-    "services": ["overpass"],
     "dataRequirements": ["osm-pbf"]
   },
   "backend": {
@@ -44,6 +42,12 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    }
+  ],
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
     }
   ]
 }

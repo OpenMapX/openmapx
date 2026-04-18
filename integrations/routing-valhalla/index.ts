@@ -1,6 +1,15 @@
 import type { IntegrationContext } from "@openmapx/core";
-import { valhallaService } from "./provider.js";
+import { setValhallaUrl, valhallaService } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  const resolved = ctx.getRequiredService("valhalla");
+  const url =
+    resolved?.url ??
+    (ctx.config.endpoint as string | undefined) ??
+    process.env.VALHALLA_URL ??
+    "https://valhalla1.openstreetmap.de";
+
+  setValhallaUrl(url);
+
   ctx.registerProvider("routing", valhallaService);
 }

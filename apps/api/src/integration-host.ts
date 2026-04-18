@@ -16,6 +16,7 @@ import {
   type RouteHandler,
   type RouteOptions,
   satisfiesPlatformVersion,
+  services,
   toIntegrationMeta,
   validateManifest,
 } from "@openmapx/core";
@@ -24,9 +25,13 @@ import type { FastifyInstance } from "fastify";
 import { db, sql as pgClient } from "./db";
 import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
+import { loadAllBindingsByIntegration } from "./services/capability-bindings";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
 import { getSecret, resolveVaultSecrets } from "./services/secrets";
+import { getServiceRegistry, serviceUrl } from "./services/service-registry";
 import { requireAuth } from "./utils/require-auth";
+
+const { resolveRequirement } = services;
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
@@ -361,6 +366,26 @@ export async function initIntegrations(
   // Topological sort by manifest.dependencies to ensure deps load first
   const sorted = topologicalSort(discovered);
 
+  // Load all capability bindings once for requires: resolution.
+  // Falls back gracefully if DB is unavailable (e.g. no PostgreSQL in dev).
+  let allBindings = new Map<string, Map<string, string>>();
+  try {
+    allBindings = await loadAllBindingsByIntegration();
+  } catch {
+    fastify.log.debug(
+      "Capability bindings unavailable — requires: resolution uses auto-select only",
+    );
+  }
+
+  let registryInstance: ReturnType<typeof getServiceRegistry> | null = null;
+  let loadedServices: ReturnType<ReturnType<typeof getServiceRegistry>["list"]> = [];
+  try {
+    registryInstance = getServiceRegistry();
+    loadedServices = registryInstance.list();
+  } catch {
+    fastify.log.debug("Service registry unavailable — requires: resolution skipped");
+  }
+
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
     const validation = validateManifest(raw);
     if (!validation.valid) {
@@ -435,7 +460,15 @@ export async function initIntegrations(
       continue;
     }
 
-    const needsDb = manifest.infrastructure?.services?.includes("postgres");
+    // Determine if this integration needs a DB connection.
+    // Support both the new requires: approach and the legacy infrastructure.services approach
+    // (legacy removed from schema but may still be in unprocessed manifests as unknown fields).
+    const rawInfra = (raw as Record<string, unknown>).infrastructure as
+      | { services?: string[] }
+      | undefined;
+    const needsDb =
+      manifest.requires?.some((r) => r.service === "postgis") ||
+      rawInfra?.services?.includes("postgres");
     const integrationDb = needsDb
       ? {
           async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
@@ -447,6 +480,35 @@ export async function initIntegrations(
         }
       : undefined;
 
+    // Resolve requires: entries into a map keyed by service slug or capability name.
+    const requiresMap = new Map<string, { serviceId: string; url: string; enabled: boolean }>();
+    const bindings = allBindings.get(id) ?? new Map<string, string>();
+
+    for (const req of manifest.requires ?? []) {
+      const result = resolveRequirement(loadedServices, req, { bindings });
+      if (!result.satisfied || !result.match) {
+        if (!req.optional) {
+          fastify.log.warn(
+            { integration: id, requirement: req, reason: result.reason },
+            `Integration ${id}: required service unresolved`,
+          );
+        }
+        continue;
+      }
+
+      // biome-ignore lint/style/noNonNullAssertion: requireEntrySchema refine ensures exactly one of service/capability is set
+      const key = req.service ?? req.capability!;
+      const url = serviceUrl(result.match.serviceId);
+      if (!url) continue;
+
+      const svc = registryInstance?.get(result.match.serviceId);
+      requiresMap.set(key, {
+        serviceId: result.match.serviceId,
+        url,
+        enabled: svc?.enabled ?? false,
+      });
+    }
+
     const ctx: IntegrationContext = {
       id,
       manifest,
@@ -456,6 +518,9 @@ export async function initIntegrations(
       db: integrationDb,
       log,
       secrets: { get: (key: string) => getSecret(id, key) },
+      getRequiredService(key: string) {
+        return requiresMap.get(key) ?? null;
+      },
       registerProvider(domain: string, provider: unknown) {
         const existing = providers.get(domain) ?? [];
         existing.push(provider);
@@ -674,6 +739,23 @@ export async function reloadIntegrations(): Promise<{
   const discovered = await discoverManifests(_integrationDirs);
   const sorted = topologicalSort(discovered);
 
+  // Reload capability bindings and service registry for requires: resolution.
+  let reloadBindings = new Map<string, Map<string, string>>();
+  try {
+    reloadBindings = await loadAllBindingsByIntegration();
+  } catch {
+    _fastify.log.debug("Capability bindings unavailable during reload");
+  }
+
+  let reloadRegistry: ReturnType<typeof getServiceRegistry> | null = null;
+  let reloadServices: ReturnType<ReturnType<typeof getServiceRegistry>["list"]> = [];
+  try {
+    reloadRegistry = getServiceRegistry();
+    reloadServices = reloadRegistry.list();
+  } catch {
+    _fastify.log.debug("Service registry unavailable during reload");
+  }
+
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
     const validation = validateManifest(raw);
     if (!validation.valid) {
@@ -742,7 +824,12 @@ export async function reloadIntegrations(): Promise<{
       continue;
     }
 
-    const needsDb = manifest.infrastructure?.services?.includes("postgres");
+    const reloadRawInfra = (raw as Record<string, unknown>).infrastructure as
+      | { services?: string[] }
+      | undefined;
+    const needsDb =
+      manifest.requires?.some((r) => r.service === "postgis") ||
+      reloadRawInfra?.services?.includes("postgres");
     const integrationDb = needsDb
       ? {
           async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
@@ -754,6 +841,38 @@ export async function reloadIntegrations(): Promise<{
         }
       : undefined;
 
+    // Resolve requires: entries for this integration on reload.
+    const reloadRequiresMap = new Map<
+      string,
+      { serviceId: string; url: string; enabled: boolean }
+    >();
+    const reloadBind = reloadBindings.get(id) ?? new Map<string, string>();
+
+    for (const req of manifest.requires ?? []) {
+      const result = resolveRequirement(reloadServices, req, { bindings: reloadBind });
+      if (!result.satisfied || !result.match) {
+        if (!req.optional) {
+          _fastify.log.warn(
+            { integration: id, requirement: req, reason: result.reason },
+            `Integration ${id}: required service unresolved`,
+          );
+        }
+        continue;
+      }
+
+      // biome-ignore lint/style/noNonNullAssertion: requireEntrySchema refine ensures exactly one of service/capability is set
+      const key = req.service ?? req.capability!;
+      const url = serviceUrl(result.match.serviceId);
+      if (!url) continue;
+
+      const svc = reloadRegistry?.get(result.match.serviceId);
+      reloadRequiresMap.set(key, {
+        serviceId: result.match.serviceId,
+        url,
+        enabled: svc?.enabled ?? false,
+      });
+    }
+
     const ctx: IntegrationContext = {
       id,
       manifest,
@@ -763,6 +882,9 @@ export async function reloadIntegrations(): Promise<{
       db: integrationDb,
       log,
       secrets: { get: (key: string) => getSecret(id, key) },
+      getRequiredService(key: string) {
+        return reloadRequiresMap.get(key) ?? null;
+      },
       registerProvider(domain: string, provider: unknown) {
         const existing = providers.get(domain) ?? [];
         existing.push(provider);

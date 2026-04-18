@@ -6,8 +6,6 @@
   "domains": ["routing"],
   "dependencies": ["routing"],
   "infrastructure": {
-    "dockerProfile": "routing",
-    "services": ["osrm"],
     "dataRequirements": ["osm-pbf"],
     "planetScale": false
   },
@@ -45,6 +43,12 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    }
+  ],
+  "requires": [
+    {
+      "service": "osrm",
+      "optional": true
     }
   ]
 }
