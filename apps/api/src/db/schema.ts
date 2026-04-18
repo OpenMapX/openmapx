@@ -40,5 +40,7 @@ export {
   savedPlace,
   savedPlaceRelations,
 } from "./saved-schema";
+// Community service repositories
+export { type ServiceRepositoryRow, serviceRepository } from "./service-repository-schema";
 // System settings
 export { systemSettings } from "./system-settings-schema";

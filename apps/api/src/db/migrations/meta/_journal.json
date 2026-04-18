@@ -15,6 +15,13 @@
       "when": 1776539608340,
       "tag": "0001_capability_bindings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776540337329,
+      "tag": "0002_service_repositories",
+      "breakpoints": true
     }
   ]
 }

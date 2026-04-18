@@ -1,0 +1,81 @@
+import { execFile as execFileCb, spawn } from "node:child_process";
+import type { ServerResponse } from "node:http";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+
+const execFile = promisify(execFileCb);
+
+function composePath(): string {
+  // apps/api is two levels down from repo root; generated compose lives in infra/docker/
+  return join(
+    resolve(process.cwd(), "..", ".."),
+    "infra",
+    "docker",
+    "docker-compose.generated.yml",
+  );
+}
+
+export interface PsEntry {
+  service: string;
+  state: "running" | "exited" | "restarting" | "created" | "paused" | "not-running";
+  container: string;
+}
+
+export async function dockerComposePs(): Promise<PsEntry[]> {
+  try {
+    const { stdout } = await execFile(
+      "docker",
+      ["compose", "-f", composePath(), "ps", "--format", "json"],
+      { timeout: 15_000 },
+    );
+    const lines = stdout.trim().split("\n").filter(Boolean);
+    return lines.map((l) => {
+      const obj = JSON.parse(l) as { Name: string; Service: string; State: string };
+      return { container: obj.Name, service: obj.Service, state: obj.State as PsEntry["state"] };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function dockerComposeAction(
+  serviceId: string,
+  action: "start" | "stop" | "restart",
+): Promise<{ exitCode: number; stdout: string }> {
+  const serviceArgs = serviceId ? [serviceId] : [];
+  const args =
+    action === "start"
+      ? ["up", "-d", ...serviceArgs]
+      : action === "stop"
+        ? ["stop", ...serviceArgs]
+        : ["restart", ...serviceArgs];
+  try {
+    const { stdout } = await execFile("docker", ["compose", "-f", composePath(), ...args], {
+      timeout: 120_000,
+    });
+    return { exitCode: 0, stdout: stdout ?? "" };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException & { code?: number }).code ?? 1;
+    const stdout = (err as { stdout?: string }).stdout ?? "";
+    return { exitCode: typeof code === "number" ? code : 1, stdout };
+  }
+}
+
+export function dockerComposeLogs(
+  serviceId: string,
+  out: ServerResponse,
+  opts: { tail: number },
+): void {
+  const child = spawn("docker", [
+    "compose",
+    "-f",
+    composePath(),
+    "logs",
+    "-f",
+    `--tail=${opts.tail}`,
+    serviceId,
+  ]);
+  child.stdout.pipe(out);
+  child.stderr.pipe(out);
+  child.on("close", () => out.end());
+}

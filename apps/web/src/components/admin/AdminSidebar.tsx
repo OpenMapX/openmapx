@@ -1,14 +1,18 @@
 "use client";
 
 import ActivityIcon from "@mui/icons-material/Assessment";
+import ComposeIcon from "@mui/icons-material/Code";
 import OverviewIcon from "@mui/icons-material/Dashboard";
 import ServicesIcon from "@mui/icons-material/Dns";
 import IntegrationsIcon from "@mui/icons-material/Extension";
+import CatalogIcon from "@mui/icons-material/GridView";
 import StatusIcon from "@mui/icons-material/MonitorHeart";
 import UsersIcon from "@mui/icons-material/People";
 import SettingsIcon from "@mui/icons-material/Settings";
+import ReposIcon from "@mui/icons-material/Source";
 import StoreIcon from "@mui/icons-material/Store";
 import Box from "@mui/material/Box";
+import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import List from "@mui/material/List";
@@ -23,6 +27,21 @@ import { usePathname } from "next/navigation";
 import { TOPBAR_HEIGHT } from "./AdminTopBar";
 
 export const SIDEBAR_WIDTH = 220;
+
+const SERVICES_SUB_ITEMS = [
+  {
+    label: "Catalog",
+    href: "/admin/services",
+    icon: <CatalogIcon fontSize="small" />,
+    exact: true,
+  },
+  { label: "Repositories", href: "/admin/services/repos", icon: <ReposIcon fontSize="small" /> },
+  {
+    label: "Compose preview",
+    href: "/admin/services/compose",
+    icon: <ComposeIcon fontSize="small" />,
+  },
+] as const;
 
 const BASE_NAV_ITEMS = [
   {
@@ -112,6 +131,37 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+type SubItem = (typeof SERVICES_SUB_ITEMS)[number];
+
+function SubNavLink({ item, active }: { item: SubItem; active: boolean }) {
+  return (
+    <ListItem disablePadding>
+      <ListItemButton
+        component={Link}
+        href={item.href}
+        selected={active}
+        sx={{
+          borderRadius: 1,
+          mx: 1,
+          pl: 4,
+          "&.Mui-selected": {
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+            "& .MuiListItemIcon-root": { color: "inherit" },
+            "&:hover": { bgcolor: "primary.dark" },
+          },
+        }}
+      >
+        <ListItemIcon sx={{ minWidth: 30 }}>{item.icon}</ListItemIcon>
+        <ListItemText
+          primary={item.label}
+          primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 600 : 400 }}
+        />
+      </ListItemButton>
+    </ListItem>
+  );
+}
+
 export function AdminSidebar({ open, onClose, selfHosted = false }: AdminSidebarProps) {
   const pathname = usePathname();
 
@@ -121,6 +171,13 @@ export function AdminSidebar({ open, onClose, selfHosted = false }: AdminSidebar
     if ("exact" in item && item.exact) return pathname === item.href;
     return pathname === item.href || pathname.startsWith(`${item.href}/`);
   };
+
+  const isSubActive = (item: SubItem) => {
+    if ("exact" in item && item.exact) return pathname === item.href;
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  };
+
+  const servicesExpanded = selfHosted && pathname.startsWith("/admin/services");
 
   const drawerContent = (
     <>
@@ -132,7 +189,18 @@ export function AdminSidebar({ open, onClose, selfHosted = false }: AdminSidebar
       <Divider />
       <List dense sx={{ pt: 1, flex: 1 }}>
         {navItems.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item)} />
+          <Box key={item.href}>
+            <NavLink item={item} active={isActive(item)} />
+            {item.href === "/admin/services" && selfHosted && (
+              <Collapse in={servicesExpanded} timeout="auto" unmountOnExit>
+                <List dense disablePadding>
+                  {SERVICES_SUB_ITEMS.map((sub) => (
+                    <SubNavLink key={sub.href} item={sub} active={isSubActive(sub)} />
+                  ))}
+                </List>
+              </Collapse>
+            )}
+          </Box>
         ))}
       </List>
     </>

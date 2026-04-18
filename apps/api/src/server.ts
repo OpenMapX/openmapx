@@ -17,6 +17,8 @@ import {
 import { redis } from "./redis";
 import { adminRoute } from "./routes/admin";
 import { registerCapabilityBindingRoutes } from "./routes/admin-capability-bindings";
+import { registerAdminComposeRoutes } from "./routes/admin-compose";
+import { registerAdminServiceReposRoutes } from "./routes/admin-service-repos";
 import { adminServicesRoute } from "./routes/admin-services";
 import { adminSettingsRoute } from "./routes/admin-settings";
 import { adminStoreRoute } from "./routes/admin-store";
@@ -140,6 +142,8 @@ await server.register(adminServicesRoute, { prefix: "/api" });
 await server.register(adminSettingsRoute, { prefix: "/api" });
 await server.register(adminStoreRoute, { prefix: "/api" });
 await registerCapabilityBindingRoutes(server);
+await registerAdminServiceReposRoutes(server);
+await registerAdminComposeRoutes(server);
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {

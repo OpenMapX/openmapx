@@ -38,6 +38,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { DomainChip } from "./DomainChip";
 import { IntegrationStatusDot } from "./IntegrationStatusDot";
+import { RequiredServicesPanel } from "./RequiredServicesPanel";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 import { StatusBadge } from "./StatusBadge";
 
@@ -230,47 +231,17 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
         </Card>
       )}
 
-      {(data.requires.length > 0 ||
-        data.infrastructure?.dataRequirements?.length ||
-        data.infrastructure?.planetScale) && (
+      {data.requires.length > 0 && (
+        <RequiredServicesPanel integrationId={data.id} requires={data.requires} />
+      )}
+
+      {(data.infrastructure?.dataRequirements?.length || data.infrastructure?.planetScale) && (
         <Card variant="outlined">
           <CardContent>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Required Infrastructure
+              Infrastructure Requirements
             </Typography>
             <Stack gap={0.75}>
-              {data.requires.map((req, idx) => {
-                const label = req.service
-                  ? req.service
-                  : req.capability
-                    ? `any ${req.capability}`
-                    : "unknown";
-                const flavour = req.service
-                  ? req.service.startsWith("http") || req.service.includes("github.com")
-                    ? "community service"
-                    : "service"
-                  : "capability";
-                // Key uses the service/capability identifier; the schema's refine()
-                // guarantees exactly one of service/capability is set per entry, and
-                // duplicate entries for the same identifier would already be a manifest
-                // authoring bug (the resolver would bind twice to the same slot).
-                const key = req.service ?? req.capability ?? `unknown-${idx}`;
-                return (
-                  <Stack key={key} direction="row" alignItems="center" gap={1}>
-                    <CheckCircleIcon
-                      fontSize="small"
-                      sx={{ color: req.optional ? "text.disabled" : "info.main" }}
-                    />
-                    <Typography variant="body2" fontFamily="monospace">
-                      {label}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {flavour}
-                      {req.optional ? " · optional" : " · required"}
-                    </Typography>
-                  </Stack>
-                );
-              })}
               {data.infrastructure?.dataRequirements?.map((req) => (
                 <Stack key={req} direction="row" alignItems="center" gap={1}>
                   <CheckCircleIcon fontSize="small" sx={{ color: "text.disabled" }} />
