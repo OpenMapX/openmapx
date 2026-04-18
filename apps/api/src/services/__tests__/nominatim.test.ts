@@ -203,15 +203,15 @@ describe("reverseGeocode", () => {
     expect(result?.city).toContain("Dorfstadt");
   });
 
-  it("includes the POI/landmark name from Nominatim address fields", async () => {
-    // Nominatim puts named features (attractions, monuments, etc.) into
-    // typed fields under `address`. @fragaria/address-formatter understands
-    // these aliases and positions them correctly per country template, so
-    // no bespoke display_name fallback is needed.
+  it("excludes POI/landmark names and region codes from the address line", async () => {
+    // The panel renders `place.name` separately, so repeating it inside the
+    // address string is noise. Nominatim's ISO3166-2-lvl* region codes are
+    // likewise dropped — the formatter only sees the whitelisted fields.
     const reverseResult = {
       display_name: "Brandenburg Gate, Pariser Platz, Berlin, Germany",
       address: {
         tourism: "Brandenburg Gate",
+        "ISO3166-2-lvl4": "DE-BE",
         city: "Berlin",
         country: "Germany",
         country_code: "de",
@@ -222,7 +222,8 @@ describe("reverseGeocode", () => {
 
     const result = await nominatimService.reverseGeocode(52.52, 13.37);
 
-    expect(result?.address).toContain("Brandenburg Gate");
+    expect(result?.address).not.toContain("Brandenburg Gate");
+    expect(result?.address).not.toContain("DE-BE");
     expect(result?.address).toContain("Berlin");
     expect(result?.address).toContain("Germany");
   });

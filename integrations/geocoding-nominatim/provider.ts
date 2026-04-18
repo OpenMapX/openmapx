@@ -139,8 +139,6 @@ export const nominatimService: GeocodingProviderImpl = {
     const address = formatAddress({
       house_number: a.house_number,
       road: a.road,
-      neighbourhood: a.neighbourhood,
-      suburb: a.suburb,
       city: a.city,
       town: a.town,
       village: a.village,
@@ -149,15 +147,6 @@ export const nominatimService: GeocodingProviderImpl = {
       postcode: a.postcode,
       country: a.country,
       country_code: a.country_code,
-      // POI/landmark fields — the formatter slots these into the correct
-      // position for each country template (typically before the street).
-      attraction: a.attraction,
-      tourism: a.tourism,
-      historic: a.historic,
-      amenity: a.amenity,
-      leisure: a.leisure,
-      building: a.building,
-      shop: a.shop,
     });
     const city = [cityName, a.state ?? a.county ?? ""].filter(Boolean).join(", ");
     return { address, city };

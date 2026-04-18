@@ -2,8 +2,11 @@
  * Country-aware address formatting using @fragaria/address-formatter.
  *
  * House number position (before/after street name), postcode placement, and
- * other conventions vary by country. This module wraps the formatter with
- * proper TypeScript types so call sites stay clean.
+ * whether the state/region is shown vary by country. The underlying formatter
+ * picks a template from `country_code`, so the whitelist below intentionally
+ * keeps `state` + `country_code` to support US-style "San Francisco, CA 94102"
+ * output globally — `state_code` is derived from `state` + `country_code`
+ * automatically by the formatter.
  */
 
 import formatter from "@fragaria/address-formatter";
@@ -11,44 +14,53 @@ import formatter from "@fragaria/address-formatter";
 export interface AddressComponents {
   house_number?: string;
   road?: string;
-  neighbourhood?: string;
-  suburb?: string;
   city?: string;
   town?: string;
   village?: string;
+  municipality?: string;
   county?: string;
   state?: string;
   postcode?: string;
   country?: string;
   country_code?: string;
-  // POI / landmark fields. The underlying OpenCage templates accept these
-  // as aliases and position them correctly per country (e.g. before the
-  // street in most templates), so landmark queries like "Brandenburg Gate"
-  // don't lose the feature name when there's no road component.
-  attraction?: string;
-  tourism?: string;
-  historic?: string;
-  amenity?: string;
-  leisure?: string;
-  building?: string;
-  shop?: string;
 }
 
 interface AddressFormatter {
-  format(components: AddressComponents, options: Record<string, unknown>): string[];
+  format(components: Record<string, string>, options: Record<string, unknown>): string[];
 }
+
+// Only these keys are forwarded to the underlying formatter. Nominatim returns
+// many extra fields (ISO3166-2-lvl4 → "DE-BE", amenity/bar/shop POI names,
+// suburb, borough, neighbourhood, …) that the OpenCage formatter doesn't
+// recognize; unrecognized keys get dumped into the `attention` placeholder
+// which prefixes the output. Whitelisting keeps the rendered line close to
+// what Google Maps shows: "{road} {house_number}, {postcode} {city}, {country}".
+const FORMATTER_KEYS = [
+  "road",
+  "house_number",
+  "postcode",
+  "city",
+  "state",
+  "country",
+  "country_code",
+] as const;
 
 function runFormatter(
   components: AddressComponents,
   options: { appendCountry: boolean },
 ): string[] {
-  // The underlying formatter stringifies `undefined` values into the output
-  // instead of skipping them — strip empty keys first so callers can pass
-  // optional fields inline without guarding each one.
+  // Collapse Nominatim's city fallbacks (town/village/municipality) into `city`
+  // so the template's {{{city}}} slot renders for rural addresses too.
+  const city = components.city ?? components.town ?? components.village ?? components.municipality;
+
+  const source: Record<string, string | undefined> = { ...components, city };
+
   const clean: Record<string, string> = {};
-  for (const [k, v] of Object.entries(components)) {
-    if (typeof v === "string" && v.length > 0) clean[k] = v;
+  for (const key of FORMATTER_KEYS) {
+    const v = source[key];
+    if (typeof v === "string" && v.length > 0) clean[key] = v;
   }
+
   return (formatter as unknown as AddressFormatter)
     .format(clean, { output: "array", ...options })
     .filter(Boolean);
