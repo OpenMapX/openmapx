@@ -1,0 +1,33 @@
+{
+  "id": "elasticsearch",
+  "name": "Elasticsearch (for Pelias)",
+  "version": "1.0.0",
+  "description": "Search backend for Pelias. Single-node, security disabled (internal only).",
+  "license": "Elastic-License-2.0",
+  "quality": "built-in",
+  "container": {
+    "image": "elasticsearch",
+    "tag": "7.17.18",
+    "expose": [9200],
+    "environment": {
+      "discovery.type": "single-node",
+      "ES_JAVA_OPTS": "-Xms2g -Xmx2g",
+      "xpack.security.enabled": "false"
+    },
+    "memory": "4g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/_cluster/health",
+      "port": 9200,
+      "interval": "15s",
+      "timeout": "5s",
+      "retries": 10
+    }
+  },
+  "volumes": [{ "name": "openmapx-esdata", "mountAt": "/usr/share/elasticsearch/data" }],
+  "exposure": {
+    "hostPorts": [{ "container": 9200, "host": 9200, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "geocoding" }
+}

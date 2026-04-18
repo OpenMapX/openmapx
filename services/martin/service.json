@@ -1,0 +1,30 @@
+{
+  "id": "martin",
+  "name": "Martin",
+  "version": "1.0.0",
+  "description": "Vector tile server for PostGIS, MBTiles, and PMTiles. Exposed via Traefik at /martin.",
+  "license": "MIT/Apache-2.0",
+  "quality": "built-in",
+  "homepage": "https://maplibre.org/martin/",
+  "container": {
+    "image": "ghcr.io/maplibre/martin",
+    "tag": "latest",
+    "expose": [3000],
+    "environment": {
+      "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgis:5432/openmapx"
+    },
+    "restart": "unless-stopped",
+    "dependsOn": [{ "service": "postgis", "condition": "service_healthy" }]
+  },
+  "provides": ["tile-server"],
+  "exposure": {
+    "hostPorts": [{ "container": 3000, "host": 3002, "bindAddress": "127.0.0.1" }],
+    "proxy": {
+      "enabled": true,
+      "pathPrefix": "/martin",
+      "stripPrefix": true,
+      "middleware": ["tiles-cache@file"]
+    }
+  },
+  "ui": { "category": "tiles" }
+}

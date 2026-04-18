@@ -1,0 +1,30 @@
+{
+  "id": "motis",
+  "name": "MOTIS",
+  "version": "1.0.0",
+  "description": "Multi-modal transit + routing engine. Handles planet-scale + hundreds of GTFS feeds (~16GB RAM).",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://github.com/motis-project/motis",
+  "container": {
+    "image": "ghcr.io/motis-project/motis",
+    "tag": "latest",
+    "expose": [8080],
+    "user": "${UID:-1000}:${GID:-1000}",
+    "workingDir": "/motis-data",
+    "entrypoint": ["/bin/sh", "-c"],
+    "command": ["/motis import && /motis server"],
+    "memory": "16g",
+    "restart": "unless-stopped",
+    "logging": {
+      "driver": "json-file",
+      "options": { "max-size": "50m", "max-file": "3" }
+    }
+  },
+  "provides": ["transit-engine", "routing-engine"],
+  "consumes": [{ "type": "motis-data", "mountAt": "/motis-data", "required": true }],
+  "exposure": {
+    "hostPorts": [{ "container": 8080, "host": 8081, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "transit" }
+}

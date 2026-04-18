@@ -1,0 +1,298 @@
+import { isAbsolute, relative, resolve } from "node:path";
+import { dump as yamlDump } from "js-yaml";
+import { detectConsumesCycle } from "./resolver";
+import type {
+  HardlinkEntry,
+  LoadedService,
+  RenderResult,
+  ServiceBindMount,
+  ServiceManifest,
+} from "./types";
+
+export interface RenderContext {
+  domain?: string;
+  consumesPaths?: Map<string, string>;
+  /**
+   * Absolute directory the generated compose file will be written to. Used to
+   * render bind-mount sources as paths relative to the compose file location
+   * (how docker-compose resolves them). When absent, absolute paths are emitted.
+   */
+  composeOutDir?: string;
+}
+
+// Maps `@`-prefixed special bind sources to concrete host paths. The set of
+// allowed keys is enforced by the schema (see SPECIAL_BIND_SOURCES).
+const SPECIAL_BIND_SOURCE_PATHS: Record<string, string> = {
+  "@docker-socket": "/var/run/docker.sock",
+};
+
+function resolveBindSource(
+  bm: ServiceBindMount,
+  serviceDirectory: string,
+  composeOutDir: string | undefined,
+): string {
+  if (bm.source.startsWith("@")) {
+    return SPECIAL_BIND_SOURCE_PATHS[bm.source] ?? bm.source;
+  }
+  const absolute = resolve(serviceDirectory, bm.source);
+  if (!composeOutDir) return absolute;
+  const rel = relative(composeOutDir, absolute);
+  // Ensure docker-compose sees it as a path (not a volume name).
+  if (!rel.startsWith(".") && !isAbsolute(rel)) return `./${rel}`;
+  return rel;
+}
+
+export interface ComposeServiceSnippet {
+  image: string;
+  expose?: string[];
+  ports?: string[];
+  command?: string[] | string;
+  entrypoint?: string[] | string;
+  environment?: Record<string, string>;
+  working_dir?: string;
+  user?: string;
+  shm_size?: string;
+  cap_add?: string[];
+  cap_drop?: string[];
+  devices?: string[];
+  privileged?: boolean;
+  network_mode?: string;
+  networks?: string[];
+  volumes?: string[];
+  labels?: Record<string, string>;
+  restart?: string;
+  healthcheck?: Record<string, unknown>;
+  depends_on?: Record<string, { condition: string }>;
+  logging?: { driver: string; options?: Record<string, string> };
+  deploy?: { resources?: { limits?: { memory?: string } } };
+}
+
+export function renderServiceSnippet(
+  service: LoadedService,
+  ctx: RenderContext,
+): ComposeServiceSnippet {
+  const m = service.manifest;
+  const c = m.container;
+  const snippet: ComposeServiceSnippet = {
+    image: `${c.image}:${c.tag}`,
+  };
+
+  if (c.expose?.length) snippet.expose = c.expose.map((p) => String(p));
+
+  if (m.exposure?.hostPorts?.length) {
+    snippet.ports = m.exposure.hostPorts.map((p) => {
+      const proto = p.protocol ? `/${p.protocol}` : "";
+      const bind = p.bindAddress ? `${p.bindAddress}:` : "";
+      return `${bind}${p.host}:${p.container}${proto}`;
+    });
+  }
+
+  if (c.command !== undefined) snippet.command = c.command;
+  if (c.entrypoint !== undefined) snippet.entrypoint = c.entrypoint;
+  if (c.environment) snippet.environment = { ...c.environment };
+  if (c.workingDir) snippet.working_dir = c.workingDir;
+  if (c.user) snippet.user = c.user;
+  if (c.shmSize) snippet.shm_size = c.shmSize;
+  if (c.capAdd?.length) snippet.cap_add = c.capAdd;
+  if (c.capDrop?.length) snippet.cap_drop = c.capDrop;
+  if (c.devices?.length) snippet.devices = c.devices;
+  if (c.privileged) snippet.privileged = true;
+
+  if (c.networkMode === "host") {
+    snippet.network_mode = "host";
+  } else {
+    snippet.networks = ["openmapx"];
+  }
+
+  const volumes: string[] = [];
+  for (const v of m.volumes ?? []) {
+    volumes.push(`${v.name}:${v.mountAt}${v.readOnly ? ":ro" : ""}`);
+  }
+  for (const cs of m.consumes ?? []) {
+    const sourcePath = ctx.consumesPaths?.get(cs.type);
+    if (sourcePath) {
+      volumes.push(`${sourcePath}:${cs.mountAt}${cs.readOnly ? ":ro" : ""}`);
+    }
+  }
+  for (const bm of m.bindMounts ?? []) {
+    const src = resolveBindSource(bm, service.directory, ctx.composeOutDir);
+    // readOnly defaults to true for bind mounts (config files, docker socket)
+    const readOnly = bm.readOnly !== false;
+    volumes.push(`${src}:${bm.target}${readOnly ? ":ro" : ""}`);
+  }
+  if (volumes.length) snippet.volumes = volumes;
+
+  if (m.exposure?.proxy?.enabled) {
+    snippet.labels = renderTraefikLabels(m, ctx);
+  }
+
+  if (c.restart) snippet.restart = c.restart;
+
+  if (c.healthcheck) {
+    snippet.healthcheck = renderHealthcheck(c.healthcheck, c);
+  }
+
+  if (c.dependsOn?.length) {
+    snippet.depends_on = Object.fromEntries(
+      c.dependsOn.map((d) => [d.service, { condition: d.condition ?? "service_started" }]),
+    );
+  }
+
+  if (c.logging) snippet.logging = c.logging;
+  if (c.memory) snippet.deploy = { resources: { limits: { memory: c.memory } } };
+
+  return snippet;
+}
+
+function renderHealthcheck(
+  hc: NonNullable<ServiceManifest["container"]["healthcheck"]>,
+  container: ServiceManifest["container"],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (hc.type === "http") {
+    const port = hc.port ?? container.expose?.[0] ?? 80;
+    const path = hc.path ?? "/";
+    out.test = ["CMD-SHELL", `curl -fs http://localhost:${port}${path} || exit 1`];
+  } else if (hc.type === "tcp") {
+    const port = hc.port ?? container.expose?.[0] ?? 80;
+    out.test = ["CMD-SHELL", `nc -z localhost ${port} || exit 1`];
+  } else if (hc.type === "exec" && hc.command) {
+    out.test = Array.isArray(hc.command) ? ["CMD", ...hc.command] : ["CMD-SHELL", hc.command];
+  }
+  if (hc.interval) out.interval = hc.interval;
+  if (hc.timeout) out.timeout = hc.timeout;
+  if (hc.retries !== undefined) out.retries = hc.retries;
+  if (hc.startPeriod) out.start_period = hc.startPeriod;
+  return out;
+}
+
+function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<string, string> {
+  const proxy = m.exposure?.proxy;
+  if (!proxy?.enabled) return {};
+
+  const id = m.id;
+  const domain = ctx.domain ?? "localhost";
+  const pathPrefix = proxy.pathPrefix ?? `/${id}`;
+  const targetPort = m.container.expose?.[0] ?? 80;
+
+  const labels: Record<string, string> = {
+    "traefik.enable": "true",
+    [`traefik.http.routers.${id}.rule`]: `Host(\`${domain}\`) && PathPrefix(\`${pathPrefix}\`)`,
+    [`traefik.http.routers.${id}.entrypoints`]: "websecure",
+    [`traefik.http.routers.${id}.tls.certresolver`]: "letsencrypt",
+    [`traefik.http.services.${id}.loadbalancer.server.port`]: String(targetPort),
+  };
+
+  const middlewares: string[] = [];
+  if (proxy.stripPrefix) {
+    labels[`traefik.http.middlewares.${id}-strip.stripprefix.prefixes`] = pathPrefix;
+    middlewares.push(`${id}-strip`);
+  }
+  for (const mw of proxy.middleware ?? []) middlewares.push(mw);
+  if (middlewares.length) {
+    labels[`traefik.http.routers.${id}.middlewares`] = middlewares.join(",");
+  }
+
+  if (typeof proxy.priority === "number") {
+    labels[`traefik.http.routers.${id}.priority`] = String(proxy.priority);
+  }
+
+  return labels;
+}
+
+function topologicalOrder(services: LoadedService[]): LoadedService[] {
+  const producers = new Map<string, string>();
+  for (const s of services) {
+    for (const p of s.manifest.produces ?? []) {
+      producers.set(p.type, s.manifest.id);
+    }
+  }
+  const adj = new Map<string, Set<string>>();
+  for (const s of services) {
+    const upstream = new Set<string>();
+    for (const c of s.manifest.consumes ?? []) {
+      const producer = producers.get(c.type);
+      if (producer && producer !== s.manifest.id) upstream.add(producer);
+    }
+    adj.set(s.manifest.id, upstream);
+  }
+
+  const visited = new Set<string>();
+  const result: LoadedService[] = [];
+  function visit(id: string) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    for (const dep of adj.get(id) ?? []) visit(dep);
+    const found = services.find((s) => s.manifest.id === id);
+    if (found) result.push(found);
+  }
+  for (const s of services) visit(s.manifest.id);
+  return result;
+}
+
+export function renderCompose(services: LoadedService[], ctx: RenderContext): RenderResult {
+  const cycle = detectConsumesCycle(services);
+  if (cycle) {
+    throw new Error(
+      `Cycle detected in consumes/produces graph involving services: ${cycle.join(" → ")}`,
+    );
+  }
+
+  const sorted = topologicalOrder(services);
+
+  const consumesPaths = new Map<string, string>();
+  for (const s of services) {
+    for (const p of s.manifest.produces ?? []) {
+      consumesPaths.set(p.type, p.sourceDir);
+    }
+  }
+
+  // Each consumed data type gets its own subdirectory under the consumer's data
+  // dir. This keeps multiple consumes (e.g. Overpass's `overpass-db` scratch +
+  // `overpass-osm` read-only PBF) cleanly separated on disk and in the mounts.
+  const hardlinkPlan: HardlinkEntry[] = [];
+  for (const s of services) {
+    for (const c of s.manifest.consumes ?? []) {
+      const source = consumesPaths.get(c.type);
+      if (!source) continue;
+      hardlinkPlan.push({
+        source,
+        target: `data/${s.manifest.id}/${c.type}`,
+        consumerService: s.manifest.id,
+        dataType: c.type,
+      });
+    }
+  }
+
+  const composeServices: Record<string, ComposeServiceSnippet> = {};
+  for (const s of sorted) {
+    if (!s.enabled) continue;
+    composeServices[s.manifest.id] = renderServiceSnippet(s, {
+      ...ctx,
+      consumesPaths: new Map(
+        (s.manifest.consumes ?? []).map((c) => [c.type, `./data/${s.manifest.id}/${c.type}`]),
+      ),
+    });
+  }
+
+  const namedVolumes: Record<string, null> = {};
+  for (const s of services) {
+    for (const v of s.manifest.volumes ?? []) {
+      namedVolumes[v.name] = null;
+    }
+  }
+
+  const composeDoc = {
+    services: composeServices,
+    networks: { openmapx: { driver: "bridge" } },
+    ...(Object.keys(namedVolumes).length ? { volumes: namedVolumes } : {}),
+  };
+
+  const composeYaml = yamlDump(composeDoc, { lineWidth: 120, noRefs: true });
+
+  const envLines: string[] = [];
+  if (ctx.domain) envLines.push(`DOMAIN=${ctx.domain}`);
+  const envFile = envLines.join("\n") + (envLines.length ? "\n" : "");
+
+  return { composeYaml, envFile, hardlinkPlan };
+}

@@ -1,0 +1,28 @@
+{
+  "id": "otp",
+  "name": "OpenTripPlanner",
+  "version": "1.0.0",
+  "description": "Region-only transit alternative to MOTIS (~10 GTFS feed limit, ~16GB RAM).",
+  "license": "LGPL-3.0",
+  "quality": "built-in",
+  "homepage": "https://www.opentripplanner.org/",
+  "container": {
+    "image": "opentripplanner/opentripplanner",
+    "tag": "latest",
+    "expose": [8080],
+    "command": ["--load", "--serve"],
+    "environment": { "JAVA_TOOL_OPTIONS": "-Xmx12g" },
+    "memory": "16g",
+    "restart": "unless-stopped"
+  },
+  "provides": ["transit-engine"],
+  "consumes": [{ "type": "otp-data", "mountAt": "/var/opentripplanner", "required": true }],
+  "bindMounts": [
+    { "source": "config/build-config.json", "target": "/var/opentripplanner/build-config.json" },
+    { "source": "config/router-config.json", "target": "/var/opentripplanner/router-config.json" }
+  ],
+  "exposure": {
+    "hostPorts": [{ "container": 8080, "host": 8090, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "transit" }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "pelias-placeholder",
+  "name": "Pelias Placeholder",
+  "version": "1.0.0",
+  "description": "Pelias fallback geocoder for hierarchical place lookups.",
+  "license": "MIT",
+  "quality": "built-in",
+  "container": {
+    "image": "pelias/placeholder",
+    "tag": "latest",
+    "expose": [4100],
+    "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
+    "restart": "unless-stopped"
+  },
+  "consumes": [
+    { "type": "pelias-placeholder-data", "mountAt": "/data/placeholder", "required": true }
+  ],
+  "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
+  "exposure": {
+    "hostPorts": [{ "container": 4100, "host": 4100, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "geocoding" }
+}

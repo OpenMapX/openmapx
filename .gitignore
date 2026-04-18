@@ -65,3 +65,9 @@ integrations/*/config.json
 docs/superpowers/
 docs/plans/
 docs/legal/
+
+# CLI generated outputs
+infra/docker/docker-compose.generated.yml
+infra/docker/docker-compose.generated.hardlinks.json
+infra/docker/.env.generated
+services/.community/

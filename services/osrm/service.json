@@ -1,0 +1,23 @@
+{
+  "id": "osrm",
+  "name": "OSRM",
+  "version": "1.0.0",
+  "description": "Open Source Routing Machine — region-only alternative to Valhalla (~4GB RAM per country).",
+  "license": "BSD-2-Clause",
+  "quality": "built-in",
+  "homepage": "https://project-osrm.org/",
+  "container": {
+    "image": "ghcr.io/project-osrm/osrm-backend",
+    "tag": "latest",
+    "expose": [5000],
+    "command": ["osrm-routed", "--algorithm", "mld", "/data/region.osrm"],
+    "memory": "8g",
+    "restart": "unless-stopped"
+  },
+  "provides": ["routing-engine"],
+  "consumes": [{ "type": "osrm-data", "mountAt": "/data", "readOnly": true, "required": true }],
+  "exposure": {
+    "hostPorts": [{ "container": 5000, "host": 5000, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "routing" }
+}

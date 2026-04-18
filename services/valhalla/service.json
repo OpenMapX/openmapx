@@ -1,0 +1,54 @@
+{
+  "id": "valhalla",
+  "name": "Valhalla",
+  "version": "1.0.0",
+  "description": "Multi-modal routing engine using OpenStreetMap data. Handles planet-scale (~16GB RAM).",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://valhalla.github.io/valhalla/",
+  "documentation": "https://valhalla.github.io/valhalla/api/",
+  "container": {
+    "image": "ghcr.io/valhalla/valhalla-scripted",
+    "tag": "latest",
+    "expose": [8002],
+    "environment": {
+      "serve_tiles": "True",
+      "build_elevation": "True",
+      "build_admins": "True",
+      "build_time_zones": "True",
+      "use_tiles_ignore_pbf": "False"
+    },
+    "memory": "16g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/status",
+      "port": 8002,
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 5
+    }
+  },
+  "provides": ["routing-engine"],
+  "consumes": [{ "type": "osm-pbf", "mountAt": "/custom_files", "required": true }],
+  "bindMounts": [{ "source": "config/valhalla.json", "target": "/custom_files/valhalla.json" }],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "useElevation": {
+        "type": "boolean",
+        "default": true,
+        "title": "Include elevation data"
+      },
+      "useAdmins": {
+        "type": "boolean",
+        "default": true,
+        "title": "Build admin boundaries"
+      }
+    }
+  },
+  "exposure": {
+    "hostPorts": [{ "container": 8002, "host": 8002, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "routing", "icon": "icons/valhalla.svg" }
+}

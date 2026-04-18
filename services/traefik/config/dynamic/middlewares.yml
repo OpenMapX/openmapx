@@ -1,0 +1,11 @@
+http:
+  middlewares:
+    # Cache headers for TileServer GL / Martin responses.
+    # These servers don't set Cache-Control by default. Adding it here
+    # reduces redundant round-trips and suppresses Firefox NS_BINDING_ABORTED
+    # noise caused by re-fetching unchanged tiles.
+    # Client-side long-term caching is handled by the service worker (CacheFirst).
+    tiles-cache:
+      headers:
+        customResponseHeaders:
+          Cache-Control: "public, max-age=86400, stale-while-revalidate=604800"

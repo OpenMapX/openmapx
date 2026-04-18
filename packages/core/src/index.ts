@@ -334,6 +334,8 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
+// Service plugin system
+export * as services from "./services";
 // Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export type { OverlayStoreBase } from "./stores/createOverlayStore";

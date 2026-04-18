@@ -1,0 +1,48 @@
+{
+  "id": "nominatim",
+  "name": "Nominatim",
+  "version": "1.0.0",
+  "description": "Full-featured OSM geocoder with bundled PostgreSQL. Planet import: ~64GB RAM peak, ~1.5TB disk.",
+  "license": "GPL-2.0",
+  "quality": "built-in",
+  "homepage": "https://nominatim.org/",
+  "container": {
+    "image": "mediagis/nominatim",
+    "tag": "5.2",
+    "expose": [8080],
+    "environment": {
+      "PBF_PATH": "/nominatim/data/data.osm.pbf",
+      "REPLICATION_URL": "https://planet.openstreetmap.org/replication/day",
+      "REPLICATION_UPDATE_INTERVAL": "86400",
+      "NOMINATIM_PASSWORD": "${POSTGRES_PASSWORD:-postgres}",
+      "THREADS": "${NOMINATIM_THREADS:-8}",
+      "IMPORT_STYLE": "full",
+      "REVERSE_ONLY": "false",
+      "IMPORT_WIKIPEDIA": "${NOMINATIM_IMPORT_WIKIPEDIA:-true}",
+      "IMPORT_US_POSTCODES": "${NOMINATIM_IMPORT_US_POSTCODES:-false}",
+      "IMPORT_GB_POSTCODES": "${NOMINATIM_IMPORT_GB_POSTCODES:-false}"
+    },
+    "shmSize": "1g",
+    "memory": "64g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/status",
+      "port": 8080,
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "600s"
+    }
+  },
+  "provides": ["geocoder"],
+  "consumes": [{ "type": "osm-pbf", "mountAt": "/nominatim/data", "required": true }],
+  "volumes": [
+    { "name": "openmapx-nominatim-data", "mountAt": "/var/lib/postgresql/16/main" },
+    { "name": "openmapx-nominatim-flatnode", "mountAt": "/nominatim/flatnode" }
+  ],
+  "exposure": {
+    "hostPorts": [{ "container": 8080, "host": 8088, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "geocoding" }
+}

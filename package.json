@@ -11,7 +11,8 @@
     "check-types": "turbo run check-types",
     "prepare": "husky",
     "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
-    "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts"
+    "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts",
+    "openmapx": "pnpm -C packages/cli exec tsx src/index.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",

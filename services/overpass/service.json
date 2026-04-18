@@ -1,0 +1,51 @@
+{
+  "id": "overpass",
+  "name": "Overpass API",
+  "version": "1.0.0",
+  "description": "OSM query service. Planet import: ~24h, ~200GB disk, ~4GB RAM.",
+  "license": "AGPL-3.0",
+  "quality": "built-in",
+  "homepage": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+  "container": {
+    "image": "wiktorn/overpass-api",
+    "tag": "latest",
+    "expose": [80],
+    "environment": {
+      "OVERPASS_META": "yes",
+      "OVERPASS_MODE": "init",
+      "OVERPASS_PLANET_URL": "file:///osm/data.osm.bz2",
+      "OVERPASS_PLANET_PREPROCESS": "rm -f /db/planet.osm.bz2 && ln -s /osm/data.osm.bz2 /db/planet.osm.bz2",
+      "OVERPASS_DIFF_URL": "https://planet.openstreetmap.org/replication/day/",
+      "OVERPASS_COMPRESSION": "lz4",
+      "OVERPASS_RULES_LOAD": "10",
+      "OVERPASS_SPACE": "${OVERPASS_SPACE:-107374182400}",
+      "OVERPASS_UPDATE_SLEEP": "86400",
+      "OVERPASS_FASTCGI_PROCESSES": "${OVERPASS_FASTCGI_PROCESSES:-4}",
+      "OVERPASS_STOP_AFTER_INIT": "false",
+      "OVERPASS_MAX_TIMEOUT": "300s"
+    },
+    "memory": "32g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "exec",
+      "command": [
+        "sh",
+        "-c",
+        "curl -qfs 'http://localhost/api/interpreter?data=[out:json];node(1);out;' | grep -q Overpass || exit 1"
+      ],
+      "interval": "60s",
+      "timeout": "10s",
+      "retries": 3,
+      "startPeriod": "172800s"
+    }
+  },
+  "provides": ["osm-query"],
+  "consumes": [
+    { "type": "overpass-db", "mountAt": "/db", "required": true },
+    { "type": "overpass-osm", "mountAt": "/osm", "readOnly": true, "required": true }
+  ],
+  "exposure": {
+    "hostPorts": [{ "container": 80, "host": 8082, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "osm-query" }
+}

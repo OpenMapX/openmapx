@@ -1,0 +1,30 @@
+{
+  "id": "tileserver",
+  "name": "TileServer GL",
+  "version": "1.0.0",
+  "description": "Self-hosted MapLibre/Mapbox vector + raster tile server. Exposed via Traefik at /tiles.",
+  "license": "BSD-2-Clause",
+  "quality": "built-in",
+  "homepage": "https://tileserver.readthedocs.io/",
+  "container": {
+    "image": "maptiler/tileserver-gl",
+    "tag": "latest",
+    "expose": [8080],
+    "command": ["--public_url", "https://${DOMAIN:-localhost}/tiles/"],
+    "memory": "2g",
+    "restart": "unless-stopped"
+  },
+  "provides": ["tile-server"],
+  "consumes": [{ "type": "tileserver-data", "mountAt": "/data", "required": true }],
+  "bindMounts": [{ "source": "config/config.json", "target": "/data/config.json" }],
+  "exposure": {
+    "hostPorts": [{ "container": 8080, "host": 8080, "bindAddress": "127.0.0.1" }],
+    "proxy": {
+      "enabled": true,
+      "pathPrefix": "/tiles",
+      "stripPrefix": true,
+      "middleware": ["tiles-cache@file"]
+    }
+  },
+  "ui": { "category": "tiles" }
+}

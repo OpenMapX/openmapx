@@ -1,0 +1,77 @@
+{
+  "esclient": {
+    "apiVersion": "7.x",
+    "hosts": [
+      {
+        "host": "elasticsearch",
+        "port": 9200
+      }
+    ]
+  },
+  "elasticsearch": {
+    "settings": {
+      "index": {
+        "number_of_replicas": "0",
+        "number_of_shards": "1",
+        "refresh_interval": "10s"
+      }
+    }
+  },
+  "api": {
+    "services": {
+      "placeholder": {
+        "url": "http://pelias-placeholder:4100"
+      },
+      "pip": {
+        "url": "http://pelias-pip:4200"
+      }
+    },
+    "targets": {
+      "layers_by_source": {
+        "openstreetmap": ["address", "venue", "street"],
+        "whosonfirst": [
+          "continent",
+          "country",
+          "dependency",
+          "macroregion",
+          "region",
+          "macrocounty",
+          "county",
+          "locality",
+          "localadmin",
+          "borough",
+          "neighbourhood",
+          "coarse"
+        ]
+      }
+    }
+  },
+  "imports": {
+    "adminLookup": {
+      "enabled": true
+    },
+    "openstreetmap": {
+      "datapath": "/data/openstreetmap",
+      "leveldbpath": "/tmp/leveldb",
+      "import": [
+        {
+          "filename": "data.osm.pbf"
+        }
+      ]
+    },
+    "whosonfirst": {
+      "datapath": "/data/whosonfirst",
+      "importVenues": false,
+      "importPostalcodes": true
+    },
+    "interpolation": {
+      "datapath": "/data/interpolation"
+    },
+    "polyline": {
+      "datapath": "/data/polylines"
+    }
+  },
+  "logger": {
+    "level": "info"
+  }
+}

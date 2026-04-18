@@ -1,0 +1,39 @@
+{
+  "id": "app-web",
+  "name": "OpenMapX Web",
+  "version": "1.0.0",
+  "description": "Next.js 16 frontend. MapLibre + MUI + Tailwind.",
+  "license": "MIT",
+  "quality": "built-in",
+  "container": {
+    "image": "ghcr.io/medformatik/openmapx-web",
+    "tag": "latest",
+    "expose": [3000],
+    "environment": {
+      "NEXT_PUBLIC_API_URL": "https://${DOMAIN:-localhost}",
+      "NEXT_PUBLIC_MAPTILER_KEY": "${MAPTILER_KEY:-}",
+      "NEXT_PUBLIC_MAPILLARY_TOKEN": "${MAPILLARY_TOKEN:-}",
+      "NEXT_PUBLIC_MAP_STYLE_URL": "${NEXT_PUBLIC_MAP_STYLE_URL:-}",
+      "NEXT_PUBLIC_TILES_URL": "${NEXT_PUBLIC_TILES_URL:-}",
+      "NEXT_PUBLIC_STYLE_PROVIDER": "${NEXT_PUBLIC_STYLE_PROVIDER:-maptiler}",
+      "LEGAL_NAME": "${LEGAL_NAME:-}",
+      "LEGAL_STREET": "${LEGAL_STREET:-}",
+      "LEGAL_POSTAL_CODE": "${LEGAL_POSTAL_CODE:-}",
+      "LEGAL_CITY": "${LEGAL_CITY:-}",
+      "LEGAL_COUNTRY": "${LEGAL_COUNTRY:-}",
+      "LEGAL_EMAIL": "${LEGAL_EMAIL:-}",
+      "LEGAL_PHONE": "${LEGAL_PHONE:-}",
+      "LEGAL_JURISDICTION_CITY": "${LEGAL_JURISDICTION_CITY:-}"
+    },
+    "memory": "512m",
+    "restart": "unless-stopped"
+  },
+  "exposure": {
+    "proxy": {
+      "enabled": true,
+      "pathPrefix": "/",
+      "priority": 1
+    }
+  },
+  "ui": { "category": "application" }
+}

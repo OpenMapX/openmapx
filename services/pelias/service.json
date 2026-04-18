@@ -1,0 +1,23 @@
+{
+  "id": "pelias",
+  "name": "Pelias API",
+  "version": "1.0.0",
+  "description": "Modular geocoder query API. Requires Elasticsearch + placeholder + pip services.",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://pelias.io/",
+  "container": {
+    "image": "pelias/api",
+    "tag": "latest",
+    "expose": [4000],
+    "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
+    "restart": "unless-stopped",
+    "dependsOn": [{ "service": "elasticsearch", "condition": "service_healthy" }]
+  },
+  "provides": ["geocoder"],
+  "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
+  "exposure": {
+    "hostPorts": [{ "container": 4000, "host": 4000, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "geocoding" }
+}

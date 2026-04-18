@@ -1,0 +1,30 @@
+{
+  "id": "traefik",
+  "name": "Traefik",
+  "version": "1.0.0",
+  "description": "Reverse proxy and TLS termination via Let's Encrypt.",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://traefik.io/",
+  "container": {
+    "image": "traefik",
+    "tag": "v3.6",
+    "expose": [80, 443],
+    "environment": {
+      "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL": "${ACME_EMAIL:-admin@example.com}"
+    },
+    "memory": "256m",
+    "restart": "unless-stopped"
+  },
+  "provides": ["proxy"],
+  "volumes": [{ "name": "openmapx-traefik-acme", "mountAt": "/etc/traefik" }],
+  "bindMounts": [
+    { "source": "@docker-socket", "target": "/var/run/docker.sock" },
+    { "source": "config/traefik.yml", "target": "/etc/traefik/traefik.yml" },
+    { "source": "config/dynamic", "target": "/etc/traefik/dynamic" }
+  ],
+  "exposure": {
+    "hostPorts": [{ "container": 80, "host": 80 }, { "container": 443, "host": 443 }]
+  },
+  "ui": { "category": "infrastructure" }
+}

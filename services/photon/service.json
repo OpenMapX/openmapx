@@ -1,0 +1,37 @@
+{
+  "id": "photon",
+  "name": "Photon",
+  "version": "1.0.0",
+  "description": "Lightweight OSM geocoder with search-as-you-type. Auto-downloads worldwide index (~8GB RAM, ~200GB disk).",
+  "license": "Apache-2.0",
+  "quality": "built-in",
+  "homepage": "https://github.com/komoot/photon",
+  "container": {
+    "image": "rtuszik/photon-docker",
+    "tag": "latest",
+    "expose": [2322],
+    "environment": {
+      "REGION": "${PHOTON_REGION:-planet}",
+      "UPDATE_STRATEGY": "PARALLEL",
+      "UPDATE_INTERVAL": "720h",
+      "LOG_LEVEL": "INFO"
+    },
+    "memory": "8g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/api?q=test",
+      "port": 2322,
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "600s"
+    }
+  },
+  "provides": ["geocoder"],
+  "consumes": [{ "type": "photon-data", "mountAt": "/photon/data", "required": true }],
+  "exposure": {
+    "hostPorts": [{ "container": 2322, "host": 2322, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "geocoding" }
+}

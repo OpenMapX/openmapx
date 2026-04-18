@@ -1,0 +1,28 @@
+{
+  "id": "pelias-pip",
+  "name": "Pelias Point-in-Polygon",
+  "version": "1.0.0",
+  "description": "Pelias PIP (point-in-polygon) lookups for admin hierarchies (Who's On First).",
+  "license": "MIT",
+  "quality": "built-in",
+  "container": {
+    "image": "pelias/pip-service",
+    "tag": "latest",
+    "expose": [4200],
+    "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
+    "restart": "unless-stopped"
+  },
+  "consumes": [
+    {
+      "type": "pelias-whosonfirst-data",
+      "mountAt": "/data/whosonfirst",
+      "readOnly": true,
+      "required": true
+    }
+  ],
+  "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
+  "exposure": {
+    "hostPorts": [{ "container": 4200, "host": 4200, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "geocoding" }
+}
