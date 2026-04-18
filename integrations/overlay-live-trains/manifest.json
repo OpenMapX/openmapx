@@ -52,7 +52,7 @@
   "category": "Transit",
   "dataSources": [
     {
-      "sourceId": "db-ris",
+      "sourceId": "db-ris-maps",
       "name": "Deutsche Bahn RIS Maps",
       "url": "https://apis.deutschebahn.com/",
       "license": "Proprietary (bilateral license)",

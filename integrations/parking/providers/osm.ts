@@ -61,7 +61,7 @@ function elementToFacility(el: OsmParkingElement): ParkingFacility | null {
     id: `osm:${el.type}/${el.id}`,
     name: tags.name ?? "Parking",
     coordinates: [lon, lat],
-    sources: ["osm-parking"],
+    sources: ["osm"],
     parkingType: mapParkingTag(tags.parking),
     capacity,
     hasRealtimeData: false,

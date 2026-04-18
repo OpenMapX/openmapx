@@ -34,7 +34,7 @@
     {
       "sourceId": "tfl",
       "name": "Transport for London",
-      "url": "https://api.tfl.gov.uk/",
+      "url": "https://tfl.gov.uk/",
       "license": "Proprietary (OGL v2 with TfL amendments)",
       "licenseUrl": "https://tfl.gov.uk/corporate/terms-and-conditions/transport-data-service",
       "attribution": "Powered by <a href=\"https://tfl.gov.uk/\">TfL Open Data</a>",

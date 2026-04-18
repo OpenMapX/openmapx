@@ -49,7 +49,7 @@ const META: DataSourceMeta = {
 function buildSourceFilterOptions(): { id: string; label: string }[] {
   return [
     { id: "windy", label: "Windy" },
-    { id: "osm-webcam", label: "OpenStreetMap" },
+    { id: "osm", label: "OpenStreetMap" },
     { id: "caltrans", label: "Caltrans" },
     { id: "tfl", label: "TfL London" },
     { id: "nps", label: "US National Parks" },

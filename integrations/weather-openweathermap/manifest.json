@@ -44,6 +44,7 @@
       "url": "https://openweathermap.org/",
       "license": "ODbL",
       "licenseUrl": "https://openweathermap.org/full-price",
+      "attribution": "© <a href=\"https://openweathermap.org/\">OpenWeather</a>",
       "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://openweather.co.uk/privacy-policy",

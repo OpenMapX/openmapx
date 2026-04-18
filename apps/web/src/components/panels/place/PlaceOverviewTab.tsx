@@ -680,7 +680,9 @@ export function PlaceOverviewTab({
         onOpenTripDetail={onOpenTripDetail}
       />
       {/* Data source detail sections (e.g. EV charging connectors) */}
-      {place.dataSourceDetail && <DataSourceSections detail={place.dataSourceDetail} />}
+      {place.dataSourceDetail && (
+        <DataSourceSections detail={place.dataSourceDetail} domain={place.primaryScheme} />
+      )}
     </>
   );
 }

@@ -116,7 +116,7 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchDot).mockResolvedValue(dotRaw as never);
 
     vi.mocked(mapWindyToResult).mockReturnValue(makeResult("windy:1", "windy", "landscape"));
-    vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm-webcam", "other"));
+    vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm", "other"));
     vi.mocked(mapCaltransToResult).mockReturnValue(
       makeResult("caltrans:7:1", "caltrans", "traffic"),
     );
@@ -144,7 +144,7 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchDot).mockResolvedValue([]);
 
     vi.mocked(mapWindyToResult).mockReturnValue(makeResult("windy:1", "windy", "landscape"));
-    vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm-webcam", "other"));
+    vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm-webcam:1", "osm", "other"));
 
     await webcamProvider.search(makeBbox());
 
@@ -226,7 +226,7 @@ describe("webcamProvider.getDetail", () => {
     const raw = { id: "osm-webcam:456" };
     const detail = {
       id: "osm-webcam:456",
-      sources: ["osm-webcam"],
+      sources: ["osm"],
       name: "OSM",
       coordinates: [11, 48] as [number, number],
       sections: [],

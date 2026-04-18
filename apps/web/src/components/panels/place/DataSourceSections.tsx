@@ -44,7 +44,6 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // EV Charging
   "ev-charging": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   ocm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
-  "osm-ev": { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   // Fuel
   fuel: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
   tankerkoenig: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
@@ -94,7 +93,6 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "madrid-es": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "utmc-newcastle": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "nsw-au": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
-  "osm-parking": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "ndw-truck-nl": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "autobahn-de": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "opendatahub-it": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
@@ -111,7 +109,6 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   // Webcam
   webcam: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
   windy: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
-  "osm-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
   caltrans: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
   tfl: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
   nps: { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
@@ -128,7 +125,10 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "dot-ma": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
 };
 
-function resolveSourceHeader(detail: DataSourceDetail): {
+function resolveSourceHeader(
+  detail: DataSourceDetail,
+  domain?: string,
+): {
   icon: ReactNode;
   titleKey: string | null;
   titleFallback: string | null;
@@ -143,6 +143,13 @@ function resolveSourceHeader(detail: DataSourceDetail): {
   const prefix = primarySource.split("/")[0];
   const prefixMatch = SOURCE_HEADERS[prefix];
   if (prefixMatch) return { ...prefixMatch, titleFallback: null };
+
+  // Fall back to the calling integration's domain (e.g. "osm" source rendered
+  // under the ev-charging / parking / webcam domain).
+  if (domain) {
+    const domainMatch = SOURCE_HEADERS[domain];
+    if (domainMatch) return { ...domainMatch, titleFallback: null };
+  }
 
   // Fallback: capitalize source name
   return {
@@ -182,6 +189,10 @@ function getSectionIcon(sectionIcon?: string): React.ReactNode {
 
 interface Props {
   detail: DataSourceDetail;
+  /** Integration/domain id (e.g. "ev-charging", "parking", "webcam") — used as
+   * a fallback to resolve the section icon when the data source identifier is
+   * generic (e.g. "osm"). */
+  domain?: string;
 }
 
 /** Render a single connector row in the compact list style. */
@@ -657,9 +668,9 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
   );
 }
 
-export function DataSourceSections({ detail }: Props) {
+export function DataSourceSections({ detail, domain }: Props) {
   const t = useTranslations("dataSources");
-  const header = resolveSourceHeader(detail);
+  const header = resolveSourceHeader(detail, domain);
 
   return (
     <Box>

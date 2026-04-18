@@ -10,8 +10,12 @@ export function initPhotosOrchestrator(ctx: IntegrationContext): void {
   _ctx = ctx;
 }
 
+// Providers in this list are ordered last (street-level imagery — shown after editorial photos)
+const DEPRIORITIZED_PROVIDER_IDS = new Set(["mapillary", "panoramax"]);
+
 /**
  * Collect photo providers from all integrations registered under the "photos" domain.
+ * Street-level imagery providers (mapillary, panoramax) are sorted to the end.
  */
 function getPhotoProviders(): PhotoProvider[] {
   if (!_ctx)
@@ -22,7 +26,11 @@ function getPhotoProviders(): PhotoProvider[] {
       providers.push(p);
     }
   }
-  return providers;
+  return providers.sort((a, b) => {
+    const aLast = DEPRIORITIZED_PROVIDER_IDS.has(a.id) ? 1 : 0;
+    const bLast = DEPRIORITIZED_PROVIDER_IDS.has(b.id) ? 1 : 0;
+    return aLast - bLast;
+  });
 }
 
 /**

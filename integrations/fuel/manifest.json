@@ -116,9 +116,9 @@
     },
     {
       "sourceId": "osm",
-      "name": "OpenStreetMap (Overpass)",
+      "name": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/",
-      "license": "ODbL",
+      "license": "ODbL 1.0",
       "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
       "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
       "commercialUse": "yes",

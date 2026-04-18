@@ -34,7 +34,7 @@ describe("deduplicateByCoordinates", () => {
     const osm = makeResult({
       id: "osm-webcam:1",
       coordinates: [13.37703, 52.52003],
-      source: "osm-webcam",
+      source: "osm",
     });
     const deduped = deduplicateByCoordinates([windy, osm]);
     expect(deduped).toHaveLength(1);
@@ -58,7 +58,7 @@ describe("deduplicateByCoordinates", () => {
     const osm = makeResult({
       id: "osm-webcam:1",
       coordinates: [13.37704, 52.52003],
-      source: "osm-webcam",
+      source: "osm",
       name: "OSM Cam",
     });
     const deduped = deduplicateByCoordinates([windy, osm]);
@@ -70,7 +70,7 @@ describe("deduplicateByCoordinates", () => {
   it("handles multiple groups", () => {
     const results = [
       makeResult({ id: "windy:1", coordinates: [13.377, 52.52], source: "windy" }),
-      makeResult({ id: "osm-webcam:1", coordinates: [13.37704, 52.52003], source: "osm-webcam" }),
+      makeResult({ id: "osm-webcam:1", coordinates: [13.37704, 52.52003], source: "osm" }),
       makeResult({ id: "windy:2", coordinates: [13.4, 52.55], source: "windy" }),
       makeResult({ id: "tfl:1", coordinates: [-0.1, 51.5], source: "tfl" }),
     ];

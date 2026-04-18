@@ -31,7 +31,7 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "opendatahub-it": 4,
   apcoa: 4,
   goldbeck: 4,
-  "osm-parking": 5,
+  osm: 5,
 };
 
 function getSourcePriority(source: string): number {

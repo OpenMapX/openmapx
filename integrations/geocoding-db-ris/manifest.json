@@ -38,7 +38,7 @@
   "category": "Geocoding",
   "dataSources": [
     {
-      "sourceId": "db-ris",
+      "sourceId": "db-ris-stations",
       "name": "Deutsche Bahn RIS Stations",
       "url": "https://apis.deutschebahn.com/",
       "license": "Proprietary (bilateral license)",

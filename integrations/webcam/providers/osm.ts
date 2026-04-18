@@ -29,7 +29,7 @@ export function mapOsmToRaw(node: OsmWebcam): RawWebcam {
     id: `osm-webcam:${node.id}`,
     name,
     coordinates: [node.lon, node.lat],
-    source: "osm-webcam",
+    source: "osm",
     variant: "other",
     thumbnailUrl: webcamUrl,
     streamUrl: webcamUrl,
@@ -109,7 +109,7 @@ export async function mapOsmToDetail(raw: RawWebcam): Promise<DataSourceDetail> 
 
   return {
     id: raw.id,
-    sources: ["osm-webcam"],
+    sources: ["osm"],
     name: raw.name,
     coordinates: raw.coordinates,
     sections,

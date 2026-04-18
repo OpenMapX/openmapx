@@ -24,7 +24,7 @@ describe("deduplicateParking", () => {
   });
 
   it("returns single facility unchanged", () => {
-    const f = makeFacility({ id: "p1", coordinates: [13.377, 52.52], sources: ["osm-parking"] });
+    const f = makeFacility({ id: "p1", coordinates: [13.377, 52.52], sources: ["osm"] });
     const result = deduplicateParking([f]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("p1");
@@ -40,7 +40,7 @@ describe("deduplicateParking", () => {
     const b = makeFacility({
       id: "osm-1",
       coordinates: [13.3774, 52.5204],
-      sources: ["osm-parking"],
+      sources: ["osm"],
       name: "OSM Parking",
     });
     const result = deduplicateParking([a, b]);
@@ -51,12 +51,12 @@ describe("deduplicateParking", () => {
     const a = makeFacility({
       id: "p1",
       coordinates: [13.377, 52.52],
-      sources: ["osm-parking"],
+      sources: ["osm"],
     });
     const b = makeFacility({
       id: "p2",
       coordinates: [13.39, 52.54],
-      sources: ["osm-parking"],
+      sources: ["osm"],
     });
     const result = deduplicateParking([a, b]);
     expect(result).toHaveLength(2);
@@ -68,13 +68,13 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.5201],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Totally Different Name",
       });
       const b = makeFacility({
         id: "b",
         coordinates: [13.3772, 52.5203],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Another Unrelated Lot",
       });
       const result = deduplicateParking([a, b]);
@@ -92,7 +92,7 @@ describe("deduplicateParking", () => {
       const b = makeFacility({
         id: "b",
         coordinates: [13.377, 52.5217],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Rathaus P1",
       });
       const result = deduplicateParking([a, b]);
@@ -103,13 +103,13 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.521],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Parkhaus Rathaus",
       });
       const b = makeFacility({
         id: "b",
         coordinates: [13.377, 52.5217],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Parkhaus Kaufhof",
       });
       const result = deduplicateParking([a, b]);
@@ -121,13 +121,13 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.521],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Rathaus",
       });
       const b = makeFacility({
         id: "b",
         coordinates: [13.377, 52.5233],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Rathaus",
       });
       const result = deduplicateParking([a, b]);
@@ -138,13 +138,13 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.521],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         parkingType: "on-street",
       });
       const b = makeFacility({
         id: "b",
         coordinates: [13.3771, 52.5211],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         parkingType: "garage",
       });
       const result = deduplicateParking([a, b]);
@@ -202,7 +202,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "OSM Parking",
       });
       const result = deduplicateParking([osm, v2]);
@@ -221,7 +221,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Rathaus",
       });
       const result = deduplicateParking([osm, v2]);
@@ -239,7 +239,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "Rathaus",
       });
       const result = deduplicateParking([unknown, osm]);
@@ -259,7 +259,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "OSM Parking Hbf",
       });
       const result = deduplicateParking([db, osm]);
@@ -278,7 +278,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         freeSpaces: 42,
       });
       const result = deduplicateParking([db, osm]);
@@ -297,7 +297,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         hasRealtimeData: true,
         freeSpaces: 42,
       });
@@ -317,7 +317,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         hasRealtimeData: true,
         state: "open",
       });
@@ -335,7 +335,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         freeSpaces: 42,
       });
       const result = deduplicateParking([db, osm]);
@@ -351,7 +351,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         capacity: 200,
       });
       const result = deduplicateParking([db, osm]);
@@ -368,7 +368,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         hasRealtimeData: true,
       });
       const result = deduplicateParking([db, osm]);
@@ -385,7 +385,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         hasRealtimeData: false,
       });
       const result = deduplicateParking([db, osm]);
@@ -402,7 +402,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         parkingType: "underground",
       });
       const result = deduplicateParking([db, osm]);
@@ -436,7 +436,7 @@ describe("deduplicateParking", () => {
       const b = makeFacility({
         id: "b",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         maxHeight: 200,
       });
       const result = deduplicateParking([a, b]);
@@ -453,7 +453,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         address: "Hauptstraße 123, 10115 Berlin",
       });
       const result = deduplicateParking([db, osm]);
@@ -470,7 +470,7 @@ describe("deduplicateParking", () => {
       const b = makeFacility({
         id: "b",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         openingHours: "Mo-Fr 06:00-22:00; Sa 08:00-20:00; Su closed",
       });
       const result = deduplicateParking([a, b]);
@@ -486,7 +486,7 @@ describe("deduplicateParking", () => {
       const b = makeFacility({
         id: "b",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         parkAndRide: true,
       });
       const result = deduplicateParking([a, b]);
@@ -502,10 +502,10 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
       });
       const result = deduplicateParking([v2, osm]);
-      expect(result[0].sources).toEqual(["parkapi-v2/Dresden", "osm-parking"]);
+      expect(result[0].sources).toEqual(["parkapi-v2/Dresden", "osm"]);
     });
 
     it("enriches optional fields from lower-priority members when primary lacks them", () => {
@@ -517,7 +517,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         disabledSpaces: 5,
         chargingSpaces: 3,
         maxHeight: 200,
@@ -560,7 +560,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         fee: "paid",
       });
       const result = deduplicateParking([db, osm]);
@@ -577,7 +577,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         fee: "paid",
       });
       const result = deduplicateParking([db, osm]);
@@ -590,7 +590,7 @@ describe("deduplicateParking", () => {
       const osm = makeFacility({
         id: "osm-1",
         coordinates: [13.377, 52.52],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         name: "OSM Lot",
         capacity: 100,
       });
@@ -627,19 +627,19 @@ describe("deduplicateParking", () => {
       const a = makeFacility({
         id: "a",
         coordinates: [13.377, 52.52],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         capacity: 200,
       });
       const b = makeFacility({
         id: "b",
         coordinates: [13.3772, 52.5202],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         disabledSpaces: 5,
       });
       const c = makeFacility({
         id: "c",
         coordinates: [13.3771, 52.5201],
-        sources: ["osm-parking"],
+        sources: ["osm"],
         chargingSpaces: 3,
       });
       const result = deduplicateParking([a, b, c]);

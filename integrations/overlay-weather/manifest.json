@@ -76,7 +76,7 @@
     },
     {
       "sourceId": "openweathermap",
-      "name": "OpenWeatherMap",
+      "name": "OpenWeather",
       "url": "https://openweathermap.org/",
       "license": "ODbL",
       "licenseUrl": "https://openweathermap.org/full-price",

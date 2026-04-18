@@ -45,7 +45,7 @@
   "dataSources": [
     {
       "sourceId": "valhalla",
-      "name": "Valhalla (Isochrone)",
+      "name": "Valhalla",
       "url": "https://github.com/valhalla/valhalla",
       "license": "MIT (software); fair-use demo server",
       "licenseUrl": "https://github.com/valhalla/valhalla/blob/master/COPYING",
