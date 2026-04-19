@@ -3,9 +3,9 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends osmium-tool curl unzip bzip2 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-COPY package.json tsconfig.json ./
+COPY package.json tsconfig.json tsconfig.build.json ./
 COPY src ./src
-RUN npm install --silent && npx tsc
+RUN npm install --silent && npx tsc -p tsconfig.build.json
 
 FROM node:24-slim
 WORKDIR /app
