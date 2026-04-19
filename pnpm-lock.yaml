@@ -97,6 +97,9 @@ importers:
       simple-git:
         specifier: ^3.36.0
         version: 3.36.0
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
     devDependencies:
       '@openmapx/core':
         specifier: workspace:^
@@ -119,9 +122,6 @@ importers:
       esbuild:
         specifier: ^0.27.7
         version: 0.27.7
-      tsx:
-        specifier: ^4.21.0
-        version: 4.21.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -839,9 +839,6 @@ importers:
 
   services/data-manager:
     dependencies:
-      '@openmapx/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       execa:
         specifier: ^9.5.2
         version: 9.6.1

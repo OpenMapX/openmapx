@@ -24,8 +24,10 @@ COPY integrations/ integrations/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     cd node_modules/.pnpm && \
     rm -rf next@* @next+swc* prisma@* @prisma+* sharp@* @img+sharp* \
-           @electric-sql+pglite* @rolldown+binding* esbuild@* @esbuild+* \
+           @electric-sql+pglite* @rolldown+binding* \
            lightningcss* drizzle-kit@* effect@* typescript@*
+# Note: esbuild and @esbuild/* are kept because tsx pulls esbuild at runtime
+# to strip TypeScript types on-the-fly during dynamic integration imports.
 
 # Build (type-check + bundle)
 FROM base AS builder
@@ -56,9 +58,15 @@ ENV OPENMAPX_ROOT_DIR=/app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 
-# Source packages needed at runtime by integration code
+# Source packages needed at runtime by integration code. We need both the
+# source .ts files (for tsx to load dynamically) AND each package's own
+# node_modules (pnpm symlinks to its declared deps — Node resolves from the
+# .ts file's location upward, so `@better-auth/passkey` imported from
+# packages/core must be reachable via packages/core/node_modules).
 COPY packages/core/ packages/core/
 COPY packages/shared-mobility/ packages/shared-mobility/
+COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=prod-deps /app/packages/shared-mobility/node_modules ./packages/shared-mobility/node_modules
 
 # Integrations with pnpm-resolved node_modules (manifests + code + deps)
 COPY --from=prod-deps /app/integrations ./integrations
