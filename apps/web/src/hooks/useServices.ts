@@ -145,15 +145,25 @@ export function useServiceDetail(id: string) {
   });
 }
 
+export type ServiceConfigSource = "default" | "database" | "env";
+
+export interface ResolvedConfigValue {
+  value: unknown;
+  source: ServiceConfigSource;
+}
+
 export interface ServiceConfigResponse {
   schema: Record<string, unknown> | null;
-  config: Record<string, unknown>;
+  resolvedConfig: Record<string, ResolvedConfigValue>;
+  /** Env-var prefix operators use to override values (e.g. `SERVICE_VALHALLA_`). */
+  envPrefix: string;
 }
 
 /**
  * Fetch the per-service operator config + the manifest's configSchema. The
- * schema can also be reached via `useServiceDetail(id)`, but this endpoint is
- * cheaper for the config tab and avoids re-fetching the full LoadedService.
+ * response is resolved per field (default / database / env), so the config
+ * form can show source badges and disable fields currently overridden by
+ * host env vars.
  */
 export function useServiceConfig(id: string) {
   const env = useEnv();

@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core";
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { serviceConfig } from "../db/schema";
 import { gtfsManager } from "../services/gtfs/index";
 import { jobRunner } from "../services/job-runner";
+import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
@@ -15,7 +15,7 @@ import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { validateConfigBody } from "../utils/validate-config-body";
 
-const { getProvidedCapabilityNames } = coreServices;
+const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
 
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", async (request, reply) => {
@@ -98,21 +98,25 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // GET /admin/services/:id/config — current per-service operator config (JSON-Schema-shaped)
+  // GET /admin/services/:id/config — schema + per-field resolved values with
+  // sources. Mirrors the shape returned by the integration config endpoint so
+  // the admin UI can render source badges (default / database / env) and
+  // disable editing for fields currently overridden by `SERVICE_<ID>_<KEY>`
+  // env vars on the host.
   app.get<{ Params: { id: string } }>("/admin/services/:id/config", async (req, reply) => {
     const svc = getServiceRegistry().get(req.params.id);
     if (!svc) {
       reply.status(404);
       return { error: "Service not found" };
     }
-    const [row] = await db
-      .select({ config: serviceConfig.config })
-      .from(serviceConfig)
-      .where(eq(serviceConfig.serviceId, req.params.id))
-      .limit(1);
+    const resolvedConfig = await resolveServiceConfigWithSources({
+      id: svc.manifest.id,
+      configSchema: svc.manifest.configSchema,
+    });
     return {
       schema: svc.manifest.configSchema ?? null,
-      config: row?.config ?? {},
+      resolvedConfig,
+      envPrefix: serviceConfigEnvPrefix(svc.manifest.id),
     };
   });
 

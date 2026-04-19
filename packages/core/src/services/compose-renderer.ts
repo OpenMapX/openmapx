@@ -128,6 +128,19 @@ export interface RenderContext {
    * treated as the only service available.
    */
   allServices?: LoadedService[];
+  /**
+   * Per-service admin/env-resolved configuration values, merged into the
+   * rendered `container.environment` so operator-set values actually reach
+   * the container. Caller (CLI or API) is responsible for computing the map
+   * — the renderer is pure and does not read the DB or process.env itself.
+   *
+   * Precedence inside this map is the caller's concern. When merged into the
+   * container env, these values override any matching key declared on the
+   * manifest's `container.environment`, since operator config is expected to
+   * win over manifest defaults. Values are stringified via `String(value)` at
+   * merge time (docker-compose env values are strings).
+   */
+  resolvedServiceConfigs?: Map<string, Record<string, unknown>>;
 }
 
 // Maps `@`-prefixed special bind sources (literals only) to concrete host
@@ -238,6 +251,19 @@ export function renderServiceSnippet(
   if (c.command !== undefined) snippet.command = c.command;
   if (c.entrypoint !== undefined) snippet.entrypoint = c.entrypoint;
   if (c.environment) snippet.environment = { ...c.environment };
+  // Overlay operator-resolved config onto the manifest's baseline environment.
+  // Resolved values win over manifest defaults (that's the whole point of
+  // admin/env config). Keys with `undefined`/`null` values are skipped so a
+  // partial config map doesn't blank out manifest defaults.
+  const resolved = ctx.resolvedServiceConfigs?.get(m.id);
+  if (resolved) {
+    const env = snippet.environment ?? {};
+    for (const [key, value] of Object.entries(resolved)) {
+      if (value === undefined || value === null) continue;
+      env[key] = String(value);
+    }
+    if (Object.keys(env).length > 0) snippet.environment = env;
+  }
   if (c.workingDir) snippet.working_dir = c.workingDir;
   if (c.user) snippet.user = c.user;
   if (c.shmSize) snippet.shm_size = c.shmSize;

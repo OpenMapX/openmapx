@@ -287,12 +287,13 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
         <ServiceConfigForm
           serviceId={manifest.id}
           schema={manifest.configSchema}
-          initialValues={configQuery.data?.config}
+          resolvedConfig={configQuery.data?.resolvedConfig ?? {}}
+          envPrefix={configQuery.data?.envPrefix}
           onSave={async (values) => {
             await saveConfig.mutateAsync(values);
           }}
           onSaveAndApply={async (values) => {
-            // Service configs are mounted into the container at start time,
+            // Service configs land in the rendered compose env at start time,
             // so applying a new value requires a restart. Persist first so a
             // failed restart doesn't leave the next start with the old value.
             await saveConfig.mutateAsync(values);

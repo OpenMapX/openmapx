@@ -68,7 +68,7 @@ describe("renderServiceSnippet", () => {
     expect(labels["traefik.http.services.alpha.loadbalancer.server.port"]).toBe("3000");
   });
 
-  it("renders environment from manifest + per-service config", () => {
+  it("renders environment from manifest when no resolved config present", () => {
     const snippet = renderServiceSnippet(
       svc("alpha", {
         container: {
@@ -80,6 +80,55 @@ describe("renderServiceSnippet", () => {
       {},
     );
     expect(snippet.environment).toEqual({ LOG_LEVEL: "info", FOO: "bar" });
+  });
+
+  it("overlays resolvedServiceConfigs on top of the manifest environment", () => {
+    const snippet = renderServiceSnippet(
+      svc("alpha", {
+        container: {
+          image: "t/alpha",
+          tag: "latest",
+          environment: { LOG_LEVEL: "info", MEMORY: "1g" },
+        },
+      }),
+      {
+        resolvedServiceConfigs: new Map([["alpha", { MEMORY: "4g", EXTRA: "from-admin" }]]),
+      },
+    );
+    // MEMORY overridden, LOG_LEVEL preserved, EXTRA added.
+    expect(snippet.environment).toEqual({
+      LOG_LEVEL: "info",
+      MEMORY: "4g",
+      EXTRA: "from-admin",
+    });
+  });
+
+  it("coerces non-string resolved config values to strings for compose env", () => {
+    const snippet = renderServiceSnippet(svc("alpha"), {
+      resolvedServiceConfigs: new Map([["alpha", { WORKERS: 4, DEBUG: true }]]),
+    });
+    expect(snippet.environment).toEqual({ WORKERS: "4", DEBUG: "true" });
+  });
+
+  it("skips null/undefined resolved values so partial maps don't blank manifest env", () => {
+    const snippet = renderServiceSnippet(
+      svc("alpha", {
+        container: { image: "t/alpha", tag: "latest", environment: { KEEP: "me" } },
+      }),
+      {
+        resolvedServiceConfigs: new Map([
+          ["alpha", { KEEP: undefined as unknown as string, OTHER: null as unknown as string }],
+        ]),
+      },
+    );
+    expect(snippet.environment).toEqual({ KEEP: "me" });
+  });
+
+  it("only applies resolved config for the matching service id", () => {
+    const snippet = renderServiceSnippet(svc("alpha"), {
+      resolvedServiceConfigs: new Map([["beta", { BAD: "wrong" }]]),
+    });
+    expect(snippet.environment).toBeUndefined();
   });
 
   it("renders volumes (named) and bind mounts for consumes/config", () => {
@@ -157,6 +206,30 @@ describe("renderCompose", () => {
     expect((parsed.services as Record<string, unknown>).beta).toBeDefined();
     expect(parsed.networks).toEqual({ openmapx: { driver: "bridge" } });
     expect(parsed.volumes).toEqual({ "openmapx-alpha-data": null });
+  });
+
+  it("forwards resolvedServiceConfigs into each service's rendered environment", () => {
+    const services = [
+      svc("alpha", {
+        container: {
+          image: "t/alpha",
+          tag: "latest",
+          environment: { LOG_LEVEL: "info" },
+        },
+      }),
+      svc("beta"),
+    ];
+    const result = renderCompose(services, {
+      domain: "example.com",
+      resolvedServiceConfigs: new Map([
+        ["alpha", { LOG_LEVEL: "debug", NEW_KEY: "x" }],
+        ["beta", { SOMETHING: "y" }],
+      ]),
+    });
+    const parsed = parseYaml(result.composeYaml) as Record<string, { environment?: unknown }>;
+    const composeServices = parsed.services as Record<string, { environment?: unknown }>;
+    expect(composeServices.alpha.environment).toEqual({ LOG_LEVEL: "debug", NEW_KEY: "x" });
+    expect(composeServices.beta.environment).toEqual({ SOMETHING: "y" });
   });
 
   it("computes hardlink plan from consumes/produces", () => {

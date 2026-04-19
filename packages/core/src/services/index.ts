@@ -14,6 +14,14 @@ export {
   renderCompose,
   renderServiceSnippet,
 } from "./compose-renderer";
+export {
+  type ConfigSource,
+  type ConfigValueWithSource,
+  configSchemaKeys,
+  flattenResolvedConfig,
+  resolveServiceConfigFromEnv,
+  serviceConfigEnvPrefix,
+} from "./config-resolver";
 export { DataManagerClient, type DataManagerClientOptions } from "./data-manager-client";
 export {
   type ManifestValidationResult,

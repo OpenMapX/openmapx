@@ -3,7 +3,9 @@
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import SaveIcon from "@mui/icons-material/Save";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import MenuItem from "@mui/material/MenuItem";
@@ -11,8 +13,16 @@ import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ResolvedConfigValue, ServiceConfigSource } from "@/hooks/useServices";
+
+const SOURCE_COLOR: Record<ServiceConfigSource, "default" | "primary" | "success"> = {
+  default: "default",
+  database: "primary",
+  env: "success",
+};
 
 interface SchemaProperty {
   type?: string;
@@ -26,13 +36,23 @@ interface SchemaProperty {
 interface ServiceConfigFormProps {
   serviceId: string;
   schema: Record<string, unknown> | undefined;
-  /** Persisted config from `GET /admin/services/:id/config`; merged over defaults. */
-  initialValues?: Record<string, unknown>;
+  /**
+   * Resolved per-field values with source annotation (default / database / env).
+   * Env-sourced fields are rendered disabled, matching how `ConfigSchemaForm`
+   * handles integration config, so operators see at a glance which knobs the
+   * host environment is currently dictating.
+   */
+  resolvedConfig: Record<string, ResolvedConfigValue>;
+  /**
+   * Env-var prefix the operator can use on the host to override any config
+   * field. Shown as a hint in the form header so the convention is discoverable.
+   */
+  envPrefix?: string;
   /** Save the new config to the database (no container restart). */
   onSave?: (values: Record<string, unknown>) => Promise<void>;
   /**
    * Save the new config AND restart the service so the change takes effect.
-   * Service configs are mounted into the container at start time, so a
+   * Service configs land in the rendered compose env at start time, so a
    * separate restart is required for the new values to be observed by the
    * running process.
    */
@@ -66,24 +86,26 @@ function extractFields(schema: Record<string, unknown> | undefined) {
 export function ServiceConfigForm({
   serviceId: _serviceId,
   schema,
-  initialValues,
+  resolvedConfig,
+  envPrefix,
   onSave,
   onSaveAndApply,
 }: ServiceConfigFormProps) {
   const fields = useMemo(() => extractFields(schema), [schema]);
 
+  // Only non-env fields are editable; env-sourced values come from the host.
   const computeInitialValues = useCallback(() => {
     const initial: Record<string, unknown> = {};
     for (const field of fields) {
-      // Persisted values from the DB win over schema defaults.
-      const persisted = initialValues?.[field.key];
-      initial[field.key] = persisted !== undefined ? persisted : (field.default ?? "");
+      const entry = resolvedConfig[field.key];
+      if (entry?.source !== "env") {
+        initial[field.key] = entry?.value ?? field.default ?? "";
+      }
     }
     return initial;
-  }, [fields, initialValues]);
+  }, [fields, resolvedConfig]);
 
   const [values, setValues] = useState<Record<string, unknown>>(computeInitialValues);
-  // `pending` distinguishes which button to spinner. `null` = idle.
   const [pending, setPending] = useState<"save" | "apply" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<"saved" | "applied" | null>(null);
@@ -92,16 +114,37 @@ export function ServiceConfigForm({
     setValues(computeInitialValues());
   }, [computeInitialValues]);
 
+  // Track DB/default starting point so we can surface how many fields changed.
+  const originalValues = useMemo(() => {
+    const orig: Record<string, unknown> = {};
+    for (const field of fields) {
+      const entry = resolvedConfig[field.key];
+      if (entry?.source !== "env") {
+        orig[field.key] = entry?.value ?? field.default ?? "";
+      }
+    }
+    return orig;
+  }, [fields, resolvedConfig]);
+
+  const changedKeys = useMemo(
+    () =>
+      Object.keys(values).filter((k) => {
+        const orig = originalValues[k];
+        const cur = values[k];
+        return String(cur) !== String(orig ?? "");
+      }),
+    [values, originalValues],
+  );
+
   async function handleSave() {
+    if (!onSave) return;
     setError(null);
     setSaved(null);
     setPending("save");
     try {
-      if (onSave) {
-        await onSave(values);
-      } else {
-        console.log("[ServiceConfigForm] onSave not wired yet — values:", values);
-      }
+      const diff: Record<string, unknown> = {};
+      for (const k of changedKeys) diff[k] = values[k];
+      await onSave(diff);
       setSaved("saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -116,7 +159,9 @@ export function ServiceConfigForm({
     setSaved(null);
     setPending("apply");
     try {
-      await onSaveAndApply(values);
+      const diff: Record<string, unknown> = {};
+      for (const k of changedKeys) diff[k] = values[k];
+      await onSaveAndApply(diff);
       setSaved("applied");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save & Apply failed");
@@ -153,63 +198,110 @@ export function ServiceConfigForm({
         </Alert>
       )}
 
-      {fields.map((field) => (
-        <Stack key={field.key} gap={0.5}>
-          <Typography variant="body2" fontWeight={600}>
-            {field.title}
-          </Typography>
-          {field.description && (
-            <Typography variant="caption" color="text.secondary">
-              {field.description}
-            </Typography>
-          )}
-          {field.type === "boolean" ? (
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={Boolean(values[field.key])}
-                  onChange={(e) =>
-                    setValues((prev) => ({ ...prev, [field.key]: e.target.checked }))
-                  }
-                  disabled={saving}
-                />
-              }
-              label={<Typography variant="body2">{String(values[field.key] ?? false)}</Typography>}
-            />
-          ) : field.enum ? (
-            <Select
-              size="small"
-              value={String(values[field.key] ?? "")}
-              onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-              disabled={saving}
-              sx={{ maxWidth: 320 }}
+      {envPrefix && (
+        <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
+          <Typography variant="caption">
+            Host env vars always win. Override any field below by setting{" "}
+            <Box
+              component="code"
+              sx={{ fontFamily: "monospace", fontSize: "0.78rem", fontWeight: 600 }}
             >
-              {field.enum.map((opt) => (
-                <MenuItem key={opt} value={opt}>
-                  {opt}
-                </MenuItem>
-              ))}
-            </Select>
-          ) : (
-            <TextField
-              size="small"
-              value={String(values[field.key] ?? "")}
-              onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-              disabled={saving}
-              type={
-                field.type === "number" || field.type === "integer"
-                  ? "number"
-                  : field.format === "url"
-                    ? "url"
-                    : "text"
-              }
-              placeholder={field.default !== undefined ? String(field.default) : undefined}
-              sx={{ maxWidth: 480 }}
-            />
-          )}
-        </Stack>
-      ))}
+              {envPrefix}&lt;KEY&gt;
+            </Box>{" "}
+            in the host environment.
+          </Typography>
+        </Alert>
+      )}
+
+      {fields.map((field) => {
+        const entry = resolvedConfig[field.key];
+        const source: ServiceConfigSource = entry?.source ?? "default";
+        const isEnvOverridden = source === "env";
+        const displayValue = isEnvOverridden ? entry?.value : values[field.key];
+
+        return (
+          <Stack key={field.key} gap={0.5}>
+            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+              <Typography variant="body2" fontWeight={600}>
+                {field.title}
+              </Typography>
+              <Tooltip title={`Currently sourced from: ${source}`}>
+                <Chip
+                  label={source}
+                  size="small"
+                  color={SOURCE_COLOR[source] ?? "default"}
+                  variant="outlined"
+                  sx={{ fontFamily: "monospace", fontSize: "0.7rem" }}
+                />
+              </Tooltip>
+              {isEnvOverridden && (
+                <Chip
+                  label="env override"
+                  size="small"
+                  color="success"
+                  sx={{ fontSize: "0.7rem" }}
+                />
+              )}
+            </Stack>
+
+            {field.description && (
+              <Typography variant="caption" color="text.secondary">
+                {field.description}
+              </Typography>
+            )}
+
+            {field.type === "boolean" ? (
+              <FormControlLabel
+                control={
+                  <Switch
+                    size="small"
+                    checked={Boolean(displayValue)}
+                    onChange={(e) =>
+                      setValues((prev) => ({ ...prev, [field.key]: e.target.checked }))
+                    }
+                    disabled={isEnvOverridden || saving}
+                  />
+                }
+                label={
+                  <Typography variant="body2" color={isEnvOverridden ? "text.disabled" : undefined}>
+                    {String(displayValue ?? false)}
+                  </Typography>
+                }
+              />
+            ) : field.enum ? (
+              <Select
+                size="small"
+                value={String(displayValue ?? "")}
+                onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                disabled={isEnvOverridden || saving}
+                sx={{ maxWidth: 320 }}
+              >
+                {field.enum.map((opt) => (
+                  <MenuItem key={opt} value={opt}>
+                    {opt}
+                  </MenuItem>
+                ))}
+              </Select>
+            ) : (
+              <TextField
+                size="small"
+                value={String(displayValue ?? "")}
+                onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                disabled={isEnvOverridden || saving}
+                type={
+                  field.type === "number" || field.type === "integer"
+                    ? "number"
+                    : field.format === "url"
+                      ? "url"
+                      : "text"
+                }
+                placeholder={field.default !== undefined ? String(field.default) : undefined}
+                sx={{ maxWidth: 480 }}
+              />
+            )}
+          </Stack>
+        );
+      })}
 
       <Stack direction="row" gap={1}>
         <Button
@@ -217,9 +309,9 @@ export function ServiceConfigForm({
           size="small"
           startIcon={pending === "save" ? <CircularProgress size={14} /> : <SaveIcon />}
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || changedKeys.length === 0 || !onSave}
         >
-          Save
+          Save{changedKeys.length > 0 ? ` (${changedKeys.length} changed)` : ""}
         </Button>
         {onSaveAndApply && (
           <Button
@@ -227,7 +319,7 @@ export function ServiceConfigForm({
             size="small"
             startIcon={pending === "apply" ? <CircularProgress size={14} /> : <RestartAltIcon />}
             onClick={handleApply}
-            disabled={saving}
+            disabled={saving || changedKeys.length === 0}
           >
             Save &amp; Apply (restart)
           </Button>

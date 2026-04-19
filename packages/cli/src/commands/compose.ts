@@ -6,7 +6,8 @@ import { dockerComposeStream } from "../lib/docker";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
-const { ServiceRegistry, renderCompose } = coreServices;
+const { ServiceRegistry, flattenResolvedConfig, renderCompose, resolveServiceConfigFromEnv } =
+  coreServices;
 
 export interface RenderRepoOptions {
   rootDir?: string;
@@ -25,7 +26,22 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   await registry.load();
   const enabled = registry.enabled();
   const composeOutDir = dirname(paths.composeOutPath);
-  const result = renderCompose(enabled, { domain: opts.domain, composeOutDir });
+  // CLI renders without DB access — the full DB cascade runs in the API path.
+  // We still resolve env-var overrides so `SERVICE_<ID>_<KEY>=...` on the host
+  // lands in the rendered container env, keeping CLI- and API-produced YAML
+  // observationally equivalent when no per-service DB config is set.
+  const resolvedServiceConfigs = new Map<string, Record<string, unknown>>();
+  for (const s of enabled) {
+    const withSources = resolveServiceConfigFromEnv(s.manifest, process.env);
+    if (Object.keys(withSources).length > 0) {
+      resolvedServiceConfigs.set(s.manifest.id, flattenResolvedConfig(withSources));
+    }
+  }
+  const result = renderCompose(enabled, {
+    domain: opts.domain,
+    composeOutDir,
+    resolvedServiceConfigs,
+  });
 
   writeFileSync(paths.composeOutPath, result.composeYaml, "utf-8");
   const hardlinkPath = join(paths.infraDir, "docker-compose.generated.hardlinks.json");

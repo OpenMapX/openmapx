@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { services } from "@openmapx/core";
 import type { FastifyInstance } from "fastify";
+import { resolveAllServiceConfigs } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { requireAdmin } from "../utils/require-admin";
@@ -30,9 +31,17 @@ export async function registerAdminComposeRoutes(
       return { error: "Service registry not available" };
     }
     const domain = process.env.DOMAIN ?? "localhost";
-    const result = renderCompose(registry.enabled(), {
+    const enabled = registry.enabled();
+    // Resolve the full config cascade (defaults + DB + env) for every enabled
+    // service before rendering, so `SERVICE_<ID>_<KEY>=...` on the host and
+    // admin-panel-saved values both land in the generated compose env.
+    const resolvedServiceConfigs = await resolveAllServiceConfigs(
+      enabled.map((s) => ({ id: s.manifest.id, configSchema: s.manifest.configSchema })),
+    );
+    const result = renderCompose(enabled, {
       domain,
       composeOutDir: COMPOSE_OUT_DIR,
+      resolvedServiceConfigs,
     });
     reply.header("Content-Type", "text/yaml; charset=utf-8");
     return result.composeYaml;
