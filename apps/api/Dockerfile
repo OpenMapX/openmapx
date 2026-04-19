@@ -47,6 +47,12 @@ RUN pnpm build
 FROM node:24-alpine AS runner
 WORKDIR /app
 
+# curl is required by the container healthcheck (generated from
+# services/app-api/service.json — docker compose healthcheck runs
+# `curl -fs http://localhost:3001/health`). Alpine ships wget but not curl,
+# so we install it explicitly. ca-certificates gives node outgoing HTTPS.
+RUN apk add --no-cache curl ca-certificates
+
 ENV NODE_ENV=production
 ENV PORT=3001
 # findRepoRoot() walks up for pnpm-workspace.yaml/turbo.json — neither exists
