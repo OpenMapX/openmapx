@@ -6,11 +6,114 @@ import type {
   LoadedService,
   RenderResult,
   ServiceBindMount,
+  ServiceConsumes,
   ServiceManifest,
+  ServiceProduces,
 } from "./types";
+
+/**
+ * Producer index keyed by `<type>` for default/single-instance producers and
+ * `<type>/<instance>` for instanced ones. Built once per render so consumer
+ * lookups are O(1). See {@link resolveProducer}.
+ */
+type ProducerEntry = {
+  producerId: string;
+  produces: ServiceProduces;
+};
+type ProducerIndex = {
+  /** type → entry, only set when the producer has no `instance` (the "default"). */
+  default: Map<string, ProducerEntry>;
+  /** `${type}/${instance}` → entry. */
+  instanced: Map<string, ProducerEntry>;
+  /** type → all entries (default + instanced) for fall-back lookup. */
+  byType: Map<string, ProducerEntry[]>;
+};
+
+function buildProducerIndex(services: LoadedService[]): ProducerIndex {
+  const index: ProducerIndex = {
+    default: new Map(),
+    instanced: new Map(),
+    byType: new Map(),
+  };
+  for (const s of services) {
+    for (const p of s.manifest.produces ?? []) {
+      const entry: ProducerEntry = { producerId: s.manifest.id, produces: p };
+      if (p.instance === undefined) {
+        if (index.default.has(p.type)) {
+          throw new Error(
+            `Multiple default-instance producers for type "${p.type}": ${index.default.get(p.type)?.producerId} and ${s.manifest.id}. Disambiguate with distinct \`instance\` ids on the producers, then specify \`instance\` on consumers.`,
+          );
+        }
+        index.default.set(p.type, entry);
+      } else {
+        const key = `${p.type}/${p.instance}`;
+        if (index.instanced.has(key)) {
+          throw new Error(
+            `Multiple producers for (type "${p.type}", instance "${p.instance}"): ${index.instanced.get(key)?.producerId} and ${s.manifest.id}. Each (type, instance) pair must be unique across the registry.`,
+          );
+        }
+        index.instanced.set(key, entry);
+      }
+      const list = index.byType.get(p.type) ?? [];
+      list.push(entry);
+      index.byType.set(p.type, list);
+    }
+  }
+  return index;
+}
+
+/**
+ * Resolve a consumer entry to the producer that satisfies it, or `null` if
+ * no producer is found and the entry is non-required (caller silently
+ * skips). Throws on ambiguity.
+ */
+function resolveProducer(
+  consumes: ServiceConsumes,
+  consumerId: string,
+  index: ProducerIndex,
+): ProducerEntry | null {
+  if (consumes.instance !== undefined) {
+    const key = `${consumes.type}/${consumes.instance}`;
+    const found = index.instanced.get(key);
+    if (found) return found;
+    if (consumes.required === false) return null;
+    throw new Error(
+      `Service "${consumerId}" consumes (type "${consumes.type}", instance "${consumes.instance}") but no producer with that instance is installed.`,
+    );
+  }
+
+  const def = index.default.get(consumes.type);
+  if (def) return def;
+
+  // No default producer. If exactly one instanced producer exists for this
+  // type, use it as the implicit default — the common single-instance case.
+  const candidates = index.byType.get(consumes.type) ?? [];
+  if (candidates.length === 1) return candidates[0] ?? null;
+
+  if (candidates.length === 0) {
+    if (consumes.required === false) return null;
+    return null; // unresolved required; caller decides whether to skip silently (existing behavior)
+  }
+
+  // Multiple producer instances and the consumer didn't pick one.
+  throw new Error(
+    `Service "${consumerId}" consumes type "${consumes.type}" without specifying an \`instance\`, but multiple producer instances are installed: ${candidates.map((c) => c.produces.instance ?? "<default>").join(", ")}. Add \`instance\` to disambiguate.`,
+  );
+}
+
+/** Local hardlink target dir used by both consumer mount paths and the plan. */
+function hardlinkTargetDir(consumerId: string, c: ServiceConsumes): string {
+  const base = `data/${consumerId}/${c.type}`;
+  return c.instance ? `${base}/${c.instance}` : base;
+}
 
 export interface RenderContext {
   domain?: string;
+  /**
+   * Per-consumer-entry mount paths keyed by the same `<type>` / `<type>/<instance>`
+   * key shape used in the producer index. The renderer wires this up
+   * automatically; callers don't usually pass it.
+   */
   consumesPaths?: Map<string, string>;
   /**
    * Absolute directory the generated compose file will be written to. Used to
@@ -154,7 +257,8 @@ export function renderServiceSnippet(
     volumes.push(`${v.name}:${v.mountAt}${v.readOnly ? ":ro" : ""}`);
   }
   for (const cs of m.consumes ?? []) {
-    const sourcePath = ctx.consumesPaths?.get(cs.type);
+    const key = cs.instance ? `${cs.type}/${cs.instance}` : cs.type;
+    const sourcePath = ctx.consumesPaths?.get(key);
     if (sourcePath) {
       volumes.push(`${sourcePath}:${cs.mountAt}${cs.readOnly ? ":ro" : ""}`);
     }
@@ -264,17 +368,37 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
 }
 
 function topologicalOrder(services: LoadedService[]): LoadedService[] {
-  const producers = new Map<string, string>();
+  // Mirror the same instance-aware lookup as `detectConsumesCycle` so multi-
+  // region producer setups order correctly.
+  const defaultProducers = new Map<string, string>();
+  const instancedProducers = new Map<string, string>();
+  const producersByType = new Map<string, string[]>();
   for (const s of services) {
     for (const p of s.manifest.produces ?? []) {
-      producers.set(p.type, s.manifest.id);
+      if (p.instance === undefined) {
+        defaultProducers.set(p.type, s.manifest.id);
+      } else {
+        instancedProducers.set(`${p.type}/${p.instance}`, s.manifest.id);
+      }
+      const list = producersByType.get(p.type) ?? [];
+      list.push(s.manifest.id);
+      producersByType.set(p.type, list);
     }
   }
   const adj = new Map<string, Set<string>>();
   for (const s of services) {
     const upstream = new Set<string>();
     for (const c of s.manifest.consumes ?? []) {
-      const producer = producers.get(c.type);
+      let producer: string | undefined;
+      if (c.instance !== undefined) {
+        producer = instancedProducers.get(`${c.type}/${c.instance}`);
+      } else {
+        producer =
+          defaultProducers.get(c.type) ??
+          (producersByType.get(c.type)?.length === 1
+            ? producersByType.get(c.type)?.[0]
+            : undefined);
+      }
       if (producer && producer !== s.manifest.id) upstream.add(producer);
     }
     adj.set(s.manifest.id, upstream);
@@ -301,28 +425,27 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
     );
   }
 
+  // Build the producer index FIRST — it throws on duplicate
+  // (type, instance) pairs, and we want that error to surface before any
+  // other work. Topological order then runs against a registry we know is
+  // structurally sound.
+  const producerIndex = buildProducerIndex(services);
   const sorted = topologicalOrder(services);
 
-  const consumesPaths = new Map<string, string>();
-  for (const s of services) {
-    for (const p of s.manifest.produces ?? []) {
-      consumesPaths.set(p.type, p.sourceDir);
-    }
-  }
-
-  // Each consumed data type gets its own subdirectory under the consumer's data
-  // dir. This keeps multiple consumes (e.g. Overpass's `overpass-db` scratch +
-  // `overpass-osm` read-only PBF) cleanly separated on disk and in the mounts.
+  // Hardlink plan: for each consumer entry, look up the matching producer
+  // (instance-aware) and emit one entry. The target dir nests `<instance>`
+  // when present so multi-region setups keep separate dirs on disk.
   const hardlinkPlan: HardlinkEntry[] = [];
   for (const s of services) {
     for (const c of s.manifest.consumes ?? []) {
-      const source = consumesPaths.get(c.type);
-      if (!source) continue;
+      const producer = resolveProducer(c, s.manifest.id, producerIndex);
+      if (!producer) continue;
       hardlinkPlan.push({
-        source,
-        target: `data/${s.manifest.id}/${c.type}`,
+        source: producer.produces.sourceDir,
+        target: hardlinkTargetDir(s.manifest.id, c),
         consumerService: s.manifest.id,
         dataType: c.type,
+        ...(producer.produces.instance ? { instance: producer.produces.instance } : {}),
       });
     }
   }
@@ -330,12 +453,17 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   const composeServices: Record<string, ComposeServiceSnippet> = {};
   for (const s of sorted) {
     if (!s.enabled) continue;
+    // Per-consumer mount-path map: keyed by `<type>` or `<type>/<instance>`,
+    // pointing at the local hardlink target under the compose dir.
+    const consumesPaths = new Map<string, string>();
+    for (const c of s.manifest.consumes ?? []) {
+      const key = c.instance ? `${c.type}/${c.instance}` : c.type;
+      consumesPaths.set(key, `./${hardlinkTargetDir(s.manifest.id, c)}`);
+    }
     composeServices[s.manifest.id] = renderServiceSnippet(s, {
       ...ctx,
       allServices: services,
-      consumesPaths: new Map(
-        (s.manifest.consumes ?? []).map((c) => [c.type, `./data/${s.manifest.id}/${c.type}`]),
-      ),
+      consumesPaths,
     });
   }
 

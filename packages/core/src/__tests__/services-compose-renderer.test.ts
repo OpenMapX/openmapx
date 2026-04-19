@@ -274,4 +274,139 @@ describe("renderCompose", () => {
     });
     expect(() => renderCompose([orphan], { domain: "example.com" })).toThrow(/not found/);
   });
+
+  describe("multi-instance produces / consumes", () => {
+    it("matches a default-instance producer to a no-instance consumer", () => {
+      const producer = svc("data", {
+        produces: [{ type: "osm-pbf", sourceDir: "data/osm" }],
+      });
+      const consumer = svc("valhalla", {
+        consumes: [{ type: "osm-pbf", mountAt: "/custom_files", required: true }],
+      });
+      const result = renderCompose([producer, consumer], { domain: "example.com" });
+      expect(result.hardlinkPlan).toEqual([
+        {
+          source: "data/osm",
+          target: "data/valhalla/osm-pbf",
+          consumerService: "valhalla",
+          dataType: "osm-pbf",
+        },
+      ]);
+      expect(result.composeYaml).toContain("./data/valhalla/osm-pbf:/custom_files");
+    });
+
+    it("matches a (type, instance)-keyed consumer to the corresponding producer instance", () => {
+      const producer = svc("data", {
+        produces: [
+          { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/europe" },
+          { type: "osm-pbf", instance: "north-america", sourceDir: "data/osm/north-america" },
+        ],
+      });
+      const valhallaEu = svc("valhalla-eu", {
+        consumes: [
+          { type: "osm-pbf", instance: "europe", mountAt: "/custom_files", required: true },
+        ],
+      });
+      const valhallaNa = svc("valhalla-na", {
+        consumes: [
+          {
+            type: "osm-pbf",
+            instance: "north-america",
+            mountAt: "/custom_files",
+            required: true,
+          },
+        ],
+      });
+      const result = renderCompose([producer, valhallaEu, valhallaNa], {
+        domain: "example.com",
+      });
+      const targets = result.hardlinkPlan.map((e) => ({
+        source: e.source,
+        target: e.target,
+        instance: e.instance,
+      }));
+      expect(targets).toEqual([
+        {
+          source: "data/osm/europe",
+          target: "data/valhalla-eu/osm-pbf/europe",
+          instance: "europe",
+        },
+        {
+          source: "data/osm/north-america",
+          target: "data/valhalla-na/osm-pbf/north-america",
+          instance: "north-america",
+        },
+      ]);
+      expect(result.composeYaml).toContain("./data/valhalla-eu/osm-pbf/europe:/custom_files");
+      expect(result.composeYaml).toContain(
+        "./data/valhalla-na/osm-pbf/north-america:/custom_files",
+      );
+    });
+
+    it("falls back to the only instanced producer when consumer omits instance", () => {
+      // Single instanced producer + consumer with no instance: implicit pick.
+      const producer = svc("data", {
+        produces: [{ type: "osm-pbf", instance: "europe", sourceDir: "data/osm/europe" }],
+      });
+      const consumer = svc("valhalla", {
+        consumes: [{ type: "osm-pbf", mountAt: "/custom_files", required: true }],
+      });
+      const result = renderCompose([producer, consumer], { domain: "example.com" });
+      expect(result.hardlinkPlan).toHaveLength(1);
+      expect(result.hardlinkPlan[0]?.source).toBe("data/osm/europe");
+      // The consumer didn't pick an instance, so its mount path stays at the
+      // type-level dir (no instance subdir on the consumer side).
+      expect(result.hardlinkPlan[0]?.target).toBe("data/valhalla/osm-pbf");
+    });
+
+    it("throws when consumer references a missing instance", () => {
+      const producer = svc("data", {
+        produces: [{ type: "osm-pbf", instance: "europe", sourceDir: "data/osm/europe" }],
+      });
+      const consumer = svc("valhalla", {
+        consumes: [{ type: "osm-pbf", instance: "asia", mountAt: "/custom_files", required: true }],
+      });
+      expect(() => renderCompose([producer, consumer], { domain: "example.com" })).toThrow(
+        /no producer with that instance/,
+      );
+    });
+
+    it("throws on ambiguous resolution (multiple instances, consumer omits instance)", () => {
+      const producer = svc("data", {
+        produces: [
+          { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/europe" },
+          { type: "osm-pbf", instance: "north-america", sourceDir: "data/osm/north-america" },
+        ],
+      });
+      const consumer = svc("valhalla", {
+        consumes: [{ type: "osm-pbf", mountAt: "/custom_files", required: true }],
+      });
+      expect(() => renderCompose([producer, consumer], { domain: "example.com" })).toThrow(
+        /multiple producer instances/,
+      );
+    });
+
+    it("throws on duplicate (type, instance) across producer services", () => {
+      const a = svc("data-a", {
+        produces: [{ type: "osm-pbf", instance: "europe", sourceDir: "a/europe" }],
+      });
+      const b = svc("data-b", {
+        produces: [{ type: "osm-pbf", instance: "europe", sourceDir: "b/europe" }],
+      });
+      expect(() => renderCompose([a, b], { domain: "example.com" })).toThrow(
+        /Multiple producers for/,
+      );
+    });
+
+    it("silently skips a missing producer when consumer is required: false", () => {
+      const consumer = svc("orphan", {
+        consumes: [
+          { type: "osm-pbf", instance: "asia", mountAt: "/custom_files", required: false },
+        ],
+      });
+      // No producer, but required: false → no plan entry, no throw.
+      const result = renderCompose([consumer], { domain: "example.com" });
+      expect(result.hardlinkPlan).toEqual([]);
+    });
+  });
 });

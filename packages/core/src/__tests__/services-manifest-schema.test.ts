@@ -271,4 +271,64 @@ describe("validateServiceManifest", () => {
     });
     expect(result.valid).toBe(false);
   });
+
+  describe("produces / consumes instance ids", () => {
+    it("accepts valid instance ids on produces and consumes", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        produces: [
+          { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/europe" },
+          { type: "osm-pbf", instance: "north-america", sourceDir: "data/osm/north-america" },
+        ],
+        consumes: [
+          { type: "osm-pbf", instance: "europe", mountAt: "/custom_files", required: true },
+        ],
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it("rejects an instance id that doesn't match the slug regex", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        produces: [{ type: "osm-pbf", instance: "Europe!", sourceDir: "data/osm/europe" }],
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/lowercase/);
+    });
+
+    it("rejects duplicate (type, instance) on produces", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        produces: [
+          { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/eu1" },
+          { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/eu2" },
+        ],
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/duplicate.*europe/);
+    });
+
+    it("rejects two default-instance produces entries for the same type", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        produces: [
+          { type: "osm-pbf", sourceDir: "data/osm/a" },
+          { type: "osm-pbf", sourceDir: "data/osm/b" },
+        ],
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/default-instance/);
+    });
+
+    it("allows the same type with one default and one instanced entry on the same producer", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        produces: [
+          { type: "osm-pbf", sourceDir: "data/osm/global" },
+          { type: "osm-pbf", instance: "europe", sourceDir: "data/osm/europe" },
+        ],
+      });
+      expect(result.valid).toBe(true);
+    });
+  });
 });

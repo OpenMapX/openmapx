@@ -24,7 +24,7 @@
       "retries": 3
     }
   },
-  "provides": ["osm-data", "gtfs-data", "tile-fonts"],
+  "provides": ["osm-data", "gtfs-data", "tile-asset-data"],
   "produces": [
     { "type": "osm-pbf", "sourceDir": "data/osm" },
     { "type": "gtfs", "sourceDir": "data/gtfs" },

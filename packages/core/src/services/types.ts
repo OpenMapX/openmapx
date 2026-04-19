@@ -74,6 +74,14 @@ export interface ServiceVolume {
 
 export interface ServiceConsumes {
   type: string;
+  /**
+   * Optional producer-instance id for multi-instance data types (e.g. one
+   * OSM PBF per region). When absent, the renderer uses the producer's
+   * default-instance entry — or the only entry for this type, if there is
+   * exactly one. With multiple producer instances and no `instance` set,
+   * rendering fails with an "ambiguous" error.
+   */
+  instance?: string;
   mountAt: string;
   readOnly?: boolean;
   required?: boolean;
@@ -81,6 +89,13 @@ export interface ServiceConsumes {
 
 export interface ServiceProduces {
   type: string;
+  /**
+   * Optional instance id when this producer ships multiple instances of the
+   * same type (e.g. `instance: "europe"` and `instance: "north-america"`
+   * for two OSM PBFs). Omit for the default/single-instance case. Must match
+   * `^[a-z0-9][a-z0-9-]*$` (it appears in on-disk hardlink target paths).
+   */
+  instance?: string;
   sourceDir: string;
 }
 
@@ -144,6 +159,58 @@ export interface ServiceUI {
   category?: string;
 }
 
+/**
+ * Capability declaration on a service. Two forms are accepted:
+ *
+ *   - **Bare string** — `"routing-engine"`. The vast majority of services use
+ *     this; no per-capability metadata.
+ *   - **Object** — `{ capability: "routing-engine", metadata: { ... } }`.
+ *     Reserved for future runtime layers (region-aware routing, capability
+ *     selection by mode, etc.). Today nothing in the platform reads
+ *     `metadata`; integrations can attach whatever they like and read it
+ *     back via the registry. Convention (not enforced) — common keys:
+ *
+ *     ```jsonc
+ *     {
+ *       "capability": "routing-engine",
+ *       "metadata": {
+ *         "region": "europe",                  // human label
+ *         "bbox": [-25, 35, 45, 72],           // [west, south, east, north]
+ *         "modes": ["car", "bike", "foot"]     // supported transport modes
+ *       }
+ *     }
+ *     ```
+ *
+ *     `metadata` is `Record<string, unknown>` — totally free-form. The
+ *     manifest validator surfaces capability-name warnings against either
+ *     form, and `findByCapability` matches on the capability string regardless
+ *     of which form was used.
+ *
+ *     For multi-region deployments, the producer-instance binding lives on
+ *     `consumes.instance` — that's where the data flow already gets wired
+ *     up. Don't duplicate it on `provides.metadata`.
+ */
+export interface ServiceProvidesEntry {
+  capability: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type ServiceProvides = string | ServiceProvidesEntry;
+
+/**
+ * Normalise the union shape into a uniform `{ capability, metadata? }[]`. Use
+ * this anywhere you walk `manifest.provides` so both forms work transparently.
+ */
+export function normalizeProvides(provides: ServiceProvides[] | undefined): ServiceProvidesEntry[] {
+  if (!provides) return [];
+  return provides.map((p) => (typeof p === "string" ? { capability: p } : p));
+}
+
+/** Convenience wrapper — just the capability strings. */
+export function getProvidedCapabilityNames(provides: ServiceProvides[] | undefined): string[] {
+  return normalizeProvides(provides).map((p) => p.capability);
+}
+
 export interface ServiceManifest {
   id: string;
   name: string;
@@ -158,7 +225,7 @@ export interface ServiceManifest {
 
   container: ServiceContainer;
 
-  provides?: string[];
+  provides?: ServiceProvides[];
   consumes?: ServiceConsumes[];
   produces?: ServiceProduces[];
 
@@ -228,6 +295,8 @@ export interface HardlinkEntry {
   target: string;
   consumerService: string;
   dataType: string;
+  /** Producer-instance id for multi-instance datasets; undefined for the default/only instance. */
+  instance?: string;
 }
 
 export interface RenderResult {

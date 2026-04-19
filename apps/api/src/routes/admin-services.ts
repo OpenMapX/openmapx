@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { services as coreServices } from "@openmapx/core";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -13,6 +14,8 @@ import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { validateConfigBody } from "../utils/validate-config-body";
+
+const { getProvidedCapabilityNames } = coreServices;
 
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", async (request, reply) => {
@@ -31,7 +34,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       version: s.manifest.version,
       description: s.manifest.description,
       quality: s.manifest.quality,
-      provides: s.manifest.provides ?? [],
+      // Normalised to bare strings for the admin UI; the structured-form
+      // metadata isn't surfaced anywhere yet (reserved slot for future
+      // runtime layers like region-aware routing).
+      provides: getProvidedCapabilityNames(s.manifest.provides),
       consumes: s.manifest.consumes ?? [],
       exposure: s.manifest.exposure,
       enabled: s.enabled,

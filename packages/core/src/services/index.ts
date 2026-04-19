@@ -1,4 +1,14 @@
 export {
+  type CapabilityCheck,
+  type CapabilityKind,
+  type CapabilityWarning,
+  checkCapabilityName,
+  collectCapabilityWarnings,
+  NAMESPACED_NAME_REGEX,
+  WELL_KNOWN_CAPABILITIES,
+  WELL_KNOWN_DATA_TYPES,
+} from "./capabilities";
+export {
   type ComposeServiceSnippet,
   type RenderContext,
   renderCompose,

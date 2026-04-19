@@ -14,7 +14,7 @@ import simpleGit from "simple-git";
 import { db } from "../db";
 import { type ServiceRepositoryRow, serviceRepository } from "../db/schema";
 
-const { validateServiceManifest } = services;
+const { getProvidedCapabilityNames, validateServiceManifest } = services;
 
 // Re-export under the historical name + class so existing callers (and tests)
 // keep working. The implementation lives in @openmapx/core and is shared with
@@ -109,7 +109,11 @@ function readPreviewsFromClone(target: string): RepoManifestPreview[] {
       version: m.version as string,
       description: m.description as string | undefined,
       quality: m.quality as string,
-      provides: (m.provides ?? []) as string[],
+      // Normalise the union shape (string | { capability, metadata? }) to
+      // bare strings for the install-preview UI.
+      provides: getProvidedCapabilityNames(
+        m.provides as Parameters<typeof getProvidedCapabilityNames>[0],
+      ),
       needsCapabilities: (c.capAdd ?? []) as string[],
       hostPorts,
       proxyEnabled,

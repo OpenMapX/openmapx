@@ -1,7 +1,14 @@
-import type { IntegrationRequirement, LoadedService, ResolutionResult } from "./types";
+import {
+  getProvidedCapabilityNames,
+  type IntegrationRequirement,
+  type LoadedService,
+  type ResolutionResult,
+} from "./types";
 
 export function findByCapability(services: LoadedService[], capability: string): LoadedService[] {
-  return services.filter((s) => s.enabled && s.manifest.provides?.includes(capability));
+  return services.filter(
+    (s) => s.enabled && getProvidedCapabilityNames(s.manifest.provides).includes(capability),
+  );
 }
 
 export interface ResolverContext {
@@ -76,20 +83,46 @@ export function resolveRequirement(
 /**
  * Detect a cycle in the consumes/produces DAG. Returns the set of service ids
  * forming the cycle (any order), or null if acyclic.
+ *
+ * Producers are indexed by `(type, instance)` so multi-region setups (one
+ * service per region producing the same type with different `instance` ids)
+ * don't collide. A consumer that omits `instance` resolves to:
+ *   1. the default-instance producer for the type, if any, else
+ *   2. the only instanced producer for the type, if exactly one exists, else
+ *   3. nothing (cycle detection treats it as no dependency — the renderer
+ *      will surface the ambiguity at render time).
  */
 export function detectConsumesCycle(services: LoadedService[]): string[] | null {
-  const producers = new Map<string, string>(); // dataType -> serviceId
+  const defaultProducers = new Map<string, string>(); // type -> serviceId
+  const instancedProducers = new Map<string, string>(); // `${type}/${instance}` -> serviceId
+  const producersByType = new Map<string, string[]>(); // type -> all producer serviceIds
   for (const s of services) {
     for (const p of s.manifest.produces ?? []) {
-      producers.set(p.type, s.manifest.id);
+      if (p.instance === undefined) {
+        defaultProducers.set(p.type, s.manifest.id);
+      } else {
+        instancedProducers.set(`${p.type}/${p.instance}`, s.manifest.id);
+      }
+      const list = producersByType.get(p.type) ?? [];
+      list.push(s.manifest.id);
+      producersByType.set(p.type, list);
     }
   }
 
-  const adj = new Map<string, string[]>(); // serviceId -> downstream ids it consumes from
+  const adj = new Map<string, string[]>(); // serviceId -> upstream ids it consumes from
   for (const s of services) {
     const deps: string[] = [];
     for (const c of s.manifest.consumes ?? []) {
-      const producer = producers.get(c.type);
+      let producer: string | undefined;
+      if (c.instance !== undefined) {
+        producer = instancedProducers.get(`${c.type}/${c.instance}`);
+      } else {
+        producer =
+          defaultProducers.get(c.type) ??
+          (producersByType.get(c.type)?.length === 1
+            ? producersByType.get(c.type)?.[0]
+            : undefined);
+      }
       if (producer) deps.push(producer);
     }
     adj.set(s.manifest.id, deps);

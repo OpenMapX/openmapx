@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { type CapabilityWarning, collectCapabilityWarnings } from "./capabilities";
 import type { ServiceManifest } from "./types";
 
 const IMAGE_REGEX = /^[a-z0-9]([a-z0-9._\-/])*$/;
@@ -107,8 +108,13 @@ const volumeSchema = z.object({
   backup: z.boolean().optional(),
 });
 
+// Instance ids end up in on-disk hardlink target paths (data/<consumer-id>/
+// <type>/<instance>/) so they share the same slug shape as service ids.
+const INSTANCE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+
 const consumesSchema = z.object({
   type: z.string().min(1),
+  instance: z.string().regex(INSTANCE_ID_REGEX, "must be lowercase, hyphen-separated").optional(),
   mountAt: z
     .string()
     .regex(ABSOLUTE_PATH_REGEX, "must be absolute")
@@ -119,6 +125,7 @@ const consumesSchema = z.object({
 
 const producesSchema = z.object({
   type: z.string().min(1),
+  instance: z.string().regex(INSTANCE_ID_REGEX, "must be lowercase, hyphen-separated").optional(),
   sourceDir: z.string().min(1),
 });
 
@@ -196,6 +203,18 @@ const uiSchema = z.object({
   category: z.string().optional(),
 });
 
+// Capability declaration — accepts either a bare string (the common case)
+// or `{ capability, metadata? }`. The `metadata` slot is reserved for future
+// runtime layers (region routing, per-mode capability selection, etc.); the
+// platform doesn't read it today.
+const providesEntrySchema = z.union([
+  z.string().min(1),
+  z.object({
+    capability: z.string().min(1),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  }),
+]);
+
 export const serviceManifestSchema = z.object({
   id: z
     .string()
@@ -213,7 +232,7 @@ export const serviceManifestSchema = z.object({
 
   container: containerSchema,
 
-  provides: z.array(z.string()).optional(),
+  provides: z.array(providesEntrySchema).optional(),
   consumes: z.array(consumesSchema).optional(),
   produces: z.array(producesSchema).optional(),
 
@@ -232,6 +251,13 @@ export const serviceManifestSchema = z.object({
 export interface ManifestValidationResult {
   valid: boolean;
   errors: string[];
+  /**
+   * Non-blocking advisories — currently used for capability/data-type strings
+   * that are neither well-known nor properly namespaced (`<vendor>/<name>`).
+   * Operators see these in the admin UI and the `pnpm openmapx services
+   * capabilities` output; the manifest still loads.
+   */
+  warnings?: CapabilityWarning[];
 }
 
 export function validateServiceManifest(raw: unknown): ManifestValidationResult {
@@ -270,5 +296,32 @@ export function validateServiceManifest(raw: unknown): ManifestValidationResult 
     }
   }
 
-  return { valid: errors.length === 0, errors };
+  // A service can ship multiple `produces` entries for the same `type` only
+  // when each carries a distinct `instance` id. Same (type, instance) pair
+  // twice is always a mistake — it'd give two source dirs for the same
+  // logical dataset. The default-instance entry counts as `instance: undefined`
+  // and may appear at most once per type.
+  const seenProduces = new Set<string>();
+  for (const p of m.produces ?? []) {
+    const key = `${p.type}\u0000${p.instance ?? ""}`;
+    if (seenProduces.has(key)) {
+      errors.push(
+        p.instance
+          ? `produces: duplicate (type "${p.type}", instance "${p.instance}") — each producer instance must be unique`
+          : `produces: duplicate default-instance entry for type "${p.type}" — declare distinct \`instance\` ids when shipping multiple instances`,
+      );
+    }
+    seenProduces.add(key);
+  }
+
+  // Capability + data-type advisories. Non-blocking; surface these to the
+  // operator so community plugins migrate toward namespaced names without
+  // breaking existing manifests.
+  const warnings = collectCapabilityWarnings(m);
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    ...(warnings.length ? { warnings } : {}),
+  };
 }

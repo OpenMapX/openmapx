@@ -136,3 +136,34 @@ describe("detectConsumesCycle", () => {
     expect(cycle?.sort()).toEqual(["a", "b"]);
   });
 });
+
+describe("findByCapability — structured `provides` form", () => {
+  it("matches a service whose provides entry uses the structured form", () => {
+    const services = [
+      svc("valhalla-eu", {
+        provides: [
+          {
+            capability: "routing-engine",
+            metadata: { region: "europe", bbox: [-25, 35, 45, 72] },
+          },
+        ],
+      }),
+      svc("nominatim", { provides: ["geocoder"] }),
+    ];
+    const result = findByCapability(services, "routing-engine").map((s) => s.manifest.id);
+    expect(result).toEqual(["valhalla-eu"]);
+  });
+
+  it("matches across mixed bare-string and structured-form providers", () => {
+    const services = [
+      svc("valhalla-eu", {
+        provides: [{ capability: "routing-engine", metadata: { region: "europe" } }],
+      }),
+      svc("osrm", { provides: ["routing-engine"] }),
+    ];
+    const result = findByCapability(services, "routing-engine")
+      .map((s) => s.manifest.id)
+      .sort();
+    expect(result).toEqual(["osrm", "valhalla-eu"]);
+  });
+});
