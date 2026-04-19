@@ -141,6 +141,34 @@ export function registerDataCommands(program: Command): void {
     );
 
   data
+    .command("convert <kind> [region]")
+    .description(
+      "Derive a secondary format from an existing download (kind: overpass — converts OSM PBF → OSM BZ2 for Overpass)",
+    )
+    .action(async (kind: string, region: string | undefined) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      try {
+        if (kind === "overpass") {
+          const started = Date.now();
+          const render = progressRenderer();
+          const r = await client.convertOverpass({
+            region,
+            onProgress: (bytes, total) => render.update(bytes, total, started),
+          });
+          render.done();
+          log.ok(`Converted → ${r.path} (${(r.sizeBytes / 1e9).toFixed(2)} GB)`);
+        } else {
+          log.err(`Unknown kind: ${kind} (use: overpass)`);
+          process.exit(1);
+        }
+      } catch (err) {
+        log.err(`convert failed: ${(err as Error).message}`);
+        log.dim(`(is data-manager running? expected at ${DEFAULT_DM_URL})`);
+        process.exit(1);
+      }
+    });
+
+  data
     .command("link")
     .description("Apply the hardlink plan from the most recent compose render")
     .action(async () => {

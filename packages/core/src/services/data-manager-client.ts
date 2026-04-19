@@ -40,59 +40,24 @@ export class DataManagerClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ region }),
     });
-    if (!res.ok) throw new Error(`download/osm failed: HTTP ${res.status}`);
-    if (!res.body) throw new Error("download/osm: server returned no body stream");
+    return readProgressStream(res, "download/osm", opts.onProgress);
+  }
 
-    // Server emits NDJSON: one JSON object per line.
-    //   {event: "progress", bytes, totalBytes?}
-    //   {event: "done", ok, path, url, sizeBytes}
-    //   {event: "error", message}
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let final: { ok: boolean; path: string; sizeBytes: number } | null = null;
-
-    const handleLine = (line: string) => {
-      if (!line) return;
-      let msg: Record<string, unknown>;
-      try {
-        msg = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        return;
-      }
-      if (msg.event === "progress") {
-        opts.onProgress?.(
-          Number(msg.bytes) || 0,
-          typeof msg.totalBytes === "number" ? msg.totalBytes : undefined,
-        );
-      } else if (msg.event === "done") {
-        final = {
-          ok: Boolean(msg.ok),
-          path: String(msg.path ?? ""),
-          sizeBytes: Number(msg.sizeBytes) || 0,
-        };
-      } else if (msg.event === "error") {
-        throw new Error(String(msg.message ?? "download/osm failed"));
-      }
-    };
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      while (true) {
-        const newlineIdx = buffer.indexOf("\n");
-        if (newlineIdx < 0) break;
-        handleLine(buffer.slice(0, newlineIdx).trim());
-        buffer = buffer.slice(newlineIdx + 1);
-      }
-    }
-    // Servers that don't emit a trailing newline still produce a valid final
-    // line — parse whatever's left in the buffer.
-    handleLine(buffer.trim());
-
-    if (!final) throw new Error("download/osm: stream ended without a 'done' event");
-    return final;
+  async convertOverpass(
+    opts: {
+      region?: string;
+      onProgress?: (bytesConverted: number, totalBytes?: number) => void;
+    } = {},
+  ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
+    const body = opts.region ? { region: opts.region } : {};
+    const res = await this.fetchImpl(`${this.baseUrl}/convert/overpass`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return readProgressStream(res, "convert/overpass", opts.onProgress, {
+      pathField: "targetBz2",
+    });
   }
 
   async downloadGtfs(
@@ -134,4 +99,73 @@ export class DataManagerClient {
     if (!res.ok) throw new Error(`link failed: HTTP ${res.status}`);
     return (await res.json()) as { linked: number; skipped: number };
   }
+}
+
+/**
+ * Parse an NDJSON progress stream emitted by the data-manager's long-running
+ * endpoints (`/download/osm`, `/convert/overpass`, …). Each line is a JSON
+ * object:
+ *
+ *   `{event: "progress", bytes, totalBytes?}`
+ *   `{event: "done",     ok, path | targetBz2, sizeBytes, ...}`
+ *   `{event: "error",    message}`
+ *
+ * The `path` field's name varies across endpoints; pass `pathField` to map
+ * whichever key the server uses onto the return value's `path` property.
+ */
+async function readProgressStream(
+  res: { ok: boolean; body: ReadableStream<Uint8Array> | null; status?: number },
+  label: string,
+  onProgress?: (bytes: number, totalBytes?: number) => void,
+  opts: { pathField?: string } = {},
+): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
+  if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status ?? "?"}`);
+  if (!res.body) throw new Error(`${label}: server returned no body stream`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let final: { ok: boolean; path: string; sizeBytes: number } | null = null;
+
+  const pathField = opts.pathField ?? "path";
+
+  const handleLine = (line: string) => {
+    if (!line) return;
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (msg.event === "progress") {
+      onProgress?.(
+        Number(msg.bytes) || 0,
+        typeof msg.totalBytes === "number" ? msg.totalBytes : undefined,
+      );
+    } else if (msg.event === "done") {
+      final = {
+        ok: Boolean(msg.ok),
+        path: String(msg[pathField] ?? msg.path ?? ""),
+        sizeBytes: Number(msg.sizeBytes) || 0,
+      };
+    } else if (msg.event === "error") {
+      throw new Error(String(msg.message ?? `${label} failed`));
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    while (true) {
+      const newlineIdx = buffer.indexOf("\n");
+      if (newlineIdx < 0) break;
+      handleLine(buffer.slice(0, newlineIdx).trim());
+      buffer = buffer.slice(newlineIdx + 1);
+    }
+  }
+  handleLine(buffer.trim());
+
+  if (!final) throw new Error(`${label}: stream ended without a 'done' event`);
+  return final;
 }

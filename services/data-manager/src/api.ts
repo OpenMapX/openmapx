@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { convertPbfToBz2 } from "./jobs/convert-overpass.js";
+import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
@@ -95,8 +95,44 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return { ok: true, ...result };
   });
 
-  app.post<{ Body: { sourcePbf: string; targetBz2: string } }>("/convert/overpass", async (req) => {
-    await convertPbfToBz2(req.body);
-    return { ok: true };
-  });
+  app.post<{ Body: { sourcePbf?: string; targetBz2?: string; region?: string } }>(
+    "/convert/overpass",
+    async (req, reply) => {
+      const { sourcePbf, targetBz2, region } = req.body ?? {};
+
+      // Low-level form: caller supplied explicit paths. Run the raw conversion
+      // and return a simple JSON result (no streaming — legacy behaviour).
+      if (sourcePbf && targetBz2) {
+        await convertPbfToBz2({ sourcePbf, targetBz2 });
+        return { ok: true };
+      }
+
+      // High-level form: stream NDJSON progress and pick source/target from
+      // the state store. Mirrors the /download/osm streaming protocol so the
+      // CLI can reuse the same progress renderer.
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+      });
+      const writeLine = (obj: Record<string, unknown>) => {
+        reply.raw.write(`${JSON.stringify(obj)}\n`);
+      };
+
+      try {
+        const result = await convertPbfToBz2ForRegion({
+          region,
+          dataDir,
+          store,
+          onProgress: (bytes, totalBytes) => writeLine({ event: "progress", bytes, totalBytes }),
+        });
+        writeLine({ event: "done", ok: true, ...result });
+      } catch (err) {
+        writeLine({ event: "error", message: (err as Error).message });
+      } finally {
+        reply.raw.end();
+      }
+    },
+  );
 }
