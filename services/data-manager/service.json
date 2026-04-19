@@ -6,7 +6,7 @@
   "license": "MIT",
   "quality": "built-in",
   "container": {
-    "image": "openmapx/data-manager",
+    "image": "ghcr.io/medformatik/openmapx-data-manager",
     "tag": "latest",
     "expose": [4000],
     "environment": {

@@ -20,9 +20,14 @@ jobs:
       matrix:
         include:
           - app: api
+            context: .
             dockerfile: apps/api/Dockerfile
           - app: web
+            context: .
             dockerfile: apps/web/Dockerfile
+          - app: data-manager
+            context: services/data-manager
+            dockerfile: services/data-manager/Dockerfile
 
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +50,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
