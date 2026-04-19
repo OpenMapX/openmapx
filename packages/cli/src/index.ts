@@ -8,6 +8,12 @@ import { registerIntegrationsCommands } from "./commands/integrations";
 import { registerReposCommands } from "./commands/repos";
 import { registerServicesCommands } from "./commands/services";
 import { registerUsersCommands } from "./commands/users";
+import { loadInfraEnv } from "./lib/infra-env";
+
+// Mirror Docker Compose's behaviour: auto-load infra/docker/.env so that
+// `--domain` and `SERVICE_<ID>_<KEY>` overrides resolve consistently between
+// `pnpm openmapx compose render` (CLI) and `docker compose up` (compose).
+loadInfraEnv();
 
 const program = new Command();
 
