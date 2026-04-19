@@ -32,6 +32,61 @@ describe("applyHardlinkPlan", () => {
     expect(statSync(join(src, "a.osm.pbf")).ino).toBe(statSync(join(tgt, "a.osm.pbf")).ino);
   });
 
+  it("strips leading `data/` from plan paths and resolves against rootDir", async () => {
+    // Simulates the real compose-renderer output: `source: "data/osm"`,
+    // `target: "data/motis/osm-pbf"` — both resolved by applyHardlinkPlan
+    // against `rootDir` = the data-manager's /data mount (which already IS
+    // `infra/docker/data/`). Plain resolve would land at `/data/data/osm`,
+    // which 404s the directory and silently links zero files.
+    mkdirSync(join(tmp, "osm"), { recursive: true });
+    writeFileSync(join(tmp, "osm", "a.osm.pbf"), "PBF");
+
+    const result = await applyHardlinkPlan(
+      [
+        {
+          source: "data/osm",
+          target: "data/motis/osm-pbf",
+          consumerService: "motis",
+          dataType: "osm-pbf",
+        },
+      ],
+      { rootDir: tmp },
+    );
+    expect(result.linked).toBe(1);
+    expect(statSync(join(tmp, "osm", "a.osm.pbf")).ino).toBe(
+      statSync(join(tmp, "motis", "osm-pbf", "a.osm.pbf")).ino,
+    );
+  });
+
+  it("recurses into nested subdirectories (tile-fonts / tile-styles layout)", async () => {
+    // tile-fonts has per-fontstack subdirs (`Metropolis Bold/` etc.), each
+    // with range .pbf files inside. tile-styles has per-style subdirs with
+    // style.json + sprite.* siblings. A flat readdir would skip every entry
+    // because each one is a directory.
+    const src = join(tmp, "tile-styles");
+    mkdirSync(join(src, "osm-bright"), { recursive: true });
+    writeFileSync(join(src, "osm-bright", "style.json"), "{}");
+    writeFileSync(join(src, "osm-bright", "sprite.png"), "PNG");
+    mkdirSync(join(src, "dark-matter"), { recursive: true });
+    writeFileSync(join(src, "dark-matter", "style.json"), "{}");
+
+    const result = await applyHardlinkPlan(
+      [
+        {
+          source: "tile-styles",
+          target: "tileserver/tile-styles",
+          consumerService: "tileserver",
+          dataType: "tile-styles",
+        },
+      ],
+      { rootDir: tmp },
+    );
+    expect(result.linked).toBe(3);
+    expect(
+      readFileSync(join(tmp, "tileserver", "tile-styles", "osm-bright", "sprite.png"), "utf-8"),
+    ).toBe("PNG");
+  });
+
   it("skips re-link when inode already matches (idempotent)", async () => {
     const src = join(tmp, "src");
     const tgt = join(tmp, "tgt");
