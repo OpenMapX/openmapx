@@ -17,10 +17,15 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "Nominatim endpoint URL",
+        "description": "Base URL of the Nominatim server. Leave blank to use the public OSM instance or a self-hosted service resolved via the `nominatim` capability.",
+        "format": "url"
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://nominatim.openstreetmap.org/status"

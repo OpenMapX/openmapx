@@ -16,7 +16,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q42&format=json&props=labels&languages=en"

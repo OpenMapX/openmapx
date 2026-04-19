@@ -49,6 +49,13 @@ function errMsg(err: unknown): string {
   return String(err).slice(0, 120);
 }
 
+function resolveConfigValue(integration: LoadedIntegration, key: string): string | undefined {
+  const v = integration.config?.[key];
+  if (v == null) return undefined;
+  const s = typeof v === "string" ? v : String(v);
+  return s.length > 0 ? s : undefined;
+}
+
 async function executeSingleHealthCheck(
   integration: LoadedIntegration,
   hc: {
@@ -57,7 +64,7 @@ async function executeSingleHealthCheck(
     url?: string;
     urlTemplate?: string;
     headers?: Record<string, string>;
-    requiredEnvVars?: string[];
+    requiredConfigKeys?: string[];
     category?: string;
   },
   suffix?: string,
@@ -72,14 +79,16 @@ async function executeSingleHealthCheck(
     ? `${toIntegrationMeta(integration).name} — ${hc.name}`
     : toIntegrationMeta(integration).name;
 
-  // Check required env vars
-  if (hc.requiredEnvVars?.some((v: string) => !process.env[v])) {
-    const missing = hc.requiredEnvVars?.find((v: string) => !process.env[v]);
+  // Skip the probe when any required config key is unresolved (no value from
+  // defaults / DB / vault / env). The cascade is populated at integration
+  // load time via `resolveConfig`.
+  if (hc.requiredConfigKeys?.some((k: string) => !resolveConfigValue(integration, k))) {
+    const missing = hc.requiredConfigKeys?.find((k: string) => !resolveConfigValue(integration, k));
     return {
       id,
       name,
       category,
-      url: `${missing} not set`,
+      url: `${missing} not configured`,
       status: "unconfigured",
     };
   }
@@ -128,12 +137,14 @@ async function executeSingleHealthCheck(
     };
   }
 
-  // URL template interpolation (fall back to static url if template produces a broken URL)
+  // URL template interpolation (fall back to static url if template produces a broken URL).
+  // `${configKey}` placeholders resolve against the integration's resolved
+  // config (same source used at request time) — not raw process.env.
   let checkUrl: string;
   if (hc.urlTemplate) {
     const resolved = (hc.urlTemplate as string).replace(
       /\$\{(\w+)\}/g,
-      (_, key: string) => process.env[key] ?? "",
+      (_, key: string) => resolveConfigValue(integration, key) ?? "",
     );
     const hasHost = /^https?:\/\/[^/]/.test(resolved);
     checkUrl = hasHost ? resolved : ((hc.url as string | undefined) ?? resolved);
@@ -149,11 +160,15 @@ async function executeSingleHealthCheck(
     "$1=***",
   );
 
-  // Interpolate env vars in headers
+  // Interpolate `${configKey}` placeholders in headers (same resolution rules
+  // as urlTemplate — resolved config, not process.env).
   const rawHeaders = (hc.headers as Record<string, string>) ?? {};
   const interpolatedHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(rawHeaders)) {
-    interpolatedHeaders[k] = v.replace(/\$\{(\w+)\}/g, (_, key: string) => process.env[key] ?? "");
+    interpolatedHeaders[k] = v.replace(
+      /\$\{(\w+)\}/g,
+      (_, key: string) => resolveConfigValue(integration, key) ?? "",
+    );
   }
 
   const start = Date.now();

@@ -22,8 +22,14 @@ const VEHICLE_TYPE_MAP: Record<number, TransportMode> = {
   4: "ferry",
 };
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let mbtaApiKey: string | null = null;
+export function setMbtaApiKey(value: string | undefined): void {
+  mbtaApiKey = value && value.length > 0 ? value : null;
+}
+
 function apiKey(): string | null {
-  return process.env.MBTA_API_KEY ?? null;
+  return mbtaApiKey;
 }
 
 function authParams(): URLSearchParams {

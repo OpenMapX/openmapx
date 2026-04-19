@@ -7,7 +7,11 @@ import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@
 import { decodePolyline } from "@openmapx/core";
 import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
 
-let VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
+// Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
+// already folds in `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` + legacy
+// `VALHALLA_URL` env aliases via the core config resolver) → hardcoded
+// fallback.
+let VALHALLA_URL = "https://valhalla1.openstreetmap.de";
 
 /** Update the Valhalla base URL (called from setup() when service registry resolves it). */
 export function setValhallaUrl(url: string): void {

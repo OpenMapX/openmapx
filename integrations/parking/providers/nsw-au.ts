@@ -101,10 +101,14 @@ const KNOWN_FACILITIES: Record<
 let listCache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
 const occupancyCache: Map<string, { total: number; fetchedAt: number }> = new Map();
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let cachedApiKey: string | undefined;
+export function setNswTransportApiKey(value: string | undefined): void {
+  cachedApiKey = value && value.length > 0 ? value : undefined;
+}
+
 function getApiKey(): string | null {
-  const key = process.env.NSW_TRANSPORT_API_KEY;
-  if (!key) return null;
-  return key;
+  return cachedApiKey ?? null;
 }
 
 function overlapsCoverage(bbox: BoundingBox): boolean {

@@ -24,11 +24,10 @@
       }
     }
   },
-  "envVars": ["MAPTILER_KEY"],
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://api.maptiler.com/geocoding/test.json?key=${MAPTILER_KEY}&limit=1",
-    "requiredEnvVars": ["MAPTILER_KEY"]
+    "urlTemplate": "https://api.maptiler.com/geocoding/test.json?key=${apiKey}&limit=1",
+    "requiredConfigKeys": ["apiKey"]
   },
   "quality": "built-in",
   "category": "Geocoding",

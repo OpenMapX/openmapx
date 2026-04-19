@@ -38,7 +38,6 @@
       }
     }
   },
-  "envVars": ["OWM_API_KEY"],
   "quality": "built-in",
   "category": "Data Overlays",
   "healthCheck": [
@@ -50,8 +49,8 @@
     {
       "name": "OpenWeatherMap",
       "type": "http",
-      "urlTemplate": "https://tile.openweathermap.org/map/temp_new/0/0/0.png?appid=${OWM_API_KEY}",
-      "requiredEnvVars": ["OWM_API_KEY"]
+      "urlTemplate": "https://tile.openweathermap.org/map/temp_new/0/0/0.png?appid=${owmApiKey}",
+      "requiredConfigKeys": ["owmApiKey"]
     },
     {
       "name": "Open-Meteo",

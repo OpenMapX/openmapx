@@ -51,12 +51,19 @@ function buildFlickrUrl(photo: FlickrPhoto, size: string): string {
   return `https://live.staticflickr.com/${photo.server}/${photo.id}_${photo.secret}_${size}.jpg`;
 }
 
+// Populated by setup(ctx) from the resolved integration config (default →
+// database → vault → env cascade). Read lazily at request time so a late
+// secret rotation shows up without re-registering the provider.
+let apiKey: string | undefined;
+export function setFlickrApiKey(key: string | undefined): void {
+  apiKey = key && key.length > 0 ? key : undefined;
+}
+
 export const flickrPhotoProvider: PhotoProvider = {
   id: "flickr",
   name: "Flickr",
 
   async search(query: PhotoQuery): Promise<PlacePhoto[]> {
-    const apiKey = process.env.FLICKR_API_KEY;
     if (!apiKey) return [];
 
     const limit = query.limit ?? 6;

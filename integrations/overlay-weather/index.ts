@@ -22,7 +22,7 @@ const ALLOWED_OWM_LAYERS = [
 ];
 
 export function setup(ctx: IntegrationContext): void {
-  const owmApiKey = (ctx.config.OWM_API_KEY ?? ctx.config.owmApiKey) as string | undefined;
+  const owmApiKey = ctx.config.owmApiKey as string | undefined;
 
   ctx.registerRoute("GET", "/radar/meta", async (_req, reply) => {
     const cached = await ctx.cache.get<RadarMeta>("weather:radar:meta");

@@ -17,12 +17,12 @@ interface MotisInstance {
 
 const transitousInstance: MotisInstance = (() => {
   const client = createClient({
-    baseUrl: process.env.TRANSITOUS_URL ?? "https://api.transitous.org",
+    baseUrl: "https://api.transitous.org",
   });
   return { client, prefix: "mo:", provider: "mo" };
 })();
 
-let motisLocalBaseUrl = process.env.MOTIS_URL ?? "http://localhost:8081";
+let motisLocalBaseUrl = "http://localhost:8081";
 
 const motisLocalInstance: MotisInstance = (() => {
   const client = createClient({
@@ -35,6 +35,11 @@ const motisLocalInstance: MotisInstance = (() => {
 export function setMotisLocalUrl(url: string): void {
   motisLocalBaseUrl = url;
   motisLocalInstance.client.setConfig({ baseUrl: url });
+}
+
+/** Update the Transitous cloud base URL. */
+export function setTransitousUrl(url: string): void {
+  transitousInstance.client.setConfig({ baseUrl: url });
 }
 
 async function isMotisLocalReachable(): Promise<boolean> {

@@ -1,8 +1,14 @@
 import type { BoundingBox, DataSourceResult, FuelStation } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+let mockTankerkoenigKey: string | undefined;
+
 vi.mock("../factory.js", () => ({
   searchFuelStations: vi.fn(),
+  getTankerkoenigApiKey: () => mockTankerkoenigKey,
+  setTankerkoenigApiKey: (value: string | undefined) => {
+    mockTankerkoenigKey = value && value.length > 0 ? value : undefined;
+  },
 }));
 
 vi.mock("../mapper.js", () => ({
@@ -32,6 +38,7 @@ let mockFetch: ReturnType<typeof vi.fn>;
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  mockTankerkoenigKey = undefined;
 });
 
 function makeBbox(): BoundingBox {
@@ -138,7 +145,7 @@ describe("fuelProvider.getDetail", () => {
   });
 
   it("tankerkoenig/ prefix with valid UUID and API key fetches enriched detail", async () => {
-    vi.stubEnv("TANKERKOENIG_API_KEY", "test-key-123");
+    mockTankerkoenigKey = "test-key-123";
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
     const itemId = `tankerkoenig/${uuid}`;
@@ -180,7 +187,7 @@ describe("fuelProvider.getDetail", () => {
   });
 
   it("tankerkoenig/ with invalid UUID skips API call", async () => {
-    vi.stubEnv("TANKERKOENIG_API_KEY", "test-key-123");
+    mockTankerkoenigKey = "test-key-123";
 
     const itemId = "tankerkoenig/not-a-uuid";
 
@@ -192,7 +199,7 @@ describe("fuelProvider.getDetail", () => {
   });
 
   it("tankerkoenig/ without API key skips API call", async () => {
-    delete process.env.TANKERKOENIG_API_KEY;
+    mockTankerkoenigKey = undefined;
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
     const result = await fuelProvider.getDetail(`tankerkoenig/${uuid}`);
@@ -233,7 +240,7 @@ describe("fuelProvider.getDetail", () => {
   });
 
   it("tankerkoenig/ API fetch failure falls through to cache/fallback", async () => {
-    vi.stubEnv("TANKERKOENIG_API_KEY", "test-key");
+    mockTankerkoenigKey = "test-key";
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
     mockFetch.mockRejectedValue(new Error("Network error"));

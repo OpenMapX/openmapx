@@ -6,7 +6,6 @@ export function setup(ctx: IntegrationContext): void {
   const url =
     resolved?.url ??
     (ctx.config.endpoint as string | undefined) ??
-    process.env.VALHALLA_URL ??
     "https://valhalla1.openstreetmap.de";
 
   setValhallaUrl(url);

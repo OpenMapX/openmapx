@@ -7,7 +7,7 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
-import { searchFuelStations } from "./factory.js";
+import { getTankerkoenigApiKey, searchFuelStations } from "./factory.js";
 import {
   buildTankerkoenigDetail,
   mapFuelStationToDetail,
@@ -143,7 +143,7 @@ class FuelDataSourceProvider implements DataSourceProvider {
     // Tankerkoenig stations: fetch enriched detail from their API
     if (itemId.startsWith("tankerkoenig/")) {
       const uuid = itemId.replace(/^tankerkoenig\//, "");
-      const apiKey = process.env.TANKERKOENIG_API_KEY;
+      const apiKey = getTankerkoenigApiKey();
 
       if (apiKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
         try {

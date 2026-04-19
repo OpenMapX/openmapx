@@ -29,7 +29,6 @@
       }
     }
   },
-  "envVars": [],
   "quality": "built-in",
   "category": "Map Overlays"
 }

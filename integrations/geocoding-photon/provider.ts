@@ -9,7 +9,8 @@ import type { GeocodingProviderImpl } from "./types.js";
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import { resolvePoiIconPath } from "@openmapx/core";
 
-let PHOTON_URL = process.env.PHOTON_URL ?? "https://photon.komoot.io";
+// Populated by setup(ctx); see setPhotonUrl.
+let PHOTON_URL = "https://photon.komoot.io";
 
 /** Update the Photon base URL (called from setup() when service registry resolves it). */
 export function setPhotonUrl(url: string): void {

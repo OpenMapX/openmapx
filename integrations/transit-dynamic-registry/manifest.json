@@ -6,7 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": [],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -14,6 +13,12 @@
         "type": "boolean",
         "default": true,
         "description": "Enable dynamic transit registry"
+      },
+      "githubToken": {
+        "type": "string",
+        "title": "GitHub token",
+        "description": "Optional GitHub API token. Raises the unauthenticated 60/hr rate limit to 5000/hr when fetching the registry from api.github.com.",
+        "x-openmapx-secret": true
       }
     }
   },

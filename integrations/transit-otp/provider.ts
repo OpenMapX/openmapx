@@ -26,7 +26,7 @@ export function setOtpUrl(url: string): void {
   OTP_BASE_URL = url;
 }
 
-const OTP_URL = () => OTP_BASE_URL ?? process.env.OTP_URL ?? "http://localhost:8090";
+const OTP_URL = () => OTP_BASE_URL ?? "http://localhost:8090";
 
 export async function isOtpAvailable(): Promise<boolean> {
   try {

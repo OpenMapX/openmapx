@@ -32,9 +32,21 @@ const healthCheckSchema = z.object({
   name: z.string().optional(),
   type: z.enum(["http", "ping", "tcp", "custom"]),
   url: z.string().optional(),
+  /**
+   * Template with `${configKey}` placeholders resolved from the integration's
+   * configSchema cascade (defaults → database → vault → env). Use this when
+   * the probe needs an API key or similar; the placeholder name must match a
+   * key declared in `configSchema.properties`.
+   */
   urlTemplate: z.string().optional(),
+  /** Same substitution rules as `urlTemplate`. */
   headers: z.record(z.string(), z.string()).optional(),
-  requiredEnvVars: z.array(z.string()).optional(),
+  /**
+   * configSchema keys that must resolve to a non-empty value for the probe
+   * to run. When any is missing, the health check reports "unconfigured"
+   * instead of attempting the request.
+   */
+  requiredConfigKeys: z.array(z.string()).optional(),
   category: z.string().optional(),
 });
 
@@ -88,20 +100,6 @@ const requireEntrySchema = z
   });
 
 /**
- * Per-env-var metadata. When a bare string is used in `envVars`, the variable is
- * treated as required (historical default).
- */
-const envVarEntrySchema = z.object({
-  name: z.string(),
-  /** Whether the variable must be set for the integration to function. Defaults to true. */
-  required: z.boolean().optional(),
-  /** Human-readable purpose shown in the admin UI. */
-  description: z.string().optional(),
-});
-
-const envVarSchema = z.union([z.string(), envVarEntrySchema]);
-
-/**
  * Slug regex shared with the service manifest schema. The id is used as a
  * filesystem directory name (`integrations/<id>/`, `custom_integrations/<id>/`)
  * and as a string literal in generated code (the community bundle entry stub
@@ -131,7 +129,6 @@ export const integrationManifestSchema = z.object({
   backend: backendSchema.optional(),
 
   configSchema: z.record(z.string(), z.unknown()).optional(),
-  envVars: z.array(envVarSchema).optional(),
 
   healthCheck: z.union([healthCheckSchema, z.array(healthCheckSchema)]).optional(),
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
@@ -149,26 +146,6 @@ export type IntegrationFrontend = z.infer<typeof frontendSchema>;
 export type IntegrationLayerSelector = z.infer<typeof layerSelectorSchema>;
 export type IntegrationOverlay = z.infer<typeof overlaySchema>;
 export type IntegrationSearchCategory = z.infer<typeof searchCategorySchema>;
-export type IntegrationEnvVar = z.infer<typeof envVarSchema>;
-
-export interface NormalizedEnvVar {
-  name: string;
-  required: boolean;
-  description?: string;
-}
-
-/**
- * Normalize `manifest.envVars` to the object form. Bare strings are treated as
- * required variables (historical behavior).
- */
-export function normalizeEnvVars(envVars: IntegrationManifest["envVars"]): NormalizedEnvVar[] {
-  if (!envVars) return [];
-  return envVars.map((v) =>
-    typeof v === "string"
-      ? { name: v, required: true }
-      : { name: v.name, required: v.required ?? true, description: v.description },
-  );
-}
 
 export interface ManifestValidationResult {
   valid: boolean;
@@ -189,13 +166,6 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
     }
     // dataSources is encouraged for integrations with backend routes but not enforced —
     // orchestrator integrations aggregate providers that declare their own data sources.
-    // Health check policy: required for integrations with envVars (external APIs)
-    // or backend services (databases, etc.)
-    if (manifest.envVars?.length && !manifest.healthCheck) {
-      errors.push(
-        "manifest.healthCheck is required for integrations with external API dependencies (envVars)",
-      );
-    }
     // Only enforce healthCheck for required (non-optional) service dependencies.
     // Optional capability requirements (e.g. on orchestrator integrations) don't mandate a healthCheck.
     const hasRequiredServiceDep = manifest.requires?.some((r) => r.optional !== true && r.service);

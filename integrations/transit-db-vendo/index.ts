@@ -2,6 +2,7 @@ import type { IntegrationContext } from "@openmapx/core";
 import * as dbVendo from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  dbVendo.setDbVendoUserAgent(ctx.config.userAgent as string | undefined);
   ctx.registerProvider("transit", {
     id: "transit-db-vendo",
     prefix: "db:",

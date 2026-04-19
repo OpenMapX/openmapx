@@ -14,11 +14,18 @@ const BASE_URLS = {
 
 export type RisApi = keyof typeof BASE_URLS;
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let cachedClientId: string | undefined;
+let cachedApiKey: string | undefined;
+
+export function setRisCredentials(creds: { clientId?: string; apiKey?: string }): void {
+  cachedClientId = creds.clientId && creds.clientId.length > 0 ? creds.clientId : undefined;
+  cachedApiKey = creds.apiKey && creds.apiKey.length > 0 ? creds.apiKey : undefined;
+}
+
 function getCredentials(): { clientId: string; apiKey: string } | null {
-  const clientId = process.env.DB_RIS_CLIENT_ID;
-  const apiKey = process.env.DB_RIS_API_KEY;
-  if (!clientId || !apiKey) return null;
-  return { clientId, apiKey };
+  if (!cachedClientId || !cachedApiKey) return null;
+  return { clientId: cachedClientId, apiKey: cachedApiKey };
 }
 
 export function isRisConfigured(): boolean {

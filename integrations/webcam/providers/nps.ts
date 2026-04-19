@@ -4,8 +4,14 @@ import type { RawWebcam } from "./types.js";
 
 const NPS_BASE = "https://developer.nps.gov/api/v1";
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let npsApiKey: string | undefined;
+export function setNpsApiKey(value: string | undefined): void {
+  npsApiKey = value && value.length > 0 ? value : undefined;
+}
+
 function getApiKey(): string {
-  return process.env.NPS_API_KEY || "DEMO_KEY";
+  return npsApiKey ?? "DEMO_KEY";
 }
 
 interface NpsWebcam {

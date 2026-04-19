@@ -25,8 +25,14 @@ const MODE_MAP: Record<string, TransportMode> = {
   "cable-car": "cable_car",
 };
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let tflApiKey: string | null = null;
+export function setTflApiKey(value: string | undefined): void {
+  tflApiKey = value && value.length > 0 ? value : null;
+}
+
 function apiKey(): string | null {
-  return process.env.TFL_API_KEY ?? null;
+  return tflApiKey;
 }
 
 function mapTflMode(modeName: string): TransportMode {

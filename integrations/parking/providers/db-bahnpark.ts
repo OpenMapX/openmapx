@@ -16,11 +16,18 @@ const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 
 let facilityCache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let cachedClientId: string | undefined;
+let cachedApiKey: string | undefined;
+
+export function setBahnParkCredentials(creds: { clientId?: string; apiKey?: string }): void {
+  cachedClientId = creds.clientId && creds.clientId.length > 0 ? creds.clientId : undefined;
+  cachedApiKey = creds.apiKey && creds.apiKey.length > 0 ? creds.apiKey : undefined;
+}
+
 function getCredentials(): { clientId: string; apiKey: string } | null {
-  const clientId = process.env.DB_PARKING_CLIENT_ID;
-  const apiKey = process.env.DB_PARKING_API_KEY;
-  if (!clientId || !apiKey) return null;
-  return { clientId, apiKey };
+  if (!cachedClientId || !cachedApiKey) return null;
+  return { clientId: cachedClientId, apiKey: cachedApiKey };
 }
 
 export function isBahnParkConfigured(): boolean {

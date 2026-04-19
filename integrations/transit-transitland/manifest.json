@@ -6,7 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": ["TRANSIT_LAND_API_KEY"],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -27,8 +26,8 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://transit.land/api/v2/rest/stops?lat=52.52&lon=13.405&radius=100&limit=1&api_key=${TRANSIT_LAND_API_KEY}",
-    "requiredEnvVars": ["TRANSIT_LAND_API_KEY"]
+    "urlTemplate": "https://transit.land/api/v2/rest/stops?lat=52.52&lon=13.405&radius=100&limit=1&api_key=${apiKey}",
+    "requiredConfigKeys": ["apiKey"]
   },
   "dataSources": [
     {

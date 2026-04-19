@@ -9,7 +9,6 @@
     "dataRequirements": ["osm-pbf", "gtfs-feeds"]
   },
   "category": "Transit",
-  "envVars": [],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -17,6 +16,28 @@
         "type": "boolean",
         "default": true,
         "description": "Enable MOTIS/Transitous transit integration"
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "Local MOTIS endpoint URL",
+        "description": "Base URL of a self-hosted MOTIS server. Leave blank to rely on the `motis` service registry entry.",
+        "format": "url"
+      },
+      "transitousUrl": {
+        "type": "string",
+        "title": "Transitous endpoint URL",
+        "description": "Base URL of the cloud Transitous instance.",
+        "format": "url"
+      },
+      "transitousUserAgent": {
+        "type": "string",
+        "title": "User-Agent override",
+        "description": "Override the User-Agent header for Transitous requests."
+      },
+      "dataDir": {
+        "type": "string",
+        "title": "MOTIS data directory",
+        "description": "Filesystem path to the MOTIS data directory (for `license.json` attribution lookup)."
       }
     }
   },

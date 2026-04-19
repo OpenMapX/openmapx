@@ -110,7 +110,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export function setup(ctx: IntegrationContext): void {
-  const apiKey = ctx.config.OWM_API_KEY as string | undefined;
+  const apiKey = ctx.config.apiKey as string | undefined;
   if (!apiKey) return;
 
   const provider: WeatherProvider = {

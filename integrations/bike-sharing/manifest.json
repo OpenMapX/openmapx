@@ -26,7 +26,8 @@
       "clientId": {
         "type": "string",
         "title": "Client ID",
-        "description": "Deutsche Bahn GBFS client ID."
+        "description": "Deutsche Bahn GBFS client ID.",
+        "x-openmapx-secret": true
       },
       "apiKey": {
         "type": "string",
@@ -36,7 +37,6 @@
       }
     }
   },
-  "envVars": ["DB_GBFS_CLIENT_ID", "DB_GBFS_API_KEY"],
   "healthCheck": [
     {
       "name": "Nextbike",

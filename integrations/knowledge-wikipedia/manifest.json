@@ -16,7 +16,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://en.wikipedia.org/w/api.php?action=query&format=json&titles=Main_Page&prop=extracts&exintro=1&exlimit=1"

@@ -46,9 +46,6 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   writeFileSync(paths.composeOutPath, result.composeYaml, "utf-8");
   const hardlinkPath = join(paths.infraDir, "docker-compose.generated.hardlinks.json");
   writeFileSync(hardlinkPath, JSON.stringify(result.hardlinkPlan, null, 2), "utf-8");
-  if (result.envFile) {
-    writeFileSync(paths.envOutPath, result.envFile, "utf-8");
-  }
   return {
     servicesRendered: enabled.length,
     composePath: paths.composeOutPath,

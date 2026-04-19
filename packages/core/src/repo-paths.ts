@@ -55,7 +55,6 @@ export interface RepoPaths {
   customIntegrationsDir: string;
   infraDir: string;
   composeOutPath: string;
-  envOutPath: string;
 }
 
 export function repoPaths(start?: string): RepoPaths {
@@ -68,6 +67,5 @@ export function repoPaths(start?: string): RepoPaths {
     customIntegrationsDir: join(root, "custom_integrations"),
     infraDir: join(root, "infra", "docker"),
     composeOutPath: join(root, "infra", "docker", "docker-compose.generated.yml"),
-    envOutPath: join(root, "infra", "docker", ".env.generated"),
   };
 }

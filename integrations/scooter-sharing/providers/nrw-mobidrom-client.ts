@@ -42,12 +42,24 @@ const FEED_CACHE_MS = 2 * 60 * 1000; // 2 min (feed updates every 5 min)
 // NRW bounding box for fast pre-filter (full federal state)
 const COVERAGE_BBOX: BoundingBox = { south: 50.32, west: 5.87, north: 52.53, east: 9.46 };
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let configuredClientId: string | undefined;
+let configuredClientSecret: string | undefined;
+
+export function setNrwMobidromCredentials(creds: {
+  clientId?: string;
+  clientSecret?: string;
+}): void {
+  configuredClientId = creds.clientId?.trim() || undefined;
+  configuredClientSecret = creds.clientSecret?.trim() || undefined;
+}
+
 function clientId(): string {
-  return process.env.NRW_MOBIDROM_CLIENT_ID?.trim() || DEFAULT_CLIENT_ID;
+  return configuredClientId ?? DEFAULT_CLIENT_ID;
 }
 
 function clientSecret(): string {
-  return process.env.NRW_MOBIDROM_CLIENT_SECRET?.trim() || DEFAULT_CLIENT_SECRET;
+  return configuredClientSecret ?? DEFAULT_CLIENT_SECRET;
 }
 
 interface TokenCache {

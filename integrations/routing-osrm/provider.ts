@@ -7,7 +7,10 @@ import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@
 import { USER_AGENT } from "@openmapx/core";
 import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
 
-let OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
+// Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
+// already folds in `INTEGRATION_ROUTING_OSRM_ENDPOINT` + legacy `OSRM_URL`
+// env aliases via the core config resolver) → hardcoded fallback.
+let OSRM_URL = "https://router.project-osrm.org";
 
 /** Update the OSRM base URL (called from setup() when service registry resolves it). */
 export function setOsrmUrl(url: string): void {

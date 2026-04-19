@@ -20,7 +20,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "ping",
     "url": "https://overpass-api.de/api/status"

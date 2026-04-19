@@ -508,9 +508,5 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
 
   const composeYaml = yamlDump(composeDoc, { lineWidth: 120, noRefs: true });
 
-  const envLines: string[] = [];
-  if (ctx.domain) envLines.push(`DOMAIN=${ctx.domain}`);
-  const envFile = envLines.join("\n") + (envLines.length ? "\n" : "");
-
-  return { composeYaml, envFile, hardlinkPlan };
+  return { composeYaml, hardlinkPlan };
 }

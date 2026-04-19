@@ -5,10 +5,7 @@ export function setup(ctx: IntegrationContext): void {
   // Resolve OTP URL from the service registry if available.
   const resolved = ctx.getRequiredService("otp");
   const url =
-    resolved?.url ??
-    (ctx.config.endpoint as string | undefined) ??
-    process.env.OTP_URL ??
-    "http://localhost:8090";
+    resolved?.url ?? (ctx.config.endpoint as string | undefined) ?? "http://localhost:8090";
   setOtpUrl(url);
 
   // Only register if OTP is available

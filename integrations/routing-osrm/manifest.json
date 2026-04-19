@@ -18,10 +18,15 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "OSRM endpoint URL",
+        "description": "Base URL of the OSRM server. Leave blank to use the public demo or a self-hosted service resolved via the `osrm` capability.",
+        "format": "url"
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "ping",
     "url": "https://router.project-osrm.org/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false"

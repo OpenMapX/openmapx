@@ -32,7 +32,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": [
     {
       "name": "NASA EONET",

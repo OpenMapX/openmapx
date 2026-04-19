@@ -23,11 +23,10 @@
       }
     }
   },
-  "envVars": ["FLICKR_API_KEY"],
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=${FLICKR_API_KEY}&lat=0&lon=0&radius=1&per_page=1&format=json&nojsoncallback=1",
-    "requiredEnvVars": ["FLICKR_API_KEY"]
+    "urlTemplate": "https://api.flickr.com/services/rest/?method=flickr.photos.search&api_key=${apiKey}&lat=0&lon=0&radius=1&per_page=1&format=json&nojsoncallback=1",
+    "requiredConfigKeys": ["apiKey"]
   },
   "quality": "built-in",
   "category": "External",

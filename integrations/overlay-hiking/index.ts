@@ -23,6 +23,10 @@ function round(n: number, decimals: number): number {
 }
 
 export function setup(ctx: IntegrationContext): void {
+  const tileUrl =
+    (ctx.config.tileUrl as string | undefined) ??
+    "https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png";
+
   ctx.registerRoute("GET", "/tiles/:z/:x/:y.png", async (req, reply) => {
     const z = Number(req.params.z);
     const x = Number(req.params.x);
@@ -32,9 +36,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const baseUrl =
-      process.env.WAYMARKED_HIKING_TILE_URL ??
-      "https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png";
+    const baseUrl = tileUrl;
     const url = baseUrl
       .replace("{z}", String(z))
       .replace("{x}", String(x))

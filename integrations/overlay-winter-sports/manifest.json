@@ -27,10 +27,15 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "tileUrl": {
+        "type": "string",
+        "title": "Tile URL template",
+        "description": "Tile URL with `{z}/{x}/{y}` placeholders. Defaults to the OpenSnowMap pistes tileset.",
+        "format": "url"
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://tiles.opensnowmap.org/pistes/0/0/0.png"

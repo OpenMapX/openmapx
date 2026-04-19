@@ -18,7 +18,8 @@
       "clientId": {
         "type": "string",
         "title": "Client ID",
-        "description": "Deutsche Bahn RIS API client ID."
+        "description": "Deutsche Bahn RIS API client ID.",
+        "x-openmapx-secret": true
       },
       "apiKey": {
         "type": "string",
@@ -29,10 +30,9 @@
       }
     }
   },
-  "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
   "healthCheck": {
     "type": "custom",
-    "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"]
+    "requiredConfigKeys": ["clientId", "apiKey"]
   },
   "quality": "built-in",
   "category": "Geocoding",

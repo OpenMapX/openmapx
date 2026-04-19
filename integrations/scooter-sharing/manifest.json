@@ -22,6 +22,18 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "nrwMobidromClientId": {
+        "type": "string",
+        "title": "NRW Mobidrom Client ID",
+        "description": "OAuth2 client ID override for the NRW Mobidrom GBFS API. Defaults to the publicly documented 'gbfs-api' client.",
+        "x-openmapx-secret": true
+      },
+      "nrwMobidromClientSecret": {
+        "type": "string",
+        "title": "NRW Mobidrom Client Secret",
+        "description": "OAuth2 client secret override for the NRW Mobidrom GBFS API. Defaults to the publicly documented secret (see dataset page).",
+        "x-openmapx-secret": true
       }
     }
   },
@@ -115,18 +127,6 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
-    }
-  ],
-  "envVars": [
-    {
-      "name": "NRW_MOBIDROM_CLIENT_ID",
-      "required": false,
-      "description": "OAuth2 client ID override for the NRW Mobidrom GBFS API. Defaults to the publicly documented 'gbfs-api' client."
-    },
-    {
-      "name": "NRW_MOBIDROM_CLIENT_SECRET",
-      "required": false,
-      "description": "OAuth2 client secret override for the NRW Mobidrom GBFS API. Defaults to the publicly documented secret (see dataset page)."
     }
   ]
 }

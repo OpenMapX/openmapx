@@ -47,7 +47,6 @@ export interface IntegrationSummary {
   isBuiltIn: boolean;
   enabled: boolean;
   configured: boolean;
-  envVarsSet: Record<string, boolean>;
   hasHealthCheck: boolean;
   health: { status: "up" | "down" | "unconfigured"; responseTime?: number; error?: string } | null;
   dependencies: string[];

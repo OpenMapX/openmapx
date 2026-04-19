@@ -158,7 +158,7 @@ export function generatePrivacySectionsFromManifests(
   >();
 
   for (const integration of integrations) {
-    if (!integration.enabled || !integration.configured) continue;
+    if (!integration.enabled) continue;
 
     const sources = integration.dataSources;
     if (!sources?.length) continue;
@@ -206,7 +206,7 @@ export function generateAttributionSectionsFromManifests(
   const grouped = new Map<string, { heading: string; headingDe: string; rows: AttributionRow[] }>();
 
   for (const integration of integrations) {
-    if (!integration.enabled || !integration.configured) continue;
+    if (!integration.enabled) continue;
 
     const sources = integration.dataSources;
     if (!sources?.length) continue;

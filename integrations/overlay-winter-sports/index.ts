@@ -1,6 +1,10 @@
 import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
 
 export function setup(ctx: IntegrationContext): void {
+  const tileUrl =
+    (ctx.config.tileUrl as string | undefined) ??
+    "https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png";
+
   ctx.registerRoute("GET", "/tiles/:z/:x/:y.png", async (req, reply) => {
     const z = Number(req.params.z);
     const x = Number(req.params.x);
@@ -10,8 +14,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const baseUrl =
-      process.env.OPENSNOWMAP_TILE_URL ?? "https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png";
+    const baseUrl = tileUrl;
     const url = baseUrl
       .replace("{z}", String(z))
       .replace("{x}", String(x))

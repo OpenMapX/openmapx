@@ -6,7 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": [],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -14,6 +13,11 @@
         "type": "boolean",
         "default": true,
         "description": "Enable DB Vendo transit integration"
+      },
+      "userAgent": {
+        "type": "string",
+        "title": "User-Agent override",
+        "description": "Override the User-Agent header sent to db-vendo endpoints."
       }
     }
   },

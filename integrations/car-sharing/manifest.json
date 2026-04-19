@@ -25,7 +25,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": [
     {
       "name": "Cambio",

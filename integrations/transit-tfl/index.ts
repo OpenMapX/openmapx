@@ -2,6 +2,7 @@ import type { IntegrationContext } from "@openmapx/core";
 import * as tfl from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  tfl.setTflApiKey(ctx.config.apiKey as string | undefined);
   ctx.registerProvider("transit", {
     id: "transit-tfl",
     prefix: "tfl:",

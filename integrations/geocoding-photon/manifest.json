@@ -14,10 +14,15 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "Photon endpoint URL",
+        "description": "Base URL of the Photon server. Leave blank to use the public Komoot instance or a self-hosted service resolved via the `photon` capability.",
+        "format": "url"
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://photon.komoot.io/api?q=test&limit=1"

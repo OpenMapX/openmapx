@@ -6,7 +6,6 @@ export function setup(ctx: IntegrationContext): void {
   const url =
     resolved?.url ??
     (ctx.config.endpoint as string | undefined) ??
-    process.env.OSRM_URL ??
     "https://router.project-osrm.org";
 
   setOsrmUrl(url);

@@ -11,7 +11,6 @@ import {
   type IntegrationStrings,
   type LoadedIntegration,
   type Logger,
-  normalizeEnvVars,
   PLATFORM_VERSION,
   type RouteHandler,
   type RouteOptions,
@@ -144,12 +143,18 @@ export async function resolveConfigWithSources(
   const result: Record<string, ConfigValueWithSource> = {};
   const schema = manifest.configSchema as Record<string, unknown> | undefined;
   const knownKeys = new Set<string>();
+  // Uppercased config key → canonical (original-case) key. Used to match env
+  // vars like `INTEGRATION_PHOTOS_FLICKR_APIKEY` against configSchema key
+  // `apiKey` without forcing operators to lowercase the suffix (or forcing
+  // schema authors to pick all-lowercase keys).
+  const upperToKey = new Map<string, string>();
 
   if (schema) {
     const props = (schema.properties ?? schema) as Record<string, { default?: unknown }>;
     for (const [key, def] of Object.entries(props)) {
       if (key === "type" || key === "properties") continue;
       knownKeys.add(key);
+      upperToKey.set(key.toUpperCase(), key);
       if (def && typeof def === "object" && "default" in def && def.default !== undefined) {
         result[key] = { value: def.default, source: "default" };
       }
@@ -197,12 +202,17 @@ export async function resolveConfigWithSources(
     }
   }
 
+  // Env layer — highest priority. Pattern: `INTEGRATION_<ID>_<KEY>` (upper-cased
+  // id with hyphens replaced by underscores, then the upper-cased config key).
+  // Matching is case-insensitive on the configSchema key so both snake_case
+  // and camelCase keys work (`apiKey` matches `INTEGRATION_X_APIKEY`).
   const prefix = `INTEGRATION_${manifest.id.replace(/-/g, "_").toUpperCase()}_`;
   for (const [envKey, envVal] of Object.entries(process.env)) {
-    if (envKey.startsWith(prefix) && envVal !== undefined) {
-      const key = envKey.slice(prefix.length).toLowerCase();
-      if (knownKeys.has(key)) result[key] = { value: envVal, source: "env" };
-    }
+    if (envVal === undefined) continue;
+    if (!envKey.startsWith(prefix)) continue;
+    const rest = envKey.slice(prefix.length);
+    const canonical = upperToKey.get(rest);
+    if (canonical) result[canonical] = { value: envVal, source: "env" };
   }
 
   return result;
@@ -212,7 +222,6 @@ async function resolveConfig(
   manifest: {
     id: string;
     configSchema?: Record<string, unknown>;
-    envVars?: IntegrationManifest["envVars"];
   },
   directory: string,
 ): Promise<Record<string, unknown>> {
@@ -221,15 +230,6 @@ async function resolveConfig(
   for (const [key, entry] of Object.entries(withSources)) {
     config[key] = entry.value;
   }
-
-  // Also load env vars declared in manifest (legacy direct-access pattern)
-  for (const entry of normalizeEnvVars(manifest.envVars)) {
-    const val = process.env[entry.name];
-    if (val !== undefined) {
-      config[entry.name] = val;
-    }
-  }
-
   return config;
 }
 

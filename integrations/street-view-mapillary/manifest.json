@@ -37,11 +37,10 @@
       }
     }
   },
-  "envVars": ["MAPILLARY_TOKEN"],
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://graph.mapillary.com/images?access_token=${MAPILLARY_TOKEN}&fields=id&limit=1",
-    "requiredEnvVars": ["MAPILLARY_TOKEN"]
+    "urlTemplate": "https://graph.mapillary.com/images?access_token=${accessToken}&fields=id&limit=1",
+    "requiredConfigKeys": ["accessToken"]
   },
   "quality": "built-in",
   "category": "Imagery",

@@ -6,7 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -17,7 +16,8 @@
       "clientId": {
         "type": "string",
         "title": "Client ID",
-        "description": "Deutsche Bahn RIS API client ID."
+        "description": "Deutsche Bahn RIS API client ID.",
+        "x-openmapx-secret": true
       },
       "apiKey": {
         "type": "string",
@@ -34,7 +34,7 @@
   "healthCheck": {
     "type": "ping",
     "url": "https://apis.deutschebahn.com/db/apis/ris-routing/v2",
-    "requiredEnvVars": ["DB_RIS_CLIENT_ID", "DB_RIS_API_KEY"]
+    "requiredConfigKeys": ["clientId", "apiKey"]
   },
   "dataSources": [
     {

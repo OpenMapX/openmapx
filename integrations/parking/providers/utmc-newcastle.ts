@@ -63,11 +63,18 @@ const COVERAGE_BBOX = { south: 54.85, west: -1.8, north: 55.1, east: -1.4 };
 let staticCache: { carParks: UtmcStaticCarPark[]; fetchedAt: number } | null = null;
 let dynamicCache: { carParks: Map<string, UtmcDynamicCarPark>; fetchedAt: number } | null = null;
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let cachedUsername: string | undefined;
+let cachedPassword: string | undefined;
+
+export function setUtmcCredentials(creds: { username?: string; password?: string }): void {
+  cachedUsername = creds.username && creds.username.length > 0 ? creds.username : undefined;
+  cachedPassword = creds.password && creds.password.length > 0 ? creds.password : undefined;
+}
+
 function getCredentials(): { username: string; password: string } | null {
-  const username = process.env.UTMC_USERNAME;
-  const password = process.env.UTMC_PASSWORD;
-  if (!username || !password) return null;
-  return { username, password };
+  if (!cachedUsername || !cachedPassword) return null;
+  return { username: cachedUsername, password: cachedPassword };
 }
 
 function overlapsCoverage(bbox: BoundingBox): boolean {

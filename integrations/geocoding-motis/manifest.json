@@ -17,10 +17,21 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "Local MOTIS endpoint URL",
+        "description": "Base URL of a self-hosted MOTIS server. Leave blank to rely on the `motis` service registry entry.",
+        "format": "url"
+      },
+      "transitousUrl": {
+        "type": "string",
+        "title": "Transitous endpoint URL",
+        "description": "Base URL of the cloud Transitous instance (fallback when local MOTIS is unreachable).",
+        "format": "url"
       }
     }
   },
-  "envVars": ["MOTIS_URL"],
   "healthCheck": {
     "type": "http",
     "url": "https://europe.motis-project.de/api/v1/geocode?text=test"

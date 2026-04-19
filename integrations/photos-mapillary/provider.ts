@@ -13,12 +13,18 @@ interface MapillaryImageResponse {
   }>;
 }
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let accessToken: string | undefined;
+export function setMapillaryAccessToken(value: string | undefined): void {
+  accessToken = value && value.length > 0 ? value : undefined;
+}
+
 export const mapillaryPhotoProvider: PhotoProvider = {
   id: "mapillary",
   name: "Mapillary",
 
   async search(query: PhotoQuery): Promise<PlacePhoto[]> {
-    const token = process.env.MAPILLARY_TOKEN;
+    const token = accessToken;
     if (!token) return [];
 
     const limit = query.limit ?? 6;

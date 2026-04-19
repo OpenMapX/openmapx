@@ -26,11 +26,18 @@ interface CachedData {
 const cache = new Map<string, CachedData>();
 const CACHE_TTL_MS = 120_000; // 2 min
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let cachedClientId: string | undefined;
+let cachedApiKey: string | undefined;
+
+export function setDbBikeCredentials(creds: { clientId?: string; apiKey?: string }): void {
+  cachedClientId = creds.clientId && creds.clientId.length > 0 ? creds.clientId : undefined;
+  cachedApiKey = creds.apiKey && creds.apiKey.length > 0 ? creds.apiKey : undefined;
+}
+
 function getCredentials(): { clientId: string; apiKey: string } | null {
-  const clientId = process.env.DB_GBFS_CLIENT_ID;
-  const apiKey = process.env.DB_GBFS_API_KEY;
-  if (!clientId || !apiKey) return null;
-  return { clientId, apiKey };
+  if (!cachedClientId || !cachedApiKey) return null;
+  return { clientId: cachedClientId, apiKey: cachedApiKey };
 }
 
 async function fetchJson<T>(

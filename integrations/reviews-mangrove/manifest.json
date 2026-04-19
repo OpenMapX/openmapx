@@ -17,7 +17,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://api.mangrove.reviews/reviews?limit=1"

@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import type { AutocompleteResult, IntegrationContext } from "@openmapx/core";
 import { registerPlaceResolver } from "@openmapx/core/server";
 import { MemCache } from "./mem-cache.js";
-import { getGeocodingProvider } from "./orchestrator.js";
-import { lookupByOsmRef } from "./place-lookup.js";
+import { getGeocodingProvider, setConfiguredProviderList } from "./orchestrator.js";
+import { lookupByOsmRef, setPlaceLookupNominatimUrl } from "./place-lookup.js";
 import { expandSearchQuery, fetchWithVariants } from "./query-expansion.js";
 
 /** Build a short hash key from a prefix + arbitrary data. */
@@ -29,6 +29,9 @@ const MEM_HARD_MS = 2 * 3600_000;
 const memCache = new MemCache<AutocompleteResult[]>(1000);
 
 export function setup(ctx: IntegrationContext): void {
+  setConfiguredProviderList(ctx.config.provider as string | undefined);
+  setPlaceLookupNominatimUrl(ctx.config.nominatimUrl as string | undefined);
+
   // OSM primary-id dispatch: when a Place.id arrives as `osm:node/123`,
   // resolve it via Nominatim's OSM-ref detail lookup.
   registerPlaceResolver("osm", async (value, resolverCtx) => {

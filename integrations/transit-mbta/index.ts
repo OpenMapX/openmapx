@@ -2,6 +2,7 @@ import type { IntegrationContext } from "@openmapx/core";
 import * as mbta from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  mbta.setMbtaApiKey(ctx.config.apiKey as string | undefined);
   ctx.registerProvider("transit", {
     id: "transit-mbta",
     prefix: "mb:",

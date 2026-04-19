@@ -183,13 +183,19 @@ function parseEntry(path: string, json: any): RegistryEntry | null {
   };
 }
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let githubToken: string | undefined;
+export function setGithubToken(value: string | undefined): void {
+  githubToken = value && value.length > 0 ? value : undefined;
+}
+
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const headers: Record<string, string> = {};
-    if (process.env.GITHUB_TOKEN && url.includes("api.github.com")) {
-      headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
+    if (githubToken && url.includes("api.github.com")) {
+      headers.Authorization = `token ${githubToken}`;
     }
     return await fetch(url, { signal: controller.signal, headers });
   } finally {

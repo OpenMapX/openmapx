@@ -30,7 +30,6 @@ export type { IntegrationStrings, LoadedIntegration, LoadedIntegrationMeta } fro
 export { toIntegrationMeta } from "./loader";
 export type {
   IntegrationDataSource,
-  IntegrationEnvVar,
   IntegrationFrontend,
   IntegrationHealthCheck,
   IntegrationLayerSelector,
@@ -38,12 +37,10 @@ export type {
   IntegrationOverlay,
   IntegrationSearchCategory,
   ManifestValidationResult,
-  NormalizedEnvVar,
 } from "./manifest";
 export {
   INTEGRATION_ID_REGEX,
   integrationManifestSchema,
-  normalizeEnvVars,
   validateManifest,
 } from "./manifest";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";

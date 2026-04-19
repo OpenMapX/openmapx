@@ -12,13 +12,24 @@ const ALL_PROVIDERS: FuelPriceProvider[] = [
   new AustriaService(),
 ];
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let _tankerkoenigKey: string | undefined;
 let _tankerkoenig: FuelPriceProvider | null | undefined;
+
+export function setTankerkoenigApiKey(value: string | undefined): void {
+  _tankerkoenigKey = value && value.length > 0 ? value : undefined;
+  // Reset the memoised provider so the next call picks up the new key.
+  _tankerkoenig = undefined;
+}
 
 function getTankerkoenig(): FuelPriceProvider | null {
   if (_tankerkoenig !== undefined) return _tankerkoenig;
-  const key = process.env.TANKERKOENIG_API_KEY;
-  _tankerkoenig = key ? new TankerkoenigService(key) : null;
+  _tankerkoenig = _tankerkoenigKey ? new TankerkoenigService(_tankerkoenigKey) : null;
   return _tankerkoenig;
+}
+
+export function getTankerkoenigApiKey(): string | undefined {
+  return _tankerkoenigKey;
 }
 
 function activeProviders(bbox: BoundingBox): FuelPriceProvider[] {

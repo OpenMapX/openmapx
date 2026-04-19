@@ -31,13 +31,12 @@
       }
     }
   },
-  "envVars": ["TANKERKOENIG_API_KEY"],
   "healthCheck": [
     {
       "name": "Tankerkoenig (DE)",
       "type": "http",
-      "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${TANKERKOENIG_API_KEY}",
-      "requiredEnvVars": ["TANKERKOENIG_API_KEY"]
+      "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${apiKey}",
+      "requiredConfigKeys": ["apiKey"]
     },
     {
       "name": "E-Control (AT)",

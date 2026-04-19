@@ -31,7 +31,12 @@ function buildIds(result: NominatimDetailResult, requestId: string): PlaceIds {
   return ids;
 }
 
-const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
+// Populated by setup(ctx) from the resolved integration config cascade.
+let NOMINATIM_URL = "https://nominatim.openstreetmap.org";
+export function setPlaceLookupNominatimUrl(value: string | undefined): void {
+  NOMINATIM_URL = value && value.length > 0 ? value : "https://nominatim.openstreetmap.org";
+}
+
 const DEFAULT_HEADERS = {
   "User-Agent": USER_AGENT,
   "Accept-Language": "en",

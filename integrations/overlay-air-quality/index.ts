@@ -279,7 +279,7 @@ async function resolveLatestValues(
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/air-quality/stations", async (req, reply) => {
-    const apiKey = ctx.config.OPENAQ_API_KEY as string | undefined;
+    const apiKey = ctx.config.apiKey as string | undefined;
     if (!apiKey) {
       reply.status(503).send({ message: "Air quality is not configured" });
       return;

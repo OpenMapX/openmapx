@@ -28,10 +28,15 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "tileUrl": {
+        "type": "string",
+        "title": "Tile URL template",
+        "description": "Tile URL with `{z}/{x}/{y}` placeholders. Defaults to the Waymarked Trails hiking tileset.",
+        "format": "url"
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://hiking.waymarkedtrails.org/api/v1/list/search?query=test&limit=1"

@@ -15,8 +15,14 @@ const GTFS_MODE_MAP: Record<number, TransportMode> = {
   12: "monorail",
 };
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let transitlandApiKey: string | null = null;
+export function setTransitlandApiKey(value: string | undefined): void {
+  transitlandApiKey = value && value.length > 0 ? value : null;
+}
+
 function apiKey(): string | null {
-  return process.env.TRANSIT_LAND_API_KEY ?? null;
+  return transitlandApiKey;
 }
 
 async function tlFetch<T>(path: string, params: Record<string, string>): Promise<T | null> {

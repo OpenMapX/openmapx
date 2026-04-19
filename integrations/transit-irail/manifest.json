@@ -6,7 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": [],
   "configSchema": {
     "type": "object",
     "properties": {

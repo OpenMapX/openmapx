@@ -13,11 +13,16 @@
       "showInChipBar": true
     }
   },
-  "backend": { "routes": false },
+  "backend": {
+    "routes": false
+  },
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": { "type": "boolean", "default": true },
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
       "apiKey": {
         "type": "string",
         "title": "Windy Webcams API Key",
@@ -86,32 +91,21 @@
       }
     }
   },
-  "envVars": [
-    "WINDY_WEBCAMS_API_KEY",
-    "NPS_API_KEY",
-    "DOT_GA_API_KEY",
-    "DOT_FL_API_KEY",
-    "DOT_AZ_API_KEY",
-    "DOT_ID_API_KEY",
-    "DOT_UT_API_KEY",
-    "DOT_LA_API_KEY",
-    "DOT_PA_API_KEY",
-    "DOT_SC_API_KEY",
-    "DOT_MA_API_KEY"
-  ],
   "healthCheck": [
     {
       "name": "Windy Webcams",
       "type": "http",
       "urlTemplate": "https://api.windy.com/webcams/api/v3/webcams?limit=1",
-      "headers": { "x-windy-api-key": "${WINDY_WEBCAMS_API_KEY}" },
-      "requiredEnvVars": ["WINDY_WEBCAMS_API_KEY"]
+      "headers": {
+        "x-windy-api-key": "${apiKey}"
+      },
+      "requiredConfigKeys": ["apiKey"]
     },
     {
       "name": "NPS Webcams",
       "type": "http",
-      "urlTemplate": "https://developer.nps.gov/api/v1/webcams?limit=1&api_key=${NPS_API_KEY}",
-      "requiredEnvVars": ["NPS_API_KEY"]
+      "urlTemplate": "https://developer.nps.gov/api/v1/webcams?limit=1&api_key=${npsApiKey}",
+      "requiredConfigKeys": ["npsApiKey"]
     },
     {
       "name": "Caltrans CCTV",
@@ -136,56 +130,56 @@
     {
       "name": "511GA",
       "type": "http",
-      "urlTemplate": "https://511ga.org/api/v2/get/cameras?key=${DOT_GA_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_GA_API_KEY"]
+      "urlTemplate": "https://511ga.org/api/v2/get/cameras?key=${dotGaApiKey}&format=json",
+      "requiredConfigKeys": ["dotGaApiKey"]
     },
     {
       "name": "FL511",
       "type": "http",
-      "urlTemplate": "https://fl511.com/api/v2/get/cameras?key=${DOT_FL_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_FL_API_KEY"]
+      "urlTemplate": "https://fl511.com/api/v2/get/cameras?key=${dotFlApiKey}&format=json",
+      "requiredConfigKeys": ["dotFlApiKey"]
     },
     {
       "name": "AZ511",
       "type": "http",
-      "urlTemplate": "https://az511.com/api/v2/get/cameras?key=${DOT_AZ_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_AZ_API_KEY"]
+      "urlTemplate": "https://az511.com/api/v2/get/cameras?key=${dotAzApiKey}&format=json",
+      "requiredConfigKeys": ["dotAzApiKey"]
     },
     {
       "name": "Idaho 511",
       "type": "http",
-      "urlTemplate": "https://511.idaho.gov/api/v2/get/cameras?key=${DOT_ID_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_ID_API_KEY"]
+      "urlTemplate": "https://511.idaho.gov/api/v2/get/cameras?key=${dotIdApiKey}&format=json",
+      "requiredConfigKeys": ["dotIdApiKey"]
     },
     {
       "name": "Utah 511",
       "type": "http",
-      "urlTemplate": "https://prod-ut.ibi511.com/api/v2/get/cameras?key=${DOT_UT_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_UT_API_KEY"]
+      "urlTemplate": "https://prod-ut.ibi511.com/api/v2/get/cameras?key=${dotUtApiKey}&format=json",
+      "requiredConfigKeys": ["dotUtApiKey"]
     },
     {
       "name": "511LA",
       "type": "http",
-      "urlTemplate": "https://511la.org/api/v2/get/cameras?key=${DOT_LA_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_LA_API_KEY"]
+      "urlTemplate": "https://511la.org/api/v2/get/cameras?key=${dotLaApiKey}&format=json",
+      "requiredConfigKeys": ["dotLaApiKey"]
     },
     {
       "name": "511PA",
       "type": "http",
-      "urlTemplate": "https://www.511pa.com/api/v2/get/cameras?key=${DOT_PA_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_PA_API_KEY"]
+      "urlTemplate": "https://www.511pa.com/api/v2/get/cameras?key=${dotPaApiKey}&format=json",
+      "requiredConfigKeys": ["dotPaApiKey"]
     },
     {
       "name": "511SC",
       "type": "http",
-      "urlTemplate": "https://511sc.org/api/v2/get/cameras?key=${DOT_SC_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_SC_API_KEY"]
+      "urlTemplate": "https://511sc.org/api/v2/get/cameras?key=${dotScApiKey}&format=json",
+      "requiredConfigKeys": ["dotScApiKey"]
     },
     {
       "name": "Mass511",
       "type": "http",
-      "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${DOT_MA_API_KEY}&format=json",
-      "requiredEnvVars": ["DOT_MA_API_KEY"]
+      "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${dotMaApiKey}&format=json",
+      "requiredConfigKeys": ["dotMaApiKey"]
     }
   ],
   "quality": "built-in",
@@ -197,7 +191,7 @@
       "url": "https://www.windy.com/webcams",
       "license": "Proprietary (free tier, attribution required)",
       "licenseUrl": "https://api.windy.com/webcams/terms",
-      "attribution": "Webcams provided by <a href=\"https://www.windy.com/\">windy.com</a> \u2014 <a href=\"https://www.windy.com/webcams/add\">add a webcam</a>",
+      "attribution": "Webcams provided by <a href=\"https://www.windy.com/\">windy.com</a> — <a href=\"https://www.windy.com/webcams/add\">add a webcam</a>",
       "commercialUse": "conditional",
       "providerCountry": "CZ",
       "providerPrivacyUrl": "https://account.windy.com/agreements/windy-privacy-policy",

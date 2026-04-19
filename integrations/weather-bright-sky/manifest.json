@@ -22,7 +22,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://api.brightsky.dev/current_weather?lat=52.52&lon=13.405"

@@ -3,8 +3,14 @@ import type { RawWebcam, WebcamVariant, WindyWebcam } from "./types.js";
 
 const WINDY_BASE = "https://api.windy.com/webcams/api/v3";
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let windyApiKey: string | null = null;
+export function setWindyApiKey(value: string | undefined): void {
+  windyApiKey = value && value.length > 0 ? value : null;
+}
+
 function getApiKey(): string | null {
-  return process.env.WINDY_WEBCAMS_API_KEY || null;
+  return windyApiKey;
 }
 
 function windyHeaders(): Record<string, string> {

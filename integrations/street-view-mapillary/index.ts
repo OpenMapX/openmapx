@@ -14,7 +14,7 @@ interface MapillaryImagesResponse {
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/streetview/images", async (req, reply) => {
-    const token = ctx.config.MAPILLARY_TOKEN as string | undefined;
+    const token = ctx.config.accessToken as string | undefined;
     if (!token) {
       reply.status(503).send({ message: "Mapillary token not configured" });
       return;

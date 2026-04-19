@@ -5,13 +5,11 @@ let mockFetch: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   mockFetch = vi.fn();
   vi.stubGlobal("fetch", mockFetch);
-  process.env.MAPTILER_KEY = "test-key-123";
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  delete process.env.MAPTILER_KEY;
 });
 
 function mockOk(data: unknown) {
@@ -43,9 +41,11 @@ function makeBerlinFeature(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function loadModule() {
+async function loadModule(opts: { withApiKey?: boolean } = { withApiKey: true }) {
   vi.resetModules();
-  return import("@integrations/geocoding-maptiler/provider.js");
+  const mod = await import("@integrations/geocoding-maptiler/provider.js");
+  if (opts.withApiKey) mod.setMaptilerApiKey("test-key-123");
+  return mod;
 }
 
 // geocode
@@ -122,11 +122,10 @@ describe("geocode", () => {
   });
 
   it("throws when MAPTILER_KEY is not set", async () => {
-    delete process.env.MAPTILER_KEY;
-    const { maptilerGeocodingService } = await loadModule();
+    const { maptilerGeocodingService } = await loadModule({ withApiKey: false });
 
     await expect(maptilerGeocodingService.geocode("Berlin")).rejects.toThrow(
-      "MAPTILER_KEY env var is required",
+      "MapTiler geocoding requires an API key",
     );
   });
 

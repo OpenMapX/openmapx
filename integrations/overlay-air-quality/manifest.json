@@ -38,14 +38,13 @@
       }
     }
   },
-  "envVars": ["OPENAQ_API_KEY"],
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://api.openaq.org/v3/locations?bbox=-0.1,-0.1,0.1,0.1&parameters_id=2&limit=1&page=1",
     "headers": {
-      "X-API-Key": "${OPENAQ_API_KEY}"
+      "X-API-Key": "${apiKey}"
     },
-    "requiredEnvVars": ["OPENAQ_API_KEY"]
+    "requiredConfigKeys": ["apiKey"]
   },
   "quality": "built-in",
   "category": "Data Overlays",

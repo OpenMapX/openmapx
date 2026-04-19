@@ -6,7 +6,6 @@
   "quality": "built-in",
   "domains": ["transit"],
   "category": "Transit",
-  "envVars": ["MBTA_API_KEY"],
   "configSchema": {
     "type": "object",
     "properties": {
@@ -27,8 +26,8 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://api-v3.mbta.com/stops?filter[latitude]=42.36&filter[longitude]=-71.06&filter[radius]=0.01&api_key=${MBTA_API_KEY}",
-    "requiredEnvVars": ["MBTA_API_KEY"]
+    "urlTemplate": "https://api-v3.mbta.com/stops?filter[latitude]=42.36&filter[longitude]=-71.06&filter[radius]=0.01&api_key=${apiKey}",
+    "requiredConfigKeys": ["apiKey"]
   },
   "dataSources": [
     {

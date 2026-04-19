@@ -5,7 +5,6 @@ const valid = {
   id: "routing-valhalla",
   name: "Valhalla Routing",
   domains: ["routing"],
-  envVars: ["VALHALLA_URL"],
   healthCheck: { type: "http", url: "http://valhalla:8002/status" },
 };
 

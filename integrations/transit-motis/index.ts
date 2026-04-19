@@ -3,11 +3,15 @@ import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
 import type { IntegrationContext } from "@openmapx/core";
 import * as motis from "./adapter.js";
-import { motisLocalInstance, setMotisLocalUrl, transitousInstance } from "./instances.js";
+import {
+  configureTransitous,
+  motisLocalInstance,
+  setMotisLocalUrl,
+  transitousInstance,
+} from "./instances.js";
 
-const MOTIS_DATA_DIR =
-  process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis");
-const LICENSE_FILE = join(MOTIS_DATA_DIR, "license.json");
+// Populated by setup(ctx); default matches pre-config-cascade behaviour.
+let LICENSE_FILE = join(process.cwd(), "../../infra/docker/data/motis", "license.json");
 
 let cachedData: unknown[] | null = null;
 let cachedMtime = 0;
@@ -78,11 +82,20 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   // Resolve local MOTIS URL from the service registry if available.
   const resolved = ctx.getRequiredService("motis");
   const motisUrl =
-    resolved?.url ??
-    (ctx.config.endpoint as string | undefined) ??
-    process.env.MOTIS_URL ??
-    "http://localhost:8081";
+    resolved?.url ?? (ctx.config.endpoint as string | undefined) ?? "http://localhost:8081";
   setMotisLocalUrl(motisUrl);
+
+  configureTransitous({
+    url: ctx.config.transitousUrl as string | undefined,
+    userAgent: ctx.config.transitousUserAgent as string | undefined,
+  });
+
+  const dataDir =
+    (ctx.config.dataDir as string | undefined) ??
+    join(process.cwd(), "../../infra/docker/data/motis");
+  LICENSE_FILE = join(dataDir, "license.json");
+  cachedData = null;
+  cachedMtime = 0;
 
   // Register Transitous (cloud MOTIS) as a transit provider
   ctx.registerProvider("transit", {

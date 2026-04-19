@@ -42,8 +42,16 @@ function isProviderName(value: string): value is ProviderName {
   return value in NAME_TO_INTEGRATION;
 }
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let configuredProviderList = "maptiler";
+export function setConfiguredProviderList(value: string | undefined): void {
+  configuredProviderList = value && value.trim().length > 0 ? value : "maptiler";
+  // Reset the memoised orchestrator so the next call picks up the new chain.
+  cached = null;
+}
+
 function parseProviderList(): ProviderName[] {
-  const raw = process.env.GEOCODING_PROVIDER ?? "maptiler";
+  const raw = configuredProviderList;
   const names = raw
     .split(",")
     .map((s) => s.trim().toLowerCase())

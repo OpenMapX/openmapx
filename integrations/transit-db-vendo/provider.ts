@@ -30,30 +30,53 @@ import { withRetrying } from "db-vendo-client/retry.js";
 import { withThrottling } from "db-vendo-client/throttle.js";
 
 const PREFIX = "db:";
-const UA = process.env.DB_USER_AGENT ?? USER_AGENT_TRANSIT;
 
-// Primary client for journey planning, departures, stops, etc.
-// dbnav quota: 60 req/min → throttle to 1/s. Retry up to 3× on transient
-// failures (network timeouts, 5xx); HafasErrors are never retried.
 // biome-ignore lint/suspicious/noExplicitAny: external untyped package
-const client: any = createClient(withRetrying(withThrottling(dbnavProfile, 1, 1000)), UA, {
-  enrichStations: true,
-});
+function buildClients(userAgent: string): { client: any; dbwebClient: any } {
+  // Primary client for journey planning, departures, stops, etc.
+  // dbnav quota: 60 req/min → throttle to 1/s. Retry up to 3× on transient
+  // failures (network timeouts, 5xx); HafasErrors are never retried.
+  // biome-ignore lint/suspicious/noExplicitAny: external untyped package
+  const mainClient: any = createClient(
+    withRetrying(withThrottling(dbnavProfile, 1, 1000)),
+    userAgent,
+    { enrichStations: true },
+  );
 
-// Secondary client for polyline geometry via /reiseloesung/fahrt?poly=true.
-// dbweb is "aggressively blocked" per docs, so we:
-//   • throttle to 1 req/2 s (very conservative)
-//   • retry up to 2× with a short backoff (3 s, 6 s) so the UI doesn't stall
-//   • randomize the User-Agent to reduce fingerprinting-based blocking
+  // Secondary client for polyline geometry via /reiseloesung/fahrt?poly=true.
+  // dbweb is "aggressively blocked" per docs, so we:
+  //   • throttle to 1 req/2 s (very conservative)
+  //   • retry up to 2× with a short backoff (3 s, 6 s) so the UI doesn't stall
+  //   • randomize the User-Agent to reduce fingerprinting-based blocking
+  // biome-ignore lint/suspicious/noExplicitAny: external untyped package
+  const dbweb: any = createClient(
+    withRetrying(withThrottling({ ...dbwebProfile, randomizeUserAgent: true }, 1, 2000), {
+      retries: 2,
+      minTimeout: 3_000,
+      factor: 2,
+    }),
+    userAgent,
+  );
+
+  return { client: mainClient, dbwebClient: dbweb };
+}
+
+// Module-level defaults; setup(ctx) rebuilds with the resolved User-Agent.
 // biome-ignore lint/suspicious/noExplicitAny: external untyped package
-const dbwebClient: any = createClient(
-  withRetrying(withThrottling({ ...dbwebProfile, randomizeUserAgent: true }, 1, 2000), {
-    retries: 2,
-    minTimeout: 3_000,
-    factor: 2,
-  }),
-  UA,
-);
+let client: any;
+// biome-ignore lint/suspicious/noExplicitAny: external untyped package
+let dbwebClient: any;
+({ client, dbwebClient } = buildClients(USER_AGENT_TRANSIT));
+
+/**
+ * Rebuild both underlying db-vendo clients with a new User-Agent. Called from
+ * setup(ctx) so operators can override the header via `ctx.config.userAgent`
+ * (or the `DB_USER_AGENT` env alias).
+ */
+export function setDbVendoUserAgent(userAgent: string | undefined): void {
+  const ua = userAgent && userAgent.length > 0 ? userAgent : USER_AGENT_TRANSIT;
+  ({ client, dbwebClient } = buildClients(ua));
+}
 
 // biome-ignore lint/suspicious/noExplicitAny: external API response
 function normalizeStop(s: any): TransitStop {

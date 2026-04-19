@@ -17,7 +17,6 @@
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "http",
     "url": "https://api.panoramax.xyz/api/search"

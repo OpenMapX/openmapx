@@ -301,6 +301,5 @@ export interface HardlinkEntry {
 
 export interface RenderResult {
   composeYaml: string;
-  envFile: string;
   hardlinkPlan: HardlinkEntry[];
 }

@@ -3,9 +3,18 @@ import type { OcmPoi, OcmReferenceData } from "./ocm-types.js";
 
 const OCM_BASE = "https://api.openchargemap.io/v3";
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let ocmApiKey: string | undefined;
+export function setOcmApiKey(value: string | undefined): void {
+  ocmApiKey = value && value.length > 0 ? value : undefined;
+}
+
 function getApiKey(): string {
-  const key = process.env.OPENCHARGEMAP_API_KEY;
-  if (!key) throw new ConfigurationError("OPENCHARGEMAP_API_KEY is not configured");
+  const key = ocmApiKey;
+  if (!key)
+    throw new ConfigurationError(
+      "OpenChargeMap API key is not configured (config `apiKey` or OPENCHARGEMAP_API_KEY)",
+    );
   return key;
 }
 

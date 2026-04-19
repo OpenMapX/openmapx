@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { type IntegrationManifest, normalizeEnvVars } from "@openmapx/core";
 import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -49,21 +48,6 @@ function getIntegrationDisplayName(integration: {
   return (en?.name as string) ?? integration.manifest.name ?? integration.id;
 }
 
-function getEnvVarsSet(envVars: IntegrationManifest["envVars"]): Record<string, boolean> {
-  const normalized = normalizeEnvVars(envVars);
-  if (normalized.length === 0) return {};
-  return Object.fromEntries(
-    normalized.map((v) => [v.name, !!(process.env[v.name] && process.env[v.name] !== "")]),
-  );
-}
-
-/** True when all required env vars are set. Optional vars don't gate this. */
-function isConfigured(envVars: IntegrationManifest["envVars"]): boolean {
-  const required = normalizeEnvVars(envVars).filter((v) => v.required);
-  if (required.length === 0) return true;
-  return required.every((v) => process.env[v.name] !== undefined && process.env[v.name] !== "");
-}
-
 function maskSensitiveConfig(
   resolvedConfig: Record<string, { value: unknown; source: string }>,
 ): Record<string, { value: unknown; source: string }> {
@@ -89,26 +73,24 @@ interface CredentialStatusEntry {
   sharedSecretName?: string;
   updatedAt?: string;
   updatedBy?: string | null;
-  isLegacyEnvVar: boolean;
-  /** False for optional env-var overrides (secret-field credentials are always required). */
-  required: boolean;
 }
 
-/** Compute credential status for an integration (secret fields + legacy envVars). */
+/**
+ * Compute credential status for an integration — one entry per
+ * `x-openmapx-secret: true` field in the configSchema. Secrets are sourced
+ * from the encrypted vault (admin-panel path) or a host env var matching
+ * `INTEGRATION_<ID>_<KEY>` (env override).
+ */
 async function computeCredentialStatus(integration: {
   id: string;
-  manifest: {
-    configSchema?: Record<string, unknown>;
-    envVars?: IntegrationManifest["envVars"];
-  };
+  manifest: { configSchema?: Record<string, unknown> };
 }): Promise<CredentialStatusEntry[]> {
   const secretFields = getSecretFields(integration.manifest.configSchema);
-  const vaultList = secretFields.length > 0 ? await listSecrets(integration.id) : [];
+  if (secretFields.length === 0) return [];
+  const vaultList = await listSecrets(integration.id);
   const vaultMap = new Map(vaultList.map((v) => [v.key, v]));
 
   const result: CredentialStatusEntry[] = [];
-
-  // Secret fields from configSchema — always required (nothing to authenticate with otherwise)
   for (const field of secretFields) {
     const vaultEntry = vaultMap.get(field.key);
     const envKey = `INTEGRATION_${integration.id.replace(/-/g, "_").toUpperCase()}_${field.key.toUpperCase()}`;
@@ -126,26 +108,8 @@ async function computeCredentialStatus(integration: {
       sharedSecretName: field.sharedSecretName,
       updatedAt: vaultEntry?.updatedAt?.toISOString(),
       updatedBy: vaultEntry?.updatedBy ?? null,
-      isLegacyEnvVar: false,
-      required: true,
     });
   }
-
-  // Legacy envVars not already covered by a secret field
-  const secretFieldKeys = new Set(secretFields.map((f) => f.key));
-  for (const entry of normalizeEnvVars(integration.manifest.envVars)) {
-    if (secretFieldKeys.has(entry.name)) continue;
-    const hasEnv = !!(process.env[entry.name] && process.env[entry.name] !== "");
-    result.push({
-      key: entry.name,
-      title: entry.name,
-      description: entry.description,
-      source: hasEnv ? "env" : "missing",
-      isLegacyEnvVar: true,
-      required: entry.required,
-    });
-  }
-
   return result;
 }
 
@@ -197,8 +161,11 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
 
     const totalIntegrations = integrations.length;
     const enabledIntegrations = integrations.filter((i) => i.enabled).length;
-    const unconfiguredIntegrations = integrations.filter(
-      (i) => i.enabled && !isConfigured(i.manifest.envVars),
+    const credentialStatuses = await Promise.all(
+      integrations.filter((i) => i.enabled).map((i) => computeCredentialStatus(i)),
+    );
+    const unconfiguredIntegrations = credentialStatuses.filter(
+      (statuses) => statuses.length > 0 && statuses.every((s) => s.source === "missing"),
     ).length;
     const unhealthyIntegrations = integrations.filter((i) => {
       if (!i.enabled || !i.manifest.healthCheck) return false;
@@ -234,12 +201,15 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       target?: string;
     }> = [];
 
-    // Missing credentials
-    for (const i of integrations) {
-      if (!i.enabled) continue;
-      const secretFields = getSecretFields(i.manifest.configSchema);
-      if (secretFields.length === 0 && !i.manifest.envVars?.length) continue;
-      if (!isConfigured(i.manifest.envVars)) {
+    // Missing credentials — flag integrations where every declared secret is
+    // unresolved (no vault value, no env var override).
+    const enabledIntegrationList = integrations.filter((i) => i.enabled);
+    for (let idx = 0; idx < enabledIntegrationList.length; idx++) {
+      const i = enabledIntegrationList[idx];
+      if (!i) continue;
+      const statuses = credentialStatuses[idx] ?? [];
+      if (statuses.length === 0) continue;
+      if (statuses.every((s) => s.source === "missing")) {
         attention.push({
           type: "missing_credentials",
           severity: "warning",
@@ -320,29 +290,33 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
 
   app.get("/admin/integrations", async () => {
     const all = getAllIntegrations();
-    return all.map((integration) => {
-      const cached = getCachedHealthStatus(integration.id);
-      const envVars = integration.manifest.envVars;
-      return {
-        id: integration.id,
-        name: getIntegrationDisplayName(integration),
-        description: integration.manifest.description,
-        version: integration.manifest.version,
-        domains: integration.manifest.domains,
-        quality: integration.manifest.quality ?? "built-in",
-        isBuiltIn: integration.isBuiltIn,
-        enabled: integration.enabled,
-        configured: isConfigured(envVars),
-        envVarsSet: getEnvVarsSet(envVars),
-        hasHealthCheck: !!integration.manifest.healthCheck,
-        health: cached
-          ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
-          : null,
-        dependencies: integration.manifest.dependencies ?? [],
-        requires: integration.manifest.requires ?? [],
-        infrastructure: integration.manifest.infrastructure ?? null,
-      };
-    });
+    return Promise.all(
+      all.map(async (integration) => {
+        const cached = getCachedHealthStatus(integration.id);
+        const statuses = await computeCredentialStatus(integration);
+        // `configured` is true when every declared secret has a vault or env
+        // value (or when the integration declares no secrets at all).
+        const configured = statuses.every((s) => s.source !== "missing");
+        return {
+          id: integration.id,
+          name: getIntegrationDisplayName(integration),
+          description: integration.manifest.description,
+          version: integration.manifest.version,
+          domains: integration.manifest.domains,
+          quality: integration.manifest.quality ?? "built-in",
+          isBuiltIn: integration.isBuiltIn,
+          enabled: integration.enabled,
+          configured,
+          hasHealthCheck: !!integration.manifest.healthCheck,
+          health: cached
+            ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
+            : null,
+          dependencies: integration.manifest.dependencies ?? [],
+          requires: integration.manifest.requires ?? [],
+          infrastructure: integration.manifest.infrastructure ?? null,
+        };
+      }),
+    );
   });
 
   app.get<{ Params: { id: string } }>("/admin/integrations/:id", async (request, reply) => {
@@ -356,19 +330,15 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     ]);
 
     const resolvedConfig = maskSensitiveConfig(resolvedRaw);
-    const envVars = integration.manifest.envVars;
 
     const dependencyStatus = (integration.manifest.dependencies ?? []).map((depId) => {
       const dep = getIntegration(depId);
       return { id: depId, loaded: !!dep, enabled: dep?.enabled ?? false };
     });
 
-    const envVarEntries = normalizeEnvVars(envVars).map((entry) => ({
-      name: entry.name,
-      present: !!(process.env[entry.name] && process.env[entry.name] !== ""),
-      required: entry.required,
-      description: entry.description,
-    }));
+    // Every declared secret has a vault or env value (or the integration
+    // declares none).
+    const configured = credentialStatus.every((s) => s.source !== "missing");
 
     return {
       id: integration.id,
@@ -382,7 +352,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       quality: integration.manifest.quality ?? "built-in",
       isBuiltIn: integration.isBuiltIn,
       enabled: integration.enabled,
-      configured: isConfigured(envVars),
+      configured,
       hasHealthCheck: !!integration.manifest.healthCheck,
       health: cached
         ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
@@ -393,7 +363,6 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       manifest: integration.manifest,
       resolvedConfig,
       dependencyStatus,
-      envVarEntries,
       credentialStatus,
       secretsConfigured: isSecretsConfigured(),
     };
@@ -608,15 +577,11 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     }
 
     const result = all
-      .filter((i) => {
-        const secretFields = getSecretFields(i.manifest.configSchema);
-        return secretFields.length > 0 || (i.manifest.envVars?.length ?? 0) > 0;
-      })
+      .filter((i) => getSecretFields(i.manifest.configSchema).length > 0)
       .map((i) => {
         const secretFields = getSecretFields(i.manifest.configSchema);
         const vaultList = vaultByIntegration.get(i.id) ?? [];
         const vaultMap = new Map(vaultList.map((v) => [v.key, v]));
-        const envVarsSet = getEnvVarsSet(i.manifest.envVars);
         const missingSecrets = secretFields.filter((f) => {
           const envKey = `INTEGRATION_${i.id.replace(/-/g, "_").toUpperCase()}_${f.key.toUpperCase()}`;
           return !vaultMap.has(f.key) && !process.env[envKey];
@@ -629,7 +594,6 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
           secretFields: secretFields.length,
           vaultStored: vaultList.length,
           missingCredentials: missingSecrets.length,
-          envVarsSet,
         };
       });
 

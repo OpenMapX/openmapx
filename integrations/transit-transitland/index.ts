@@ -2,6 +2,7 @@ import type { IntegrationContext } from "@openmapx/core";
 import * as transitland from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  transitland.setTransitlandApiKey(ctx.config.apiKey as string | undefined);
   ctx.registerProvider("transit", {
     id: "transit-transitland",
     prefix: "tl:",

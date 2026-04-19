@@ -1,12 +1,13 @@
 import type { IntegrationContext } from "@openmapx/core";
 import { getAdapter } from "./adapters.js";
-import { setCache } from "./fetcher.js";
+import { setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
 import { registry } from "./registry.js";
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
   // Inject the cache client so the fetcher can persist registry data
   setCache(ctx.cache);
+  setGithubToken(ctx.config.githubToken as string | undefined);
 
   // Inject Redis for cached-hafas-client if available via config
   const redisClient = ctx.config.redis;

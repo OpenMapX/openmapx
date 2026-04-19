@@ -8,7 +8,6 @@ export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
     const services: Record<
       string,
       {
-        configured: boolean;
         enabled: boolean;
         healthy: boolean;
         available: boolean;
@@ -20,10 +19,9 @@ export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
       const meta = toIntegrationMeta(integration);
       const healthy = isIntegrationHealthy(integration.id, !!integration.manifest.healthCheck);
       services[integration.id] = {
-        configured: meta.configured,
         enabled: meta.enabled,
         healthy,
-        available: meta.configured && meta.enabled,
+        available: meta.enabled && (healthy || !integration.manifest.healthCheck),
         domains: meta.domains,
       };
     }

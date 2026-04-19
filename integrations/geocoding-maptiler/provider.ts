@@ -10,6 +10,12 @@ import { resolvePoiIconPath } from "@openmapx/core";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
 
+// Populated by setup(ctx) from the resolved integration config cascade.
+let apiKey: string | undefined;
+export function setMaptilerApiKey(value: string | undefined): void {
+  apiKey = value && value.length > 0 ? value : undefined;
+}
+
 interface MaptilerFeature {
   id: string;
   text: string;
@@ -39,8 +45,9 @@ async function fetchMaptiler(
   params: Record<string, string>,
   lang?: string,
 ): Promise<MaptilerResponse> {
-  const key = process.env.MAPTILER_KEY;
-  if (!key) throw new Error("MAPTILER_KEY env var is required for MapTiler geocoding");
+  const key = apiKey;
+  if (!key)
+    throw new Error("MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_KEY)");
 
   const url = new URL(`${BASE_URL}/${encodeURIComponent(query)}.json`);
   url.searchParams.set("key", key);
@@ -63,8 +70,9 @@ async function fetchMaptilerReverse(
   lat: number,
   lang?: string,
 ): Promise<MaptilerResponse> {
-  const key = process.env.MAPTILER_KEY;
-  if (!key) throw new Error("MAPTILER_KEY env var is required for MapTiler geocoding");
+  const key = apiKey;
+  if (!key)
+    throw new Error("MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_KEY)");
 
   const url = new URL(`${BASE_URL}/${lng},${lat}.json`);
   url.searchParams.set("key", key);

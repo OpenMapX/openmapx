@@ -9,7 +9,6 @@
     "dataRequirements": ["osm-pbf"]
   },
   "category": "Transit",
-  "envVars": [],
   "configSchema": {
     "type": "object",
     "properties": {

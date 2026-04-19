@@ -149,12 +149,9 @@ export function TrustDisclosure({ trust }: TrustDisclosureProps) {
   );
 }
 
-type EnvVarShape = string | { name: string; required?: boolean; description?: string };
-
 export function inferTrustProfile(manifest: {
   frontendBundle?: boolean;
   backend?: boolean;
-  envVars?: EnvVarShape[];
   infrastructure?: string[];
   configSchema?: Record<string, unknown>;
 }): TrustProfile {
@@ -165,13 +162,11 @@ export function inferTrustProfile(manifest: {
       ).some((f) => f?.["x-openmapx-secret"] === true)
     : false;
 
-  const hasEnvVars = (manifest.envVars?.length ?? 0) > 0;
-
   return {
     frontendBundle: manifest.frontendBundle ?? false,
     backendCode: manifest.backend ?? true,
-    externalNetwork: hasEnvVars || hasSecretFields,
-    secretUsage: hasEnvVars || hasSecretFields,
+    externalNetwork: hasSecretFields,
+    secretUsage: hasSecretFields,
     serviceRequirements: manifest.infrastructure ?? [],
   };
 }

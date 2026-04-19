@@ -19,7 +19,6 @@
       }
     }
   },
-  "envVars": [],
   "backend": {
     "routes": false
   },

@@ -17,10 +17,15 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "Pelias endpoint URL",
+        "description": "Base URL of the self-hosted Pelias server.",
+        "format": "url"
       }
     }
   },
-  "envVars": ["PELIAS_URL"],
   "healthCheck": {
     "type": "http",
     "urlTemplate": "http://localhost:4000/v1/search?text=test&size=1"

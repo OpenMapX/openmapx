@@ -17,10 +17,15 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "Valhalla endpoint URL",
+        "description": "Base URL of the Valhalla server. Leave blank to use the public FOSSGIS instance or a self-hosted service resolved via the `valhalla` capability.",
+        "format": "url"
       }
     }
   },
-  "envVars": [],
   "healthCheck": {
     "type": "ping",
     "url": "https://valhalla1.openstreetmap.de/status"

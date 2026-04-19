@@ -37,11 +37,10 @@
       }
     }
   },
-  "envVars": ["TOMTOM_TRAFFIC_KEY"],
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/0/0/0.png?key=${TOMTOM_TRAFFIC_KEY}&tileSize=256",
-    "requiredEnvVars": ["TOMTOM_TRAFFIC_KEY"]
+    "urlTemplate": "https://api.tomtom.com/traffic/map/4/tile/flow/relative-delay/0/0/0.png?key=${apiKey}&tileSize=256",
+    "requiredConfigKeys": ["apiKey"]
   },
   "quality": "built-in",
   "category": "Traffic",
