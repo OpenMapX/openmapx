@@ -12,6 +12,7 @@
     "environment": {
       "PORT": "3001",
       "HOST": "0.0.0.0",
+      "DOMAIN": "${DOMAIN:-localhost}",
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgis:5432/openmapx",
       "REDIS_URL": "redis://redis:6379",
       "OSRM_URL": "${OSRM_URL:-http://osrm:5000}",
@@ -63,7 +64,16 @@
     "dependsOn": [
       { "service": "postgis", "condition": "service_healthy" },
       { "service": "redis", "condition": "service_healthy" }
-    ]
+    ],
+    "healthcheck": {
+      "type": "http",
+      "path": "/health",
+      "port": 3001,
+      "interval": "15s",
+      "timeout": "3s",
+      "retries": 10,
+      "startPeriod": "30s"
+    }
   },
   "exposure": {
     "proxy": {

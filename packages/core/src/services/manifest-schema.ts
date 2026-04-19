@@ -25,6 +25,16 @@ export function isServiceBindSource(s: string): boolean {
   return SERVICE_BIND_SOURCE_REGEX.test(s);
 }
 
+// `@infra:<rel-path>` resolves against `infra/docker/`, the compose-file
+// directory. Built-in only; used by data-manager to share `infra/docker/data/`
+// with consumer services that bind the same base via their `consumes:` mount.
+export const INFRA_BIND_SOURCE_PREFIX = "@infra:";
+const INFRA_BIND_SOURCE_REGEX = /^@infra:[^\s]+$/;
+
+export function isInfraBindSource(s: string): boolean {
+  return INFRA_BIND_SOURCE_REGEX.test(s);
+}
+
 // Linux capabilities allowed for declaration. Restricted to a known set so
 // community services can't smuggle arbitrary strings into docker compose.
 const ALLOWED_CAPS = new Set([
@@ -141,11 +151,16 @@ const bindMountSchema = z.object({
         if (!path || path.startsWith("/")) return false;
         return !pathHasParentEscape(path);
       }
+      if (isInfraBindSource(s)) {
+        const path = s.slice(INFRA_BIND_SOURCE_PREFIX.length);
+        if (!path || path.startsWith("/")) return false;
+        return !pathHasParentEscape(path);
+      }
       if (s.startsWith("@")) return false; // unknown special source
       if (s.startsWith("/")) return false; // absolute paths forbidden
       if (pathHasParentEscape(s)) return false;
       return true;
-    }, "source must be a relative path (no '..', no absolute paths) or a known special source (@docker-socket, @service:<slug>:<rel-path>)"),
+    }, "source must be a relative path (no '..', no absolute paths) or a known special source (@docker-socket, @service:<slug>:<rel-path>, @infra:<rel-path>)"),
   target: z
     .string()
     .regex(ABSOLUTE_PATH_REGEX, "must be absolute")

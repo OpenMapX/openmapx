@@ -32,6 +32,6 @@
     { "type": "tile-sprites", "sourceDir": "data/tile-sprites" },
     { "type": "osm-pbf-bz2", "sourceDir": "data/osm-bz2" }
   ],
-  "volumes": [{ "name": "openmapx-data", "mountAt": "/data", "backup": false }],
+  "bindMounts": [{ "source": "@infra:data", "target": "/data", "readOnly": false }],
   "ui": { "category": "infrastructure" }
 }

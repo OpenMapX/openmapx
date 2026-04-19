@@ -152,6 +152,7 @@ const SPECIAL_BIND_SOURCE_PATHS: Record<string, string> = {
 };
 
 const SERVICE_BIND_PREFIX = "@service:";
+const INFRA_BIND_PREFIX = "@infra:";
 
 function toComposePath(absolute: string, composeOutDir: string | undefined): string {
   if (!composeOutDir) return absolute;
@@ -170,6 +171,19 @@ function resolveBindSource(
   // Literal special sources (e.g. @docker-socket) — emit the concrete path.
   if (SPECIAL_BIND_SOURCE_PATHS[bm.source]) {
     return SPECIAL_BIND_SOURCE_PATHS[bm.source];
+  }
+
+  // @infra:<rel-path> — mount from the compose-file directory (infra/docker/).
+  // Used by data-manager so its /data is the same host directory that
+  // consumer services bind via their `consumes` mounts.
+  if (bm.source.startsWith(INFRA_BIND_PREFIX)) {
+    const relPath = bm.source.slice(INFRA_BIND_PREFIX.length);
+    if (!composeOutDir) {
+      // No compose dir known — emit the relative path unchanged so downstream
+      // callers can still introspect the source.
+      return `./${relPath}`;
+    }
+    return toComposePath(resolve(composeOutDir, relPath), composeOutDir);
   }
 
   // @service:<slug>:<rel-path> — mount from another built-in service's directory.

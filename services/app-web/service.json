@@ -30,7 +30,8 @@
       "LEGAL_JURISDICTION_CITY": "${LEGAL_JURISDICTION_CITY:-}"
     },
     "memory": "512m",
-    "restart": "unless-stopped"
+    "restart": "unless-stopped",
+    "dependsOn": [{ "service": "app-api", "condition": "service_healthy" }]
   },
   "exposure": {
     "proxy": {
