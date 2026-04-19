@@ -2,24 +2,25 @@
  * Resolves OSM class/type pairs to human-readable English labels using the
  * iD editor's tagging schema (@openstreetmap/id-tagging-schema). The full
  * JSON is loaded once at startup — server-side only, never sent to the client.
+ *
+ * Uses static JSON imports so esbuild inlines the data into the api bundle
+ * at build time. A runtime `require()` would fail in the containerized api
+ * image because `@openstreetmap/id-tagging-schema` is a sub-dep of the
+ * geocoding integration, not a root-hoisted package that `createRequire`
+ * can find from `apps/api/dist/server.js`.
  */
 
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
+import presets from "@openstreetmap/id-tagging-schema/dist/presets.json" with { type: "json" };
+import enTranslations from "@openstreetmap/id-tagging-schema/dist/translations/en.json" with {
+  type: "json",
+};
 
 type PresetEntry = { name?: string };
 type TranslationEntry = { name?: string };
 type EnTranslations = { en?: { presets?: { presets?: Record<string, TranslationEntry> } } };
 
-const schema = require("@openstreetmap/id-tagging-schema/dist/presets.json") as Record<
-  string,
-  PresetEntry
->;
-
-const translations =
-  (require("@openstreetmap/id-tagging-schema/dist/translations/en.json") as EnTranslations).en
-    ?.presets?.presets ?? {};
+const schema = presets as Record<string, PresetEntry>;
+const translations = (enTranslations as EnTranslations).en?.presets?.presets ?? {};
 
 // iD names include editing-context qualifiers that are verbose in a display context.
 // Strip them wherever they appear as a trailing suffix.
