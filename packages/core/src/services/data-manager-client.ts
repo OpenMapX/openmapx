@@ -31,14 +31,68 @@ export class DataManagerClient {
     return body.datasets;
   }
 
-  async downloadOsm(region: string): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
+  async downloadOsm(
+    region: string,
+    opts: { onProgress?: (bytesDownloaded: number, totalBytes?: number) => void } = {},
+  ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
     const res = await this.fetchImpl(`${this.baseUrl}/download/osm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ region }),
     });
     if (!res.ok) throw new Error(`download/osm failed: HTTP ${res.status}`);
-    return (await res.json()) as { ok: boolean; path: string; sizeBytes: number };
+    if (!res.body) throw new Error("download/osm: server returned no body stream");
+
+    // Server emits NDJSON: one JSON object per line.
+    //   {event: "progress", bytes, totalBytes?}
+    //   {event: "done", ok, path, url, sizeBytes}
+    //   {event: "error", message}
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let final: { ok: boolean; path: string; sizeBytes: number } | null = null;
+
+    const handleLine = (line: string) => {
+      if (!line) return;
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      if (msg.event === "progress") {
+        opts.onProgress?.(
+          Number(msg.bytes) || 0,
+          typeof msg.totalBytes === "number" ? msg.totalBytes : undefined,
+        );
+      } else if (msg.event === "done") {
+        final = {
+          ok: Boolean(msg.ok),
+          path: String(msg.path ?? ""),
+          sizeBytes: Number(msg.sizeBytes) || 0,
+        };
+      } else if (msg.event === "error") {
+        throw new Error(String(msg.message ?? "download/osm failed"));
+      }
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      while (true) {
+        const newlineIdx = buffer.indexOf("\n");
+        if (newlineIdx < 0) break;
+        handleLine(buffer.slice(0, newlineIdx).trim());
+        buffer = buffer.slice(newlineIdx + 1);
+      }
+    }
+    // Servers that don't emit a trailing newline still produce a valid final
+    // line — parse whatever's left in the buffer.
+    handleLine(buffer.trim());
+
+    if (!final) throw new Error("download/osm: stream ended without a 'done' event");
+    return final;
   }
 
   async downloadGtfs(

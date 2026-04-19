@@ -24,11 +24,35 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   app.get("/datasets", async () => ({ datasets: store.getAll() }));
 
-  app.post<{ Body: { region: string } }>("/download/osm", async (req) => {
+  app.post<{ Body: { region: string } }>("/download/osm", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");
-    const result = await downloadOsm({ region, dataDir, store });
-    return { ok: true, ...result };
+
+    // Stream NDJSON progress events back to the client. Hijacking the reply
+    // lets us write line-by-line; Fastify otherwise buffers the full body.
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    });
+    const writeLine = (obj: Record<string, unknown>) => {
+      reply.raw.write(`${JSON.stringify(obj)}\n`);
+    };
+
+    try {
+      const result = await downloadOsm({
+        region,
+        dataDir,
+        store,
+        onProgress: (bytes, totalBytes) => writeLine({ event: "progress", bytes, totalBytes }),
+      });
+      writeLine({ event: "done", ok: true, ...result });
+    } catch (err) {
+      writeLine({ event: "error", message: (err as Error).message });
+    } finally {
+      reply.raw.end();
+    }
   });
 
   app.post<{ Body: { feeds: FeedDescriptor[]; countries?: string[] } }>(

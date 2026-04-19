@@ -15,6 +15,7 @@ export interface DownloadOsmOptions {
   region: string;
   dataDir: string;
   store: StateStore;
+  onProgress?: (bytesDownloaded: number, totalBytes?: number) => void;
 }
 
 export interface DownloadOsmResult {
@@ -31,7 +32,7 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
   mkdirSync(targetDir, { recursive: true });
   const targetPath = join(targetDir, fileName);
 
-  await curlAtomic(url, targetPath);
+  await curlAtomic(url, targetPath, { onProgress: opts.onProgress });
 
   const sizeBytes = statSync(targetPath).size;
   const meta: DatasetMetadata = {

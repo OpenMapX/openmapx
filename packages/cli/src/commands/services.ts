@@ -189,7 +189,7 @@ export function registerServicesCommands(program: Command): void {
 
   services
     .command("start <ids...>")
-    .description("Start one or more services")
+    .description("Start one or more services (docker compose up -d — recreates on config change)")
     .action(async (ids: string[]) => {
       const code = await dockerComposeStream(["up", "-d", ...ids]);
       process.exit(code);
@@ -197,7 +197,7 @@ export function registerServicesCommands(program: Command): void {
 
   services
     .command("stop <ids...>")
-    .description("Stop one or more services")
+    .description("Stop one or more services (docker compose stop)")
     .action(async (ids: string[]) => {
       const code = await dockerComposeStream(["stop", ...ids]);
       process.exit(code);
@@ -205,7 +205,9 @@ export function registerServicesCommands(program: Command): void {
 
   services
     .command("restart <ids...>")
-    .description("Restart one or more services")
+    .description(
+      "In-place reboot of one or more services (docker compose restart — use `start` to pick up compose-file changes)",
+    )
     .action(async (ids: string[]) => {
       const code = await dockerComposeStream(["restart", ...ids]);
       process.exit(code);

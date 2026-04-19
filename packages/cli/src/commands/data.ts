@@ -1,12 +1,83 @@
 import { readFileSync } from "node:fs";
 import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
+import kleur from "kleur";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 
 const { DataManagerClient } = services;
 
 const DEFAULT_DM_URL = process.env.DATA_MANAGER_URL ?? "http://localhost:4000";
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rs = s % 60;
+  if (m < 60) return `${m}m ${rs}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+interface ProgressRenderer {
+  update: (bytes: number, total: number | undefined, startedAtMs: number) => void;
+  done: () => void;
+}
+
+/**
+ * Single-line progress bar that rewrites itself in-place via `\r`. Falls back
+ * to plain text (and never repeats a line) when stdout isn't a TTY — useful
+ * for CI logs and `tee`/pipe redirections.
+ */
+function progressRenderer(): ProgressRenderer {
+  const isTty = process.stdout.isTTY === true;
+  const barWidth = 24;
+  let lastLine = "";
+
+  const write = (line: string) => {
+    if (!isTty) {
+      // Non-TTY: only print when the text changes materially so logs don't
+      // explode. (Here: every second of progress, same string suffices.)
+      if (line === lastLine) return;
+      process.stdout.write(`${line}\n`);
+      lastLine = line;
+      return;
+    }
+    process.stdout.write(`\r${" ".repeat(lastLine.length)}\r${line}`);
+    lastLine = line;
+  };
+
+  return {
+    update(bytes, total, startedAtMs) {
+      const elapsed = Date.now() - startedAtMs;
+      const rate = elapsed > 0 ? bytes / (elapsed / 1000) : 0;
+      const rateStr = `${formatBytes(rate)}/s`;
+      if (total && total > 0) {
+        const pct = Math.min(100, (bytes / total) * 100);
+        const filled = Math.round((pct / 100) * barWidth);
+        const bar = `${"█".repeat(filled)}${"░".repeat(barWidth - filled)}`;
+        const etaMs = rate > 0 ? ((total - bytes) / rate) * 1000 : 0;
+        const etaStr = rate > 0 ? ` · ETA ${formatDuration(etaMs)}` : "";
+        write(
+          `${kleur.cyan(bar)} ${pct.toFixed(1).padStart(5)}%  ${formatBytes(bytes)} / ${formatBytes(total)}  ${rateStr}${etaStr}`,
+        );
+      } else {
+        write(`${kleur.dim("downloading")}  ${formatBytes(bytes)}  ${rateStr}`);
+      }
+    },
+    done() {
+      if (isTty && lastLine) process.stdout.write("\n");
+      lastLine = "";
+    },
+  };
+}
 
 export function registerDataCommands(program: Command): void {
   const data = program.command("data").description("Manage source data");
@@ -29,7 +100,12 @@ export function registerDataCommands(program: Command): void {
               log.err("region required (e.g. 'planet', 'europe/germany')");
               process.exit(1);
             }
-            const r = await client.downloadOsm(region);
+            const started = Date.now();
+            const render = progressRenderer();
+            const r = await client.downloadOsm(region, {
+              onProgress: (bytes, total) => render.update(bytes, total, started),
+            });
+            render.done();
             log.ok(`Downloaded ${region} (${(r.sizeBytes / 1e9).toFixed(2)} GB) → ${r.path}`);
           } else if (kind === "gtfs") {
             if (!options.feedsFile) {
