@@ -47,6 +47,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3001
+# findRepoRoot() walks up for pnpm-workspace.yaml/turbo.json — neither exists
+# in the runner image. Short-circuit to /app (where apps/, packages/,
+# integrations/ live, everything the runtime reads from the repo tree).
+ENV OPENMAPX_ROOT_DIR=/app
 
 # Root + API node_modules
 COPY --from=prod-deps /app/node_modules ./node_modules

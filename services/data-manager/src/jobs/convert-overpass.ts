@@ -107,11 +107,14 @@ export async function convertPbfToBz2ForRegion(
   mkdirSync(targetDir, { recursive: true });
   const targetBz2 = join(targetDir, "data.osm.bz2");
 
-  const totalBytes = statSync(picked.path).size;
+  // No `totalBytes` hint: the bz2-compressed XML output is typically ~1.1×
+  // the input PBF (PBF is more compact than bz2 XML), so the *input* size
+  // makes a misleading progress target. Let the CLI fall back to its
+  // unknown-total renderer (bytes + rate, no bar, no ETA).
   await convertPbfToBz2({
     sourcePbf: picked.path,
     targetBz2,
-    onProgress: opts.onProgress ? (bytes) => opts.onProgress?.(bytes, totalBytes) : undefined,
+    onProgress: opts.onProgress ? (bytes) => opts.onProgress?.(bytes) : undefined,
   });
 
   const sizeBytes = statSync(targetBz2).size;

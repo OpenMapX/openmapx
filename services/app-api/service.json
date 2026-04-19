@@ -13,6 +13,7 @@
       "PORT": "3001",
       "HOST": "0.0.0.0",
       "DOMAIN": "${DOMAIN:-localhost}",
+      "OPENMAPX_ROOT_DIR": "${OPENMAPX_ROOT_DIR:-/app}",
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgis:5432/openmapx",
       "REDIS_URL": "redis://redis:6379",
       "OSRM_URL": "${OSRM_URL:-http://osrm:5000}",
