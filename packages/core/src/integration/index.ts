@@ -20,23 +20,12 @@ export type {
 } from "./context";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
-export type {
-  BuildOptions as IntegrationBuildOptions,
-  BuildResult as IntegrationBuildResult,
-  InstallOptions as IntegrationInstallOptions,
-  InstallResult as IntegrationInstallResult,
-  IntegrationSummary,
-  ListOptions as IntegrationListOptions,
-  RemoveOptions as IntegrationRemoveOptions,
-  ValidateResult as IntegrationValidateResult,
-} from "./installer";
-export {
-  buildIntegration,
-  installIntegration,
-  listIntegrations,
-  removeIntegration,
-  validateIntegrationDirectory,
-} from "./installer";
+// Installer exports (`buildIntegration` / `installIntegration` / `listIntegrations`
+// / `removeIntegration` / `validateIntegrationDirectory` and their option/result
+// types) intentionally do NOT live in this barrel. `installer.ts` imports
+// node:fs/crypto/os/path, and any barrel that re-exports it taints everyone
+// who imports the barrel — including the client-reachable `@openmapx/core`
+// main entry. Consumers import them from `@openmapx/core/server` instead.
 export type { IntegrationStrings, LoadedIntegration, LoadedIntegrationMeta } from "./loader";
 export { toIntegrationMeta } from "./loader";
 export type {

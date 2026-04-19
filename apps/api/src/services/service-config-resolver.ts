@@ -22,7 +22,7 @@
 // Example: `SERVICE_VALHALLA_MEMORY_LIMIT=4g` overrides whatever is saved in
 // `service_config.config.memory_limit` for the `valhalla` service.
 
-import { services as coreServices } from "@openmapx/core";
+import { services as coreServices } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { serviceConfig } from "../db/schema";

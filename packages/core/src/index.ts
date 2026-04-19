@@ -123,13 +123,10 @@ export type {
   MapOverlayProvider,
   StreetViewProvider,
 } from "./domains";
-// Git clone helpers (shared by community service repos + community integrations)
-export {
-  type GitShallowCloneOptions,
-  gitShallowClone,
-  gitShallowCloneAtomic,
-} from "./git-clone";
-// Git URL allowlist (shared by community service repos + community integrations)
+// Git URL allowlist (shared by community service repos + community integrations).
+// The `gitShallowClone*` helpers that use these live in `./server` — they import
+// `node:fs` and would break the client bundle if re-exported here.
+
 export { ALLOWED_GIT_HOSTS, assertAllowedGitUrl, InvalidGitUrlError } from "./git-url";
 // Hooks — Transit
 export {
@@ -260,7 +257,11 @@ export {
   registerIdSchemeView,
   registerPlaceResolver,
 } from "./ids";
-// Integration framework
+// Integration framework. Installer-family exports (buildIntegration,
+// installIntegration, removeIntegration, validateIntegrationDirectory, plus
+// their InstallOptions/BuildOptions/ValidateResult/IntegrationSummary
+// companions) live in `./server` — they use node:fs and would pull node-only
+// modules into the client bundle if re-exported here.
 export type {
   CacheClient,
   CommunityIntegrationModule,
@@ -270,25 +271,17 @@ export type {
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,
-  IntegrationBuildOptions,
-  IntegrationBuildResult,
   IntegrationContext,
   IntegrationDataSource,
   IntegrationEnvVar,
   IntegrationEvent,
   IntegrationFrontend,
   IntegrationHealthCheck,
-  IntegrationInstallOptions,
-  IntegrationInstallResult,
   IntegrationLayerSelector,
-  IntegrationListOptions,
   IntegrationManifest,
   IntegrationOverlay,
-  IntegrationRemoveOptions,
   IntegrationSearchCategory,
   IntegrationStrings,
-  IntegrationSummary,
-  IntegrationValidateResult,
   LoadedIntegration,
   LoadedIntegrationMeta,
   Logger,
@@ -299,7 +292,6 @@ export type {
   RouteOptions,
 } from "./integration";
 export {
-  buildIntegration,
   createFallbackChain,
   createFirstWins,
   createMergeAll,
@@ -309,16 +301,12 @@ export {
   IntegrationEventBus,
   IntegrationRegistry,
   initCommunityIntegrationRegistry,
-  installIntegration,
   integrationManifestSchema,
-  listIntegrations,
   normalizeEnvVars,
   PLATFORM_VERSION,
   registerCommunityModule,
-  removeIntegration,
   satisfiesPlatformVersion,
   toIntegrationMeta,
-  validateIntegrationDirectory,
   validateManifest,
 } from "./integration";
 // Mangrove (Open Reviews Standard)
@@ -356,12 +344,8 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
-// Repo path resolution (shared by CLI + apps/api runtime code)
-export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
-// Service plugin system
-export * as services from "./services";
-// Subprocess helper used by git-clone and the community-integration build step
-export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
+// `repoPaths`, the `services` namespace, and `spawnWithBufferedLogs` use node:fs
+// / node:child_process — they live in `./server`, not this client-reachable barrel.
 // Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export type { OverlayStoreBase } from "./stores/createOverlayStore";

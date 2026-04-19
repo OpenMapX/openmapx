@@ -1,14 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  installIntegration as coreInstallIntegration,
-  removeIntegration as coreRemoveIntegration,
-  findRepoRoot,
   PLATFORM_VERSION,
   satisfiesPlatformVersion,
   USER_AGENT_ADMIN,
   validatePublicUrl,
 } from "@openmapx/core";
+import {
+  installIntegration as coreInstallIntegration,
+  removeIntegration as coreRemoveIntegration,
+  findRepoRoot,
+} from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { installedIntegration } from "../db/schema";

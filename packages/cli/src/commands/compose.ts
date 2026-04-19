@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { services as coreServices } from "@openmapx/core";
+import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { dockerComposeStream } from "../lib/docker";
 import { log } from "../lib/output";

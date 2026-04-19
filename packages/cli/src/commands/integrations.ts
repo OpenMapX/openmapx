@@ -7,7 +7,7 @@ import {
   installIntegration,
   removeIntegration,
   validateIntegrationDirectory,
-} from "@openmapx/core";
+} from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
 import { log, table } from "../lib/output";

@@ -1,14 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import {
-  assertAllowedGitUrl,
-  findRepoRoot,
-  gitShallowCloneAtomic,
-  InvalidGitUrlError,
-  repoPaths,
-  services,
-} from "@openmapx/core";
+import { assertAllowedGitUrl, InvalidGitUrlError } from "@openmapx/core";
+import { findRepoRoot, gitShallowCloneAtomic, repoPaths, services } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
 import simpleGit from "simple-git";
 import { db } from "../db";

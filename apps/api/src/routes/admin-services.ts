@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { services as coreServices } from "@openmapx/core";
+import { services as coreServices } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { serviceConfig } from "../db/schema";

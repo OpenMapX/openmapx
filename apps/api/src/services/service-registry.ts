@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { services } from "@openmapx/core";
+import { services } from "@openmapx/core/server";
 
 const { ServiceRegistry, resolveRequirement } = services;
 type IntegrationManifestRequires = NonNullable<services.IntegrationRequirement[] | undefined>;

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { services } from "@openmapx/core";
+import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";

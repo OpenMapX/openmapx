@@ -1,5 +1,5 @@
 import { dirname, resolve } from "node:path";
-import { services } from "@openmapx/core";
+import { services } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { resolveAllServiceConfigs } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
