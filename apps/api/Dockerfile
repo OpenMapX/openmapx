@@ -68,6 +68,17 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/src/db/migrations ./apps/api/dist/db/migrations
 COPY apps/api/package.json ./apps/api/
 
+# tsx resolves tsconfig paths + .js → .ts at runtime. We ship:
+#   - apps/api/tsconfig.json: defines `@integrations/*` → `../../integrations/*`
+#   - packages/core/tsconfig.json: same alias, resolved relative to packages/core
+# These are needed because dist/server.js (bundled) dynamically loads:
+#   - /app/integrations/<id>/index.ts — .ts, often imports from ./provider.js
+#   - /app/packages/core/src/index.ts — imports `@integrations/poi-search/types`
+COPY apps/api/tsconfig.json ./apps/api/
+COPY packages/core/tsconfig.json ./packages/core/
+
 WORKDIR /app/apps/api
 EXPOSE 3001
-CMD ["node", "dist/server.js"]
+# `--import tsx/esm` activates the tsx loader for all subsequent imports,
+# including the dynamic integration loader's runtime imports of .ts files.
+CMD ["node", "--import", "tsx/esm", "dist/server.js"]
