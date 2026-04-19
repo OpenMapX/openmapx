@@ -145,6 +145,58 @@ export function useServiceDetail(id: string) {
   });
 }
 
+export interface ServiceConfigResponse {
+  schema: Record<string, unknown> | null;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Fetch the per-service operator config + the manifest's configSchema. The
+ * schema can also be reached via `useServiceDetail(id)`, but this endpoint is
+ * cheaper for the config tab and avoids re-fetching the full LoadedService.
+ */
+export function useServiceConfig(id: string) {
+  const env = useEnv();
+  const apiUrl = env.apiUrl;
+
+  return useQuery<ServiceConfigResponse>({
+    queryKey: ["admin", "services", id, "config"],
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/admin/services/${id}/config`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load service config");
+      return res.json();
+    },
+    enabled: Boolean(id),
+  });
+}
+
+export function useServiceConfigSave(id: string) {
+  const env = useEnv();
+  const apiUrl = env.apiUrl;
+  const qc = useQueryClient();
+
+  return useMutation<{ ok: boolean }, Error, Record<string, unknown>>({
+    mutationFn: async (config) => {
+      const res = await fetch(`${apiUrl}/api/admin/services/${id}/config`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string })?.error ?? "Failed to save config");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "services", id, "config"] });
+    },
+  });
+}
+
 export function useServiceAction(id: string) {
   const env = useEnv();
   const apiUrl = env.apiUrl;

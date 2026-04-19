@@ -55,6 +55,12 @@ export class DataManagerClient {
     return body.count;
   }
 
+  async downloadStyle(): Promise<{ ok: boolean }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/download/style`, { method: "POST" });
+    if (!res.ok) throw new Error(`download/style failed: HTTP ${res.status}`);
+    return (await res.json()) as { ok: boolean };
+  }
+
   async link(
     plan: Array<{ source: string; target: string; consumerService: string; dataType: string }>,
   ): Promise<{ linked: number; skipped: number }> {

@@ -1,9 +1,0 @@
-requests
-types-requests
-ruamel.yaml
-license-expression
-pycountry
-beautifulsoup4
-lxml
-toml
-tzdata

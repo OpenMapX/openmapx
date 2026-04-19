@@ -38,7 +38,8 @@
   "exposure": {
     "proxy": {
       "enabled": true,
-      "pathPrefix": "/api"
+      "pathPrefix": "/api",
+      "additionalRoutes": [{ "path": "/health" }]
     }
   },
   "ui": { "category": "application" }

@@ -18,28 +18,73 @@ export interface RenderContext {
    * (how docker-compose resolves them). When absent, absolute paths are emitted.
    */
   composeOutDir?: string;
+  /**
+   * Full list of services in the registry. Required for resolving
+   * `@service:<slug>:<path>` bind-mount sources (the renderer needs to know
+   * the target service's directory). When absent, the consuming service is
+   * treated as the only service available.
+   */
+  allServices?: LoadedService[];
 }
 
-// Maps `@`-prefixed special bind sources to concrete host paths. The set of
-// allowed keys is enforced by the schema (see SPECIAL_BIND_SOURCES).
+// Maps `@`-prefixed special bind sources (literals only) to concrete host
+// paths. Parameterized special sources like `@service:<slug>:<path>` are
+// handled separately in `resolveBindSource` because they need access to the
+// other service's directory.
 const SPECIAL_BIND_SOURCE_PATHS: Record<string, string> = {
   "@docker-socket": "/var/run/docker.sock",
 };
 
-function resolveBindSource(
-  bm: ServiceBindMount,
-  serviceDirectory: string,
-  composeOutDir: string | undefined,
-): string {
-  if (bm.source.startsWith("@")) {
-    return SPECIAL_BIND_SOURCE_PATHS[bm.source] ?? bm.source;
-  }
-  const absolute = resolve(serviceDirectory, bm.source);
+const SERVICE_BIND_PREFIX = "@service:";
+
+function toComposePath(absolute: string, composeOutDir: string | undefined): string {
   if (!composeOutDir) return absolute;
   const rel = relative(composeOutDir, absolute);
   // Ensure docker-compose sees it as a path (not a volume name).
   if (!rel.startsWith(".") && !isAbsolute(rel)) return `./${rel}`;
   return rel;
+}
+
+function resolveBindSource(
+  bm: ServiceBindMount,
+  service: LoadedService,
+  allServices: LoadedService[],
+  composeOutDir: string | undefined,
+): string {
+  // Literal special sources (e.g. @docker-socket) — emit the concrete path.
+  if (SPECIAL_BIND_SOURCE_PATHS[bm.source]) {
+    return SPECIAL_BIND_SOURCE_PATHS[bm.source];
+  }
+
+  // @service:<slug>:<rel-path> — mount from another built-in service's directory.
+  if (bm.source.startsWith(SERVICE_BIND_PREFIX)) {
+    const rest = bm.source.slice(SERVICE_BIND_PREFIX.length);
+    const colonIdx = rest.indexOf(":");
+    if (colonIdx < 0) {
+      throw new Error(
+        `bindMount source "${bm.source}" on service "${service.manifest.id}": missing ':<rel-path>' after slug`,
+      );
+    }
+    const slug = rest.slice(0, colonIdx);
+    const relPath = rest.slice(colonIdx + 1);
+    const target = allServices.find((s) => s.manifest.id === slug);
+    if (!target) {
+      throw new Error(
+        `bindMount source "${bm.source}" on service "${service.manifest.id}": service "${slug}" not found in registry`,
+      );
+    }
+    if (target.manifest.quality !== "built-in") {
+      throw new Error(
+        `bindMount source "${bm.source}" on service "${service.manifest.id}": @service:<slug> is only allowed to reference built-in services (target "${slug}" is "${target.manifest.quality}")`,
+      );
+    }
+    const absolute = resolve(target.directory, relPath);
+    return toComposePath(absolute, composeOutDir);
+  }
+
+  // Plain relative path — resolved against the consuming service's own dir.
+  const absolute = resolve(service.directory, bm.source);
+  return toComposePath(absolute, composeOutDir);
 }
 
 export interface ComposeServiceSnippet {
@@ -115,7 +160,7 @@ export function renderServiceSnippet(
     }
   }
   for (const bm of m.bindMounts ?? []) {
-    const src = resolveBindSource(bm, service.directory, ctx.composeOutDir);
+    const src = resolveBindSource(bm, service, ctx.allServices ?? [service], ctx.composeOutDir);
     // readOnly defaults to true for bind mounts (config files, docker socket)
     const readOnly = bm.readOnly !== false;
     volumes.push(`${src}:${bm.target}${readOnly ? ":ro" : ""}`);
@@ -197,6 +242,24 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
     labels[`traefik.http.routers.${id}.priority`] = String(proxy.priority);
   }
 
+  // Additional routes — each emits a separate Traefik router but reuses the
+  // same `traefik.http.services.${id}` backend so all routes hit the same
+  // container port. Useful for a single API exposing both `/api/*` and `/health`.
+  const additionalRoutes = proxy.additionalRoutes ?? [];
+  for (let i = 0; i < additionalRoutes.length; i++) {
+    const route = additionalRoutes[i];
+    if (!route) continue;
+    const routerName = `${id}-r${i + 1}`;
+    const matcher = route.path ? `Path(\`${route.path}\`)` : `PathPrefix(\`${route.pathPrefix}\`)`;
+    labels[`traefik.http.routers.${routerName}.rule`] = `Host(\`${domain}\`) && ${matcher}`;
+    labels[`traefik.http.routers.${routerName}.entrypoints`] = "websecure";
+    labels[`traefik.http.routers.${routerName}.tls.certresolver`] = "letsencrypt";
+    labels[`traefik.http.routers.${routerName}.service`] = id;
+    if (route.middleware?.length) {
+      labels[`traefik.http.routers.${routerName}.middlewares`] = route.middleware.join(",");
+    }
+  }
+
   return labels;
 }
 
@@ -269,6 +332,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
     if (!s.enabled) continue;
     composeServices[s.manifest.id] = renderServiceSnippet(s, {
       ...ctx,
+      allServices: services,
       consumesPaths: new Map(
         (s.manifest.consumes ?? []).map((c) => [c.type, `./data/${s.manifest.id}/${c.type}`]),
       ),

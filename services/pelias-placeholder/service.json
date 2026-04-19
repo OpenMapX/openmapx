@@ -15,7 +15,7 @@
   "consumes": [
     { "type": "pelias-placeholder-data", "mountAt": "/data/placeholder", "required": true }
   ],
-  "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
+  "bindMounts": [{ "source": "@service:pelias:config/pelias.json", "target": "/code/pelias.json" }],
   "exposure": {
     "hostPorts": [{ "container": 4100, "host": 4100, "bindAddress": "127.0.0.1" }]
   },

@@ -1,8 +1,8 @@
 "use client";
 
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import SaveIcon from "@mui/icons-material/Save";
 import Alert from "@mui/material/Alert";
-import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -26,7 +26,17 @@ interface SchemaProperty {
 interface ServiceConfigFormProps {
   serviceId: string;
   schema: Record<string, unknown> | undefined;
+  /** Persisted config from `GET /admin/services/:id/config`; merged over defaults. */
+  initialValues?: Record<string, unknown>;
+  /** Save the new config to the database (no container restart). */
   onSave?: (values: Record<string, unknown>) => Promise<void>;
+  /**
+   * Save the new config AND restart the service so the change takes effect.
+   * Service configs are mounted into the container at start time, so a
+   * separate restart is required for the new values to be observed by the
+   * running process.
+   */
+  onSaveAndApply?: (values: Record<string, unknown>) => Promise<void>;
 }
 
 function humanize(key: string): string {
@@ -56,22 +66,27 @@ function extractFields(schema: Record<string, unknown> | undefined) {
 export function ServiceConfigForm({
   serviceId: _serviceId,
   schema,
+  initialValues,
   onSave,
+  onSaveAndApply,
 }: ServiceConfigFormProps) {
   const fields = useMemo(() => extractFields(schema), [schema]);
 
   const computeInitialValues = useCallback(() => {
     const initial: Record<string, unknown> = {};
     for (const field of fields) {
-      initial[field.key] = field.default ?? "";
+      // Persisted values from the DB win over schema defaults.
+      const persisted = initialValues?.[field.key];
+      initial[field.key] = persisted !== undefined ? persisted : (field.default ?? "");
     }
     return initial;
-  }, [fields]);
+  }, [fields, initialValues]);
 
   const [values, setValues] = useState<Record<string, unknown>>(computeInitialValues);
-  const [saving, setSaving] = useState(false);
+  // `pending` distinguishes which button to spinner. `null` = idle.
+  const [pending, setPending] = useState<"save" | "apply" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<"saved" | "applied" | null>(null);
 
   useEffect(() => {
     setValues(computeInitialValues());
@@ -79,21 +94,38 @@ export function ServiceConfigForm({
 
   async function handleSave() {
     setError(null);
-    setSaved(false);
-    setSaving(true);
+    setSaved(null);
+    setPending("save");
     try {
       if (onSave) {
         await onSave(values);
       } else {
         console.log("[ServiceConfigForm] onSave not wired yet — values:", values);
       }
-      setSaved(true);
+      setSaved("saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
-      setSaving(false);
+      setPending(null);
     }
   }
+
+  async function handleApply() {
+    if (!onSaveAndApply) return;
+    setError(null);
+    setSaved(null);
+    setPending("apply");
+    try {
+      await onSaveAndApply(values);
+      setSaved("applied");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save & Apply failed");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  const saving = pending !== null;
 
   if (fields.length === 0) {
     return (
@@ -110,9 +142,14 @@ export function ServiceConfigForm({
           {error}
         </Alert>
       )}
-      {saved && (
-        <Alert severity="success" variant="outlined" onClose={() => setSaved(false)}>
-          Configuration saved.
+      {saved === "saved" && (
+        <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
+          Configuration saved. {onSaveAndApply ? "Restart the service to apply." : ""}
+        </Alert>
+      )}
+      {saved === "applied" && (
+        <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
+          Configuration saved and service restart queued.
         </Alert>
       )}
 
@@ -174,17 +211,28 @@ export function ServiceConfigForm({
         </Stack>
       ))}
 
-      <Box>
+      <Stack direction="row" gap={1}>
         <Button
-          variant="contained"
+          variant="outlined"
           size="small"
-          startIcon={saving ? <CircularProgress size={14} /> : <SaveIcon />}
+          startIcon={pending === "save" ? <CircularProgress size={14} /> : <SaveIcon />}
           onClick={handleSave}
           disabled={saving}
         >
           Save
         </Button>
-      </Box>
+        {onSaveAndApply && (
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={pending === "apply" ? <CircularProgress size={14} /> : <RestartAltIcon />}
+            onClick={handleApply}
+            disabled={saving}
+          >
+            Save &amp; Apply (restart)
+          </Button>
+        )}
+      </Stack>
     </Stack>
   );
 }

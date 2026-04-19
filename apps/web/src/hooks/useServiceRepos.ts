@@ -13,6 +13,14 @@ export interface RepoRow {
   createdAt: string;
 }
 
+export interface RepoHostPort {
+  host: number;
+  container: number;
+  protocol?: "tcp" | "udp";
+  /** Loopback addresses (`127.0.0.1`, `::1`) are local-only; anything else is publicly exposed. */
+  bindAddress?: string;
+}
+
 export interface RepoPreviewService {
   slug: string;
   name: string;
@@ -21,7 +29,7 @@ export interface RepoPreviewService {
   quality: string;
   provides: string[];
   needsCapabilities: string[];
-  hostPorts: number[];
+  hostPorts: RepoHostPort[];
   proxyEnabled: boolean;
   devices: string[];
   validationErrors: string[];

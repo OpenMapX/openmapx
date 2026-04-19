@@ -40,6 +40,8 @@ export {
   savedPlace,
   savedPlaceRelations,
 } from "./saved-schema";
+// Service config (per-service operator settings, JSON-Schema-shaped)
+export { type ServiceConfigRow, serviceConfig } from "./service-config-schema";
 // Community service repositories
 export { type ServiceRepositoryRow, serviceRepository } from "./service-repository-schema";
 // System settings

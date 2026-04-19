@@ -1,8 +1,9 @@
-import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import {
+  installIntegration as coreInstallIntegration,
+  removeIntegration as coreRemoveIntegration,
+  findRepoRoot,
   PLATFORM_VERSION,
   satisfiesPlatformVersion,
   USER_AGENT_ADMIN,
@@ -13,19 +14,12 @@ import { db } from "../db";
 import { installedIntegration } from "../db/schema";
 import { reloadIntegrations } from "../integration-host";
 import { redis } from "../redis";
-import { safeChildEnv } from "./admin-ops";
 import type { JobContext } from "./job-runner";
 
-// Path resolution
-
-function findRootDir(): string {
-  if (process.env.OPENMAPX_ROOT_DIR) return process.env.OPENMAPX_ROOT_DIR;
-  const thisFile = fileURLToPath(import.meta.url);
-  return join(dirname(thisFile), "..", "..", "..", "..");
-}
-
-export const ROOT_DIR = findRootDir();
-export const INTEGRATION_SH = join(ROOT_DIR, "scripts", "integration.sh");
+// Single sentinel-based root resolver shared with the CLI. Honours
+// OPENMAPX_ROOT_DIR and falls back to walking up from the current working
+// directory looking for the workspace marker + an OpenMapX subdirectory.
+export const ROOT_DIR = findRepoRoot();
 
 // Catalog
 
@@ -194,53 +188,43 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
   });
 }
 
-// Job: run integration.sh
+// Job handlers
+//
+// Install/update/remove all delegate to `@openmapx/core`'s installer (the same
+// code path the `pnpm openmapx integrations` CLI uses). Job-runner wiring
+// (progress, logs, abort signal) lives here; the actual filesystem + git work
+// lives in core.
 
-function runIntegrationSh(args: string[], ctx: JobContext): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (ctx.signal.aborted) {
-      reject(new DOMException("Aborted", "AbortError"));
-      return;
-    }
+function repoToSource(repository: string): string {
+  if (repository.startsWith("https://github.com/")) {
+    const path = repository.replace("https://github.com/", "").replace(/\.git$/, "");
+    return `github:${path}`;
+  }
+  return repository;
+}
 
-    const proc = spawn("bash", [INTEGRATION_SH, ...args], {
-      env: safeChildEnv(),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      const lines = chunk.toString().split("\n").filter(Boolean);
-      for (const line of lines) {
-        ctx.log(line, "stdout").catch(() => {});
-      }
-    });
-
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      const lines = chunk.toString().split("\n").filter(Boolean);
-      for (const line of lines) {
-        ctx.log(line, "stderr").catch(() => {});
-      }
-    });
-
-    ctx.signal.addEventListener("abort", () => {
-      proc.kill("SIGTERM");
-    });
-
-    proc.on("close", (code) => {
-      if (ctx.signal.aborted) {
-        reject(new DOMException("Aborted", "AbortError"));
-      } else if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`integration.sh exited with code ${code}`));
-      }
-    });
-
-    proc.on("error", reject);
+async function runInstall(
+  ctx: JobContext,
+  source: string,
+  ref: string | undefined,
+): Promise<{ id: string; directory: string; replaced: boolean }> {
+  return coreInstallIntegration({
+    rootDir: ROOT_DIR,
+    source,
+    ref,
+    // The admin Store endpoint only ever installs from a vetted catalog
+    // (https Git URLs at allowlisted hosts). Local-path installs are a
+    // CLI-only convenience and shouldn't be reachable through the HTTP API
+    // even with admin credentials.
+    allowLocalSources: false,
+    signal: ctx.signal,
+    onLog: (line, stream) => {
+      ctx.log(line, stream).catch(() => {});
+    },
   });
 }
 
-// Job handlers
+const VERSION_REF_REGEX = /^[a-zA-Z0-9._\-/]+$/;
 
 export async function handleInstallJob(ctx: JobContext): Promise<Record<string, unknown>> {
   const { repository, version, actorId } = ctx.payload as {
@@ -249,29 +233,17 @@ export async function handleInstallJob(ctx: JobContext): Promise<Record<string, 
     actorId?: string;
   };
 
+  // Validate before logging anything, so a bad request doesn't leave a misleading
+  // "Installing… 5%" line in the audit log.
+  if (version && !VERSION_REF_REGEX.test(version)) {
+    throw new Error(`Invalid version format: "${version}"`);
+  }
+
   await ctx.log(`Installing integration from ${repository}${version ? ` @ ${version}` : ""}...`);
-  await ctx.setProgress(5);
-
-  // Build source arg: github:user/repo or URL
-  let sourceArg = repository;
-  if (repository.startsWith("https://github.com/")) {
-    const path = repository.replace("https://github.com/", "");
-    sourceArg = `github:${path.replace(/\.git$/, "")}`;
-  }
-
-  const args = ["install", sourceArg];
-  if (version) {
-    if (!/^[a-zA-Z0-9._\-/]+$/.test(version)) {
-      throw new Error(`Invalid version format: "${version}"`);
-    }
-    args.push("--ref", version);
-  }
-
   await ctx.setProgress(10);
-  await runIntegrationSh(args, ctx);
+  const installed = await runInstall(ctx, repoToSource(repository), version);
   await ctx.setProgress(70);
 
-  // Reload integrations to pick up the new one
   await ctx.log("Reloading integrations...");
   const reloadResult = await reloadIntegrations();
   await ctx.log(
@@ -279,29 +251,25 @@ export async function handleInstallJob(ctx: JobContext): Promise<Record<string, 
   );
   await ctx.setProgress(90);
 
-  // Derive the directory name (integration.sh names it after the repo)
-  const repoName =
-    repository
-      .split("/")
-      .pop()
-      ?.replace(/\.git$/, "") ?? "unknown";
-  const dirName = repoName.replace(/^openmapx-/, "");
-
-  // Read the actual manifest.json to get the canonical integration ID
-  const manifestPath = join(ROOT_DIR, "custom_integrations", dirName, "manifest.json");
-  let integrationId = dirName;
+  // Sanity-check the manifest id matches what the installer told us — it should
+  // always agree because the installer reads the manifest itself, but logging
+  // a warning here makes drift detectable.
+  let integrationId = installed.id;
+  const manifestPath = join(installed.directory, "manifest.json");
   if (existsSync(manifestPath)) {
     try {
       const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as { id?: string };
-      if (manifest.id) integrationId = manifest.id;
+      if (manifest.id && manifest.id !== installed.id) {
+        await ctx.log(
+          `Warning: manifest id ${manifest.id} differs from installed id ${installed.id}`,
+        );
+        integrationId = manifest.id;
+      }
     } catch {
-      await ctx.log(
-        `Warning: could not read manifest.json, using directory name as ID: ${dirName}`,
-      );
+      // not fatal — installed.id from the installer is authoritative
     }
   }
 
-  // Upsert installed_integration record
   const now = new Date();
   await db
     .insert(installedIntegration)
@@ -344,25 +312,13 @@ export async function handleUpdateJob(ctx: JobContext): Promise<Record<string, u
 
   if (!record) throw new Error(`Integration ${id} is not installed`);
 
+  if (version && !VERSION_REF_REGEX.test(version)) {
+    throw new Error(`Invalid version format: "${version}"`);
+  }
+
   await ctx.log(`Updating integration ${id}${version ? ` to ${version}` : " to latest"}...`);
-  await ctx.setProgress(5);
-
-  let sourceArg = record.repository;
-  if (record.repository.startsWith("https://github.com/")) {
-    const path = record.repository.replace("https://github.com/", "");
-    sourceArg = `github:${path.replace(/\.git$/, "")}`;
-  }
-
-  const args = ["install", sourceArg];
-  if (version) {
-    if (!/^[a-zA-Z0-9._\-/]+$/.test(version)) {
-      throw new Error(`Invalid version format: "${version}"`);
-    }
-    args.push("--ref", version);
-  }
-
   await ctx.setProgress(10);
-  await runIntegrationSh(args, ctx);
+  await runInstall(ctx, repoToSource(record.repository), version);
   await ctx.setProgress(70);
 
   await ctx.log("Reloading integrations...");
@@ -392,7 +348,7 @@ export async function handleRemoveJob(ctx: JobContext): Promise<Record<string, u
   await ctx.log(`Removing integration ${id}...`);
   await ctx.setProgress(5);
 
-  await runIntegrationSh(["remove", id], ctx);
+  coreRemoveIntegration({ rootDir: ROOT_DIR, id });
   await ctx.setProgress(70);
 
   await ctx.log("Reloading integrations...");

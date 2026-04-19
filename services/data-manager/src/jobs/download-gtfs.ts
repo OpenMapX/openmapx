@@ -1,7 +1,7 @@
 import { mkdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import { execa } from "execa";
 import type { DatasetMetadata, StateStore } from "../state.js";
+import { curlAtomic } from "./atomic-download.js";
 
 export interface FeedDescriptor {
   id: string;
@@ -43,7 +43,7 @@ export async function downloadGtfs(opts: DownloadGtfsOptions): Promise<DatasetMe
     const downloaded = await Promise.all(
       batch.map(async (feed) => {
         const targetPath = join(targetDir, `${feed.id}.zip`);
-        await execa("curl", ["-fSL", "-o", targetPath, feed.url], { stdio: "inherit" });
+        await curlAtomic(feed.url, targetPath);
         const sizeBytes = statSync(targetPath).size;
         const meta: DatasetMetadata = {
           type: "gtfs",

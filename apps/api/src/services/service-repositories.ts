@@ -1,25 +1,41 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { services } from "@openmapx/core";
+import { join } from "node:path";
+import {
+  assertAllowedGitUrl,
+  findRepoRoot,
+  gitShallowCloneAtomic,
+  InvalidGitUrlError,
+  repoPaths,
+  services,
+} from "@openmapx/core";
 import { eq } from "drizzle-orm";
-import simpleGit, { type SimpleGit } from "simple-git";
+import simpleGit from "simple-git";
 import { db } from "../db";
 import { type ServiceRepositoryRow, serviceRepository } from "../db/schema";
 
 const { validateServiceManifest } = services;
 
+// Re-export under the historical name + class so existing callers (and tests)
+// keep working. The implementation lives in @openmapx/core and is shared with
+// the community-integration installer.
+export { InvalidGitUrlError as InvalidRepoUrlError };
+export const assertAllowedUrl = assertAllowedGitUrl;
+
 export function hashUrl(url: string): string {
   return createHash("sha256").update(url).digest("hex").slice(0, 16);
 }
 
-function repoRoot(): string {
-  // apps/api is two levels down from repo root
-  return resolve(process.cwd(), "..", "..");
+function communityDir(): string {
+  return repoPaths(findRepoRoot()).communityDir;
 }
 
-function communityDir(): string {
-  return join(repoRoot(), "services", ".community");
+export interface RepoHostPort {
+  host: number;
+  container: number;
+  protocol?: "tcp" | "udp";
+  /** Loopback (127.0.0.1, ::1) is much lower-risk than the absent default of all interfaces. */
+  bindAddress?: string;
 }
 
 export interface RepoManifestPreview {
@@ -30,26 +46,32 @@ export interface RepoManifestPreview {
   quality: string;
   provides: string[];
   needsCapabilities: string[];
-  hostPorts: number[];
+  hostPorts: RepoHostPort[];
   proxyEnabled: boolean;
   devices: string[];
   validationErrors: string[];
 }
 
-export async function previewRepo(url: string): Promise<{
+export interface RepoPreview {
   hash: string;
+  /** First service's `name` if any, used as the human-readable label for the repo row. */
+  suggestedDisplayName?: string;
   services: RepoManifestPreview[];
-}> {
-  const hash = hashUrl(url);
-  const target = join(communityDir(), hash);
-  if (existsSync(target)) {
-    rmSync(target, { recursive: true, force: true });
-  }
+}
 
-  const git: SimpleGit = simpleGit();
-  await git.clone(url, target, ["--depth", "1"]);
+/**
+ * Clone-then-rename atomically into `services/.community/<hash>/`. Two admins
+ * concurrently submitting the same URL each clone into a unique tmp dir and
+ * the second `renameSync` over `<hash>` simply replaces the first — no torn
+ * state, no half-finished clones for downstream readers. Implementation is
+ * shared with the community-integration installer via `@openmapx/core`.
+ */
+async function atomicShallowClone(url: string, finalTarget: string): Promise<void> {
+  await gitShallowCloneAtomic({ url, finalTarget });
+}
 
-  const servicesList: RepoManifestPreview[] = [];
+function readPreviewsFromClone(target: string): RepoManifestPreview[] {
+  const out: RepoManifestPreview[] = [];
   const entries = readdirSync(target, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -60,23 +82,28 @@ export async function previewRepo(url: string): Promise<{
     try {
       raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
     } catch (err) {
-      servicesList.push(buildErrorPreview(entry.name, [`Invalid JSON: ${(err as Error).message}`]));
+      out.push(buildErrorPreview(entry.name, [`Invalid JSON: ${(err as Error).message}`]));
       continue;
     }
 
     const validation = validateServiceManifest(raw);
     if (!validation.valid) {
-      servicesList.push(buildErrorPreview(entry.name, validation.errors));
+      out.push(buildErrorPreview(entry.name, validation.errors));
       continue;
     }
 
     const m = raw as Record<string, unknown>;
     const c = (m.container ?? {}) as Record<string, unknown>;
     const exposure = (m.exposure ?? {}) as Record<string, unknown>;
-    const hostPorts = ((exposure.hostPorts ?? []) as Array<{ host: number }>).map((p) => p.host);
+    const hostPorts = ((exposure.hostPorts ?? []) as RepoHostPort[]).map((p) => ({
+      host: p.host,
+      container: p.container,
+      protocol: p.protocol,
+      bindAddress: p.bindAddress,
+    }));
     const proxyEnabled = Boolean((exposure.proxy as Record<string, unknown> | undefined)?.enabled);
 
-    servicesList.push({
+    out.push({
       slug: m.id as string,
       name: m.name as string,
       version: m.version as string,
@@ -90,8 +117,17 @@ export async function previewRepo(url: string): Promise<{
       validationErrors: [],
     });
   }
+  return out;
+}
 
-  return { hash, services: servicesList };
+export async function previewRepo(url: string): Promise<RepoPreview> {
+  assertAllowedUrl(url);
+  const hash = hashUrl(url);
+  const target = join(communityDir(), hash);
+  await atomicShallowClone(url, target);
+  const list = readPreviewsFromClone(target);
+  const suggestedDisplayName = list.find((s) => s.validationErrors.length === 0)?.name;
+  return { hash, suggestedDisplayName, services: list };
 }
 
 function buildErrorPreview(slug: string, errors: string[]): RepoManifestPreview {
@@ -110,21 +146,36 @@ function buildErrorPreview(slug: string, errors: string[]): RepoManifestPreview 
 }
 
 export async function registerRepo(url: string): Promise<ServiceRepositoryRow> {
+  assertAllowedUrl(url);
   const hash = hashUrl(url);
   const target = join(communityDir(), hash);
   if (!existsSync(target)) {
-    await simpleGit().clone(url, target, ["--depth", "1"]);
+    await atomicShallowClone(url, target);
+  }
+
+  // Re-validate every manifest at registration time. A repo that previewed
+  // cleanly could have been edited between preview and confirmation; refusing
+  // here prevents an admin-visible row pointing at a registry-rejected service.
+  const previews = readPreviewsFromClone(target);
+  const failed = previews.filter((p) => p.validationErrors.length > 0);
+  if (failed.length > 0) {
+    rmSync(target, { recursive: true, force: true });
+    throw new InvalidGitUrlError(
+      `Refusing to register: ${failed.length} service(s) failed validation: ` +
+        failed.map((f) => `${f.slug}: ${f.validationErrors.join("; ")}`).join(" | "),
+    );
   }
 
   const git = simpleGit(target);
   const sha = (await git.revparse(["HEAD"])).trim();
+  const displayName = previews[0]?.name ?? null;
 
   const rows = await db
     .insert(serviceRepository)
-    .values({ hash, url, lastFetchedAt: new Date(), lastSha: sha })
+    .values({ hash, url, displayName, lastFetchedAt: new Date(), lastSha: sha })
     .onConflictDoUpdate({
       target: serviceRepository.hash,
-      set: { lastFetchedAt: new Date(), lastSha: sha },
+      set: { displayName, lastFetchedAt: new Date(), lastSha: sha },
     })
     .returning();
   if (!rows[0]) throw new Error("Failed to insert service repository");

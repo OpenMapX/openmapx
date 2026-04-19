@@ -16,7 +16,6 @@ import {
   type RouteHandler,
   type RouteOptions,
   satisfiesPlatformVersion,
-  services,
   toIntegrationMeta,
   validateManifest,
 } from "@openmapx/core";
@@ -28,10 +27,8 @@ import { redis } from "./redis";
 import { loadAllBindingsByIntegration } from "./services/capability-bindings";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
 import { getSecret, resolveVaultSecrets } from "./services/secrets";
-import { getServiceRegistry, serviceUrl } from "./services/service-registry";
+import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { requireAuth } from "./utils/require-auth";
-
-const { resolveRequirement } = services;
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
@@ -480,34 +477,17 @@ export async function initIntegrations(
         }
       : undefined;
 
-    // Resolve requires: entries into a map keyed by service slug or capability name.
-    const requiresMap = new Map<string, { serviceId: string; url: string; enabled: boolean }>();
-    const bindings = allBindings.get(id) ?? new Map<string, string>();
-
-    for (const req of manifest.requires ?? []) {
-      const result = resolveRequirement(loadedServices, req, { bindings });
-      if (!result.satisfied || !result.match) {
-        if (!req.optional) {
-          fastify.log.warn(
-            { integration: id, requirement: req, reason: result.reason },
-            `Integration ${id}: required service unresolved`,
-          );
-        }
-        continue;
-      }
-
-      // biome-ignore lint/style/noNonNullAssertion: requireEntrySchema refine ensures exactly one of service/capability is set
-      const key = req.service ?? req.capability!;
-      const url = serviceUrl(result.match.serviceId);
-      if (!url) continue;
-
-      const svc = registryInstance?.get(result.match.serviceId);
-      requiresMap.set(key, {
-        serviceId: result.match.serviceId,
-        url,
-        enabled: svc?.enabled ?? false,
-      });
-    }
+    const requiresMap = resolveRequiresForIntegration({
+      manifestId: id,
+      requires: manifest.requires,
+      loadedServices,
+      bindings: allBindings.get(id) ?? new Map(),
+      onUnsatisfied: (requirement, reason) =>
+        fastify.log.warn(
+          { integration: id, requirement, reason },
+          `Integration ${id}: required service unresolved`,
+        ),
+    });
 
     const ctx: IntegrationContext = {
       id,
@@ -841,37 +821,18 @@ export async function reloadIntegrations(): Promise<{
         }
       : undefined;
 
-    // Resolve requires: entries for this integration on reload.
-    const reloadRequiresMap = new Map<
-      string,
-      { serviceId: string; url: string; enabled: boolean }
-    >();
-    const reloadBind = reloadBindings.get(id) ?? new Map<string, string>();
-
-    for (const req of manifest.requires ?? []) {
-      const result = resolveRequirement(reloadServices, req, { bindings: reloadBind });
-      if (!result.satisfied || !result.match) {
-        if (!req.optional) {
-          _fastify.log.warn(
-            { integration: id, requirement: req, reason: result.reason },
-            `Integration ${id}: required service unresolved`,
-          );
-        }
-        continue;
-      }
-
-      // biome-ignore lint/style/noNonNullAssertion: requireEntrySchema refine ensures exactly one of service/capability is set
-      const key = req.service ?? req.capability!;
-      const url = serviceUrl(result.match.serviceId);
-      if (!url) continue;
-
-      const svc = reloadRegistry?.get(result.match.serviceId);
-      reloadRequiresMap.set(key, {
-        serviceId: result.match.serviceId,
-        url,
-        enabled: svc?.enabled ?? false,
-      });
-    }
+    const fastifyForReload = _fastify;
+    const reloadRequiresMap = resolveRequiresForIntegration({
+      manifestId: id,
+      requires: manifest.requires,
+      loadedServices: reloadServices,
+      bindings: reloadBindings.get(id) ?? new Map(),
+      onUnsatisfied: (requirement, reason) =>
+        fastifyForReload?.log.warn(
+          { integration: id, requirement, reason },
+          `Integration ${id}: required service unresolved`,
+        ),
+    });
 
     const ctx: IntegrationContext = {
       id,

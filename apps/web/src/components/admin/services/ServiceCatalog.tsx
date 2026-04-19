@@ -125,10 +125,7 @@ function filterServices(
 ): ServiceSummary[] {
   const q = search.trim().toLowerCase();
   return services.filter((s) => {
-    if (quality !== "all") {
-      if (quality === "community" && s.quality === "built-in") return false;
-      if (quality === "built-in" && s.quality !== "built-in") return false;
-    }
+    if (quality !== "all" && s.quality !== quality) return false;
     if (!q) return true;
     return (
       s.id.toLowerCase().includes(q) ||
@@ -218,6 +215,7 @@ export function ServiceCatalog() {
           >
             <MenuItem value="all">All quality tiers</MenuItem>
             <MenuItem value="built-in">Built-in</MenuItem>
+            <MenuItem value="community-verified">Community (verified)</MenuItem>
             <MenuItem value="community">Community</MenuItem>
           </Select>
         </FormControl>

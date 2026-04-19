@@ -25,6 +25,21 @@ export interface ServicePortMapping {
   bindAddress?: string;
 }
 
+/**
+ * A secondary Traefik route attached to the same backend service. Used when
+ * one container needs to handle multiple paths under the same host — e.g.
+ * `app-api` serves `/api/*` (the primary) AND `/health` (an exact-match
+ * secondary for external uptime probes).
+ */
+export interface ServiceProxyAdditionalRoute {
+  /** Path prefix match (`PathPrefix(...)`); pick this OR `path`. */
+  pathPrefix?: string;
+  /** Exact path match (`Path(...)`); pick this OR `pathPrefix`. */
+  path?: string;
+  /** Per-route middleware overrides; if omitted, the primary route's middleware applies. */
+  middleware?: string[];
+}
+
 export interface ServiceProxyExposure {
   enabled: boolean;
   pathPrefix?: string;
@@ -37,6 +52,12 @@ export interface ServiceProxyExposure {
    * more specific routes take precedence.
    */
   priority?: number;
+  /**
+   * Additional routes pointing at the same backend service (e.g. an exact
+   * `/health` match alongside a `/api` prefix). Each renders as a separate
+   * Traefik router with the same `loadbalancer.server.port`.
+   */
+  additionalRoutes?: ServiceProxyAdditionalRoute[];
 }
 
 export interface ServiceExposure {
@@ -75,6 +96,11 @@ export interface ServiceProduces {
  *    for built-ins; `services/.community/<hash>/<slug>/` for community).
  *  - Built-in only: A `@`-prefixed special source from a known whitelist:
  *    - `@docker-socket` → `/var/run/docker.sock`
+ *    - `@service:<other-slug>:<rel-path>` → mounts a file/dir from another
+ *      built-in service's directory. Example: pelias-placeholder + pelias-pip
+ *      use `@service:pelias:config/pelias.json` to share pelias's config
+ *      without duplicating it. The renderer fails fast if the named service
+ *      is unknown or the path escapes its directory.
  *
  * Community services CANNOT use `@`-special sources (enforced by post-parse
  * validation) — those grant host-level access and are reserved for first-party

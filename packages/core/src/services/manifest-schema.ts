@@ -9,8 +9,20 @@ const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
 
 // Built-in services may request a bind mount from one of these special host
 // sources. Community services are rejected by post-parse validation and cannot
-// use bindMounts at all. Keep this list tight — each entry is a security boundary.
+// use them. Keep this list tight — each entry is a security boundary.
 export const SPECIAL_BIND_SOURCES = new Set<string>(["@docker-socket"]);
+
+// `@service:<slug>:<rel-path>` is a parameterized special source: built-in
+// services may mount a file from another built-in service's directory. Useful
+// for shared config (e.g. pelias-placeholder + pelias-pip mount pelias's
+// `config/pelias.json` without duplicating it). The renderer enforces that
+// `<rel-path>` doesn't traverse out of the named service's directory.
+export const SERVICE_BIND_SOURCE_PREFIX = "@service:";
+const SERVICE_BIND_SOURCE_REGEX = /^@service:[a-z0-9][a-z0-9-]*:[^\s]+$/;
+
+export function isServiceBindSource(s: string): boolean {
+  return SERVICE_BIND_SOURCE_REGEX.test(s);
+}
 
 // Linux capabilities allowed for declaration. Restricted to a known set so
 // community services can't smuggle arbitrary strings into docker compose.
@@ -59,6 +71,17 @@ const portMappingSchema = z.object({
   bindAddress: z.string().optional(),
 });
 
+const additionalRouteSchema = z
+  .object({
+    pathPrefix: z.string().regex(PATH_PREFIX_REGEX).optional(),
+    path: z.string().regex(PATH_PREFIX_REGEX).optional(),
+    middleware: z.array(z.string()).optional(),
+  })
+  .refine(
+    (v) => Boolean(v.pathPrefix) !== Boolean(v.path),
+    "exactly one of 'pathPrefix' or 'path' must be set on each additional route",
+  );
+
 const proxyExposureSchema = z.object({
   enabled: z.boolean(),
   pathPrefix: z.string().regex(PATH_PREFIX_REGEX).optional(),
@@ -66,6 +89,7 @@ const proxyExposureSchema = z.object({
   middleware: z.array(z.string()).optional(),
   authRequired: z.boolean().optional(),
   priority: z.number().int().min(0).max(1_000_000).optional(),
+  additionalRoutes: z.array(additionalRouteSchema).optional(),
 });
 
 const exposureSchema = z.object({
@@ -104,11 +128,17 @@ const bindMountSchema = z.object({
     .min(1)
     .refine((s) => {
       if (SPECIAL_BIND_SOURCES.has(s)) return true;
+      if (isServiceBindSource(s)) {
+        // Validate the embedded path part doesn't try to escape the named service.
+        const path = s.slice(SERVICE_BIND_SOURCE_PREFIX.length).split(":").slice(1).join(":");
+        if (!path || path.startsWith("/")) return false;
+        return !pathHasParentEscape(path);
+      }
       if (s.startsWith("@")) return false; // unknown special source
       if (s.startsWith("/")) return false; // absolute paths forbidden
       if (pathHasParentEscape(s)) return false;
       return true;
-    }, "source must be a relative path (no '..', no absolute paths) or a known special source (e.g. @docker-socket)"),
+    }, "source must be a relative path (no '..', no absolute paths) or a known special source (@docker-socket, @service:<slug>:<rel-path>)"),
   target: z
     .string()
     .regex(ABSOLUTE_PATH_REGEX, "must be absolute")

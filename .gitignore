@@ -48,12 +48,8 @@ dist/
 .turbo/
 *.env.local
 .env
-infra/docker/tiles/
-infra/docker/valhalla/
-infra/docker/pgdata/
-
-# Transitous API keys (contains secrets)
-infra/docker/services/transitous/api-keys.json
+# Downloaded source data (managed by data-manager service / `openmapx data` CLI)
+infra/docker/data/
 
 # Community integrations (user-installed, not version-controlled)
 custom_integrations/

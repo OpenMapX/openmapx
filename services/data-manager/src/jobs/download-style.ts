@@ -2,6 +2,7 @@ import { mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execa } from "execa";
 import type { StateStore } from "../state.js";
+import { curlAtomic } from "./atomic-download.js";
 
 export interface StyleAssetUrls {
   fonts: string;
@@ -28,32 +29,31 @@ export interface DownloadStyleOptions {
 }
 
 export async function downloadStyle(opts: DownloadStyleOptions): Promise<void> {
-  const targetDir = join(opts.dataDir, "tileserver");
-  mkdirSync(join(targetDir, "fonts"), { recursive: true });
-  mkdirSync(join(targetDir, "styles"), { recursive: true });
-  mkdirSync(join(targetDir, "sprites"), { recursive: true });
+  // Asset families live at top-level paths under data/ so they don't collide
+  // with any consumer service's data dir (e.g. `data/tileserver/` is the
+  // tileserver consumer's hardlink target dir).
+  const fontsDir = join(opts.dataDir, "tile-fonts");
+  const spritesDir = join(opts.dataDir, "tile-sprites");
+  const stylesDir = join(opts.dataDir, "tile-styles");
+  mkdirSync(fontsDir, { recursive: true });
+  mkdirSync(spritesDir, { recursive: true });
+  mkdirSync(stylesDir, { recursive: true });
 
   const urls = resolveStyleAssetUrls();
 
-  await execa("curl", ["-fSL", "-o", join(targetDir, "fonts.zip"), urls.fonts], {
-    stdio: "inherit",
-  });
-  await execa("unzip", ["-qo", join(targetDir, "fonts.zip"), "-d", join(targetDir, "fonts")], {
-    stdio: "inherit",
-  });
+  const fontsZip = join(opts.dataDir, "tile-fonts.zip");
+  await curlAtomic(urls.fonts, fontsZip);
+  await execa("unzip", ["-qo", fontsZip, "-d", fontsDir], { stdio: "inherit" });
   opts.store.upsert({
     type: "tile-fonts",
     id: "openmaptiles-v2",
     url: urls.fonts,
-    sizeBytes: statSync(join(targetDir, "fonts.zip")).size,
+    sizeBytes: statSync(fontsZip).size,
     downloadedAt: new Date().toISOString(),
-    path: join(targetDir, "fonts"),
+    path: fontsDir,
   });
 
-  await execa("curl", ["-fSL", "-o", join(targetDir, "sprites.zip"), urls.sprites], {
-    stdio: "inherit",
-  });
-  await execa("unzip", ["-qo", join(targetDir, "sprites.zip"), "-d", join(targetDir, "sprites")], {
-    stdio: "inherit",
-  });
+  const spritesZip = join(opts.dataDir, "tile-sprites.zip");
+  await curlAtomic(urls.sprites, spritesZip);
+  await execa("unzip", ["-qo", spritesZip, "-d", spritesDir], { stdio: "inherit" });
 }

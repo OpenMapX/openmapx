@@ -45,8 +45,7 @@ export function registerDataCommands(program: Command): void {
             const count = await client.downloadGtfs(feeds, countries);
             log.ok(`Downloaded ${count} GTFS feeds`);
           } else if (kind === "style") {
-            const res = await fetch(`${DEFAULT_DM_URL}/download/style`, { method: "POST" });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            await client.downloadStyle();
             log.ok("Downloaded styles + fonts + sprites");
           } else {
             log.err(`Unknown kind: ${kind} (use osm | gtfs | style)`);

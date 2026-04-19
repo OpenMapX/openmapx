@@ -37,14 +37,7 @@ import { statusRoute } from "./routes/status";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { winterSportsRoute } from "./routes/winter-sports";
-import {
-  buildTarget,
-  profileStart,
-  profileStop,
-  serviceRestart,
-  serviceStart,
-  serviceStop,
-} from "./services/admin-ops";
+import { serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
 import { gtfsManager } from "./services/gtfs/index";
 import { pruneOldRecords } from "./services/health-history";
@@ -235,24 +228,6 @@ jobRunner.register("service.restart", async (ctx) => {
   const service = ctx.payload.service as string;
   await serviceRestart(service, ctx);
   return { service, action: "restart" };
-});
-
-jobRunner.register("profile.start", async (ctx) => {
-  const profile = ctx.payload.profile as string;
-  await profileStart(profile, ctx);
-  return { profile, action: "start" };
-});
-
-jobRunner.register("profile.stop", async (ctx) => {
-  const profile = ctx.payload.profile as string;
-  await profileStop(profile, ctx);
-  return { profile, action: "stop" };
-});
-
-jobRunner.register("build.target", async (ctx) => {
-  const target = ctx.payload.target as string;
-  await buildTarget(target, ctx);
-  return { target };
 });
 
 jobRunner.register("integration.reload", async (ctx) => {

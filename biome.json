@@ -14,7 +14,8 @@
       "!dist",
       "!.turbo",
       "!apps/web/public/sw.js",
-      "!**/db/migrations"
+      "!**/db/migrations",
+      "!infra/docker/data"
     ]
   },
   "formatter": {

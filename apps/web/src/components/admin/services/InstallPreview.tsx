@@ -1,11 +1,25 @@
 "use client";
 
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import type { RepoPreviewService } from "@/hooks/useServiceRepos";
+import type { RepoHostPort, RepoPreviewService } from "@/hooks/useServiceRepos";
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+
+function isLoopback(bind?: string): boolean {
+  return !!bind && LOOPBACK_HOSTS.has(bind);
+}
+
+function formatPort(p: RepoHostPort): string {
+  const proto = p.protocol ? `/${p.protocol}` : "";
+  return p.bindAddress
+    ? `${p.bindAddress}:${p.host}→${p.container}${proto}`
+    : `${p.host}→${p.container}${proto} (all interfaces)`;
+}
 
 export function InstallPreview({ services }: { services: RepoPreviewService[] }) {
   return (
@@ -60,7 +74,26 @@ export function InstallPreview({ services }: { services: RepoPreviewService[] })
                       Devices: <code>{s.devices.join(", ")}</code>
                     </li>
                   )}
-                  {s.hostPorts.length > 0 && <li>Host port bindings: {s.hostPorts.join(", ")}</li>}
+                  {s.hostPorts.length > 0 && (
+                    <li>
+                      Host port bindings:
+                      <Box component="ul" sx={{ pl: 2.5, my: 0 }}>
+                        {s.hostPorts.map((p) => {
+                          const publiclyExposed = !isLoopback(p.bindAddress);
+                          return (
+                            <li key={`${p.bindAddress ?? "*"}:${p.host}/${p.protocol ?? "tcp"}`}>
+                              <code>{formatPort(p)}</code>
+                              {publiclyExposed && (
+                                <strong style={{ marginLeft: 6, color: "#b71c1c" }}>
+                                  ⚠ publicly accessible
+                                </strong>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </Box>
+                    </li>
+                  )}
                   {s.proxyEnabled && <li>Publicly exposes itself via the reverse proxy</li>}
                 </ul>
               </Alert>

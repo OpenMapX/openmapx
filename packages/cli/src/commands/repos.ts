@@ -1,12 +1,12 @@
 import type { Command } from "commander";
 import { log, table } from "../lib/output";
 
-const API = process.env.API_URL ?? "http://localhost:3001";
-const ADMIN_TOKEN = process.env.OPENMAPX_ADMIN_TOKEN;
-
-function authHeaders(): Record<string, string> {
-  return ADMIN_TOKEN ? { Authorization: `Bearer ${ADMIN_TOKEN}` } : {};
-}
+// Default to localhost where `requireAdmin` short-circuits auth for loopback
+// connections. For remote APIs, set OPENMAPX_API_URL — but note the CLI does
+// not yet have a session-cookie acquisition flow, so remote use will currently
+// require the operator to either run the CLI on the API host or expose a
+// local SSH tunnel.
+const API = process.env.API_URL ?? process.env.OPENMAPX_API_URL ?? "http://localhost:3001";
 
 interface RepoRow {
   url: string;
@@ -25,7 +25,7 @@ export function registerReposCommands(program: Command): void {
     .command("list")
     .description("List registered service repositories")
     .action(async () => {
-      const res = await fetch(`${API}/api/admin/service-repos`, { headers: authHeaders() });
+      const res = await fetch(`${API}/api/admin/service-repos`);
       if (!res.ok) {
         log.err(`HTTP ${res.status}: ${await res.text()}`);
         process.exit(1);
@@ -59,7 +59,7 @@ export function registerReposCommands(program: Command): void {
     .action(async (url: string) => {
       const res = await fetch(`${API}/api/admin/service-repos`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, acknowledgeRisks: true }),
       });
       if (!res.ok) {
@@ -75,7 +75,6 @@ export function registerReposCommands(program: Command): void {
     .action(async (hash: string) => {
       const res = await fetch(`${API}/api/admin/service-repos/${hash}`, {
         method: "DELETE",
-        headers: authHeaders(),
       });
       if (!res.ok) {
         log.err(`HTTP ${res.status}`);
@@ -90,7 +89,6 @@ export function registerReposCommands(program: Command): void {
     .action(async (hash: string) => {
       const res = await fetch(`${API}/api/admin/service-repos/${hash}/refresh`, {
         method: "POST",
-        headers: authHeaders(),
       });
       if (!res.ok) {
         log.err(`HTTP ${res.status}`);

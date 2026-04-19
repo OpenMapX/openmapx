@@ -1,5 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { db } from "../db";
+import { serviceConfig } from "../db/schema";
 import { gtfsManager } from "../services/gtfs/index";
 import { jobRunner } from "../services/job-runner";
 import { getServiceRegistry } from "../services/service-registry";
@@ -7,6 +12,7 @@ import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
 import { serviceActionLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { validateConfigBody } from "../utils/validate-config-body";
 
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", async (request, reply) => {
@@ -86,6 +92,68 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // GET /admin/services/:id/config — current per-service operator config (JSON-Schema-shaped)
+  app.get<{ Params: { id: string } }>("/admin/services/:id/config", async (req, reply) => {
+    const svc = getServiceRegistry().get(req.params.id);
+    if (!svc) {
+      reply.status(404);
+      return { error: "Service not found" };
+    }
+    const [row] = await db
+      .select({ config: serviceConfig.config })
+      .from(serviceConfig)
+      .where(eq(serviceConfig.serviceId, req.params.id))
+      .limit(1);
+    return {
+      schema: svc.manifest.configSchema ?? null,
+      config: row?.config ?? {},
+    };
+  });
+
+  // POST /admin/services/:id/config — replace per-service config (JSONB upsert)
+  app.post<{ Params: { id: string }; Body: { config: Record<string, unknown> } }>(
+    "/admin/services/:id/config",
+    async (req, reply) => {
+      const svc = getServiceRegistry().get(req.params.id);
+      if (!svc) {
+        reply.status(404);
+        return { error: "Service not found" };
+      }
+      const body = req.body?.config;
+      // Validate against the manifest's configSchema so operators can't store
+      // values the service won't accept at startup. Same validator used by the
+      // integration config endpoint.
+      const { updates: config, errors } = validateConfigBody(body, svc.manifest.configSchema, {
+        // Service manifests don't model "enabled" today; nothing to reject.
+        rejectEnabled: false,
+        // Service configs don't yet declare secret fields, but reject them
+        // anyway so future secret declarations don't accidentally land here.
+        rejectSecrets: true,
+      });
+      if (errors.length > 0) {
+        reply.status(400);
+        return { errors };
+      }
+      const adminSession = getAdminSession(req);
+      await db
+        .insert(serviceConfig)
+        .values({ id: randomUUID(), serviceId: req.params.id, config })
+        .onConflictDoUpdate({
+          target: serviceConfig.serviceId,
+          set: { config, updatedAt: new Date() },
+        });
+      await writeAuditLog({
+        actorId: adminSession.user.id,
+        targetId: req.params.id,
+        targetType: "service",
+        action: "service.config.update",
+        details: { keys: Object.keys(config) },
+        request: req,
+      });
+      return { ok: true };
+    },
+  );
+
   // GET /admin/services/:id/logs — stream logs as plain text
   app.get<{ Params: { id: string }; Querystring: { lines?: string } }>(
     "/admin/services/:id/logs",
@@ -99,15 +167,14 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // GET /admin/deployment — deployment mode detection
   app.get("/admin/deployment", async () => {
-    const { COMPOSE_FILE, MANAGE_SH, INFRA_DIR, isDockerAvailable } = await import(
-      "../services/admin-ops"
-    );
+    const { INFRA_DIR, isDockerAvailable } = await import("../services/admin-ops");
     const dockerAvailable = await isDockerAvailable();
+    const composePath = join(INFRA_DIR, "docker-compose.generated.yml");
     return {
       selfHosted: dockerAvailable,
       dockerAvailable,
-      composeFileFound: existsSync(COMPOSE_FILE),
-      manageSh: existsSync(MANAGE_SH),
+      // True once the operator has run `pnpm openmapx compose render`.
+      composeRendered: existsSync(composePath),
       infraDir: INFRA_DIR,
     };
   });
@@ -134,42 +201,5 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       Promise.resolve(gtfsManager.getFeeds()),
     ]);
     return { osm: osmInfo, builds: buildStatuses, gtfsFeeds, fetchedAt: new Date().toISOString() };
-  });
-
-  // POST /admin/services/data/build/:target — enqueue build job
-  app.post<{ Params: { target: string } }>(
-    "/admin/services/data/build/:target",
-    async (request, reply) => {
-      const { ALLOWED_BUILD_TARGETS } = await import("../services/admin-ops");
-      const { target } = request.params;
-      if (!ALLOWED_BUILD_TARGETS.has(target)) {
-        return reply.status(400).send({ error: `Unknown build target: "${target}"` });
-      }
-      const adminSession = getAdminSession(request);
-
-      const jobId = await jobRunner.enqueue("build.target", { target }, adminSession.user.id);
-      await writeAuditLog({
-        actorId: adminSession.user.id,
-        targetId: target,
-        targetType: "build",
-        action: "build.start",
-        details: { target },
-        request,
-      });
-      return { ok: true, jobId };
-    },
-  );
-
-  // GET /admin/services/meta — static metadata for backward compat
-  app.get("/admin/services/meta", async () => {
-    const { PROFILE_SERVICES, ALLOWED_BUILD_TARGETS, SERVICE_META } = await import(
-      "../services/admin-ops"
-    );
-    return {
-      profiles: Object.keys(PROFILE_SERVICES),
-      profileMap: PROFILE_SERVICES,
-      buildTargets: Array.from(ALLOWED_BUILD_TARGETS),
-      serviceMeta: SERVICE_META,
-    };
   });
 }

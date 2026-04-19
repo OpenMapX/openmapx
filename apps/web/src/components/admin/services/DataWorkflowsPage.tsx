@@ -155,7 +155,7 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
       ) : (
         <Alert severity="warning" sx={{ mb: 1 }}>
           No OSM PBF file found in the data directory. Run{" "}
-          <code>./manage.sh download-osm &lt;region&gt;</code> to download.
+          <code>pnpm openmapx data download osm &lt;region&gt;</code> to download.
         </Alert>
       )}
     </Paper>
@@ -164,24 +164,16 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
 
 // BuildsSection
 
-function BuildsSection({
-  builds,
-  onBuild,
-  pendingTarget,
-}: {
-  builds: BuildStatus[];
-  onBuild: (target: string) => void;
-  pendingTarget: string | null;
-}) {
+function BuildsSection({ builds }: { builds: BuildStatus[] }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Stack direction="row" alignItems="center" spacing={1} mb={2}>
         <BuildIcon color="primary" />
         <Typography variant="h6" fontWeight={600}>
-          Service Builds
+          Service Build Inventory
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          Build search indexes and routing graphs from OSM/GTFS data
+          Read-only view of which services have populated their data dirs
         </Typography>
       </Stack>
 
@@ -201,27 +193,15 @@ function BuildsSection({
                   </Typography>
                 </Stack>
                 {b.builtAt && (
-                  <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Built {formatDate(b.builtAt)}
                   </Typography>
                 )}
                 {!b.built && (
-                  <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                  <Typography variant="caption" color="text.secondary" display="block">
                     Not built
                   </Typography>
                 )}
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={
-                    pendingTarget === b.target ? <CircularProgress size={14} /> : <BuildIcon />
-                  }
-                  disabled={pendingTarget === b.target}
-                  onClick={() => onBuild(b.target)}
-                  fullWidth
-                >
-                  {b.built ? "Rebuild" : "Build"}
-                </Button>
               </CardContent>
             </Card>
           </Grid>
@@ -229,8 +209,10 @@ function BuildsSection({
       </Grid>
 
       <Alert severity="info" sx={{ mt: 2 }}>
-        Build jobs run in the background. Monitor progress in{" "}
-        <Link href="/admin/activity">Activity → Jobs</Link>.
+        Each service builds its own indexes/graphs on first start (Valhalla auto-builds tiles,
+        Nominatim auto-imports, OSRM runs its extract/partition/customize chain, etc.). Trigger a
+        rebuild by stopping the service from the <Link href="/admin/services">service catalog</Link>{" "}
+        and starting it again, or via <code>pnpm openmapx services restart &lt;id&gt;</code>.
       </Alert>
     </Paper>
   );
@@ -349,10 +331,6 @@ function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
 
 export function DataWorkflowsPage() {
   const { apiUrl } = useEnv();
-  const queryClient = useQueryClient();
-
-  const [pendingBuild, setPendingBuild] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<DataResponse>({
     queryKey: ["admin-services-data"],
@@ -360,31 +338,6 @@ export function DataWorkflowsPage() {
       fetch(`${apiUrl}/api/admin/services/data`, { credentials: "include" }).then((r) => r.json()),
     refetchInterval: 30_000,
   });
-
-  const buildMutation = useMutation({
-    mutationFn: async (target: string) => {
-      const res = await fetch(
-        `${apiUrl}/api/admin/services/data/build/${encodeURIComponent(target)}`,
-        { method: "POST", credentials: "include" },
-      );
-      if (!res.ok) throw new Error(`Build request failed: HTTP ${res.status}`);
-      return res.json() as Promise<{ ok: boolean; jobId: string }>;
-    },
-    onSuccess: (result, target) => {
-      setToast(`Build job queued for "${target}" (job ${result.jobId.slice(0, 8)})`);
-      setPendingBuild(null);
-      void queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
-    },
-    onError: (_, target) => {
-      setToast(`Failed to start build for "${target}".`);
-      setPendingBuild(null);
-    },
-  });
-
-  const handleBuild = (target: string) => {
-    setPendingBuild(target);
-    buildMutation.mutate(target);
-  };
 
   if (isLoading) {
     return (
@@ -423,15 +376,8 @@ export function DataWorkflowsPage() {
       <Stack spacing={3}>
         <OsmSection osm={data.osm} />
         <GtfsSection feeds={data.gtfsFeeds} apiUrl={apiUrl} />
-        <BuildsSection builds={data.builds} onBuild={handleBuild} pendingTarget={pendingBuild} />
+        <BuildsSection builds={data.builds} />
       </Stack>
-
-      <Snackbar
-        open={!!toast}
-        autoHideDuration={5000}
-        onClose={() => setToast(null)}
-        message={toast}
-      />
     </Box>
   );
 }

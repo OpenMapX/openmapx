@@ -17,7 +17,7 @@ import {
   reloadIntegrations,
   resolveConfigWithSources,
 } from "../integration-host";
-import { getServiceStatuses, isDockerAvailable } from "../services/admin-ops";
+import { isDockerAvailable } from "../services/admin-ops";
 import { getTimeline } from "../services/health-history";
 import {
   executeAllIntegrationHealthChecks,
@@ -33,8 +33,10 @@ import {
   setSecret,
 } from "../services/secrets";
 import { writeAuditLog } from "../utils/audit-log";
+import { dockerComposePs, type PsEntry } from "../utils/docker-compose";
 import { healthCheckSweepLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 
 const SENSITIVE_KEY_RE = /key|secret|token|password|credential|api_?key/i;
 
@@ -76,37 +78,8 @@ function maskSensitiveConfig(
   return masked;
 }
 
-/** Extract fields with x-openmapx-secret: true from a configSchema. */
-function getSecretFields(configSchema?: Record<string, unknown>): Array<{
-  key: string;
-  title: string;
-  description?: string;
-  sharedSecretName?: string;
-}> {
-  if (!configSchema) return [];
-  const props = (configSchema.properties ?? configSchema) as Record<
-    string,
-    Record<string, unknown>
-  >;
-  const result: Array<{
-    key: string;
-    title: string;
-    description?: string;
-    sharedSecretName?: string;
-  }> = [];
-  for (const [key, def] of Object.entries(props)) {
-    if (key === "type" || key === "properties" || !def || typeof def !== "object") continue;
-    if (def["x-openmapx-secret"] === true) {
-      result.push({
-        key,
-        title: (def.title as string) ?? key,
-        description: def.description as string | undefined,
-        sharedSecretName: def["x-openmapx-sharedSecretName"] as string | undefined,
-      });
-    }
-  }
-  return result;
-}
+// `getSecretFields` lives next to `validateConfigBody` so the two stay in
+// sync (both walk the same configSchema.properties shape).
 
 interface CredentialStatusEntry {
   key: string;
@@ -215,7 +188,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         .where(inArray(adminJob.status, ["running", "queued"]))
         .orderBy(desc(adminJob.createdAt))
         .limit(5),
-      selfHosted ? getServiceStatuses() : Promise.resolve([]),
+      selfHosted ? dockerComposePs() : Promise.resolve([] as PsEntry[]),
     ]);
 
     const totalUsers = userRow?.total ?? 0;
@@ -233,10 +206,14 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       return cached?.status === "down";
     }).length;
 
-    // Services summary (Docker only)
+    // Services summary (Docker only). The new `dockerComposePs` helper reports
+    // raw docker states; we collapse "exited"/"created"/"paused"/"not-running"
+    // into a single "stopped" bucket and treat "restarting" as "unhealthy".
     const runningServices = dockerServices.filter((s) => s.state === "running").length;
-    const stoppedServices = dockerServices.filter((s) => s.state === "stopped").length;
-    const unhealthyServices = dockerServices.filter((s) => s.state === "unhealthy").length;
+    const stoppedServices = dockerServices.filter(
+      (s) => s.state !== "running" && s.state !== "restarting",
+    ).length;
+    const unhealthyServices = dockerServices.filter((s) => s.state === "restarting").length;
 
     // System health
     const unhealthyCount = unhealthyIntegrations + unhealthyServices;
@@ -298,9 +275,11 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Unhealthy Docker services
+    // Unhealthy Docker services — `restarting` is the closest signal to the
+    // legacy "unhealthy" state that `docker compose ps --format json` exposes
+    // without per-service healthcheck inspection.
     for (const svc of dockerServices) {
-      if (svc.state === "unhealthy") {
+      if (svc.state === "restarting") {
         attention.push({
           type: "service_unhealthy",
           severity: "error",
@@ -468,57 +447,14 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
 
       const adminSession = getAdminSession(request);
 
-      const body = request.body;
-      if (!body || typeof body !== "object") {
-        return reply.status(400).send({ error: "Body must be a JSON object" });
-      }
-
-      const schema = integration.manifest.configSchema as Record<string, unknown> | undefined;
-      const props = schema
-        ? ((schema.properties ?? schema) as Record<string, Record<string, unknown>>)
-        : {};
-
-      const updates: Record<string, unknown> = {};
-      const errors: string[] = [];
-
-      for (const [key, value] of Object.entries(body)) {
-        if (key === "type" || key === "properties") continue;
-        const def = props[key] as Record<string, unknown> | undefined;
-
-        if (!def) {
-          errors.push(`Unknown config key: "${key}"`);
-          continue;
-        }
-        if (def["x-openmapx-secret"]) {
-          errors.push(`"${key}" is a secret field — use the credentials API instead`);
-          continue;
-        }
-        if (key === "enabled") {
-          errors.push(`"enabled" must be set via the enable/disable endpoints`);
-          continue;
-        }
-
-        const type = def.type as string | undefined;
-        if (type === "boolean" && typeof value !== "boolean") {
-          errors.push(`"${key}" must be a boolean`);
-          continue;
-        }
-        if ((type === "number" || type === "integer") && typeof value !== "number") {
-          errors.push(`"${key}" must be a number`);
-          continue;
-        }
-        if (type === "string" && typeof value !== "string") {
-          errors.push(`"${key}" must be a string`);
-          continue;
-        }
-        if (def.enum && !(def.enum as unknown[]).includes(value)) {
-          errors.push(`"${key}" must be one of: ${(def.enum as unknown[]).join(", ")}`);
-          continue;
-        }
-
-        updates[key] = value;
-      }
-
+      // Same JSON-Schema-shaped validator the service config endpoint uses;
+      // rejects unknown keys, secret fields (must go through the credentials
+      // API), the `enabled` switch (use enable/disable endpoints), and
+      // mismatched primitive types.
+      const { updates, errors } = validateConfigBody(
+        request.body,
+        integration.manifest.configSchema as Record<string, unknown> | undefined,
+      );
       if (errors.length > 0) {
         return reply.status(400).send({ errors });
       }

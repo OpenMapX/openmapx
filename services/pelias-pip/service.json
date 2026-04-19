@@ -20,7 +20,7 @@
       "required": true
     }
   ],
-  "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
+  "bindMounts": [{ "source": "@service:pelias:config/pelias.json", "target": "/code/pelias.json" }],
   "exposure": {
     "hostPorts": [{ "container": 4200, "host": 4200, "bindAddress": "127.0.0.1" }]
   },

@@ -1,7 +1,7 @@
 import { mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { execa } from "execa";
 import type { DatasetMetadata, StateStore } from "../state.js";
+import { curlAtomic } from "./atomic-download.js";
 
 export function resolveOsmUrl(region: string): string {
   if (!region) throw new Error("region is required");
@@ -31,7 +31,7 @@ export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsm
   mkdirSync(targetDir, { recursive: true });
   const targetPath = join(targetDir, fileName);
 
-  await execa("curl", ["-fSL", "-o", targetPath, url], { stdio: "inherit" });
+  await curlAtomic(url, targetPath);
 
   const sizeBytes = statSync(targetPath).size;
   const meta: DatasetMetadata = {

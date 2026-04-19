@@ -232,4 +232,46 @@ describe("renderCompose", () => {
     const ids = Object.keys(parsed.services);
     expect(ids.indexOf("data-manager")).toBeLessThan(ids.indexOf("valhalla"));
   });
+
+  it("emits one Traefik router per additionalRoutes entry, all bound to the same backend", () => {
+    const list = [
+      svc("app-api", {
+        container: { image: "ghcr.io/x/api", tag: "latest", expose: [3001] },
+        exposure: {
+          proxy: {
+            enabled: true,
+            pathPrefix: "/api",
+            additionalRoutes: [{ path: "/health" }],
+          },
+        },
+      }),
+    ];
+    const result = renderCompose(list, { domain: "example.com" });
+    expect(result.composeYaml).toContain("traefik.http.routers.app-api.rule");
+    expect(result.composeYaml).toContain("traefik.http.routers.app-api-r1.rule");
+    expect(result.composeYaml).toContain("Path(`/health`)");
+    // Secondary router routes to the SAME backend service.
+    expect(result.composeYaml).toContain("traefik.http.routers.app-api-r1.service: app-api");
+  });
+
+  it("resolves @service:<slug>:<path> bindMounts against the named service's directory", () => {
+    const pelias = svc("pelias", {});
+    const placeholder = svc("pelias-placeholder", {
+      bindMounts: [{ source: "@service:pelias:config/pelias.json", target: "/code/pelias.json" }],
+    });
+    const result = renderCompose([pelias, placeholder], {
+      domain: "example.com",
+      composeOutDir: "/repo/infra/docker",
+    });
+    expect(result.composeYaml).toContain(
+      "../../services/pelias/config/pelias.json:/code/pelias.json:ro",
+    );
+  });
+
+  it("rejects @service:<slug>:<path> when the target service is unknown at render time", () => {
+    const orphan = svc("placeholder", {
+      bindMounts: [{ source: "@service:nonexistent:config/x.json", target: "/code/x.json" }],
+    });
+    expect(() => renderCompose([orphan], { domain: "example.com" })).toThrow(/not found/);
+  });
 });

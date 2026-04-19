@@ -21,7 +21,12 @@ import Typography from "@mui/material/Typography";
 import NextLink from "next/link";
 import { useState } from "react";
 import type { ServiceDetail as ServiceDetailData, ServiceStatus } from "@/hooks/useServices";
-import { useServiceAction, useServiceDetail } from "@/hooks/useServices";
+import {
+  useServiceAction,
+  useServiceConfig,
+  useServiceConfigSave,
+  useServiceDetail,
+} from "@/hooks/useServices";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
 import { ServiceConfigForm } from "./ServiceConfigForm";
@@ -258,6 +263,11 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
 
 function ConfigTab({ data }: { data: ServiceDetailData }) {
   const { manifest } = data;
+  // Persisted config from `service_config` table (separate query from the
+  // manifest itself so the config tab doesn't refetch the full LoadedService).
+  const configQuery = useServiceConfig(manifest.id);
+  const saveConfig = useServiceConfigSave(manifest.id);
+  const action = useServiceAction(manifest.id);
 
   if (!manifest.configSchema) {
     return (
@@ -274,7 +284,21 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
         <Typography variant="subtitle2" color="text.secondary" gutterBottom>
           Configuration
         </Typography>
-        <ServiceConfigForm serviceId={manifest.id} schema={manifest.configSchema} />
+        <ServiceConfigForm
+          serviceId={manifest.id}
+          schema={manifest.configSchema}
+          initialValues={configQuery.data?.config}
+          onSave={async (values) => {
+            await saveConfig.mutateAsync(values);
+          }}
+          onSaveAndApply={async (values) => {
+            // Service configs are mounted into the container at start time,
+            // so applying a new value requires a restart. Persist first so a
+            // failed restart doesn't leave the next start with the old value.
+            await saveConfig.mutateAsync(values);
+            await action.mutateAsync("restart");
+          }}
+        />
       </CardContent>
     </Card>
   );

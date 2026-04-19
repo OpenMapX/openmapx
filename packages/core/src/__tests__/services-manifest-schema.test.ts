@@ -198,4 +198,77 @@ describe("validateServiceManifest", () => {
     });
     expect(result.valid).toBe(false);
   });
+
+  it("accepts @service:<slug>:<path> bindMount source for built-in services", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      bindMounts: [{ source: "@service:pelias:config/pelias.json", target: "/code/pelias.json" }],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects @service:<slug>:<path> with parent traversal in path", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      bindMounts: [{ source: "@service:pelias:../etc/passwd", target: "/etc/passwd" }],
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects @service:<slug>:<path> with absolute path part", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      bindMounts: [{ source: "@service:pelias:/etc/passwd", target: "/etc/passwd" }],
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects @service:<slug>:<path> for community services", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      quality: "community",
+      bindMounts: [{ source: "@service:pelias:config/pelias.json", target: "/code/pelias.json" }],
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("accepts exposure.proxy.additionalRoutes with path or pathPrefix", () => {
+    const r1 = validateServiceManifest({
+      ...validMinimal,
+      exposure: {
+        proxy: {
+          enabled: true,
+          pathPrefix: "/api",
+          additionalRoutes: [{ path: "/health" }],
+        },
+      },
+    });
+    expect(r1.valid).toBe(true);
+
+    const r2 = validateServiceManifest({
+      ...validMinimal,
+      exposure: {
+        proxy: {
+          enabled: true,
+          pathPrefix: "/api",
+          additionalRoutes: [{ pathPrefix: "/v2" }],
+        },
+      },
+    });
+    expect(r2.valid).toBe(true);
+  });
+
+  it("rejects exposure.proxy.additionalRoutes with both path and pathPrefix", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      exposure: {
+        proxy: {
+          enabled: true,
+          pathPrefix: "/api",
+          additionalRoutes: [{ path: "/health", pathPrefix: "/v2" }],
+        },
+      },
+    });
+    expect(result.valid).toBe(false);
+  });
 });

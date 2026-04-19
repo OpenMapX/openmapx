@@ -101,8 +101,18 @@ const envVarEntrySchema = z.object({
 
 const envVarSchema = z.union([z.string(), envVarEntrySchema]);
 
+/**
+ * Slug regex shared with the service manifest schema. The id is used as a
+ * filesystem directory name (`integrations/<id>/`, `custom_integrations/<id>/`)
+ * and as a string literal in generated code (the community bundle entry stub
+ * embeds it as `id: "<value>"`), so we constrain it to safe characters and
+ * reject anything that could escape the install tree or break out of a quoted
+ * literal.
+ */
+export const INTEGRATION_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+
 export const integrationManifestSchema = z.object({
-  id: z.string(),
+  id: z.string().regex(INTEGRATION_ID_REGEX, "must be lowercase, hyphen-separated"),
   name: z.string().optional(),
   version: z.string().optional(),
   description: z.string().optional(),
