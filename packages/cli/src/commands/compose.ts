@@ -89,4 +89,12 @@ export function registerComposeCommands(program: Command): void {
       const code = await dockerComposeStream(args);
       process.exit(code);
     });
+
+  compose
+    .command("pull")
+    .description("Pull the latest images for all services")
+    .action(async () => {
+      const code = await dockerComposeStream(["pull"]);
+      process.exit(code);
+    });
 }

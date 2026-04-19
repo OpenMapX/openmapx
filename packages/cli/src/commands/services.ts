@@ -188,26 +188,26 @@ export function registerServicesCommands(program: Command): void {
     });
 
   services
-    .command("start <id>")
-    .description("Start a service")
-    .action(async (id: string) => {
-      const code = await dockerComposeStream(["up", "-d", id]);
+    .command("start <ids...>")
+    .description("Start one or more services")
+    .action(async (ids: string[]) => {
+      const code = await dockerComposeStream(["up", "-d", ...ids]);
       process.exit(code);
     });
 
   services
-    .command("stop <id>")
-    .description("Stop a service")
-    .action(async (id: string) => {
-      const code = await dockerComposeStream(["stop", id]);
+    .command("stop <ids...>")
+    .description("Stop one or more services")
+    .action(async (ids: string[]) => {
+      const code = await dockerComposeStream(["stop", ...ids]);
       process.exit(code);
     });
 
   services
-    .command("restart <id>")
-    .description("Restart a service")
-    .action(async (id: string) => {
-      const code = await dockerComposeStream(["restart", id]);
+    .command("restart <ids...>")
+    .description("Restart one or more services")
+    .action(async (ids: string[]) => {
+      const code = await dockerComposeStream(["restart", ...ids]);
       process.exit(code);
     });
 

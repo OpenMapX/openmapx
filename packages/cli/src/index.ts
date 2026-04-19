@@ -7,6 +7,7 @@ import { registerDataCommands } from "./commands/data";
 import { registerIntegrationsCommands } from "./commands/integrations";
 import { registerReposCommands } from "./commands/repos";
 import { registerServicesCommands } from "./commands/services";
+import { registerUsersCommands } from "./commands/users";
 
 const program = new Command();
 
@@ -23,6 +24,7 @@ registerComposeCommands(program);
 registerDataCommands(program);
 registerReposCommands(program);
 registerBackupCommands(program);
+registerUsersCommands(program);
 registerCheckCommand(program);
 
 await program.parseAsync(process.argv);
