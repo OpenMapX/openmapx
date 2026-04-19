@@ -108,18 +108,23 @@ export function registerDataCommands(program: Command): void {
             render.done();
             log.ok(`Downloaded ${region} (${(r.sizeBytes / 1e9).toFixed(2)} GB) → ${r.path}`);
           } else if (kind === "gtfs") {
-            if (!options.feedsFile) {
-              log.err("--feeds-file required");
-              process.exit(1);
-            }
-            const feeds = JSON.parse(readFileSync(options.feedsFile, "utf-8")) as Array<{
-              id: string;
-              country: string;
-              url: string;
-            }>;
             const countries = options.countries?.split(",").filter(Boolean) ?? [];
-            const count = await client.downloadGtfs(feeds, countries);
-            log.ok(`Downloaded ${count} GTFS feeds`);
+            let result: { count: number; resolvedFromCatalog: boolean };
+            if (options.feedsFile) {
+              const feeds = JSON.parse(readFileSync(options.feedsFile, "utf-8")) as Array<{
+                id: string;
+                country: string;
+                url: string;
+              }>;
+              result = await client.downloadGtfs({ feeds, countries });
+            } else {
+              log.dim(
+                "no --feeds-file; resolving feeds from Transitous catalog (pass --feeds-file to override)",
+              );
+              result = await client.downloadGtfs({ source: "transitous", countries });
+            }
+            const src = result.resolvedFromCatalog ? " (from Transitous catalog)" : "";
+            log.ok(`Downloaded ${result.count} GTFS feeds${src}`);
           } else if (kind === "style") {
             await client.downloadStyle();
             log.ok("Downloaded styles + fonts + sprites");

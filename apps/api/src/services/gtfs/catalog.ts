@@ -3,7 +3,7 @@ import { USER_AGENT_TRANSIT } from "@openmapx/core";
 import type { CatalogFeed } from "./types";
 
 const GITHUB_API = "https://api.github.com";
-const RAW_BASE = "https://raw.githubusercontent.com/transitous/transitous/main";
+const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transitous/main";
 const TIMEOUT_MS = 15_000;
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -111,7 +111,7 @@ function slugify(name: string, countryCode: string): string {
 
 async function fetchTransitousCatalog(): Promise<CatalogFeed[]> {
   const tree = await fetchJson<{ tree: GitHubTreeEntry[] }>(
-    `${GITHUB_API}/repos/transitous/transitous/git/trees/main?recursive=1`,
+    `${GITHUB_API}/repos/public-transport/transitous/git/trees/main?recursive=1`,
   );
   if (!tree?.tree) return [];
 

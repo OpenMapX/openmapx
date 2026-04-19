@@ -96,17 +96,25 @@ export class DataManagerClient {
   }
 
   async downloadGtfs(
-    feeds: Array<{ id: string; country: string; url: string }>,
-    countries: string[],
-  ): Promise<number> {
+    opts:
+      | {
+          feeds: Array<{ id: string; country: string; url: string }>;
+          countries?: string[];
+        }
+      | { source: "transitous"; countries?: string[] },
+  ): Promise<{ count: number; resolvedFromCatalog: boolean }> {
+    const body =
+      "feeds" in opts
+        ? { feeds: opts.feeds, countries: opts.countries ?? [] }
+        : { source: opts.source, countries: opts.countries ?? [] };
     const res = await this.fetchImpl(`${this.baseUrl}/download/gtfs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ feeds, countries }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`download/gtfs failed: HTTP ${res.status}`);
-    const body = (await res.json()) as { count: number };
-    return body.count;
+    const parsed = (await res.json()) as { count: number; resolvedFromCatalog?: boolean };
+    return { count: parsed.count, resolvedFromCatalog: parsed.resolvedFromCatalog ?? false };
   }
 
   async downloadStyle(): Promise<{ ok: boolean }> {

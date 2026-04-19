@@ -4,6 +4,7 @@ import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
+import { fetchTransitousCatalog } from "./jobs/transitous-catalog.js";
 import { StateStore } from "./state.js";
 
 export interface ApiOptions {
@@ -55,14 +56,33 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     }
   });
 
-  app.post<{ Body: { feeds: FeedDescriptor[]; countries?: string[] } }>(
-    "/download/gtfs",
-    async (req) => {
-      const { feeds, countries = [] } = req.body;
-      const downloaded = await downloadGtfs({ feeds, countries, dataDir, store });
-      return { ok: true, count: downloaded.length };
-    },
-  );
+  app.post<{
+    Body: { feeds?: FeedDescriptor[]; countries?: string[]; source?: "transitous" };
+  }>("/download/gtfs", async (req) => {
+    const { feeds, countries = [], source } = req.body;
+    let resolvedFeeds: FeedDescriptor[];
+    if (feeds && feeds.length > 0) {
+      resolvedFeeds = feeds;
+    } else if (source === "transitous" || !feeds) {
+      // Default: pull the Transitous catalog when the caller didn't supply
+      // an explicit list. Keeps the CLI ergonomics simple (no feeds.json
+      // required) and stays in sync with the upstream registry.
+      resolvedFeeds = await fetchTransitousCatalog();
+    } else {
+      throw new Error("download/gtfs: either `feeds` or `source: 'transitous'` is required");
+    }
+    const downloaded = await downloadGtfs({
+      feeds: resolvedFeeds,
+      countries,
+      dataDir,
+      store,
+    });
+    return {
+      ok: true,
+      count: downloaded.length,
+      resolvedFromCatalog: !feeds || feeds.length === 0,
+    };
+  });
 
   app.post("/download/style", async () => {
     await downloadStyle({ dataDir, store });
