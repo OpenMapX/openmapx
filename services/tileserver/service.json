@@ -17,7 +17,7 @@
   "provides": ["tile-server"],
   "consumes": [
     { "type": "tile-fonts", "mountAt": "/data/fonts", "readOnly": true, "required": true },
-    { "type": "tile-sprites", "mountAt": "/data/sprites", "readOnly": true, "required": true }
+    { "type": "tile-styles", "mountAt": "/data/styles", "readOnly": true, "required": true }
   ],
   "bindMounts": [{ "source": "config/config.json", "target": "/data/config.json" }],
   "exposure": {

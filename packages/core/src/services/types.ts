@@ -271,13 +271,7 @@ export interface ResolutionResult {
  * aligned with the data-manager service's `produces:` declarations and with
  * `services/data-manager/src/state.ts` where this is mirrored for the service.
  */
-export type DatasetType =
-  | "osm-pbf"
-  | "osm-pbf-bz2"
-  | "gtfs"
-  | "tile-fonts"
-  | "tile-sprites"
-  | "tile-style";
+export type DatasetType = "osm-pbf" | "osm-pbf-bz2" | "gtfs" | "tile-fonts" | "tile-styles";
 
 export interface DatasetMetadata {
   type: DatasetType;

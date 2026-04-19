@@ -4,13 +4,7 @@ import { dirname, join } from "node:path";
 // Kept in sync with packages/core/src/services/types.ts `DatasetType`. When
 // the data-manager is allowed to depend on @openmapx/core directly (post-Dockerfile
 // refactor), we can import from there and delete this local copy.
-export type DatasetType =
-  | "osm-pbf"
-  | "osm-pbf-bz2"
-  | "gtfs"
-  | "tile-fonts"
-  | "tile-sprites"
-  | "tile-style";
+export type DatasetType = "osm-pbf" | "osm-pbf-bz2" | "gtfs" | "tile-fonts" | "tile-styles";
 
 export interface DatasetMetadata {
   type: DatasetType;
