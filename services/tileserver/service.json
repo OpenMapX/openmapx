@@ -14,8 +14,10 @@
     "memory": "2g",
     "restart": "unless-stopped"
   },
+  "buildCommand": "openmapx services build tileserver",
   "provides": ["tile-server"],
   "consumes": [
+    { "type": "tile-mbtiles", "mountAt": "/data/mbtiles", "readOnly": true, "required": true },
     { "type": "tile-fonts", "mountAt": "/data/fonts", "readOnly": true, "required": true },
     { "type": "tile-styles", "mountAt": "/data/styles", "readOnly": true, "required": true }
   ],

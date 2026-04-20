@@ -65,4 +65,5 @@ docs/legal/
 # CLI generated outputs
 infra/docker/docker-compose.generated.yml
 infra/docker/docker-compose.generated.hardlinks.json
+infra/docker/service-selection.json
 services/.community/

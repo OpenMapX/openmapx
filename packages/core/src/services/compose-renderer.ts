@@ -62,10 +62,14 @@ function buildProducerIndex(services: LoadedService[]): ProducerIndex {
   return index;
 }
 
+function consumesKey(consumes: ServiceConsumes): string {
+  return consumes.instance ? `${consumes.type}/${consumes.instance}` : consumes.type;
+}
+
 /**
- * Resolve a consumer entry to the producer that satisfies it, or `null` if
- * no producer is found and the entry is non-required (caller silently
- * skips). Throws on ambiguity.
+ * Resolve a consumer entry to the producer that satisfies it, or `null` when
+ * the entry is explicitly optional and no producer is found. Throws on missing
+ * required producers and ambiguity.
  */
 function resolveProducer(
   consumes: ServiceConsumes,
@@ -92,7 +96,9 @@ function resolveProducer(
 
   if (candidates.length === 0) {
     if (consumes.required === false) return null;
-    return null; // unresolved required; caller decides whether to skip silently (existing behavior)
+    throw new Error(
+      `Service "${consumerId}" consumes required data type "${consumes.type}" but no producer is installed.`,
+    );
   }
 
   // Multiple producer instances and the consumer didn't pick one.
@@ -297,8 +303,7 @@ export function renderServiceSnippet(
     volumes.push(`${v.name}:${v.mountAt}${v.readOnly ? ":ro" : ""}`);
   }
   for (const cs of m.consumes ?? []) {
-    const key = cs.instance ? `${cs.type}/${cs.instance}` : cs.type;
-    const sourcePath = ctx.consumesPaths?.get(key);
+    const sourcePath = ctx.consumesPaths?.get(consumesKey(cs));
     if (sourcePath) {
       volumes.push(`${sourcePath}:${cs.mountAt}${cs.readOnly ? ":ro" : ""}`);
     }
@@ -476,33 +481,37 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   // (instance-aware) and emit one entry. The target dir nests `<instance>`
   // when present so multi-region setups keep separate dirs on disk.
   const hardlinkPlan: HardlinkEntry[] = [];
+  const resolvedConsumesPathsByService = new Map<string, Map<string, string>>();
   for (const s of services) {
     for (const c of s.manifest.consumes ?? []) {
       const producer = resolveProducer(c, s.manifest.id, producerIndex);
       if (!producer) continue;
+      const target = hardlinkTargetDir(s.manifest.id, c);
       hardlinkPlan.push({
         source: producer.produces.sourceDir,
-        target: hardlinkTargetDir(s.manifest.id, c),
+        target,
         consumerService: s.manifest.id,
         dataType: c.type,
         ...(producer.produces.instance ? { instance: producer.produces.instance } : {}),
+        ...(c.targetFilename ? { targetFilename: c.targetFilename } : {}),
       });
+      const paths = resolvedConsumesPathsByService.get(s.manifest.id) ?? new Map<string, string>();
+      paths.set(consumesKey(c), `./${target}`);
+      resolvedConsumesPathsByService.set(s.manifest.id, paths);
     }
   }
 
   const composeServices: Record<string, ComposeServiceSnippet> = {};
   for (const s of sorted) {
     if (!s.enabled) continue;
-    // Per-consumer mount-path map: keyed by `<type>` or `<type>/<instance>`,
-    // pointing at the local hardlink target under the compose dir.
-    const consumesPaths = new Map<string, string>();
-    for (const c of s.manifest.consumes ?? []) {
-      const key = c.instance ? `${c.type}/${c.instance}` : c.type;
-      consumesPaths.set(key, `./${hardlinkTargetDir(s.manifest.id, c)}`);
-    }
+    // Per-consumer mount-path map: only resolved producer-backed consumes
+    // entries are mounted. Missing optional producers stay absent instead of
+    // becoming empty local bind directories.
+    const consumesPaths =
+      resolvedConsumesPathsByService.get(s.manifest.id) ?? new Map<string, string>();
     composeServices[s.manifest.id] = renderServiceSnippet(s, {
       ...ctx,
-      allServices: services,
+      allServices: ctx.allServices ?? services,
       consumesPaths,
     });
   }

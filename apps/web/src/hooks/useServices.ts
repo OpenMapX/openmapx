@@ -20,7 +20,13 @@ export interface ServiceSummary {
   description?: string;
   quality: ServiceQuality;
   provides: string[];
-  consumes?: Array<{ type: string; mountAt: string; readOnly?: boolean; required?: boolean }>;
+  consumes?: Array<{
+    type: string;
+    mountAt: string;
+    targetFilename?: string;
+    readOnly?: boolean;
+    required?: boolean;
+  }>;
   exposure?: {
     hostPorts?: Array<{ container: number; host: number; protocol?: string }>;
     proxy?: { enabled: boolean; pathPrefix?: string };
@@ -63,7 +69,13 @@ export interface ServiceManifestShape {
     logging?: { driver: string; options?: Record<string, string> };
   };
   provides?: string[];
-  consumes?: Array<{ type: string; mountAt: string; readOnly?: boolean; required?: boolean }>;
+  consumes?: Array<{
+    type: string;
+    mountAt: string;
+    targetFilename?: string;
+    readOnly?: boolean;
+    required?: boolean;
+  }>;
   produces?: Array<{ type: string; sourceDir: string }>;
   configSchema?: Record<string, unknown>;
   envVars?: Array<{ name: string; required?: boolean; description?: string; default?: string }>;

@@ -6,7 +6,7 @@ import { getServiceRegistry } from "../services/service-registry";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { requireAdmin } from "../utils/require-admin";
 
-const { renderCompose } = services;
+const { buildAppApiServiceEnv, renderCompose } = services;
 
 // `composeOutDir` makes the renderer emit bind-mount sources as paths relative
 // to the (eventual) compose file location, matching what `pnpm openmapx compose
@@ -38,9 +38,16 @@ export async function registerAdminComposeRoutes(
     const resolvedServiceConfigs = await resolveAllServiceConfigs(
       enabled.map((s) => ({ id: s.manifest.id, configSchema: s.manifest.configSchema })),
     );
+    if (enabled.some((s) => s.manifest.id === "app-api")) {
+      resolvedServiceConfigs.set(
+        "app-api",
+        buildAppApiServiceEnv(enabled, resolvedServiceConfigs.get("app-api") ?? {}, process.env),
+      );
+    }
     const result = renderCompose(enabled, {
       domain,
       composeOutDir: COMPOSE_OUT_DIR,
+      allServices: registry.list(),
       resolvedServiceConfigs,
     });
     reply.header("Content-Type", "text/yaml; charset=utf-8");

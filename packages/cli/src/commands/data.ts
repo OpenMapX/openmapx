@@ -2,10 +2,19 @@ import { readFileSync } from "node:fs";
 import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
+import {
+  OPENMAPX_REGION_ENV,
+  resolveOsmRegion,
+  resolveOverpassRegion,
+  resolveTransitousCountries,
+  TRANSITOUS_COUNTRIES_ENV,
+} from "../lib/env-defaults";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
 
 const { DataManagerClient } = services;
+type GtfsDownloadResult = services.GtfsDownloadResult;
 
 const DEFAULT_DM_URL = process.env.DATA_MANAGER_URL ?? "http://localhost:4000";
 
@@ -85,7 +94,10 @@ export function registerDataCommands(program: Command): void {
   data
     .command("download <kind> [region]")
     .description("Download source data (osm <region> | gtfs | style)")
-    .option("--countries <list>", "Comma-separated GTFS country codes (gtfs only)")
+    .option(
+      "--countries <list>",
+      `Comma-separated GTFS country codes (gtfs only; default: $${TRANSITOUS_COUNTRIES_ENV})`,
+    )
     .option("--feeds-file <path>", "Path to feeds JSON file (gtfs only)")
     .action(
       async (
@@ -96,20 +108,34 @@ export function registerDataCommands(program: Command): void {
         const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
         try {
           if (kind === "osm") {
-            if (!region) {
-              log.err("region required (e.g. 'planet', 'europe/germany')");
+            const resolvedRegion = resolveOsmRegion(region);
+            if (resolvedRegion.sourceEnv) {
+              log.dim(`using region "${resolvedRegion.value}" from $${resolvedRegion.sourceEnv}`);
+            }
+            if (!resolvedRegion.value) {
+              log.err(
+                `region required (e.g. 'planet', 'europe/germany') or set $${OPENMAPX_REGION_ENV}`,
+              );
               process.exit(1);
             }
             const started = Date.now();
             const render = progressRenderer();
-            const r = await client.downloadOsm(region, {
+            const r = await client.downloadOsm(resolvedRegion.value, {
               onProgress: (bytes, total) => render.update(bytes, total, started),
             });
             render.done();
-            log.ok(`Downloaded ${region} (${(r.sizeBytes / 1e9).toFixed(2)} GB) → ${r.path}`);
+            log.ok(
+              `Downloaded ${resolvedRegion.value} (${(r.sizeBytes / 1e9).toFixed(2)} GB) → ${r.path}`,
+            );
           } else if (kind === "gtfs") {
-            const countries = options.countries?.split(",").filter(Boolean) ?? [];
-            let result: { count: number; resolvedFromCatalog: boolean };
+            const resolvedCountries = resolveTransitousCountries(options.countries);
+            if (resolvedCountries.sourceEnv) {
+              log.dim(
+                `using GTFS country filter from $${resolvedCountries.sourceEnv}: ${resolvedCountries.values.join(", ")}`,
+              );
+            }
+            const countries = resolvedCountries.values;
+            let result: GtfsDownloadResult;
             if (options.feedsFile) {
               const feeds = JSON.parse(readFileSync(options.feedsFile, "utf-8")) as Array<{
                 id: string;
@@ -119,12 +145,31 @@ export function registerDataCommands(program: Command): void {
               result = await client.downloadGtfs({ feeds, countries });
             } else {
               log.dim(
-                "no --feeds-file; resolving feeds from Transitous catalog (pass --feeds-file to override)",
+                "no --feeds-file; resolving GTFS feed URLs from the Transitous catalog (pass --feeds-file to override)",
               );
               result = await client.downloadGtfs({ source: "transitous", countries });
             }
-            const src = result.resolvedFromCatalog ? " (from Transitous catalog)" : "";
-            log.ok(`Downloaded ${result.count} GTFS feeds${src}`);
+            const src = result.resolvedFromCatalog ? " using Transitous catalog" : "";
+            if (result.failedCount > 0) {
+              const failedIds = result.failures
+                .slice(0, 3)
+                .map((failure) => failure.id)
+                .join(", ");
+              const tail =
+                result.failures.length > 3 ? `, +${result.failures.length - 3} more` : "";
+              log.warn(
+                `GTFS download completed with ${result.failedCount} failure${result.failedCount === 1 ? "" : "s"}${failedIds ? ` (${failedIds}${tail})` : ""}`,
+              );
+            }
+            const skipNote =
+              result.skippedCount > 0
+                ? `, skipped ${result.skippedCount} feed${result.skippedCount === 1 ? "" : "s"} by country filter`
+                : "";
+            if (result.count === 0 && result.failedCount > 0) {
+              log.err(`Downloaded 0 GTFS feeds${src}${skipNote}`);
+              process.exit(1);
+            }
+            log.ok(`Downloaded ${result.count} GTFS feeds${src}${skipNote}`);
           } else if (kind === "style") {
             await client.downloadStyle();
             log.ok("Downloaded styles + fonts + sprites");
@@ -141,6 +186,29 @@ export function registerDataCommands(program: Command): void {
     );
 
   data
+    .command("build <kind> [region]")
+    .description(
+      "Build prepared artifacts from downloaded data (compatibility alias for `services build`; kind: motis | osrm | otp | pelias | tiles)",
+    )
+    .action(async (kind: string, region: string | undefined) => {
+      try {
+        const serviceId = resolveDataBuildServiceId(kind);
+        if (!serviceId) {
+          log.err(`Unknown kind: ${kind} (use: motis | osrm | otp | pelias | tiles)`);
+          process.exit(1);
+        }
+        await buildServices({
+          mode: "explicit",
+          serviceIds: [serviceId],
+          region,
+        });
+      } catch (err) {
+        log.err(`build failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  data
     .command("convert <kind> [region]")
     .description(
       "Derive a secondary format from an existing download (kind: overpass — converts OSM PBF → OSM BZ2 for Overpass)",
@@ -149,10 +217,14 @@ export function registerDataCommands(program: Command): void {
       const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
       try {
         if (kind === "overpass") {
+          const resolvedRegion = resolveOverpassRegion(region);
+          if (resolvedRegion.sourceEnv) {
+            log.dim(`using region "${resolvedRegion.value}" from $${resolvedRegion.sourceEnv}`);
+          }
           const started = Date.now();
           const render = progressRenderer();
           const r = await client.convertOverpass({
-            region,
+            region: resolvedRegion.value,
             onProgress: (bytes, total) => render.update(bytes, total, started),
           });
           render.done();
@@ -179,6 +251,7 @@ export function registerDataCommands(program: Command): void {
         target: string;
         consumerService: string;
         dataType: string;
+        targetFilename?: string;
       }>;
       try {
         plan = JSON.parse(readFileSync(planPath, "utf-8")) as typeof plan;

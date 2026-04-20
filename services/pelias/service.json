@@ -12,8 +12,13 @@
     "expose": [4000],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped",
-    "dependsOn": [{ "service": "elasticsearch", "condition": "service_healthy" }]
+    "dependsOn": [
+      { "service": "elasticsearch", "condition": "service_healthy" },
+      { "service": "pelias-placeholder", "condition": "service_started" },
+      { "service": "pelias-pip", "condition": "service_started" }
+    ]
   },
+  "buildCommand": "openmapx services build pelias",
   "provides": ["geocoder"],
   "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
   "exposure": {

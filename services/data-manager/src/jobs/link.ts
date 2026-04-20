@@ -1,4 +1,4 @@
-import { existsSync, linkSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
 export interface HardlinkEntry {
@@ -6,6 +6,7 @@ export interface HardlinkEntry {
   target: string;
   consumerService: string;
   dataType: string;
+  targetFilename?: string;
 }
 
 export interface ApplyHardlinkOptions {
@@ -37,6 +38,19 @@ function stripDataPrefix(p: string): string {
  * (per-style subdir) have nested layouts — a flat `readdirSync` would
  * skip every entry because it's a directory.
  */
+function linkFile(srcPath: string, tgtPath: string): { linked: number; skipped: number } {
+  if (existsSync(tgtPath)) {
+    const srcStat = statSync(srcPath);
+    const tgtStat = statSync(tgtPath);
+    if (srcStat.ino === tgtStat.ino && srcStat.dev === tgtStat.dev) {
+      return { linked: 0, skipped: 1 };
+    }
+    unlinkSync(tgtPath);
+  }
+  linkSync(srcPath, tgtPath);
+  return { linked: 1, skipped: 0 };
+}
+
 function linkTree(sourceDir: string, targetDir: string): { linked: number; skipped: number } {
   let linked = 0;
   let skipped = 0;
@@ -52,27 +66,30 @@ function linkTree(sourceDir: string, targetDir: string): { linked: number; skipp
     }
     if (!entry.isFile()) continue;
 
-    if (existsSync(tgtPath)) {
-      const srcStat = statSync(srcPath);
-      const tgtStat = statSync(tgtPath);
-      if (srcStat.ino === tgtStat.ino && srcStat.dev === tgtStat.dev) {
-        skipped++;
-        continue;
-      }
-    }
-    try {
-      linkSync(srcPath, tgtPath);
-      linked++;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EEXIST") {
-        skipped++;
-      } else {
-        throw err;
-      }
-    }
+    const res = linkFile(srcPath, tgtPath);
+    linked += res.linked;
+    skipped += res.skipped;
   }
   return { linked, skipped };
+}
+
+function linkSingleFileAs(
+  sourceDir: string,
+  targetDir: string,
+  targetFilename: string,
+): { linked: number; skipped: number } {
+  const files = readdirSync(sourceDir, { withFileTypes: true }).filter((entry) => entry.isFile());
+  if (files.length !== 1) {
+    throw new Error(
+      `Cannot link ${sourceDir} as ${targetFilename}: expected exactly one source file, found ${files.length}`,
+    );
+  }
+
+  const file = files[0];
+  if (!file) return { linked: 0, skipped: 0 };
+
+  mkdirSync(targetDir, { recursive: true });
+  return linkFile(join(sourceDir, file.name), join(targetDir, targetFilename));
 }
 
 export async function applyHardlinkPlan(
@@ -91,7 +108,9 @@ export async function applyHardlinkPlan(
     if (!existsSync(source) || !statSync(source).isDirectory()) continue;
     if (relative(source, target) === "") continue; // self-link — nothing to do
 
-    const res = linkTree(source, target);
+    const res = entry.targetFilename
+      ? linkSingleFileAs(source, target, entry.targetFilename)
+      : linkTree(source, target);
     linked += res.linked;
     skipped += res.skipped;
   }

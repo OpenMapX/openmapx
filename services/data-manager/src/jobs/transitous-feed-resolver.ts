@@ -1,12 +1,12 @@
 /**
- * Minimal Transitous catalog fetcher for the data-manager.
+ * Resolve downloadable GTFS feed descriptors from the public Transitous
+ * repository catalog.
  *
- * Walks the `public-transport/transitous` GitHub repo (main branch) at
- * `feeds/*.json`, extracts every `sources[]` entry of type `http` + spec
- * `gtfs`, and returns `{id, country, url}` tuples that `downloadGtfs` can
- * stream through `curlAtomic`. Kept deliberately lightweight — no BBox
- * lookups, no local caching (data-manager already dedupes downloads via its
- * state store).
+ * This is intentionally a catalog resolver, not a replacement for the old
+ * Transitous/MOTIS preparation pipeline. It walks `feeds/*.json` in the
+ * upstream repository, extracts direct HTTP GTFS schedule URLs, and returns
+ * lightweight `{id, country, url}` descriptors that the GTFS downloader can
+ * fetch.
  */
 
 const USER_AGENT = "openmapx-data-manager/1.0";
@@ -14,7 +14,7 @@ const GITHUB_API = "https://api.github.com";
 const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transitous/main";
 const TIMEOUT_MS = 15_000;
 
-export interface TransitousFeed {
+export interface ResolvedTransitousFeed {
   id: string;
   country: string;
   url: string;
@@ -71,7 +71,7 @@ function slugify(name: string, countryCode: string): string {
   return `${countryCode}_${base}`;
 }
 
-export async function fetchTransitousCatalog(): Promise<TransitousFeed[]> {
+export async function resolveTransitousFeedCatalog(): Promise<ResolvedTransitousFeed[]> {
   const tree = await fetchJson<{ tree: GitHubTreeEntry[] }>(
     `${GITHUB_API}/repos/public-transport/transitous/git/trees/main?recursive=1`,
   );
@@ -83,13 +83,12 @@ export async function fetchTransitousCatalog(): Promise<TransitousFeed[]> {
   }
 
   const feedFiles = tree.tree
-    .filter((e) => e.type === "blob" && e.path.startsWith("feeds/") && e.path.endsWith(".json"))
-    .map((e) => e.path);
+    .filter((entry) => entry.type === "blob" && entry.path.startsWith("feeds/"))
+    .filter((entry) => entry.path.endsWith(".json"))
+    .map((entry) => entry.path);
 
-  const feeds: TransitousFeed[] = [];
+  const feeds: ResolvedTransitousFeed[] = [];
 
-  // Fetch feed files in parallel (max 10 concurrent) — same shape as the
-  // apps/api catalog fetcher.
   for (let i = 0; i < feedFiles.length; i += 10) {
     const chunk = feedFiles.slice(i, i + 10);
     const results = await Promise.allSettled(
@@ -99,6 +98,7 @@ export async function fetchTransitousCatalog(): Promise<TransitousFeed[]> {
         const data = JSON.parse(content) as TransitousFeedFile;
         const filename = path.replace("feeds/", "").replace(".json", "");
         const countryCode = filename.split("-")[0].split(".")[0].toLowerCase();
+
         for (const source of data.sources ?? []) {
           if (source.skip) continue;
           if (source.type !== "http") continue;
@@ -112,9 +112,10 @@ export async function fetchTransitousCatalog(): Promise<TransitousFeed[]> {
         }
       }),
     );
-    for (const r of results) {
-      if (r.status === "rejected") {
-        console.warn("[transitous-catalog] failed to parse feed file:", r.reason);
+
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.warn("[transitous-feed-resolver] failed to parse feed file:", result.reason);
       }
     }
   }

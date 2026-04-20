@@ -77,6 +77,11 @@ COPY --from=prod-deps /app/packages/shared-mobility/node_modules ./packages/shar
 # Integrations with pnpm-resolved node_modules (manifests + code + deps)
 COPY --from=prod-deps /app/integrations ./integrations
 
+# Service manifests are read at runtime by the API service registry. They are
+# not needed for the bundle itself, but without them self-hosted containers
+# cannot resolve integration `requires:` entries or render compose previews.
+COPY services/ services/
+
 # API build output
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/src/db/migrations ./apps/api/dist/db/migrations

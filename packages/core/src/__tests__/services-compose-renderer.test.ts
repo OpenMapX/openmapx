@@ -253,6 +253,35 @@ describe("renderCompose", () => {
     ]);
   });
 
+  it("passes consumes targetFilename through to the hardlink plan", () => {
+    const services = [
+      svc("data-manager", {
+        produces: [{ type: "osm-pbf", sourceDir: "data/osm" }],
+      }),
+      svc("nominatim", {
+        consumes: [
+          {
+            type: "osm-pbf",
+            mountAt: "/nominatim/data",
+            targetFilename: "data.osm.pbf",
+            required: true,
+          },
+        ],
+      }),
+    ];
+    const result = renderCompose(services, { domain: "example.com" });
+    expect(result.hardlinkPlan).toEqual([
+      {
+        source: "data/osm",
+        target: "data/nominatim/osm-pbf",
+        consumerService: "nominatim",
+        dataType: "osm-pbf",
+        targetFilename: "data.osm.pbf",
+      },
+    ]);
+    expect(result.composeYaml).toContain("./data/nominatim/osm-pbf:/nominatim/data");
+  });
+
   it("nests host paths by consumed type when a service consumes multiple types", () => {
     const services = [
       svc("dm", {
@@ -346,6 +375,22 @@ describe("renderCompose", () => {
       bindMounts: [{ source: "@service:nonexistent:config/x.json", target: "/code/x.json" }],
     });
     expect(() => renderCompose([orphan], { domain: "example.com" })).toThrow(/not found/);
+  });
+
+  it("can resolve @service:<slug>:<path> against installed services outside the rendered subset", () => {
+    const pelias = svc("pelias", {});
+    const placeholder = svc("pelias-placeholder", {
+      bindMounts: [{ source: "@service:pelias:config/pelias.json", target: "/code/pelias.json" }],
+    });
+    const result = renderCompose([placeholder], {
+      domain: "example.com",
+      composeOutDir: "/repo/infra/docker",
+      allServices: [pelias, placeholder],
+    });
+    expect(result.composeYaml).toContain(
+      "../../services/pelias/config/pelias.json:/code/pelias.json:ro",
+    );
+    expect(result.composeYaml).not.toContain("pelias:\n");
   });
 
   describe("multi-instance produces / consumes", () => {
@@ -444,6 +489,15 @@ describe("renderCompose", () => {
       );
     });
 
+    it("throws when a required consumer has no producer", () => {
+      const consumer = svc("valhalla", {
+        consumes: [{ type: "osm-pbf", mountAt: "/custom_files", required: true }],
+      });
+      expect(() => renderCompose([consumer], { domain: "example.com" })).toThrow(
+        /consumes required data type "osm-pbf" but no producer is installed/,
+      );
+    });
+
     it("throws on ambiguous resolution (multiple instances, consumer omits instance)", () => {
       const producer = svc("data", {
         produces: [
@@ -477,9 +531,10 @@ describe("renderCompose", () => {
           { type: "osm-pbf", instance: "asia", mountAt: "/custom_files", required: false },
         ],
       });
-      // No producer, but required: false → no plan entry, no throw.
+      // No producer, but required: false -> no plan entry, no mount, no throw.
       const result = renderCompose([consumer], { domain: "example.com" });
       expect(result.hardlinkPlan).toEqual([]);
+      expect(result.composeYaml).not.toContain("/custom_files");
     });
   });
 });

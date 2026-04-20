@@ -13,7 +13,12 @@
     "restart": "unless-stopped"
   },
   "consumes": [
-    { "type": "pelias-placeholder-data", "mountAt": "/data/placeholder", "required": true }
+    {
+      "type": "pelias-placeholder-data",
+      "mountAt": "/data/placeholder",
+      "readOnly": true,
+      "required": true
+    }
   ],
   "bindMounts": [{ "source": "@service:pelias:config/pelias.json", "target": "/code/pelias.json" }],
   "exposure": {

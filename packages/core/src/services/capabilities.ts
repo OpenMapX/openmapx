@@ -47,7 +47,11 @@ export const WELL_KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
 export const WELL_KNOWN_DATA_TYPES: ReadonlySet<string> = new Set([
   "osm-pbf",
   "osm-pbf-bz2",
+  "osrm-graph",
+  "otp-graph",
+  "motis-data",
   "gtfs",
+  "tile-mbtiles",
   "tile-fonts",
   "tile-styles",
   "pelias-placeholder-data",

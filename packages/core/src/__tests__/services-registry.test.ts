@@ -84,4 +84,19 @@ describe("ServiceRegistry.load", () => {
     await registry.load();
     expect(registry.get("nope")).toBeUndefined();
   });
+
+  it("can apply an enabled id set after loading installed services", async () => {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+    writeManifest("beta", { ...baseManifest, id: "beta" });
+
+    const registry = new ServiceRegistry({ rootDir: tmp });
+    await registry.load();
+    registry.applyEnabledIds(new Set(["beta"]));
+
+    expect(registry.list().map((s) => [s.manifest.id, s.enabled])).toEqual([
+      ["alpha", false],
+      ["beta", true],
+    ]);
+    expect(registry.enabled().map((s) => s.manifest.id)).toEqual(["beta"]);
+  });
 });

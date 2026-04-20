@@ -93,6 +93,12 @@ export class ServiceRegistry {
     return this.services.filter((s) => s.enabled);
   }
 
+  applyEnabledIds(enabledIds: Set<string>): void {
+    for (const svc of this.services) {
+      svc.enabled = enabledIds.has(svc.manifest.id);
+    }
+  }
+
   get(id: string): LoadedService | undefined {
     return this.services.find((s) => s.manifest.id === id);
   }

@@ -137,11 +137,11 @@ export interface BuildStatus {
 // "has the build completed?" answer.
 const BUILT_PRODUCT_DIRS: Record<string, string> = {
   valhalla: "valhalla",
-  osrm: "osrm",
-  otp: "otp",
-  motis: "motis",
-  tiles: "tileserver",
-  pelias: "pelias-elasticsearch",
+  osrm: "osrm-graph",
+  otp: "otp-graph",
+  motis: "motis-data",
+  tiles: "tile-mbtiles",
+  pelias: "pelias",
   nominatim: "nominatim",
   photon: "photon",
   overpass: "overpass",

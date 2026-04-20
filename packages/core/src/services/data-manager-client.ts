@@ -5,6 +5,24 @@ export interface DataManagerClientOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+export interface GtfsDownloadFailure {
+  id: string;
+  country: string;
+  url: string;
+  message: string;
+}
+
+export interface GtfsDownloadResult {
+  count: number;
+  resolvedFromCatalog: boolean;
+  requestedCount: number;
+  selectedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  partialSuccess: boolean;
+  failures: GtfsDownloadFailure[];
+}
+
 export class DataManagerClient {
   private baseUrl: string;
   private fetchImpl: typeof globalThis.fetch;
@@ -67,7 +85,7 @@ export class DataManagerClient {
           countries?: string[];
         }
       | { source: "transitous"; countries?: string[] },
-  ): Promise<{ count: number; resolvedFromCatalog: boolean }> {
+  ): Promise<GtfsDownloadResult> {
     const body =
       "feeds" in opts
         ? { feeds: opts.feeds, countries: opts.countries ?? [] }
@@ -78,8 +96,17 @@ export class DataManagerClient {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`download/gtfs failed: HTTP ${res.status}`);
-    const parsed = (await res.json()) as { count: number; resolvedFromCatalog?: boolean };
-    return { count: parsed.count, resolvedFromCatalog: parsed.resolvedFromCatalog ?? false };
+    const parsed = (await res.json()) as Partial<GtfsDownloadResult>;
+    return {
+      count: parsed.count ?? 0,
+      resolvedFromCatalog: parsed.resolvedFromCatalog ?? false,
+      requestedCount: parsed.requestedCount ?? 0,
+      selectedCount: parsed.selectedCount ?? 0,
+      skippedCount: parsed.skippedCount ?? 0,
+      failedCount: parsed.failedCount ?? 0,
+      partialSuccess: parsed.partialSuccess ?? false,
+      failures: parsed.failures ?? [],
+    };
   }
 
   async downloadStyle(): Promise<{ ok: boolean }> {
@@ -89,7 +116,13 @@ export class DataManagerClient {
   }
 
   async link(
-    plan: Array<{ source: string; target: string; consumerService: string; dataType: string }>,
+    plan: Array<{
+      source: string;
+      target: string;
+      consumerService: string;
+      dataType: string;
+      targetFilename?: string;
+    }>,
   ): Promise<{ linked: number; skipped: number }> {
     const res = await this.fetchImpl(`${this.baseUrl}/link`, {
       method: "POST",

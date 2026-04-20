@@ -11,7 +11,7 @@ import {
 } from "./instances.js";
 
 // Populated by setup(ctx); default matches pre-config-cascade behaviour.
-let LICENSE_FILE = join(process.cwd(), "../../infra/docker/data/motis", "license.json");
+let LICENSE_FILE = join(process.cwd(), "../../infra/docker/data/motis-data", "license.json");
 
 let cachedData: unknown[] | null = null;
 let cachedMtime = 0;
@@ -92,7 +92,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   const dataDir =
     (ctx.config.dataDir as string | undefined) ??
-    join(process.cwd(), "../../infra/docker/data/motis");
+    join(process.cwd(), "../../infra/docker/data/motis-data");
   LICENSE_FILE = join(dataDir, "license.json");
   cachedData = null;
   cachedMtime = 0;

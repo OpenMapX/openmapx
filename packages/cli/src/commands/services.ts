@@ -4,12 +4,22 @@ import kleur from "kleur";
 import { dockerComposeStream } from "../lib/docker";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { buildServices } from "../lib/service-builds";
+import {
+  applyServiceSelection,
+  disableSelectedServices,
+  enableSelectedServices,
+  getServiceSelectionSummary,
+  SERVICE_SELECTION_FILE,
+} from "../lib/service-selection";
 
 const {
   checkCapabilityName,
+  formatServiceIdList,
   getProvidedCapabilityNames,
   normalizeProvides,
   ServiceRegistry,
+  SERVICE_SELECTION_ENV,
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } = coreServices;
@@ -26,6 +36,7 @@ export async function listServices(opts: ListOptions = {}): Promise<LoadedServic
   const paths = repoPaths(opts.rootDir);
   const registry = new ServiceRegistry({ rootDir: paths.root });
   await registry.load();
+  applyServiceSelection(registry, { rootDir: paths.root });
   let list = registry.list();
   if (opts.capability) {
     const cap = opts.capability;
@@ -154,6 +165,60 @@ export function registerServicesCommands(program: Command): void {
   const services = program.command("services").description("Manage services");
 
   services
+    .command("selected")
+    .description("Show requested and effective selected services")
+    .action(async () => {
+      try {
+        const applied = await getServiceSelectionSummary();
+        console.log(`Source: ${applied.source}`);
+        console.log(`Requested: ${applied.requestedIds.join(", ") || "(none)"}`);
+        console.log(`Effective: ${applied.selection.enabledIdsOrdered.join(", ") || "(none)"}`);
+        for (const warning of applied.selection.warnings) log.warn(warning);
+      } catch (err) {
+        log.err((err as Error).message);
+        process.exit(1);
+      }
+    });
+
+  services
+    .command("enable <ids...>")
+    .description(`Persistently add services to ${SERVICE_SELECTION_FILE}`)
+    .action(async (ids: string[]) => {
+      try {
+        const state = enableSelectedServices(ids);
+        const applied = await getServiceSelectionSummary();
+        log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
+        log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);
+        for (const warning of applied.selection.warnings) log.warn(warning);
+      } catch (err) {
+        log.err((err as Error).message);
+        if ((err as Error).message.includes(SERVICE_SELECTION_ENV)) {
+          log.dim(`Selection file was not changed.`);
+        }
+        process.exit(1);
+      }
+    });
+
+  services
+    .command("disable <ids...>")
+    .description(`Persistently remove services from ${SERVICE_SELECTION_FILE}`)
+    .action(async (ids: string[]) => {
+      try {
+        const state = disableSelectedServices(ids);
+        const applied = await getServiceSelectionSummary();
+        log.ok(`Selected roots → ${formatServiceIdList(state.selected) || "(none)"}`);
+        log.dim(`Effective services → ${formatServiceIdList(applied.selection.enabledIdsOrdered)}`);
+        for (const warning of applied.selection.warnings) log.warn(warning);
+      } catch (err) {
+        log.err((err as Error).message);
+        if ((err as Error).message.includes(SERVICE_SELECTION_ENV)) {
+          log.dim(`Selection file was not changed.`);
+        }
+        process.exit(1);
+      }
+    });
+
+  services
     .command("list")
     .description("List discovered services")
     .option("--capability <cap>", "Filter by provided capability")
@@ -185,6 +250,61 @@ export function registerServicesCommands(program: Command): void {
         process.exit(1);
       }
       console.log(JSON.stringify(svc.manifest, null, 2));
+    });
+
+  services
+    .command("build-all")
+    .description("Build prepared artifacts for every installed service that declares buildCommand")
+    .option(
+      "--region <region>",
+      "Region selector passed through to build handlers (overrides service-specific env defaults)",
+    )
+    .option("--fail-fast", "Stop after the first build failure")
+    .action(async (options: { region?: string; failFast?: boolean }) => {
+      try {
+        const result = await buildServices({
+          mode: "all",
+          region: options.region,
+          continueOnError: options.failFast !== true,
+        });
+        if (result.failures.length > 0) {
+          log.err(
+            `build-all completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
+          );
+          process.exit(1);
+        }
+      } catch (err) {
+        log.err(`build-all failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  services
+    .command("build <ids...>")
+    .description("Build prepared artifacts for one or more services that declare buildCommand")
+    .option(
+      "--region <region>",
+      "Region selector passed through to build handlers (overrides service-specific env defaults)",
+    )
+    .option("--continue-on-error", "Keep building later services after a failure")
+    .action(async (ids: string[], options: { region?: string; continueOnError?: boolean }) => {
+      try {
+        const result = await buildServices({
+          mode: "explicit",
+          serviceIds: ids,
+          region: options.region,
+          continueOnError: options.continueOnError,
+        });
+        if (result.failures.length > 0) {
+          log.err(
+            `build completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
+          );
+          process.exit(1);
+        }
+      } catch (err) {
+        log.err(`build failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
     });
 
   services

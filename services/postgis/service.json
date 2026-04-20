@@ -26,7 +26,7 @@
     }
   },
   "provides": ["database"],
-  "volumes": [{ "name": "openmapx-pgdata", "mountAt": "/var/lib/postgresql" }],
+  "volumes": [{ "name": "openmapx-pgdata", "mountAt": "/var/lib/postgresql", "backup": true }],
   "exposure": {
     "hostPorts": [{ "container": 5432, "host": 5432, "bindAddress": "127.0.0.1" }]
   },

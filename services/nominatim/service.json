@@ -36,10 +36,21 @@
     }
   },
   "provides": ["geocoder"],
-  "consumes": [{ "type": "osm-pbf", "mountAt": "/nominatim/data", "required": true }],
+  "consumes": [
+    {
+      "type": "osm-pbf",
+      "mountAt": "/nominatim/data",
+      "targetFilename": "data.osm.pbf",
+      "required": true
+    }
+  ],
   "volumes": [
-    { "name": "openmapx-nominatim-data", "mountAt": "/var/lib/postgresql/16/main" },
-    { "name": "openmapx-nominatim-flatnode", "mountAt": "/nominatim/flatnode" }
+    {
+      "name": "openmapx-nominatim-data",
+      "mountAt": "/var/lib/postgresql/16/main",
+      "backup": true
+    },
+    { "name": "openmapx-nominatim-flatnode", "mountAt": "/nominatim/flatnode", "backup": true }
   ],
   "exposure": {
     "hostPorts": [{ "container": 8080, "host": 8088, "bindAddress": "127.0.0.1" }]

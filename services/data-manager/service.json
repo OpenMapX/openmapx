@@ -27,9 +27,15 @@
   "provides": ["osm-data", "gtfs-data", "tile-asset-data"],
   "produces": [
     { "type": "osm-pbf", "sourceDir": "data/osm" },
+    { "type": "osrm-graph", "sourceDir": "data/osrm-graph" },
+    { "type": "otp-graph", "sourceDir": "data/otp-graph" },
+    { "type": "motis-data", "sourceDir": "data/motis-data" },
     { "type": "gtfs", "sourceDir": "data/gtfs" },
+    { "type": "tile-mbtiles", "sourceDir": "data/tile-mbtiles" },
     { "type": "tile-fonts", "sourceDir": "data/tile-fonts" },
     { "type": "tile-styles", "sourceDir": "data/tile-styles" },
+    { "type": "pelias-placeholder-data", "sourceDir": "data/pelias/placeholder" },
+    { "type": "pelias-whosonfirst-data", "sourceDir": "data/pelias/whosonfirst" },
     { "type": "osm-pbf-bz2", "sourceDir": "data/osm-bz2" }
   ],
   "bindMounts": [{ "source": "@infra:data", "target": "/data", "readOnly": false }],

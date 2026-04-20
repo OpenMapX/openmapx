@@ -83,6 +83,14 @@ export interface ServiceConsumes {
    */
   instance?: string;
   mountAt: string;
+  /**
+   * Optional stable filename to expose inside the consumed mount directory.
+   * When set, the data-manager hardlink step expects the producer source
+   * directory to contain exactly one file and links it into the consumer target
+   * directory under this filename. Use this for services with fixed input-name
+   * contracts, e.g. Nominatim's `/nominatim/data/data.osm.pbf`.
+   */
+  targetFilename?: string;
   readOnly?: boolean;
   required?: boolean;
 }
@@ -271,7 +279,18 @@ export interface ResolutionResult {
  * aligned with the data-manager service's `produces:` declarations and with
  * `services/data-manager/src/state.ts` where this is mirrored for the service.
  */
-export type DatasetType = "osm-pbf" | "osm-pbf-bz2" | "gtfs" | "tile-fonts" | "tile-styles";
+export type DatasetType =
+  | "osm-pbf"
+  | "osm-pbf-bz2"
+  | "osrm-graph"
+  | "otp-graph"
+  | "motis-data"
+  | "gtfs"
+  | "tile-mbtiles"
+  | "tile-fonts"
+  | "tile-styles"
+  | "pelias-placeholder-data"
+  | "pelias-whosonfirst-data";
 
 export interface DatasetMetadata {
   type: DatasetType;
@@ -291,6 +310,8 @@ export interface HardlinkEntry {
   dataType: string;
   /** Producer-instance id for multi-instance datasets; undefined for the default/only instance. */
   instance?: string;
+  /** Stable target filename requested by the consumer, if any. */
+  targetFilename?: string;
 }
 
 export interface RenderResult {

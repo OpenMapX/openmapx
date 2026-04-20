@@ -121,6 +121,7 @@ const volumeSchema = z.object({
 // Instance ids end up in on-disk hardlink target paths (data/<consumer-id>/
 // <type>/<instance>/) so they share the same slug shape as service ids.
 const INSTANCE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+const TARGET_FILENAME_REGEX = /^[a-zA-Z0-9._-]+$/;
 
 const consumesSchema = z.object({
   type: z.string().min(1),
@@ -129,6 +130,11 @@ const consumesSchema = z.object({
     .string()
     .regex(ABSOLUTE_PATH_REGEX, "must be absolute")
     .refine((p) => !pathHasParentEscape(p), "must not contain '..'"),
+  targetFilename: z
+    .string()
+    .regex(TARGET_FILENAME_REGEX, "must be a filename, not a path")
+    .refine((name) => name !== "." && name !== "..", "must be a filename, not a path")
+    .optional(),
   readOnly: z.boolean().optional(),
   required: z.boolean().optional(),
 });

@@ -48,6 +48,7 @@ const baseService = {
 };
 
 beforeEach(() => {
+  delete process.env.OPENMAPX_ENABLED_SERVICES;
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-backup-"));
   setupRepo();
 });
@@ -257,7 +258,7 @@ describe("discoverBackupableServices", () => {
 
     const targets = await discoverBackupableServices({ rootDir: tmp });
     const ids = targets.map((t) => t.id).sort();
-    expect(ids).toEqual(["postgis", "tileserver"]);
+    expect(ids).toEqual(["postgis"]);
 
     const pg = targets.find((t) => t.id === "postgis");
     expect(pg?.isPostgres).toBe(true);
@@ -278,6 +279,29 @@ describe("discoverBackupableServices", () => {
     });
     const out = await discoverBackupableServices({ rootDir: tmp, serviceIds: ["postgis"] });
     expect(out.map((t) => t.id)).toEqual(["postgis"]);
+  });
+
+  it("includes backupable services from the local selection file", async () => {
+    writeManifest("postgis", {
+      ...baseService,
+      id: "postgis",
+      volumes: [{ name: "openmapx-pgdata", mountAt: "/var/lib/postgresql", backup: true }],
+    });
+    writeManifest("tileserver", {
+      ...baseService,
+      id: "tileserver",
+      volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true }],
+    });
+    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+    writeFileSync(
+      join(tmp, "infra", "docker", "service-selection.json"),
+      JSON.stringify({ selected: ["postgis", "tileserver"] }),
+      "utf-8",
+    );
+
+    const out = await discoverBackupableServices({ rootDir: tmp });
+
+    expect(out.map((t) => t.id).sort()).toEqual(["postgis", "tileserver"]);
   });
 });
 

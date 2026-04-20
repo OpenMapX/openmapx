@@ -78,6 +78,37 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(false);
   });
 
+  it("accepts a consumes targetFilename for fixed input-name contracts", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      consumes: [
+        {
+          type: "osm-pbf",
+          mountAt: "/nominatim/data",
+          targetFilename: "data.osm.pbf",
+          required: true,
+        },
+      ],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects consumes targetFilename when it contains a path", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      consumes: [
+        {
+          type: "osm-pbf",
+          mountAt: "/nominatim/data",
+          targetFilename: "../data.osm.pbf",
+          required: true,
+        },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/targetFilename/);
+  });
+
   it("rejects unknown capAdd entries (must be uppercase Linux capability)", () => {
     const result = validateServiceManifest({
       ...validMinimal,

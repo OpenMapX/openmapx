@@ -165,6 +165,7 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                   />
                   <Typography variant="caption" color="text.secondary">
                     mounted at <code style={{ fontFamily: "monospace" }}>{c.mountAt}</code>
+                    {c.targetFilename ? ` · as ${c.targetFilename}` : ""}
                     {c.readOnly ? " · read-only" : ""}
                     {c.required === false ? " · optional" : ""}
                   </Typography>

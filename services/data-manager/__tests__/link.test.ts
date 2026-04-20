@@ -107,4 +107,72 @@ describe("applyHardlinkPlan", () => {
     expect(r2.linked).toBe(0);
     expect(r2.skipped).toBe(1);
   });
+
+  it("replaces stale target files when the source inode changed", async () => {
+    const src = join(tmp, "src");
+    const tgt = join(tmp, "tgt");
+    mkdirSync(src, { recursive: true });
+    mkdirSync(tgt, { recursive: true });
+    writeFileSync(join(src, "feed.zip"), "fresh");
+    writeFileSync(join(tgt, "feed.zip"), "stale");
+
+    const result = await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
+      { rootDir: tmp },
+    );
+
+    expect(result.linked).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(readFileSync(join(tgt, "feed.zip"), "utf-8")).toBe("fresh");
+    expect(statSync(join(src, "feed.zip")).ino).toBe(statSync(join(tgt, "feed.zip")).ino);
+  });
+
+  it("links exactly one source file under a requested target filename", async () => {
+    const src = join(tmp, "osm");
+    const tgt = join(tmp, "nominatim", "osm-pbf");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "europe-germany.osm.pbf"), "PBF");
+
+    const result = await applyHardlinkPlan(
+      [
+        {
+          source: src,
+          target: tgt,
+          consumerService: "nominatim",
+          dataType: "osm-pbf",
+          targetFilename: "data.osm.pbf",
+        },
+      ],
+      { rootDir: tmp },
+    );
+
+    expect(result.linked).toBe(1);
+    expect(readFileSync(join(tgt, "data.osm.pbf"), "utf-8")).toBe("PBF");
+    expect(statSync(join(src, "europe-germany.osm.pbf")).ino).toBe(
+      statSync(join(tgt, "data.osm.pbf")).ino,
+    );
+  });
+
+  it("fails a targetFilename link when the source directory has multiple files", async () => {
+    const src = join(tmp, "osm");
+    const tgt = join(tmp, "nominatim", "osm-pbf");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "europe-germany.osm.pbf"), "PBF1");
+    writeFileSync(join(src, "planet.osm.pbf"), "PBF2");
+
+    await expect(
+      applyHardlinkPlan(
+        [
+          {
+            source: src,
+            target: tgt,
+            consumerService: "nominatim",
+            dataType: "osm-pbf",
+            targetFilename: "data.osm.pbf",
+          },
+        ],
+        { rootDir: tmp },
+      ),
+    ).rejects.toThrow(/expected exactly one source file/);
+  });
 });

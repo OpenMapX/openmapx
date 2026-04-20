@@ -192,10 +192,13 @@ export async function getRouteAlerts(lineId: string): Promise<ServiceAlert[]> {
 export async function getRouteStopSequence(lineId: string): Promise<RouteStop[]> {
   const key = apiKey();
   if (!key) return [];
+  const rawId = lineId.startsWith("tfl:") ? lineId.slice(4) : lineId;
 
   try {
     const params = new URLSearchParams({ app_key: key });
-    const res = await fetch(`${BASE_URL}/Line/${lineId}/Route/Sequence/outbound?${params}`);
+    const res = await fetch(
+      `${BASE_URL}/Line/${encodeURIComponent(rawId)}/Route/Sequence/outbound?${params}`,
+    );
     if (!res.ok) return [];
 
     // biome-ignore lint/suspicious/noExplicitAny: external API response

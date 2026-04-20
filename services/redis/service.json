@@ -21,7 +21,7 @@
     }
   },
   "provides": ["cache"],
-  "volumes": [{ "name": "openmapx-redisdata", "mountAt": "/data" }],
+  "volumes": [{ "name": "openmapx-redisdata", "mountAt": "/data", "backup": true }],
   "exposure": {
     "hostPorts": [{ "container": 6379, "host": 6379, "bindAddress": "127.0.0.1" }]
   },

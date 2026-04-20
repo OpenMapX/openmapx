@@ -4,7 +4,7 @@ import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
-import { fetchTransitousCatalog } from "./jobs/transitous-catalog.js";
+import { resolveTransitousFeedCatalog } from "./jobs/transitous-feed-resolver.js";
 import { StateStore } from "./state.js";
 
 export interface ApiOptions {
@@ -64,23 +64,29 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     if (feeds && feeds.length > 0) {
       resolvedFeeds = feeds;
     } else if (source === "transitous" || !feeds) {
-      // Default: pull the Transitous catalog when the caller didn't supply
-      // an explicit list. Keeps the CLI ergonomics simple (no feeds.json
-      // required) and stays in sync with the upstream registry.
-      resolvedFeeds = await fetchTransitousCatalog();
+      // Default: resolve direct GTFS feed URLs from the Transitous catalog
+      // when the caller did not provide an explicit list. This is only a
+      // catalog resolver; MOTIS-specific preparation happens elsewhere.
+      resolvedFeeds = await resolveTransitousFeedCatalog();
     } else {
       throw new Error("download/gtfs: either `feeds` or `source: 'transitous'` is required");
     }
-    const downloaded = await downloadGtfs({
+    const result = await downloadGtfs({
       feeds: resolvedFeeds,
       countries,
       dataDir,
       store,
     });
     return {
-      ok: true,
-      count: downloaded.length,
+      ok: result.failures.length === 0,
+      count: result.downloaded.length,
       resolvedFromCatalog: !feeds || feeds.length === 0,
+      requestedCount: result.requestedCount,
+      selectedCount: result.selectedCount,
+      skippedCount: result.skippedCount,
+      failedCount: result.failures.length,
+      partialSuccess: result.partialSuccess,
+      failures: result.failures,
     };
   });
 

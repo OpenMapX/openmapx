@@ -1,7 +1,14 @@
 import { resolve } from "node:path";
 import { services } from "@openmapx/core/server";
 
-const { ServiceRegistry, resolveRequirement } = services;
+const {
+  DEFAULT_SELECTED_SERVICE_IDS,
+  expandServiceSelection,
+  parseServiceIdList,
+  resolveRequirement,
+  SERVICE_SELECTION_ENV,
+  ServiceRegistry,
+} = services;
 type IntegrationManifestRequires = NonNullable<services.IntegrationRequirement[] | undefined>;
 
 let registry: InstanceType<typeof ServiceRegistry> | null = null;
@@ -13,6 +20,19 @@ export async function initServiceRegistry(): Promise<void> {
   const rootDir = resolve(process.cwd(), "..", "..");
   registry = new ServiceRegistry({ rootDir, warnings });
   await registry.load();
+  const envSelection = parseServiceIdList(process.env[SERVICE_SELECTION_ENV]);
+  const selection = expandServiceSelection(
+    registry.list(),
+    envSelection ?? DEFAULT_SELECTED_SERVICE_IDS,
+    {
+      allowMissingSelected: envSelection === null,
+    },
+  );
+  if (selection.missingIds.length > 0) {
+    warnings.push(`Selected service(s) are not installed: ${selection.missingIds.join(", ")}`);
+  }
+  warnings.push(...selection.warnings);
+  registry.applyEnabledIds(selection.enabledIds);
 }
 
 export function getServiceRegistry(): InstanceType<typeof ServiceRegistry> {

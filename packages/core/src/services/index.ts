@@ -22,7 +22,12 @@ export {
   resolveServiceConfigFromEnv,
   serviceConfigEnvPrefix,
 } from "./config-resolver";
-export { DataManagerClient, type DataManagerClientOptions } from "./data-manager-client";
+export {
+  DataManagerClient,
+  type DataManagerClientOptions,
+  type GtfsDownloadFailure,
+  type GtfsDownloadResult,
+} from "./data-manager-client";
 export {
   type ManifestValidationResult,
   serviceManifestSchema,
@@ -35,4 +40,15 @@ export {
   type ResolverContext,
   resolveRequirement,
 } from "./resolver";
+export {
+  buildAppApiServiceEnv,
+  DEFAULT_SELECTED_SERVICE_IDS,
+  type ExpandedServiceSelection,
+  type ExpandServiceSelectionOptions,
+  expandServiceSelection,
+  formatServiceIdList,
+  normalizeServiceIds,
+  parseServiceIdList,
+  SERVICE_SELECTION_ENV,
+} from "./selection";
 export * from "./types";

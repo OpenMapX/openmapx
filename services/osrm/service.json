@@ -14,8 +14,9 @@
     "memory": "8g",
     "restart": "unless-stopped"
   },
+  "buildCommand": "openmapx services build osrm",
   "provides": ["routing-engine"],
-  "consumes": [{ "type": "osm-pbf", "mountAt": "/data", "readOnly": true, "required": true }],
+  "consumes": [{ "type": "osrm-graph", "mountAt": "/data", "readOnly": true, "required": true }],
   "exposure": {
     "hostPorts": [{ "container": 5000, "host": 5000, "bindAddress": "127.0.0.1" }]
   },

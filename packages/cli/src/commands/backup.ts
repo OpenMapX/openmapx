@@ -15,6 +15,7 @@ import { execa } from "execa";
 import kleur from "kleur";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { applyServiceSelection } from "../lib/service-selection";
 
 const { ServiceRegistry } = coreServices;
 
@@ -162,6 +163,7 @@ export async function discoverBackupableServices(
   const paths = repoPaths(opts.rootDir);
   const registry = new ServiceRegistry({ rootDir: paths.root });
   await registry.load();
+  applyServiceSelection(registry, { rootDir: paths.root });
   const enabled = registry.enabled();
   const wanted = opts.serviceIds ? new Set(opts.serviceIds) : null;
 

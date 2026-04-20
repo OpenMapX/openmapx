@@ -15,10 +15,10 @@
     "memory": "16g",
     "restart": "unless-stopped"
   },
+  "buildCommand": "openmapx services build otp",
   "provides": ["transit-engine"],
   "consumes": [
-    { "type": "osm-pbf", "mountAt": "/var/opentripplanner/osm", "required": true },
-    { "type": "gtfs", "mountAt": "/var/opentripplanner/gtfs", "required": true }
+    { "type": "otp-graph", "mountAt": "/var/opentripplanner", "readOnly": true, "required": true }
   ],
   "bindMounts": [
     { "source": "config/build-config.json", "target": "/var/opentripplanner/build-config.json" },

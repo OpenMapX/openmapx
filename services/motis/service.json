@@ -21,11 +21,9 @@
       "options": { "max-size": "50m", "max-file": "3" }
     }
   },
+  "buildCommand": "openmapx services build motis",
   "provides": ["transit-engine", "routing-engine"],
-  "consumes": [
-    { "type": "osm-pbf", "mountAt": "/motis-data/osm", "required": true },
-    { "type": "gtfs", "mountAt": "/motis-data/gtfs", "required": true }
-  ],
+  "consumes": [{ "type": "motis-data", "mountAt": "/motis-data", "required": true }],
   "exposure": {
     "hostPorts": [{ "container": 8080, "host": 8081, "bindAddress": "127.0.0.1" }]
   },
