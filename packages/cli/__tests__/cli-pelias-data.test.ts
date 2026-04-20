@@ -87,9 +87,18 @@ describe("buildPeliasData", () => {
           "-f",
           join(tmp, "infra", "docker", PELIAS_BUILD_COMPOSE_FILENAME),
           "down",
-          "--volumes",
           "--remove-orphans",
         ],
+        cwd: join(tmp, "infra", "docker"),
+      },
+      {
+        command: "docker",
+        args: ["volume", "rm", "docker_openmapx-esdata"],
+        cwd: join(tmp, "infra", "docker"),
+      },
+      {
+        command: "docker",
+        args: ["volume", "create", "docker_openmapx-esdata"],
         cwd: join(tmp, "infra", "docker"),
       },
       {
@@ -219,7 +228,6 @@ describe("buildPeliasData", () => {
           "-f",
           join(tmp, "infra", "docker", PELIAS_BUILD_COMPOSE_FILENAME),
           "down",
-          "--volumes",
           "--remove-orphans",
         ],
         cwd: join(tmp, "infra", "docker"),
@@ -239,5 +247,47 @@ describe("buildPeliasData", () => {
         runner: async () => {},
       }),
     ).rejects.toThrow(/Multiple OSM PBF files found/);
+  });
+
+  it("ignores a missing shared Elasticsearch volume before recreating it", async () => {
+    const pbf = join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf");
+    writeFileSync(pbf, "PBF");
+
+    const peliasDir = join(tmp, "infra", "docker", "data", PELIAS_DATA_DIR);
+    const whosonfirstDir = join(peliasDir, "whosonfirst");
+    const placeholderDir = join(peliasDir, "placeholder");
+    const runner: CommandRunner = async (command, args) => {
+      if (command !== "docker") return;
+      const joined = args.join(" ");
+      if (joined === "volume rm docker_openmapx-esdata") {
+        const error = new Error(
+          "Command failed with exit code 1: docker volume rm docker_openmapx-esdata",
+        ) as Error & {
+          stderr?: string;
+        };
+        error.stderr = "Error response from daemon: get docker_openmapx-esdata: no such volume";
+        throw error;
+      }
+      if (joined.includes("run --rm pelias-whosonfirst-download")) {
+        writeFileSync(join(whosonfirstDir, "admin.sqlite3"), "WOF");
+      }
+      if (joined.includes("run --rm pelias-placeholder-build")) {
+        writeFileSync(join(placeholderDir, PELIAS_PLACEHOLDER_FILENAME), "SQLITE");
+      }
+    };
+
+    await expect(
+      buildPeliasData({
+        rootDir: tmp,
+        region: "europe/germany",
+        elasticsearchImage: "elasticsearch:7.17.18",
+        placeholderImage: "pelias/placeholder:latest",
+        runner,
+        elasticsearchReadyDelayMs: 0,
+      }),
+    ).resolves.toMatchObject({
+      peliasDir,
+      placeholderStorePath: join(placeholderDir, PELIAS_PLACEHOLDER_FILENAME),
+    });
   });
 });

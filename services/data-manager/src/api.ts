@@ -4,7 +4,7 @@ import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
-import { resolveTransitousFeedCatalog } from "./jobs/transitous-feed-resolver.js";
+import { downloadGtfsViaTransitous } from "./jobs/transitous-pipeline.js";
 import { StateStore } from "./state.js";
 
 export interface ApiOptions {
@@ -60,27 +60,26 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     Body: { feeds?: FeedDescriptor[]; countries?: string[]; source?: "transitous" };
   }>("/download/gtfs", async (req) => {
     const { feeds, countries = [], source } = req.body;
-    let resolvedFeeds: FeedDescriptor[];
-    if (feeds && feeds.length > 0) {
-      resolvedFeeds = feeds;
-    } else if (source === "transitous" || !feeds) {
-      // Default: resolve direct GTFS feed URLs from the Transitous catalog
-      // when the caller did not provide an explicit list. This is only a
-      // catalog resolver; MOTIS-specific preparation happens elsewhere.
-      resolvedFeeds = await resolveTransitousFeedCatalog();
-    } else {
+    if (Array.isArray(feeds) && feeds.length === 0 && source !== "transitous") {
       throw new Error("download/gtfs: either `feeds` or `source: 'transitous'` is required");
     }
-    const result = await downloadGtfs({
-      feeds: resolvedFeeds,
-      countries,
-      dataDir,
-      store,
-    });
+    const useTransitousPipeline = source === "transitous" || feeds === undefined;
+    const result = useTransitousPipeline
+      ? await downloadGtfsViaTransitous({
+          countries,
+          dataDir,
+          store,
+        })
+      : await downloadGtfs({
+          feeds,
+          countries,
+          dataDir,
+          store,
+        });
     return {
       ok: result.failures.length === 0,
       count: result.downloaded.length,
-      resolvedFromCatalog: !feeds || feeds.length === 0,
+      usedTransitousPipeline: useTransitousPipeline,
       requestedCount: result.requestedCount,
       selectedCount: result.selectedCount,
       skippedCount: result.skippedCount,

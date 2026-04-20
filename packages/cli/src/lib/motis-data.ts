@@ -109,14 +109,26 @@ async function ensureTransitousCatalog(
       cwd: dataDir,
       stdio: "inherit",
     });
+    await runner(
+      "git",
+      ["-C", catalogDir, "submodule", "update", "--init", "--checkout", "--depth", "1"],
+      {
+        cwd: dataDir,
+        stdio: "inherit",
+      },
+    );
     return catalogDir;
   }
 
   rmSync(catalogDir, { recursive: true, force: true });
-  await runner("git", ["clone", "--depth", "1", repoUrl, catalogDir], {
-    cwd: dataDir,
-    stdio: "inherit",
-  });
+  await runner(
+    "git",
+    ["clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules", repoUrl, catalogDir],
+    {
+      cwd: dataDir,
+      stdio: "inherit",
+    },
+  );
   return catalogDir;
 }
 

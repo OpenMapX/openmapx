@@ -1,3 +1,6 @@
+FROM docker.io/golang:1.26 AS build-gtfsclean
+RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@latest
+
 FROM node:24-slim AS base
 
 # Keep this pinned to the repo root `packageManager` field so Docker resolves
@@ -35,10 +38,17 @@ FROM node:24-slim AS runner
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends osmium-tool curl unzip bzip2 ca-certificates \
+    && apt-get install -y --no-install-recommends \
+      osmium-tool curl unzip bzip2 ca-certificates \
+      git python3 python3-pip python3-venv wget rsync openssh-client \
     && rm -rf /var/lib/apt/lists/*
+RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
+COPY infra/docker/services/transitous/requirements.txt /tmp/transitous-requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/transitous-requirements.txt
+COPY --from=build-gtfsclean /usr/local/bin/gtfsclean /usr/local/bin/gtfsclean
 
 ENV NODE_ENV=production
+ENV PYTHONDONTWRITEBYTECODE=1
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-manager/node_modules

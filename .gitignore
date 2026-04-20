@@ -66,4 +66,5 @@ docs/legal/
 infra/docker/docker-compose.generated.yml
 infra/docker/docker-compose.generated.hardlinks.json
 infra/docker/service-selection.json
+infra/docker/services/transitous/api-keys.json
 services/.community/

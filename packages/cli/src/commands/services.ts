@@ -272,7 +272,6 @@ export function registerServicesCommands(program: Command): void {
         if (result.completedIds.length > 0) {
           const rendered = await renderComposeForRepo({
             domain: process.env.DOMAIN ?? "localhost",
-            services: result.completedIds,
           });
           for (const warning of rendered.selectionWarnings) log.warn(warning);
           const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
@@ -311,7 +310,6 @@ export function registerServicesCommands(program: Command): void {
         if (result.completedIds.length > 0) {
           const rendered = await renderComposeForRepo({
             domain: process.env.DOMAIN ?? "localhost",
-            services: result.completedIds,
           });
           for (const warning of rendered.selectionWarnings) log.warn(warning);
           const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });

@@ -14,7 +14,7 @@ export interface GtfsDownloadFailure {
 
 export interface GtfsDownloadResult {
   count: number;
-  resolvedFromCatalog: boolean;
+  usedTransitousPipeline: boolean;
   requestedCount: number;
   selectedCount: number;
   skippedCount: number;
@@ -99,7 +99,7 @@ export class DataManagerClient {
     const parsed = (await res.json()) as Partial<GtfsDownloadResult>;
     return {
       count: parsed.count ?? 0,
-      resolvedFromCatalog: parsed.resolvedFromCatalog ?? false,
+      usedTransitousPipeline: parsed.usedTransitousPipeline ?? false,
       requestedCount: parsed.requestedCount ?? 0,
       selectedCount: parsed.selectedCount ?? 0,
       skippedCount: parsed.skippedCount ?? 0,

@@ -147,11 +147,11 @@ export function registerDataCommands(program: Command): void {
               result = await client.downloadGtfs({ feeds, countries });
             } else {
               log.dim(
-                "no --feeds-file; resolving GTFS feed URLs from the Transitous catalog (pass --feeds-file to override)",
+                "no --feeds-file; running the full Transitous GTFS fetch pipeline (pass --feeds-file to bypass it)",
               );
               result = await client.downloadGtfs({ source: "transitous", countries });
             }
-            const src = result.resolvedFromCatalog ? " using Transitous catalog" : "";
+            const src = result.usedTransitousPipeline ? " using Transitous pipeline" : "";
             if (result.failedCount > 0) {
               const failedIds = result.failures
                 .slice(0, 3)
@@ -207,7 +207,6 @@ export function registerDataCommands(program: Command): void {
         if (result.completedIds.length === 0) return;
         const rendered = await renderComposeForRepo({
           domain: process.env.DOMAIN ?? "localhost",
-          services: result.completedIds,
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
         const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });

@@ -7,7 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
@@ -21,11 +21,12 @@ export const PELIAS_BUILD_PROJECT_NAME = "openmapx-pelias-build";
 export const DEFAULT_PELIAS_SCHEMA_IMAGE = "pelias/schema:latest";
 export const DEFAULT_PELIAS_WHOSONFIRST_IMAGE = "pelias/whosonfirst:latest";
 export const DEFAULT_PELIAS_OPENSTREETMAP_IMAGE = "pelias/openstreetmap:latest";
+const PELIAS_RUNTIME_ES_VOLUME = "openmapx-esdata";
 
 export type CommandRunner = (
   command: string,
   args: string[],
-  opts: { cwd?: string; stdio?: "inherit" },
+  opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ) => Promise<void>;
 
 export interface BuildPeliasDataOptions {
@@ -57,7 +58,7 @@ export interface BuildPeliasDataResult {
 async function defaultRunner(
   command: string,
   args: string[],
-  opts: { cwd?: string; stdio?: "inherit" },
+  opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
   await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "inherit" });
 }
@@ -85,6 +86,7 @@ function clearPeliasBuildDir(dir: string): void {
 
 function writeBuildComposeFile(
   composeFile: string,
+  sharedElasticsearchVolume: string,
   images: {
     elasticsearch: string;
     schema: string;
@@ -116,7 +118,7 @@ function writeBuildComposeFile(
           ES_JAVA_OPTS: "-Xms2g -Xmx2g",
           "xpack.security.enabled": "false",
         },
-        volumes: ["openmapx-esdata:/usr/share/elasticsearch/data"],
+        volumes: [`${PELIAS_RUNTIME_ES_VOLUME}:/usr/share/elasticsearch/data`],
         networks: ["openmapx"],
       },
       "pelias-schema": {
@@ -149,7 +151,10 @@ function writeBuildComposeFile(
       },
     },
     volumes: {
-      "openmapx-esdata": null,
+      [PELIAS_RUNTIME_ES_VOLUME]: {
+        external: true,
+        name: sharedElasticsearchVolume,
+      },
     },
     networks: {
       openmapx: {
@@ -205,11 +210,44 @@ async function cleanupPeliasBuildProject(
   cwd: string,
   runner: CommandRunner,
 ): Promise<void> {
-  await runner(
-    "docker",
-    dockerComposeArgs(composeFile, ["down", "--volumes", "--remove-orphans"]),
-    { cwd, stdio: "inherit" },
-  );
+  await runner("docker", dockerComposeArgs(composeFile, ["down", "--remove-orphans"]), {
+    cwd,
+    stdio: "inherit",
+  });
+}
+
+function runtimeComposeProjectName(infraDir: string): string {
+  const explicit = process.env.COMPOSE_PROJECT_NAME?.trim();
+  if (explicit) return explicit;
+  return basename(infraDir);
+}
+
+function sharedElasticsearchVolumeName(infraDir: string): string {
+  return `${runtimeComposeProjectName(infraDir)}_${PELIAS_RUNTIME_ES_VOLUME}`;
+}
+
+async function resetSharedElasticsearchVolume(
+  volumeName: string,
+  cwd: string,
+  runner: CommandRunner,
+): Promise<void> {
+  try {
+    await runner("docker", ["volume", "rm", volumeName], { cwd, stdio: "pipe" });
+  } catch (error) {
+    const details = [
+      (error as Error).message,
+      String((error as { shortMessage?: string }).shortMessage ?? ""),
+      String((error as { stderr?: string }).stderr ?? ""),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    if (!/no such volume/i.test(details)) {
+      throw new Error(
+        `Pelias build cannot reset Elasticsearch volume "${volumeName}". Stop the runtime Pelias/Elasticsearch stack before rebuilding: ${details}`,
+      );
+    }
+  }
+  await runner("docker", ["volume", "create", volumeName], { cwd, stdio: "pipe" });
 }
 
 export async function buildPeliasData(
@@ -231,12 +269,13 @@ export async function buildPeliasData(
   const readyAttempts = opts.elasticsearchReadyAttempts ?? 60;
   const readyDelayMs = opts.elasticsearchReadyDelayMs ?? 5000;
   const composeFile = join(paths.infraDir, PELIAS_BUILD_COMPOSE_FILENAME);
+  const elasticsearchVolume = sharedElasticsearchVolumeName(paths.infraDir);
 
   clearPeliasBuildDir(openstreetmapDir);
   clearPeliasBuildDir(whosonfirstDir);
   clearPeliasBuildDir(placeholderDir);
   linkOrCopy(sourcePbf, openstreetmapPath);
-  writeBuildComposeFile(composeFile, {
+  writeBuildComposeFile(composeFile, elasticsearchVolume, {
     elasticsearch: opts.elasticsearchImage,
     schema: schemaImage,
     whosonfirst: whosonfirstImage,
@@ -247,6 +286,8 @@ export async function buildPeliasData(
   let buildError: unknown;
   try {
     await cleanupPeliasBuildProject(composeFile, paths.infraDir, runner);
+    // Rebuild from a clean index without reusing the runtime stack's containers.
+    await resetSharedElasticsearchVolume(elasticsearchVolume, paths.infraDir, runner);
     await runner("docker", dockerComposeArgs(composeFile, ["up", "-d", "elasticsearch"]), {
       cwd: paths.infraDir,
       stdio: "inherit",

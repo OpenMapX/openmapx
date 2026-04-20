@@ -38,7 +38,10 @@
     { "type": "pelias-whosonfirst-data", "sourceDir": "data/pelias/whosonfirst" },
     { "type": "osm-pbf-bz2", "sourceDir": "data/osm-bz2" }
   ],
-  "bindMounts": [{ "source": "@infra:data", "target": "/data", "readOnly": false }],
+  "bindMounts": [
+    { "source": "@infra:data", "target": "/data", "readOnly": false },
+    { "source": "@infra:services/transitous", "target": "/config/transitous" }
+  ],
   "exposure": {
     "hostPorts": [{ "container": 4000, "host": 4000, "bindAddress": "127.0.0.1" }]
   },

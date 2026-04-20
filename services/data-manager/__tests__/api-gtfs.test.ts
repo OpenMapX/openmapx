@@ -2,14 +2,14 @@ import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockDownloadGtfs = vi.fn();
-const mockResolveTransitousFeedCatalog = vi.fn();
+const mockDownloadGtfsViaTransitous = vi.fn();
 
 vi.mock("../src/jobs/download-gtfs.js", () => ({
   downloadGtfs: mockDownloadGtfs,
 }));
 
-vi.mock("../src/jobs/transitous-feed-resolver.js", () => ({
-  resolveTransitousFeedCatalog: mockResolveTransitousFeedCatalog,
+vi.mock("../src/jobs/transitous-pipeline.js", () => ({
+  downloadGtfsViaTransitous: mockDownloadGtfsViaTransitous,
 }));
 
 const { registerApi } = await import("../src/api.js");
@@ -17,7 +17,7 @@ const { registerApi } = await import("../src/api.js");
 describe("data-manager GTFS API", () => {
   beforeEach(() => {
     mockDownloadGtfs.mockReset();
-    mockResolveTransitousFeedCatalog.mockReset();
+    mockDownloadGtfsViaTransitous.mockReset();
   });
 
   afterEach(async () => {
@@ -25,11 +25,7 @@ describe("data-manager GTFS API", () => {
   });
 
   it("returns partial-success GTFS download details when some feeds fail", async () => {
-    mockResolveTransitousFeedCatalog.mockResolvedValue([
-      { id: "de_bvg", country: "de", url: "https://example.com/de_bvg.zip" },
-      { id: "de_vbb", country: "de", url: "https://example.com/de_vbb.zip" },
-    ]);
-    mockDownloadGtfs.mockResolvedValue({
+    mockDownloadGtfsViaTransitous.mockResolvedValue({
       requestedCount: 2,
       selectedCount: 2,
       skippedCount: 0,
@@ -67,7 +63,7 @@ describe("data-manager GTFS API", () => {
     expect(JSON.parse(res.body)).toEqual({
       ok: false,
       count: 1,
-      resolvedFromCatalog: true,
+      usedTransitousPipeline: true,
       requestedCount: 2,
       selectedCount: 2,
       skippedCount: 0,
@@ -83,8 +79,26 @@ describe("data-manager GTFS API", () => {
       ],
     });
 
-    expect(mockResolveTransitousFeedCatalog).toHaveBeenCalledTimes(1);
-    expect(mockDownloadGtfs).toHaveBeenCalledTimes(1);
+    expect(mockDownloadGtfsViaTransitous).toHaveBeenCalledTimes(1);
+    expect(mockDownloadGtfs).not.toHaveBeenCalled();
+
+    await app.close();
+  });
+
+  it("rejects an explicit empty feeds array unless source=transitous is set", async () => {
+    const app = Fastify();
+    registerApi(app, { dataDir: "/tmp/openmapx-dm-gtfs-api" });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/download/gtfs",
+      payload: { feeds: [], countries: ["de"] },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toContain("either `feeds` or `source: 'transitous'` is required");
+    expect(mockDownloadGtfsViaTransitous).not.toHaveBeenCalled();
+    expect(mockDownloadGtfs).not.toHaveBeenCalled();
 
     await app.close();
   });

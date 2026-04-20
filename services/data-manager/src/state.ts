@@ -58,6 +58,14 @@ export class StateStore {
     this.persist();
   }
 
+  replaceType(type: DatasetMetadata["type"], datasets: DatasetMetadata[]): void {
+    this.state.datasets = [
+      ...this.state.datasets.filter((dataset) => dataset.type !== type),
+      ...datasets,
+    ];
+    this.persist();
+  }
+
   remove(type: DatasetMetadata["type"], id: string): boolean {
     const before = this.state.datasets.length;
     this.state.datasets = this.state.datasets.filter((d) => !(d.type === type && d.id === id));

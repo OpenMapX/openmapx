@@ -1,9 +1,11 @@
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { services } from "@openmapx/core/server";
 
 const {
   DEFAULT_SELECTED_SERVICE_IDS,
   expandServiceSelection,
+  normalizeServiceIds,
   parseServiceIdList,
   resolveRequirement,
   SERVICE_SELECTION_ENV,
@@ -13,6 +15,19 @@ type IntegrationManifestRequires = NonNullable<services.IntegrationRequirement[]
 
 let registry: InstanceType<typeof ServiceRegistry> | null = null;
 const warnings: string[] = [];
+const SERVICE_SELECTION_FILE = "service-selection.json";
+
+function readSelectionFile(rootDir: string): string[] | null {
+  const filePath = join(rootDir, "infra", "docker", SERVICE_SELECTION_FILE);
+  if (!existsSync(filePath)) return null;
+
+  const raw = JSON.parse(readFileSync(filePath, "utf-8")) as { selected?: unknown };
+  if (!Array.isArray(raw.selected)) {
+    throw new Error(`Malformed service selection file at ${filePath}: expected "selected" array`);
+  }
+
+  return normalizeServiceIds(raw.selected);
+}
 
 export async function initServiceRegistry(): Promise<void> {
   // Reset warnings on each init so a hot-reload path doesn't accumulate stale entries.
@@ -21,11 +36,19 @@ export async function initServiceRegistry(): Promise<void> {
   registry = new ServiceRegistry({ rootDir, warnings });
   await registry.load();
   const envSelection = parseServiceIdList(process.env[SERVICE_SELECTION_ENV]);
+  let fileSelection: string[] | null = null;
+  if (envSelection === null) {
+    try {
+      fileSelection = readSelectionFile(rootDir);
+    } catch (error) {
+      warnings.push((error as Error).message);
+    }
+  }
   const selection = expandServiceSelection(
     registry.list(),
-    envSelection ?? DEFAULT_SELECTED_SERVICE_IDS,
+    envSelection ?? fileSelection ?? DEFAULT_SELECTED_SERVICE_IDS,
     {
-      allowMissingSelected: envSelection === null,
+      allowMissingSelected: envSelection === null && fileSelection === null,
     },
   );
   if (selection.missingIds.length > 0) {
