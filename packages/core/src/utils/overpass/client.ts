@@ -1,11 +1,25 @@
 import { USER_AGENT } from "../userAgent";
 import type { OverpassResponse } from "./types";
 
-const OVERPASS_URL = process.env.OVERPASS_URL
-  ? `${process.env.OVERPASS_URL.replace(/\/$/, "")}/api/interpreter`
-  : "https://overpass-api.de/api/interpreter";
-
+const DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const OVERPASS_FALLBACK_URL = "https://overpass.kumi.systems/api/interpreter";
+let configuredOverpassUrl: string | null = null;
+
+function normalizeOverpassUrl(url: string): string {
+  const trimmed = url.replace(/\/$/, "");
+  return trimmed.endsWith("/api/interpreter") ? trimmed : `${trimmed}/api/interpreter`;
+}
+
+function currentOverpassUrl(): string {
+  if (configuredOverpassUrl) return configuredOverpassUrl;
+  const envUrl = process.env.OVERPASS_URL?.trim();
+  return envUrl ? normalizeOverpassUrl(envUrl) : DEFAULT_OVERPASS_URL;
+}
+
+export function setOverpassUrl(url: string | undefined): void {
+  const trimmed = url?.trim();
+  configuredOverpassUrl = trimmed && trimmed.length > 0 ? normalizeOverpassUrl(trimmed) : null;
+}
 
 export class OverpassRateLimitError extends Error {
   constructor() {
@@ -48,12 +62,12 @@ async function fetchOverpass(url: string, query: string): Promise<OverpassRespon
  */
 export async function overpassQuery(query: string): Promise<OverpassResponse> {
   try {
-    return await fetchOverpass(OVERPASS_URL, query);
+    return await fetchOverpass(currentOverpassUrl(), query);
   } catch (err) {
     // Only fall back to the public mirror when using the default public endpoint.
     // A custom OVERPASS_URL means a local/private instance — no point falling back
     // to a different public server.
-    const usingCustomUrl = !!process.env.OVERPASS_URL;
+    const usingCustomUrl = configuredOverpassUrl !== null || !!process.env.OVERPASS_URL;
     const isFallbackable =
       err instanceof OverpassRateLimitError || err instanceof OverpassTimeoutError;
     if (!usingCustomUrl && isFallbackable) {

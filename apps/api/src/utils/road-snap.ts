@@ -7,15 +7,22 @@
  */
 
 import { USER_AGENT } from "@openmapx/core";
+import { serviceUrl } from "../services/service-registry.js";
 
-const OSRM_URL = process.env.OSRM_URL ?? "https://router.project-osrm.org";
-const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 const TIMEOUT_MS = 10_000;
 const MAX_WAYPOINTS_PER_REQUEST = 100;
 
 interface MatchResult {
   type: "LineString";
   coordinates: [number, number][];
+}
+
+function getOsrmUrl(): string {
+  return serviceUrl("osrm") ?? process.env.OSRM_URL ?? "https://router.project-osrm.org";
+}
+
+function getValhallaUrl(): string {
+  return serviceUrl("valhalla") ?? process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 }
 
 /**
@@ -65,8 +72,9 @@ async function valhallaRoute(coords: [number, number][]): Promise<MatchResult | 
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const valhallaUrl = getValhallaUrl();
   try {
-    const res = await fetch(`${VALHALLA_URL}/route`, {
+    const res = await fetch(`${valhallaUrl}/route`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
       body,
@@ -90,8 +98,8 @@ async function valhallaRoute(coords: [number, number][]): Promise<MatchResult | 
 
 async function osrmRoute(coords: [number, number][], profile: string): Promise<MatchResult | null> {
   const coordStr = coords.map((c) => `${c[0]},${c[1]}`).join(";");
-
-  const url = new URL(`${OSRM_URL}/route/v1/${profile}/${coordStr}`);
+  const osrmUrl = getOsrmUrl();
+  const url = new URL(`${osrmUrl}/route/v1/${profile}/${coordStr}`);
   url.searchParams.set("geometries", "geojson");
   url.searchParams.set("overview", "full");
 

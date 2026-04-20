@@ -14,23 +14,40 @@ interface MotisInstance {
   provider: string;
 }
 
+const DEFAULT_TRANSITOUS_URL = process.env.TRANSITOUS_URL ?? "https://api.transitous.org";
+const DEFAULT_MOTIS_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
+let transitousUrl = DEFAULT_TRANSITOUS_URL;
+let motisLocalUrl = DEFAULT_MOTIS_URL;
+
 const transitousInstance: MotisInstance = (() => {
   const client = createClient({
-    baseUrl: process.env.TRANSITOUS_URL ?? "https://api.transitous.org",
+    baseUrl: transitousUrl,
   });
   return { client, prefix: "mo:", provider: "mo" };
 })();
 
 const motisLocalInstance: MotisInstance = (() => {
   const client = createClient({
-    baseUrl: process.env.MOTIS_URL ?? "http://localhost:8081",
+    baseUrl: motisLocalUrl,
   });
   return { client, prefix: "ms:", provider: "ms" };
 })();
 
+export function setSharedMobilityTransitousUrl(url: string | undefined): void {
+  const trimmed = url?.trim();
+  transitousUrl = trimmed && trimmed.length > 0 ? trimmed : DEFAULT_TRANSITOUS_URL;
+  transitousInstance.client.setConfig({ baseUrl: transitousUrl });
+}
+
+export function setSharedMobilityMotisUrl(url: string | undefined): void {
+  const trimmed = url?.trim();
+  motisLocalUrl = trimmed && trimmed.length > 0 ? trimmed : DEFAULT_MOTIS_URL;
+  motisLocalInstance.client.setConfig({ baseUrl: motisLocalUrl });
+}
+
 async function isMotisLocalReachable(): Promise<boolean> {
   try {
-    const res = await fetch(`${process.env.MOTIS_URL ?? "http://localhost:8081"}/api/v1/plan`, {
+    const res = await fetch(`${motisLocalUrl}/api/v1/plan`, {
       method: "HEAD",
       signal: AbortSignal.timeout(2000),
     });

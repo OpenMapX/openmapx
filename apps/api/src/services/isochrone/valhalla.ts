@@ -1,3 +1,4 @@
+import { serviceUrl } from "../service-registry.js";
 import type {
   IsochroneContour,
   IsochroneGeometry,
@@ -5,8 +6,6 @@ import type {
   IsochroneResult,
   IsochroneTravelMode,
 } from "./provider.js";
-
-const VALHALLA_URL = process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 
 const COSTING_MAP: Record<IsochroneTravelMode, string> = {
   driving: "auto",
@@ -34,6 +33,10 @@ function computeGeneralize(maxMinutes: number): number {
   if (maxMinutes <= 15) return 50;
   if (maxMinutes <= 30) return 100;
   return 200;
+}
+
+function getValhallaUrl(): string {
+  return serviceUrl("valhalla") ?? process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 }
 
 export const valhallaIsochroneProvider: IsochroneProvider = {
@@ -64,9 +67,10 @@ export const valhallaIsochroneProvider: IsochroneProvider = {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
+    const valhallaUrl = getValhallaUrl();
 
     try {
-      const res = await fetch(`${VALHALLA_URL}/isochrone`, {
+      const res = await fetch(`${valhallaUrl}/isochrone`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

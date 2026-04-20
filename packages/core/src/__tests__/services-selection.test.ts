@@ -50,7 +50,7 @@ describe("service selection helpers", () => {
     ]);
   });
 
-  it("builds app-api env from the enabled local service set", () => {
+  it("builds app-api env with selection + integration/service env passthrough", () => {
     const env = buildAppApiServiceEnv(
       [
         svc("app-api", {
@@ -79,8 +79,6 @@ describe("service selection helpers", () => {
       OPENMAPX_ENABLED_SERVICES: "app-api,osrm,valhalla,overpass",
       INTEGRATION_PHOTOS_FLICKR_APIKEY: "flickr-key",
       SERVICE_VALHALLA_BUILD_ELEVATION: "false",
-      VALHALLA_URL: "http://valhalla:8002",
-      OVERPASS_URL: "http://overpass:80",
     });
   });
 });

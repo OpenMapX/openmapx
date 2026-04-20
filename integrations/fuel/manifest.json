@@ -31,6 +31,12 @@
       }
     }
   },
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
+    }
+  ],
   "healthCheck": [
     {
       "name": "Tankerkoenig (DE)",

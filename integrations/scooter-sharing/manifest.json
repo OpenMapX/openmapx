@@ -37,6 +37,16 @@
       }
     }
   },
+  "requires": [
+    {
+      "service": "motis",
+      "optional": true
+    },
+    {
+      "service": "nominatim",
+      "optional": true
+    }
+  ],
   "healthCheck": {
     "type": "http",
     "url": "https://gbfs.api.ridedott.com/public/v2/brussels/gbfs.json"

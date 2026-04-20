@@ -475,6 +475,7 @@ export {
   reconstructMultiLineString,
   reconstructMultiPolygon,
   reconstructPolygon,
+  setOverpassUrl,
 } from "./utils/overpass";
 export type {
   LineStringGeometry,

@@ -223,7 +223,7 @@ export async function generateTransitousApiKeys(
   const dataDir = join(paths.infraDir, "data");
   const outputPath = opts.outputPath
     ? resolve(paths.root, opts.outputPath)
-    : join(paths.infraDir, "services", "transitous", "api-keys.json");
+    : join(paths.root, "services", "motis", "tools", "transitous", "api-keys.json");
 
   const catalogDir = await ensureTransitousCatalog(
     dataDir,

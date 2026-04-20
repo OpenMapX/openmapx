@@ -278,12 +278,12 @@ export function registerDataCommands(program: Command): void {
   data
     .command("generate-api-keys")
     .description(
-      "Generate Transitous API-key template at infra/docker/services/transitous/api-keys.json",
+      "Generate Transitous API-key template at services/motis/tools/transitous/api-keys.json",
     )
     .option("--repo-url <url>", "Override Transitous catalog git URL")
     .option(
       "--output <path>",
-      "Override output path (default: infra/docker/services/transitous/api-keys.json)",
+      "Override output path (default: services/motis/tools/transitous/api-keys.json)",
     )
     .action(async (options: { repoUrl?: string; output?: string }) => {
       try {

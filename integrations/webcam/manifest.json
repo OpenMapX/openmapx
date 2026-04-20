@@ -91,6 +91,12 @@
       }
     }
   },
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
+    }
+  ],
   "healthCheck": [
     {
       "name": "Windy Webcams",

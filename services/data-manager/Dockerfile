@@ -43,7 +43,7 @@ RUN apt-get update \
       git python3 python3-pip python3-venv wget rsync openssh-client \
     && rm -rf /var/lib/apt/lists/*
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
-COPY infra/docker/services/transitous/requirements.txt /tmp/transitous-requirements.txt
+COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/transitous-requirements.txt
 COPY --from=build-gtfsclean /usr/local/bin/gtfsclean /usr/local/bin/gtfsclean
 

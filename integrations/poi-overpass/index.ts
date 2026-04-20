@@ -1,5 +1,5 @@
 import type { BoundingBox, IntegrationContext } from "@openmapx/core";
-import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
+import { CATEGORY_FILTERS, searchByCategory, setOverpassUrl } from "@openmapx/core";
 import type { PoiSearchProvider, PoiSearchResult } from "../poi-search/types.js";
 
 const overpassProvider: PoiSearchProvider = {
@@ -14,5 +14,7 @@ const overpassProvider: PoiSearchProvider = {
 };
 
 export function setup(ctx: IntegrationContext): void {
+  const resolved = ctx.getRequiredService("overpass");
+  if (resolved?.url) setOverpassUrl(resolved.url);
   ctx.registerProvider("poi-search", overpassProvider);
 }

@@ -1,13 +1,6 @@
 import type { LoadedService, ServiceConsumes, ServiceProduces } from "./types";
 
 export const SERVICE_SELECTION_ENV = "OPENMAPX_ENABLED_SERVICES";
-const OPTIONAL_LOCAL_SERVICE_ENV: Readonly<Record<string, string>> = {
-  motis: "MOTIS_URL",
-  nominatim: "NOMINATIM_URL",
-  osrm: "OSRM_URL",
-  overpass: "OVERPASS_URL",
-  valhalla: "VALHALLA_URL",
-};
 const APP_API_ENV_PASSTHROUGH_PREFIXES = ["INTEGRATION_", "SERVICE_"] as const;
 
 export const DEFAULT_SELECTED_SERVICE_IDS = [
@@ -115,15 +108,10 @@ export function formatServiceIdList(ids: Iterable<string>): string {
   return [...ids].join(",");
 }
 
-function serviceUrl(id: string, services: LoadedService[]): string | null {
-  const service = services.find((svc) => svc.manifest.id === id);
-  const port = service?.manifest.container.expose?.[0];
-  return port ? `http://${id}:${port}` : null;
-}
-
 /**
  * Compose-time app-api env synthesis shared by the CLI renderer and the admin
- * compose preview so both surfaces emit the same self-hosted service URLs.
+ * compose preview so both surfaces emit identical service-selection + env
+ * passthrough values.
  */
 export function buildAppApiServiceEnv(
   enabledServices: LoadedService[],
@@ -136,13 +124,6 @@ export function buildAppApiServiceEnv(
       enabledServices.map((service) => service.manifest.id),
     ),
   };
-  const enabledIds = new Set(enabledServices.map((service) => service.manifest.id));
-
-  for (const [serviceId, envName] of Object.entries(OPTIONAL_LOCAL_SERVICE_ENV)) {
-    if (hostEnv[envName] !== undefined || !enabledIds.has(serviceId)) continue;
-    const url = serviceUrl(serviceId, enabledServices);
-    if (url) next[envName] = url;
-  }
 
   // Forward dynamic operator override families into the API container so
   // env-based integration/service config still works without an `env_file`

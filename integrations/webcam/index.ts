@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, setOverpassUrl } from "@openmapx/core";
 import { registerPlaceResolver } from "@openmapx/core/server";
 import { createDataSourceResolver } from "../data-source/resolver.js";
 import { initCache } from "./cache.js";
@@ -8,6 +8,8 @@ import { setWindyApiKey } from "./providers/windy.js";
 
 export function setup(ctx: IntegrationContext): void {
   initCache(ctx.cache);
+  const resolved = ctx.getRequiredService("overpass");
+  if (resolved?.url) setOverpassUrl(resolved.url);
   setWindyApiKey(ctx.config.apiKey as string | undefined);
   setNpsApiKey(ctx.config.npsApiKey as string | undefined);
   ctx.registerProvider("data-source", webcamProvider);

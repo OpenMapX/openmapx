@@ -48,7 +48,10 @@ describe.skipIf(!manifestsPresent)(
       const services = registry
         .list()
         .filter((service) => ["data-manager", "osrm"].includes(service.manifest.id));
-      const result = renderCompose(services, { domain: "example.com" });
+      const result = renderCompose(services, {
+        domain: "example.com",
+        allServices: registry.list(),
+      });
       const osrmPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "osrm");
 
       expect(osrmPlanEntry).toEqual(
@@ -69,7 +72,10 @@ describe.skipIf(!manifestsPresent)(
       const services = registry
         .list()
         .filter((service) => ["data-manager", "tileserver"].includes(service.manifest.id));
-      const result = renderCompose(services, { domain: "example.com" });
+      const result = renderCompose(services, {
+        domain: "example.com",
+        allServices: registry.list(),
+      });
 
       expect(result.hardlinkPlan).toEqual(
         expect.arrayContaining([
@@ -105,7 +111,10 @@ describe.skipIf(!manifestsPresent)(
       const services = registry
         .list()
         .filter((service) => ["data-manager", "otp"].includes(service.manifest.id));
-      const result = renderCompose(services, { domain: "example.com" });
+      const result = renderCompose(services, {
+        domain: "example.com",
+        allServices: registry.list(),
+      });
       const otpPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "otp");
 
       expect(otpPlanEntry).toEqual(
@@ -127,7 +136,10 @@ describe.skipIf(!manifestsPresent)(
       const services = registry
         .list()
         .filter((service) => ["data-manager", "motis"].includes(service.manifest.id));
-      const result = renderCompose(services, { domain: "example.com" });
+      const result = renderCompose(services, {
+        domain: "example.com",
+        allServices: registry.list(),
+      });
       const motisPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "motis");
 
       expect(motisPlanEntry).toEqual(
@@ -153,7 +165,10 @@ describe.skipIf(!manifestsPresent)(
             service.manifest.id,
           ),
         );
-      const result = renderCompose(services, { domain: "example.com" });
+      const result = renderCompose(services, {
+        domain: "example.com",
+        allServices: registry.list(),
+      });
 
       expect(result.hardlinkPlan).toEqual(
         expect.arrayContaining([

@@ -1,12 +1,18 @@
 import type { IntegrationContext } from "@openmapx/core";
 import { registerPlaceResolver } from "@openmapx/core/server";
 import { initCache } from "@openmapx/integration-shared-mobility/cache";
+import { setSharedMobilityMotisUrl } from "@openmapx/integration-shared-mobility/motis-rentals";
+import { setSharedMobilityNominatimUrl } from "@openmapx/integration-shared-mobility/nominatim";
 import { createDataSourceResolver } from "../data-source/resolver.js";
 import { setDbBikeCredentials } from "./providers/db-bike-client.js";
 import { bikeSharingProvider } from "./providers/provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   initCache(ctx.cache);
+  const motis = ctx.getRequiredService("motis");
+  const nominatim = ctx.getRequiredService("nominatim");
+  if (motis?.url) setSharedMobilityMotisUrl(motis.url);
+  if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
   setDbBikeCredentials({
     clientId: ctx.config.clientId as string | undefined,
     apiKey: ctx.config.apiKey as string | undefined,

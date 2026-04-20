@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AutocompleteResult, IntegrationContext } from "@openmapx/core";
+import { type AutocompleteResult, type IntegrationContext, setOverpassUrl } from "@openmapx/core";
 import { registerPlaceResolver } from "@openmapx/core/server";
 import { MemCache } from "./mem-cache.js";
 import { getGeocodingProvider, setConfiguredProviderList } from "./orchestrator.js";
@@ -30,7 +30,10 @@ const memCache = new MemCache<AutocompleteResult[]>(1000);
 
 export function setup(ctx: IntegrationContext): void {
   setConfiguredProviderList(ctx.config.provider as string | undefined);
-  setPlaceLookupNominatimUrl(ctx.config.nominatimUrl as string | undefined);
+  const nominatim = ctx.getRequiredService("nominatim");
+  const overpass = ctx.getRequiredService("overpass");
+  setPlaceLookupNominatimUrl((ctx.config.nominatimUrl as string | undefined) ?? nominatim?.url);
+  if (overpass?.url) setOverpassUrl(overpass.url);
 
   // OSM primary-id dispatch: when a Place.id arrives as `osm:node/123`,
   // resolve it via Nominatim's OSM-ref detail lookup.

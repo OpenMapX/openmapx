@@ -3,6 +3,7 @@ export {
   OverpassTimeoutError,
   overpassQuery,
   overpassQuerySafe,
+  setOverpassUrl,
 } from "./client";
 export {
   buildNodeMap,

@@ -2,18 +2,23 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { motisLocalInstance } from "@integrations/transit-motis/instances.js";
+import { motisLocalInstance, setMotisLocalUrl } from "@integrations/transit-motis/instances.js";
 import type { MotisFeed, MotisStatus } from "@integrations/transit-motis/types";
 import { stops } from "@motis-project/motis-client";
 import { type BBox, validatePublicUrl } from "@openmapx/core";
 import { cacheGet, cacheSet } from "../../utils/cache.js";
+import { serviceUrl } from "../service-registry.js";
 
 const execFileAsync = promisify(execFile);
 
-const MOTIS_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
+const DEFAULT_MOTIS_URL = "http://localhost:8081";
 const MOTIS_DATA_DIR =
   process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis-data");
 const STATE_FILE = "openmapx-feeds.json";
+
+function getMotisUrl(): string {
+  return serviceUrl("motis") ?? process.env.MOTIS_URL ?? DEFAULT_MOTIS_URL;
+}
 
 interface FeedState {
   feeds: MotisFeed[];
@@ -31,7 +36,7 @@ class MotisManager {
   }
 
   get url(): string {
-    return MOTIS_URL;
+    return getMotisUrl();
   }
 
   /** Load persisted feed state from the data directory. */
@@ -108,6 +113,7 @@ class MotisManager {
     if (cached !== null) return cached;
 
     try {
+      setMotisLocalUrl(getMotisUrl());
       const { response } = await stops({
         client: motisLocalInstance.client,
         query: { min: "0,0", max: "0.01,0.01" },
@@ -125,9 +131,10 @@ class MotisManager {
   /** Get full MOTIS status including feed list and connectivity. */
   async getStatus(): Promise<MotisStatus> {
     const reachable = await this.isReachable();
+    const url = getMotisUrl();
     return {
-      configured: !!process.env.MOTIS_URL || existsSync(MOTIS_DATA_DIR),
-      url: MOTIS_URL,
+      configured: !!serviceUrl("motis") || !!process.env.MOTIS_URL || existsSync(MOTIS_DATA_DIR),
+      url,
       reachable,
       feeds: this.state.feeds,
       needsRestart: this.state.version !== this.state.lastRestartVersion,

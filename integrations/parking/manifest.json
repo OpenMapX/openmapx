@@ -56,6 +56,12 @@
       }
     }
   },
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
+    }
+  ],
   "healthCheck": [
     {
       "name": "ParkAPI",

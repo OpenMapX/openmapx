@@ -137,7 +137,7 @@ async function ensureTransitousToolsImage(
   image: string,
   runner: CommandRunner,
 ): Promise<void> {
-  const contextDir = join(rootDir, "infra", "docker", "services", "transitous");
+  const contextDir = join(rootDir, "services", "motis", "tools", "transitous");
   await runner("docker", ["build", "-t", image, contextDir], { cwd: rootDir, stdio: "inherit" });
 }
 
@@ -287,7 +287,7 @@ export async function buildMotisData(
   mkdirSync(transitousDownloadsDir, { recursive: true });
   await ensureTransitousToolsImage(paths.root, image, runner);
 
-  const runScriptPath = join(paths.root, "infra", "docker", "services", "transitous", "run.sh");
+  const runScriptPath = join(paths.root, "services", "motis", "tools", "transitous", "run.sh");
   await runner(
     "docker",
     dockerRunTransitousArgs(

@@ -50,7 +50,7 @@ beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-transitous-api-keys-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   mkdirSync(join(tmp, "services"), { recursive: true });
-  mkdirSync(join(tmp, "infra", "docker", "services", "transitous"), { recursive: true });
+  mkdirSync(join(tmp, "services", "motis", "tools", "transitous"), { recursive: true });
 });
 
 afterEach(() => {
@@ -59,7 +59,7 @@ afterEach(() => {
 
 describe("generateTransitousApiKeys", () => {
   it("clones the Transitous catalog and preserves existing filled keys", async () => {
-    const outputPath = join(tmp, "infra", "docker", "services", "transitous", "api-keys.json");
+    const outputPath = join(tmp, "services", "motis", "tools", "transitous", "api-keys.json");
     writeFileSync(
       outputPath,
       JSON.stringify(
@@ -129,7 +129,7 @@ describe("generateTransitousApiKeys", () => {
     expect(result.requiredCount).toBe(2);
     expect(result.preservedCount).toBe(0);
     expect(result.droppedCount).toBe(0);
-    const outputPath = join(tmp, "infra", "docker", "services", "transitous", "api-keys.json");
+    const outputPath = join(tmp, "services", "motis", "tools", "transitous", "api-keys.json");
     expect(JSON.parse(readFileSync(outputPath, "utf-8")) as Record<string, string>).toStrictEqual({
       "ca-qc/QuebecAgency": "",
       "us-ca/NeedsKey": "",

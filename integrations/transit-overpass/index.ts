@@ -1,7 +1,9 @@
-import type { IntegrationContext } from "@openmapx/core";
+import { type IntegrationContext, setOverpassUrl } from "@openmapx/core";
 import * as overpass from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
+  const resolved = ctx.getRequiredService("overpass");
+  if (resolved?.url) setOverpassUrl(resolved.url);
   ctx.registerProvider("transit", {
     id: "transit-overpass",
     prefix: "osm:",

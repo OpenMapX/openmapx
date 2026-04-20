@@ -25,6 +25,16 @@
       }
     }
   },
+  "requires": [
+    {
+      "service": "motis",
+      "optional": true
+    },
+    {
+      "service": "nominatim",
+      "optional": true
+    }
+  ],
   "healthCheck": [
     {
       "name": "Cambio",

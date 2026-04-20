@@ -31,6 +31,12 @@
       }
     }
   },
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
+    }
+  ],
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${apiKey}&latitude=0&longitude=0&distance=100",

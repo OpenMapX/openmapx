@@ -1,6 +1,12 @@
 import { USER_AGENT } from "@openmapx/core";
 
-const NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
+const DEFAULT_NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
+let nominatimUrl = DEFAULT_NOMINATIM_URL;
+
+export function setSharedMobilityNominatimUrl(url: string | undefined): void {
+  const trimmed = url?.trim();
+  nominatimUrl = trimmed && trimmed.length > 0 ? trimmed : DEFAULT_NOMINATIM_URL;
+}
 
 const cityNameCache = new Map<string, { city: string | null; expiresAt: number }>();
 const CITY_NAME_TTL_MS = 24 * 60 * 60 * 1000;
@@ -16,7 +22,7 @@ export async function reverseGeocodeCity(
   if (cached && cached.expiresAt > Date.now()) return cached.city;
 
   try {
-    const url = new URL(`${NOMINATIM_URL}/reverse`);
+    const url = new URL(`${nominatimUrl}/reverse`);
     url.searchParams.set("lat", String(lat));
     url.searchParams.set("lon", String(lng));
     url.searchParams.set("format", "jsonv2");

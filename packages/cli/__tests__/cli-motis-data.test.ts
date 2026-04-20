@@ -20,10 +20,10 @@ beforeEach(() => {
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
   writeFileSync(join(tmp, "turbo.json"), "{}\n");
   mkdirSync(join(tmp, "services"), { recursive: true });
+  mkdirSync(join(tmp, "services", "motis", "tools", "transitous"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data", "osm"), { recursive: true });
   mkdirSync(join(tmp, "infra", "docker", "data", "gtfs"), { recursive: true });
-  mkdirSync(join(tmp, "infra", "docker", "services", "transitous"), { recursive: true });
-  writeFileSync(join(tmp, "infra", "docker", "services", "transitous", "run.sh"), "#!/bin/sh\n");
+  writeFileSync(join(tmp, "services", "motis", "tools", "transitous", "run.sh"), "#!/bin/sh\n");
 });
 
 afterEach(() => {
@@ -110,7 +110,7 @@ describe("buildMotisData", () => {
           "build",
           "-t",
           DEFAULT_TRANSITOUS_TOOLS_IMAGE,
-          join(tmp, "infra", "docker", "services", "transitous"),
+          join(tmp, "services", "motis", "tools", "transitous"),
         ],
         cwd: tmp,
       },
@@ -126,7 +126,7 @@ describe("buildMotisData", () => {
           "-v",
           `${join(tmp, "infra", "docker", "data", ".transitous-downloads")}:/transitous/downloads`,
           "-v",
-          `${join(tmp, "infra", "docker", "services", "transitous", "run.sh")}:/run.sh:ro`,
+          `${join(tmp, "services", "motis", "tools", "transitous", "run.sh")}:/run.sh:ro`,
           DEFAULT_TRANSITOUS_TOOLS_IMAGE,
           "/bin/bash",
           "/run.sh",
@@ -146,7 +146,7 @@ describe("buildMotisData", () => {
           "-v",
           `${join(tmp, "infra", "docker", "data", ".transitous-downloads")}:/transitous/downloads`,
           "-v",
-          `${join(tmp, "infra", "docker", "services", "transitous", "run.sh")}:/run.sh:ro`,
+          `${join(tmp, "services", "motis", "tools", "transitous", "run.sh")}:/run.sh:ro`,
           DEFAULT_TRANSITOUS_TOOLS_IMAGE,
           "/bin/bash",
           "/run.sh",
