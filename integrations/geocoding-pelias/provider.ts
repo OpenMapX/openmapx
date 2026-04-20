@@ -1,14 +1,14 @@
 import type { GeocodingProviderImpl } from "./types.js";
 /**
  * Pelias geocoding client (self-hosted).
- * Set PELIAS_URL to your Pelias instance (e.g. http://localhost:4000).
+ * Set PELIAS_URL to your Pelias instance (e.g. http://localhost:4300).
  * https://github.com/pelias/pelias
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 
 // Populated by setup(ctx); see setPeliasUrl.
-let PELIAS_URL = "http://localhost:4000";
+let PELIAS_URL = "http://localhost:4300";
 
 /** Update the Pelias base URL (called from setup() when service registry resolves it). */
 export function setPeliasUrl(url: string): void {

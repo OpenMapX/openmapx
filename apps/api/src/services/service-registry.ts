@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { services } from "@openmapx/core/server";
+import { join } from "node:path";
+import { findRepoRoot, services } from "@openmapx/core/server";
 
 const {
   DEFAULT_SELECTED_SERVICE_IDS,
@@ -32,7 +32,7 @@ function readSelectionFile(rootDir: string): string[] | null {
 export async function initServiceRegistry(): Promise<void> {
   // Reset warnings on each init so a hot-reload path doesn't accumulate stale entries.
   warnings.length = 0;
-  const rootDir = resolve(process.cwd(), "..", "..");
+  const rootDir = findRepoRoot();
   registry = new ServiceRegistry({ rootDir, warnings });
   await registry.load();
   const envSelection = parseServiceIdList(process.env[SERVICE_SELECTION_ENV]);

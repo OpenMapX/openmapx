@@ -1,18 +1,12 @@
 import { execFile as execFileCb, spawn } from "node:child_process";
 import type { ServerResponse } from "node:http";
-import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { repoPaths } from "@openmapx/core/server";
 
 const execFile = promisify(execFileCb);
 
 function composePath(): string {
-  // apps/api is two levels down from repo root; generated compose lives in infra/docker/
-  return join(
-    resolve(process.cwd(), "..", ".."),
-    "infra",
-    "docker",
-    "docker-compose.generated.yml",
-  );
+  return repoPaths().composeOutPath;
 }
 
 export interface PsEntry {

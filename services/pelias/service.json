@@ -22,7 +22,7 @@
   "provides": ["geocoder"],
   "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
   "exposure": {
-    "hostPorts": [{ "container": 4000, "host": 4000, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [{ "container": 4000, "host": 4300, "bindAddress": "127.0.0.1" }]
   },
   "ui": { "category": "geocoding" }
 }

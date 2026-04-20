@@ -1,5 +1,4 @@
-import { dirname, resolve } from "node:path";
-import { services } from "@openmapx/core/server";
+import { repoPaths, services } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { applyHardlinksFromPlan, renderAndPersistCompose } from "../services/admin-ops";
 import { resolveAllServiceConfigs } from "../services/service-config-resolver";
@@ -14,7 +13,7 @@ const { buildAppApiServiceEnv, renderCompose } = services;
 // render` writes to disk. The file isn't actually written here; this only keeps
 // the previewed YAML byte-identical to what an operator would see after running
 // the CLI render.
-const COMPOSE_OUT_DIR = resolve(dirname(process.cwd()), "..", "infra", "docker");
+const COMPOSE_OUT_DIR = repoPaths().infraDir;
 
 export async function registerAdminComposeRoutes(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant

@@ -60,7 +60,7 @@ describe("downloadGtfsViaTransitous", () => {
     const runner = async (
       command: string,
       args: string[],
-      _opts: { cwd?: string; stdio?: "inherit" | "pipe" },
+      opts: { cwd?: string; stdio?: "inherit" | "pipe" },
     ) => {
       calls.push({ command, args, cwd: opts.cwd });
       if (command === "git" && args.join(" ") === `-C ${catalogDir} reset --hard HEAD`) {

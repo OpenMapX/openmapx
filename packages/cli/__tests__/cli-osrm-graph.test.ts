@@ -44,6 +44,19 @@ describe("resolveOsmPbfForOsrm", () => {
 });
 
 describe("buildOsrmGraph", () => {
+  it("rejects planet-scale inputs", async () => {
+    const pbf = join(tmp, "infra", "docker", "data", "osm", "planet.osm.pbf");
+    writeFileSync(pbf, "PBF");
+
+    await expect(
+      buildOsrmGraph({
+        rootDir: tmp,
+        region: "planet",
+        image: "ghcr.io/project-osrm/osrm-backend:latest",
+      }),
+    ).rejects.toThrow("OSRM cannot build planet-scale graphs");
+  });
+
   it("runs OSRM extract, partition, and customize in the OSRM Docker image", async () => {
     const pbf = join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf");
     writeFileSync(pbf, "PBF");

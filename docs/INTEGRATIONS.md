@@ -546,7 +546,7 @@
 
 ## geocoding-pelias
 
-### Pelias Search — `http://localhost:4000/v1/search`
+### Pelias Search — `http://localhost:4300/v1/search`
 - Data sent: Search query text, result limit, language
 - Data received: GeoJSON features with gid, label, name, layer (venue/address/street/locality), confidence, coordinates
 - Purpose: Forward geocoding via self-hosted Pelias instance
@@ -562,10 +562,10 @@
 - End-user data exposure: Server-only (self-hosted)
 - DPA: Not applicable (self-hosted software)
 - Coverage: Configurable (depends on imported data)
-- Env vars: `PELIAS_URL` — optional (default: `http://localhost:4000`)
+- Env vars: `PELIAS_URL` — optional (default: `http://localhost:4300`)
 - Self-hostable: Yes — already self-hosted; Docker setup at <https://github.com/pelias/docker>
 
-### Pelias Reverse — `http://localhost:4000/v1/reverse`
+### Pelias Reverse — `http://localhost:4300/v1/reverse`
 - Data sent: Coordinates (latitude, longitude), language
 - Data received: GeoJSON feature with label (address), locality, region
 - Purpose: Reverse geocoding via self-hosted Pelias
@@ -582,7 +582,7 @@
 - Env vars: `PELIAS_URL` — optional
 - Self-hostable: Yes
 
-### Pelias Autocomplete — `http://localhost:4000/v1/autocomplete`
+### Pelias Autocomplete — `http://localhost:4300/v1/autocomplete`
 - Data sent: Partial search query text, result limit, language
 - Data received: GeoJSON features with name, locality/region/country (sublabel), coordinates, layer type
 - Purpose: Autocomplete/typeahead optimized for partial input via self-hosted Pelias

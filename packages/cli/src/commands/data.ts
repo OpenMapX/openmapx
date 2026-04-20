@@ -13,6 +13,7 @@ import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
+import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
 
 const { DataManagerClient } = services;
@@ -270,6 +271,42 @@ export function registerDataCommands(program: Command): void {
         if (message.includes("Hardlink plan not found")) {
           log.dim(`(expected plan at ${planPath}; run 'openmapx compose render' first)`);
         }
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("generate-api-keys")
+    .description(
+      "Generate Transitous API-key template at infra/docker/services/transitous/api-keys.json",
+    )
+    .option("--repo-url <url>", "Override Transitous catalog git URL")
+    .option(
+      "--output <path>",
+      "Override output path (default: infra/docker/services/transitous/api-keys.json)",
+    )
+    .action(async (options: { repoUrl?: string; output?: string }) => {
+      try {
+        log.dim("Syncing Transitous catalog and scanning feeds that require API keys...");
+        const result = await generateTransitousApiKeys({
+          transitousRepoUrl: options.repoUrl,
+          outputPath: options.output,
+        });
+        const preserved =
+          result.preservedCount > 0
+            ? ` (${result.preservedCount} existing value${result.preservedCount === 1 ? "" : "s"} preserved)`
+            : "";
+        log.ok(
+          `Generated ${result.outputPath} with ${result.requiredCount} API-key slot${result.requiredCount === 1 ? "" : "s"}${preserved}`,
+        );
+        if (result.droppedCount > 0) {
+          log.warn(
+            `Dropped ${result.droppedCount} stale key${result.droppedCount === 1 ? "" : "s"} no longer required by the current Transitous catalog`,
+          );
+        }
+        log.dim("Fill in missing values, then run: openmapx data download gtfs");
+      } catch (err) {
+        log.err(`generate-api-keys failed: ${(err as Error).message}`);
         process.exit(1);
       }
     });

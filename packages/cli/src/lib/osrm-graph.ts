@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
@@ -69,6 +69,11 @@ export async function buildOsrmGraph(opts: BuildOsrmGraphOptions): Promise<Build
   const dataDir = join(paths.infraDir, "data");
   const graphDir = resolve(dataDir, OSRM_GRAPH_DIR);
   const sourcePbf = resolveOsmPbfForOsrm(dataDir, opts.region);
+  if (basename(sourcePbf) === "planet.osm.pbf") {
+    throw new Error(
+      "OSRM cannot build planet-scale graphs. Use Valhalla for planet-scale routing.",
+    );
+  }
   const profile = opts.profile ?? DEFAULT_OSRM_PROFILE;
   const runner = opts.runner ?? defaultRunner;
 
