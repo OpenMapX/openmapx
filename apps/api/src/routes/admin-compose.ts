@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { services } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
+import { applyHardlinksFromPlan, renderAndPersistCompose } from "../services/admin-ops";
 import { resolveAllServiceConfigs } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
 import { dockerComposeAction } from "../utils/docker-compose";
@@ -58,8 +59,10 @@ export async function registerAdminComposeRoutes(
   app.post("/api/admin/compose/up", async (req, reply) => {
     const session = await requireAdmin(req, reply);
     if (!session) return;
+    await renderAndPersistCompose();
+    const hardlinks = await applyHardlinksFromPlan();
     const r = await dockerComposeAction("", "start");
-    return { ok: r.exitCode === 0, stdout: r.stdout };
+    return { ok: r.exitCode === 0, stdout: r.stdout, hardlinks };
   });
 
   // POST /api/admin/compose/down — stop the whole stack

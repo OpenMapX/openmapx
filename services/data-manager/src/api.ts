@@ -95,9 +95,9 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return { ok: true };
   });
 
-  app.post<{ Body: { plan: HardlinkEntry[] } }>("/link", async (req) => {
-    const { plan } = req.body;
-    const result = await applyHardlinkPlan(plan, { rootDir: dataDir });
+  app.post<{ Body: { plan: HardlinkEntry[]; prune?: boolean } }>("/link", async (req) => {
+    const { plan, prune } = req.body;
+    const result = await applyHardlinkPlan(plan, { rootDir: dataDir, prune });
     return { ok: true, ...result };
   });
 

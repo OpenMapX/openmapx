@@ -64,4 +64,29 @@ describe("DataManagerClient", () => {
     const client = new DataManagerClient({ baseUrl: "http://x", fetch: fakeFetch });
     await expect(client.downloadOsm("planet")).rejects.toThrow("upstream 404");
   });
+
+  it("posts /link with prune flag and parses linked/skipped/pruned counts", async () => {
+    const fakeFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.method).toBe("POST");
+      expect(String(init?.body)).toContain('"prune":true');
+      return {
+        ok: true,
+        json: async () => ({ ok: true, linked: 7, skipped: 2, pruned: 3 }),
+      };
+    }) as unknown as typeof globalThis.fetch;
+
+    const client = new DataManagerClient({ baseUrl: "http://x", fetch: fakeFetch });
+    const result = await client.link(
+      [
+        {
+          source: "data/osm",
+          target: "data/valhalla/osm-pbf",
+          consumerService: "valhalla",
+          dataType: "osm-pbf",
+        },
+      ],
+      { prune: true },
+    );
+    expect(result).toEqual({ linked: 7, skipped: 2, pruned: 3 });
+  });
 });

@@ -22,6 +22,19 @@ export function filterFeedsByCountry(
   return feeds.filter((f) => set.has(f.country.toLowerCase()));
 }
 
+/**
+ * Normalise feed archive names to the Transitous/MOTIS convention used by the
+ * config generator (`*.gtfs.zip` / `*.netex.zip`).
+ */
+function feedArchiveFilename(id: string): string {
+  const trimmed = id.trim();
+  const withoutZip = trimmed.replace(/\.zip$/i, "");
+  if (/\.(gtfs|netex)$/i.test(withoutZip)) {
+    return `${withoutZip}.zip`;
+  }
+  return `${withoutZip}.gtfs.zip`;
+}
+
 export interface DownloadGtfsOptions {
   feeds: FeedDescriptor[];
   countries: string[];
@@ -63,7 +76,7 @@ export async function downloadGtfs(opts: DownloadGtfsOptions): Promise<DownloadG
     const batch = filtered.slice(i, i + concurrency);
     const settled = await Promise.allSettled(
       batch.map(async (feed) => {
-        const targetPath = join(targetDir, `${feed.id}.zip`);
+        const targetPath = join(targetDir, feedArchiveFilename(feed.id));
         await downloader(feed.url, targetPath);
         const sizeBytes = statSync(targetPath).size;
         const meta: DatasetMetadata = {

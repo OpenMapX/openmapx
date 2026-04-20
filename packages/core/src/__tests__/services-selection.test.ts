@@ -67,12 +67,18 @@ describe("service selection helpers", () => {
         }),
       ],
       { EXISTING: "1" },
-      { OSRM_URL: "https://router.example" },
+      {
+        OSRM_URL: "https://router.example",
+        INTEGRATION_PHOTOS_FLICKR_APIKEY: "flickr-key",
+        SERVICE_VALHALLA_BUILD_ELEVATION: "false",
+      },
     );
 
     expect(env).toEqual({
       EXISTING: "1",
       OPENMAPX_ENABLED_SERVICES: "app-api,osrm,valhalla,overpass",
+      INTEGRATION_PHOTOS_FLICKR_APIKEY: "flickr-key",
+      SERVICE_VALHALLA_BUILD_ELEVATION: "false",
       VALHALLA_URL: "http://valhalla:8002",
       OVERPASS_URL: "http://overpass:80",
     });

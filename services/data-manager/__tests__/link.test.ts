@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -28,6 +36,7 @@ describe("applyHardlinkPlan", () => {
     );
 
     expect(result.linked).toBe(2);
+    expect(result.pruned).toBe(0);
     expect(readFileSync(join(tgt, "a.osm.pbf"), "utf-8")).toBe("PBF1");
     expect(statSync(join(src, "a.osm.pbf")).ino).toBe(statSync(join(tgt, "a.osm.pbf")).ino);
   });
@@ -53,6 +62,7 @@ describe("applyHardlinkPlan", () => {
       { rootDir: tmp },
     );
     expect(result.linked).toBe(1);
+    expect(result.pruned).toBe(0);
     expect(statSync(join(tmp, "osm", "a.osm.pbf")).ino).toBe(
       statSync(join(tmp, "motis", "osm-pbf", "a.osm.pbf")).ino,
     );
@@ -82,6 +92,7 @@ describe("applyHardlinkPlan", () => {
       { rootDir: tmp },
     );
     expect(result.linked).toBe(3);
+    expect(result.pruned).toBe(0);
     expect(
       readFileSync(join(tmp, "tileserver", "tile-styles", "osm-bright", "sprite.png"), "utf-8"),
     ).toBe("PNG");
@@ -99,6 +110,7 @@ describe("applyHardlinkPlan", () => {
     );
     expect(r1.linked).toBe(1);
     expect(r1.skipped).toBe(0);
+    expect(r1.pruned).toBe(0);
 
     const r2 = await applyHardlinkPlan(
       [{ source: src, target: tgt, consumerService: "v", dataType: "osm-pbf" }],
@@ -106,6 +118,7 @@ describe("applyHardlinkPlan", () => {
     );
     expect(r2.linked).toBe(0);
     expect(r2.skipped).toBe(1);
+    expect(r2.pruned).toBe(0);
   });
 
   it("replaces stale target files when the source inode changed", async () => {
@@ -123,6 +136,7 @@ describe("applyHardlinkPlan", () => {
 
     expect(result.linked).toBe(1);
     expect(result.skipped).toBe(0);
+    expect(result.pruned).toBe(1);
     expect(readFileSync(join(tgt, "feed.zip"), "utf-8")).toBe("fresh");
     expect(statSync(join(src, "feed.zip")).ino).toBe(statSync(join(tgt, "feed.zip")).ino);
   });
@@ -147,6 +161,7 @@ describe("applyHardlinkPlan", () => {
     );
 
     expect(result.linked).toBe(1);
+    expect(result.pruned).toBe(0);
     expect(readFileSync(join(tgt, "data.osm.pbf"), "utf-8")).toBe("PBF");
     expect(statSync(join(src, "europe-germany.osm.pbf")).ino).toBe(
       statSync(join(tgt, "data.osm.pbf")).ino,
@@ -174,5 +189,49 @@ describe("applyHardlinkPlan", () => {
         { rootDir: tmp },
       ),
     ).rejects.toThrow(/expected exactly one source file/);
+  });
+
+  it("prunes stale target files that no longer exist in source", async () => {
+    const src = join(tmp, "src");
+    const tgt = join(tmp, "tgt");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "feed.zip"), "GTFS");
+
+    await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
+      { rootDir: tmp },
+    );
+    rmSync(join(src, "feed.zip"), { force: true });
+
+    const result = await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
+      { rootDir: tmp },
+    );
+
+    expect(result.linked).toBe(0);
+    expect(result.pruned).toBe(1);
+    expect(existsSync(join(tgt, "feed.zip"))).toBe(false);
+  });
+
+  it("can keep stale target files when prune is disabled", async () => {
+    const src = join(tmp, "src");
+    const tgt = join(tmp, "tgt");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "feed.zip"), "GTFS");
+
+    await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
+      { rootDir: tmp },
+    );
+    rmSync(join(src, "feed.zip"), { force: true });
+
+    const result = await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
+      { rootDir: tmp, prune: false },
+    );
+
+    expect(result.linked).toBe(0);
+    expect(result.pruned).toBe(0);
+    expect(existsSync(join(tgt, "feed.zip"))).toBe(true);
   });
 });

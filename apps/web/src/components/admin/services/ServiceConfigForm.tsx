@@ -51,9 +51,9 @@ interface ServiceConfigFormProps {
   /** Save the new config to the database (no container restart). */
   onSave?: (values: Record<string, unknown>) => Promise<void>;
   /**
-   * Save the new config AND restart the service so the change takes effect.
+   * Save the new config AND recreate the service so the change takes effect.
    * Service configs land in the rendered compose env at start time, so a
-   * separate restart is required for the new values to be observed by the
+   * compose up/recreate is required for the new values to be observed by the
    * running process.
    */
   onSaveAndApply?: (values: Record<string, unknown>) => Promise<void>;
@@ -189,12 +189,12 @@ export function ServiceConfigForm({
       )}
       {saved === "saved" && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          Configuration saved. {onSaveAndApply ? "Restart the service to apply." : ""}
+          Configuration saved. {onSaveAndApply ? "Use Start (recreate) to apply." : ""}
         </Alert>
       )}
       {saved === "applied" && (
         <Alert severity="success" variant="outlined" onClose={() => setSaved(null)}>
-          Configuration saved and service restart queued.
+          Configuration saved and service (re)start queued.
         </Alert>
       )}
 
@@ -321,7 +321,7 @@ export function ServiceConfigForm({
             onClick={handleApply}
             disabled={saving || changedKeys.length === 0}
           >
-            Save &amp; Apply (restart)
+            Save &amp; Apply (recreate)
           </Button>
         )}
       </Stack>

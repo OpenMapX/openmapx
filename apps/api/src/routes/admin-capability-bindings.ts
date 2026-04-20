@@ -1,3 +1,4 @@
+import { services as coreServices } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import {
   listBindingsForIntegration,
@@ -6,6 +7,8 @@ import {
 } from "../services/capability-bindings";
 import { getServiceRegistry } from "../services/service-registry";
 import { requireAdmin } from "../utils/require-admin";
+
+const { getProvidedCapabilityNames } = coreServices;
 
 export async function registerCapabilityBindingRoutes(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
@@ -33,7 +36,7 @@ export async function registerCapabilityBindingRoutes(
       reply.status(400);
       return { error: `Unknown service: ${req.body.serviceId}` };
     }
-    if (!svc.manifest.provides?.includes(req.params.capability)) {
+    if (!getProvidedCapabilityNames(svc.manifest.provides).includes(req.params.capability)) {
       reply.status(400);
       return {
         error: `Service ${svc.manifest.id} does not provide capability ${req.params.capability}`,

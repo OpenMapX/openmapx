@@ -1,14 +1,38 @@
 import { execFile as execFileCb } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { services as coreServices, repoPaths } from "@openmapx/core/server";
 import { dockerComposeAction } from "../utils/docker-compose";
 import type { JobContext } from "./job-runner";
+import { resolveAllServiceConfigs } from "./service-config-resolver";
 import { getServiceRegistry } from "./service-registry";
 
 const execFile = promisify(execFileCb);
+const { DataManagerClient, buildAppApiServiceEnv, renderCompose } = coreServices;
+
+const HARDLINK_PLAN_FILE = "docker-compose.generated.hardlinks.json";
+const DATA_MANAGER_STARTUP_TIMEOUT_MS = 60_000;
+const DATA_MANAGER_POLL_INTERVAL_MS = 2_000;
+
+interface HardlinkPlanEntry {
+  source: string;
+  target: string;
+  consumerService: string;
+  dataType: string;
+  targetFilename?: string;
+}
+
+export interface HardlinkApplySummary {
+  applied: boolean;
+  linked: number;
+  skipped: number;
+  pruned: number;
+  entries: number;
+  via?: string;
+}
 
 // Path resolution
 
@@ -47,6 +71,135 @@ export function resetDockerCache(): void {
   _dockerCacheAt = 0;
 }
 
+/**
+ * Render docker-compose.generated.yml + hardlink plan from the current service
+ * registry and operator config layers (defaults + DB + env). Called before
+ * `service.start` so "save config + apply" can take effect without requiring
+ * a separate manual CLI render.
+ */
+export async function renderAndPersistCompose(): Promise<void> {
+  const registry = getServiceRegistry();
+  const enabled = registry.enabled();
+  const paths = repoPaths();
+  const resolvedServiceConfigs = await resolveAllServiceConfigs(
+    enabled.map((service) => ({
+      id: service.manifest.id,
+      configSchema: service.manifest.configSchema,
+    })),
+  );
+
+  if (enabled.some((service) => service.manifest.id === "app-api")) {
+    resolvedServiceConfigs.set(
+      "app-api",
+      buildAppApiServiceEnv(enabled, resolvedServiceConfigs.get("app-api") ?? {}, process.env),
+    );
+  }
+
+  const rendered = renderCompose(enabled, {
+    domain: process.env.DOMAIN ?? "localhost",
+    composeOutDir: paths.infraDir,
+    allServices: registry.list(),
+    resolvedServiceConfigs,
+  });
+
+  mkdirSync(paths.infraDir, { recursive: true });
+  writeFileSync(paths.composeOutPath, rendered.composeYaml, "utf-8");
+  writeFileSync(
+    join(paths.infraDir, "docker-compose.generated.hardlinks.json"),
+    JSON.stringify(rendered.hardlinkPlan, null, 2),
+    "utf-8",
+  );
+}
+
+function dataManagerEnabled(): boolean {
+  try {
+    const svc = getServiceRegistry().get("data-manager");
+    return !!svc?.enabled;
+  } catch {
+    return false;
+  }
+}
+
+function dataManagerUrlCandidates(): string[] {
+  const out: string[] = [];
+  if (process.env.DATA_MANAGER_URL?.trim()) out.push(process.env.DATA_MANAGER_URL.trim());
+  // In docker-compose, app-api reaches data-manager over the service DNS name.
+  out.push("http://data-manager:4000");
+  // Keep localhost fallback for non-container local API runs.
+  out.push("http://localhost:4000");
+  return [...new Set(out)];
+}
+
+async function waitForDataManagerClient(): Promise<{
+  client: coreServices.DataManagerClient;
+  url: string;
+}> {
+  const urls = dataManagerUrlCandidates();
+  const deadline = Date.now() + DATA_MANAGER_STARTUP_TIMEOUT_MS;
+  let lastErr: unknown;
+
+  while (Date.now() < deadline) {
+    for (const url of urls) {
+      const client = new DataManagerClient({ baseUrl: url });
+      try {
+        await client.status();
+        return { client, url };
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, DATA_MANAGER_POLL_INTERVAL_MS));
+  }
+
+  const detail = (lastErr as Error | undefined)?.message ?? String(lastErr ?? "unknown error");
+  throw new Error(
+    `data-manager did not become reachable within ${DATA_MANAGER_STARTUP_TIMEOUT_MS / 1000}s (${urls.join(", ")}): ${detail}`,
+  );
+}
+
+function readHardlinkPlanFromDisk(): HardlinkPlanEntry[] {
+  const paths = repoPaths();
+  const filePath = join(paths.infraDir, HARDLINK_PLAN_FILE);
+  if (!existsSync(filePath)) {
+    throw new Error(`Hardlink plan not found at ${filePath}. Render compose first.`);
+  }
+  const parsed = JSON.parse(readFileSync(filePath, "utf-8")) as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Hardlink plan at ${filePath} is not an array.`);
+  }
+  return parsed as HardlinkPlanEntry[];
+}
+
+/**
+ * Ensure consumer data mounts are refreshed from producer directories before a
+ * service/container start. Uses the data-manager `/link` endpoint because the
+ * API container may not have direct host write access to infra/docker/data.
+ */
+export async function applyHardlinksFromPlan(
+  opts: { log?: (msg: string) => Promise<void> | void } = {},
+): Promise<HardlinkApplySummary> {
+  const plan = readHardlinkPlanFromDisk();
+  if (plan.length === 0) {
+    return { applied: true, linked: 0, skipped: 0, pruned: 0, entries: 0 };
+  }
+  if (!dataManagerEnabled()) {
+    throw new Error(
+      `Hardlink plan contains ${plan.length} entr${plan.length === 1 ? "y" : "ies"}, but service "data-manager" is disabled. Enable data-manager before starting services from Admin, or apply links via CLI first.`,
+    );
+  }
+
+  opts.log?.("Ensuring data-manager is running for hardlink apply...");
+  const dmStart = await dockerComposeAction("data-manager", "start");
+  if (dmStart.exitCode !== 0) {
+    throw new Error(`docker compose up data-manager exited with ${dmStart.exitCode}`);
+  }
+
+  opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
+  const { client, url } = await waitForDataManagerClient();
+  const result = await client.link(plan, { prune: true });
+  return { applied: true, entries: plan.length, via: url, ...result };
+}
+
 // Service control (job handlers) — registry-authorized + routed through the
 // docker-compose helper that targets the generated compose file.
 
@@ -67,6 +220,14 @@ function assertKnownService(service: string): void {
 
 export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
   assertKnownService(service);
+  await ctx.log(`Rendering compose for latest config...`);
+  await renderAndPersistCompose();
+  const hardlinks = await applyHardlinksFromPlan({ log: (m) => ctx.log(m) });
+  if (hardlinks.applied) {
+    await ctx.log(
+      `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
+    );
+  }
   await ctx.log(`Starting ${service}...`);
   const r = await dockerComposeAction(service, "start");
   if (r.exitCode !== 0) throw new Error(`docker compose up exited with ${r.exitCode}`);

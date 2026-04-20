@@ -35,12 +35,12 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "useElevation": {
+      "build_elevation": {
         "type": "boolean",
         "default": true,
-        "title": "Include elevation data"
+        "title": "Build elevation data"
       },
-      "useAdmins": {
+      "build_admins": {
         "type": "boolean",
         "default": true,
         "title": "Build admin boundaries"

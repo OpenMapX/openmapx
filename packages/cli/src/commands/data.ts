@@ -9,9 +9,11 @@ import {
   resolveTransitousCountries,
   TRANSITOUS_COUNTRIES_ENV,
 } from "../lib/env-defaults";
+import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
+import { renderComposeForRepo } from "./compose";
 
 const { DataManagerClient } = services;
 type GtfsDownloadResult = services.GtfsDownloadResult;
@@ -197,11 +199,21 @@ export function registerDataCommands(program: Command): void {
           log.err(`Unknown kind: ${kind} (use: motis | osrm | otp | pelias | tiles)`);
           process.exit(1);
         }
-        await buildServices({
+        const result = await buildServices({
           mode: "explicit",
           serviceIds: [serviceId],
           region,
         });
+        if (result.completedIds.length === 0) return;
+        const rendered = await renderComposeForRepo({
+          domain: process.env.DOMAIN ?? "localhost",
+          services: result.completedIds,
+        });
+        for (const warning of rendered.selectionWarnings) log.warn(warning);
+        const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        log.ok(
+          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+        );
       } catch (err) {
         log.err(`build failed: ${(err as Error).message}`);
         process.exit(1);
@@ -242,33 +254,23 @@ export function registerDataCommands(program: Command): void {
 
   data
     .command("link")
-    .description("Apply the hardlink plan from the most recent compose render")
+    .description(
+      "Apply + prune the hardlink plan from the most recent compose render (keeps consumer dirs in sync with producer data)",
+    )
     .action(async () => {
-      const paths = repoPaths();
-      const planPath = `${paths.infraDir}/docker-compose.generated.hardlinks.json`;
-      let plan: Array<{
-        source: string;
-        target: string;
-        consumerService: string;
-        dataType: string;
-        targetFilename?: string;
-      }>;
       try {
-        plan = JSON.parse(readFileSync(planPath, "utf-8")) as typeof plan;
+        const result = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        log.ok(
+          `Linked ${result.linked} files (${result.skipped} already linked, ${result.pruned} stale file${result.pruned === 1 ? "" : "s"} pruned)`,
+        );
       } catch (err) {
-        log.err(`could not read hardlink plan at ${planPath}: ${(err as Error).message}`);
-        log.dim("(run 'openmapx compose render' first)");
-        process.exit(1);
-        return;
-      }
-
-      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
-      try {
-        const result = await client.link(plan);
-        log.ok(`Linked ${result.linked} files (${result.skipped} already linked)`);
-      } catch (err) {
-        log.err(`link failed: ${(err as Error).message}`);
-        log.dim(`(is data-manager running? expected at ${DEFAULT_DM_URL})`);
+        const paths = repoPaths();
+        const planPath = `${paths.infraDir}/docker-compose.generated.hardlinks.json`;
+        const message = (err as Error).message;
+        log.err(`link failed: ${message}`);
+        if (message.includes("Hardlink plan not found")) {
+          log.dim(`(expected plan at ${planPath}; run 'openmapx compose render' first)`);
+        }
         process.exit(1);
       }
     });

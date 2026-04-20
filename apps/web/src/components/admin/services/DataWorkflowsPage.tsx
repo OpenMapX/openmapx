@@ -212,7 +212,11 @@ function BuildsSection({ builds }: { builds: BuildStatus[] }) {
         Each service builds its own indexes/graphs on first start (Valhalla auto-builds tiles,
         Nominatim auto-imports, OSRM runs its extract/partition/customize chain, etc.). Trigger a
         rebuild by stopping the service from the <Link href="/admin/services">service catalog</Link>{" "}
-        and starting it again, or via <code>pnpm openmapx services restart &lt;id&gt;</code>.
+        and starting it again, or via{" "}
+        <code>
+          pnpm openmapx services stop &lt;id&gt; && pnpm openmapx services start &lt;id&gt;
+        </code>
+        .
       </Alert>
     </Paper>
   );

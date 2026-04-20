@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { dockerComposeStream } from "../lib/docker";
+import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { applyServiceSelection } from "../lib/service-selection";
@@ -118,6 +119,10 @@ export function registerComposeCommands(program: Command): void {
         });
         log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
         for (const warning of r.selectionWarnings) log.warn(warning);
+        const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        log.ok(
+          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+        );
       } catch (err) {
         log.err(`Render failed: ${(err as Error).message}`);
         process.exit(1);

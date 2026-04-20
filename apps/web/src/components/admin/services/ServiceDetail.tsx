@@ -294,11 +294,11 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
             await saveConfig.mutateAsync(values);
           }}
           onSaveAndApply={async (values) => {
-            // Service configs land in the rendered compose env at start time,
-            // so applying a new value requires a restart. Persist first so a
-            // failed restart doesn't leave the next start with the old value.
+            // Service configs land in the generated compose env, so applying
+            // a new value must go through `docker compose up -d` semantics.
+            // Persist first so a failed start/recreate doesn't lose the edit.
             await saveConfig.mutateAsync(values);
-            await action.mutateAsync("restart");
+            await action.mutateAsync("start");
           }}
         />
       </CardContent>
@@ -437,16 +437,20 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
         </Stack>
 
         <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
-          <Button
-            size="small"
-            variant="contained"
-            color="success"
-            startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
-            onClick={() => runAction("start")}
-            disabled={isBusy || data.status === "running"}
-          >
-            Start
-          </Button>
+          <Tooltip title="Recreate this service from the latest rendered compose and hardlink plan.">
+            <span>
+              <Button
+                size="small"
+                variant="contained"
+                color="success"
+                startIcon={isBusy ? <CircularProgress size={14} /> : <PlayArrowIcon />}
+                onClick={() => runAction("start")}
+                disabled={isBusy}
+              >
+                {data.status === "running" ? "Recreate" : "Start"}
+              </Button>
+            </span>
+          </Tooltip>
           <Button
             size="small"
             variant="outlined"
@@ -457,15 +461,19 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
           >
             Stop
           </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-            onClick={() => runAction("restart")}
-            disabled={isBusy}
-          >
-            Restart
-          </Button>
+          <Tooltip title="In-place restart only. Use Start to apply new config/compose/hardlink changes.">
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
+                onClick={() => runAction("restart")}
+                disabled={isBusy}
+              >
+                Restart
+              </Button>
+            </span>
+          </Tooltip>
           <Button
             size="small"
             variant="outlined"

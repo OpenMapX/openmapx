@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { db } from "../db";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { db, sql } from "../db";
 import { capabilityBinding } from "../db/schema";
 import {
   getBinding,
@@ -10,6 +10,25 @@ import {
 } from "./capability-bindings";
 
 const TEST_INT = "routing-test";
+
+beforeAll(async () => {
+  // Some local test DB setups don't run migrations ahead of this suite.
+  // Bootstrap the table minimally so DAO tests remain hermetic.
+  await sql`
+    create table if not exists capability_binding (
+      integration_id text not null,
+      capability text not null,
+      service_id text not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      primary key (integration_id, capability)
+    )
+  `;
+  await sql`
+    create index if not exists idx_capability_binding_service
+      on capability_binding (service_id)
+  `;
+});
 
 beforeEach(async () => {
   await db.delete(capabilityBinding).where(eq(capabilityBinding.integrationId, TEST_INT));

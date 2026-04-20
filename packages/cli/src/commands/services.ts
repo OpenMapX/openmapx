@@ -2,6 +2,7 @@ import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
 import { dockerComposeStream } from "../lib/docker";
+import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { buildServices } from "../lib/service-builds";
@@ -12,6 +13,7 @@ import {
   getServiceSelectionSummary,
   SERVICE_SELECTION_FILE,
 } from "../lib/service-selection";
+import { renderComposeForRepo } from "./compose";
 
 const {
   checkCapabilityName,
@@ -267,6 +269,17 @@ export function registerServicesCommands(program: Command): void {
           region: options.region,
           continueOnError: options.failFast !== true,
         });
+        if (result.completedIds.length > 0) {
+          const rendered = await renderComposeForRepo({
+            domain: process.env.DOMAIN ?? "localhost",
+            services: result.completedIds,
+          });
+          for (const warning of rendered.selectionWarnings) log.warn(warning);
+          const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+          log.ok(
+            `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+          );
+        }
         if (result.failures.length > 0) {
           log.err(
             `build-all completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
@@ -295,6 +308,17 @@ export function registerServicesCommands(program: Command): void {
           region: options.region,
           continueOnError: options.continueOnError,
         });
+        if (result.completedIds.length > 0) {
+          const rendered = await renderComposeForRepo({
+            domain: process.env.DOMAIN ?? "localhost",
+            services: result.completedIds,
+          });
+          for (const warning of rendered.selectionWarnings) log.warn(warning);
+          const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+          log.ok(
+            `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+          );
+        }
         if (result.failures.length > 0) {
           log.err(
             `build completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
@@ -309,8 +333,24 @@ export function registerServicesCommands(program: Command): void {
 
   services
     .command("start <ids...>")
-    .description("Start one or more services (docker compose up -d — recreates on config change)")
+    .description(
+      "Render compose, auto-apply/prune hardlinks, then start one or more services (docker compose up -d)",
+    )
     .action(async (ids: string[]) => {
+      try {
+        const rendered = await renderComposeForRepo({
+          domain: process.env.DOMAIN ?? "localhost",
+          services: ids,
+        });
+        for (const warning of rendered.selectionWarnings) log.warn(warning);
+        const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        log.ok(
+          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+        );
+      } catch (err) {
+        log.err(`prepare/start failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
       const code = await dockerComposeStream(["up", "-d", ...ids]);
       process.exit(code);
     });

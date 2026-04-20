@@ -8,6 +8,7 @@ const OPTIONAL_LOCAL_SERVICE_ENV: Readonly<Record<string, string>> = {
   overpass: "OVERPASS_URL",
   valhalla: "VALHALLA_URL",
 };
+const APP_API_ENV_PASSTHROUGH_PREFIXES = ["INTEGRATION_", "SERVICE_"] as const;
 
 export const DEFAULT_SELECTED_SERVICE_IDS = [
   "traefik",
@@ -141,6 +142,16 @@ export function buildAppApiServiceEnv(
     if (hostEnv[envName] !== undefined || !enabledIds.has(serviceId)) continue;
     const url = serviceUrl(serviceId, enabledServices);
     if (url) next[envName] = url;
+  }
+
+  // Forward dynamic operator override families into the API container so
+  // env-based integration/service config still works without an `env_file`
+  // blanket pass-through in compose.
+  for (const [key, value] of Object.entries(hostEnv)) {
+    if (value === undefined) continue;
+    if (APP_API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      next[key] = value;
+    }
   }
 
   return next;

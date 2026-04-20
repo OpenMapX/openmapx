@@ -85,5 +85,6 @@ describe("download-gtfs helpers", () => {
       datasets: Array<{ id: string }>;
     };
     expect(state.datasets.map((dataset) => dataset.id)).toEqual(["de_bvg"]);
+    expect(readFileSync(join(tmp, "gtfs", "de_bvg.gtfs.zip"), "utf-8")).toBe("GTFS");
   });
 });

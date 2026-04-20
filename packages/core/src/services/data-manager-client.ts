@@ -123,14 +123,24 @@ export class DataManagerClient {
       dataType: string;
       targetFilename?: string;
     }>,
-  ): Promise<{ linked: number; skipped: number }> {
+    opts: { prune?: boolean } = {},
+  ): Promise<{ linked: number; skipped: number; pruned: number }> {
     const res = await this.fetchImpl(`${this.baseUrl}/link`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, prune: opts.prune }),
     });
     if (!res.ok) throw new Error(`link failed: HTTP ${res.status}`);
-    return (await res.json()) as { linked: number; skipped: number };
+    const parsed = (await res.json()) as Partial<{
+      linked: number;
+      skipped: number;
+      pruned: number;
+    }>;
+    return {
+      linked: parsed.linked ?? 0,
+      skipped: parsed.skipped ?? 0,
+      pruned: parsed.pruned ?? 0,
+    };
   }
 }
 
