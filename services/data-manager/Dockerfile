@@ -3,10 +3,10 @@ RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/
 
 FROM node:24-slim AS base
 
-# Keep this pinned to the repo root `packageManager` field so Docker resolves
-# dependencies with the same pnpm version that generated pnpm-lock.yaml.
-ARG PNPM_VERSION=9.15.9
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+# Read the pnpm version directly from the repo root package.json to ensure
+# lockfile resolution stays reproducible across local and CI Docker builds.
+COPY package.json /tmp/package.json
+RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/package.json').packageManager)") --activate
 
 FROM base AS deps
 WORKDIR /app

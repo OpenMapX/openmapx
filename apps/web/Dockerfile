@@ -1,8 +1,8 @@
 FROM node:24-alpine AS base
-# Keep in sync with the root `packageManager` field so lockfile resolution
-# stays reproducible across local and CI Docker builds.
-ARG PNPM_VERSION=9.15.9
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+# Read the pnpm version directly from the repo root package.json to ensure
+# lockfile resolution stays reproducible across local and CI Docker builds.
+COPY package.json /tmp/package.json
+RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/package.json').packageManager)") --activate
 
 # Install dependencies
 FROM base AS deps

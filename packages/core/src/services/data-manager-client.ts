@@ -49,6 +49,16 @@ export class DataManagerClient {
     return body.datasets;
   }
 
+  async reloadDatasets(): Promise<{ ok: boolean; datasets: number }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/datasets/reload`, { method: "POST" });
+    if (!res.ok) throw new Error(`datasets/reload failed: HTTP ${res.status}`);
+    const body = (await res.json()) as Partial<{ ok: boolean; datasets: number }>;
+    return {
+      ok: body.ok ?? true,
+      datasets: body.datasets ?? 0,
+    };
+  }
+
   async downloadOsm(
     region: string,
     opts: { onProgress?: (bytesDownloaded: number, totalBytes?: number) => void } = {},

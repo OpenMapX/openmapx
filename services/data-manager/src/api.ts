@@ -25,6 +25,11 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   app.get("/datasets", async () => ({ datasets: store.getAll() }));
 
+  app.post("/datasets/reload", async () => {
+    const result = store.reload();
+    return { ok: true, ...result };
+  });
+
   app.post<{ Body: { region: string } }>("/download/osm", async (req, reply) => {
     const { region } = req.body;
     if (!region) throw new Error("region required");

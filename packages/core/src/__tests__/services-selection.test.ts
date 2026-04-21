@@ -77,9 +77,53 @@ describe("service selection helpers", () => {
     expect(env).toEqual({
       EXISTING: "1",
       OPENMAPX_ENABLED_SERVICES: "app-api,osrm,valhalla,overpass",
+      // overpass is enabled and no host OVERPASS_URL set → internal URL injected
+      OVERPASS_URL: "http://overpass:80",
       INTEGRATION_PHOTOS_FLICKR_APIKEY: "flickr-key",
       SERVICE_VALHALLA_BUILD_ELEVATION: "false",
     });
+  });
+
+  it("injects internal Docker-network URLs for env-var-driven backends when co-deployed", () => {
+    // Both overpass and nominatim enabled, no host overrides
+    const env = buildAppApiServiceEnv(
+      [
+        svc("app-api"),
+        svc("overpass", { container: { image: "t/overpass", tag: "latest", expose: [80] } }),
+        svc("nominatim", {
+          container: { image: "t/nominatim", tag: "latest", expose: [8080] },
+        }),
+      ],
+      {},
+      {},
+    );
+
+    expect(env.OVERPASS_URL).toBe("http://overpass:80");
+    expect(env.NOMINATIM_URL).toBe("http://nominatim:8080");
+  });
+
+  it("host-env OVERPASS_URL and NOMINATIM_URL override the injected internal URLs", () => {
+    const env = buildAppApiServiceEnv(
+      [
+        svc("app-api"),
+        svc("overpass", { container: { image: "t/overpass", tag: "latest", expose: [80] } }),
+        svc("nominatim", {
+          container: { image: "t/nominatim", tag: "latest", expose: [8080] },
+        }),
+      ],
+      {},
+      {
+        OVERPASS_URL: "https://my-overpass.example.com",
+        NOMINATIM_URL: "https://my-nominatim.example.com",
+      },
+    );
+
+    // Explicit host overrides must win over the injected internal addresses
+    expect(env.OVERPASS_URL).toBeUndefined(); // not injected because hostEnv has it
+    expect(env.NOMINATIM_URL).toBeUndefined(); // not injected because hostEnv has it
+    // The host env values themselves are NOT forwarded unless they match the
+    // passthrough prefix pattern (INTEGRATION_* / SERVICE_*), so they must be
+    // set in the compose file's existing env or the manifest's ${VAR:-default}.
   });
 });
 

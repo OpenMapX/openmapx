@@ -108,8 +108,10 @@ export async function buildOtpGraph(opts: BuildOtpGraphOptions): Promise<BuildOt
   const paths = repoPaths(opts.rootDir);
   const dataDir = join(paths.infraDir, "data");
   const sourcePbf = resolveOsmPbf(dataDir, opts.region, "OTP");
-  if (basename(sourcePbf) === "planet.osm.pbf") {
-    throw new Error("OTP cannot build planet-scale graphs. Use MOTIS for planet-scale transit.");
+  if (basename(sourcePbf) === "planet.osm.pbf" || statSync(sourcePbf).size > 50_000_000_000) {
+    throw new Error(
+      "OTP cannot build planet-scale graphs (>50GB). Use MOTIS for planet-scale transit.",
+    );
   }
 
   const graphDir = resolve(dataDir, OTP_GRAPH_DIR);

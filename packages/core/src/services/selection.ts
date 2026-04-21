@@ -109,6 +109,29 @@ export function formatServiceIdList(ids: Iterable<string>): string {
 }
 
 /**
+ * Map of service id → env var name for backends that the API reaches via
+ * `process.env` rather than through the live service-registry `serviceUrl()`.
+ *
+ * - `overpass`: `packages/core/src/utils/overpass/client.ts` reads
+ *   `process.env.OVERPASS_URL` directly (module-level initialisation).
+ * - `nominatim`: `packages/shared-mobility/nominatim.ts` reads
+ *   `process.env.NOMINATIM_URL` at module load time.
+ *
+ * All other built-in backends (valhalla, osrm, motis, pelias, photon, otp)
+ * are resolved at runtime through the live service registry (`serviceUrl()`),
+ * so their manifest env-var defaults are never consulted while those services
+ * are enabled.
+ *
+ * When a service is co-deployed we override its manifest default (public API)
+ * with the Docker-internal address. The operator's explicit host-env value
+ * always wins because it is applied last by the renderer's env-merge logic.
+ */
+const SERVICE_ENV_URL_MAP: Array<{ serviceId: string; envVar: string; internalPort: number }> = [
+  { serviceId: "overpass", envVar: "OVERPASS_URL", internalPort: 80 },
+  { serviceId: "nominatim", envVar: "NOMINATIM_URL", internalPort: 8080 },
+];
+
+/**
  * Compose-time app-api env synthesis shared by the CLI renderer and the admin
  * compose preview so both surfaces emit identical service-selection + env
  * passthrough values.
@@ -124,6 +147,17 @@ export function buildAppApiServiceEnv(
       enabledServices.map((service) => service.manifest.id),
     ),
   };
+
+  // For services that the API reaches via process.env rather than the live
+  // service registry, inject the Docker-internal URL when the service is
+  // co-deployed. This ensures self-hosted instances are used instead of the
+  // public-API fallback baked into the manifest defaults.
+  const enabledIds = new Set(enabledServices.map((s) => s.manifest.id));
+  for (const { serviceId, envVar, internalPort } of SERVICE_ENV_URL_MAP) {
+    if (enabledIds.has(serviceId) && !hostEnv[envVar]) {
+      next[envVar] = `http://${serviceId}:${internalPort}`;
+    }
+  }
 
   // Forward dynamic operator override families into the API container so
   // env-based integration/service config still works without an `env_file`

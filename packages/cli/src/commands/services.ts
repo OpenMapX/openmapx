@@ -372,6 +372,36 @@ export function registerServicesCommands(program: Command): void {
     });
 
   services
+    .command("recreate <ids...>")
+    .description(
+      "Pull latest images, then force-recreate one or more services (render + hardlinks + docker compose up -d --force-recreate)",
+    )
+    .action(async (ids: string[]) => {
+      try {
+        const rendered = await renderComposeForRepo({
+          domain: process.env.DOMAIN ?? "localhost",
+          services: ids,
+        });
+        for (const warning of rendered.selectionWarnings) log.warn(warning);
+        const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        log.ok(
+          `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+        );
+      } catch (err) {
+        log.err(`prepare/recreate failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
+
+      const pullCode = await dockerComposeStream(["pull", ...ids]);
+      if (pullCode !== 0) {
+        log.warn("Some images could not be pulled (service may be locally built). Continuing.");
+      }
+
+      const code = await dockerComposeStream(["up", "-d", "--force-recreate", ...ids]);
+      process.exit(code);
+    });
+
+  services
     .command("status [id]")
     .description("Show container status (one or all services)")
     .action(async (id?: string) => {

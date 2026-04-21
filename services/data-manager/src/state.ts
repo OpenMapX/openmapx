@@ -38,6 +38,16 @@ export class StateStore {
 
   constructor(dataDir: string) {
     this.path = join(dataDir, ".data-manager-state.json");
+    this.loadFromDisk();
+  }
+
+  reload(): { datasets: number } {
+    this.loadFromDisk();
+    return { datasets: this.state.datasets.length };
+  }
+
+  private loadFromDisk(): void {
+    this.state = { datasets: [] };
     if (existsSync(this.path)) {
       try {
         this.state = JSON.parse(readFileSync(this.path, "utf-8")) as State;

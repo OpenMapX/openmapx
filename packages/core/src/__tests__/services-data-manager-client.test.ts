@@ -65,6 +65,20 @@ describe("DataManagerClient", () => {
     await expect(client.downloadOsm("planet")).rejects.toThrow("upstream 404");
   });
 
+  it("posts /datasets/reload and returns the refreshed dataset count", async () => {
+    const fakeFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.method).toBe("POST");
+      return {
+        ok: true,
+        json: async () => ({ ok: true, datasets: 3 }),
+      };
+    }) as unknown as typeof globalThis.fetch;
+
+    const client = new DataManagerClient({ baseUrl: "http://x", fetch: fakeFetch });
+    const result = await client.reloadDatasets();
+    expect(result).toEqual({ ok: true, datasets: 3 });
+  });
+
   it("posts /link with prune flag and parses linked/skipped/pruned counts", async () => {
     const fakeFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       expect(init?.method).toBe("POST");
