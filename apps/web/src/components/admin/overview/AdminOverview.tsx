@@ -5,6 +5,7 @@ import DnsIcon from "@mui/icons-material/Dns";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExtensionIcon from "@mui/icons-material/Extension";
 import GroupIcon from "@mui/icons-material/Group";
+import KeyIcon from "@mui/icons-material/Key";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -63,6 +64,18 @@ interface OverviewData {
   attention: AttentionItem[];
   recentActivity: AuditEntry[];
   activeJobs: JobEntry[];
+}
+
+interface CredentialsOverviewData {
+  credentials: Array<{
+    integrationId: string;
+    name: string;
+    enabled: boolean;
+    secretFields: number;
+    vaultStored: number;
+    missingCredentials: number;
+  }>;
+  secretsConfigured: boolean;
 }
 
 // Components
@@ -154,6 +167,16 @@ export function AdminOverview() {
     refetchInterval: 60_000,
   });
 
+  const credentialsOverview = useQuery<CredentialsOverviewData>({
+    queryKey: ["admin", "credentials", "overview"],
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/admin/credentials`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load credentials overview");
+      return res.json();
+    },
+    refetchInterval: 60_000,
+  });
+
   const healthSweep = useMutation({
     mutationFn: async () => {
       const res = await fetch(`${apiUrl}/api/admin/integrations/health/run`, {
@@ -206,6 +229,12 @@ export function AdminOverview() {
   if (!data) return <Alert severity="error">Failed to load overview data.</Alert>;
 
   const isBusy = healthSweep.isPending || reloadMutation.isPending;
+  const credentials = credentialsOverview.data?.credentials ?? [];
+  const missingCredentialIntegrations = credentials.filter((entry) => entry.missingCredentials > 0);
+  const totalMissingCredentials = missingCredentialIntegrations.reduce(
+    (sum, entry) => sum + entry.missingCredentials,
+    0,
+  );
 
   return (
     <Stack gap={3}>
@@ -339,6 +368,35 @@ export function AdminOverview() {
             </StatCard>
           )}
         </Grid>
+
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <StatCard title="Credentials" icon={<KeyIcon />} href="/admin/integrations">
+            <Typography
+              variant="h4"
+              fontWeight={700}
+              color={totalMissingCredentials > 0 ? "warning.main" : "success.main"}
+            >
+              {totalMissingCredentials}
+            </Typography>
+            <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
+              <Chip
+                label={`${credentials.length} integration${credentials.length === 1 ? "" : "s"}`}
+                size="small"
+                variant="outlined"
+              />
+              <Chip
+                label={
+                  totalMissingCredentials > 0
+                    ? `${missingCredentialIntegrations.length} missing`
+                    : "all configured"
+                }
+                size="small"
+                color={totalMissingCredentials > 0 ? "warning" : "success"}
+                variant="outlined"
+              />
+            </Stack>
+          </StatCard>
+        </Grid>
       </Grid>
 
       {/* Attention list */}
@@ -364,6 +422,54 @@ export function AdminOverview() {
               </Alert>
             ))}
           </Stack>
+        </Box>
+      )}
+
+      {credentialsOverview.isError && (
+        <Alert severity="error" variant="outlined">
+          Failed to load credentials summary.
+        </Alert>
+      )}
+
+      {credentials.length > 0 && (
+        <Box>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            Credentials Overview
+          </Typography>
+          {!credentialsOverview.data?.secretsConfigured && (
+            <Alert severity="warning" sx={{ mb: 1.25 }}>
+              Credentials vault is not configured. Set <code>OPENMAPX_SECRETS_KEY</code> to enable
+              secure storage in the admin UI.
+            </Alert>
+          )}
+          {missingCredentialIntegrations.length === 0 ? (
+            <Alert severity="success" variant="outlined">
+              No missing integration credentials detected.
+            </Alert>
+          ) : (
+            <Stack gap={1}>
+              {missingCredentialIntegrations.slice(0, 6).map((entry) => (
+                <Alert
+                  key={entry.integrationId}
+                  severity="warning"
+                  variant="outlined"
+                  action={
+                    <Button
+                      component={Link}
+                      href={`/admin/integrations/${entry.integrationId}`}
+                      size="small"
+                      color="inherit"
+                    >
+                      Open
+                    </Button>
+                  }
+                >
+                  {entry.name}: {entry.missingCredentials} missing credential
+                  {entry.missingCredentials === 1 ? "" : "s"}
+                </Alert>
+              ))}
+            </Stack>
+          )}
         </Box>
       )}
 

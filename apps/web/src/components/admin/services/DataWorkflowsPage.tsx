@@ -14,25 +14,31 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
-
-// Types
+import { useAdminToast } from "../shared/AdminToast";
 
 interface OsmInfo {
   found: boolean;
@@ -78,7 +84,10 @@ interface DataResponse {
   fetchedAt: string;
 }
 
-// Helpers
+interface DataActionResponse {
+  ok: boolean;
+  jobId: string;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -110,7 +119,368 @@ const BUILD_LABELS: Record<string, string> = {
   overpass: "Overpass",
 };
 
-// OsmSection
+function OperationCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack spacing={1.5}>
+          <Box>
+            <Typography variant="subtitle2" fontWeight={700}>
+              {title}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {description}
+            </Typography>
+          </Box>
+          {children}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
+  const showToast = useAdminToast();
+  const queryClient = useQueryClient();
+
+  const [osmRegion, setOsmRegion] = useState("");
+  const [gtfsCountries, setGtfsCountries] = useState("");
+  const [gtfsFeedsFile, setGtfsFeedsFile] = useState("");
+  const [updateRegion, setUpdateRegion] = useState("");
+  const [updateCountries, setUpdateCountries] = useState("");
+  const [updateFeedsFile, setUpdateFeedsFile] = useState("");
+  const [updateFailFast, setUpdateFailFast] = useState(false);
+  const [overpassRegion, setOverpassRegion] = useState("");
+  const [cleanTarget, setCleanTarget] = useState("all");
+  const [cleanDialogOpen, setCleanDialogOpen] = useState(false);
+  const [apiKeysRepoUrl, setApiKeysRepoUrl] = useState("");
+  const [apiKeysOutput, setApiKeysOutput] = useState("");
+  const [lastJobId, setLastJobId] = useState<string | null>(null);
+
+  const runOperation = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const res = await fetch(`${apiUrl}/api/admin/services/data/action`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Failed to queue operation");
+      }
+      return res.json() as Promise<DataActionResponse>;
+    },
+    onSuccess: (result, body) => {
+      const op = String(body.operation ?? "operation");
+      setLastJobId(result.jobId);
+      showToast(`Queued ${op} (${result.jobId})`);
+      queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
+    },
+    onError: (err) => showToast(err instanceof Error ? err.message : "Operation failed", "error"),
+  });
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5 }}>
+      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+        <BuildIcon color="primary" />
+        <Typography variant="h6" fontWeight={600}>
+          Data Operations
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Button component={Link} href="/admin/activity" variant="outlined" size="small">
+          Open Activity
+        </Button>
+      </Stack>
+
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Queue CLI-backed data jobs from the GUI. All operations stream logs via Admin jobs.
+      </Typography>
+
+      {lastJobId && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={
+            <Button component={Link} href="/admin/activity" size="small" color="inherit">
+              View Jobs
+            </Button>
+          }
+        >
+          Last queued job: <code>{lastJobId}</code>
+        </Alert>
+      )}
+
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Download OSM"
+            description="Runs: openmapx data download osm [region]"
+          >
+            <TextField
+              size="small"
+              label="Region"
+              placeholder="e.g. germany"
+              value={osmRegion}
+              onChange={(e) => setOsmRegion(e.target.value)}
+            />
+            <Button
+              variant="contained"
+              onClick={() => runOperation.mutate({ operation: "download-osm", region: osmRegion })}
+              disabled={runOperation.isPending}
+            >
+              Queue OSM Download
+            </Button>
+          </OperationCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Download GTFS"
+            description="Runs: openmapx data download gtfs [--countries] [--feeds-file]"
+          >
+            <TextField
+              size="small"
+              label="Countries"
+              placeholder="de,at,ch"
+              value={gtfsCountries}
+              onChange={(e) => setGtfsCountries(e.target.value)}
+            />
+            <TextField
+              size="small"
+              label="Feeds file"
+              placeholder="/path/to/feeds.json"
+              value={gtfsFeedsFile}
+              onChange={(e) => setGtfsFeedsFile(e.target.value)}
+            />
+            <Button
+              variant="contained"
+              onClick={() =>
+                runOperation.mutate({
+                  operation: "download-gtfs",
+                  countries: gtfsCountries,
+                  feedsFile: gtfsFeedsFile,
+                })
+              }
+              disabled={runOperation.isPending}
+            >
+              Queue GTFS Download
+            </Button>
+          </OperationCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Download Style Assets"
+            description="Runs: openmapx data download style"
+          >
+            <Button
+              variant="contained"
+              onClick={() => runOperation.mutate({ operation: "download-style" })}
+              disabled={runOperation.isPending}
+            >
+              Queue Style Download
+            </Button>
+          </OperationCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Full Update Pipeline"
+            description="Runs: openmapx data update [region] and dependent build/link steps"
+          >
+            <TextField
+              size="small"
+              label="Region"
+              placeholder="e.g. germany"
+              value={updateRegion}
+              onChange={(e) => setUpdateRegion(e.target.value)}
+            />
+            <TextField
+              size="small"
+              label="Countries"
+              placeholder="de,at,ch"
+              value={updateCountries}
+              onChange={(e) => setUpdateCountries(e.target.value)}
+            />
+            <TextField
+              size="small"
+              label="Feeds file"
+              placeholder="/path/to/feeds.json"
+              value={updateFeedsFile}
+              onChange={(e) => setUpdateFeedsFile(e.target.value)}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={updateFailFast}
+                  onChange={(e) => setUpdateFailFast(e.target.checked)}
+                />
+              }
+              label="Fail fast"
+            />
+            <Button
+              variant="contained"
+              onClick={() =>
+                runOperation.mutate({
+                  operation: "update",
+                  region: updateRegion,
+                  countries: updateCountries,
+                  feedsFile: updateFeedsFile,
+                  failFast: updateFailFast,
+                })
+              }
+              disabled={runOperation.isPending}
+            >
+              Queue Update Pipeline
+            </Button>
+          </OperationCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Convert for Overpass"
+            description="Runs: openmapx data convert overpass [region]"
+          >
+            <TextField
+              size="small"
+              label="Region"
+              placeholder="e.g. germany"
+              value={overpassRegion}
+              onChange={(e) => setOverpassRegion(e.target.value)}
+            />
+            <Button
+              variant="contained"
+              onClick={() =>
+                runOperation.mutate({ operation: "convert-overpass", region: overpassRegion })
+              }
+              disabled={runOperation.isPending}
+            >
+              Queue Overpass Convert
+            </Button>
+          </OperationCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Hardlink Sync"
+            description="Runs: openmapx data link (apply/prune hardlink plan)"
+          >
+            <Button
+              variant="contained"
+              onClick={() => runOperation.mutate({ operation: "link" })}
+              disabled={runOperation.isPending}
+            >
+              Queue Hardlink Sync
+            </Button>
+          </OperationCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Cleanup Data"
+            description="Runs: openmapx data clean <target> (destructive)"
+          >
+            <TextField
+              size="small"
+              label="Target"
+              placeholder="all | osm | gtfs | overpass ..."
+              value={cleanTarget}
+              onChange={(e) => setCleanTarget(e.target.value)}
+            />
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={() => setCleanDialogOpen(true)}
+              disabled={runOperation.isPending || !cleanTarget.trim()}
+            >
+              Queue Cleanup
+            </Button>
+          </OperationCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <OperationCard
+            title="Generate Transitous API-Key Template"
+            description="Runs: openmapx data generate-api-keys"
+          >
+            <TextField
+              size="small"
+              label="Transitous repo URL"
+              placeholder="https://github.com/transitous/transitous"
+              value={apiKeysRepoUrl}
+              onChange={(e) => setApiKeysRepoUrl(e.target.value)}
+            />
+            <TextField
+              size="small"
+              label="Output path"
+              placeholder="services/motis/tools/transitous/api-keys.json"
+              value={apiKeysOutput}
+              onChange={(e) => setApiKeysOutput(e.target.value)}
+            />
+            <Button
+              variant="contained"
+              onClick={() =>
+                runOperation.mutate({
+                  operation: "generate-api-keys",
+                  repoUrl: apiKeysRepoUrl,
+                  output: apiKeysOutput,
+                })
+              }
+              disabled={runOperation.isPending}
+            >
+              Queue API-Key Template
+            </Button>
+          </OperationCard>
+        </Grid>
+      </Grid>
+
+      <Dialog
+        open={cleanDialogOpen}
+        onClose={() => setCleanDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Data Cleanup</DialogTitle>
+        <DialogContent>
+          <Stack gap={1.5} pt={0.5}>
+            <Alert severity="warning">
+              This operation removes local data files and may require full rebuilds.
+            </Alert>
+            <Typography variant="body2">
+              Target: <strong>{cleanTarget || "(empty)"}</strong>
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCleanDialogOpen(false)} disabled={runOperation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            color="warning"
+            variant="contained"
+            disabled={runOperation.isPending || !cleanTarget.trim()}
+            onClick={() => {
+              runOperation.mutate({ operation: "clean", target: cleanTarget.trim() });
+              setCleanDialogOpen(false);
+            }}
+          >
+            {runOperation.isPending ? "Queueing..." : "Confirm Cleanup"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Paper>
+  );
+}
 
 function OsmSection({ osm }: { osm: OsmInfo }) {
   return (
@@ -168,15 +538,12 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
         </Stack>
       ) : (
         <Alert severity="warning" sx={{ mb: 1 }}>
-          No OSM PBF file found in the data directory. Run{" "}
-          <code>pnpm openmapx data download osm &lt;region&gt;</code> to download.
+          No OSM PBF file found in the data directory. Queue an OSM download above.
         </Alert>
       )}
     </Paper>
   );
 }
-
-// BuildsSection
 
 function BuildsSection({ builds }: { builds: BuildStatus[] }) {
   return (
@@ -223,20 +590,12 @@ function BuildsSection({ builds }: { builds: BuildStatus[] }) {
       </Grid>
 
       <Alert severity="info" sx={{ mt: 2 }}>
-        Each service builds its own indexes/graphs on first start (Valhalla auto-builds tiles,
-        Nominatim auto-imports, OSRM runs its extract/partition/customize chain, etc.). Trigger a
-        rebuild by stopping the service from the <Link href="/admin/services">service catalog</Link>{" "}
-        and starting it again, or via{" "}
-        <code>
-          pnpm openmapx services stop &lt;id&gt; && pnpm openmapx services start &lt;id&gt;
-        </code>
-        .
+        Each service builds its own indexes/graphs on first start. Trigger rebuilds from the service
+        catalog or queue data update/build operations.
       </Alert>
     </Paper>
   );
 }
-
-// GtfsSection
 
 function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
   const queryClient = useQueryClient();
@@ -366,8 +725,7 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
 
       {!status.configFound ? (
         <Alert severity="warning">
-          No MOTIS config found yet. Run <code>pnpm openmapx services build motis</code> after
-          downloading GTFS.
+          No MOTIS config found yet. Queue GTFS/OSM operations and build MOTIS data.
         </Alert>
       ) : (
         <Stack spacing={1.5}>
@@ -399,8 +757,6 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
   );
 }
 
-// Main component
-
 export function DataWorkflowsPage() {
   const { apiUrl } = useEnv();
 
@@ -431,7 +787,7 @@ export function DataWorkflowsPage() {
             Data &amp; Feed Workflows
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Manage OSM data, GTFS feeds, and service build indexes
+            Manage OSM data, GTFS feeds, builds, and long-running data jobs
           </Typography>
         </Box>
         <Box sx={{ flex: 1 }} />
@@ -446,6 +802,7 @@ export function DataWorkflowsPage() {
       </Stack>
 
       <Stack spacing={3}>
+        <DataOperationsSection apiUrl={apiUrl} />
         <OsmSection osm={data.osm} />
         <GtfsSection feeds={data.gtfsFeeds} apiUrl={apiUrl} />
         <MotisTransitousSection status={data.motisTransitous} />

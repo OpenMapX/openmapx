@@ -37,6 +37,11 @@ import { statusRoute } from "./routes/status";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { winterSportsRoute } from "./routes/winter-sports";
+import {
+  handleBackupOperationJob,
+  handleDataOperationJob,
+  handleServiceBulkJob,
+} from "./services/admin-job-handlers";
 import { serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
 import { gtfsManager } from "./services/gtfs/index";
@@ -229,6 +234,10 @@ jobRunner.register("service.restart", async (ctx) => {
   await serviceRestart(service, ctx);
   return { service, action: "restart" };
 });
+
+jobRunner.register("data.operation", handleDataOperationJob);
+jobRunner.register("backup.operation", handleBackupOperationJob);
+jobRunner.register("service.bulk", handleServiceBulkJob);
 
 jobRunner.register("integration.reload", async (ctx) => {
   await ctx.log("Reloading all integrations...");

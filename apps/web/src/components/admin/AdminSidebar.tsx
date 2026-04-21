@@ -8,8 +8,10 @@ import IntegrationsIcon from "@mui/icons-material/Extension";
 import CatalogIcon from "@mui/icons-material/GridView";
 import StatusIcon from "@mui/icons-material/MonitorHeart";
 import UsersIcon from "@mui/icons-material/People";
+import BackupIcon from "@mui/icons-material/Restore";
 import SettingsIcon from "@mui/icons-material/Settings";
 import ReposIcon from "@mui/icons-material/Source";
+import DataIcon from "@mui/icons-material/Storage";
 import StoreIcon from "@mui/icons-material/Store";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
@@ -40,6 +42,16 @@ const SERVICES_SUB_ITEMS = [
     label: "Compose preview",
     href: "/admin/services/compose",
     icon: <ComposeIcon fontSize="small" />,
+  },
+  {
+    label: "Data workflows",
+    href: "/admin/services/data",
+    icon: <DataIcon fontSize="small" />,
+  },
+  {
+    label: "Backups",
+    href: "/admin/services/backups",
+    icon: <BackupIcon fontSize="small" />,
   },
 ] as const;
 

@@ -67,6 +67,16 @@ interface InstalledResponse {
   integrations: InstalledEntry[];
 }
 
+interface StoreUpdatesResponse {
+  updates: Array<{
+    id: string;
+    installedVersion: string;
+    latestVersion: string;
+    hasUpdate: boolean;
+  }>;
+  available: number;
+}
+
 const SORT_OPTIONS = [
   { value: "az", label: "A–Z" },
   { value: "newest", label: "Newest" },
@@ -331,6 +341,7 @@ function InstalledTab({
     onSuccess: (d) => {
       showToast(`Update job queued (${d.jobId})`);
       qc.invalidateQueries({ queryKey: ["store-installed"] });
+      qc.invalidateQueries({ queryKey: ["store-updates-summary"] });
     },
     onError: (e) => showToast(String(e), "error"),
   });
@@ -481,6 +492,16 @@ export function StorePage() {
     },
   });
 
+  const updatesQuery = useQuery<StoreUpdatesResponse>({
+    queryKey: ["store-updates-summary"],
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/admin/store/updates`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load updates summary");
+      return res.json();
+    },
+    refetchInterval: 120_000,
+  });
+
   const refreshMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch(`${apiUrl}/api/admin/store/refresh-catalog`, {
@@ -493,6 +514,7 @@ export function StorePage() {
     onSuccess: (d) => {
       showToast(`Catalog refreshed — ${d.entries} entries loaded`);
       qc.invalidateQueries({ queryKey: ["store-catalog"] });
+      qc.invalidateQueries({ queryKey: ["store-updates-summary"] });
     },
     onError: (e) => showToast(String(e), "error"),
   });
@@ -528,6 +550,31 @@ export function StorePage() {
           <Typography variant="body2" color="text.secondary">
             Browse, install, and manage community integrations
           </Typography>
+          {updatesQuery.data && (
+            <Stack direction="row" gap={0.75} mt={1} flexWrap="wrap">
+              <Chip
+                size="small"
+                variant="outlined"
+                color={updatesQuery.data.available > 0 ? "warning" : "success"}
+                label={
+                  updatesQuery.data.available > 0
+                    ? `${updatesQuery.data.available} update${updatesQuery.data.available === 1 ? "" : "s"} available`
+                    : "All installed integrations are up to date"
+                }
+              />
+              {updatesQuery.data.updates
+                .filter((u) => u.hasUpdate)
+                .slice(0, 3)
+                .map((u) => (
+                  <Chip
+                    key={u.id}
+                    size="small"
+                    variant="outlined"
+                    label={`${u.id}: ${u.installedVersion} → ${u.latestVersion}`}
+                  />
+                ))}
+            </Stack>
+          )}
         </Box>
         <Stack direction="row" gap={1}>
           <Button

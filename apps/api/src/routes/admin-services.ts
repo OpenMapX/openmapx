@@ -6,6 +6,13 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { serviceConfig } from "../db/schema";
+import {
+  assertValidBackupName,
+  getServiceSelectionSummary,
+  listBackupSummaries,
+  writeServiceSelection as persistServiceSelection,
+  validateServiceSelectionForWrite,
+} from "../services/admin-cli";
 import { gtfsManager } from "../services/gtfs/index";
 import { jobRunner } from "../services/job-runner";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
@@ -17,6 +24,29 @@ import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { validateConfigBody } from "../utils/validate-config-body";
 
 const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
+const DATA_JOB_OPERATIONS = new Set([
+  "download-osm",
+  "download-gtfs",
+  "download-style",
+  "update",
+  "convert-overpass",
+  "link",
+  "clean",
+  "generate-api-keys",
+] as const);
+const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "recreate", "build"] as const);
+
+function toIdList(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const out: string[] = [];
+  for (const item of input) {
+    if (typeof item !== "string") continue;
+    const id = item.trim();
+    if (!id || out.includes(id)) continue;
+    out.push(id);
+  }
+  return out;
+}
 
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   app.addHook("preHandler", async (request, reply) => {
@@ -98,6 +128,113 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { ok: true, jobId };
     },
   );
+
+  // GET /admin/services/selection — requested + effective selection roots
+  app.get("/admin/services/selection", async (_req, reply) => {
+    let registry: ReturnType<typeof getServiceRegistry>;
+    try {
+      registry = getServiceRegistry();
+    } catch {
+      reply.status(503);
+      return { error: "Service registry not available" };
+    }
+    return getServiceSelectionSummary(registry);
+  });
+
+  // PUT /admin/services/selection — persist selected root services
+  app.put<{ Body: { selectedRoots?: string[] } }>(
+    "/admin/services/selection",
+    async (req, reply) => {
+      let registry: ReturnType<typeof getServiceRegistry>;
+      try {
+        registry = getServiceRegistry();
+      } catch {
+        reply.status(503);
+        return { error: "Service registry not available" };
+      }
+
+      const selectedRoots = toIdList(req.body?.selectedRoots);
+      let validated: ReturnType<typeof validateServiceSelectionForWrite>;
+      try {
+        validated = validateServiceSelectionForWrite(registry, selectedRoots);
+      } catch (err) {
+        reply.status(400);
+        return { error: (err as Error).message };
+      }
+
+      const path = persistServiceSelection(validated.normalized);
+      const summary = getServiceSelectionSummary(registry);
+      const adminSession = getAdminSession(req);
+      await writeAuditLog({
+        actorId: adminSession.user.id,
+        targetType: "service",
+        targetId: "selection",
+        action: "service.selection.update",
+        details: {
+          selectedRoots: summary.selectedRoots,
+          effectiveIds: summary.effectiveIds,
+        },
+        request: req,
+      });
+
+      return { ok: true, path, summary };
+    },
+  );
+
+  // POST /admin/services/bulk-action — enqueue CLI-backed bulk service actions
+  app.post<{
+    Body: {
+      action?: "start" | "stop" | "restart" | "recreate" | "build";
+      serviceIds?: string[];
+      all?: boolean;
+      region?: string;
+      continueOnError?: boolean;
+    };
+  }>("/admin/services/bulk-action", async (req, reply) => {
+    const action = req.body?.action;
+    if (!action || !BULK_SERVICE_ACTIONS.has(action)) {
+      reply.status(400);
+      return { error: "Invalid action (expected start|stop|restart|recreate|build)" };
+    }
+
+    const serviceIds = toIdList(req.body?.serviceIds);
+    if (action !== "build" && serviceIds.length === 0) {
+      reply.status(400);
+      return { error: `Action "${action}" requires one or more serviceIds` };
+    }
+    if (action === "build" && req.body?.all !== true && serviceIds.length === 0) {
+      reply.status(400);
+      return { error: 'Build action requires serviceIds or explicit "all": true' };
+    }
+
+    const region =
+      typeof req.body?.region === "string" && req.body.region.trim()
+        ? req.body.region.trim()
+        : undefined;
+    const adminSession = getAdminSession(req);
+    const jobId = await jobRunner.enqueue(
+      "service.bulk",
+      {
+        action,
+        serviceIds,
+        all: req.body?.all === true,
+        region,
+        continueOnError: req.body?.continueOnError,
+      },
+      adminSession.user.id,
+    );
+
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      targetType: "service",
+      targetId: serviceIds.join(",") || "all",
+      action: `service.bulk.${action}`,
+      details: { serviceIds, all: req.body?.all === true, region },
+      request: req,
+    });
+
+    return { ok: true, jobId };
+  });
 
   // GET /admin/services/:id/config — schema + per-field resolved values with
   // sources. Mirrors the shape returned by the integration config endpoint so
@@ -229,5 +366,171 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       motisTransitous,
       fetchedAt: new Date().toISOString(),
     };
+  });
+
+  // POST /admin/services/data/action — enqueue CLI-backed data operations
+  app.post<{
+    Body: {
+      operation?:
+        | "download-osm"
+        | "download-gtfs"
+        | "download-style"
+        | "update"
+        | "convert-overpass"
+        | "link"
+        | "clean"
+        | "generate-api-keys";
+      region?: string;
+      countries?: string;
+      feedsFile?: string;
+      failFast?: boolean;
+      target?: string;
+      repoUrl?: string;
+      output?: string;
+    };
+  }>("/admin/services/data/action", async (req, reply) => {
+    const operation = req.body?.operation;
+    if (!operation || !DATA_JOB_OPERATIONS.has(operation)) {
+      reply.status(400);
+      return { error: "Invalid operation" };
+    }
+    if (operation === "clean" && (!req.body.target || req.body.target.trim() === "")) {
+      reply.status(400);
+      return { error: "clean operation requires target" };
+    }
+
+    const adminSession = getAdminSession(req);
+    const jobId = await jobRunner.enqueue(
+      "data.operation",
+      {
+        operation,
+        region: req.body?.region,
+        countries: req.body?.countries,
+        feedsFile: req.body?.feedsFile,
+        failFast: req.body?.failFast === true,
+        target: req.body?.target,
+        repoUrl: req.body?.repoUrl,
+        output: req.body?.output,
+      },
+      adminSession.user.id,
+    );
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      targetType: "data",
+      targetId: operation,
+      action: `data.${operation}`,
+      request: req,
+    });
+    return { ok: true, jobId };
+  });
+
+  // GET /admin/services/backups — list on-disk backup manifests
+  app.get("/admin/services/backups", async () => {
+    const { backups, warnings, root } = listBackupSummaries();
+    return { backups, warnings, root };
+  });
+
+  // POST /admin/services/backups — create backup job
+  app.post<{ Body: { name?: string } }>("/admin/services/backups", async (req, reply) => {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (name) {
+      try {
+        assertValidBackupName(name);
+      } catch (err) {
+        reply.status(400);
+        return { error: (err as Error).message };
+      }
+    }
+
+    const adminSession = getAdminSession(req);
+    const jobId = await jobRunner.enqueue(
+      "backup.operation",
+      { operation: "create", name: name || undefined },
+      adminSession.user.id,
+    );
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      targetType: "backup",
+      targetId: name || "auto",
+      action: "backup.create",
+      details: { name: name || null, jobId },
+      request: req,
+    });
+    return { ok: true, jobId };
+  });
+
+  // POST /admin/services/backups/:name/restore — restore backup job
+  app.post<{
+    Params: { name: string };
+    Body: { serviceIds?: string[]; stopRunning?: boolean };
+  }>("/admin/services/backups/:name/restore", async (req, reply) => {
+    const name = req.params.name.trim();
+    try {
+      assertValidBackupName(name);
+    } catch (err) {
+      reply.status(400);
+      return { error: (err as Error).message };
+    }
+
+    const { backups } = listBackupSummaries();
+    if (!backups.some((backup) => backup.name === name)) {
+      reply.status(404);
+      return { error: `Backup not found: ${name}` };
+    }
+
+    const serviceIds = toIdList(req.body?.serviceIds);
+    const adminSession = getAdminSession(req);
+    const jobId = await jobRunner.enqueue(
+      "backup.operation",
+      {
+        operation: "restore",
+        name,
+        serviceIds,
+        stopRunning: req.body?.stopRunning === true,
+      },
+      adminSession.user.id,
+    );
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      targetType: "backup",
+      targetId: name,
+      action: "backup.restore",
+      details: { serviceIds, stopRunning: req.body?.stopRunning === true, jobId },
+      request: req,
+    });
+    return { ok: true, jobId };
+  });
+
+  // DELETE /admin/services/backups/:name — delete backup job
+  app.delete<{ Params: { name: string } }>("/admin/services/backups/:name", async (req, reply) => {
+    const name = req.params.name.trim();
+    try {
+      assertValidBackupName(name);
+    } catch (err) {
+      reply.status(400);
+      return { error: (err as Error).message };
+    }
+
+    const { backups } = listBackupSummaries();
+    if (!backups.some((backup) => backup.name === name)) {
+      reply.status(404);
+      return { error: `Backup not found: ${name}` };
+    }
+
+    const adminSession = getAdminSession(req);
+    const jobId = await jobRunner.enqueue(
+      "backup.operation",
+      { operation: "delete", name },
+      adminSession.user.id,
+    );
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      targetType: "backup",
+      targetId: name,
+      action: "backup.delete",
+      details: { jobId },
+      request: req,
+    });
+    return { ok: true, jobId };
   });
 }

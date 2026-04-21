@@ -303,6 +303,7 @@ function ExportImportSection({
   const env = useEnv();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const integrationsFileRef = useRef<HTMLInputElement>(null);
 
   const doExport = async () => {
     try {
@@ -365,6 +366,35 @@ function ExportImportSection({
     }
   };
 
+  const importIntegrations = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as {
+        integrations?: Array<{ integrationId: string; config: Record<string, unknown> }>;
+      };
+      const integrations = Array.isArray(parsed.integrations) ? parsed.integrations : [];
+      if (integrations.length === 0) {
+        onMsg("Import failed — no integration configs found", "error");
+        return;
+      }
+      const res = await fetch(`${env.apiUrl}/api/admin/integrations/import`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ integrations }),
+      });
+      if (!res.ok) throw new Error();
+      const data = (await res.json()) as { imported: number; skipped: string[] };
+      qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      const skippedCount = data.skipped?.length ?? 0;
+      onMsg(
+        `Imported ${data.imported} integration config(s)${skippedCount > 0 ? ` (${skippedCount} skipped)` : ""}`,
+      );
+    } catch {
+      onMsg("Integration import failed — check the file format", "error");
+    }
+  };
+
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
       <Typography variant="subtitle1" fontWeight={600} gutterBottom>
@@ -395,6 +425,14 @@ function ExportImportSection({
         >
           Export Integration Configs
         </Button>
+        <Button
+          variant="outlined"
+          startIcon={<UploadIcon />}
+          size="small"
+          onClick={() => integrationsFileRef.current?.click()}
+        >
+          Import Integration Configs
+        </Button>
         <input
           ref={fileRef}
           type="file"
@@ -403,6 +441,17 @@ function ExportImportSection({
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) doImport(f);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={integrationsFileRef}
+          type="file"
+          accept=".json"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void importIntegrations(f);
             e.target.value = "";
           }}
         />
