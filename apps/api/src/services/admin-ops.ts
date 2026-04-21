@@ -301,6 +301,7 @@ const BUILT_PRODUCT_DIRS: Record<string, string> = {
   osrm: "osrm-graph",
   otp: "otp-graph",
   motis: "motis-data",
+  motisFeedProxy: "motis-feed-proxy",
   tiles: "tile-mbtiles",
   pelias: "pelias",
   nominatim: "nominatim",
@@ -321,4 +322,141 @@ export async function getBuildStatuses(): Promise<BuildStatus[]> {
       }
     }),
   );
+}
+
+export interface MotisTransitousStatus {
+  configFound: boolean;
+  datasetCount: number;
+  realtimeFeedCount: number;
+  gbfsFeedCount: number;
+  feedProxyUrlCount: number;
+  feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
+  feedProxyConfigFound: boolean;
+  feedProxyVarsFound: boolean;
+  feedProxyFeedCount: number;
+}
+
+function countGbfsFeeds(configText: string): number {
+  const lines = configText.split(/\r?\n/);
+  let inGbfs = false;
+  let inFeeds = false;
+  let feedsIndent = 0;
+  let count = 0;
+
+  for (const line of lines) {
+    const indent = (line.match(/^\s*/) ?? [""])[0].length;
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    if (!inGbfs && trimmed === "gbfs:") {
+      inGbfs = true;
+      inFeeds = false;
+      continue;
+    }
+
+    if (inGbfs && !inFeeds && trimmed === "feeds:") {
+      inFeeds = true;
+      feedsIndent = indent;
+      continue;
+    }
+
+    if (inGbfs && inFeeds) {
+      if (indent <= feedsIndent) {
+        inGbfs = false;
+        inFeeds = false;
+        continue;
+      }
+      if (/^[^#\s][^:]*:\s*$/.test(trimmed)) {
+        count += 1;
+      }
+      continue;
+    }
+
+    if (inGbfs && indent === 0 && trimmed.endsWith(":") && trimmed !== "gbfs:") {
+      inGbfs = false;
+      inFeeds = false;
+    }
+  }
+
+  return count;
+}
+
+export function getMotisTransitousStatus(): MotisTransitousStatus {
+  const motisDir = join(DATA_DIR, "motis-data");
+  const feedProxyDir = join(DATA_DIR, "motis-feed-proxy");
+  const configPath = join(motisDir, "config.yml");
+  const feedProxyConfigPath = join(feedProxyDir, "default.conf");
+  const feedProxyVarsPath = join(feedProxyDir, "feed-proxy-vars.json");
+
+  const feedProxyConfigFound = existsSync(feedProxyConfigPath);
+  const feedProxyVarsFound = existsSync(feedProxyVarsPath);
+  let feedProxyFeedCount = 0;
+  if (feedProxyVarsFound) {
+    try {
+      const parsed = JSON.parse(readFileSync(feedProxyVarsPath, "utf-8")) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        feedProxyFeedCount = Object.keys(parsed).length;
+      }
+    } catch {
+      feedProxyFeedCount = 0;
+    }
+  }
+
+  if (!existsSync(configPath)) {
+    return {
+      configFound: false,
+      datasetCount: 0,
+      realtimeFeedCount: 0,
+      gbfsFeedCount: 0,
+      feedProxyUrlCount: 0,
+      feedProxyMode: "none",
+      feedProxyConfigFound,
+      feedProxyVarsFound,
+      feedProxyFeedCount,
+    };
+  }
+
+  const configText = readFileSync(configPath, "utf-8");
+  const datasetCount = (configText.match(/^\s*path:\s+/gm) ?? []).length;
+  const realtimeFeedCount = (configText.match(/^\s*protocol:\s+/gm) ?? []).length;
+  const gbfsFeedCount = countGbfsFeeds(configText);
+
+  const feedProxyHosts = Array.from(
+    configText.matchAll(/url:\s*(https?:\/\/[^\s"']*\/feed\/[^\s"']*)/g),
+  )
+    .map((match) => {
+      const raw = match[1];
+      if (!raw) return null;
+      try {
+        return new URL(raw).hostname.toLowerCase();
+      } catch {
+        return null;
+      }
+    })
+    .filter((host): host is string => Boolean(host));
+
+  const uniqueHosts = new Set(feedProxyHosts);
+  const feedProxyUrlCount = feedProxyHosts.length;
+  const hasTransitousProxy = uniqueHosts.has("rt.triptix.tech");
+  const hasOtherProxy = [...uniqueHosts].some((host) => host !== "rt.triptix.tech");
+  const feedProxyMode: MotisTransitousStatus["feedProxyMode"] =
+    feedProxyUrlCount === 0
+      ? "none"
+      : hasTransitousProxy && hasOtherProxy
+        ? "mixed"
+        : hasTransitousProxy
+          ? "transitous-cloud"
+          : "self-hosted";
+
+  return {
+    configFound: true,
+    datasetCount,
+    realtimeFeedCount,
+    gbfsFeedCount,
+    feedProxyUrlCount,
+    feedProxyMode,
+    feedProxyConfigFound,
+    feedProxyVarsFound,
+    feedProxyFeedCount,
+  };
 }

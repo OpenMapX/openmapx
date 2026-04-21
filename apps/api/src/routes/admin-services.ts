@@ -213,12 +213,21 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // GET /admin/services/data — data inventory (OSM, builds, GTFS)
   app.get("/admin/services/data", async () => {
-    const { getOsmPbfInfo, getBuildStatuses } = await import("../services/admin-ops");
-    const [osmInfo, buildStatuses, gtfsFeeds] = await Promise.all([
+    const { getOsmPbfInfo, getBuildStatuses, getMotisTransitousStatus } = await import(
+      "../services/admin-ops"
+    );
+    const [osmInfo, buildStatuses, gtfsFeeds, motisTransitous] = await Promise.all([
       getOsmPbfInfo(),
       getBuildStatuses(),
       Promise.resolve(gtfsManager.getFeeds()),
+      Promise.resolve(getMotisTransitousStatus()),
     ]);
-    return { osm: osmInfo, builds: buildStatuses, gtfsFeeds, fetchedAt: new Date().toISOString() };
+    return {
+      osm: osmInfo,
+      builds: buildStatuses,
+      gtfsFeeds,
+      motisTransitous,
+      fetchedAt: new Date().toISOString(),
+    };
   });
 }

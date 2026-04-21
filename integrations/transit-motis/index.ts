@@ -5,6 +5,7 @@ import type { IntegrationContext } from "@openmapx/core";
 import * as motis from "./adapter.js";
 import {
   configureTransitous,
+  type MotisInstance,
   motisLocalInstance,
   setMotisLocalUrl,
   transitousInstance,
@@ -15,6 +16,10 @@ let LICENSE_FILE = join(process.cwd(), "../../infra/docker/data/motis-data", "li
 
 let cachedData: unknown[] | null = null;
 let cachedMtime = 0;
+let cachedLocalReachable = false;
+let cachedLocalReachableAt = 0;
+
+const LOCAL_REACHABILITY_TTL_MS = 15_000;
 
 function loadAttribution(): unknown[] {
   if (!existsSync(LICENSE_FILE)) return [];
@@ -40,6 +45,47 @@ async function isMotisReachable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function isMotisReachableCached(): Promise<boolean> {
+  if (Date.now() - cachedLocalReachableAt < LOCAL_REACHABILITY_TTL_MS) {
+    return cachedLocalReachable;
+  }
+  cachedLocalReachable = await isMotisReachable();
+  cachedLocalReachableAt = Date.now();
+  return cachedLocalReachable;
+}
+
+function withPrefix(id: string, prefix: "ms:" | "mo:"): string {
+  return `${prefix}${id.replace(/^(ms:|mo:)/, "")}`;
+}
+
+function resolveDateTime(departureTime?: string): { date: string; time: string } {
+  const now = new Date();
+  return {
+    date: departureTime?.slice(0, 10) ?? now.toISOString().slice(0, 10),
+    time: departureTime?.slice(11, 19) ?? now.toISOString().slice(11, 19),
+  };
+}
+
+async function planWithInstance(
+  instance: MotisInstance,
+  params: {
+    from: { lat: number; lng: number };
+    to: { lat: number; lng: number };
+    departureTime?: string;
+  },
+) {
+  const { date, time } = resolveDateTime(params.departureTime);
+  return motis.planTrip(
+    instance,
+    params.from.lat,
+    params.from.lng,
+    params.to.lat,
+    params.to.lng,
+    date,
+    time,
+  );
 }
 
 interface FeedEntry {
@@ -84,6 +130,8 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   const motisUrl =
     resolved?.url ?? (ctx.config.endpoint as string | undefined) ?? "http://localhost:8081";
   setMotisLocalUrl(motisUrl);
+  cachedLocalReachable = false;
+  cachedLocalReachableAt = 0;
 
   configureTransitous({
     url: ctx.config.transitousUrl as string | undefined,
@@ -97,37 +145,71 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   cachedData = null;
   cachedMtime = 0;
 
-  // Register Transitous (cloud MOTIS) as a transit provider
+  // Register local-first MOTIS provider.
+  // For bbox/search/plan we only expose this provider to avoid fan-out to both local + cloud.
   ctx.registerProvider("transit", {
-    id: "transit-motis-transitous",
-    prefix: "mo:",
+    id: "transit-motis-local",
+    prefix: "ms:",
     coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
-    priority: 3,
-    getStopsNearby: (lat: number, lng: number, radiusMeters: number) => {
+    priority: 2,
+    async getStopsNearby(lat: number, lng: number, radiusMeters: number) {
       const deg = radiusMeters / 111_320;
+      if (await isMotisReachableCached()) {
+        const local = await motis.getStops(motisLocalInstance, [
+          lng - deg,
+          lat - deg,
+          lng + deg,
+          lat + deg,
+        ]);
+        if (local.length > 0) return local;
+      }
       return motis.getStops(transitousInstance, [lng - deg, lat - deg, lng + deg, lat + deg]);
     },
-    getStop: (id: string) => motis.getStopById(transitousInstance, id),
-    getDepartures: (id: string, min: number) => motis.getDepartures(transitousInstance, id, min),
-    getArrivals: (id: string, min: number) => motis.getArrivals(transitousInstance, id, min),
-    searchByName: (q: string, limit: number) => motis.searchByName(transitousInstance, q, limit),
+    async getStop(id: string) {
+      const localId = withPrefix(id, "ms:");
+      const cloudId = withPrefix(id, "mo:");
+      if (await isMotisReachableCached()) {
+        const local = await motis.getStopById(motisLocalInstance, localId);
+        if (local) return local;
+      }
+      return motis.getStopById(transitousInstance, cloudId);
+    },
+    async getDepartures(id: string, min: number) {
+      const localId = withPrefix(id, "ms:");
+      const cloudId = withPrefix(id, "mo:");
+      if (await isMotisReachableCached()) {
+        const local = await motis.getDepartures(motisLocalInstance, localId, min);
+        if (local.length > 0) return local;
+      }
+      return motis.getDepartures(transitousInstance, cloudId, min);
+    },
+    async getArrivals(id: string, min: number) {
+      const localId = withPrefix(id, "ms:");
+      const cloudId = withPrefix(id, "mo:");
+      if (await isMotisReachableCached()) {
+        const local = await motis.getArrivals(motisLocalInstance, localId, min);
+        if (local.length > 0) return local;
+      }
+      return motis.getArrivals(transitousInstance, cloudId, min);
+    },
+    async searchByName(q: string, limit: number) {
+      if (await isMotisReachableCached()) {
+        const local = await motis.searchByName(motisLocalInstance, q, limit);
+        if (local.length > 0) return local;
+      }
+      return motis.searchByName(transitousInstance, q, limit);
+    },
     async planTrip(params: {
       from: { lat: number; lng: number };
       to: { lat: number; lng: number };
       departureTime?: string;
     }) {
-      const now = new Date();
-      const date = params.departureTime?.slice(0, 10) ?? now.toISOString().slice(0, 10);
-      const time = params.departureTime?.slice(11, 19) ?? now.toISOString().slice(11, 19);
-      return motis.planTrip(
-        transitousInstance,
-        params.from.lat,
-        params.from.lng,
-        params.to.lat,
-        params.to.lng,
-        date,
-        time,
-      );
+      if (await isMotisReachableCached()) {
+        const local = await planWithInstance(motisLocalInstance, params);
+        if (local?.itineraries?.length) return local;
+      }
+      const cloudPlan = await planWithInstance(transitousInstance, params);
+      return cloudPlan ? { ...cloudPlan, provider: "mo" } : null;
     },
   });
 
@@ -136,39 +218,17 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     res.send(loadAttribution());
   });
 
-  // Register local MOTIS if available
-  if (await isMotisReachable()) {
-    ctx.registerProvider("transit", {
-      id: "transit-motis-local",
-      prefix: "ms:",
-      coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
-      priority: 2,
-      getStopsNearby: (lat: number, lng: number, radiusMeters: number) => {
-        const deg = radiusMeters / 111_320;
-        return motis.getStops(motisLocalInstance, [lng - deg, lat - deg, lng + deg, lat + deg]);
-      },
-      getStop: (id: string) => motis.getStopById(motisLocalInstance, id),
-      getDepartures: (id: string, min: number) => motis.getDepartures(motisLocalInstance, id, min),
-      getArrivals: (id: string, min: number) => motis.getArrivals(motisLocalInstance, id, min),
-      searchByName: (q: string, limit: number) => motis.searchByName(motisLocalInstance, q, limit),
-      async planTrip(params: {
-        from: { lat: number; lng: number };
-        to: { lat: number; lng: number };
-        departureTime?: string;
-      }) {
-        const now = new Date();
-        const date = params.departureTime?.slice(0, 10) ?? now.toISOString().slice(0, 10);
-        const time = params.departureTime?.slice(11, 19) ?? now.toISOString().slice(11, 19);
-        return motis.planTrip(
-          motisLocalInstance,
-          params.from.lat,
-          params.from.lng,
-          params.to.lat,
-          params.to.lng,
-          date,
-          time,
-        );
-      },
-    });
-  }
+  // Keep a Transitous provider for attribution + follow-up lookups of `mo:` IDs.
+  // Intentionally do not expose nearby/search/plan here to avoid orchestrator fan-out.
+  ctx.registerProvider("transit", {
+    id: "transit-motis-transitous",
+    prefix: "mo:",
+    coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
+    priority: 3,
+    getStop: (id: string) => motis.getStopById(transitousInstance, withPrefix(id, "mo:")),
+    getDepartures: (id: string, min: number) =>
+      motis.getDepartures(transitousInstance, withPrefix(id, "mo:"), min),
+    getArrivals: (id: string, min: number) =>
+      motis.getArrivals(transitousInstance, withPrefix(id, "mo:"), min),
+  });
 }

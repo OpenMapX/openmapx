@@ -7,7 +7,7 @@ ARG MOTIS_VERSION=v2.9.1
 
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
-      git python3-pip python3-venv wget bzip2 rsync openssh-client ca-certificates \
+      git python3-pip python3-venv wget bzip2 rsync openssh-client ca-certificates age \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED

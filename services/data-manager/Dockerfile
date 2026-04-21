@@ -39,7 +39,7 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      osmium-tool curl unzip bzip2 ca-certificates \
+      osmium-tool curl unzip bzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
     && rm -rf /var/lib/apt/lists/*
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED

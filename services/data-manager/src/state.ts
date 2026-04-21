@@ -10,6 +10,7 @@ export type DatasetType =
   | "osrm-graph"
   | "otp-graph"
   | "motis-data"
+  | "motis-feed-proxy-config"
   | "gtfs"
   | "tile-mbtiles"
   | "tile-fonts"

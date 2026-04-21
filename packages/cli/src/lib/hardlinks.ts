@@ -215,6 +215,9 @@ export function applyGeneratedHardlinks(
   }
 
   const { plan, dataRoot } = readGeneratedHardlinkPlan(opts.rootDir);
+  // Pre-create the host data root as the invoking user so docker doesn't
+  // auto-create it as root on first compose up.
+  mkdirSync(dataRoot, { recursive: true });
   const result = applyHardlinkPlan(plan, { rootDir: dataRoot, prune: opts.prune });
   return { applied: true, entries: plan.length, planPath, ...result };
 }

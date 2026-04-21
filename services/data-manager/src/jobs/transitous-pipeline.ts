@@ -31,7 +31,7 @@ interface TransitousFeedFileEntry {
   country: string;
   path: string;
   url: string;
-  activeScheduleSourceIds: string[];
+  activeScheduleSources: TransitousActiveScheduleSource[];
   parseFailure?: FeedDownloadFailure;
 }
 
@@ -47,6 +47,18 @@ interface TransitousFeedSource {
 
 interface TransitousFeedFile {
   sources?: TransitousFeedSource[];
+}
+
+interface TransitousActiveScheduleSource {
+  id: string;
+  name: string;
+}
+
+interface TransitlandAtlasFeedFile {
+  feeds?: Array<{
+    id?: string;
+    urls?: Record<string, string | undefined>;
+  }>;
 }
 
 interface GtfsArchiveSnapshot {
@@ -197,19 +209,77 @@ function sourceIdForFailure(
   return `${country}_${base || fallback.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
 }
 
-function isSupportedScheduleSource(source: TransitousFeedSource): boolean {
-  const spec = (source.spec ?? "gtfs").toLowerCase();
+function buildTransitlandAtlasSpecIndex(catalogDir: string): Map<string, string> {
+  const index = new Map<string, string>();
+  const atlasFeedsDir = join(catalogDir, "transitland-atlas", "feeds");
+  if (!existsSync(atlasFeedsDir)) return index;
+
+  for (const fileName of readdirSync(atlasFeedsDir)) {
+    if (!fileName.endsWith(".json")) continue;
+    const filePath = join(atlasFeedsDir, fileName);
+    let payload: TransitlandAtlasFeedFile;
+    try {
+      payload = JSON.parse(readFileSync(filePath, "utf-8")) as TransitlandAtlasFeedFile;
+    } catch {
+      continue;
+    }
+
+    for (const feed of payload.feeds ?? []) {
+      if (!feed.id) continue;
+      const urls = feed.urls ?? {};
+      if (urls.static_current) {
+        index.set(feed.id, "gtfs");
+      } else if (urls.gbfs_auto_discovery) {
+        index.set(feed.id, "gbfs");
+      }
+    }
+  }
+
+  return index;
+}
+
+function resolveSourceSpec(
+  source: TransitousFeedSource,
+  atlasSpecIndex: Map<string, string>,
+): string {
+  if (source.spec?.trim()) return source.spec.trim().toLowerCase();
+
+  if (source.type === "transitland-atlas") {
+    const atlasId = source["transitland-atlas-id"];
+    if (atlasId) {
+      const atlasSpec = atlasSpecIndex.get(atlasId);
+      if (atlasSpec) return atlasSpec;
+    }
+  }
+
+  // Match Transitous defaults when we cannot infer better from metadata.
+  return "gtfs";
+}
+
+function isSupportedScheduleSource(
+  source: TransitousFeedSource,
+  atlasSpecIndex: Map<string, string>,
+): boolean {
+  const spec = resolveSourceSpec(source, atlasSpecIndex);
   return spec === "gtfs" || spec === "netex";
 }
 
-function activeScheduleSourceIds(
+function activeScheduleSources(
   feedId: string,
   country: string,
   feed: TransitousFeedFile,
-): string[] {
-  return (feed.sources ?? [])
-    .filter((source) => !source.skip && isSupportedScheduleSource(source))
-    .map((source, index) => sourceIdForFailure(country, source.name, `${feedId}_${index + 1}`));
+  atlasSpecIndex: Map<string, string>,
+): TransitousActiveScheduleSource[] {
+  return (feed.sources ?? []).flatMap((source, index) => {
+    if (source.skip || !isSupportedScheduleSource(source, atlasSpecIndex)) return [];
+    const fallback = `${feedId}_${index + 1}`;
+    return [
+      {
+        id: sourceIdForFailure(country, source.name, fallback),
+        name: source.name ?? fallback,
+      },
+    ];
+  });
 }
 
 function listTransitousFeedFiles(catalogDir: string): TransitousFeedFileEntry[] {
@@ -217,6 +287,7 @@ function listTransitousFeedFiles(catalogDir: string): TransitousFeedFileEntry[] 
   if (!existsSync(feedsDir)) {
     throw new Error(`Transitous catalog missing feeds directory: ${feedsDir}`);
   }
+  const atlasSpecIndex = buildTransitlandAtlasSpecIndex(catalogDir);
 
   return readdirSync(feedsDir)
     .filter((name) => name.endsWith(".json"))
@@ -229,7 +300,7 @@ function listTransitousFeedFiles(catalogDir: string): TransitousFeedFileEntry[] 
         country,
         path: join("feeds", name),
         url: `${RAW_BASE}/feeds/${name}`,
-        activeScheduleSourceIds: [] as string[],
+        activeScheduleSources: [] as TransitousActiveScheduleSource[],
       };
 
       try {
@@ -237,12 +308,12 @@ function listTransitousFeedFiles(catalogDir: string): TransitousFeedFileEntry[] 
         const feed = JSON.parse(readFileSync(filePath, "utf-8")) as TransitousFeedFile;
         return {
           ...entry,
-          activeScheduleSourceIds: activeScheduleSourceIds(id, country, feed),
+          activeScheduleSources: activeScheduleSources(id, country, feed, atlasSpecIndex),
         };
       } catch (error) {
         return {
           ...entry,
-          activeScheduleSourceIds: [id],
+          activeScheduleSources: [{ id, name: id }],
           parseFailure: {
             id,
             country,
@@ -252,6 +323,38 @@ function listTransitousFeedFiles(catalogDir: string): TransitousFeedFileEntry[] 
         };
       }
     });
+}
+
+function escapedRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function failedSourceIdsFromPipelineError(
+  feed: TransitousFeedFileEntry,
+  message: string,
+): string[] {
+  const names = new Set<string>();
+  const regionPrefix = escapedRegex(feed.id);
+  const sourceErrorPattern = new RegExp(
+    `Error: Could not (?:fetch|postprocess) ${regionPrefix}-(.+?):`,
+    "g",
+  );
+  let match: RegExpExecArray | null;
+  while (true) {
+    match = sourceErrorPattern.exec(message);
+    if (!match) break;
+    const name = match[1]?.trim();
+    if (name) names.add(name);
+  }
+
+  if (names.size > 0) {
+    return [...names].map((name) => sourceIdForFailure(feed.country, name, feed.id));
+  }
+
+  if (feed.activeScheduleSources.length === 1) {
+    return [feed.activeScheduleSources[0].id];
+  }
+  return [feed.id];
 }
 
 async function runFetchPipeline(
@@ -264,12 +367,13 @@ async function runFetchPipeline(
     try {
       await runner("python3", ["./src/fetch.py", feed.path], { cwd: catalogDir, stdio: "pipe" });
     } catch (error) {
-      for (const id of feed.activeScheduleSourceIds) {
+      const message = (error as Error).message;
+      for (const id of failedSourceIdsFromPipelineError(feed, message)) {
         failures.push({
           id,
           country: feed.country,
           url: feed.url,
-          message: (error as Error).message,
+          message,
         });
       }
     }
@@ -347,7 +451,7 @@ function toDatasetMetadata(archive: GtfsArchiveSnapshot, downloadedAt: string): 
 }
 
 function sumActiveGtfsSources(feeds: TransitousFeedFileEntry[]): number {
-  return feeds.reduce((sum, feed) => sum + feed.activeScheduleSourceIds.length, 0);
+  return feeds.reduce((sum, feed) => sum + feed.activeScheduleSources.length, 0);
 }
 
 export async function downloadGtfsViaTransitous(
@@ -382,7 +486,7 @@ export async function downloadGtfsViaTransitous(
       );
     }
     const selectedFeedFiles = countryMatchedFeedFiles.filter(
-      (feed) => feed.activeScheduleSourceIds.length > 0,
+      (feed) => feed.activeScheduleSources.length > 0,
     );
     const selectedCount = sumActiveGtfsSources(selectedFeedFiles);
     if (selectedCount === 0) {

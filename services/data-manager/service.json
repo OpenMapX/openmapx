@@ -30,6 +30,7 @@
     { "type": "osrm-graph", "sourceDir": "data/osrm-graph" },
     { "type": "otp-graph", "sourceDir": "data/otp-graph" },
     { "type": "motis-data", "sourceDir": "data/motis-data" },
+    { "type": "motis-feed-proxy-config", "sourceDir": "data/motis-feed-proxy" },
     { "type": "gtfs", "sourceDir": "data/gtfs" },
     { "type": "tile-mbtiles", "sourceDir": "data/tile-mbtiles" },
     { "type": "tile-fonts", "sourceDir": "data/tile-fonts" },

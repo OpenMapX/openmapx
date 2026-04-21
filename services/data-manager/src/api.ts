@@ -63,35 +63,74 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   app.post<{
     Body: { feeds?: FeedDescriptor[]; countries?: string[]; source?: "transitous" };
-  }>("/download/gtfs", async (req) => {
+  }>("/download/gtfs", async (req, reply) => {
     const { feeds, countries = [], source } = req.body;
     if (Array.isArray(feeds) && feeds.length === 0 && source !== "transitous") {
       throw new Error("download/gtfs: either `feeds` or `source: 'transitous'` is required");
     }
+
+    // Long-running GTFS refreshes can exceed default client header/body
+    // timeouts. Stream keepalive whitespace while the import is running.
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    });
+
+    const keepalive = setInterval(() => {
+      try {
+        reply.raw.write(" \n");
+      } catch {
+        // Ignore broken pipe errors if the client disconnected.
+      }
+    }, 10_000);
+
     const useTransitousPipeline = source === "transitous" || feeds === undefined;
-    const result = useTransitousPipeline
-      ? await downloadGtfsViaTransitous({
-          countries,
-          dataDir,
-          store,
-        })
-      : await downloadGtfs({
-          feeds,
-          countries,
-          dataDir,
-          store,
-        });
-    return {
-      ok: result.failures.length === 0,
-      count: result.downloaded.length,
-      usedTransitousPipeline: useTransitousPipeline,
-      requestedCount: result.requestedCount,
-      selectedCount: result.selectedCount,
-      skippedCount: result.skippedCount,
-      failedCount: result.failures.length,
-      partialSuccess: result.partialSuccess,
-      failures: result.failures,
-    };
+    try {
+      const result = useTransitousPipeline
+        ? await downloadGtfsViaTransitous({
+            countries,
+            dataDir,
+            store,
+          })
+        : await downloadGtfs({
+            feeds,
+            countries,
+            dataDir,
+            store,
+          });
+      reply.raw.end(
+        JSON.stringify({
+          ok: result.failures.length === 0,
+          count: result.downloaded.length,
+          usedTransitousPipeline: useTransitousPipeline,
+          requestedCount: result.requestedCount,
+          selectedCount: result.selectedCount,
+          skippedCount: result.skippedCount,
+          failedCount: result.failures.length,
+          partialSuccess: result.partialSuccess,
+          failures: result.failures,
+        }),
+      );
+    } catch (err) {
+      reply.raw.end(
+        JSON.stringify({
+          ok: false,
+          count: 0,
+          usedTransitousPipeline: useTransitousPipeline,
+          requestedCount: 0,
+          selectedCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
+          partialSuccess: false,
+          failures: [],
+          error: (err as Error).message,
+        }),
+      );
+    } finally {
+      clearInterval(keepalive);
+    }
   });
 
   app.post("/download/style", async () => {

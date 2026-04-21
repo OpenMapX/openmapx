@@ -106,7 +106,10 @@ export class DataManagerClient {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`download/gtfs failed: HTTP ${res.status}`);
-    const parsed = (await res.json()) as Partial<GtfsDownloadResult>;
+    const parsed = (await res.json()) as Partial<GtfsDownloadResult> & { error?: string };
+    if (typeof parsed.error === "string" && parsed.error.trim().length > 0) {
+      throw new Error(parsed.error.trim());
+    }
     return {
       count: parsed.count ?? 0,
       usedTransitousPipeline: parsed.usedTransitousPipeline ?? false,

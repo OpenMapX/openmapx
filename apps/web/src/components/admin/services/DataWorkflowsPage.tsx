@@ -58,10 +58,23 @@ interface GtfsFeed {
   rowCounts?: { stops?: number; routes?: number; trips?: number };
 }
 
+interface MotisTransitousStatus {
+  configFound: boolean;
+  datasetCount: number;
+  realtimeFeedCount: number;
+  gbfsFeedCount: number;
+  feedProxyUrlCount: number;
+  feedProxyMode: "none" | "self-hosted" | "transitous-cloud" | "mixed";
+  feedProxyConfigFound: boolean;
+  feedProxyVarsFound: boolean;
+  feedProxyFeedCount: number;
+}
+
 interface DataResponse {
   osm: OsmInfo;
   builds: BuildStatus[];
   gtfsFeeds: GtfsFeed[];
+  motisTransitous: MotisTransitousStatus;
   fetchedAt: string;
 }
 
@@ -89,6 +102,7 @@ const BUILD_LABELS: Record<string, string> = {
   osrm: "OSRM",
   otp: "OpenTripPlanner",
   motis: "MOTIS",
+  motisFeedProxy: "MOTIS Feed Proxy",
   tiles: "Tile Server",
   pelias: "Pelias",
   nominatim: "Nominatim",
@@ -331,6 +345,60 @@ function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
   );
 }
 
+function motisProxyModeColor(
+  mode: MotisTransitousStatus["feedProxyMode"],
+): "default" | "success" | "warning" | "error" {
+  if (mode === "self-hosted") return "success";
+  if (mode === "none") return "default";
+  if (mode === "mixed") return "warning";
+  return "error";
+}
+
+function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5 }}>
+      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+        <StorageIcon color="primary" />
+        <Typography variant="h6" fontWeight={600}>
+          MOTIS Transitous Parity
+        </Typography>
+      </Stack>
+
+      {!status.configFound ? (
+        <Alert severity="warning">
+          No MOTIS config found yet. Run <code>pnpm openmapx services build motis</code> after
+          downloading GTFS.
+        </Alert>
+      ) : (
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            <Chip label={`${status.datasetCount} schedule dataset(s)`} size="small" />
+            <Chip label={`${status.realtimeFeedCount} realtime feed(s)`} size="small" />
+            <Chip label={`${status.gbfsFeedCount} GBFS feed(s)`} size="small" />
+            <Chip label={`${status.feedProxyUrlCount} proxied URL(s)`} size="small" />
+            <Chip
+              label={`Feed proxy: ${status.feedProxyMode}`}
+              color={motisProxyModeColor(status.feedProxyMode)}
+              size="small"
+            />
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            Proxy artifacts: config {status.feedProxyConfigFound ? "present" : "missing"} · vars{" "}
+            {status.feedProxyVarsFound ? "present" : "missing"} · {status.feedProxyFeedCount} mapped
+            feed endpoint(s)
+          </Typography>
+          {(status.feedProxyMode === "transitous-cloud" || status.feedProxyMode === "mixed") && (
+            <Alert severity={status.feedProxyMode === "mixed" ? "warning" : "error"}>
+              MOTIS config still references Transitous cloud feed-proxy URLs. Rebuild MOTIS data to
+              switch fully to self-hosted proxy URLs.
+            </Alert>
+          )}
+        </Stack>
+      )}
+    </Paper>
+  );
+}
+
 // Main component
 
 export function DataWorkflowsPage() {
@@ -380,6 +448,7 @@ export function DataWorkflowsPage() {
       <Stack spacing={3}>
         <OsmSection osm={data.osm} />
         <GtfsSection feeds={data.gtfsFeeds} apiUrl={apiUrl} />
+        <MotisTransitousSection status={data.motisTransitous} />
         <BuildsSection builds={data.builds} />
       </Stack>
     </Box>

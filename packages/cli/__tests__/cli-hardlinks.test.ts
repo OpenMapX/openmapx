@@ -89,4 +89,18 @@ describe("cli hardlink helpers", () => {
       "PBF",
     );
   });
+
+  it("applyGeneratedHardlinks creates data root even with an empty plan", () => {
+    const dataRoot = join(tmp, "infra", "docker", "data");
+    rmSync(dataRoot, { recursive: true, force: true });
+    writeFileSync(join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"), "[]");
+
+    const result = applyGeneratedHardlinks({ rootDir: tmp, requirePlan: true, prune: true });
+
+    expect(result.applied).toBe(true);
+    expect(result.linked).toBe(0);
+    expect(result.pruned).toBe(0);
+    expect(existsSync(dataRoot)).toBe(true);
+    expect(statSync(dataRoot).isDirectory()).toBe(true);
+  });
 });

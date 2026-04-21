@@ -14,6 +14,7 @@
     "workingDir": "/motis-data",
     "entrypoint": ["/bin/sh", "-c"],
     "command": ["/motis import && /motis server"],
+    "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
     "memory": "16g",
     "restart": "unless-stopped",
     "logging": {

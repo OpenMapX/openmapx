@@ -9,6 +9,7 @@ import {
   DEFAULT_TRANSITOUS_TOOLS_IMAGE,
   MOTIS_CONFIG_FILENAME,
   MOTIS_DATA_DIR,
+  MOTIS_FEED_PROXY_DIR,
   MOTIS_LICENSE_FILENAME,
 } from "../src/lib/motis-data";
 
@@ -39,6 +40,7 @@ describe("buildMotisData", () => {
 
     const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
     const gtfsDir = join(tmp, "infra", "docker", "data", "gtfs");
+    const feedProxyDir = join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR);
     const runner: CommandRunner = async (command, args, opts) => {
       calls.push({ command, args, cwd: opts.cwd });
       if (command === "docker" && args.at(-1) === "generate-config") {
@@ -54,6 +56,7 @@ describe("buildMotisData", () => {
             "web_folder: /transitous/web",
             "datasets:",
             "  - path: de_bvg.gtfs.zip",
+            "proxy_url: https://rt.triptix.tech/feed/de-BVG-0",
             "",
           ].join("\n"),
         );
@@ -61,6 +64,21 @@ describe("buildMotisData", () => {
       }
       if (command === "docker" && args.at(-1) === "generate-attribution") {
         writeFileSync(join(gtfsDir, MOTIS_LICENSE_FILENAME), '[{"id":"de-bvg"}]\n');
+      }
+      if (command === "docker" && args.at(-1) === "generate-feed-proxy-vars") {
+        mkdirSync(feedProxyDir, { recursive: true });
+        writeFileSync(
+          join(feedProxyDir, "feed-proxy-vars.json"),
+          JSON.stringify(
+            {
+              "de-BVG-0": {
+                url: "https://rt.triptix.tech/feed/de-BVG-0",
+              },
+            },
+            null,
+            2,
+          ),
+        );
       }
     };
 
@@ -76,6 +94,9 @@ describe("buildMotisData", () => {
     expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).toContain(
       "data_attribution_link: /terms#data-sources",
     );
+    expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).toContain(
+      "http://motis-feed-proxy/feed/de-BVG-0",
+    );
     expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).not.toContain("tiles:");
     expect(readFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "utf-8")).not.toContain(
       "web_folder:",
@@ -87,6 +108,11 @@ describe("buildMotisData", () => {
     expect(result.gtfsFeeds).toEqual([join(motisDir, "de_bvg.gtfs.zip")]);
     expect(result.configPath).toBe(join(motisDir, MOTIS_CONFIG_FILENAME));
     expect(result.licensePath).toBe(join(motisDir, MOTIS_LICENSE_FILENAME));
+    expect(result.feedProxyConfigPath).toBe(join(feedProxyDir, "default.conf"));
+    expect(result.feedProxyFeedCount).toBe(1);
+    expect(readFileSync(join(feedProxyDir, "default.conf"), "utf-8")).toContain(
+      'location "/feed/de-BVG-0"',
+    );
     expect(result.transitousCatalogDir).toBe(
       join(tmp, "infra", "docker", "data", ".transitous-catalog"),
     );
@@ -154,7 +180,86 @@ describe("buildMotisData", () => {
         ]),
         cwd: tmp,
       },
+      {
+        command: "docker",
+        args: expect.arrayContaining([
+          "run",
+          "--rm",
+          "-v",
+          `${join(tmp, "infra", "docker", "data", ".transitous-catalog")}:/transitous`,
+          "-v",
+          `${join(tmp, "infra", "docker", "data", "gtfs")}:/transitous/out`,
+          "-v",
+          `${join(tmp, "infra", "docker", "data", ".transitous-downloads")}:/transitous/downloads`,
+          "-v",
+          `${join(tmp, "services", "motis", "tools", "transitous", "run.sh")}:/run.sh:ro`,
+          "-v",
+          `${join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR)}:/feed-proxy-out`,
+          DEFAULT_TRANSITOUS_TOOLS_IMAGE,
+          "/bin/bash",
+          "/run.sh",
+          "generate-feed-proxy-vars",
+        ]),
+        cwd: tmp,
+      },
     ]);
+  });
+
+  it("only rewrites feed-proxy URLs that have self-hosted proxy mappings", async () => {
+    const pbf = join(tmp, "infra", "docker", "data", "osm", "planet.osm.pbf");
+    const gtfs = join(tmp, "infra", "docker", "data", "gtfs", "de_bvg.gtfs.zip");
+    const gtfsDir = join(tmp, "infra", "docker", "data", "gtfs");
+    const feedProxyDir = join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR);
+    writeFileSync(pbf, "PBF");
+    writeFileSync(gtfs, "GTFS");
+
+    await buildMotisData({
+      rootDir: tmp,
+      region: "planet",
+      runner: async (command, args) => {
+        if (command !== "docker") return;
+        if (args.at(-1) === "generate-config") {
+          writeFileSync(
+            join(gtfsDir, MOTIS_CONFIG_FILENAME),
+            [
+              "osm: old-file.osm.pbf",
+              "data_attribution_link: https://transitous.org/sources/",
+              "datasets:",
+              "  de-BVG:",
+              "    rt:",
+              "      - url: https://rt.triptix.tech/feed/de-BVG-0",
+              "      - url: https://rt.triptix.tech/feed/de-VBB-0",
+              "",
+            ].join("\n"),
+          );
+        }
+        if (args.at(-1) === "generate-attribution") {
+          writeFileSync(join(gtfsDir, MOTIS_LICENSE_FILENAME), "[]\n");
+        }
+        if (args.at(-1) === "generate-feed-proxy-vars") {
+          mkdirSync(feedProxyDir, { recursive: true });
+          writeFileSync(
+            join(feedProxyDir, "feed-proxy-vars.json"),
+            JSON.stringify(
+              {
+                "de-BVG-0": {
+                  url: "https://example.org/rt.pb",
+                },
+              },
+              null,
+              2,
+            ),
+          );
+        }
+      },
+    });
+
+    const renderedConfig = readFileSync(
+      join(tmp, "infra", "docker", "data", MOTIS_DATA_DIR, MOTIS_CONFIG_FILENAME),
+      "utf-8",
+    );
+    expect(renderedConfig).toContain("http://motis-feed-proxy/feed/de-BVG-0");
+    expect(renderedConfig).toContain("https://rt.triptix.tech/feed/de-VBB-0");
   });
 
   it("passes TRANSITOUS_COUNTRIES through to the Transitous tooling container", async () => {
@@ -177,10 +282,19 @@ describe("buildMotisData", () => {
         if (args.at(-1) === "generate-attribution") {
           writeFileSync(join(gtfsDir, MOTIS_LICENSE_FILENAME), "[]\n");
         }
+        if (args.at(-1) === "generate-feed-proxy-vars") {
+          mkdirSync(join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR), {
+            recursive: true,
+          });
+          writeFileSync(
+            join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR, "feed-proxy-vars.json"),
+            "{}\n",
+          );
+        }
       },
     });
 
-    expect(dockerRuns).toHaveLength(2);
+    expect(dockerRuns).toHaveLength(3);
     for (const args of dockerRuns) {
       expect(args).toEqual(expect.arrayContaining(["-e", "TRANSITOUS_COUNTRIES=de,at"]));
     }
@@ -201,6 +315,10 @@ describe("buildMotisData", () => {
     expect(result.gtfsFeeds).toEqual([]);
     expect(result.configPath).toBeUndefined();
     expect(result.licensePath).toBeUndefined();
+    expect(result.feedProxyConfigPath).toBe(
+      join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR, "default.conf"),
+    );
+    expect(result.feedProxyFeedCount).toBe(0);
     expect(existsSync(join(tmp, "infra", "docker", "data", MOTIS_DATA_DIR, "planet.osm.pbf"))).toBe(
       true,
     );

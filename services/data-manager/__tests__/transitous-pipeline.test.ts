@@ -337,4 +337,129 @@ describe("downloadGtfsViaTransitous", () => {
     };
     expect(state.datasets).toEqual([]);
   });
+
+  it("excludes Transitland GBFS-only sources from GTFS schedule counts", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-transitous-atlas-spec-"));
+    const dataDir = tmp;
+    const catalogDir = join(dataDir, ".transitous-catalog");
+    mkdirSync(join(catalogDir, ".git"), { recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+    mkdirSync(join(catalogDir, "transitland-atlas", "feeds"), { recursive: true });
+
+    writeFileSync(
+      join(catalogDir, "feeds", "de.json"),
+      JSON.stringify(
+        {
+          sources: [
+            {
+              name: "TransitGBFS",
+              type: "transitland-atlas",
+              "transitland-atlas-id": "f-de-gbfs",
+            },
+            {
+              name: "TransitGTFS",
+              type: "transitland-atlas",
+              "transitland-atlas-id": "f-de-gtfs",
+            },
+            {
+              name: "HttpGTFS",
+              type: "http",
+              url: "https://example.test/http-gtfs.zip",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(
+      join(catalogDir, "transitland-atlas", "feeds", "de.dmfr.json"),
+      JSON.stringify(
+        {
+          feeds: [
+            { id: "f-de-gbfs", urls: { gbfs_auto_discovery: "https://example.test/gbfs.json" } },
+            { id: "f-de-gtfs", urls: { static_current: "https://example.test/gtfs.zip" } },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const result = await downloadGtfsViaTransitous({
+      countries: ["de"],
+      dataDir,
+      store: new StateStore(dataDir),
+      runner: async (command, args) => {
+        if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/de.json") {
+          writeFileSync(join(dataDir, "gtfs", "de_transitgtfs.gtfs.zip"), "GTFS");
+          writeFileSync(join(dataDir, "gtfs", "de_httpgtfs.gtfs.zip"), "HTTP");
+        }
+      },
+      now: () => "2026-04-20T12:00:00.000Z",
+    });
+
+    expect(result.requestedCount).toBe(2);
+    expect(result.selectedCount).toBe(2);
+    expect(result.skippedCount).toBe(0);
+    expect(result.failures).toEqual([]);
+    expect(result.downloaded.map((dataset) => dataset.id)).toEqual([
+      "de_httpgtfs",
+      "de_transitgtfs",
+    ]);
+  });
+
+  it("attributes fetch failures to the source names reported by Transitous fetch.py", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-transitous-failure-attribution-"));
+    const dataDir = tmp;
+    const catalogDir = join(dataDir, ".transitous-catalog");
+    mkdirSync(join(catalogDir, ".git"), { recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+
+    writeFileSync(
+      join(catalogDir, "feeds", "de.json"),
+      JSON.stringify(
+        {
+          sources: [{ name: "A" }, { name: "B" }, { name: "C" }],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const result = await downloadGtfsViaTransitous({
+      countries: ["de"],
+      dataDir,
+      store: new StateStore(dataDir),
+      runner: async (command, args) => {
+        if (command === "python3" && args[0] === "./src/fetch.py") {
+          throw new Error(
+            [
+              "Error: Could not fetch de-A: HTTP 500",
+              "Error: Could not postprocess de-B: Feed is expired",
+              "Error: 2 errors occurred during fetching.",
+            ].join("\n"),
+          );
+        }
+      },
+      now: () => "2026-04-20T12:00:00.000Z",
+    });
+
+    expect(result.selectedCount).toBe(3);
+    expect(result.downloaded).toEqual([]);
+    expect(result.failures).toEqual([
+      {
+        id: "de_a",
+        country: "de",
+        url: "https://raw.githubusercontent.com/public-transport/transitous/main/feeds/de.json",
+        message: expect.stringContaining("Could not fetch de-A"),
+      },
+      {
+        id: "de_b",
+        country: "de",
+        url: "https://raw.githubusercontent.com/public-transport/transitous/main/feeds/de.json",
+        message: expect.stringContaining("Could not postprocess de-B"),
+      },
+    ]);
+  });
 });

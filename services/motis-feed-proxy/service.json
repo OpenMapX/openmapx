@@ -1,0 +1,35 @@
+{
+  "id": "motis-feed-proxy",
+  "name": "MOTIS Feed Proxy",
+  "version": "1.0.0",
+  "description": "Transitous-style feed proxy for GTFS-RT and GBFS URLs that need header/URL indirection.",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://github.com/public-transport/transitous",
+  "container": {
+    "image": "nginx",
+    "tag": "1.27-alpine",
+    "expose": [80],
+    "memory": "256m",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/healthz",
+      "port": 80,
+      "interval": "30s",
+      "timeout": "5s",
+      "retries": 3
+    }
+  },
+  "provides": ["proxy"],
+  "consumes": [
+    {
+      "type": "motis-feed-proxy-config",
+      "mountAt": "/etc/nginx/conf.d",
+      "targetFilename": "default.conf",
+      "readOnly": true,
+      "required": true
+    }
+  ],
+  "ui": { "category": "transit" }
+}
