@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { adminFetch } from "../lib/admin-fetch";
 import { log, table } from "../lib/output";
 
 // Default to localhost where `requireAdmin` short-circuits auth for loopback
@@ -25,7 +26,7 @@ export function registerReposCommands(program: Command): void {
     .command("list")
     .description("List registered service repositories")
     .action(async () => {
-      const res = await fetch(`${API}/api/admin/service-repos`);
+      const res = await adminFetch(`${API}/api/admin/service-repos`);
       if (!res.ok) {
         log.err(`HTTP ${res.status}: ${await res.text()}`);
         process.exit(1);
@@ -57,7 +58,7 @@ export function registerReposCommands(program: Command): void {
     .command("add <url>")
     .description("Register a community service repository from a Git URL")
     .action(async (url: string) => {
-      const res = await fetch(`${API}/api/admin/service-repos`, {
+      const res = await adminFetch(`${API}/api/admin/service-repos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, acknowledgeRisks: true }),
@@ -73,7 +74,7 @@ export function registerReposCommands(program: Command): void {
     .command("remove <hash>")
     .description("Unregister a service repository (and remove the local clone)")
     .action(async (hash: string) => {
-      const res = await fetch(`${API}/api/admin/service-repos/${hash}`, {
+      const res = await adminFetch(`${API}/api/admin/service-repos/${hash}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -87,7 +88,7 @@ export function registerReposCommands(program: Command): void {
     .command("refresh <hash>")
     .description("git fetch + reset --hard a registered repository")
     .action(async (hash: string) => {
-      const res = await fetch(`${API}/api/admin/service-repos/${hash}/refresh`, {
+      const res = await adminFetch(`${API}/api/admin/service-repos/${hash}/refresh`, {
         method: "POST",
       });
       if (!res.ok) {

@@ -3,6 +3,13 @@ import type { DatasetMetadata } from "./types";
 export interface DataManagerClientOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
+  /**
+   * Shared secret that the data-manager requires on every non-health request.
+   * Defaults to `process.env.DATA_MANAGER_AUTH_TOKEN`. Leaving this unset when
+   * the server has a token configured will produce 401 responses on every
+   * mutation call.
+   */
+  authToken?: string;
 }
 
 export interface GtfsDownloadFailure {
@@ -26,10 +33,26 @@ export interface GtfsDownloadResult {
 export class DataManagerClient {
   private baseUrl: string;
   private fetchImpl: typeof globalThis.fetch;
+  private authToken: string | undefined;
 
   constructor(opts: DataManagerClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
     this.fetchImpl = opts.fetch ?? globalThis.fetch;
+    this.authToken =
+      opts.authToken ??
+      (typeof process !== "undefined"
+        ? process.env?.DATA_MANAGER_AUTH_TOKEN?.trim() || undefined
+        : undefined);
+  }
+
+  /** Merge caller-supplied init with the Authorization bearer header. */
+  private authed(init: RequestInit = {}): RequestInit {
+    if (!this.authToken) return init;
+    const headers = new Headers(init.headers);
+    if (!headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${this.authToken}`);
+    }
+    return { ...init, headers };
   }
 
   statusUrl(): string {
@@ -37,20 +60,24 @@ export class DataManagerClient {
   }
 
   async status(): Promise<{ ok: boolean; uptime: number; dataDir: string }> {
+    // /status intentionally skips auth so container health probes work.
     const res = await this.fetchImpl(this.statusUrl());
     if (!res.ok) throw new Error(`status failed: HTTP ${res.status}`);
     return (await res.json()) as { ok: boolean; uptime: number; dataDir: string };
   }
 
   async datasets(): Promise<DatasetMetadata[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/datasets`);
+    const res = await this.fetchImpl(`${this.baseUrl}/datasets`, this.authed());
     if (!res.ok) throw new Error(`datasets failed: HTTP ${res.status}`);
     const body = (await res.json()) as { datasets: DatasetMetadata[] };
     return body.datasets;
   }
 
   async reloadDatasets(): Promise<{ ok: boolean; datasets: number }> {
-    const res = await this.fetchImpl(`${this.baseUrl}/datasets/reload`, { method: "POST" });
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/datasets/reload`,
+      this.authed({ method: "POST" }),
+    );
     if (!res.ok) throw new Error(`datasets/reload failed: HTTP ${res.status}`);
     const body = (await res.json()) as Partial<{ ok: boolean; datasets: number }>;
     return {
@@ -63,11 +90,14 @@ export class DataManagerClient {
     region: string,
     opts: { onProgress?: (bytesDownloaded: number, totalBytes?: number) => void } = {},
   ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
-    const res = await this.fetchImpl(`${this.baseUrl}/download/osm`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ region }),
-    });
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/download/osm`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region }),
+      }),
+    );
     return readProgressStream(res, "download/osm", opts.onProgress);
   }
 
@@ -78,11 +108,14 @@ export class DataManagerClient {
     } = {},
   ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
     const body = opts.region ? { region: opts.region } : {};
-    const res = await this.fetchImpl(`${this.baseUrl}/convert/overpass`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/convert/overpass`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
     return readProgressStream(res, "convert/overpass", opts.onProgress, {
       pathField: "targetBz2",
     });
@@ -100,11 +133,14 @@ export class DataManagerClient {
       "feeds" in opts
         ? { feeds: opts.feeds, countries: opts.countries ?? [] }
         : { source: opts.source, countries: opts.countries ?? [] };
-    const res = await this.fetchImpl(`${this.baseUrl}/download/gtfs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/download/gtfs`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
     if (!res.ok) throw new Error(`download/gtfs failed: HTTP ${res.status}`);
     const parsed = (await res.json()) as Partial<GtfsDownloadResult> & { error?: string };
     if (typeof parsed.error === "string" && parsed.error.trim().length > 0) {
@@ -123,7 +159,10 @@ export class DataManagerClient {
   }
 
   async downloadStyle(): Promise<{ ok: boolean }> {
-    const res = await this.fetchImpl(`${this.baseUrl}/download/style`, { method: "POST" });
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/download/style`,
+      this.authed({ method: "POST" }),
+    );
     if (!res.ok) throw new Error(`download/style failed: HTTP ${res.status}`);
     return (await res.json()) as { ok: boolean };
   }
@@ -138,11 +177,14 @@ export class DataManagerClient {
     }>,
     opts: { prune?: boolean } = {},
   ): Promise<{ linked: number; skipped: number; pruned: number }> {
-    const res = await this.fetchImpl(`${this.baseUrl}/link`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan, prune: opts.prune }),
-    });
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/link`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, prune: opts.prune }),
+      }),
+    );
     if (!res.ok) throw new Error(`link failed: HTTP ${res.status}`);
     const parsed = (await res.json()) as Partial<{
       linked: number;

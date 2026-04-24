@@ -1,6 +1,16 @@
 import { existsSync, linkSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
+function assertWithinRoot(label: string, pathAbs: string, rootDir: string): void {
+  const rootAbs = resolve(rootDir);
+  const rel = relative(rootAbs, pathAbs);
+  // `relative()` returns "" for identical paths and "../…" for escapes.
+  if (rel === "") return;
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`hardlink ${label} "${pathAbs}" escapes the data root "${rootAbs}"`);
+  }
+}
+
 export interface HardlinkEntry {
   source: string;
   target: string;
@@ -165,6 +175,11 @@ export async function applyHardlinkPlan(
     const rawTarget = isAbsolute(entry.target) ? entry.target : stripDataPrefix(entry.target);
     const source = isAbsolute(rawSource) ? rawSource : resolve(opts.rootDir, rawSource);
     const target = isAbsolute(rawTarget) ? rawTarget : resolve(opts.rootDir, rawTarget);
+    // Constrain both sides to rootDir so malicious plans cannot hardlink or
+    // delete host files outside /data (source is read-only for linkSync but
+    // prune uses rmSync, which is destructive).
+    assertWithinRoot("source", source, opts.rootDir);
+    assertWithinRoot("target", target, opts.rootDir);
 
     if (!existsSync(source) || !statSync(source).isDirectory()) {
       if (prune) {

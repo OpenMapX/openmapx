@@ -55,6 +55,18 @@ COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-ma
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
 
+# Run as a dedicated non-root user. The data-manager writes to /data which is
+# bind-mounted from the host — the host-side permissions need to allow writes
+# by UID/GID 1001, or operators can override via `docker run --user` /
+# compose `user:`. node:24-slim ships a "node" user at UID 1000 we could reuse,
+# but the 1001 UID aligns with conventions used by the rest of the project's
+# service images and avoids colliding with host user IDs.
+RUN groupadd --system --gid 1001 datamgr \
+    && useradd --system --uid 1001 --gid datamgr --create-home --home-dir /home/datamgr datamgr \
+    && chown -R datamgr:datamgr /app /home/datamgr
+
+USER datamgr:datamgr
+
 WORKDIR /app/services/data-manager
 EXPOSE 4000
 CMD ["node", "dist/index.js"]

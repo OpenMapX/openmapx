@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { resolveGooglePhotosLink } from "../../../../integrations/photos/orchestrator.js";
 
@@ -55,15 +55,15 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      // Referrer guard: only allow requests originating from our frontend.
-      // Browsers send Referer on <img> loads; third-party sites get blocked.
+      // Referrer guard: require a Referer or Origin that matches one of our
+      // frontend origins. Browsers send Referer on <img> loads; third-party
+      // sites are rejected. A missing Referer/Origin (non-browser clients,
+      // stripped-referrer policies) is also rejected — the proxy exists for
+      // the web UI, not as a generic open relay.
       const referer = req.headers.referer ?? req.headers.origin;
-      if (referer) {
-        const origins = getAllowedOrigins();
-        const allowed = origins.some((o) => referer.startsWith(o));
-        if (!allowed) {
-          return reply.status(403).send({ message: "Forbidden" });
-        }
+      const origins = getAllowedOrigins();
+      if (!referer || !origins.some((o) => referer.startsWith(o))) {
+        return reply.status(403).send({ message: "Forbidden" });
       }
 
       const { url } = req.query;
@@ -94,10 +94,14 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
       }
 
       try {
-        const upstream = await fetch(imageUrl, {
-          signal: AbortSignal.timeout(10_000),
+        // Manual redirect handling — each Location target is re-checked against
+        // the allowlist, so an allowed host cannot redirect out to an arbitrary
+        // third-party origin.
+        const upstream = await fetchWithRedirects(imageUrl, {
+          timeoutMs: 10_000,
           headers: { "User-Agent": USER_AGENT },
-          redirect: "follow",
+          maxRedirects: 5,
+          validateRedirectUrl: (next) => isAllowedHost(next.hostname),
         });
 
         if (!upstream.ok) {
@@ -114,13 +118,39 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
           return reply.status(413).send({ message: "Image too large" });
         }
 
-        const bytes = await upstream.arrayBuffer();
-        const origins = getAllowedOrigins();
+        // Stream with a hard byte counter so a missing/misleading Content-Length
+        // cannot trick the API into buffering unbounded memory.
+        if (!upstream.body) {
+          return reply.status(502).send({ message: "Empty upstream body" });
+        }
+        const reader = upstream.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > MAX_SIZE) {
+              await reader.cancel().catch(() => {});
+              return reply.status(413).send({ message: "Image too large" });
+            }
+            chunks.push(value);
+          }
+        } finally {
+          reader.releaseLock?.();
+        }
+
         reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
         reply.header("Cross-Origin-Resource-Policy", "cross-origin");
         reply.header("Access-Control-Allow-Origin", origins[0]);
         reply.type(contentType);
-        return reply.send(Buffer.from(bytes));
+        return reply.send(
+          Buffer.concat(
+            chunks.map((c) => Buffer.from(c)),
+            total,
+          ),
+        );
       } catch (err) {
         req.log.warn({ url, err }, "Image proxy fetch failed");
         return reply.status(502).send({ message: "Failed to fetch image" });

@@ -1,15 +1,12 @@
-import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { motisLocalInstance, setMotisLocalUrl } from "@integrations/transit-motis/instances.js";
 import type { MotisFeed, MotisStatus } from "@integrations/transit-motis/types";
 import { stops } from "@motis-project/motis-client";
-import { type BBox, validatePublicUrl } from "@openmapx/core";
+import { type BBox, USER_AGENT } from "@openmapx/core";
+import { safeDownload } from "@openmapx/core/server";
 import { cacheGet, cacheSet } from "../../utils/cache.js";
 import { serviceUrl } from "../service-registry.js";
-
-const execFileAsync = promisify(execFile);
 
 const DEFAULT_MOTIS_URL = "http://localhost:8081";
 const MOTIS_DATA_DIR =
@@ -191,19 +188,19 @@ class MotisManager {
   }
 
   private async downloadFeed(feed: MotisFeed): Promise<void> {
-    validatePublicUrl(feed.url);
     const destPath = join(MOTIS_DATA_DIR, feed.filename);
     feed.status = "downloading";
     this.persist();
 
     try {
-      await execFileAsync(
-        "curl",
-        ["-fsSL", "--proto", "=https,http", "--max-time", "300", "-o", destPath, feed.url],
-        {
-          timeout: 310_000,
-        },
-      );
+      // safeDownload validates the public URL, resolves DNS and rejects private
+      // IPs, handles redirects manually, and enforces a byte cap.
+      await safeDownload(feed.url, {
+        destPath,
+        timeoutMs: 300_000,
+        maxBytes: 2 * 1024 * 1024 * 1024,
+        headers: { "User-Agent": USER_AGENT },
+      });
 
       if (!existsSync(destPath)) {
         throw new Error("Download produced no output file");

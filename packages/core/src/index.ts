@@ -460,6 +460,12 @@ export {
 } from "./utils/elevation";
 export { ConfigurationError } from "./utils/errors";
 export {
+  assertValidFeedSlug,
+  InvalidFeedSlugError,
+  isValidFeedSlug,
+  normalizeFeedSlug,
+} from "./utils/feed-slug";
+export {
   type FetchWithRedirectsOptions,
   fetchWithRedirects,
 } from "./utils/fetchWithRedirects";

@@ -178,6 +178,7 @@ const bindMountSchema = z.object({
       if (s.startsWith("/")) return false; // absolute paths forbidden
       if (pathHasParentEscape(s)) return false;
       return true;
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: error message documents literal compose-substitution syntax (${VAR}, ${VAR:-default}), not JS template placeholders
     }, "source must be a relative path (no '..', no absolute paths), a known special source (@docker-socket, @service:<slug>:<rel-path>, @infra:<rel-path>), or a Compose-variable reference (${VAR}, ${VAR:-default})"),
   target: z
     .string()

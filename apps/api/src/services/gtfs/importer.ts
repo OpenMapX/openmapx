@@ -1,9 +1,18 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fetchWithRedirects, USER_AGENT, validatePublicUrl } from "@openmapx/core";
+import { safeDownload } from "@openmapx/core/server";
 import { gtfsDate, parseCsv, streamCsvBatches } from "./csv";
 import { sql } from "./db";
 import { invalidateSchemaCaches } from "./queries";
@@ -203,14 +212,14 @@ async function downloadAndExtract(url: string, tempDir: string): Promise<string>
   mkdirSync(tempDir, { recursive: true });
   const zipPath = join(tempDir, "feed.zip");
 
-  // Download — uses execFileSync to avoid shell injection
-  execFileSync(
-    "curl",
-    ["-fsSL", "--proto", "=https,http", "--proto-redir", "=https,http", "-o", zipPath, downloadUrl],
-    {
-      timeout: 300_000, // 5 min download timeout
-    },
-  );
+  // Use the shared safe downloader: validates public URL + DNS, handles
+  // redirects manually through allowlist/validator, enforces a hard byte cap.
+  await safeDownload(downloadUrl, {
+    destPath: zipPath,
+    timeoutMs: 300_000,
+    maxBytes: 2 * 1024 * 1024 * 1024, // 2 GiB cap for GTFS zips
+    headers: { "User-Agent": USER_AGENT },
+  });
 
   // Compute hash
   const hash = createHash("sha256").update(readFileSync(zipPath)).digest("hex");
@@ -588,7 +597,9 @@ export async function importGtfsFeed(
   schema: string,
   onProgress?: (stage: string) => void,
 ): Promise<ImportResult> {
-  const tempDir = join(tmpdir(), `gtfs-import-${schema}-${Date.now()}`);
+  // Use mkdtempSync so the temp path is OS-generated — caller-derived data
+  // never ends up in the filesystem path, and concurrent imports cannot collide.
+  const tempDir = mkdtempSync(join(tmpdir(), "gtfs-import-"));
 
   try {
     // 1. Download and extract

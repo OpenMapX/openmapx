@@ -146,6 +146,7 @@ describe("renderServiceSnippet", () => {
     );
   });
 
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
   it("passes through ${VAR}-prefixed bindMount sources verbatim for compose substitution", () => {
     // app-api opts into a host-path-agreeing bind mount (docker-outside-of-
     // docker admin control) by pointing both sides at the same operator-set
@@ -167,6 +168,7 @@ describe("renderServiceSnippet", () => {
       "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}:${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
     ]);
   });
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
 
   it("renders @docker-socket bindMount as /var/run/docker.sock", () => {
     const snippet = renderServiceSnippet(

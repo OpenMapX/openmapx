@@ -14,10 +14,14 @@ const { requireAdmin } = await import("../require-admin");
 beforeEach(() => {
   mockGetSession.mockReset();
   delete process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH;
+  delete process.env.OPENMAPX_LOCAL_ADMIN_TOKEN;
+  delete process.env.NODE_ENV;
 });
 
 afterEach(() => {
   delete process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH;
+  delete process.env.OPENMAPX_LOCAL_ADMIN_TOKEN;
+  delete process.env.NODE_ENV;
 });
 
 function makeApp() {
@@ -74,5 +78,51 @@ describe("requireAdmin loopback short-circuit", () => {
     await app.close();
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ ok: true, userId: "admin1" });
+  });
+
+  it("requires the local admin token when OPENMAPX_LOCAL_ADMIN_TOKEN is set", async () => {
+    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    mockGetSession.mockResolvedValue(null);
+    const app = makeApp();
+    // No token header → loopback short-circuit must NOT admit, and no better-auth session exists.
+    const res = await app.inject({ method: "GET", url: "/protected" });
+    await app.close();
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("admits a loopback request that presents the correct local admin token", async () => {
+    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    const app = makeApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { "x-openmapx-local-admin": "s3cret" },
+    });
+    await app.close();
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ ok: true, userId: "loopback" });
+    expect(mockGetSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects a loopback request with a wrong token", async () => {
+    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    mockGetSession.mockResolvedValue(null);
+    const app = makeApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { "x-openmapx-local-admin": "WRONG" },
+    });
+    await app.close();
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("denies loopback bypass entirely in production when no token is configured", async () => {
+    process.env.NODE_ENV = "production";
+    mockGetSession.mockResolvedValue(null);
+    const app = makeApp();
+    const res = await app.inject({ method: "GET", url: "/protected" });
+    await app.close();
+    expect(res.statusCode).toBe(401);
   });
 });

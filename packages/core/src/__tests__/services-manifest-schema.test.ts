@@ -193,6 +193,7 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(false);
   });
 
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
   it("accepts a ${VAR}-reference bindMount source + target (host-path pass-through)", () => {
     const result = validateServiceManifest({
       ...validMinimal,
@@ -216,6 +217,7 @@ describe("validateServiceManifest", () => {
     });
     expect(result.valid).toBe(false);
   });
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
 
   it("accepts relative-path bindMounts for community services (ship own configs)", () => {
     const result = validateServiceManifest({

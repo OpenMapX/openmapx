@@ -234,4 +234,44 @@ describe("applyHardlinkPlan", () => {
     expect(result.pruned).toBe(0);
     expect(existsSync(join(tgt, "feed.zip"))).toBe(true);
   });
+
+  it("rejects source paths that escape rootDir", async () => {
+    const src = join(tmp, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "a"), "data");
+
+    await expect(
+      applyHardlinkPlan(
+        [
+          {
+            source: "../etc/passwd",
+            target: "valid",
+            consumerService: "x",
+            dataType: "osm",
+          },
+        ],
+        { rootDir: tmp },
+      ),
+    ).rejects.toThrow(/escapes the data root/);
+  });
+
+  it("rejects target paths that escape rootDir", async () => {
+    const src = join(tmp, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "a"), "data");
+
+    await expect(
+      applyHardlinkPlan(
+        [
+          {
+            source: "src",
+            target: "/tmp/elsewhere",
+            consumerService: "x",
+            dataType: "osm",
+          },
+        ],
+        { rootDir: tmp },
+      ),
+    ).rejects.toThrow(/escapes the data root/);
+  });
 });

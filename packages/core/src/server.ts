@@ -73,4 +73,11 @@ export {
 } from "./utils/attribution";
 export { applyHoursFilter } from "./utils/categoryFilter";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
+// Safe downloader (DNS-aware SSRF protection for server-side fetches).
+export {
+  assertResolvesToPublicIp,
+  type SafeDownloadOptions,
+  type SafeDownloadResult,
+  safeDownload,
+} from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";

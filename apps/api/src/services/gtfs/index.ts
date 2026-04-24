@@ -1,7 +1,21 @@
-import { type BBox, validatePublicUrl } from "@openmapx/core";
+import {
+  assertValidFeedSlug,
+  type BBox,
+  isValidFeedSlug,
+  normalizeFeedSlug,
+  validatePublicUrl,
+} from "@openmapx/core";
 import { sql } from "./db";
 import { dropGtfsSchema, importGtfsFeed } from "./importer";
 import type { CatalogFeed, FeedStatus, ImportedFeed } from "./types";
+
+/** Persisted schema names always have the `gtfs_<slug>` shape. Accept only slugs
+ * that match the canonical form to prevent a malicious legacy row from feeding
+ * raw SQL identifiers on load. */
+function isValidSchemaName(schemaName: string): boolean {
+  if (!schemaName.startsWith("gtfs_")) return false;
+  return isValidFeedSlug(schemaName.slice("gtfs_".length));
+}
 
 // Metadata Table
 
@@ -50,13 +64,23 @@ class GtfsManager {
       // Load existing feeds
       const rows = await sql.unsafe("SELECT * FROM public.gtfs_feeds ORDER BY slug");
       for (const row of rows) {
+        const persistedSlug = row.slug as string;
+        const persistedSchema = row.schema_name as string;
+        if (!isValidFeedSlug(persistedSlug) || !isValidSchemaName(persistedSchema)) {
+          console.warn(
+            `[gtfs] Skipping feed row with invalid slug/schema: slug=${JSON.stringify(
+              persistedSlug,
+            )}, schema=${JSON.stringify(persistedSchema)}`,
+          );
+          continue;
+        }
         const feed: ImportedFeed = {
-          slug: row.slug as string,
+          slug: persistedSlug,
           name: row.name as string,
           url: row.url as string,
           source: row.source as string,
           countryCode: (row.country_code as string) ?? "",
-          schemaName: row.schema_name as string,
+          schemaName: persistedSchema,
           status: row.status as FeedStatus,
           bbox: row.bbox as BBox | null,
           feedHash: row.feed_hash as string | null,
@@ -147,8 +171,10 @@ class GtfsManager {
   ): Promise<string> {
     const feedSlug =
       slug ??
-      (("id" in feed ? (feed as CatalogFeed).id : "").replace(/[^a-z0-9]+/gi, "_").toLowerCase() ||
-        `manual_${Date.now()}`);
+      (("id" in feed && normalizeFeedSlug((feed as CatalogFeed).id)) || `manual_${Date.now()}`);
+    // Defense-in-depth: reject any slug that slipped past route-level validation
+    // before it lands in a SQL identifier or filesystem path.
+    assertValidFeedSlug(feedSlug);
     const schemaName = `gtfs_${feedSlug}`;
 
     if (this.importing.has(feedSlug)) {

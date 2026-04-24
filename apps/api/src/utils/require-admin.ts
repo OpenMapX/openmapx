@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "../auth";
@@ -20,22 +21,58 @@ export function getAdminSession(request: FastifyRequest): AdminSession {
   return s;
 }
 
-// Loopback addresses considered "same host". Connections from these addresses
-// bypass session auth (see `isLoopbackRequest`). `::ffff:127.0.0.1` is the
+// Loopback addresses considered "same host". Admission also requires a local
+// admin token (see `isLocalAdminRequest`). `::ffff:127.0.0.1` is the
 // IPv4-mapped IPv6 form Node uses on dual-stack sockets.
 //
 // SECURITY NOTE: `request.ip` is the *socket peer* address by default. If
 // Fastify is ever started with `trustProxy: true`, `request.ip` will instead
 // reflect the X-Forwarded-For header — meaning any upstream proxy (or anything
-// that can spoof that header) could obtain admin access by claiming a loopback
-// IP. If you enable `trustProxy`, either also set
-// `OPENMAPX_DISABLE_LOCALHOST_AUTH=1` or restrict `trustProxy` to a specific
-// list of trusted proxy IPs that you know strip the header.
+// that can spoof that header) could claim a loopback IP. If you enable
+// `trustProxy`, restrict it to a specific list of trusted proxy IPs that you
+// know strip the header.
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
-function isLoopbackRequest(request: FastifyRequest): boolean {
+/**
+ * Custom header that the CLI sets to prove it is a trusted local caller rather
+ * than a malicious cross-origin form submission. HTML forms cannot set custom
+ * headers, so requiring this header blocks localhost CSRF via `<form action>`.
+ */
+const LOCAL_ADMIN_TOKEN_HEADER = "x-openmapx-local-admin";
+
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+function getLocalAdminToken(): string | null {
+  const token = process.env.OPENMAPX_LOCAL_ADMIN_TOKEN?.trim();
+  return token ? token : null;
+}
+
+function isLocalAdminRequest(request: FastifyRequest): boolean {
+  // Operator opt-out for multi-tenant hosts where loopback isn't a trust
+  // boundary. Preserved for backwards compatibility.
   if (process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH === "1") return false;
-  return LOOPBACK_ADDRESSES.has(request.ip);
+  if (!LOOPBACK_ADDRESSES.has(request.ip)) return false;
+
+  const expected = getLocalAdminToken();
+  // Dev default: when no token is configured, keep the legacy behaviour of
+  // trusting any loopback process (the admin CLI and developer workflow rely
+  // on it). Production deployments SHOULD configure the token — see
+  // services/app-api/service.json. The header check below always runs when a
+  // token is configured, which blocks same-origin CSRF from a victim browser.
+  if (!expected) {
+    if (process.env.NODE_ENV === "production") return false;
+    return true;
+  }
+
+  const header = request.headers[LOCAL_ADMIN_TOKEN_HEADER];
+  const presented = Array.isArray(header) ? header[0] : header;
+  if (typeof presented !== "string" || !presented) return false;
+  return safeEqual(presented, expected);
 }
 
 /**
@@ -91,7 +128,7 @@ export async function requireAdmin(
   reply: FastifyReply,
   roles: string[] = ["admin"],
 ): Promise<AdminSession | null> {
-  if (isLoopbackRequest(request)) {
+  if (isLocalAdminRequest(request)) {
     return loopbackSession();
   }
 

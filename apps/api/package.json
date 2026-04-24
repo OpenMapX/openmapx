@@ -33,7 +33,7 @@
     "cached-hafas-client": "^5.1.9",
     "db-vendo-client": "^6.10.8",
     "drizzle-orm": "^0.45.2",
-    "fastify": "^5.8.4",
+    "fastify": "^5.8.5",
     "hafas-client": "^6.3.6",
     "ioredis": "^5.10.1",
     "lettermint": "^1.5.1",

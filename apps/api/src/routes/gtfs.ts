@@ -1,3 +1,4 @@
+import { InvalidFeedSlugError, isValidFeedSlug, normalizeFeedSlug } from "@openmapx/core";
 import type { FastifyInstance } from "fastify";
 import { searchCatalog } from "../services/gtfs/catalog";
 import { gtfsManager } from "../services/gtfs/index";
@@ -36,7 +37,10 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
       if (!feed) {
         return reply.status(404).send({ error: `Catalog feed "${body.catalogId}" not found` });
       }
-      const slug = body.slug ?? feed.id.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+      const slug = body.slug ?? normalizeFeedSlug(feed.id);
+      if (!slug || !isValidFeedSlug(slug)) {
+        return reply.status(400).send({ error: new InvalidFeedSlugError(String(slug)).message });
+      }
       if (gtfsManager.isImporting(slug)) {
         return reply.status(409).send({ error: `Feed "${slug}" is already being imported` });
       }
@@ -54,8 +58,10 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
     }
 
     const name = body.name ?? body.url.split("/").pop()?.replace(".zip", "") ?? "Unknown";
-    const slug =
-      body.slug ?? name.replace(/[^a-z0-9]+/gi, "_").toLowerCase() ?? `manual_${Date.now()}`;
+    const slug = body.slug ?? normalizeFeedSlug(name) ?? `manual_${Date.now()}`;
+    if (!isValidFeedSlug(slug)) {
+      return reply.status(400).send({ error: new InvalidFeedSlugError(slug).message });
+    }
     if (gtfsManager.isImporting(slug)) {
       return reply.status(409).send({ error: `Feed "${slug}" is already being imported` });
     }
@@ -80,6 +86,9 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
   // Get single feed
   app.get("/gtfs/feeds/:slug", async (request, reply) => {
     const { slug } = request.params as { slug: string };
+    if (!isValidFeedSlug(slug)) {
+      return reply.status(400).send({ error: new InvalidFeedSlugError(slug).message });
+    }
     const feeds = gtfsManager.getFeeds();
     const feed = feeds.find((f) => f.slug === slug);
     if (!feed) return reply.status(404).send({ error: "Feed not found" });
@@ -90,6 +99,9 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
   app.delete("/gtfs/feeds/:slug", async (request, reply) => {
     if (!(await requireAdmin(request, reply))) return;
     const { slug } = request.params as { slug: string };
+    if (!isValidFeedSlug(slug)) {
+      return reply.status(400).send({ error: new InvalidFeedSlugError(slug).message });
+    }
     try {
       await gtfsManager.removeFeed(slug);
       return { success: true, message: `Feed "${slug}" removed` };
@@ -103,6 +115,9 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
   app.post("/gtfs/feeds/:slug/refresh", async (request, reply) => {
     if (!(await requireAdmin(request, reply))) return;
     const { slug } = request.params as { slug: string };
+    if (!isValidFeedSlug(slug)) {
+      return reply.status(400).send({ error: new InvalidFeedSlugError(slug).message });
+    }
     const feeds = gtfsManager.getFeeds();
     const feed = feeds.find((f) => f.slug === slug);
     if (!feed) return reply.status(404).send({ error: "Feed not found" });

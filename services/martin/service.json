@@ -11,7 +11,7 @@
     "tag": "latest",
     "expose": [3000],
     "environment": {
-      "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgis:5432/openmapx"
+      "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx"
     },
     "restart": "unless-stopped",
     "dependsOn": [{ "service": "postgis", "condition": "service_healthy" }]

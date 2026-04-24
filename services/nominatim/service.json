@@ -14,7 +14,7 @@
       "PBF_PATH": "/nominatim/data/data.osm.pbf",
       "REPLICATION_URL": "https://planet.openstreetmap.org/replication/day",
       "REPLICATION_UPDATE_INTERVAL": "86400",
-      "NOMINATIM_PASSWORD": "${POSTGRES_PASSWORD:-postgres}",
+      "NOMINATIM_PASSWORD": "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}",
       "THREADS": "${NOMINATIM_THREADS:-8}",
       "IMPORT_STYLE": "full",
       "REVERSE_ONLY": "false",
