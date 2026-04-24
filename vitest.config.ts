@@ -15,6 +15,7 @@ export default {
       "packages/cli/__tests__/**/*.test.ts",
       "packages/hey-api-client-fetch/**/*.test.ts",
       "packages/shared-mobility/__tests__/**/*.test.ts",
+      "services/data-manager/__tests__/**/*.test.ts",
     ],
   },
 };

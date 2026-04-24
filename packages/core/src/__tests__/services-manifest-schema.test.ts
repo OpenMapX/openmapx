@@ -193,6 +193,30 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(false);
   });
 
+  it("accepts a ${VAR}-reference bindMount source + target (host-path pass-through)", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      bindMounts: [
+        {
+          source: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+          target: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+          readOnly: false,
+        },
+      ],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects a ${VAR}-reference bindMount source that contains a `..` path component", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      bindMounts: [
+        { source: "${OPENMAPX_HOST_DIR:-/tmp/../escape}", target: "/var/run/docker.sock" },
+      ],
+    });
+    expect(result.valid).toBe(false);
+  });
+
   it("accepts relative-path bindMounts for community services (ship own configs)", () => {
     const result = validateServiceManifest({
       ...validMinimal,

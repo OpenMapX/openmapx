@@ -146,6 +146,28 @@ describe("renderServiceSnippet", () => {
     );
   });
 
+  it("passes through ${VAR}-prefixed bindMount sources verbatim for compose substitution", () => {
+    // app-api opts into a host-path-agreeing bind mount (docker-outside-of-
+    // docker admin control) by pointing both sides at the same operator-set
+    // env var. The renderer must not try to resolve `${OPENMAPX_HOST_DIR}`
+    // relative to the service directory.
+    const snippet = renderServiceSnippet(
+      svc("app-api", {
+        bindMounts: [
+          {
+            source: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+            target: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+            readOnly: false,
+          },
+        ],
+      }),
+      { composeOutDir: "/repo/infra/docker" },
+    );
+    expect(snippet.volumes).toEqual([
+      "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}:${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+    ]);
+  });
+
   it("renders @docker-socket bindMount as /var/run/docker.sock", () => {
     const snippet = renderServiceSnippet(
       svc("traefik", {

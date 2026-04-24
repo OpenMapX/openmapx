@@ -174,6 +174,15 @@ function resolveBindSource(
   allServices: LoadedService[],
   composeOutDir: string | undefined,
 ): string {
+  // Compose-variable pass-through. Sources that start with `$` — including
+  // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
+  // Docker Compose parser does the substitution at stack-up time. This is
+  // how app-api opts into a "host path = container path" bind mount for
+  // Docker-outside-of-Docker admin control without having to bake the
+  // operator's host path into the manifest.
+  if (bm.source.startsWith("$")) {
+    return bm.source;
+  }
   // Literal special sources (e.g. @docker-socket) — emit the concrete path.
   if (SPECIAL_BIND_SOURCE_PATHS[bm.source]) {
     return SPECIAL_BIND_SOURCE_PATHS[bm.source];

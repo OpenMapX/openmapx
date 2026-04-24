@@ -85,6 +85,7 @@ export async function renderAndPersistCompose(): Promise<void> {
     enabled.map((service) => ({
       id: service.manifest.id,
       configSchema: service.manifest.configSchema,
+      containerEnv: service.manifest.container.environment,
     })),
   );
 

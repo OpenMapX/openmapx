@@ -58,20 +58,32 @@ export function configSchemaKeys(
  * Returns a `{ key: { value, source } }` map. Keys without a default and
  * without an env override are omitted from the result (so the caller can tell
  * "nothing configured" from "configured to an empty string").
+ *
+ * When the caller passes `manifest.container.environment`, schema-default
+ * entries whose key already exists there are suppressed. The manifest env
+ * is itself a default (it's what the image runs with out of the box), so
+ * overlaying a schema default on top would only cause drift — e.g., the
+ * valhalla-scripted image expects capitalized "True"/"False", but a JSON
+ * schema default of `true` would stringify to lowercase "true" and silently
+ * replace the manifest value. Env and database overrides are still returned
+ * unconditionally — those are operator intent.
  */
 export function resolveServiceConfigFromEnv(
-  manifest: Pick<ServiceManifest, "id" | "configSchema">,
+  manifest: Pick<ServiceManifest, "id" | "configSchema"> & {
+    container?: Pick<ServiceManifest["container"], "environment">;
+  },
   env: NodeJS.ProcessEnv = process.env,
 ): Record<string, ConfigValueWithSource> {
   const keys = configSchemaKeys(manifest.configSchema);
   if (keys.length === 0) return {};
 
+  const manifestEnvKeys = new Set(Object.keys(manifest.container?.environment ?? {}));
   const result: Record<string, ConfigValueWithSource> = {};
 
   for (const { key, default: defVal } of keys) {
-    if (defVal !== undefined) {
-      result[key] = { value: defVal, source: "default" };
-    }
+    if (defVal === undefined) continue;
+    if (manifestEnvKeys.has(key)) continue;
+    result[key] = { value: defVal, source: "default" };
   }
 
   const prefix = serviceConfigEnvPrefix(manifest.id);

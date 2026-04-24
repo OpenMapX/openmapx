@@ -326,9 +326,19 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     const { INFRA_DIR, isDockerAvailable } = await import("../services/admin-ops");
     const dockerAvailable = await isDockerAvailable();
     const composePath = join(INFRA_DIR, "docker-compose.generated.yml");
+    // When the API runs inside app-api, docker-compose actions need the
+    // generated compose file's bind paths to resolve to real host paths.
+    // That only works when the operator sets OPENMAPX_HOST_DIR to the
+    // absolute host-side repo path and the app-api service.json bind-mounts
+    // `${OPENMAPX_HOST_DIR}:${OPENMAPX_HOST_DIR}`. Surface the state so the
+    // admin UI can warn on deploy actions that would silently no-op.
+    const hostDir = process.env.OPENMAPX_HOST_DIR?.trim();
+    const hostControlConfigured = Boolean(hostDir) && existsSync(hostDir as string);
     return {
       selfHosted: dockerAvailable,
       dockerAvailable,
+      hostControlConfigured,
+      hostDir: hostDir ?? null,
       // True once the operator has run `pnpm openmapx compose render`.
       composeRendered: existsSync(composePath),
       infraDir: INFRA_DIR,

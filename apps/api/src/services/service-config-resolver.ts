@@ -40,6 +40,15 @@ export type ConfigValueWithSource = coreServices.ConfigValueWithSource;
 export interface ResolveServiceConfigInput {
   id: string;
   configSchema?: Record<string, unknown>;
+  /**
+   * Manifest's `container.environment` baseline. Threading this through to
+   * `resolveServiceConfigFromEnv` keeps schema defaults from overlaying keys
+   * the manifest already provides a value for — otherwise a boolean default of
+   * `true` would stringify to "true" and silently replace a carefully chosen
+   * "True" in the manifest. Optional because tests can still exercise the
+   * env/default cascade without constructing a full manifest.
+   */
+  containerEnv?: Record<string, string>;
 }
 
 /**
@@ -62,8 +71,14 @@ export async function resolveServiceConfigWithSources(
 
   // Start from defaults + env via the core helper. Env is highest priority, so
   // we'll re-apply it after the DB layer below to preserve that precedence.
+  // `containerEnv` suppresses schema defaults for keys the manifest already
+  // fills — see the doc comment on `ResolveServiceConfigInput.containerEnv`.
   const envLayer = resolveServiceConfigFromEnv(
-    { id: manifest.id, configSchema: manifest.configSchema },
+    {
+      id: manifest.id,
+      configSchema: manifest.configSchema,
+      container: manifest.containerEnv ? { environment: manifest.containerEnv } : undefined,
+    },
     process.env,
   );
 

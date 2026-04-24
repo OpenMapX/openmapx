@@ -111,6 +111,42 @@ describe("resolveServiceConfigFromEnv", () => {
     );
     expect(r).toEqual({});
   });
+
+  it("suppresses schema defaults whose key the manifest env already provides", () => {
+    // Valhalla-style regression: the scripted image expects "True"/"False"
+    // strings in env. A boolean schema default of `true` would stringify to
+    // "true" at render time and silently replace the "True" already in
+    // container.environment.
+    const r = resolveServiceConfigFromEnv(
+      {
+        id: "valhalla",
+        configSchema: {
+          properties: {
+            build_elevation: { type: "boolean", default: true },
+            extra_key: { type: "string", default: "seed" },
+          },
+        },
+        container: { environment: { build_elevation: "True" } },
+      },
+      {},
+    );
+    expect(r.build_elevation).toBeUndefined();
+    expect(r.extra_key).toEqual({ value: "seed", source: "default" });
+  });
+
+  it("still honours env overrides for keys the manifest env provides", () => {
+    const r = resolveServiceConfigFromEnv(
+      {
+        id: "valhalla",
+        configSchema: {
+          properties: { build_elevation: { type: "boolean", default: true } },
+        },
+        container: { environment: { build_elevation: "True" } },
+      },
+      { SERVICE_VALHALLA_BUILD_ELEVATION: "False" },
+    );
+    expect(r.build_elevation).toEqual({ value: "False", source: "env" });
+  });
 });
 
 describe("flattenResolvedConfig", () => {

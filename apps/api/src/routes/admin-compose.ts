@@ -36,7 +36,11 @@ export async function registerAdminComposeRoutes(
     // service before rendering, so `SERVICE_<ID>_<KEY>=...` on the host and
     // admin-panel-saved values both land in the generated compose env.
     const resolvedServiceConfigs = await resolveAllServiceConfigs(
-      enabled.map((s) => ({ id: s.manifest.id, configSchema: s.manifest.configSchema })),
+      enabled.map((s) => ({
+        id: s.manifest.id,
+        configSchema: s.manifest.configSchema,
+        containerEnv: s.manifest.container.environment,
+      })),
     );
     if (enabled.some((s) => s.manifest.id === "app-api")) {
       resolvedServiceConfigs.set(

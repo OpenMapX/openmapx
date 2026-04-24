@@ -145,6 +145,13 @@ const producesSchema = z.object({
   sourceDir: z.string().min(1),
 });
 
+// Matches a fully-substituted Docker Compose variable reference:
+// `${VAR}`, `${VAR:-default}`, or `$VAR`. Bind mount sources/targets that
+// use this form are passed through to the Compose parser at stack-up time
+// — app-api uses this for its host-path-agreeing mount pair so the operator
+// can set OPENMAPX_HOST_DIR in `.env` without re-rendering the manifest.
+const COMPOSE_VAR_SOURCE_REGEX = /^\$(\{[^{}\s]+\}|[A-Za-z_][A-Za-z0-9_]*)/;
+
 const bindMountSchema = z.object({
   source: z
     .string()
@@ -162,15 +169,27 @@ const bindMountSchema = z.object({
         if (!path || path.startsWith("/")) return false;
         return !pathHasParentEscape(path);
       }
+      if (COMPOSE_VAR_SOURCE_REGEX.test(s)) {
+        // Compose-variable pass-through — rendered verbatim, no '..'/traversal
+        // analysis possible because the path is resolved at stack-up time.
+        return !pathHasParentEscape(s);
+      }
       if (s.startsWith("@")) return false; // unknown special source
       if (s.startsWith("/")) return false; // absolute paths forbidden
       if (pathHasParentEscape(s)) return false;
       return true;
-    }, "source must be a relative path (no '..', no absolute paths) or a known special source (@docker-socket, @service:<slug>:<rel-path>, @infra:<rel-path>)"),
+    }, "source must be a relative path (no '..', no absolute paths), a known special source (@docker-socket, @service:<slug>:<rel-path>, @infra:<rel-path>), or a Compose-variable reference (${VAR}, ${VAR:-default})"),
   target: z
     .string()
-    .regex(ABSOLUTE_PATH_REGEX, "must be absolute")
-    .refine((p) => !pathHasParentEscape(p), "must not contain '..'"),
+    .min(1)
+    .refine((p) => {
+      // Compose-variable reference at the start → pass-through. Even so we
+      // forbid `..` anywhere in the string so a malicious default can't
+      // traverse out of the container root.
+      if (COMPOSE_VAR_SOURCE_REGEX.test(p)) return !pathHasParentEscape(p);
+      if (!ABSOLUTE_PATH_REGEX.test(p)) return false;
+      return !pathHasParentEscape(p);
+    }, "must be absolute or a Compose-variable reference, and must not contain '..'"),
   readOnly: z.boolean().optional(),
 });
 

@@ -47,6 +47,10 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   // observationally equivalent when no per-service DB config is set.
   const resolvedServiceConfigs = new Map<string, Record<string, unknown>>();
   for (const s of enabled) {
+    // Pass the full manifest so `resolveServiceConfigFromEnv` can suppress
+    // schema defaults whose key already exists in `container.environment` —
+    // otherwise a boolean `true` default clobbers a manifest "True"/"False"
+    // string (see valhalla-scripted).
     const withSources = resolveServiceConfigFromEnv(s.manifest, process.env);
     if (Object.keys(withSources).length > 0) {
       resolvedServiceConfigs.set(s.manifest.id, flattenResolvedConfig(withSources));
