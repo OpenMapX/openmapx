@@ -117,7 +117,7 @@ describe("getStopsNearby", () => {
     const fetchCall = mockFetch.mock.calls[0];
     const requestInit = fetchCall[1] as RequestInit;
     const headers = requestInit.headers as Record<string, string>;
-    expect(headers["ET-Client-Name"]).toBe("OpenMapX");
+    expect(headers["ET-Client-Name"]).toBe("openmapx-server");
   });
 
   it("sends Authorization header when apiKey is set", async () => {

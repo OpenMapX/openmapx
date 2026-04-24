@@ -4,6 +4,24 @@
  */
 
 import { USER_AGENT } from "@openmapx/core";
+import {
+  type GbfsDiscoveryDocument,
+  type GbfsV23FreeBikeStatus,
+  type GbfsV23StationInformation,
+  type GbfsV23StationStatus,
+  type GbfsV23SystemInformation,
+  type GbfsV23SystemPricingPlans,
+  type GbfsV23VehicleTypes,
+  type GbfsV30StationInformation,
+  type GbfsV30StationStatus,
+  type GbfsV30SystemInformation,
+  type GbfsV30SystemPricingPlans,
+  type GbfsV30VehicleStatus,
+  type GbfsV30VehicleTypes,
+  gbfsLocalizedTextToString,
+  resolveGbfsFeedUrl,
+  resolveGbfsVehicleStatusFeedUrl,
+} from "@openmapx/mobility-formats";
 import type {
   GbfsPricingPlan,
   GbfsStationInfo,
@@ -19,25 +37,18 @@ const BASE_HEADERS: Record<string, string> = {
   Accept: "application/json",
 };
 
-interface GbfsDiscoveryFeed {
-  name: string;
-  url: string;
-}
-
-interface GbfsDiscoveryResponse {
-  data?: {
-    // v2 format
-    en?: { feeds: GbfsDiscoveryFeed[] };
-    // v3 format
-    feeds?: GbfsDiscoveryFeed[];
-  };
-}
-
-interface GbfsFeedResponse<T> {
-  data: T;
-  last_updated?: number;
-  ttl?: number;
-}
+type RawStationStatus =
+  | GbfsV23StationStatus["data"]["stations"][number]
+  | GbfsV30StationStatus["data"]["stations"][number];
+type RawVehicleStatus =
+  | GbfsV23FreeBikeStatus["data"]["bikes"][number]
+  | GbfsV30VehicleStatus["data"]["vehicles"][number];
+type GbfsSystemInformation = GbfsV23SystemInformation | GbfsV30SystemInformation;
+type GbfsStationInformation = GbfsV23StationInformation | GbfsV30StationInformation;
+type GbfsSystemStationStatus = GbfsV23StationStatus | GbfsV30StationStatus;
+type GbfsVehicleStatusDocument = GbfsV23FreeBikeStatus | GbfsV30VehicleStatus;
+type GbfsSystemVehicleTypes = GbfsV23VehicleTypes | GbfsV30VehicleTypes;
+type GbfsSystemPricingPlanDocument = GbfsV23SystemPricingPlans | GbfsV30SystemPricingPlans;
 
 async function fetchJson<T>(url: string, extraHeaders?: Record<string, string>): Promise<T | null> {
   try {
@@ -53,29 +64,21 @@ async function fetchJson<T>(url: string, extraHeaders?: Record<string, string>):
   }
 }
 
-function resolveFeedUrl(discovery: GbfsDiscoveryResponse, feedName: string): string | null {
-  // v2: data.en.feeds[] or data.<lang>.feeds[]
-  // We need the language container object (which has a `feeds` property), not the feeds array itself
-  const langContainer =
-    discovery.data?.en ??
-    (discovery.data
-      ? (Object.values(discovery.data).find(
-          (v) => typeof v === "object" && v !== null && "feeds" in v,
-        ) as { feeds: GbfsDiscoveryFeed[] } | undefined)
-      : null);
-  if (langContainer && "feeds" in langContainer) {
-    const feed = (langContainer as { feeds: GbfsDiscoveryFeed[] }).feeds.find(
-      (f) => f.name === feedName,
-    );
-    if (feed) return feed.url;
+function getStationAvailabilityCount(status: RawStationStatus): number {
+  return "num_bikes_available" in status
+    ? (status.num_bikes_available ?? 0)
+    : (status.num_vehicles_available ?? 0);
+}
+
+function getRawVehicleStatuses(document: GbfsVehicleStatusDocument | null): RawVehicleStatus[] {
+  if (!document?.data) return [];
+  if ("vehicles" in document.data && Array.isArray(document.data.vehicles)) {
+    return document.data.vehicles;
   }
-  // v3: data.feeds[]
-  const v3Feeds = discovery.data?.feeds;
-  if (v3Feeds) {
-    const feed = v3Feeds.find((f) => f.name === feedName);
-    if (feed) return feed.url;
+  if ("bikes" in document.data && Array.isArray(document.data.bikes)) {
+    return document.data.bikes;
   }
-  return null;
+  return [];
 }
 
 export interface GbfsSystemData {
@@ -95,54 +98,28 @@ export async function fetchGbfsSystem(
   autoDiscoveryUrl: string,
   extraHeaders?: Record<string, string>,
 ): Promise<GbfsSystemData | null> {
-  const discovery = await fetchJson<GbfsDiscoveryResponse>(autoDiscoveryUrl, extraHeaders);
+  const discovery = await fetchJson<GbfsDiscoveryDocument>(autoDiscoveryUrl, extraHeaders);
   if (!discovery?.data) return null;
 
-  const systemInfoUrl = resolveFeedUrl(discovery, "system_information");
-  const stationInfoUrl = resolveFeedUrl(discovery, "station_information");
-  const stationStatusUrl = resolveFeedUrl(discovery, "station_status");
-  const vehicleStatusUrl =
-    resolveFeedUrl(discovery, "vehicle_status") ?? resolveFeedUrl(discovery, "free_bike_status");
-  const vehicleTypesUrl = resolveFeedUrl(discovery, "vehicle_types");
-  const pricingPlansUrl = resolveFeedUrl(discovery, "system_pricing_plans");
+  const systemInfoUrl = resolveGbfsFeedUrl(discovery, "system_information");
+  const stationInfoUrl = resolveGbfsFeedUrl(discovery, "station_information");
+  const stationStatusUrl = resolveGbfsFeedUrl(discovery, "station_status");
+  const vehicleStatusUrl = resolveGbfsVehicleStatusFeedUrl(discovery);
+  const vehicleTypesUrl = resolveGbfsFeedUrl(discovery, "vehicle_types");
+  const pricingPlansUrl = resolveGbfsFeedUrl(discovery, "system_pricing_plans");
 
   // Fetch all feeds in parallel
   const [sysInfoRes, stInfoRes, stStatusRes, vStatusRes, vTypesRes, pricingRes] = await Promise.all(
     [
-      systemInfoUrl
-        ? fetchJson<
-            GbfsFeedResponse<{
-              system_id: string;
-              name: string;
-              operator?: string;
-              url?: string;
-              timezone: string;
-              opening_hours?: string;
-            }>
-          >(systemInfoUrl, extraHeaders)
-        : null,
-      stationInfoUrl
-        ? fetchJson<GbfsFeedResponse<{ stations: RawStationInfo[] }>>(stationInfoUrl, extraHeaders)
-        : null,
-      stationStatusUrl
-        ? fetchJson<GbfsFeedResponse<{ stations: RawStationStatus[] }>>(
-            stationStatusUrl,
-            extraHeaders,
-          )
-        : null,
+      systemInfoUrl ? fetchJson<GbfsSystemInformation>(systemInfoUrl, extraHeaders) : null,
+      stationInfoUrl ? fetchJson<GbfsStationInformation>(stationInfoUrl, extraHeaders) : null,
+      stationStatusUrl ? fetchJson<GbfsSystemStationStatus>(stationStatusUrl, extraHeaders) : null,
       vehicleStatusUrl
-        ? fetchJson<
-            GbfsFeedResponse<{ bikes?: RawVehicleStatus[]; vehicles?: RawVehicleStatus[] }>
-          >(vehicleStatusUrl, extraHeaders)
+        ? fetchJson<GbfsVehicleStatusDocument>(vehicleStatusUrl, extraHeaders)
         : null,
-      vehicleTypesUrl
-        ? fetchJson<GbfsFeedResponse<{ vehicle_types: RawVehicleType[] }>>(
-            vehicleTypesUrl,
-            extraHeaders,
-          )
-        : null,
+      vehicleTypesUrl ? fetchJson<GbfsSystemVehicleTypes>(vehicleTypesUrl, extraHeaders) : null,
       pricingPlansUrl
-        ? fetchJson<GbfsFeedResponse<{ plans: RawPricingPlan[] }>>(pricingPlansUrl, extraHeaders)
+        ? fetchJson<GbfsSystemPricingPlanDocument>(pricingPlansUrl, extraHeaders)
         : null,
     ],
   );
@@ -150,23 +127,27 @@ export async function fetchGbfsSystem(
   const systemInfo: GbfsSystemInfo | null = sysInfoRes?.data
     ? {
         systemId: sysInfoRes.data.system_id,
-        name: localizedText(sysInfoRes.data.name),
-        operator: sysInfoRes.data.operator ? localizedText(sysInfoRes.data.operator) : undefined,
+        name: gbfsLocalizedTextToString(sysInfoRes.data.name),
+        operator: sysInfoRes.data.operator
+          ? gbfsLocalizedTextToString(sysInfoRes.data.operator)
+          : undefined,
         url: sysInfoRes.data.url,
         timezone: sysInfoRes.data.timezone,
-        openingHours: sysInfoRes.data.opening_hours,
+        openingHours:
+          "opening_hours" in sysInfoRes.data ? sysInfoRes.data.opening_hours : undefined,
       }
     : null;
 
   const stations: GbfsStationInfo[] = (stInfoRes?.data?.stations ?? []).map((s) => ({
     stationId: s.station_id,
-    name: typeof s.name === "string" ? s.name : localizedText(s.name),
+    name: gbfsLocalizedTextToString(s.name),
     lat: s.lat,
     lon: s.lon,
     capacity: s.capacity,
-    vehicleTypesAvailable: s.vehicle_types_available?.map(
-      (v: { vehicle_type_id: string }) => v.vehicle_type_id,
-    ),
+    vehicleTypesAvailable:
+      "vehicle_types_available" in s
+        ? s.vehicle_types_available?.map((v: { vehicle_type_id: string }) => v.vehicle_type_id)
+        : undefined,
     rentalUris: s.rental_uris,
   }));
 
@@ -174,21 +155,19 @@ export async function fetchGbfsSystem(
   for (const s of stStatusRes?.data?.stations ?? []) {
     stationStatuses.set(s.station_id, {
       stationId: s.station_id,
-      numBikesAvailable: s.num_bikes_available ?? s.num_vehicles_available ?? 0,
+      numBikesAvailable: getStationAvailabilityCount(s),
       numDocksAvailable: s.num_docks_available,
       isInstalled: s.is_installed ?? true,
       isRenting: s.is_renting ?? true,
       isReturning: s.is_returning ?? true,
-      vehicleTypesAvailable: s.vehicle_types_available?.map(
-        (v: { vehicle_type_id: string; count: number }) => ({
-          vehicleTypeId: v.vehicle_type_id,
-          count: v.count,
-        }),
-      ),
+      vehicleTypesAvailable: s.vehicle_types_available?.map((v) => ({
+        vehicleTypeId: v.vehicle_type_id,
+        count: v.count,
+      })),
     });
   }
 
-  const rawVehicles = vStatusRes?.data?.vehicles ?? vStatusRes?.data?.bikes ?? [];
+  const rawVehicles = getRawVehicleStatuses(vStatusRes);
   const vehicles: GbfsVehicleStatus[] = rawVehicles
     .filter((v) => v.bike_id || v.vehicle_id)
     .map((v) => ({
@@ -209,15 +188,12 @@ export async function fetchGbfsSystem(
       vehicleTypeId: vt.vehicle_type_id,
       formFactor: vt.form_factor ?? "bicycle",
       propulsionType: vt.propulsion_type ?? "human",
-      name: typeof vt.name === "string" ? vt.name : localizedText(vt.name),
+      name: gbfsLocalizedTextToString(vt.name),
       maxRangeMeters: vt.max_range_meters,
-      make: typeof vt.make === "string" ? vt.make : vt.make ? localizedText(vt.make) : undefined,
-      model:
-        typeof vt.model === "string" ? vt.model : vt.model ? localizedText(vt.model) : undefined,
+      make: vt.make ? gbfsLocalizedTextToString(vt.make) : undefined,
+      model: vt.model ? gbfsLocalizedTextToString(vt.model) : undefined,
       riderCapacity: vt.rider_capacity,
-      vehicleAccessories: vt.vehicle_accessories?.map((a) =>
-        typeof a === "string" ? a : localizedText(a),
-      ),
+      vehicleAccessories: vt.vehicle_accessories?.map((a) => gbfsLocalizedTextToString(a)),
       co2PerKm: vt.g_CO2_km,
       returnConstraint: vt.return_constraint,
       defaultPricingPlanId: vt.default_pricing_plan_id,
@@ -229,89 +205,15 @@ export async function fetchGbfsSystem(
   for (const pp of pricingRes?.data?.plans ?? []) {
     pricingPlans.set(pp.plan_id, {
       planId: pp.plan_id,
-      name: typeof pp.name === "string" ? pp.name : localizedText(pp.name),
+      name: gbfsLocalizedTextToString(pp.name),
       currency: pp.currency ?? "EUR",
       price: pp.price ?? 0,
       isTaxable: pp.is_taxable ?? false,
-      description: pp.description
-        ? typeof pp.description === "string"
-          ? pp.description
-          : localizedText(pp.description)
-        : undefined,
+      description: pp.description ? gbfsLocalizedTextToString(pp.description) : undefined,
       perKmPricing: pp.per_km_pricing,
       perMinPricing: pp.per_min_pricing,
     });
   }
 
   return { systemInfo, stations, stationStatuses, vehicles, vehicleTypes, pricingPlans };
-}
-
-function localizedText(val: unknown): string {
-  if (typeof val === "string") return val;
-  if (Array.isArray(val) && val.length > 0) return val[0].text ?? "";
-  if (typeof val === "object" && val !== null && "text" in val)
-    return (val as { text: string }).text;
-  return "";
-}
-
-// Raw API response types (snake_case from GBFS)
-interface RawStationInfo {
-  station_id: string;
-  name: string | { text: string }[];
-  lat: number;
-  lon: number;
-  capacity?: number;
-  vehicle_types_available?: { vehicle_type_id: string }[];
-  rental_uris?: { web?: string; android?: string; ios?: string };
-}
-
-interface RawStationStatus {
-  station_id: string;
-  num_bikes_available?: number;
-  num_vehicles_available?: number;
-  num_docks_available?: number;
-  is_installed?: boolean;
-  is_renting?: boolean;
-  is_returning?: boolean;
-  vehicle_types_available?: { vehicle_type_id: string; count: number }[];
-}
-
-interface RawVehicleStatus {
-  bike_id?: string;
-  vehicle_id?: string;
-  lat?: number;
-  lon?: number;
-  is_reserved?: boolean;
-  is_disabled?: boolean;
-  vehicle_type_id?: string;
-  current_range_meters?: number;
-  current_fuel_percent?: number;
-  station_id?: string;
-}
-
-interface RawVehicleType {
-  vehicle_type_id: string;
-  form_factor?: string;
-  propulsion_type?: string;
-  name?: string | { text: string }[];
-  max_range_meters?: number;
-  make?: string | { text: string }[];
-  model?: string | { text: string }[];
-  rider_capacity?: number;
-  vehicle_accessories?: (string | { text: string }[])[];
-  g_CO2_km?: number;
-  return_constraint?: string;
-  default_pricing_plan_id?: string;
-  pricing_plan_ids?: string[];
-}
-
-interface RawPricingPlan {
-  plan_id: string;
-  name: string | { text: string }[];
-  currency?: string;
-  price?: number;
-  is_taxable?: boolean;
-  description?: string | { text: string }[];
-  per_km_pricing?: { start: number; rate: number; interval: number; end?: number }[];
-  per_min_pricing?: { start: number; rate: number; interval: number; end?: number }[];
 }

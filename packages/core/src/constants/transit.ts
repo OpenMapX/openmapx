@@ -26,6 +26,12 @@ export interface ProviderAttribution {
  * this is only a last-resort fallback when the map is unavailable.
  */
 export function providerAttribution(provider: string): ProviderAttribution {
+  if (provider === "entur") return { label: "Entur", url: "https://entur.no" };
+  if (provider === "otdch")
+    return {
+      label: "OpenTransportData Switzerland",
+      url: "https://opentransportdata.swiss/en/",
+    };
   if (provider === "ris")
     return { label: "Deutsche Bahn", url: "https://developers.deutschebahn.com" };
   if (provider === "db-ris")

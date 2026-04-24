@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
   transitArrivalsForPlace: "/api/integrations/transit/arrivals/for-place",
   transitAlertsForPlace: "/api/integrations/transit/alerts/for-place",
   transitFacilitiesForPlace: "/api/integrations/transit/facilities/for-place",
+  transitStopInfrastructure: "/api/integrations/transit/stops/:id/infrastructure",
   transitStopPlatforms: "/api/integrations/transit/stops/:id/platform-stops",
   transitStopTimetable: "/api/integrations/transit/stops/:id/timetable",
   transitDepartures: "/api/integrations/transit/stops/:id/departures",
@@ -58,7 +59,5 @@ export const API_ENDPOINTS = {
   savedPlaces: "/api/saved/places",
   savedLabels: "/api/saved/labels",
   savedCheck: "/api/saved/check",
-  risMapsPositions: "/api/ris-maps/positions",
-  risMapsGeometry: "/api/ris-maps/geometry",
   capabilities: "/api/capabilities",
 } as const;

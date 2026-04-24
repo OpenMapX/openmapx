@@ -1,0 +1,76 @@
+{
+  "id": "live-transit-entur",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://developer.entur.org/pages-real-time-vehicle/",
+  "domains": ["live-transit"],
+  "dependencies": ["overlay-live-transit"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "clientName": {
+        "type": "string",
+        "title": "ET-Client-Name",
+        "description": "Client identifier sent to Entur realtime APIs. Entur recommends the format \"company-application\".",
+        "default": "openmapx-server"
+      },
+      "journeyPlannerEndpoint": {
+        "type": "string",
+        "title": "Journey Planner endpoint",
+        "description": "Full URL of the Entur Journey Planner v3 GraphQL endpoint.",
+        "format": "url"
+      },
+      "vehiclesEndpoint": {
+        "type": "string",
+        "title": "Vehicle positions endpoint",
+        "description": "Full URL of the Entur realtime vehicle GraphQL endpoint.",
+        "format": "url"
+      }
+    }
+  },
+  "healthCheck": {
+    "type": "custom"
+  },
+  "quality": "built-in",
+  "category": "Transit",
+  "dataSources": [
+    {
+      "sourceId": "entur-live-vehicles",
+      "name": "Entur Vehicle Positions v2",
+      "url": "https://developer.entur.org/pages-real-time-vehicle/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Data made available by Entur",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "entur-live-situations",
+      "name": "Entur Journey Planner Situations",
+      "url": "https://developer.entur.org/pages-journeyplanner-journeyplanner/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Data made available by Entur",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

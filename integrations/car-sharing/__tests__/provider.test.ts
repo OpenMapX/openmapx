@@ -4,7 +4,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../providers/registry.js", () => ({
   searchRegionalClients: vi.fn(),
@@ -12,6 +12,12 @@ vi.mock("../providers/registry.js", () => ({
 
 vi.mock("@openmapx/integration-shared-mobility/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
+  fetchSwissSharedMobilityDataForBbox: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
+}));
+
+vi.mock("@openmapx/integration-shared-mobility/entur-mobility", () => ({
+  enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
+  buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
@@ -20,6 +26,7 @@ vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
 
 vi.mock("@openmapx/integration-shared-mobility/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
+  dedupVehicles: vi.fn((items: unknown[]) => items),
 }));
 
 vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
@@ -34,7 +41,14 @@ vi.mock("../providers/merge-stations.js", () => ({
 }));
 
 import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
-import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+import {
+  buildEnturGeofencingMapContext,
+  enrichEnturMobilityItems,
+} from "@openmapx/integration-shared-mobility/entur-mobility";
+import {
+  fetchGbfsData,
+  fetchSwissSharedMobilityDataForBbox,
+} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
@@ -46,8 +60,15 @@ import { mergeRegionalStations } from "../providers/merge-stations.js";
 import { carSharingProvider } from "../providers/provider.js";
 import { searchRegionalClients } from "../providers/registry.js";
 
-afterEach(() => {
+beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(fetchSwissSharedMobilityDataForBbox).mockResolvedValue({
+    stations: [],
+    vehicles: [],
+  });
+});
+
+afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -104,6 +125,7 @@ describe("carSharingProvider.search", () => {
 
     const results = await carSharingProvider.search(makeBbox());
 
+    expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
     expect(mergeRegionalStations).toHaveBeenCalledWith(regional);
     expect(mapStationToResult).toHaveBeenCalledTimes(2);
     expect(results).toHaveLength(2);
@@ -194,6 +216,23 @@ describe("carSharingProvider.search", () => {
     const results = await carSharingProvider.search(makeBbox());
     expect(results).toEqual([]);
   });
+
+  it("runs Entur enrichment on deduplicated stations and vehicles", async () => {
+    vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
+    vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
+    const station = makeStation("gbfs-station", "gbfs");
+    const vehicle = makeVehicle("gbfs-vehicle", "gbfs");
+
+    vi.mocked(searchRegionalClients).mockResolvedValue([]);
+    vi.mocked(mergeRegionalStations).mockReturnValue([]);
+    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [vehicle] });
+    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
+    vi.mocked(dedupStations).mockReturnValue([station]);
+
+    await carSharingProvider.search(makeBbox());
+
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle]);
+  });
 });
 
 // getDetail()
@@ -250,5 +289,14 @@ describe("carSharingProvider.getDetail", () => {
   it("cache miss returns null", async () => {
     const result = await carSharingProvider.getDetail("totally-unknown-cs-id");
     expect(result).toBeNull();
+  });
+
+  it("delegates map context to Entur geofencing builder", async () => {
+    const bbox = makeBbox();
+    const options = { systemIds: ["bilkollektivet"], vehicleTypeIds: ["car"] };
+
+    await carSharingProvider.getMapContext(bbox, {}, options);
+
+    expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, options);
   });
 });

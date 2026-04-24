@@ -27,6 +27,10 @@ import { fetchNrwMobidromDetail, searchNrwMobidrom } from "./nrw-mobidrom.js";
 import { fetchNrwPrDetail, searchNrwPr } from "./nrw-pr.js";
 import { fetchNswAuDetail, searchNswAu } from "./nsw-au.js";
 import { fetchOdhItDetail, searchOdhIt } from "./opendatahub-it.js";
+import {
+  fetchOpenTransportDataChParkingDetail,
+  searchOpenTransportDataChParking,
+} from "./opentransportdata-ch.js";
 import { fetchOsmParkingElement, searchOsmParking } from "./osm.js";
 import { fetchParkApiV2Detail, searchParkApiV2 } from "./parkapi-v2.js";
 import { fetchParkApiV3Detail, searchParkApiV3 } from "./parkapi-v3.js";
@@ -133,6 +137,7 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       searchNrwPr(bbox),
       searchApag(bbox),
       searchParkApiV2(bbox),
+      searchOpenTransportDataChParking(bbox),
       searchRdwNl(bbox),
       searchBnlsFr(bbox),
       searchGhentBe(bbox),
@@ -227,6 +232,10 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       }
     }
 
+    if (itemId.startsWith("otdch-parking:")) {
+      return fetchOpenTransportDataChParkingDetail(itemId.slice("otdch-parking:".length));
+    }
+
     if (itemId.startsWith("bnls:")) return fetchBnlsFrDetail(itemId.slice("bnls:".length));
     if (itemId.startsWith("ghent:")) return fetchGhentBeDetail(itemId.slice("ghent:".length));
     if (itemId.startsWith("brussels:"))
@@ -291,6 +300,7 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       searchNrwPr(bbox),
       searchApag(bbox),
       searchDbBahnPark(bbox),
+      searchOpenTransportDataChParking(bbox),
       searchRdwNl(bbox),
       searchBnlsFr(bbox),
       searchGhentBe(bbox),

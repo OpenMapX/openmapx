@@ -1,0 +1,287 @@
+{
+  "id": "transit-opentransportdata-ch",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "API key from api-manager.opentransportdata.swiss for OJP, live alerts, GTFS-RT and optional formation access.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "opentransportdata-ch-api-key"
+      },
+      "requestorRef": {
+        "type": "string",
+        "title": "RequestorRef",
+        "description": "Requestor identifier sent in OJP XML requests.",
+        "default": "OpenMapX"
+      },
+      "requestLanguage": {
+        "type": "string",
+        "title": "Request language",
+        "description": "Preferred response language for OJP requests.",
+        "default": "de"
+      },
+      "ojpEndpoint": {
+        "type": "string",
+        "title": "OJP endpoint",
+        "description": "Primary Swiss OJP 2.0 endpoint.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/ojp20"
+      },
+      "ojpFareEndpoint": {
+        "type": "string",
+        "title": "OJP Fare endpoint",
+        "description": "Swiss OJP fare endpoint used for optional itinerary price lookup.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/ojpfare"
+      },
+      "fallbackEndpoint": {
+        "type": "string",
+        "title": "Fallback OJP endpoint",
+        "description": "Fallback Swiss OJP endpoint used if the primary endpoint fails.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/ojp2020"
+      },
+      "gtfsSaEndpoint": {
+        "type": "string",
+        "title": "GTFS-SA endpoint",
+        "description": "Swiss national GTFS Realtime Service Alerts endpoint.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/la/gtfs-sa"
+      },
+      "gtfsRtEndpoint": {
+        "type": "string",
+        "title": "GTFS-RT endpoint",
+        "description": "Swiss national GTFS Realtime Trip Updates endpoint.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/la/gtfs-rt"
+      },
+      "siriSxEndpoint": {
+        "type": "string",
+        "title": "SIRI-SX endpoint",
+        "description": "Swiss national planned/full SIRI Situation Exchange feed.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/la/siri-sx"
+      },
+      "siriSxUnplannedEndpoint": {
+        "type": "string",
+        "title": "SIRI-SX unplanned endpoint",
+        "description": "Swiss national unplanned/disruption-only SIRI Situation Exchange feed.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/la/siri-sx-unplanned"
+      },
+      "formationEndpoint": {
+        "type": "string",
+        "title": "Formation endpoint",
+        "description": "Swiss train formation API base URL for coach composition details.",
+        "format": "url",
+        "default": "https://api.opentransportdata.swiss/formation"
+      },
+      "userAgent": {
+        "type": "string",
+        "title": "User-Agent override",
+        "description": "Optional custom User-Agent for Swiss API calls."
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "custom"
+  },
+  "dataSources": [
+    {
+      "sourceId": "opentransportdata-ch-ojp",
+      "name": "Open data platform mobility Switzerland – Open Journey Planner",
+      "url": "https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-ojp-geometry-osm",
+      "name": "OpenStreetMap geometry used by Swiss OJP routing outputs",
+      "url": "https://www.openstreetmap.org/copyright",
+      "license": "ODbL 1.0",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
+      "attribution": "Contains geometry derived from OpenStreetMap where Swiss OJP uses OSM-backed routing.",
+      "commercialUse": "yes",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-gtfs-static",
+      "name": "Open data platform mobility Switzerland – GTFS static timetable",
+      "url": "https://opentransportdata.swiss/en/cookbook/timetable-cookbook/gtfs/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-gtfs-sa",
+      "name": "Open data platform mobility Switzerland – GTFS Realtime Service Alerts",
+      "url": "https://opentransportdata.swiss/en/cookbook/event-cookbook/gtfs-sa/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-gtfs-rt",
+      "name": "Open data platform mobility Switzerland – GTFS Realtime Trip Updates",
+      "url": "https://opentransportdata.swiss/en/cookbook/realtime-prediction-cookbook/gtfs-rt/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-siri-sx",
+      "name": "Open data platform mobility Switzerland – SIRI Situation Exchange",
+      "url": "https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-ojp-fare",
+      "name": "Open data platform mobility Switzerland – OJP Fare",
+      "url": "https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/ojp-fare/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-formation",
+      "name": "Open data platform mobility Switzerland – Train formation service",
+      "url": "https://opentransportdata.swiss/en/cookbook/formationsdaten/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-occupancy-forecast",
+      "name": "Open data platform mobility Switzerland – Occupancy forecast JSON dataset",
+      "url": "https://data.opentransportdata.swiss/en/dataset/occupancy-forecast-json-dataset",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-go-realtime",
+      "name": "Open data platform mobility Switzerland – Business organisations with realtime data",
+      "url": "https://data.opentransportdata.swiss/en/dataset/go-realtime",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-go-siri-sx",
+      "name": "Open data platform mobility Switzerland – Business organisations with SIRI-SX data",
+      "url": "https://data.opentransportdata.swiss/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-master-data",
+      "name": "Open data platform mobility Switzerland – Service and traffic points",
+      "url": "https://opentransportdata.swiss/en/cookbook/masterdata-cookbook/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ],
+  "dependencies": ["transit"]
+}

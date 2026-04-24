@@ -12,7 +12,14 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
-import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+import {
+  buildEnturGeofencingMapContext,
+  enrichEnturMobilityItems,
+} from "@openmapx/integration-shared-mobility/entur-mobility";
+import {
+  fetchGbfsData,
+  fetchSwissSharedMobilityDataForBbox,
+} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
@@ -70,6 +77,7 @@ class ScooterSharingProvider implements DataSourceProvider {
   readonly meta = META;
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
+  readonly mapContextCacheTtl = 300;
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return [];
@@ -84,15 +92,23 @@ class ScooterSharingProvider implements DataSourceProvider {
     ];
 
     // Fetch from all sources in parallel
-    const [gbfsResult, felyxResult, goSharingResult, linkResult, nrwResult, motisResult] =
-      await Promise.allSettled([
-        fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
-        searchFelyx(bbox),
-        searchGoSharing(bbox),
-        searchLink(bbox),
-        searchNrwMobidrom(bbox),
-        fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
-      ]);
+    const [
+      gbfsResult,
+      swissGbfsResult,
+      felyxResult,
+      goSharingResult,
+      linkResult,
+      nrwResult,
+      motisResult,
+    ] = await Promise.allSettled([
+      fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
+      fetchSwissSharedMobilityDataForBbox(bbox, SCOOTER_FORM_FACTORS, "other"),
+      searchFelyx(bbox),
+      searchGoSharing(bbox),
+      searchLink(bbox),
+      searchNrwMobidrom(bbox),
+      fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
+    ]);
 
     const results: DataSourceResult[] = [];
 
@@ -100,6 +116,9 @@ class ScooterSharingProvider implements DataSourceProvider {
     const allStations: SharedMobilityStation[] = [];
     if (gbfsResult.status === "fulfilled") {
       allStations.push(...gbfsResult.value.stations);
+    }
+    if (swissGbfsResult.status === "fulfilled") {
+      allStations.push(...swissGbfsResult.value.stations);
     }
     // Aggregator stations (appended last so direct GBFS takes dedup priority)
     if (nrwResult.status === "fulfilled") {
@@ -109,25 +128,33 @@ class ScooterSharingProvider implements DataSourceProvider {
       allStations.push(...motisResult.value.stations);
     }
 
-    // Dedup and map stations
-    const deduped = dedupStations(allStations);
-    for (const station of deduped) {
-      updateCache(station.id, station);
-      results.push(mapStationToResult(station));
-    }
-
     // Collect all free-floating vehicles: direct sources first, aggregators last.
     // dedupVehicles drops aggregator (NRW Mobidrom, MOTIS/Transitous) vehicles that have a
     // direct-source counterpart with the same raw vehicle ID.
     const allVehicles: SharedMobilityVehicle[] = [];
     if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
+    if (swissGbfsResult.status === "fulfilled") allVehicles.push(...swissGbfsResult.value.vehicles);
     if (felyxResult.status === "fulfilled") allVehicles.push(...felyxResult.value);
     if (goSharingResult.status === "fulfilled") allVehicles.push(...goSharingResult.value);
     if (linkResult.status === "fulfilled") allVehicles.push(...linkResult.value);
     if (nrwResult.status === "fulfilled") allVehicles.push(...nrwResult.value.vehicles);
     if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
 
-    for (const vehicle of dedupVehicles(allVehicles)) {
+    const dedupedStations = dedupStations(allStations);
+    const dedupedVehicles = dedupVehicles(allVehicles);
+
+    try {
+      await enrichEnturMobilityItems(dedupedStations, dedupedVehicles);
+    } catch (error) {
+      console.warn("[scooter-sharing] Entur enrichment failed", error);
+    }
+
+    for (const station of dedupedStations) {
+      updateCache(station.id, station);
+      results.push(mapStationToResult(station));
+    }
+
+    for (const vehicle of dedupedVehicles) {
       updateCache(vehicle.id, vehicle);
       results.push(mapVehicleToResult(vehicle));
     }
@@ -143,6 +170,14 @@ class ScooterSharingProvider implements DataSourceProvider {
     }
 
     return null;
+  }
+
+  async getMapContext(
+    bbox: BoundingBox,
+    _filters?: Record<string, unknown>,
+    options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+  ) {
+    return buildEnturGeofencingMapContext(bbox, options);
   }
 }
 

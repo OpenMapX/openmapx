@@ -109,6 +109,51 @@ function slugify(name: string, countryCode: string): string {
   return `${countryCode}_${base}`;
 }
 
+function secondSundayOfDecemberUtc(year: number): Date {
+  const date = new Date(Date.UTC(year, 11, 1));
+  while (date.getUTCDay() !== 0) {
+    date.setUTCDate(date.getUTCDate() + 1);
+  }
+  date.setUTCDate(date.getUTCDate() + 7);
+  return date;
+}
+
+function swissTimetableYear(now = new Date()): number {
+  const year = now.getUTCFullYear();
+  return now >= secondSundayOfDecemberUtc(year) ? year + 1 : year;
+}
+
+function buildSwissOfficialFeeds(now = new Date()): CatalogFeed[] {
+  const timetableYear = swissTimetableYear(now);
+  return [
+    {
+      id: `opentransportdata-swiss:ch:timetable-${timetableYear}-gtfs2020`,
+      name: `Switzerland Timetable ${timetableYear} (GTFS2020)`,
+      source: "opentransportdata-swiss",
+      countryCode: "ch",
+      url: `https://data.opentransportdata.swiss/en/dataset/timetable-${timetableYear}-gtfs2020/permalink`,
+      license: "Open data platform mobility Switzerland terms of use",
+      bbox: COUNTRY_BBOXES.ch,
+    },
+  ];
+}
+
+function mergeCatalogFeeds(feeds: CatalogFeed[]): CatalogFeed[] {
+  const byId = new Map<string, CatalogFeed>();
+  for (const feed of feeds) {
+    byId.set(feed.id, feed);
+  }
+  return [...byId.values()].sort((left, right) => {
+    if (left.source === "opentransportdata-swiss" && right.source !== "opentransportdata-swiss") {
+      return -1;
+    }
+    if (right.source === "opentransportdata-swiss" && left.source !== "opentransportdata-swiss") {
+      return 1;
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
 async function fetchTransitousCatalog(): Promise<CatalogFeed[]> {
   const tree = await fetchJson<{ tree: GitHubTreeEntry[] }>(
     `${GITHUB_API}/repos/public-transport/transitous/git/trees/main?recursive=1`,
@@ -182,12 +227,17 @@ export async function getCatalogFeeds(): Promise<CatalogFeed[]> {
   }
 
   try {
-    cachedFeeds = await fetchTransitousCatalog();
+    cachedFeeds = mergeCatalogFeeds([
+      ...buildSwissOfficialFeeds(),
+      ...(await fetchTransitousCatalog()),
+    ]);
     lastFetchedAt = now;
-    console.log(`[gtfs-catalog] Loaded ${cachedFeeds.length} feeds from Transitous catalog`);
+    console.log(
+      `[gtfs-catalog] Loaded ${cachedFeeds.length} feeds from official Swiss + Transitous catalogs`,
+    );
   } catch (err) {
     console.warn("[gtfs-catalog] Failed to fetch catalog:", err);
-    if (!cachedFeeds) cachedFeeds = [];
+    if (!cachedFeeds) cachedFeeds = buildSwissOfficialFeeds();
   }
 
   return cachedFeeds;

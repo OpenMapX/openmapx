@@ -1,0 +1,11 @@
+{
+  "name": "Entur Geocoding",
+  "description": "Forward geocoding, autocomplete, reverse geocoding, and NSR-backed transit-stop suggestions for Norway",
+  "dataSources": [
+    {
+      "purpose": "Search Norwegian places, addresses, POIs, and public-transport stops via Entur's geocoder; reverse geocode coordinates; preserve NSR stop identifiers for downstream transit flows",
+      "dataSent": "Search query text or coordinates (longitude, latitude), language, optional Norway-first country filter, multimodal stop mode, ET-Client-Name header",
+      "dataReceived": "GeoJSON-like features with names, coordinates, NSR and Entur IDs, stop categories, transport modes, locality/county context"
+    }
+  ]
+}

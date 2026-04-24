@@ -1,36 +1,17 @@
 import type { BBox } from "@openmapx/core";
+import { mapGtfsRouteTypeToMode } from "@openmapx/mobility-formats";
 import { sql } from "./db";
-import type { GtfsDepartureRow, GtfsStopRow } from "./types";
-
-// Route Type → Mode Mapping
-
-const ROUTE_TYPE_MODE: Record<number, string> = {
-  0: "tram",
-  1: "subway",
-  2: "rail",
-  3: "bus",
-  4: "ferry",
-  5: "cable_car",
-  6: "gondola",
-  7: "funicular",
-  11: "bus", // trolleybus
-  12: "monorail",
-};
+import type {
+  GtfsDepartureRow,
+  GtfsRepresentativeTripRow,
+  GtfsShapePointRow,
+  GtfsStopRow,
+  GtfsTripStopRow,
+} from "./types";
 
 /** Map GTFS route_type (numeric, incl. extended) to TransportMode string. */
 export function routeTypeToMode(routeType: number): string {
-  if (ROUTE_TYPE_MODE[routeType]) return ROUTE_TYPE_MODE[routeType];
-  // Google extended types: ranges
-  if (routeType >= 100 && routeType < 200) return "rail";
-  if (routeType >= 200 && routeType < 300) return "bus"; // coach
-  if (routeType >= 400 && routeType < 500) return "subway"; // urban rail
-  if (routeType >= 700 && routeType < 800) return "bus";
-  if (routeType >= 900 && routeType < 1000) return "tram";
-  if (routeType >= 1000 && routeType < 1100) return "ferry";
-  if (routeType >= 1200 && routeType < 1300) return "ferry";
-  if (routeType >= 1300 && routeType < 1400) return "gondola";
-  if (routeType >= 1400 && routeType < 1500) return "funicular";
-  return "bus";
+  return mapGtfsRouteTypeToMode(routeType);
 }
 
 // Stops
@@ -315,4 +296,189 @@ export async function getSchemaStats(
     routes: Number(routes[0].c),
     trips: Number(trips[0].c),
   };
+}
+
+const schemaStopOriginalIdSupport = new Map<string, boolean>();
+
+/** Invalidate per-schema metadata caches. Call before/after a schema is dropped or re-imported. */
+export function invalidateSchemaCaches(schema: string): void {
+  schemaStopOriginalIdSupport.delete(schema);
+}
+
+async function hasOriginalStopIdColumn(schema: string): Promise<boolean> {
+  const cached = schemaStopOriginalIdSupport.get(schema);
+  if (cached !== undefined) return cached;
+
+  const rows = await sql.unsafe(
+    `
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = $1
+        AND table_name = 'stops'
+        AND column_name = 'original_stop_id'
+    ) AS exists
+    `,
+    [schema],
+  );
+  const exists = rows[0]?.exists === true;
+  schemaStopOriginalIdSupport.set(schema, exists);
+  return exists;
+}
+
+export async function findRepresentativeTrip(
+  schema: string,
+  options: {
+    routeShortName: string;
+    headsign?: string;
+    operatorName?: string;
+    stopRefs?: string[];
+    stopNames?: string[];
+  },
+): Promise<GtfsRepresentativeTripRow | null> {
+  const stopRefTerms = [
+    ...new Set((options.stopRefs ?? []).map((value) => value.trim()).filter(Boolean)),
+  ];
+  const stopNameTerms = [
+    ...new Set(
+      (options.stopNames ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean),
+    ),
+  ];
+  const hasOriginalStopId = await hasOriginalStopIdColumn(schema);
+  const originalStopIdExpr = hasOriginalStopId ? "COALESCE(s.original_stop_id, '')" : "''";
+
+  const rows = await sql.unsafe(
+    `
+    WITH candidate_trips AS (
+      SELECT
+        t.trip_id,
+        r.route_id,
+        r.route_short_name,
+        r.route_long_name,
+        r.route_type,
+        r.route_color,
+        r.route_text_color,
+        t.trip_headsign,
+        t.shape_id,
+        a.agency_name,
+        COUNT(*) FILTER (
+          WHERE cardinality($4::text[]) > 0
+            AND (
+              s.stop_id = ANY($4::text[])
+              OR ${originalStopIdExpr} = ANY($4::text[])
+            )
+        ) AS stop_ref_matches,
+        COUNT(*) FILTER (
+          WHERE cardinality($5::text[]) > 0
+            AND lower(s.stop_name) = ANY($5::text[])
+        ) AS stop_name_matches,
+        CASE
+          WHEN $2::text IS NULL THEN 0
+          WHEN COALESCE(t.trip_headsign, '') ILIKE $2::text THEN 2
+          WHEN COALESCE(r.route_long_name, '') ILIKE $2::text THEN 1
+          ELSE 0
+        END AS headsign_score,
+        CASE
+          WHEN $3::text IS NULL THEN 0
+          WHEN COALESCE(a.agency_name, '') ILIKE $3::text THEN 2
+          ELSE 0
+        END AS operator_score,
+        COUNT(*) AS stop_count,
+        (
+          SELECT MIN(ABS(sd.date - CURRENT_DATE))
+          FROM "${schema}".service_days sd
+          WHERE sd.service_id = t.service_id
+        ) AS day_distance
+      FROM "${schema}".trips t
+      JOIN "${schema}".routes r ON r.route_id = t.route_id
+      LEFT JOIN "${schema}".agency a ON a.agency_id = r.agency_id
+      JOIN "${schema}".stop_times st ON st.trip_id = t.trip_id
+      JOIN "${schema}".stops s ON s.stop_id = st.stop_id
+      WHERE r.route_short_name = $1
+      GROUP BY
+        t.trip_id,
+        r.route_id,
+        r.route_short_name,
+        r.route_long_name,
+        r.route_type,
+        r.route_color,
+        r.route_text_color,
+        t.trip_headsign,
+        t.shape_id,
+        a.agency_name
+    )
+    SELECT
+      trip_id,
+      route_id,
+      route_short_name,
+      route_long_name,
+      route_type,
+      route_color,
+      route_text_color,
+      trip_headsign,
+      shape_id,
+      agency_name
+    FROM candidate_trips
+    ORDER BY
+      stop_ref_matches DESC,
+      stop_name_matches DESC,
+      headsign_score DESC,
+      operator_score DESC,
+      day_distance ASC NULLS LAST,
+      stop_count DESC,
+      trip_id ASC
+    LIMIT 1
+    `,
+    [
+      options.routeShortName,
+      options.headsign ? `%${options.headsign}%` : null,
+      options.operatorName ? `%${options.operatorName}%` : null,
+      stopRefTerms,
+      stopNameTerms,
+    ],
+  );
+  return rows.length > 0 ? (rows[0] as unknown as GtfsRepresentativeTripRow) : null;
+}
+
+export async function getTripStops(schema: string, tripId: string): Promise<GtfsTripStopRow[]> {
+  const hasOriginalStopId = await hasOriginalStopIdColumn(schema);
+  const originalStopIdExpr = hasOriginalStopId ? "s.original_stop_id" : "NULL::text";
+  const rows = await sql.unsafe(
+    `
+    SELECT
+      s.stop_id,
+      s.stop_name,
+      s.stop_lat,
+      s.stop_lon,
+      s.parent_station,
+      s.platform_code,
+      ${originalStopIdExpr} AS original_stop_id,
+      st.stop_sequence
+    FROM "${schema}".stop_times st
+    JOIN "${schema}".stops s ON s.stop_id = st.stop_id
+    WHERE st.trip_id = $1
+    ORDER BY st.stop_sequence
+    `,
+    [tripId],
+  );
+  return rows as unknown as GtfsTripStopRow[];
+}
+
+export async function getShapePoints(
+  schema: string,
+  shapeId: string,
+): Promise<GtfsShapePointRow[]> {
+  const rows = await sql.unsafe(
+    `
+    SELECT
+      shape_pt_lat,
+      shape_pt_lon,
+      shape_pt_sequence
+    FROM "${schema}".shapes
+    WHERE shape_id = $1
+    ORDER BY shape_pt_sequence
+    `,
+    [shapeId],
+  );
+  return rows as unknown as GtfsShapePointRow[];
 }

@@ -6,6 +6,13 @@
  */
 
 import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import type {
+  GbfsV23FreeBikeStatus,
+  GbfsV23StationInformation,
+  GbfsV23StationStatus,
+  GbfsV23SystemInformation,
+  GbfsV23VehicleTypes,
+} from "@openmapx/mobility-formats";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
 const BASE_URL = "https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de";
@@ -64,62 +71,8 @@ async function fetchJson<T>(
   }
 }
 
-// GBFS v2.3 response shapes (DB-specific subset)
-interface GbfsWrapper<T> {
-  data: T;
-  last_updated: number;
-  ttl: number;
-  version: string;
-}
-
-interface RawStationInfo {
-  station_id: string;
-  name: string;
-  lat: number;
-  lon: number;
-  capacity?: number;
-  address?: string;
-}
-
-interface RawStationStatus {
-  station_id: string;
-  num_bikes_available: number;
-  num_docks_available?: number;
-  is_installed: boolean;
-  is_renting: boolean;
-  is_returning: boolean;
-  last_reported: number;
-}
-
-interface RawFreeBike {
-  bike_id: string;
-  lat?: number;
-  lon?: number;
-  is_reserved: boolean;
-  is_disabled: boolean;
-  current_fuel_percent?: number;
-  current_range_meters?: number;
-  vehicle_type_id?: string;
-  station_id?: string;
-  _bike_number?: string;
-}
-
-interface RawVehicleType {
-  vehicle_type_id: string;
-  form_factor: string;
-  propulsion_type: string;
-  name?: string;
-  max_range_meters?: number;
-}
-
-interface RawSystemInfo {
-  system_id: string;
-  name: string;
-  operator?: string;
-  language: string;
-  timezone: string;
-  url?: string;
-}
+type RawStationStatus = GbfsV23StationStatus["data"]["stations"][number];
+type RawVehicleType = GbfsV23VehicleTypes["data"]["vehicle_types"][number];
 
 async function fetchProvider(
   providerId: string,
@@ -146,11 +99,11 @@ async function fetchProvider(
 
   // Fetch all feeds in parallel
   const [sysInfoRes, stInfoRes, stStatusRes, freeBikeRes, vTypesRes] = await Promise.all([
-    fetchJson<GbfsWrapper<RawSystemInfo>>(`${base}/system_information`, creds),
-    fetchJson<GbfsWrapper<{ stations: RawStationInfo[] }>>(`${base}/station_information`, creds),
-    fetchJson<GbfsWrapper<{ stations: RawStationStatus[] }>>(`${base}/station_status`, creds),
-    fetchJson<GbfsWrapper<{ bikes: RawFreeBike[] }>>(`${base}/free_bike_status`, creds),
-    fetchJson<GbfsWrapper<{ vehicle_types: RawVehicleType[] }>>(`${base}/vehicle_types`, creds),
+    fetchJson<GbfsV23SystemInformation>(`${base}/system_information`, creds),
+    fetchJson<GbfsV23StationInformation>(`${base}/station_information`, creds),
+    fetchJson<GbfsV23StationStatus>(`${base}/station_status`, creds),
+    fetchJson<GbfsV23FreeBikeStatus>(`${base}/free_bike_status`, creds),
+    fetchJson<GbfsV23VehicleTypes>(`${base}/vehicle_types`, creds),
   ]);
 
   const operator = sysInfoRes?.data?.operator ?? sysInfoRes?.data?.name ?? providerId;

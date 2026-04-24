@@ -1,0 +1,11 @@
+{
+  "name": "Entur Transit",
+  "description": "Norwegenweite ÖPNV-Haltestellen, Abfahrtstafeln, Linien, Reiseplanung, Störungen, Fahrzeuge und Haltestellen-Facilities über Entur",
+  "dataSources": [
+    {
+      "purpose": "Suche nach norwegischen Haltestellen sowie Abruf von Abfahrtstafeln, Liniendetails, Haltestellenfolgen, Echtzeitfahrten, Störungsmeldungen, Live-Fahrzeugen und Haltestellen-Metadaten über Enturs öffentliche APIs",
+      "dataSent": "Koordinaten, Haltestellen-IDs, Linien-IDs, Service-Journey-IDs, Zeitfenster, optionaler Norwegen-Filter, Modus für multimodale Haltestellen, ET-Client-Name-Header",
+      "dataReceived": "Journey-Planner-GraphQL-Haltestellen, Linien, Trip-Patterns, Estimated Calls, Situations, codierte Liniengeometrien, Echtzeit-Fahrzeugpositionen sowie NSR-Daten zu Barrierefreiheit, Ausstattung und Parkmöglichkeiten"
+    }
+  ]
+}

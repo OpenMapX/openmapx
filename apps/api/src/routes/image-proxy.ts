@@ -28,6 +28,8 @@ const ALLOWED_HOSTS = [
   "photos.google.com",
   // OpenStreetMap / other
   "tile.openstreetmap.org",
+  // Entur Mobility branding/vehicle assets exposed by the server-side provider.
+  "api.entur.io",
 ];
 
 function isAllowedHost(hostname: string): boolean {

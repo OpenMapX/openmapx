@@ -2,9 +2,15 @@
 
 export type {
   DataSourceAttribution,
+  DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,
   DataSourceFilterDef,
+  DataSourceGeoJsonFeature,
+  DataSourceGeoJsonFeatureCollection,
+  DataSourceGeoJsonGeometry,
+  DataSourceMapContext,
+  DataSourceMapContextSelection,
   DataSourceMarkerStyle,
   DataSourceMeta,
   DataSourceResult,
@@ -64,8 +70,29 @@ export type {
   RouteLive,
   RouteStop,
   ServiceAlert,
+  TransitAccessibilityItem,
+  TransitAmenityItem,
+  TransitFareZoneSummary,
+  TransitFormationDetail,
+  TransitFormationReference,
+  TransitFormationStopSummary,
+  TransitFormationVehicleDetail,
+  TransitGeoJsonMultiPolygon,
+  TransitGeoJsonPolygon,
+  TransitInterchangeComplexity,
+  TransitIntermodalLeg,
+  TransitPlatformDetail,
   TransitRoute,
+  TransitServiceAttribute,
+  TransitServiceInfo,
+  TransitStationIntelligence,
   TransitStop,
+  TransitStopAreaSummary,
+  TransitStopInfrastructure,
+  TransitStopInfrastructureFact,
+  TransitStopInfrastructureGeometry,
+  TransitStopParking,
+  TransitTopographicPlaceSummary,
   TransportMode,
   TripFare,
   TripItinerary,
@@ -130,6 +157,7 @@ export type {
 export { ALLOWED_GIT_HOSTS, assertAllowedGitUrl, InvalidGitUrlError } from "./git-url";
 // Hooks — Transit
 export {
+  resolvePrimaryTransitStopId,
   useArrivals,
   useDepartures,
   useLinkedTransitAlerts,
@@ -138,6 +166,7 @@ export {
   useLinkedTransitFacilities,
   useLinkedTransitRoutes,
   useLinkedTransitStops,
+  usePlaceStopInfrastructure,
   useProviders,
   useRouteAlerts,
   useRouteLive,
@@ -145,6 +174,7 @@ export {
   useRoutesForStop,
   useStopAlerts,
   useStopFacilities,
+  useStopInfrastructure,
   useStopPlatforms,
   useStopSearch,
   useStopsNearby,
@@ -171,6 +201,7 @@ export { useDataSourceMatch } from "./hooks/useDataSourceMatch";
 // Hooks — Data Sources
 export {
   useDataSourceDetail,
+  useDataSourceMapContext,
   useDataSourceSearch,
   useDataSources,
 } from "./hooks/useDataSources";
@@ -190,7 +221,6 @@ export { useIntegrationOverlayActive } from "./hooks/useIntegrationOverlay";
 // Integration hooks
 export { IntegrationRegistryContext, useIntegrationRegistry } from "./hooks/useIntegrationRegistry";
 export { useIsochrone } from "./hooks/useIsochrone";
-export { useLiveTrains } from "./hooks/useLiveTrains";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
@@ -429,6 +459,10 @@ export {
   downsampleLTTB,
 } from "./utils/elevation";
 export { ConfigurationError } from "./utils/errors";
+export {
+  type FetchWithRedirectsOptions,
+  fetchWithRedirects,
+} from "./utils/fetchWithRedirects";
 export { escapeHtml, formatTime, relativeTime, sanitizeUrl } from "./utils/format";
 export {
   formatArea,

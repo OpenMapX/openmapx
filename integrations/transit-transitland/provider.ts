@@ -1,19 +1,7 @@
 import type { BBox, Departure, TransitRoute, TransitStop, TransportMode } from "@openmapx/core";
+import { GTFS_ROUTE_TYPE_MODE, mapGtfsRouteTypeToMode } from "@openmapx/mobility-formats";
 
 const BASE_URL = "https://transit.land/api/v2/rest";
-
-const GTFS_MODE_MAP: Record<number, TransportMode> = {
-  0: "tram",
-  1: "subway",
-  2: "rail",
-  3: "bus",
-  4: "ferry",
-  5: "cable_car",
-  6: "gondola",
-  7: "funicular",
-  11: "bus",
-  12: "monorail",
-};
 
 // Populated by setup(ctx) from the resolved integration config cascade.
 let transitlandApiKey: string | null = null;
@@ -40,7 +28,7 @@ async function tlFetch<T>(path: string, params: Record<string, string>): Promise
 
 function mapModes(routeTypes?: number[]): TransportMode[] {
   if (!routeTypes?.length) return ["bus"];
-  return routeTypes.map((t) => GTFS_MODE_MAP[t]).filter((m): m is TransportMode => m !== undefined);
+  return routeTypes.map((t) => mapGtfsRouteTypeToMode(t));
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: external API response
@@ -63,7 +51,7 @@ function normalizeStop(s: any): TransitStop {
 
 // biome-ignore lint/suspicious/noExplicitAny: external API response
 function normalizeRoute(r: any): TransitRoute {
-  const mode: TransportMode = GTFS_MODE_MAP[r.route_type as number] ?? "bus";
+  const mode: TransportMode = mapGtfsRouteTypeToMode(r.route_type as number);
   const color = r.route_color ? r.route_color.replace(/^#/, "") : undefined;
   const textColor = r.route_text_color ? r.route_text_color.replace(/^#/, "") : undefined;
   return {
@@ -81,7 +69,7 @@ function normalizeRoute(r: any): TransitRoute {
 // biome-ignore lint/suspicious/noExplicitAny: external API response
 function normalizeDeparture(d: any): Departure {
   const route = d.trip?.route ?? d.route ?? {};
-  const mode: TransportMode = GTFS_MODE_MAP[route.route_type as number] ?? "bus";
+  const mode: TransportMode = mapGtfsRouteTypeToMode(route.route_type as number);
   const color = route.route_color ? route.route_color.replace(/^#/, "") : undefined;
   const scheduled = d.departure_time as string;
   const expected = d.departure_time_actual as string | undefined;
@@ -114,10 +102,10 @@ export async function getStops(bbox: BBox, modes?: TransportMode[]): Promise<Tra
     per_page: "100",
   };
   if (modes?.length) {
-    // Collect ALL GTFS route_type values for each requested mode
-    const routeTypes = Object.entries(GTFS_MODE_MAP)
-      .filter(([, v]) => modes.includes(v))
-      .map(([k]) => k);
+    // Collect all explicit GTFS route_type values for the requested modes.
+    const routeTypes = Object.entries(GTFS_ROUTE_TYPE_MODE)
+      .filter(([, value]) => modes.includes(value))
+      .map(([routeType]) => routeType);
     if (routeTypes.length) {
       params.served_by_route_types = routeTypes.join(",");
     }

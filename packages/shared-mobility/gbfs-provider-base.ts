@@ -11,9 +11,10 @@ import {
   loadCatalog,
   normalizeFormFactor,
   normalizeGbfsPropulsion,
+  probeSystem,
   sortByRelevance,
 } from "./gbfs-catalog.js";
-import { fetchGbfsSystem } from "./gbfs-client.js";
+import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import { reverseGeocodeCity } from "./nominatim.js";
 import type {
   PricingDetail,
@@ -23,7 +24,8 @@ import type {
   VehicleTypeDetail,
 } from "./types.js";
 
-const MAX_SYSTEMS_PER_SEARCH = 20;
+const SYSTEM_PROBE_CONCURRENCY = 8;
+const MAX_SYSTEMS_PER_SEARCH = 64;
 
 // Operators covered by dedicated clients or known to be defunct — skip in GBFS catalog
 const EXCLUDED_GBFS_PREFIXES = [
@@ -32,6 +34,16 @@ const EXCLUDED_GBFS_PREFIXES = [
 // Redis cache key prefix and TTL for per-system station/vehicle data
 const SYSTEM_CACHE_PREFIX = "cache:gbfs:system:";
 const SYSTEM_CACHE_TTL = TTL.sharedMobility.stations; // 120s
+const ENTUR_GBFS_HOST = "api.entur.io/mobility/v2/gbfs/";
+const ENTUR_CLIENT_NAME = "openmapx-server";
+const SWISS_SHARED_MOBILITY_SYSTEM_ID = "sharedmobility.ch";
+const SWISS_SHARED_MOBILITY_DISCOVERY_URL = "https://sharedmobility.ch/gbfs.json";
+export const SWISS_SHARED_MOBILITY_BBOX: BoundingBox = {
+  west: 5.96,
+  south: 45.82,
+  east: 10.49,
+  north: 47.81,
+};
 
 interface CachedSystemData {
   stations: SharedMobilityStation[];
@@ -45,6 +57,54 @@ const GARBAGE_NAME_RE =
 function isGarbageName(name: string): boolean {
   if (!name || name.length < 2) return true;
   return GARBAGE_NAME_RE.test(name.trim());
+}
+
+function bboxOverlaps(a: BoundingBox, b: BoundingBox): boolean {
+  return a.south <= b.north && a.north >= b.south && a.west <= b.east && a.east >= b.west;
+}
+
+export function bboxOverlapsSwitzerland(bbox: BoundingBox): boolean {
+  return bboxOverlaps(bbox, SWISS_SHARED_MOBILITY_BBOX);
+}
+
+function probeVehicleTypesMatchTarget(
+  vehicleTypes: Set<string>,
+  targetFormFactors: Set<VehicleFormFactor>,
+  unknownFormFactor: VehicleFormFactor,
+): boolean {
+  if (vehicleTypes.size === 0) return true;
+  for (const vehicleType of vehicleTypes) {
+    if (targetFormFactors.has(vehicleType as VehicleFormFactor)) return true;
+    if (vehicleType === "other" && targetFormFactors.has(unknownFormFactor)) return true;
+  }
+  return false;
+}
+
+async function mapSettledWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const item = items[index] as T;
+        try {
+          results[index] = { status: "fulfilled", value: await fn(item) };
+        } catch (reason) {
+          results[index] = { status: "rejected", reason };
+        }
+      }
+    }),
+  );
+
+  return results;
 }
 
 /**
@@ -73,33 +133,36 @@ export async function fetchGbfsData(
   const centerLon = (bbox.west + bbox.east) / 2;
   const city = await reverseGeocodeCity(centerLat, centerLon);
 
-  // Sort: city-matching systems first, then scooter keywords, then rest
+  // Sort for deterministic probing/fetching order, then cap the fan-out so
+  // large countries cannot trigger hundreds of full GBFS fetches per search.
   const sorted = sortByRelevance(filtered, city);
-  // When city is known, probe all city-matching systems + up to MAX_SYSTEMS_PER_SEARCH others.
-  // When city is unknown, fall back to the limit (avoids probing 500+ systems).
-  const cityLower = city?.toLowerCase() ?? null;
-  const cityMatchCount = cityLower
-    ? sorted.filter(
-        (e) =>
-          e.systemId.toLowerCase().includes(cityLower) ||
-          e.name.toLowerCase().includes(cityLower) ||
-          e.location.toLowerCase().includes(cityLower),
-      ).length
-    : 0;
-  const limit = Math.max(MAX_SYSTEMS_PER_SEARCH, cityMatchCount);
-  const limited = sorted.slice(0, limit);
+  const probeCandidates = sorted.slice(0, MAX_SYSTEMS_PER_SEARCH);
 
-  console.log(
-    `[gbfs] Catalog: ${catalog.length} total, ${candidates.length} country, ${filtered.length} after exclusions, city="${city}"`,
+  const probed = await mapSettledWithConcurrency(
+    probeCandidates,
+    SYSTEM_PROBE_CONCURRENCY,
+    async (entry) => {
+      const probe = await probeSystem(entry);
+      if (!probe) return null;
+      if (!bboxOverlaps(probe.bbox, bbox)) return null;
+      if (!probeVehicleTypesMatchTarget(probe.vehicleTypes, targetFormFactors, unknownFormFactor)) {
+        return null;
+      }
+      return { entry, systemData: probe.systemData };
+    },
   );
-
-  console.log(
-    `[gbfs] Probing ${limited.length} systems:`,
-    limited.map((e) => e.systemId).join(", "),
-  );
+  const matchingEntries: Array<{
+    entry: (typeof probeCandidates)[number];
+    systemData?: GbfsSystemData;
+  }> = [];
+  for (const result of probed) {
+    if (result.status === "fulfilled" && result.value) {
+      matchingEntries.push(result.value);
+    }
+  }
 
   const results = await Promise.allSettled(
-    limited.map((entry) =>
+    matchingEntries.map(({ entry, systemData }) =>
       fetchSystemData(
         entry.systemId,
         entry.autoDiscoveryUrl,
@@ -107,6 +170,7 @@ export async function fetchGbfsData(
         bbox,
         targetFormFactors,
         unknownFormFactor,
+        systemData,
       ),
     ),
   );
@@ -124,6 +188,38 @@ export async function fetchGbfsData(
   return { stations, vehicles };
 }
 
+/**
+ * Dedicated Swiss shared mobility entrypoint.
+ * Uses the official sharedmobility.ch GBFS discovery feed directly so Swiss
+ * coverage works even when the global GBFS catalog is stale or under-ranked.
+ */
+export async function fetchSwissSharedMobilityData(
+  bbox: BoundingBox,
+  targetFormFactors: Set<VehicleFormFactor>,
+  unknownFormFactor: VehicleFormFactor = "bicycle",
+): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
+  const result = await fetchSystemData(
+    SWISS_SHARED_MOBILITY_SYSTEM_ID,
+    SWISS_SHARED_MOBILITY_DISCOVERY_URL,
+    "sharedmobility.ch",
+    bbox,
+    targetFormFactors,
+    unknownFormFactor,
+  );
+  return result ?? { stations: [], vehicles: [] };
+}
+
+export async function fetchSwissSharedMobilityDataForBbox(
+  bbox: BoundingBox,
+  targetFormFactors: Set<VehicleFormFactor>,
+  unknownFormFactor: VehicleFormFactor = "bicycle",
+): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
+  if (!bboxOverlapsSwitzerland(bbox)) {
+    return { stations: [], vehicles: [] };
+  }
+  return fetchSwissSharedMobilityData(bbox, targetFormFactors, unknownFormFactor);
+}
+
 async function fetchSystemData(
   systemId: string,
   autoDiscoveryUrl: string,
@@ -131,9 +227,10 @@ async function fetchSystemData(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
   unknownFormFactor: VehicleFormFactor,
+  prefetchedSystemData?: GbfsSystemData,
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] } | null> {
   // Check Redis cache (persists across requests with different bboxes)
-  const cacheKey = `${SYSTEM_CACHE_PREFIX}${systemId}`;
+  const cacheKey = `${SYSTEM_CACHE_PREFIX}${systemId}:${[...targetFormFactors].sort().join(",")}:${unknownFormFactor}`;
   const cached = await cacheGet<CachedSystemData>(cacheKey);
   if (cached) {
     return {
@@ -150,9 +247,10 @@ async function fetchSystemData(
     };
   }
 
-  const systemData = await fetchGbfsSystem(autoDiscoveryUrl);
+  const systemData =
+    prefetchedSystemData ??
+    (await fetchGbfsSystem(autoDiscoveryUrl, getGbfsDiscoveryHeaders(autoDiscoveryUrl)));
   if (!systemData) {
-    console.log(`[gbfs] ${systemId}: discovery failed`);
     return null;
   }
 
@@ -173,46 +271,6 @@ async function fetchSystemData(
   // Bike-sharing passes "bicycle", scooter-sharing passes "other".
   const defaultFormFactor: VehicleFormFactor =
     vehicleTypes.size === 0 ? unknownFormFactor : "other";
-
-  // Detailed logging for systems that have data
-  if (stationInfos.length > 0 || rawVehicles.length > 0) {
-    const vtSummary = [...vehicleTypes.values()]
-      .map((vt) => `${vt.vehicleTypeId}=${vt.formFactor}→${normalizeFormFactor(vt.formFactor)}`)
-      .join(", ");
-    console.log(
-      `[gbfs] ${systemId}: ${stationInfos.length} stations, ${rawVehicles.length} raw vehicles, vtypes=[${vtSummary}], default=${defaultFormFactor}`,
-    );
-    // Count vehicles by filter reason (for logging only)
-    let noCoords = 0;
-    let reserved = 0;
-    let atStation = 0;
-    let outsideBbox = 0;
-    let passed = 0;
-    for (const v of rawVehicles) {
-      if (v.isReserved || v.isDisabled) {
-        reserved++;
-        continue;
-      }
-      if (!v.lat || !v.lon) {
-        noCoords++;
-        continue;
-      }
-      if (v.stationId) {
-        atStation++;
-        continue;
-      }
-      if (!bboxContains(bbox, v.lat, v.lon)) {
-        outsideBbox++;
-        continue;
-      }
-      passed++;
-    }
-    console.log(
-      `[gbfs] ${systemId} vehicles: ${passed} pass for bbox, ${outsideBbox} outside bbox, ${atStation} at station, ${noCoords} no coords, ${reserved} reserved/disabled`,
-    );
-  } else {
-    console.log(`[gbfs] ${systemId}: 0 stations, 0 vehicles`);
-  }
 
   function getFormFactor(vehicleTypeId?: string): VehicleFormFactor {
     if (!vehicleTypeId) return defaultFormFactor;
@@ -268,6 +326,7 @@ async function fetchSystemData(
       const vt = vehicleTypes.get(vtId);
       if (!vt || !targetFormFactors.has(normalizeFormFactor(vt.formFactor))) continue;
       vtDetails.push({
+        id: vt.vehicleTypeId,
         name: vt.name ?? `${vt.make ?? ""} ${vt.model ?? ""}`.trim(),
         formFactor: normalizeFormFactor(vt.formFactor),
         make: vt.make,
@@ -339,8 +398,11 @@ async function fetchSystemData(
       availableVehicles: availableCount,
       emptySlots: status.numDocksAvailable,
       capacity: stInfo.capacity,
+      systemId,
+      nativeId: stInfo.stationId,
       operator,
       vehicleTypes: stationVehicleTypes,
+      vehicleTypeIds: vtIds.filter((vtId) => targetFormFactors.has(getFormFactor(vtId))),
       isActive: true,
       sources: [source],
       website: stInfo.rentalUris?.web,
@@ -373,6 +435,9 @@ async function fetchSystemData(
       batteryLevel:
         v.currentFuelPercent != null ? Math.round(v.currentFuelPercent * 100) : undefined,
       rangeMeters: v.currentRangeMeters,
+      systemId,
+      nativeId: v.bikeId,
+      vehicleTypeId: v.vehicleTypeId,
       isReserved: v.isReserved,
       isDisabled: v.isDisabled,
       operator,
@@ -396,4 +461,11 @@ async function fetchSystemData(
         targetFormFactors.has(v.formFactor),
     ),
   };
+}
+
+function getGbfsDiscoveryHeaders(autoDiscoveryUrl: string): Record<string, string> | undefined {
+  if (autoDiscoveryUrl.includes(ENTUR_GBFS_HOST)) {
+    return { "ET-Client-Name": ENTUR_CLIENT_NAME };
+  }
+  return undefined;
 }

@@ -74,6 +74,124 @@ export interface TripRemark {
 
 export type OccupancyLevel = "low" | "medium" | "high" | "overcrowded";
 
+export interface TransitFormationReference {
+  operatorRef?: string;
+  operatingDayRef?: string;
+  trainNumber?: string;
+}
+
+export interface TransitFormationStopSummary {
+  platform?: string;
+  scheduledAt?: string;
+  shortFormation?: string;
+  stopId?: string;
+  stopName?: string;
+}
+
+export interface TransitFormationVehicleDetail {
+  bikeSpaces?: number;
+  closed?: boolean;
+  hasAirConditioning?: boolean;
+  hasLowFloorAccess?: boolean;
+  hasToilet?: boolean;
+  id?: string;
+  lengthMeters?: number;
+  order?: number;
+  sector?: string;
+  seatsFirstClass?: number;
+  seatsSecondClass?: number;
+  typeCode?: string;
+  typeName?: string;
+  wheelchairSpaces?: number;
+}
+
+export interface TransitFormationDetail {
+  lastUpdate?: string;
+  lengthMeters?: number;
+  operatorCode?: string;
+  operationDate?: string;
+  seats?: number;
+  shortFormation?: string;
+  source: string;
+  stops?: TransitFormationStopSummary[];
+  trainNumber?: string;
+  vehicleCount?: number;
+  vehicles?: TransitFormationVehicleDetail[];
+}
+
+export interface TransitServiceAttribute {
+  accessFacility?: string;
+  code?: string;
+  text?: string;
+  userText?: string;
+}
+
+export interface TransitServiceInfo {
+  attributes?: TransitServiceAttribute[];
+  canceled?: boolean;
+  destinationStopPointRef?: string;
+  destinationText?: string;
+  deviation?: boolean;
+  directionRef?: string;
+  formation?: TransitFormationReference[];
+  journeyRef?: string;
+  lineRef?: string;
+  modeName?: string;
+  modeShortName?: string;
+  occupancy?: OccupancyLevel;
+  occupancyClasses?: {
+    firstClass?: OccupancyLevel;
+    secondClass?: OccupancyLevel;
+  };
+  occupancyRaw?: string;
+  occupancySource?: string;
+  occupancyUpdatedAt?: string;
+  operatingDayRef?: string;
+  operatorAbbreviation?: string;
+  operatorName?: string;
+  operatorOrganisationNumber?: string;
+  operatorParticipantRef?: string;
+  operatorRef?: string;
+  operatorRefs?: string[];
+  originStopPointRef?: string;
+  originText?: string;
+  productCategoryName?: string;
+  productCategoryRef?: string;
+  productCategoryShortName?: string;
+  ptMode?: string;
+  publicCode?: string;
+  publishedLineName?: string;
+  publishedServiceName?: string;
+  routeDescription?: string;
+  serviceFeatureRefs?: string[];
+  situationIds?: string[];
+  submode?: string;
+  trainNumber?: string;
+  undefinedDelay?: boolean;
+  unplanned?: boolean;
+  vehicleFeatureRefs?: string[];
+  vehicleRef?: string;
+  viaStopPointRefs?: string[];
+  viaTexts?: string[];
+}
+
+export interface TransitIntermodalLeg {
+  attributes?: TransitServiceAttribute[];
+  bufferTimeSeconds?: number;
+  durationSeconds?: number;
+  feasibility?: string[];
+  guidanceTexts?: string[];
+  legDescription?: string;
+  lengthMeters?: number;
+  personalMode?: string;
+  situationIds?: string[];
+  timeWindowEnd?: string;
+  timeWindowStart?: string;
+  transferMode?: string;
+  transferType?: string;
+  walkDurationSeconds?: number;
+}
+
 export interface Departure {
   tripId: string;
   route: Pick<TransitRoute, "id" | "shortName" | "longName" | "mode" | "color">;
@@ -84,18 +202,34 @@ export interface Departure {
   platform?: string;
   canceled?: boolean;
   occupancy?: OccupancyLevel;
+  formation?: TransitFormationReference[];
   remarks?: TripRemark[];
+  serviceInfo?: TransitServiceInfo;
 }
 
 export interface FareProduct {
+  authorityName?: string;
+  authorityRef?: string;
+  id?: string;
+  infoUrls?: string[];
   name: string;
   amount: number;
   currency: string;
+  netAmount?: number;
   riderCategory?: { name: string; isDefault: boolean };
   media?: { name?: string; type: string };
+  saleUrls?: string[];
+  travelClass?: string;
+  vatRate?: number;
 }
 
 export interface TripFare {
+  results?: Array<{
+    fromLegId?: string;
+    products: FareProduct[];
+    toLegId?: string;
+  }>;
+  source?: string;
   transfers: Array<{
     rule?: string;
     transferProducts?: FareProduct[];
@@ -117,10 +251,17 @@ export interface TripLeg {
   routeId?: string;
   /** Number of intermediate stops between from and to (excluding endpoints). @internal sent by backend. */
   _intermediateStopCount?: number;
+  /** Richer OJP/SIRI service metadata for the transit vehicle operating this leg. */
+  serviceInfo?: TransitServiceInfo;
+  /** Additional modeling for transfer/continuous/intermodal legs. */
+  intermodal?: TransitIntermodalLeg;
   fareTransferIndex?: number;
   effectiveFareLegIndex?: number;
   /** Occupancy level for this transit leg (e.g. from RIS::Transports or FPTF). */
   occupancy?: OccupancyLevel;
+  formation?: TransitFormationReference[];
+  boardNameSuffix?: string;
+  alightNameSuffix?: string;
 }
 
 export interface TripItinerary {
@@ -129,6 +270,9 @@ export interface TripItinerary {
   endTime: string;
   transfers: number;
   walkDistance: number;
+  distanceMeters?: number;
+  /** Estimated CO2 emissions for the itinerary in grams, when the provider supplies it. */
+  co2Grams?: number;
   legs: TripLeg[];
   fare?: TripFare;
 }
@@ -194,7 +338,10 @@ export interface VehicleJourney {
   name: string;
   provider: string;
   occupancy?: OccupancyLevel;
+  formation?: TransitFormationReference[];
+  formationDetails?: TransitFormationDetail;
   remarks?: TripRemark[];
+  serviceInfo?: TransitServiceInfo;
   stops: VehicleJourneyStop[];
 }
 
@@ -214,6 +361,134 @@ export interface RouteStop {
   lng: number;
   platformCode?: string;
   sequence: number;
+}
+
+export interface TransitStopAreaSummary {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  modes: TransportMode[];
+  level: "parent_stop" | "child_stop" | "platform";
+  stopType?: string;
+  weighting?: string;
+  parentStopId?: string;
+}
+
+export interface TransitPlatformDetail {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  modes: TransportMode[];
+  parentStopId: string;
+  publicCode?: string;
+  privateCode?: string;
+  bearing?: number;
+  boardingPositions?: string[];
+  accessibilityLabels?: string[];
+  amenityLabels?: string[];
+}
+
+export interface TransitAccessibilityItem {
+  id: string;
+  category: "step_free" | "wheelchair" | "elevator" | "escalator" | "visual" | "audible" | "other";
+  label: string;
+  available: boolean;
+}
+
+export interface TransitAmenityItem {
+  id: string;
+  category: "waiting_room" | "ticketing" | "toilets" | "bike_storage" | "parking" | "other";
+  label: string;
+  count?: number;
+}
+
+export interface TransitStopParking {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  kind: "bike_parking" | "parking" | "park_and_ride" | "other";
+  vehicleTypes: string[];
+  capacity?: number;
+  freeSpaces?: number;
+  hasRealtimeData?: boolean;
+}
+
+export type TransitInterchangeComplexity =
+  | "simple_stop"
+  | "interchange"
+  | "regional_hub"
+  | "major_interchange";
+
+export interface TransitStationIntelligence {
+  complexity: TransitInterchangeComplexity;
+  modeCount: number;
+  hasParking: boolean;
+  hasRealtimeParking: boolean;
+}
+
+export interface TransitFareZoneSummary {
+  id: string;
+  name: string;
+  authorityId?: string;
+  authorityName?: string;
+  privateCode?: string;
+  hasGeometry?: boolean;
+  isDeprecatedTariffZone?: boolean;
+}
+
+export interface TransitTopographicPlaceSummary {
+  id: string;
+  name: string;
+  placeType?: string;
+  parentTopographicPlaceId?: string;
+}
+
+export interface TransitStopInfrastructureFact {
+  label: string;
+  value: string;
+}
+
+export interface TransitGeoJsonPolygon {
+  type: "Polygon";
+  coordinates: [number, number][][];
+}
+
+export interface TransitGeoJsonMultiPolygon {
+  type: "MultiPolygon";
+  coordinates: [number, number][][][];
+}
+
+export interface TransitStopInfrastructureGeometry {
+  stopArea?: TransitGeoJsonPolygon | TransitGeoJsonMultiPolygon;
+  fareZones?: Array<{
+    fareZoneId: string;
+    geometry: TransitGeoJsonPolygon | TransitGeoJsonMultiPolygon;
+  }>;
+}
+
+export interface TransitStopInfrastructure {
+  stopId: string;
+  provider: string;
+  sourceId: string;
+  displayName: string;
+  focusLevel: "parent_stop" | "child_stop" | "platform";
+  requestedStop: TransitStopAreaSummary;
+  canonicalStop: TransitStopAreaSummary;
+  parentStop?: TransitStopAreaSummary;
+  siblingStops: TransitStopAreaSummary[];
+  childStops: TransitStopAreaSummary[];
+  platforms: TransitPlatformDetail[];
+  accessibility: TransitAccessibilityItem[];
+  amenities: TransitAmenityItem[];
+  parking: TransitStopParking[];
+  fareZones: TransitFareZoneSummary[];
+  topographicPlace?: TransitTopographicPlaceSummary;
+  stationIntelligence?: TransitStationIntelligence;
+  facts: TransitStopInfrastructureFact[];
+  geometry?: TransitStopInfrastructureGeometry;
 }
 
 /** A transit route merged across multiple providers. */
@@ -238,6 +513,7 @@ export interface TransitProviderCapabilities {
   tripPlanning: boolean;
   alerts: boolean;
   vehicles: boolean;
+  stopInfrastructure: boolean;
 }
 
 export interface TripPlanParams {
@@ -265,6 +541,7 @@ export interface TransitProvider {
   getArrivals?(stopId: string, minutes: number): Promise<Departure[]>;
   searchByName?(query: string, limit: number): Promise<TransitStop[]>;
   getStop?(stopId: string): Promise<TransitStop | null>;
+  getStopInfrastructure?(stopId: string): Promise<TransitStopInfrastructure | null>;
   getStopPlatforms?(stopId: string): Promise<TransitStop[]>;
   getStopTimetable?(stopId: string, date: string): Promise<Departure[]>;
   getRoutesForStop?(stopId: string): Promise<TransitRoute[]>;

@@ -2,6 +2,7 @@ import type { IntegrationContext } from "@openmapx/core";
 import type { GeocodingProvider } from "./types.js";
 
 type ProviderName =
+  | "entur"
   | "maptiler"
   | "nominatim"
   | "pelias"
@@ -15,6 +16,7 @@ type ProviderName =
  * Most follow the "geocoding-<name>" convention; aliases are listed explicitly.
  */
 const NAME_TO_INTEGRATION: Record<ProviderName, string> = {
+  entur: "geocoding-entur",
   maptiler: "geocoding-maptiler",
   nominatim: "geocoding-nominatim",
   pelias: "geocoding-pelias",

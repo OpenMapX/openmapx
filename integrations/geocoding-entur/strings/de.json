@@ -1,0 +1,11 @@
+{
+  "name": "Entur-Geokodierung",
+  "description": "Vorwärtsgeokodierung, Autovervollständigung, Rückwärtsgeokodierung und NSR-gestützte ÖPNV-Haltestellenvorschläge für Norwegen",
+  "dataSources": [
+    {
+      "purpose": "Suche nach norwegischen Orten, Adressen, POIs und Haltestellen über den Entur-Geocoder; Rückwärtsgeokodierung von Koordinaten; Erhalt von NSR-Haltestellen-IDs für nachgelagerte ÖPNV-Flows",
+      "dataSent": "Suchtext oder Koordinaten (Längengrad, Breitengrad), Sprache, optionaler Norwegen-Filter, Modus für multimodale Haltestellen, ET-Client-Name-Header",
+      "dataReceived": "GeoJSON-ähnliche Features mit Namen, Koordinaten, NSR- und Entur-IDs, Haltestellenkategorien, Verkehrsmodi und Orts-/Bezirkskontext"
+    }
+  ]
+}

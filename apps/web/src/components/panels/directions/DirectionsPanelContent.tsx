@@ -311,11 +311,22 @@ export function DirectionsPanelContent() {
 
   const hasMultipleStops = waypoints.length > 2;
   const showOptimize = hasMultipleStops && allWaypointsFilled && !isTransitMode;
+  const lowestCo2Grams = useMemo(() => {
+    const values = transitItineraries
+      .map((itinerary) => itinerary.co2Grams)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    if (values.length < 2) return null;
+    return Math.min(...values);
+  }, [transitItineraries]);
 
   if (transitDetailsIndex !== null && transitItineraries[transitDetailsIndex]) {
     return (
       <TransitDetailsView
         itinerary={transitItineraries[transitDetailsIndex]}
+        isLowestCo2={
+          lowestCo2Grams !== null &&
+          transitItineraries[transitDetailsIndex]?.co2Grams === lowestCo2Grams
+        }
         originLabel={originLabel}
         destinationLabel={destinationLabel}
         provider={transitPlanData?.provider}
@@ -657,6 +668,7 @@ export function DirectionsPanelContent() {
                   <TransitItineraryCard
                     itinerary={itin}
                     active={i === activeItineraryIndex}
+                    isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
                     onSelect={() => setActiveItineraryIndex(i)}
                     onDetails={() => setTransitDetailsIndex(i)}
                   />

@@ -1,12 +1,20 @@
 "use client";
 
-import type { DataSourceMeta, DataSourceResult, LngLat } from "@openmapx/core";
+import type {
+  BoundingBox,
+  DataSourceMapContextSelection,
+  DataSourceMeta,
+  DataSourceResult,
+  LngLat,
+} from "@openmapx/core";
 import {
   applyClientSideFilters,
   buildSourceAttribution,
   createPlace,
+  isPointInBBox,
   PANEL,
   splitFilters,
+  useDataSourceMapContext,
   useDataSourceSearch,
   useDataSourceStore,
   useDataSources,
@@ -22,6 +30,7 @@ import { usePinMarker } from "@/hooks/usePinMarker";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
+import { pickHoveredDataSourceItemId } from "./dataSourceHover";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
 import { useLayerReanchor } from "./useLayerReanchor";
 
@@ -35,6 +44,18 @@ function markersLayerId(dsId: string) {
 
 function labelsLayerId(dsId: string) {
   return `ds-${dsId}-labels`;
+}
+
+function mapContextSourceId(dsId: string) {
+  return `ds-${dsId}-map-context`;
+}
+
+function mapContextFillLayerId(dsId: string) {
+  return `ds-${dsId}-map-context-fill`;
+}
+
+function mapContextOutlineLayerId(dsId: string) {
+  return `ds-${dsId}-map-context-outline`;
 }
 
 function buildGeoJson(results: DataSourceResult[], attributionHtml: string, imageId?: string) {
@@ -59,6 +80,33 @@ function buildGeoJson(results: DataSourceResult[], attributionHtml: string, imag
     })),
     attribution: attributionHtml,
   };
+}
+
+function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapContextSelection {
+  const systemIds = new Set<string>();
+  const vehicleTypeIds = new Set<string>();
+
+  for (const result of results) {
+    for (const systemId of result.mapContext?.systemIds ?? []) {
+      systemIds.add(systemId);
+    }
+    for (const vehicleTypeId of result.mapContext?.vehicleTypeIds ?? []) {
+      vehicleTypeIds.add(vehicleTypeId);
+    }
+  }
+
+  return {
+    systemIds: [...systemIds].sort(),
+    vehicleTypeIds: [...vehicleTypeIds].sort(),
+  };
+}
+
+function filterResultsToBbox(
+  results: DataSourceResult[],
+  bbox: BoundingBox | null,
+): DataSourceResult[] {
+  if (!bbox) return [];
+  return results.filter((result) => isPointInBBox(result.coordinates, bbox));
 }
 
 /**
@@ -95,9 +143,15 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
   const sid = sourceId(dsId);
   const markers = markersLayerId(dsId);
   const labels = labelsLayerId(dsId);
+  const mapContextSid = mapContextSourceId(dsId);
+  const mapContextFill = mapContextFillLayerId(dsId);
+  const mapContextOutline = mapContextOutlineLayerId(dsId);
   try {
+    if (map.getLayer(mapContextOutline)) map.removeLayer(mapContextOutline);
+    if (map.getLayer(mapContextFill)) map.removeLayer(mapContextFill);
     if (map.getLayer(labels)) map.removeLayer(labels);
     if (map.getLayer(markers)) map.removeLayer(markers);
+    if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
     if (map.getSource(sid)) map.removeSource(sid);
   } catch {
     // Source may already be torn down
@@ -110,6 +164,7 @@ export function DataSourceLayer() {
   const filters = useDataSourceStore((s) => s.filters);
   const selectItem = useDataSourceStore((s) => s.selectItem);
   const searchBbox = useDataSourceStore((s) => s.searchBbox);
+  const viewportBbox = useDataSourceStore((s) => s.viewportBbox);
   const viewportZoom = useDataSourceStore((s) => s.viewportZoom);
   const setViewport = useDataSourceStore((s) => s.setViewport);
   const setSearchBbox = useDataSourceStore((s) => s.setSearchBbox);
@@ -178,14 +233,33 @@ export function DataSourceLayer() {
     [searchResults, filters, openingHoursFilter],
   );
 
+  const visibleResults = useMemo(
+    () => filterResultsToBbox(filteredResults, viewportBbox),
+    [filteredResults, viewportBbox],
+  );
+
+  const mapContextSelection = useMemo(
+    () => buildMapContextSelection(filteredResults),
+    [filteredResults],
+  );
+
+  const shouldFetchMapContext = shouldFetch && viewportBbox !== null;
+
+  const { data: mapContext } = useDataSourceMapContext(
+    shouldFetchMapContext ? activeSource : null,
+    shouldFetchMapContext ? viewportBbox : null,
+    serverFilters,
+    mapContextSelection,
+  );
+
   // Build map attribution from only the sources present in visible results
   const mapAttribution = useMemo(() => {
-    if (!activeSource || filteredResults.length === 0) return "";
+    if (!activeSource || visibleResults.length === 0) return "";
     const meta = registry.get(activeSource);
     if (!meta?.dataSources) return "";
-    const visibleSources = [...new Set(filteredResults.map((r) => r.source))];
+    const visibleSources = [...new Set(visibleResults.map((r) => r.source))];
     return buildSourceAttribution(meta.dataSources, visibleSources);
-  }, [activeSource, registry, filteredResults]);
+  }, [activeSource, registry, visibleResults]);
 
   // Show pin marker for hovered item
   const hoveredResult = filteredResults.find((r) => r.id === hoveredItemId) ?? null;
@@ -265,6 +339,9 @@ export function DataSourceLayer() {
 
       const sid = sourceId(activeSource);
       const markersLid = markersLayerId(activeSource);
+      const mapContextSid = mapContextSourceId(activeSource);
+      const mapContextFillLid = mapContextFillLayerId(activeSource);
+      const mapContextOutlineLid = mapContextOutlineLayerId(activeSource);
 
       if (viewportZoom < activeMeta.minZoom) {
         removeLayers(map, activeSource);
@@ -290,6 +367,110 @@ export function DataSourceLayer() {
           data: geojson,
           attribution: geojson.attribution,
         });
+      }
+
+      const beforeLayer = getFirstSymbolLayerId(map);
+      const mapContextData = mapContext?.geojson;
+      if (mapContextData && mapContextData.features.length > 0) {
+        if (map.getSource(mapContextSid)) {
+          (map.getSource(mapContextSid) as GeoJSONSource).setData(mapContextData);
+        } else {
+          map.addSource(mapContextSid, {
+            type: "geojson",
+            data: mapContextData,
+          });
+        }
+
+        if (!map.getLayer(mapContextFillLid)) {
+          map.addLayer(
+            {
+              id: mapContextFillLid,
+              type: "fill",
+              source: mapContextSid,
+              paint: {
+                "fill-color": [
+                  "match",
+                  ["get", "zoneClass"],
+                  "no_ride",
+                  "#C62828",
+                  "no_parking",
+                  "#EF6C00",
+                  "no_start",
+                  "#8E24AA",
+                  "slow_zone",
+                  "#1565C0",
+                  "parking_hub",
+                  "#2E7D32",
+                  "#546E7A",
+                ] as unknown as maplibregl.ExpressionSpecification,
+                "fill-opacity": [
+                  "match",
+                  ["get", "zoneClass"],
+                  "no_ride",
+                  0.16,
+                  "no_parking",
+                  0.12,
+                  "no_start",
+                  0.1,
+                  "slow_zone",
+                  0.08,
+                  "parking_hub",
+                  0.08,
+                  0.08,
+                ] as unknown as maplibregl.ExpressionSpecification,
+              },
+            },
+            beforeLayer,
+          );
+        }
+
+        if (!map.getLayer(mapContextOutlineLid)) {
+          map.addLayer(
+            {
+              id: mapContextOutlineLid,
+              type: "line",
+              source: mapContextSid,
+              paint: {
+                "line-color": [
+                  "match",
+                  ["get", "zoneClass"],
+                  "no_ride",
+                  "#C62828",
+                  "no_parking",
+                  "#EF6C00",
+                  "no_start",
+                  "#8E24AA",
+                  "slow_zone",
+                  "#1565C0",
+                  "parking_hub",
+                  "#2E7D32",
+                  "#546E7A",
+                ] as unknown as maplibregl.ExpressionSpecification,
+                "line-width": [
+                  "match",
+                  ["get", "zoneClass"],
+                  "no_ride",
+                  2.5,
+                  "no_parking",
+                  2.25,
+                  "no_start",
+                  2,
+                  "slow_zone",
+                  2,
+                  "parking_hub",
+                  2.25,
+                  2,
+                ] as unknown as maplibregl.ExpressionSpecification,
+                "line-opacity": 0.85,
+              },
+            },
+            beforeLayer,
+          );
+        }
+      } else {
+        if (map.getLayer(mapContextOutlineLid)) map.removeLayer(mapContextOutlineLid);
+        if (map.getLayer(mapContextFillLid)) map.removeLayer(mapContextFillLid);
+        if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
       }
 
       if (useIconMarkers && imageId) {
@@ -355,7 +536,6 @@ export function DataSourceLayer() {
         // Circle marker mode (default, e.g. EV charging)
         if (!map.getLayer(markersLid)) {
           const colorExpr = buildVariantColorExpression(activeMeta.markerStyle);
-          const beforeLayer = getFirstSymbolLayerId(map);
 
           map.addLayer(
             {
@@ -401,6 +581,7 @@ export function DataSourceLayer() {
     styleVersion,
     mapRef,
     mapAttribution,
+    mapContext,
   ]);
 
   const { setSelectedPlace } = usePlaceStore();
@@ -444,12 +625,7 @@ export function DataSourceLayer() {
       const features = map.queryRenderedFeatures(e.point, { layers });
       if (features.length > 0) {
         map.getCanvasContainer().style.cursor = "pointer";
-        const markerFeatures = features.filter(
-          (f) => f.layer.id === markersLid && f.properties?.id,
-        );
-        if (markerFeatures.length) {
-          setHoveredItemId((markerFeatures[0].properties as { id: string }).id);
-        }
+        setHoveredItemId(pickHoveredDataSourceItemId(features, markersLid));
       } else {
         map.getCanvasContainer().style.cursor = "";
         setHoveredItemId(null);

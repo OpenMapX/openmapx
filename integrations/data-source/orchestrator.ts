@@ -4,6 +4,7 @@ import type { DataSourceProvider } from "./types.js";
 
 const DEFAULT_SEARCH_TTL = 21600;
 const DEFAULT_DETAIL_TTL = 21600;
+const DEFAULT_MAP_CONTEXT_TTL = 300;
 const FILTER_TTL = 172800;
 
 function round(value: number, decimals: number): number {
@@ -66,6 +67,10 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
     return provider.detailCacheTtl ?? DEFAULT_DETAIL_TTL;
   }
 
+  function getMapContextTtl(provider: DataSourceProvider): number {
+    return provider.mapContextCacheTtl ?? DEFAULT_MAP_CONTEXT_TTL;
+  }
+
   function searchCacheKey(
     providerId: string,
     bbox: { south: number; west: number; north: number; east: number },
@@ -81,13 +86,27 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
     return `ds:detail:${providerId}:${safeItemId}`;
   }
 
+  function mapContextCacheKey(
+    providerId: string,
+    bbox: { south: number; west: number; north: number; east: number },
+    filters?: Record<string, unknown>,
+    options?: Record<string, unknown>,
+  ): string {
+    const roundedBbox = `${round(bbox.south, 2)},${round(bbox.west, 2)},${round(bbox.north, 2)},${round(bbox.east, 2)}`;
+    const filterHash = filters ? hashKey("f", filters) : "none";
+    const optionsHash = options ? hashKey("o", options) : "none";
+    return `ds:map-context:${providerId}:${roundedBbox}:${filterHash}:${optionsHash}`;
+  }
+
   return {
     getAllProviders,
     getProvider,
     listWithFilters,
     getSearchTtl,
     getDetailTtl,
+    getMapContextTtl,
     searchCacheKey,
     detailCacheKey,
+    mapContextCacheKey,
   };
 }

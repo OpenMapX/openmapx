@@ -30,17 +30,6 @@ const ICON_PATHS: Record<string, string> = {
     "M17 4h2V2H5v2h2l-3 7h1c0 1.1.9 2 2 2h2c1.1 0 2-.9 2-2h2c0 1.1.9 2 2 2h2c1.1 0 2-.9 2-2h1l-3-7zm-8.75 7L10 6.75 11.75 11H8.25zm7.5 0L13.5 6.25 15.25 5l2.5 6h-3zM2 22h20v-3H2v3z",
 };
 
-// DB-specific train categories with distinct colors
-const DB_CATEGORY_COLORS: Record<string, string> = {
-  ICE: "#EC0016",
-  IC: "#FF6600",
-  EC: "#FF6600",
-  RE: "#15A3DB",
-  RB: "#15A3DB",
-  IRE: "#15A3DB",
-  S: "#059500",
-};
-
 const MODE_MARKER_COLORS: Record<string, string> = {
   rail: "#1A73E8",
   subway: "#E53935",
@@ -73,36 +62,12 @@ function loadMarkerImage(
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(createMarkerSvg(iconPath, fill, size))}`;
 }
 
-/** Load all transit vehicle marker images for the LiveTrains overlay. */
-export function loadLiveTrainMarkers(map: MaplibreMap): void {
-  const trainPath = ICON_PATHS.rail;
-  // Category-specific train markers
-  for (const [cat, color] of Object.entries(DB_CATEGORY_COLORS)) {
-    loadMarkerImage(map, imageId("lt", "rail", cat), trainPath, color);
-  }
-  // Fallback
-  loadMarkerImage(map, imageId("lt", "rail", "default"), trainPath, DEFAULT_COLOR);
-}
-
 /** Load transit vehicle markers for the TransitVehicle layer (directions). */
 export function loadTransitVehicleMarkers(map: MaplibreMap): void {
   for (const [mode, path] of Object.entries(ICON_PATHS)) {
     const color = MODE_MARKER_COLORS[mode] ?? DEFAULT_COLOR;
     loadMarkerImage(map, imageId("tv", mode), path, color);
   }
-}
-
-/**
- * Build a MapLibre expression that selects the right image ID
- * based on the "category" property (for LiveTrains: ICE, IC, RE, S, etc.)
- */
-export function liveTrainIconExpression(): unknown[] {
-  const expr: unknown[] = ["match", ["get", "category"]];
-  for (const cat of Object.keys(DB_CATEGORY_COLORS)) {
-    expr.push(cat, imageId("lt", "rail", cat));
-  }
-  expr.push(imageId("lt", "rail", "default")); // fallback
-  return expr;
 }
 
 /**
@@ -121,9 +86,4 @@ export function transitVehicleIconExpression(): unknown[] {
 /** Resolve marker color for a transport mode. */
 export function modeColor(mode: TransportMode): string {
   return MODE_MARKER_COLORS[mode] ?? DEFAULT_COLOR;
-}
-
-/** Resolve marker color for a DB train category. */
-export function dbCategoryColor(category: string): string {
-  return DB_CATEGORY_COLORS[category] ?? DEFAULT_COLOR;
 }

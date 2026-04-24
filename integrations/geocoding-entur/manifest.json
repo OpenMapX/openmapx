@@ -1,0 +1,67 @@
+{
+  "id": "geocoding-entur",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["geocoding"],
+  "dependencies": ["geocoding"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "Entur geocoder base URL",
+        "description": "Base URL of the Entur geocoder API. Defaults to the public Entur endpoint.",
+        "format": "url"
+      },
+      "clientName": {
+        "type": "string",
+        "title": "ET-Client-Name",
+        "description": "Client identifier sent to Entur. Entur recommends the format \"company-application\".",
+        "default": "openmapx-server"
+      },
+      "boundaryCountry": {
+        "type": "string",
+        "title": "Boundary country",
+        "description": "Optional ISO 3166-1 alpha-3 country filter applied to Entur autocomplete/search requests. Defaults to NOR.",
+        "default": "NOR"
+      },
+      "multiModal": {
+        "type": "string",
+        "title": "Multimodal stop behavior",
+        "description": "Whether Entur should return multimodal parent stops, child stops, or both.",
+        "enum": ["parent", "child", "all"],
+        "default": "parent"
+      }
+    }
+  },
+  "healthCheck": {
+    "type": "custom"
+  },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "dataSources": [
+    {
+      "sourceId": "entur-geocoder",
+      "name": "Entur Geocoder API",
+      "url": "https://developer.entur.org/pages-geocoder-intro/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Entur",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

@@ -124,6 +124,21 @@
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
+    },
+    {
+      "sourceId": "entur-mobility",
+      "name": "Entur Mobility v2",
+      "url": "https://developer.entur.org/pages-mobility-docs-mobility-v2/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Data made available by Entur",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
     }
   ]
 }

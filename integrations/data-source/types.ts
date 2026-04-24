@@ -7,6 +7,46 @@ export interface DataSourceAttribution {
   licenseUrl?: string;
 }
 
+export interface DataSourceBranding {
+  name?: string;
+  legalName?: string;
+  logoUrl?: string;
+  logoUrlDark?: string;
+  color?: string;
+  imageUrl?: string;
+  imageUrlDark?: string;
+}
+
+export interface DataSourceMapContextSelection {
+  systemIds?: string[];
+  vehicleTypeIds?: string[];
+}
+
+export type DataSourceGeoJsonGeometry =
+  | {
+      type: "Polygon";
+      coordinates: number[][][];
+    }
+  | {
+      type: "MultiPolygon";
+      coordinates: number[][][][];
+    };
+
+export interface DataSourceGeoJsonFeature {
+  type: "Feature";
+  geometry: DataSourceGeoJsonGeometry;
+  properties: Record<string, unknown> | null;
+}
+
+export interface DataSourceGeoJsonFeatureCollection {
+  type: "FeatureCollection";
+  features: DataSourceGeoJsonFeature[];
+}
+
+export interface DataSourceMapContext {
+  geojson: DataSourceGeoJsonFeatureCollection;
+}
+
 export interface DataSourceMarkerStyle {
   variantColors: Record<string, string>;
   defaultColor: string;
@@ -51,6 +91,8 @@ export interface DataSourceResult {
   status?: string;
   summary?: string;
   operator?: string;
+  branding?: DataSourceBranding;
+  mapContext?: DataSourceMapContextSelection;
   /** Structured numeric values for client-side sorting (e.g., fuel prices by type). */
   sortValues?: Record<string, number>;
 }
@@ -114,7 +156,8 @@ export interface DataSourceDetail {
     postcode?: string;
     country?: string;
   };
-  operator?: { name: string; url?: string };
+  operator?: { name: string; url?: string; legalName?: string };
+  branding?: DataSourceBranding;
   usageInfo?: { type: string; cost?: string; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
@@ -134,8 +177,14 @@ export interface DataSourceProvider {
   readonly serviceIds?: string[];
   readonly searchCacheTtl?: number;
   readonly detailCacheTtl?: number;
+  readonly mapContextCacheTtl?: number;
   readonly coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
   getFilters(): Promise<DataSourceFilterDef[]>;
   search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]>;
   getDetail(itemId: string): Promise<DataSourceDetail | null>;
+  getMapContext?(
+    bbox: BoundingBox,
+    filters?: Record<string, unknown>,
+    options?: DataSourceMapContextSelection,
+  ): Promise<DataSourceMapContext | null>;
 }

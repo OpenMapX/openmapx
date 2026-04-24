@@ -12,6 +12,7 @@ import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { SavedPlacesLayer } from "@/components/map/layers/SavedPlacesLayer";
+import { SelectedStopInfrastructureLayer } from "@/components/map/layers/SelectedStopInfrastructureLayer";
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
@@ -110,6 +111,7 @@ export default function HomePage() {
           <MapStylePoiClickHandler />
           <UserLocationMarker />
           <SelectedPlaceMarker />
+          <SelectedStopInfrastructureLayer />
           <WaypointMarkers />
           <ElevationHoverMarker />
           <HamburgerMenu />

@@ -18,6 +18,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { MergedDeparture, Place, TripItinerary, TripLeg } from "@openmapx/core";
 import {
+  formatDistance,
   formatDuration,
   geocodeStopAsPlace,
   PANEL,
@@ -32,6 +33,7 @@ import {
   LegBadge,
   LegRemarks,
   LiveStopTime,
+  TransitEmissionsBadge,
   TransitLiveBadge,
 } from "@/components/panels/directions/TransitRouteView";
 import { LegAlerts } from "@/components/panels/transit/LegAlerts";
@@ -62,12 +64,14 @@ function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture 
 
 export function TransitDetailsView({
   itinerary,
+  isLowestCo2 = false,
   originLabel,
   destinationLabel,
   provider,
   onBack,
 }: {
   itinerary: TripItinerary;
+  isLowestCo2?: boolean;
   originLabel: string;
   destinationLabel: string;
   provider?: string;
@@ -107,6 +111,11 @@ export function TransitDetailsView({
     hour: "2-digit",
     minute: "2-digit",
   });
+  const summaryBits: string[] = [];
+  if (itinerary.transfers > 0) summaryBits.push(t("transfers", { count: itinerary.transfers }));
+  if (itinerary.walkDistance > 0) {
+    summaryBits.push(t("walkDistance", { distance: formatDistance(itinerary.walkDistance) }));
+  }
 
   if (activeLegDep) {
     return <TripDetailView departure={activeLegDep} onBack={() => setActiveLegDep(null)} />;
@@ -154,6 +163,16 @@ export function TransitDetailsView({
             </Box>
           ))}
         </Box>
+        {summaryBits.length > 0 && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
+            {summaryBits.join(" · ")}
+          </Typography>
+        )}
+        {itinerary.co2Grams !== undefined && (
+          <Box sx={{ mt: summaryBits.length > 0 ? 0.75 : 1 }}>
+            <TransitEmissionsBadge co2Grams={itinerary.co2Grams} isLowest={isLowestCo2} />
+          </Box>
+        )}
       </Box>
       <Divider />
 

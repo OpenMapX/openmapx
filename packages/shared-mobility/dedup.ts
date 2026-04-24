@@ -5,11 +5,138 @@
  */
 
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
+import type {
+  PricingDetail,
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+  VehicleTypeDetail,
+} from "./types.js";
 
 /** Round to 4 decimal places (~11m precision). */
 function coordKey(lng: number, lat: number): string {
   return `${lng.toFixed(4)},${lat.toFixed(4)}`;
+}
+
+function mergeUnique<T>(
+  current: T[] | undefined,
+  incoming: T[] | undefined,
+  keyFn?: (item: T) => string,
+): T[] | undefined {
+  if ((!current || current.length === 0) && (!incoming || incoming.length === 0)) return undefined;
+  const merged = [...(current ?? [])];
+  if (keyFn) {
+    const seen = new Set(merged.map(keyFn));
+    for (const item of incoming ?? []) {
+      const key = keyFn(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+    return merged;
+  }
+  for (const item of incoming ?? []) {
+    if (!merged.includes(item)) merged.push(item);
+  }
+  return merged;
+}
+
+function vehicleTypeDetailKey(v: VehicleTypeDetail): string {
+  return (
+    v.id ?? [v.formFactor ?? "", v.make ?? "", v.model ?? "", v.propulsion ?? "", v.name].join("|")
+  );
+}
+
+function pricingDetailKey(p: PricingDetail): string {
+  return [p.name, p.currency, p.flatRate ?? "", p.perKmRate ?? "", p.perHourRate ?? ""].join("|");
+}
+
+function mergeStation(existing: SharedMobilityStation, incoming: SharedMobilityStation): void {
+  existing.sources = mergeUnique(existing.sources, incoming.sources) ?? existing.sources;
+  existing.vehicleTypes =
+    mergeUnique(existing.vehicleTypes, incoming.vehicleTypes) ?? existing.vehicleTypes;
+  existing.vehicleTypeIds =
+    mergeUnique(existing.vehicleTypeIds, incoming.vehicleTypeIds) ?? existing.vehicleTypeIds;
+  if (!existing.systemId && incoming.systemId) existing.systemId = incoming.systemId;
+  if (!existing.nativeId && incoming.nativeId) existing.nativeId = incoming.nativeId;
+  if (!existing.operator && incoming.operator) existing.operator = incoming.operator;
+  if (!existing.branding && incoming.branding) {
+    existing.branding = incoming.branding;
+  } else if (existing.branding && incoming.branding) {
+    existing.branding = {
+      name: existing.branding.name ?? incoming.branding.name,
+      legalName: existing.branding.legalName ?? incoming.branding.legalName,
+      logoUrl: existing.branding.logoUrl ?? incoming.branding.logoUrl,
+      logoUrlDark: existing.branding.logoUrlDark ?? incoming.branding.logoUrlDark,
+      color: existing.branding.color ?? incoming.branding.color,
+    };
+  }
+  if (existing.emptySlots === undefined && incoming.emptySlots !== undefined) {
+    existing.emptySlots = incoming.emptySlots;
+  }
+  if (existing.capacity === undefined && incoming.capacity !== undefined) {
+    existing.capacity = incoming.capacity;
+  }
+  if (!existing.isActive && incoming.isActive) existing.isActive = true;
+  if (!existing.accessMethod && incoming.accessMethod)
+    existing.accessMethod = incoming.accessMethod;
+  if (!existing.transitInfo && incoming.transitInfo) existing.transitInfo = incoming.transitInfo;
+  if (!existing.locationHint && incoming.locationHint)
+    existing.locationHint = incoming.locationHint;
+  if (!existing.stationType && incoming.stationType) existing.stationType = incoming.stationType;
+  existing.vehicleClassNames =
+    mergeUnique(existing.vehicleClassNames, incoming.vehicleClassNames) ??
+    existing.vehicleClassNames;
+  const mergedAddress = {
+    street: existing.address?.street ?? incoming.address?.street,
+    city: existing.address?.city ?? incoming.address?.city,
+    postcode: existing.address?.postcode ?? incoming.address?.postcode,
+    country: existing.address?.country ?? incoming.address?.country,
+  };
+  if (
+    mergedAddress.street ||
+    mergedAddress.city ||
+    mergedAddress.postcode ||
+    mergedAddress.country
+  ) {
+    existing.address = mergedAddress;
+  }
+  if (!existing.operatorNotes && incoming.operatorNotes)
+    existing.operatorNotes = incoming.operatorNotes;
+  if (!existing.website && incoming.website) existing.website = incoming.website;
+  if (!existing.rentalApps && incoming.rentalApps) {
+    existing.rentalApps = incoming.rentalApps;
+  } else if (existing.rentalApps && incoming.rentalApps) {
+    existing.rentalApps = {
+      ios: {
+        storeUri: existing.rentalApps.ios?.storeUri ?? incoming.rentalApps.ios?.storeUri,
+        discoveryUri:
+          existing.rentalApps.ios?.discoveryUri ?? incoming.rentalApps.ios?.discoveryUri,
+      },
+      android: {
+        storeUri: existing.rentalApps.android?.storeUri ?? incoming.rentalApps.android?.storeUri,
+        discoveryUri:
+          existing.rentalApps.android?.discoveryUri ?? incoming.rentalApps.android?.discoveryUri,
+      },
+    };
+  }
+  if (!existing.stationArea && incoming.stationArea) existing.stationArea = incoming.stationArea;
+  existing.vehicleTypeDetails =
+    mergeUnique(existing.vehicleTypeDetails, incoming.vehicleTypeDetails, vehicleTypeDetailKey) ??
+    existing.vehicleTypeDetails;
+  if (!existing.pricingSummary && incoming.pricingSummary)
+    existing.pricingSummary = incoming.pricingSummary;
+  existing.pricingDetails =
+    mergeUnique(existing.pricingDetails, incoming.pricingDetails, pricingDetailKey) ??
+    existing.pricingDetails;
+  const mergedRentalUris = {
+    web: existing.rentalUris?.web ?? incoming.rentalUris?.web,
+    android: existing.rentalUris?.android ?? incoming.rentalUris?.android,
+    ios: existing.rentalUris?.ios ?? incoming.rentalUris?.ios,
+  };
+  if (mergedRentalUris.web || mergedRentalUris.android || mergedRentalUris.ios) {
+    existing.rentalUris = mergedRentalUris;
+  }
 }
 
 /**
@@ -17,14 +144,18 @@ function coordKey(lng: number, lat: number): string {
  * First-seen wins (priority order in input).
  */
 export function dedupStations(stations: SharedMobilityStation[]): SharedMobilityStation[] {
-  const seen = new Set<string>();
+  const byCoordKey = new Map<string, SharedMobilityStation>();
   const result: SharedMobilityStation[] = [];
 
   for (const s of stations) {
     const key = coordKey(s.coordinates[0], s.coordinates[1]);
-    if (seen.has(key)) continue;
+    const exactMatch = byCoordKey.get(key);
+    if (exactMatch) {
+      mergeStation(exactMatch, s);
+      continue;
+    }
 
-    const isDuplicate = result.some((existing) => {
+    const fuzzyMatch = result.find((existing) => {
       const dist = haversineMeters(
         s.coordinates[1],
         s.coordinates[0],
@@ -37,8 +168,12 @@ export function dedupStations(stations: SharedMobilityStation[]): SharedMobility
       return diceSimilarity(nameA, nameB) > 0.6;
     });
 
-    if (isDuplicate) continue;
-    seen.add(key);
+    if (fuzzyMatch) {
+      mergeStation(fuzzyMatch, s);
+      continue;
+    }
+
+    byCoordKey.set(key, s);
     result.push(s);
   }
 

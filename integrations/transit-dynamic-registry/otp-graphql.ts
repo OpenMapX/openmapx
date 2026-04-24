@@ -12,6 +12,7 @@ import type { ProtocolAdapter } from "./adapter-types";
 import type { RegistryEntry } from "./registry-types";
 
 const TIMEOUT_MS = 8_000;
+const ENTUR_CLIENT_NAME = "openmapx-server";
 
 // GraphQL fetch
 
@@ -217,7 +218,7 @@ function getEndpoint(entry: RegistryEntry): string {
 function getHeaders(entry: RegistryEntry): Record<string, string> {
   const headers: Record<string, string> = {
     // Entur (Norwegian OTP instances) uses ET-Client-Name for rate limiting
-    "ET-Client-Name": "OpenMapX",
+    "ET-Client-Name": ENTUR_CLIENT_NAME,
   };
   if (entry.options.apiKey) {
     headers.Authorization = `Bearer ${entry.options.apiKey as string}`;

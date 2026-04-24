@@ -112,6 +112,11 @@
       "url": "https://data.bs.ch/api/explore/v2.1/catalog/datasets/100014/records?limit=1"
     },
     {
+      "name": "OpenTransportData Switzerland",
+      "type": "http",
+      "url": "https://data.opentransportdata.swiss/en/dataset/bike-and-car-parking"
+    },
+    {
       "name": "Comune di Firenze",
       "type": "http",
       "url": "https://datastore.comune.fi.it/od/ParkFreeSpot.json"
@@ -295,6 +300,21 @@
       "commercialUse": "yes",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://data.bs.ch/terms/privacy-policy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "opentransportdata-ch-parking",
+      "name": "Open data platform mobility Switzerland – Bike and car parking",
+      "url": "https://opentransportdata.swiss/en/cookbook/road-traffic-cookbook/bike-and-car-parking/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

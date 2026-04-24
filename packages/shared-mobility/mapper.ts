@@ -3,6 +3,7 @@
  */
 
 import type {
+  DataSourceBranding,
   DataSourceDetail,
   DataSourceDetailSection,
   DataSourceResult,
@@ -55,6 +56,42 @@ function formatAccessory(acc: string): string {
   return ACCESSORY_LABELS[acc] ?? acc.replace(/_/g, " ");
 }
 
+function brandingFromStation(station: SharedMobilityStation): DataSourceBranding | undefined {
+  if (!station.branding) return undefined;
+  return {
+    name: station.branding.name ?? station.operator,
+    legalName: station.branding.legalName,
+    logoUrl: station.branding.logoUrl,
+    logoUrlDark: station.branding.logoUrlDark,
+    color: station.branding.color,
+  };
+}
+
+function brandingFromVehicle(vehicle: SharedMobilityVehicle): DataSourceBranding | undefined {
+  const base = vehicle.branding;
+  if (!base && !vehicle.vehicleImageUrl && !vehicle.vehicleIconUrl) return undefined;
+  return {
+    name: base?.name ?? vehicle.operator,
+    legalName: base?.legalName,
+    logoUrl: base?.logoUrl,
+    logoUrlDark: base?.logoUrlDark,
+    color: base?.color,
+    imageUrl: vehicle.vehicleIconUrl ?? vehicle.vehicleImageUrl,
+    imageUrlDark: vehicle.vehicleIconUrlDark ?? vehicle.vehicleIconUrl ?? vehicle.vehicleImageUrl,
+  };
+}
+
+function mapContextSelection(
+  systemId?: string,
+  vehicleTypeIds?: string[],
+): DataSourceResult["mapContext"] | undefined {
+  if (!systemId && (!vehicleTypeIds || vehicleTypeIds.length === 0)) return undefined;
+  return {
+    ...(systemId ? { systemIds: [systemId] } : {}),
+    ...(vehicleTypeIds && vehicleTypeIds.length > 0 ? { vehicleTypeIds } : {}),
+  };
+}
+
 export function mapStationToResult(station: SharedMobilityStation): DataSourceResult {
   const variant = stationVariant(station);
   return {
@@ -66,6 +103,8 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     status: variant,
     summary: stationSummary(station),
     operator: station.operator,
+    branding: brandingFromStation(station),
+    mapContext: mapContextSelection(station.systemId, station.vehicleTypeIds),
     sortValues: {
       available: station.availableVehicles,
       slots: station.emptySlots ?? 0,
@@ -194,6 +233,25 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     }
   }
 
+  if (station.rentalApps) {
+    const appRows: (string | number)[][] = [];
+    if (station.rentalApps.ios?.storeUri)
+      appRows.push(["iOS App", station.rentalApps.ios.storeUri]);
+    if (station.rentalApps.android?.storeUri) {
+      appRows.push(["Android App", station.rentalApps.android.storeUri]);
+    }
+    if (appRows.length > 0) {
+      sections.push({
+        title: "Apps",
+        type: "table",
+        columns: ["", ""],
+        rows: appRows,
+        sectionIcon: "open_in_new",
+        collapsed: true,
+      });
+    }
+  }
+
   // Location hint
   if (station.locationHint) {
     sections.push({
@@ -226,6 +284,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Access method → usageInfo
   const usageInfo = station.accessMethod ? { type: `Access: ${station.accessMethod}` } : undefined;
+  const branding = brandingFromStation(station);
 
   return {
     id: station.id,
@@ -233,7 +292,15 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     name: station.name,
     coordinates: station.coordinates,
     address,
-    operator: station.operator ? { name: station.operator, url: station.website } : undefined,
+    branding,
+    operator:
+      station.operator || station.branding?.legalName
+        ? {
+            name: station.operator ?? station.branding?.name ?? station.name,
+            url: station.website,
+            legalName: station.branding?.legalName,
+          }
+        : undefined,
     usageInfo,
     sections,
   };
@@ -274,6 +341,11 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
     status: variant,
     summary: vehicleSummary(vehicle),
     operator: vehicle.operator,
+    branding: brandingFromVehicle(vehicle),
+    mapContext: mapContextSelection(
+      vehicle.systemId,
+      vehicle.vehicleTypeId ? [vehicle.vehicleTypeId] : undefined,
+    ),
     sortValues: {
       ...(vehicle.batteryLevel !== undefined ? { battery: vehicle.batteryLevel } : {}),
       ...(vehicle.rangeMeters !== undefined ? { range: vehicle.rangeMeters } : {}),
@@ -308,6 +380,29 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
     sectionIcon: "info",
   });
 
+  if (vehicle.rentalUris || vehicle.rentalApps) {
+    const linkRows: (string | number)[][] = [];
+    if (vehicle.rentalUris?.web) linkRows.push(["Web", vehicle.rentalUris.web]);
+    if (vehicle.rentalUris?.ios) linkRows.push(["iOS", vehicle.rentalUris.ios]);
+    if (vehicle.rentalUris?.android) linkRows.push(["Android", vehicle.rentalUris.android]);
+    if (vehicle.rentalApps?.ios?.storeUri)
+      linkRows.push(["iOS App", vehicle.rentalApps.ios.storeUri]);
+    if (vehicle.rentalApps?.android?.storeUri) {
+      linkRows.push(["Android App", vehicle.rentalApps.android.storeUri]);
+    }
+    if (linkRows.length > 0) {
+      sections.push({
+        title: "Book",
+        type: "table",
+        columns: ["", ""],
+        rows: linkRows,
+        sectionIcon: "open_in_new",
+        collapsed: true,
+      });
+    }
+  }
+
+  const branding = brandingFromVehicle(vehicle);
   return {
     id: vehicle.id,
     sources: vehicle.sources,
@@ -315,7 +410,15 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
       ? `${vehicle.operator} ${FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"}`
       : (FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"),
     coordinates: vehicle.coordinates,
-    operator: vehicle.operator ? { name: vehicle.operator } : undefined,
+    branding,
+    operator:
+      vehicle.operator || vehicle.branding?.legalName
+        ? {
+            name: vehicle.operator ?? vehicle.branding?.name ?? "Operator",
+            url: vehicle.rentalUris?.web,
+            legalName: vehicle.branding?.legalName,
+          }
+        : undefined,
     sections,
   };
 }

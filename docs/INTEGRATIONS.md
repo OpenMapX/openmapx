@@ -409,7 +409,7 @@
 - Usage limits: Set per API product
 - Privacy: https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy
 - Country: Germany (Deutsche Bahn AG)
-- Data sent: Not directly called by geocoding-db-ris (used by overlay-live-trains)
+- Data sent: Not directly called by geocoding-db-ris (used by overlay-live-transit via live-transit-db-ris)
 - End-user data exposure: Server-only
 - DPA: Not available
 - Coverage: Germany
@@ -423,7 +423,7 @@
 - Usage limits: Set per API product
 - Privacy: https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy
 - Country: Germany (Deutsche Bahn AG)
-- Data sent: Not directly called by geocoding-db-ris (used by overlay-live-trains)
+- Data sent: Not directly called by geocoding-db-ris (used by overlay-live-transit via live-transit-db-ris)
 - End-user data exposure: Server-only
 - DPA: Not available
 - Coverage: Germany
@@ -843,12 +843,12 @@ No external API calls.
 - Env vars: None
 - Self-hostable: Yes — Docker image (<https://github.com/wiktorn/Overpass-API>)
 
-## overlay-live-trains
+## overlay-live-transit
 
 ### Deutsche Bahn RIS APIs — via shared `db-ris` service
 - Data sent: Railway administration IDs (operator filter)
 - Data received: Live + emulated train positions with journeyID, lat/lng, direction, speed, train category/name, origin/destination
-- Purpose: Display live GPS positions of active Deutsche Bahn trains on the map
+- Purpose: Contribute Germany rail vehicle positions to the generic live-transit overlay
 - License: Proprietary (custom bilateral license per API product)
 - URL: https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen
 - Commercial use: Yes, with individual license agreement
@@ -859,6 +859,38 @@ No external API calls.
 - DPA: Not available
 - Coverage: Germany
 - Env vars: None (uses shared DB RIS credentials from geocoding-db-ris)
+- Self-hostable: No
+
+### Entur Vehicle Positions v2 — `https://api.entur.io/realtime/v2/vehicles/graphql`
+- Data sent: Viewport bounding box, max data age, monitored-only filter, `ET-Client-Name` header
+- Data received: Realtime transit vehicle ids, positions, bearing, speed, line/public code, operator, service journey ids, monitored stop refs
+- Purpose: Contribute realtime public-transit vehicle positions to the live-transit overlay
+- License: NLOD 2.0
+- URL: https://data.norge.no/nlod/en/2.0
+- Commercial use: Yes
+- Attribution: Yes — "Data made available by Entur"
+- Privacy: https://om.entur.no/personvern/
+- Country: Norway (Entur AS)
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Norway
+- Env vars: None required; optional integration config overrides: `clientName`, `journeyPlannerEndpoint`, `vehiclesEndpoint`
+- Self-hostable: No
+
+### Entur Journey Planner Situations API — `https://api.entur.io/journey-planner/v3/graphql`
+- Data sent: `ET-Client-Name` header; no end-user identifiers; situations are filtered server-side to the current viewport after fetch
+- Data received: Public transport situations/alerts with summary, description, severity, validity period, affected lines, stop places, quays
+- Purpose: Add provider alerts and disruption badges to the live-transit overlay
+- License: NLOD 2.0
+- URL: https://data.norge.no/nlod/en/2.0
+- Commercial use: Yes
+- Attribution: Yes — "Data made available by Entur"
+- Privacy: https://om.entur.no/personvern/
+- Country: Norway (Entur AS)
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Norway
+- Env vars: None required; optional integration config overrides: `clientName`, `journeyPlannerEndpoint`, `vehiclesEndpoint`
 - Self-hostable: No
 
 ## overlay-natural-events
@@ -1922,35 +1954,35 @@ No external API calls (queries local PostGIS database).
 - Env vars: `MOTIS_URL` — optional (default: `http://localhost:8081`)
 - Self-hostable: Yes — already self-hosted
 
-## transit-opendata-ch
+## transit-opentransportdata-ch
 
-### OpenData.ch Locations API — `https://transport.opendata.ch/v1/locations`
-- Data sent: Coordinates (latitude, longitude) or search query
-- Data received: Stations with id, name, coordinates
-- Purpose: Find Swiss transit stations near a coordinate
-- License: MIT (API software)
-- URL: https://github.com/OpendataCH/Transport/blob/master/LICENSE
-- Commercial use: Yes (MIT software); underlying Swiss transport data has its own terms
-- Usage limits: None by license; hosted instance may have operational limits
-- Attribution: "Copyright (c) 2012 Opendata.ch" + MIT license text
-- Privacy: -
-- Country: Switzerland (Opendata.ch, Verein/non-profit, Basel)
-- Privacy other: No dedicated privacy policy found; transport.opendata.ch is unofficial
+### Swiss Open Journey Planner (OJP) — `https://api.opentransportdata.swiss/ojp20`
+- Data sent: Search text, stop identifiers, nearby-search coordinates, trip origin/destination coordinates, departure/arrival time, request language, requestor id
+- Data received: Stops, departures/arrivals, trip itineraries, trip detail and geometry, service metadata, occupancy and formation references where available
+- Purpose: Official Swiss transit stop search, nearby stops, live boards, route discovery, trip planning, trip geometry and trip detail
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/terms-of-use/
+- Commercial use: Conditional — official terms permit use by companies and publication in applications, but the grant is platform-specific rather than a standard OSS/open-data license
+- Usage limits: API key required; official limits apply and backend caching is mandatory
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland (Open Data Mobilität Schweiz / SKI on behalf of the Swiss Federal Office of Transport)
 - End-user data exposure: Server-only
 - DPA: Not available
 - Coverage: Switzerland
-- Env vars: None
+- Env vars: None directly; configure shared secret `opentransportdata-ch-api-key`
 - Self-hostable: No
 
-### OpenData.ch Stationboard API — `https://transport.opendata.ch/v1/stationboard`
-- Data sent: Station ID, result limit, departure/arrival mode
-- Data received: Stationboard entries with departure/arrival times, delay (minutes), platform, prognosis (null = cancelled), vehicle category, destination/origin
-- Purpose: Departure/arrival boards for Swiss transit stations
-- License: MIT (API software)
-- URL: https://github.com/OpendataCH/Transport/blob/master/LICENSE
-- Commercial use: Yes (MIT)
-- Attribution: MIT copyright notice
-- Privacy: -
+### Swiss GTFS Static Timetable — `https://opentransportdata.swiss/en/cookbook/timetable-cookbook/gtfs/`
+- Data sent: Dataset page fetches and file downloads only
+- Data received: Official Swiss GTFS static timetable, including routes, trips, stop times, shapes and original Swiss stop identifiers
+- Purpose: Back Swiss `getRoute()` / `getRouteStops()` enrichment with durable stop sequences, route colors and line geometry when the official feed is available
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/timetable-cookbook/gtfs/
+- Commercial use: Conditional
+- Usage limits: Large file-based open-data download; refresh on source timetable updates and cache/import server-side
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
 - Country: Switzerland
 - End-user data exposure: Server-only
 - DPA: Not available
@@ -1958,21 +1990,158 @@ No external API calls (queries local PostGIS database).
 - Env vars: None
 - Self-hostable: No
 
-### OpenData.ch Connections API — `https://transport.opendata.ch/v1/connections`
-- Data sent: Origin and destination station IDs, date, time, result limit, optional arrival time flag
-- Data received: Connections with duration, departure/arrival times, transfers count, legs with journey name/category, walk segments, station coordinates
-- Purpose: Plan transit connections between two Swiss stations
-- License: MIT (API software)
-- URL: https://github.com/OpendataCH/Transport/blob/master/LICENSE
-- Commercial use: Yes (MIT)
-- Attribution: MIT copyright notice
-- Privacy: -
+### Swiss GTFS Realtime Service Alerts — `https://api.opentransportdata.swiss/la/gtfs-sa`
+- Data sent: Authenticated feed request only (no user coordinates or ids beyond the API key)
+- Data received: Nationwide GTFS-RT service alerts with affected stops/routes and active periods
+- Purpose: Swiss stop-level, route-level and bbox-level transit alerts
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/event-cookbook/gtfs-sa/
+- Commercial use: Conditional
+- Usage limits: API key required; official docs describe stricter polling limits than generic platform limits
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: None directly; configure shared secret `opentransportdata-ch-api-key`
+- Self-hostable: No
+
+### Swiss GTFS Realtime Trip Updates — `https://api.opentransportdata.swiss/la/gtfs-rt`
+- Data sent: Authenticated feed request only (no user coordinates or ids beyond the API key)
+- Data received: Nationwide GTFS-RT trip updates for Swiss realtime-capable operators, with stop-time delays/cancellations
+- Purpose: Conservative stop-board overlay for Swiss departures/arrivals when the GTFS-RT stop and time match the OJP board entry
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/realtime-prediction-cookbook/gtfs-rt/
+- Commercial use: Conditional
+- Usage limits: API key required; official docs state two requests per minute per key and 30 second cache cadence
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: None directly; configure shared secret `opentransportdata-ch-api-key`
+- Self-hostable: No
+
+### Swiss SIRI Situation Exchange — `https://api.opentransportdata.swiss/la/siri-sx`
+- Data sent: Authenticated feed request only (no user coordinates or ids beyond the API key)
+- Data received: Nationwide planned and unplanned SIRI-SX incident messages with affected lines/operators/stops and validity windows
+- Purpose: Merge Swiss event/situation data into route, stop and bbox alert surfaces
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/
+- Commercial use: Conditional
+- Usage limits: API key required; use `siri-sx-unplanned` for frequent polling and `siri-sx` only occasionally for the full/planned feed
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: None directly; configure shared secret `opentransportdata-ch-api-key`
+- Self-hostable: No
+
+### Swiss OJP Fare — `https://api.opentransportdata.swiss/ojpfare`
+- Data sent: Serialized OJP trip request fragments for fare lookup, request language, requestor id
+- Data received: Fare products, authorities, ticket prices, classes and transfer bundles
+- Purpose: Populate `TripPlan.fare` for Swiss OJP itineraries
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/ojp-fare/
+- Commercial use: Conditional
+- Usage limits: API key required; backend caching strongly recommended
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: None directly; configure shared secret `opentransportdata-ch-api-key`
+- Self-hostable: No
+
+### Swiss Train Formation Service — `https://api.opentransportdata.swiss/formation`
+- Data sent: Authenticated query with rail operator code (`evu`), operation date and train number
+- Data received: Train composition details, short formation strings, vehicle counts, seat counts and coach attributes where the operator publishes them
+- Purpose: Enrich Swiss `VehicleJourney` responses with coach composition metadata beyond the OJP formation references
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/realtime-prediction-cookbook/formationsdaten/
+- Commercial use: Conditional
+- Usage limits: API key required; service only returns supported rail operators and today/+3-day journeys where realtime formation data is available
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: None directly; configure shared secret `opentransportdata-ch-api-key`
+- Self-hostable: No
+
+### Swiss Occupancy Forecast Dataset — `https://data.opentransportdata.swiss/en/dataset/occupancy-forecast-json-dataset`
+- Data sent: Dataset page fetches and ZIP download requests only
+- Data received: Per-day, per-operator JSON occupancy forecasts with train, section, stop and fare-class occupancy levels
+- Purpose: Fill Swiss departure, itinerary-leg and `VehicleJourney` occupancy when OJP does not carry realtime occupancy directly
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://data.opentransportdata.swiss/en/dataset/occupancy-forecast-json-dataset
+- Commercial use: Conditional
+- Usage limits: Large batch ZIP; download/cache server-side and read only the required operator/day entry
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
 - Country: Switzerland
 - End-user data exposure: Server-only
 - DPA: Not available
 - Coverage: Switzerland
 - Env vars: None
 - Self-hostable: No
+
+### Swiss Service and Traffic Point Master Data — `https://data.opentransportdata.swiss/`
+- Data sent: Dataset page fetches and file downloads only
+- Data received: Service points, traffic points, accessibility, reference points, contact points, toilets, parking lots and relations
+- Purpose: Swiss stop identity crosswalks, platform hierarchy, accessibility, amenities and station infrastructure enrichment
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/masterdata-cookbook/
+- Commercial use: Conditional
+- Usage limits: File-based open-data downloads; refresh regularly to stay aligned with source updates
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: None
+- Self-hostable: No
+
+### Swiss Business Organisation Realtime/Event Metadata — `https://data.opentransportdata.swiss/`
+- Data sent: CSV download requests only
+- Data received: Business-organisation names, abbreviations, realtime capability flags, SIRI participant refs and operator-number crosswalks
+- Purpose: Map Swiss operator refs to human-readable branding and link OJP/SIRI/formations to the same operator metadata
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://data.opentransportdata.swiss/en/dataset/go-realtime
+- Commercial use: Conditional
+- Usage limits: File-based open-data downloads; current CKAN catalog notes that these legacy datasets are scheduled to be replaced after June 30, 2026
+- Attribution: Source: opentransportdata.swiss
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: None
+- Self-hostable: No
+
+### OpenStreetMap Geometry Used by Swiss OJP Outputs
+- Data sent: None directly from this integration; OSM attribution applies where Swiss OJP geometry is OSM-backed
+- Data received: Derived routing geometry via Swiss OJP responses
+- Purpose: Required attribution for path/geometry outputs backed by OpenStreetMap
+- License: ODbL 1.0
+- URL: https://www.openstreetmap.org/copyright
+- Commercial use: Yes
+- Usage limits: N/A
+- Attribution: Yes — "© OpenStreetMap contributors"
+- Privacy: https://osmfoundation.org/wiki/Privacy_Policy
+- Country: UK (OpenStreetMap Foundation)
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Global, but only relevant here where Swiss OJP geometry uses OSM
+- Env vars: None
+- Self-hostable: Yes — self-hosted OSM stacks are possible, but this integration consumes geometry through Swiss OJP
 
 ## transit-otp
 

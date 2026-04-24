@@ -21,6 +21,7 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { formatTime } from "@/lib/formatTime";
 import { TEAL } from "@/lib/theme";
+import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { AlertsBanner } from "./AlertsBanner";
 import { RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
@@ -30,8 +31,6 @@ interface TripDetailViewProps {
   onBack: () => void;
   clearSearchBar?: boolean;
 }
-
-import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 
 export function TripDetailView({ departure, onBack, clearSearchBar = false }: TripDetailViewProps) {
   const t = useTranslations("transit");
@@ -51,6 +50,8 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
   const lineColor = departure.route.color
     ? `#${departure.route.color.replace("#", "")}`
     : (MODE_COLORS[departure.route.mode] ?? TEAL);
+  const serviceInfo = journey?.serviceInfo;
+  const formationDetails = journey?.formationDetails;
 
   return (
     <Box>
@@ -133,6 +134,157 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
             // biome-ignore lint/suspicious/noArrayIndexKey: static ordered remark list
             <RemarkChip key={i} remark={remark} />
           ))}
+        </Box>
+      )}
+
+      {(serviceInfo || formationDetails) && (
+        <Box sx={{ px: 2, pt: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
+          {serviceInfo && (
+            <Box
+              sx={{
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 2,
+                p: 1.5,
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                gap: 1,
+              }}
+            >
+              {serviceInfo.operatorName && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {t("operator")}
+                  </Typography>
+                  <Typography variant="body2">{serviceInfo.operatorName}</Typography>
+                </Box>
+              )}
+              {serviceInfo.trainNumber && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {t("trainNumber")}
+                  </Typography>
+                  <Typography variant="body2">{serviceInfo.trainNumber}</Typography>
+                </Box>
+              )}
+              {serviceInfo.operatorParticipantRef && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {t("operatorCode")}
+                  </Typography>
+                  <Typography variant="body2">{serviceInfo.operatorParticipantRef}</Typography>
+                </Box>
+              )}
+              {serviceInfo.occupancySource === "opentransportdata.swiss/occupancy-forecast" && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    {t("occupancy")}
+                  </Typography>
+                  <Typography variant="body2">{t("occupancyForecast")}</Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {formationDetails && (
+            <Box
+              sx={{
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 2,
+                p: 1.5,
+                display: "flex",
+                flexDirection: "column",
+                gap: 1.25,
+              }}
+            >
+              <Typography variant="subtitle2">{t("formation")}</Typography>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                  gap: 1,
+                }}
+              >
+                {formationDetails.shortFormation && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      {t("formationShort")}
+                    </Typography>
+                    <Typography variant="body2">{formationDetails.shortFormation}</Typography>
+                  </Box>
+                )}
+                {formationDetails.vehicleCount != null && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      {t("vehicleCount")}
+                    </Typography>
+                    <Typography variant="body2">{formationDetails.vehicleCount}</Typography>
+                  </Box>
+                )}
+                {formationDetails.seats != null && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      {t("seats")}
+                    </Typography>
+                    <Typography variant="body2">{formationDetails.seats}</Typography>
+                  </Box>
+                )}
+                {formationDetails.operatorCode && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      {t("operatorCode")}
+                    </Typography>
+                    <Typography variant="body2">{formationDetails.operatorCode}</Typography>
+                  </Box>
+                )}
+              </Box>
+
+              {formationDetails.vehicles?.length ? (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  {formationDetails.vehicles.map((vehicle, index) => (
+                    <Box
+                      key={vehicle.id ?? index}
+                      sx={{
+                        borderTop: "1px solid",
+                        borderColor: "divider",
+                        pt: 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 0.5,
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight={600}>
+                        {vehicle.typeCode || vehicle.typeName || t("vehicle")}{" "}
+                        {vehicle.order != null ? `#${vehicle.order}` : ""}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {[
+                          vehicle.seatsFirstClass != null
+                            ? `${vehicle.seatsFirstClass} ${t("firstClassSeats")}`
+                            : null,
+                          vehicle.seatsSecondClass != null
+                            ? `${vehicle.seatsSecondClass} ${t("secondClassSeats")}`
+                            : null,
+                          vehicle.bikeSpaces != null
+                            ? `${vehicle.bikeSpaces} ${t("bikeSpaces")}`
+                            : null,
+                          vehicle.wheelchairSpaces != null
+                            ? `${vehicle.wheelchairSpaces} ${t("wheelchairSpaces")}`
+                            : null,
+                          vehicle.hasAirConditioning ? t("airConditioning") : null,
+                          vehicle.hasLowFloorAccess ? t("lowFloorAccess") : null,
+                          vehicle.hasToilet ? t("toilet") : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              ) : null}
+            </Box>
+          )}
         </Box>
       )}
 

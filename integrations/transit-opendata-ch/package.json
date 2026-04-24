@@ -1,9 +1,0 @@
-{
-  "name": "@openmapx/integration-transit-opendata-ch",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@openmapx/core": "workspace:^"
-  }
-}

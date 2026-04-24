@@ -1,0 +1,63 @@
+{
+  "id": "live-transit-db-ris",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://developers.deutschebahn.com/",
+  "domains": ["live-transit"],
+  "dependencies": ["overlay-live-transit"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "clientId": {
+        "type": "string",
+        "title": "Client ID",
+        "description": "Deutsche Bahn RIS API client ID.",
+        "x-openmapx-secret": true
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API Key",
+        "description": "Deutsche Bahn RIS API key.",
+        "x-openmapx-secret": true,
+        "x-openmapx-sharedSecretName": "db-ris-api-key"
+      },
+      "administrationIds": {
+        "type": "string",
+        "title": "Administration IDs",
+        "description": "Comma-separated RIS administration IDs to request. Defaults to 80,81.",
+        "default": "80,81"
+      }
+    }
+  },
+  "healthCheck": {
+    "type": "ping",
+    "url": "https://apis.deutschebahn.com/db/apis/ris-maps/v2",
+    "requiredConfigKeys": ["clientId", "apiKey"]
+  },
+  "quality": "built-in",
+  "category": "Transit",
+  "dataSources": [
+    {
+      "sourceId": "db-ris-maps",
+      "name": "Deutsche Bahn RIS Maps",
+      "url": "https://apis.deutschebahn.com/",
+      "license": "Proprietary (bilateral license)",
+      "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/privacypolicy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

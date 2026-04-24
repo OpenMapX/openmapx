@@ -90,4 +90,67 @@ export function setup(ctx: IntegrationContext): void {
       throw err;
     }
   });
+
+  ctx.registerRoute("GET", "/:id/map-context", async (req, reply) => {
+    const provider = orchestrator.getProvider(req.params.id);
+    if (!provider) {
+      reply.status(404).send({ error: "Unknown data source" });
+      return;
+    }
+
+    const getMapContext = provider.getMapContext;
+    if (!getMapContext) {
+      reply.send(null);
+      return;
+    }
+
+    const south = Number(req.query.south);
+    const west = Number(req.query.west);
+    const north = Number(req.query.north);
+    const east = Number(req.query.east);
+
+    if ([south, west, north, east].some((n) => !Number.isFinite(n))) {
+      reply.status(400).send({ error: "Invalid bbox coordinates" });
+      return;
+    }
+
+    const bbox = { south, west, north, east };
+
+    let filters: Record<string, unknown> | undefined;
+    if (req.query.filters) {
+      try {
+        filters = JSON.parse(req.query.filters);
+      } catch {
+        reply.status(400).send({ error: "Invalid filters JSON" });
+        return;
+      }
+    }
+
+    let options: Record<string, unknown> | undefined;
+    if (req.query.options) {
+      try {
+        options = JSON.parse(req.query.options);
+      } catch {
+        reply.status(400).send({ error: "Invalid options JSON" });
+        return;
+      }
+    }
+
+    const ttl = orchestrator.getMapContextTtl(provider);
+    const cacheKey = orchestrator.mapContextCacheKey(req.params.id, bbox, filters, options);
+
+    try {
+      const context = await ctx.cache.withCache(cacheKey, ttl, () =>
+        getMapContext(bbox, filters, options),
+      );
+      reply.header("Cache-Control", `public, max-age=${Math.min(ttl, 300)}`);
+      reply.send(context ?? null);
+    } catch (err) {
+      if (err instanceof ConfigurationError) {
+        reply.status(503).send({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+  });
 }

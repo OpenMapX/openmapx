@@ -1,0 +1,115 @@
+{
+  "id": "transit-entur",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["transit"],
+  "category": "Transit",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "clientName": {
+        "type": "string",
+        "title": "ET-Client-Name",
+        "description": "Client identifier sent to Entur. Entur recommends the format \"company-application\".",
+        "default": "openmapx-server"
+      },
+      "boundaryCountry": {
+        "type": "string",
+        "title": "Boundary country",
+        "description": "Optional ISO 3166-1 alpha-3 country filter applied to stop search requests. Defaults to NOR.",
+        "default": "NOR"
+      },
+      "multiModal": {
+        "type": "string",
+        "title": "Multimodal stop behavior",
+        "description": "Whether Entur stop search should return multimodal parent stops, child stops, or both.",
+        "enum": ["parent", "child", "all"],
+        "default": "parent"
+      },
+      "geocoderEndpoint": {
+        "type": "string",
+        "title": "Geocoder endpoint",
+        "description": "Base URL of the Entur geocoder API. Defaults to the public Entur endpoint.",
+        "format": "url"
+      },
+      "journeyPlannerEndpoint": {
+        "type": "string",
+        "title": "Journey Planner endpoint",
+        "description": "Full URL of the Entur Journey Planner v3 GraphQL endpoint.",
+        "format": "url"
+      },
+      "vehiclesEndpoint": {
+        "type": "string",
+        "title": "Vehicle positions endpoint",
+        "description": "Full URL of the Entur realtime vehicle GraphQL endpoint.",
+        "format": "url"
+      },
+      "nsrEndpoint": {
+        "type": "string",
+        "title": "NSR endpoint",
+        "description": "Base URL of the Entur National Stop Register read API.",
+        "format": "url"
+      }
+    }
+  },
+  "backend": {
+    "routes": false
+  },
+  "healthCheck": {
+    "type": "custom"
+  },
+  "dataSources": [
+    {
+      "sourceId": "entur-journey-planner",
+      "name": "Entur Journey Planner v3",
+      "url": "https://developer.entur.org/pages-journeyplanner-journeyplanner/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Data made available by Entur",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "entur-vehicles",
+      "name": "Entur Vehicle Positions v2",
+      "url": "https://developer.entur.org/pages-real-time-vehicle/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Data made available by Entur",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "entur-nsr",
+      "name": "Entur National Stop Register",
+      "url": "https://developer.entur.org/stop-places-v1-read/",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Data made available by Entur",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://om.entur.no/personvern/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ],
+  "dependencies": ["transit"]
+}

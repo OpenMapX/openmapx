@@ -17,6 +17,7 @@ import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { formatTime } from "@/lib/formatTime";
 import { TEAL, TEAL_HEX } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+import { formatCo2Emission } from "../../../lib/formatCo2";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
   low: 0,
@@ -135,14 +136,65 @@ function LiveStopTime({
   );
 }
 
+function TransitEmissionsBadge({
+  co2Grams,
+  isLowest,
+}: {
+  co2Grams: number | null | undefined;
+  isLowest?: boolean;
+}) {
+  const t = useTranslations("directions");
+  const locale = useLocale();
+  const emission = formatCo2Emission(co2Grams, locale);
+  if (!emission) return null;
+
+  return (
+    <Box
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 0.5,
+        px: 0.75,
+        py: 0.35,
+        borderRadius: 99,
+        bgcolor: isLowest ? "rgba(15, 157, 88, 0.12)" : "action.hover",
+        border: "1px solid",
+        borderColor: isLowest ? "rgba(15, 157, 88, 0.24)" : "divider",
+      }}
+    >
+      <Box
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          bgcolor: isLowest ? TEAL : "text.secondary",
+          flexShrink: 0,
+        }}
+      />
+      <Typography
+        variant="caption"
+        fontWeight={600}
+        sx={{ color: isLowest ? TEAL : "text.secondary", fontSize: 10.5 }}
+      >
+        {isLowest ? t("lowestCo2") : t("co2Emissions")}
+      </Typography>
+      <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10.5 }}>
+        {emission}
+      </Typography>
+    </Box>
+  );
+}
+
 export function TransitItineraryCard({
   itinerary,
   active,
+  isLowestCo2 = false,
   onSelect,
   onDetails,
 }: {
   itinerary: TripItinerary;
   active: boolean;
+  isLowestCo2?: boolean;
   onSelect: () => void;
   onDetails: () => void;
 }) {
@@ -160,6 +212,11 @@ export function TransitItineraryCard({
     hour: "2-digit",
     minute: "2-digit",
   });
+  const metaBits: string[] = [];
+  if (itinerary.transfers > 0) metaBits.push(t("transfers", { count: itinerary.transfers }));
+  if (itinerary.walkDistance > 0) {
+    metaBits.push(t("walkDistance", { distance: formatDistance(itinerary.walkDistance) }));
+  }
 
   return (
     <Box
@@ -232,12 +289,16 @@ export function TransitItineraryCard({
         )}
       </Box>
 
-      {itinerary.transfers > 0 && (
+      {metaBits.length > 0 && (
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
-          {t("transfers", { count: itinerary.transfers })}
-          {itinerary.walkDistance > 0 &&
-            ` · ${t("walkDistance", { distance: formatDistance(itinerary.walkDistance) })}`}
+          {metaBits.join(" · ")}
         </Typography>
+      )}
+
+      {itinerary.co2Grams !== undefined && (
+        <Box sx={{ mt: metaBits.length > 0 ? 0.75 : 0.5 }}>
+          <TransitEmissionsBadge co2Grams={itinerary.co2Grams} isLowest={isLowestCo2} />
+        </Box>
       )}
 
       {active && (
@@ -269,4 +330,4 @@ export function TransitItineraryCard({
 }
 
 // Re-export internal helpers needed by TransitDetailsView
-export { LegBadge, LegRemarks, LiveStopTime, TransitLiveBadge };
+export { LegBadge, LegRemarks, LiveStopTime, TransitEmissionsBadge, TransitLiveBadge };

@@ -44,6 +44,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { TEAL } from "@/lib/theme";
+import { BrandMark } from "../shared/BrandMark";
 
 /** Matches 3-decimal Euro prices like "2.119" within a summary string. */
 const EURO_PRICE_GLOBAL_RE = /(\d+\.\d{2})(\d)\s*\u20ac/g;
@@ -74,6 +75,11 @@ function FormattedSummary({ text }: { text: string }) {
     parts.push(text.slice(lastIndex));
   }
   return <>{parts}</>;
+}
+
+function shouldShowOperatorCaption(result: DataSourceResult): boolean {
+  if (!result.operator) return false;
+  return !result.name.toLowerCase().startsWith(result.operator.toLowerCase());
 }
 
 /**
@@ -507,52 +513,65 @@ export function DataSourceFilterContent() {
                     "&:hover": { bgcolor: "var(--omx-hover-bg)" },
                   }}
                 >
-                  <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
-                    {result.name}
-                  </Typography>
-                  {result.operator && (
-                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.25 }}>
-                      {result.operator}
-                    </Typography>
-                  )}
-                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
-                    {result.summary && (
-                      <Typography variant="caption" color="text.secondary">
-                        <FormattedSummary text={result.summary} />
-                      </Typography>
+                  <Box sx={{ display: "flex", gap: 1.25, alignItems: "flex-start" }}>
+                    {result.branding && (
+                      <BrandMark
+                        branding={result.branding}
+                        fallbackName={result.operator ?? result.name}
+                        size={26}
+                      />
                     )}
-                    {result.status && result.status !== "unknown" && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color:
-                            result.status === "open" || result.status === "available"
-                              ? "success.main"
-                              : result.status === "closed" ||
-                                  result.status === "empty" ||
-                                  result.status === "inactive"
-                                ? "error.main"
-                                : result.status === "full"
-                                  ? "warning.main"
-                                  : "text.secondary",
-                          fontWeight: 500,
-                        }}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+                        {result.name}
+                      </Typography>
+                      {shouldShowOperatorCaption(result) && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.25 }}>
+                          {result.operator}
+                        </Typography>
+                      )}
+                      <Box
+                        sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}
                       >
-                        {result.status === "open"
-                          ? tc("open")
-                          : result.status === "closed"
-                            ? tc("closed")
-                            : result.status === "available"
-                              ? tc("available")
-                              : result.status === "empty"
-                                ? tc("empty")
-                                : result.status === "full"
-                                  ? tc("full")
-                                  : result.status === "inactive"
-                                    ? tc("inactive")
-                                    : null}
-                      </Typography>
-                    )}
+                        {result.summary && (
+                          <Typography variant="caption" color="text.secondary">
+                            <FormattedSummary text={result.summary} />
+                          </Typography>
+                        )}
+                        {result.status && result.status !== "unknown" && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color:
+                                result.status === "open" || result.status === "available"
+                                  ? "success.main"
+                                  : result.status === "closed" ||
+                                      result.status === "empty" ||
+                                      result.status === "inactive"
+                                    ? "error.main"
+                                    : result.status === "full"
+                                      ? "warning.main"
+                                      : "text.secondary",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {result.status === "open"
+                              ? tc("open")
+                              : result.status === "closed"
+                                ? tc("closed")
+                                : result.status === "available"
+                                  ? tc("available")
+                                  : result.status === "empty"
+                                    ? tc("empty")
+                                    : result.status === "full"
+                                      ? tc("full")
+                                      : result.status === "inactive"
+                                        ? tc("inactive")
+                                        : null}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
                   </Box>
                 </Box>
               </Box>

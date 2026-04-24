@@ -4,7 +4,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../providers/nextbike-client.js", () => ({
   searchNextbike: vi.fn(),
@@ -20,6 +20,12 @@ vi.mock("../providers/donkey-client.js", () => ({
 
 vi.mock("@openmapx/integration-shared-mobility/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
+  fetchSwissSharedMobilityDataForBbox: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
+}));
+
+vi.mock("@openmapx/integration-shared-mobility/entur-mobility", () => ({
+  enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
+  buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../providers/db-bike-client.js", () => ({
@@ -32,6 +38,7 @@ vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
 
 vi.mock("@openmapx/integration-shared-mobility/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
+  dedupVehicles: vi.fn((items: unknown[]) => items),
 }));
 
 vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
@@ -42,7 +49,14 @@ vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
 }));
 
 import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
-import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+import {
+  buildEnturGeofencingMapContext,
+  enrichEnturMobilityItems,
+} from "@openmapx/integration-shared-mobility/entur-mobility";
+import {
+  fetchGbfsData,
+  fetchSwissSharedMobilityDataForBbox,
+} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
@@ -55,6 +69,14 @@ import { searchDbBikes } from "../providers/db-bike-client.js";
 import { searchDonkey } from "../providers/donkey-client.js";
 import { searchNextbike } from "../providers/nextbike-client.js";
 import { bikeSharingProvider } from "../providers/provider.js";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(fetchSwissSharedMobilityDataForBbox).mockResolvedValue({
+    stations: [],
+    vehicles: [],
+  });
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -127,9 +149,34 @@ describe("bikeSharingProvider.search", () => {
     expect(searchCityBikes).toHaveBeenCalledOnce();
     expect(searchDonkey).toHaveBeenCalledOnce();
     expect(fetchGbfsData).toHaveBeenCalledOnce();
+    expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
     expect(searchDbBikes).toHaveBeenCalledOnce();
     expect(fetchMotisRentals).toHaveBeenCalledOnce();
     expect(results.length).toBeGreaterThan(0);
+  });
+
+  it("merges Swiss sharedmobility.ch coverage when the bbox overlaps Switzerland", async () => {
+    vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
+    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
+    vi.mocked(fetchSwissSharedMobilityDataForBbox).mockResolvedValue({
+      stations: [makeStation("ch-station-1", "gbfs/sharedmobility.ch")],
+      vehicles: [],
+    });
+    vi.mocked(searchNextbike).mockResolvedValue([]);
+    vi.mocked(searchCityBikes).mockResolvedValue([]);
+    vi.mocked(searchDonkey).mockResolvedValue([]);
+    vi.mocked(searchDbBikes).mockResolvedValue({ stations: [], vehicles: [] });
+    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
+
+    const results = await bikeSharingProvider.search({
+      south: 46.9,
+      west: 7.3,
+      north: 47.0,
+      east: 7.5,
+    });
+
+    expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
+    expect(results).toEqual([makeResult("ch-station-1")]);
   });
 
   it("station order: Nextbike > CityBikes > Donkey > GBFS > DB > MOTIS", async () => {
@@ -218,6 +265,25 @@ describe("bikeSharingProvider.search", () => {
     expect(mapVehicleToResult).toHaveBeenCalledWith(motisVehicle);
     expect(results).toHaveLength(3);
   });
+
+  it("runs Entur enrichment on deduplicated stations and vehicles", async () => {
+    vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
+    vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
+    const station = makeStation("gbfs-station", "gbfs");
+    const vehicle = makeVehicle("db-vehicle", "db");
+
+    vi.mocked(searchNextbike).mockResolvedValue([]);
+    vi.mocked(searchCityBikes).mockResolvedValue([]);
+    vi.mocked(searchDonkey).mockResolvedValue([]);
+    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [] });
+    vi.mocked(searchDbBikes).mockResolvedValue({ stations: [], vehicles: [vehicle] });
+    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
+    vi.mocked(dedupStations).mockReturnValue([station]);
+
+    await bikeSharingProvider.search(makeBbox());
+
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle]);
+  });
 });
 
 // getDetail()
@@ -279,5 +345,14 @@ describe("bikeSharingProvider.getDetail", () => {
   it("cache miss returns null", async () => {
     const result = await bikeSharingProvider.getDetail("totally-unknown-id-xyz");
     expect(result).toBeNull();
+  });
+
+  it("delegates map context to Entur geofencing builder", async () => {
+    const bbox = makeBbox();
+    const options = { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] };
+
+    await bikeSharingProvider.getMapContext(bbox, {}, options);
+
+    expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, options);
   });
 });

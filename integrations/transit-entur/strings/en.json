@@ -1,0 +1,11 @@
+{
+  "name": "Entur Transit",
+  "description": "Norway-wide transit stops, boards, routes, trip planning, alerts, vehicles, and stop facilities via Entur",
+  "dataSources": [
+    {
+      "purpose": "Search Norwegian transit stops, fetch stop boards, line details, route sequences, realtime journeys, service alerts, live vehicles, and stop-facility metadata via Entur's public APIs",
+      "dataSent": "Coordinates, stop IDs, line IDs, service-journey IDs, time windows, optional Norway boundary filter, multimodal stop mode, ET-Client-Name header",
+      "dataReceived": "Journey Planner GraphQL stops, lines, trip patterns, estimated calls, service situations, encoded leg geometries, realtime vehicle positions, NSR stop accessibility/equipment/parking data"
+    }
+  ]
+}

@@ -10,6 +10,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY packages/core/package.json packages/core/
 COPY packages/shared-mobility/package.json packages/shared-mobility/
+COPY packages/mobility-formats/package.json packages/mobility-formats/
+COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
@@ -21,6 +23,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY packages/core/package.json packages/core/
 COPY packages/shared-mobility/package.json packages/shared-mobility/
+COPY packages/mobility-formats/package.json packages/mobility-formats/
+COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
@@ -40,6 +44,8 @@ COPY --from=deps /app ./
 
 COPY packages/core/ packages/core/
 COPY packages/shared-mobility/ packages/shared-mobility/
+COPY packages/mobility-formats/ packages/mobility-formats/
+COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY apps/api/ apps/api/
 COPY turbo.json ./
 
@@ -74,8 +80,11 @@ COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 # packages/core must be reachable via packages/core/node_modules).
 COPY packages/core/ packages/core/
 COPY packages/shared-mobility/ packages/shared-mobility/
+COPY packages/mobility-formats/ packages/mobility-formats/
+COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=prod-deps /app/packages/shared-mobility/node_modules ./packages/shared-mobility/node_modules
+COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
 
 # Integrations with pnpm-resolved node_modules (manifests + code + deps)
 COPY --from=prod-deps /app/integrations ./integrations

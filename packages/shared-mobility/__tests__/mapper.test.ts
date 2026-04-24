@@ -100,6 +100,32 @@ describe("mapStationToResult", () => {
       const result = mapStationToResult(station);
       expect(result.sortValues?.slots).toBe(0);
     });
+
+    it("maps branding and map context when Entur metadata is present", () => {
+      const result = mapStationToResult(
+        makeStation({
+          systemId: "voioslo",
+          vehicleTypeIds: ["bike-type"],
+          branding: {
+            name: "Voi",
+            legalName: "Voi Technology",
+            logoUrl: "https://cdn.example.com/voi.svg",
+            color: "#F4A300",
+          },
+        }),
+      );
+
+      expect(result.branding).toMatchObject({
+        name: "Voi",
+        legalName: "Voi Technology",
+        logoUrl: "https://cdn.example.com/voi.svg",
+        color: "#F4A300",
+      });
+      expect(result.mapContext).toEqual({
+        systemIds: ["voioslo"],
+        vehicleTypeIds: ["bike-type"],
+      });
+    });
   });
 
   describe("summary", () => {
@@ -260,6 +286,32 @@ describe("mapVehicleToResult", () => {
       );
       expect(result.sortValues).toEqual({});
     });
+
+    it("maps vehicle branding and map context when Entur metadata is present", () => {
+      const result = mapVehicleToResult(
+        makeVehicle({
+          systemId: "bilkollektivet",
+          vehicleTypeId: "car-type",
+          branding: {
+            name: "Bilkollektivet",
+            legalName: "Bilkollektivet SA",
+            logoUrl: "https://cdn.example.com/bil.svg",
+          },
+          vehicleIconUrl: "https://cdn.example.com/car-icon.svg",
+        }),
+      );
+
+      expect(result.branding).toMatchObject({
+        name: "Bilkollektivet",
+        legalName: "Bilkollektivet SA",
+        logoUrl: "https://cdn.example.com/bil.svg",
+        imageUrl: "https://cdn.example.com/car-icon.svg",
+      });
+      expect(result.mapContext).toEqual({
+        systemIds: ["bilkollektivet"],
+        vehicleTypeIds: ["car-type"],
+      });
+    });
   });
 
   describe("summary", () => {
@@ -415,10 +467,18 @@ describe("mapStationToDetail", () => {
     );
     const section = detail.sections.find((s) => s.title === "Pricing");
     expect(section).toBeDefined();
-    expect(section?.type).toBe("list");
+    expect(section?.type).toBe("pricing");
     expect(section?.sectionIcon).toBe("payments");
     expect(section?.collapsed).toBe(true);
-    expect(section?.items?.[0]).toBe("Standard: 1.50 \u20AC + 0.28 \u20AC/km + 1.90 \u20AC/h");
+    expect(section?.pricingPlans?.[0]).toEqual({
+      name: "Standard",
+      currency: "EUR",
+      unlockFee: 1.5,
+      perKm: 0.28,
+      perHour: 1.9,
+      description: undefined,
+      free: false,
+    });
   });
 
   it("shows 'Free' when pricing has no rates", () => {
@@ -428,7 +488,16 @@ describe("mapStationToDetail", () => {
       }),
     );
     const section = detail.sections.find((s) => s.title === "Pricing");
-    expect(section?.items?.[0]).toBe("Free Plan: Free");
+    expect(section?.type).toBe("pricing");
+    expect(section?.pricingPlans?.[0]).toEqual({
+      name: "Free Plan",
+      currency: "EUR",
+      description: undefined,
+      free: true,
+      unlockFee: undefined,
+      perKm: undefined,
+      perHour: undefined,
+    });
   });
 
   it("includes Book section with rental URIs", () => {

@@ -12,7 +12,14 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
-import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+import {
+  buildEnturGeofencingMapContext,
+  enrichEnturMobilityItems,
+} from "@openmapx/integration-shared-mobility/entur-mobility";
+import {
+  fetchGbfsData,
+  fetchSwissSharedMobilityDataForBbox,
+} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
@@ -60,6 +67,7 @@ class CarSharingProvider implements DataSourceProvider {
   readonly meta = META;
   readonly searchCacheTtl = 300;
   readonly detailCacheTtl = 300;
+  readonly mapContextCacheTtl = 300;
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return [];
@@ -74,9 +82,10 @@ class CarSharingProvider implements DataSourceProvider {
     ];
 
     // Fetch from registered regional clients and GBFS in parallel
-    const [regionalResult, gbfsResult, motisResult] = await Promise.allSettled([
+    const [regionalResult, gbfsResult, swissGbfsResult, motisResult] = await Promise.allSettled([
       searchRegionalClients(bbox),
       fetchGbfsData(bbox, CAR_FORM_FACTORS),
+      fetchSwissSharedMobilityDataForBbox(bbox, CAR_FORM_FACTORS),
       fetchMotisRentals(bboxArray, ["car"]),
     ]);
 
@@ -99,25 +108,36 @@ class CarSharingProvider implements DataSourceProvider {
     if (gbfsResult.status === "fulfilled") {
       allStations.push(...gbfsResult.value.stations);
     }
+    if (swissGbfsResult.status === "fulfilled") {
+      allStations.push(...swissGbfsResult.value.stations);
+    }
 
     // MOTIS/Transitous stations (appended last so existing sources take dedup priority)
     if (motisResult.status === "fulfilled") {
       allStations.push(...motisResult.value.stations);
     }
 
-    // Dedup and map GBFS + MOTIS stations
-    const deduped = dedupStations(allStations);
-    for (const station of deduped) {
+    // Collect all free-floating vehicles: GBFS first, MOTIS last.
+    const allVehicles: SharedMobilityVehicle[] = [];
+    if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
+    if (swissGbfsResult.status === "fulfilled") allVehicles.push(...swissGbfsResult.value.vehicles);
+    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
+
+    const dedupedStations = dedupStations(allStations);
+    const dedupedVehicles = dedupVehicles(allVehicles);
+
+    try {
+      await enrichEnturMobilityItems(dedupedStations, dedupedVehicles);
+    } catch (error) {
+      console.warn("[car-sharing] Entur enrichment failed", error);
+    }
+
+    for (const station of dedupedStations) {
       updateCache(station.id, station);
       results.push(mapStationToResult(station));
     }
 
-    // Collect all free-floating vehicles: GBFS first, MOTIS last.
-    const allVehicles: SharedMobilityVehicle[] = [];
-    if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
-    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
-
-    for (const vehicle of dedupVehicles(allVehicles)) {
+    for (const vehicle of dedupedVehicles) {
       updateCache(vehicle.id, vehicle);
       results.push(mapVehicleToResult(vehicle));
     }
@@ -133,6 +153,14 @@ class CarSharingProvider implements DataSourceProvider {
     }
 
     return null;
+  }
+
+  async getMapContext(
+    bbox: BoundingBox,
+    _filters?: Record<string, unknown>,
+    options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+  ) {
+    return buildEnturGeofencingMapContext(bbox, options);
   }
 }
 

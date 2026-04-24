@@ -15,7 +15,7 @@
       "provider": {
         "type": "string",
         "title": "Provider order",
-        "description": "Comma-separated provider list tried in order (fallback chain). Accepted names: maptiler, nominatim, photon, pelias, motis. Defaults to `maptiler`.",
+        "description": "Comma-separated provider list tried in order (fallback chain). Accepted names: entur, maptiler, nominatim, photon, pelias, motis, transitous, db-ris. Defaults to `maptiler`.",
         "default": "maptiler"
       },
       "nominatimUrl": {

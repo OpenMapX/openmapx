@@ -3,11 +3,13 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validatePublicUrl } from "@openmapx/core";
+import { fetchWithRedirects, USER_AGENT, validatePublicUrl } from "@openmapx/core";
 import { gtfsDate, parseCsv, streamCsvBatches } from "./csv";
 import { sql } from "./db";
+import { invalidateSchemaCaches } from "./queries";
 
 const BATCH_SIZE = 5_000;
+const SWISS_REDIRECT_HOSTS = ["opentransportdata.swiss", "*.opentransportdata.swiss"];
 
 // Schema DDL
 
@@ -55,7 +57,8 @@ function createSchemaDDL(schema: string): string {
       parent_station TEXT,
       stop_timezone TEXT,
       wheelchair_boarding INTEGER DEFAULT 0,
-      platform_code TEXT
+      platform_code TEXT,
+      original_stop_id TEXT
     );
 
     CREATE TABLE "${schema}".calendar (
@@ -156,15 +159,58 @@ function createServiceDaysDDL(schema: string): string {
 
 // Download & Extract
 
-function downloadAndExtract(url: string, tempDir: string): string {
+function isSwissOpenDataUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === "opentransportdata.swiss" || hostname.endsWith(".opentransportdata.swiss");
+  } catch {
+    return false;
+  }
+}
+
+function trustedSwissRedirectHosts(url: string): string[] {
+  return [new URL(url).hostname, ...SWISS_REDIRECT_HOSTS];
+}
+
+async function resolveGtfsDownloadUrl(url: string): Promise<string> {
   validatePublicUrl(url);
+  if (!isSwissOpenDataUrl(url)) return url;
+
+  const response = await fetchWithRedirects(url, {
+    allowedRedirectHosts: trustedSwissRedirectHosts(url),
+    follow203Redirect: true,
+    headers: {
+      Accept: "application/zip, application/octet-stream, */*;q=0.1",
+      "User-Agent": USER_AGENT,
+    },
+    timeoutMs: 300_000,
+  });
+
+  try {
+    if (!response.ok) {
+      throw new Error(`GTFS feed request failed (${response.status}) for ${url}`);
+    }
+    const resolvedUrl = response.url || url;
+    validatePublicUrl(resolvedUrl);
+    return resolvedUrl;
+  } finally {
+    if (response.body) await response.body.cancel().catch(() => {});
+  }
+}
+
+async function downloadAndExtract(url: string, tempDir: string): Promise<string> {
+  const downloadUrl = await resolveGtfsDownloadUrl(url);
   mkdirSync(tempDir, { recursive: true });
   const zipPath = join(tempDir, "feed.zip");
 
   // Download — uses execFileSync to avoid shell injection
-  execFileSync("curl", ["-fsSL", "--proto", "=https,http", "-o", zipPath, url], {
-    timeout: 300_000, // 5 min download timeout
-  });
+  execFileSync(
+    "curl",
+    ["-fsSL", "--proto", "=https,http", "--proto-redir", "=https,http", "-o", zipPath, downloadUrl],
+    {
+      timeout: 300_000, // 5 min download timeout
+    },
+  );
 
   // Compute hash
   const hash = createHash("sha256").update(readFileSync(zipPath)).digest("hex");
@@ -285,6 +331,7 @@ async function importStops(schema: string, gtfsDir: string): Promise<number> {
     r.stop_timezone ?? null,
     r.wheelchair_boarding ? Number.parseInt(r.wheelchair_boarding, 10) : 0,
     r.platform_code ?? null,
+    r.original_stop_id ?? null,
   ]);
   await batchInsert(
     schema,
@@ -303,6 +350,7 @@ async function importStops(schema: string, gtfsDir: string): Promise<number> {
       "stop_timezone",
       "wheelchair_boarding",
       "platform_code",
+      "original_stop_id",
     ],
     data,
   );
@@ -545,11 +593,12 @@ export async function importGtfsFeed(
   try {
     // 1. Download and extract
     onProgress?.("downloading");
-    const gtfsDir = downloadAndExtract(url, tempDir);
+    const gtfsDir = await downloadAndExtract(url, tempDir);
     const hash = getHash(tempDir);
 
-    // 2. Create schema and tables
+    // 2. Create schema and tables (DROP/CREATE in DDL resets column layout; drop stale caches)
     onProgress?.("creating schema");
+    invalidateSchemaCaches(schema);
     await sql.unsafe(createSchemaDDL(schema));
 
     // 3. Import data (order matters for FK constraints)
@@ -607,4 +656,5 @@ export async function importGtfsFeed(
 /** Remove an imported GTFS schema entirely. */
 export async function dropGtfsSchema(schema: string): Promise<void> {
   await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+  invalidateSchemaCaches(schema);
 }

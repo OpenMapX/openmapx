@@ -1,0 +1,11 @@
+{
+  "name": "@openmapx/integration-transit-opentransportdata-ch",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/mobility-formats": "workspace:^",
+    "fflate": "^0.8.2"
+  }
+}

@@ -6,6 +6,7 @@
 
 import type { LngLat } from "@openmapx/core";
 import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
+import { parseCsvRecords } from "@openmapx/mobility-formats";
 import { formatAddress } from "../../geocoding/format-address.js";
 import { createStaticCarSharingClient } from "./static-car-sharing-client.js";
 
@@ -19,44 +20,21 @@ function parseWktPoint(wkt: string): [number, number] | null {
   return [Number.parseFloat(match[1]), Number.parseFloat(match[2])];
 }
 
-/** Parse CSV line respecting quoted fields. */
-function parseCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === "," && !inQuotes) {
-      fields.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  fields.push(current);
-  return fields;
-}
-
 function parse(body: string): SharedMobilityStation[] {
-  const lines = body.split("\n").filter((l) => l.trim());
-  if (lines.length < 2) return [];
+  const rows = parseCsvRecords(body);
+  if (rows.length === 0) return [];
 
-  // Header: WKT,gid,website,name,addr_street,addr_housenumber,level,capacity,description
   const stations: SharedMobilityStation[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const fields = parseCsvLine(lines[i]);
-    if (fields.length < 9) continue;
-
-    const [wkt, gid, website, name, street, houseNumber, _level, capacityStr, description] = fields;
+  for (const row of rows) {
+    const wkt = row.WKT ?? "";
+    const gid = row.gid ?? "";
+    const website = row.website ?? "";
+    const name = row.name ?? "";
+    const street = row.addr_street ?? "";
+    const houseNumber = row.addr_housenumber ?? "";
+    const capacityStr = row.capacity ?? "";
+    const description = row.description ?? "";
     const coords = parseWktPoint(wkt);
     if (!coords) continue;
 

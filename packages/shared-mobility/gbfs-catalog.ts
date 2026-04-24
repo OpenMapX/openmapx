@@ -4,13 +4,29 @@
  */
 
 import { type BoundingBox, USER_AGENT } from "@openmapx/core";
+import {
+  type GbfsV30Manifest,
+  listGbfsManifestDatasetVersions,
+  parseCsvRecords,
+} from "@openmapx/mobility-formats";
 import { TTL, withCache } from "./cache.js";
-import { fetchGbfsSystem } from "./gbfs-client.js";
+import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types.js";
 
 const CATALOG_URL = "https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv";
 const CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog";
+const ENTUR_CATALOG_CACHE_KEY = "shared-mobility:gbfs-catalog:entur";
 const SYSTEM_CACHE_TTL = 300; // 5min for system data
+const ENTUR_GBFS_MANIFEST_URL = "https://api.entur.io/mobility/v2/gbfs/v3/manifest.json";
+const ENTUR_CLIENT_NAME = "openmapx-server";
+const SWISS_SHARED_MOBILITY_ENTRY: GbfsCatalogEntry = {
+  autoDiscoveryUrl: "https://sharedmobility.ch/gbfs.json",
+  countryCode: "CH",
+  location: "Switzerland",
+  name: "sharedmobility.ch",
+  systemId: "sharedmobility.ch",
+  url: "https://sharedmobility.ch",
+};
 
 let catalogEntries: GbfsCatalogEntry[] | null = null;
 let catalogLoadedAt = 0;
@@ -31,7 +47,7 @@ export async function loadCatalog(): Promise<GbfsCatalogEntry[]> {
     return catalogEntries;
   }
 
-  const entries = await withCache<GbfsCatalogEntry[]>(
+  const mobilityDataEntries = await withCache<GbfsCatalogEntry[]>(
     CATALOG_CACHE_KEY,
     TTL.sharedMobility.catalog,
     async () => {
@@ -44,58 +60,91 @@ export async function loadCatalog(): Promise<GbfsCatalogEntry[]> {
     },
   );
 
+  const enturEntries = await withCache<GbfsCatalogEntry[]>(
+    ENTUR_CATALOG_CACHE_KEY,
+    TTL.sharedMobility.catalog,
+    async () => {
+      try {
+        const res = await fetch(ENTUR_GBFS_MANIFEST_URL, {
+          headers: {
+            "User-Agent": USER_AGENT,
+            "ET-Client-Name": ENTUR_CLIENT_NAME,
+          },
+        });
+        if (!res.ok) return [];
+        const manifest = (await res.json()) as GbfsV30Manifest;
+        return parseEnturManifest(manifest);
+      } catch {
+        return [];
+      }
+    },
+  );
+
+  const entries = dedupeCatalogEntries([
+    ...mobilityDataEntries,
+    ...enturEntries,
+    SWISS_SHARED_MOBILITY_ENTRY,
+  ]);
+
   catalogEntries = entries;
   catalogLoadedAt = Date.now();
   return entries;
 }
 
 function parseCatalogCsv(csv: string): GbfsCatalogEntry[] {
-  const lines = csv.split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return [];
-
-  const entries: GbfsCatalogEntry[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const fields = parseCSVLine(lines[i]);
-    if (fields.length < 6) continue;
-    const autoDiscoveryUrl = fields[5]?.trim();
-    if (!autoDiscoveryUrl?.startsWith("http")) continue;
-
-    entries.push({
-      countryCode: fields[0]?.trim() ?? "",
-      name: fields[1]?.trim() ?? "",
-      location: fields[2]?.trim() ?? "",
-      systemId: fields[3]?.trim() ?? "",
-      url: fields[4]?.trim() ?? "",
-      autoDiscoveryUrl,
-    });
-  }
-  return entries;
+  return parseCsvRecords(csv)
+    .map((row) => ({
+      countryCode: row["Country Code"] ?? "",
+      name: row.Name ?? "",
+      location: row.Location ?? "",
+      systemId: row["System ID"] ?? "",
+      url: row.URL ?? "",
+      autoDiscoveryUrl: row["Auto-Discovery URL"] ?? "",
+    }))
+    .filter((entry) => entry.autoDiscoveryUrl.startsWith("http"));
 }
 
-/** Simple CSV line parser handling quoted fields. */
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = "";
-  let inQuotes = false;
+function parseEnturManifest(manifest: GbfsV30Manifest): GbfsCatalogEntry[] {
+  const bySystem = new Map<string, GbfsCatalogEntry>();
 
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === "," && !inQuotes) {
-      fields.push(current);
-      current = "";
-    } else {
-      current += ch;
+  for (const dataset of listGbfsManifestDatasetVersions(manifest)) {
+    const existing = bySystem.get(dataset.systemId);
+    const preferred =
+      !existing ||
+      (dataset.version === "3.0" && !existing.autoDiscoveryUrl.includes("/v3/")) ||
+      (dataset.version !== "3.0" && !existing);
+    if (!preferred) continue;
+
+    bySystem.set(dataset.systemId, {
+      countryCode: "NO",
+      name: dataset.systemId,
+      location: "Norway",
+      systemId: dataset.systemId,
+      url: dataset.url,
+      autoDiscoveryUrl: dataset.url,
+    });
+  }
+
+  return [...bySystem.values()];
+}
+
+function dedupeCatalogEntries(entries: GbfsCatalogEntry[]): GbfsCatalogEntry[] {
+  const bySystemId = new Map<string, GbfsCatalogEntry>();
+
+  for (const entry of entries) {
+    const existing = bySystemId.get(entry.systemId);
+    if (!existing) {
+      bySystemId.set(entry.systemId, entry);
+      continue;
+    }
+    const existingIsV3 = existing.autoDiscoveryUrl.includes("/v3/");
+    const incomingIsV3 = entry.autoDiscoveryUrl.includes("/v3/");
+    if ((!existingIsV3 && incomingIsV3) || entry.autoDiscoveryUrl.includes("sharedmobility.ch")) {
+      bySystemId.set(entry.systemId, entry);
     }
   }
-  fields.push(current);
-  return fields;
+
+  return [...bySystemId.values()];
 }
 
 /**
@@ -201,18 +250,23 @@ export function sortByRelevance(
   });
 }
 
-const inflightProbes = new Map<
-  string,
-  Promise<{ bbox: BoundingBox; vehicleTypes: Set<string> } | null>
->();
+export interface GbfsSystemProbe {
+  bbox: BoundingBox;
+  vehicleTypes: Set<string>;
+  /**
+   * Present when this probe fetched fresh GBFS data. Absent for bbox-cache hits.
+   * Callers can reuse it to avoid fetching the same system twice in one search.
+   */
+  systemData?: GbfsSystemData;
+}
+
+const inflightProbes = new Map<string, Promise<GbfsSystemProbe | null>>();
 
 /**
  * Probe a GBFS system to determine its geographic coverage and vehicle types.
  * Results are cached in memory. Concurrent probes for the same system are coalesced.
  */
-export async function probeSystem(
-  entry: GbfsCatalogEntry,
-): Promise<{ bbox: BoundingBox; vehicleTypes: Set<string> } | null> {
+export async function probeSystem(entry: GbfsCatalogEntry): Promise<GbfsSystemProbe | null> {
   const cached = systemBboxCache.get(entry.systemId);
   if (cached && cached.expiresAt > Date.now()) {
     return { bbox: cached.bbox, vehicleTypes: cached.vehicleTypes };
@@ -228,10 +282,8 @@ export async function probeSystem(
   return promise;
 }
 
-async function probeSystemInner(
-  entry: GbfsCatalogEntry,
-): Promise<{ bbox: BoundingBox; vehicleTypes: Set<string> } | null> {
-  const system = await fetchGbfsSystem(entry.autoDiscoveryUrl);
+async function probeSystemInner(entry: GbfsCatalogEntry): Promise<GbfsSystemProbe | null> {
+  const system = await fetchGbfsSystem(entry.autoDiscoveryUrl, getGbfsDiscoveryHeaders(entry));
   if (!system) return null;
 
   // Determine bbox from stations
@@ -287,7 +339,14 @@ async function probeSystemInner(
     expiresAt: Date.now() + SYSTEM_CACHE_TTL * 1000,
   });
 
-  return { bbox, vehicleTypes };
+  return { bbox, systemData: system, vehicleTypes };
+}
+
+function getGbfsDiscoveryHeaders(entry: GbfsCatalogEntry): Record<string, string> | undefined {
+  if (entry.autoDiscoveryUrl.includes("api.entur.io/mobility/v2/gbfs/")) {
+    return { "ET-Client-Name": ENTUR_CLIENT_NAME };
+  }
+  return undefined;
 }
 
 /** Normalize GBFS form_factor to our VehicleFormFactor type. */

@@ -4,7 +4,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../providers/felyx-client.js", () => ({
   searchFelyx: vi.fn(),
@@ -24,6 +24,12 @@ vi.mock("../providers/nrw-mobidrom-client.js", () => ({
 
 vi.mock("@openmapx/integration-shared-mobility/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
+  fetchSwissSharedMobilityDataForBbox: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
+}));
+
+vi.mock("@openmapx/integration-shared-mobility/entur-mobility", () => ({
+  enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
+  buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
@@ -32,6 +38,7 @@ vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
 
 vi.mock("@openmapx/integration-shared-mobility/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
+  dedupVehicles: vi.fn((items: unknown[]) => items),
 }));
 
 vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
@@ -42,7 +49,14 @@ vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
 }));
 
 import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
-import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+import {
+  buildEnturGeofencingMapContext,
+  enrichEnturMobilityItems,
+} from "@openmapx/integration-shared-mobility/entur-mobility";
+import {
+  fetchGbfsData,
+  fetchSwissSharedMobilityDataForBbox,
+} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
@@ -55,6 +69,14 @@ import { searchGoSharing } from "../providers/gosharing-client.js";
 import { searchLink } from "../providers/link-client.js";
 import { searchNrwMobidrom } from "../providers/nrw-mobidrom-client.js";
 import { scooterSharingProvider } from "../providers/provider.js";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(fetchSwissSharedMobilityDataForBbox).mockResolvedValue({
+    stations: [],
+    vehicles: [],
+  });
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -118,6 +140,7 @@ describe("scooterSharingProvider.search", () => {
     await scooterSharingProvider.search(makeBbox());
 
     const dedupCall = vi.mocked(dedupStations).mock.calls[0][0] as SharedMobilityStation[];
+    expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
     expect(dedupCall).toHaveLength(3);
     expect(dedupCall[0].id).toBe("gbfs1");
     // Aggregator sources are appended last (NRW, then MOTIS) so direct GBFS takes dedup priority
@@ -255,6 +278,25 @@ describe("scooterSharingProvider.search", () => {
 
     expect(searchNrwMobidrom).toHaveBeenCalledWith(bbox);
   });
+
+  it("runs Entur enrichment on deduplicated stations and vehicles", async () => {
+    vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
+    vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
+    const station = makeStation("gbfs-station", "gbfs");
+    const vehicle = makeVehicle("gbfs-vehicle", "gbfs");
+
+    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [vehicle] });
+    vi.mocked(searchFelyx).mockResolvedValue([]);
+    vi.mocked(searchGoSharing).mockResolvedValue([]);
+    vi.mocked(searchLink).mockResolvedValue([]);
+    vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
+    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
+    vi.mocked(dedupStations).mockReturnValue([station]);
+
+    await scooterSharingProvider.search(makeBbox());
+
+    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle]);
+  });
 });
 
 // getDetail()
@@ -317,5 +359,14 @@ describe("scooterSharingProvider.getDetail", () => {
   it("cache miss returns null", async () => {
     const result = await scooterSharingProvider.getDetail("totally-unknown-sc-id");
     expect(result).toBeNull();
+  });
+
+  it("delegates map context to Entur geofencing builder", async () => {
+    const bbox = makeBbox();
+    const options = { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] };
+
+    await scooterSharingProvider.getMapContext(bbox, {}, options);
+
+    expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, options);
   });
 });

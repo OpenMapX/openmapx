@@ -1,3 +1,7 @@
+export {
+  resolvePrimaryTransitStopId,
+  resolvePrimaryTransitStopIdFromLinkedStops,
+} from "./resolvePrimaryTransitStopId";
 export { useArrivals } from "./useArrivals";
 export { useDepartures } from "./useDepartures";
 export { useLinkedTransitAlerts } from "./useLinkedTransitAlerts";
@@ -6,6 +10,7 @@ export { useLinkedTransitDepartures } from "./useLinkedTransitDepartures";
 export { useLinkedTransitFacilities } from "./useLinkedTransitFacilities";
 export { useLinkedTransitRoutes } from "./useLinkedTransitRoutes";
 export { useLinkedTransitStops } from "./useLinkedTransitStops";
+export { usePlaceStopInfrastructure } from "./usePlaceStopInfrastructure";
 export { useProviders } from "./useProviders";
 export { useRouteAlerts } from "./useRouteAlerts";
 export { useRouteLive } from "./useRouteLive";
@@ -13,6 +18,7 @@ export { useRouteStops } from "./useRouteStops";
 export { useRoutesForStop } from "./useRoutesForStop";
 export { useStopAlerts } from "./useStopAlerts";
 export { useStopFacilities } from "./useStopFacilities";
+export { useStopInfrastructure } from "./useStopInfrastructure";
 export { useStopPlatforms } from "./useStopPlatforms";
 export { useStopSearch } from "./useStopSearch";
 export { useStopsNearby } from "./useStopsNearby";

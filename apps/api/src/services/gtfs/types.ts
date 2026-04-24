@@ -3,7 +3,7 @@ import type { BBox } from "@openmapx/core";
 export interface CatalogFeed {
   id: string;
   name: string;
-  source: "transitous" | "mobilitydb" | "manual";
+  source: "transitous" | "mobilitydb" | "manual" | "opentransportdata-swiss";
   countryCode: string;
   url: string;
   license?: string;
@@ -39,6 +39,7 @@ export interface GtfsStopRow {
   location_type: number;
   parent_station: string | null;
   platform_code: string | null;
+  original_stop_id?: string | null;
   route_types: number[] | null;
 }
 
@@ -56,4 +57,34 @@ export interface GtfsDepartureRow {
   /** Scheduled arrival time (ISO string) — present on arrival rows */
   t_arrival?: string;
   stop_sequence: number;
+}
+
+export interface GtfsRepresentativeTripRow {
+  trip_id: string;
+  route_id: string;
+  route_short_name: string;
+  route_long_name: string;
+  route_type: number;
+  route_color: string | null;
+  route_text_color: string | null;
+  trip_headsign: string | null;
+  shape_id: string | null;
+  agency_name: string | null;
+}
+
+export interface GtfsTripStopRow {
+  stop_id: string;
+  stop_name: string;
+  stop_lat: number;
+  stop_lon: number;
+  parent_station: string | null;
+  platform_code: string | null;
+  original_stop_id: string | null;
+  stop_sequence: number;
+}
+
+export interface GtfsShapePointRow {
+  shape_pt_lat: number;
+  shape_pt_lon: number;
+  shape_pt_sequence: number;
 }

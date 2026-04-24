@@ -1,0 +1,35 @@
+{
+  "id": "overlay-live-transit",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://developer.entur.org/pages-real-time-vehicle/",
+  "domains": ["map-overlay", "live-transit"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "liveTransit",
+      "icon": "train"
+    },
+    "overlay": {
+      "excludes": []
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Transit"
+}

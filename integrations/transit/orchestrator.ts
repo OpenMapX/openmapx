@@ -5,6 +5,7 @@ import type {
   ServiceAlert,
   TransitRoute,
   TransitStop,
+  TransitStopInfrastructure,
   TripPlan,
   VehiclePosition,
 } from "@openmapx/core";
@@ -260,6 +261,19 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     } catch {
       providerHealth.recordFailure(provider.id);
       return [];
+    }
+  }
+
+  async function getStopInfrastructure(stopId: string): Promise<TransitStopInfrastructure | null> {
+    const provider = resolveByPrefix(stopId);
+    if (!provider?.getStopInfrastructure) return null;
+    try {
+      const result = await provider.getStopInfrastructure(stopId);
+      providerHealth.recordSuccess(provider.id);
+      return result;
+    } catch {
+      providerHealth.recordFailure(provider.id);
+      return null;
     }
   }
 
@@ -547,6 +561,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     getVehicleRadar,
     getAlerts,
     getStopPlatforms,
+    getStopInfrastructure,
     getStopTimetable,
     getRoutesForStop,
     getRoutesInBbox,

@@ -1,5 +1,28 @@
 import type { Ids, LngLat } from "@openmapx/core";
 
+export interface SharedMobilityBranding {
+  name?: string;
+  legalName?: string;
+  logoUrl?: string;
+  logoUrlDark?: string;
+  color?: string;
+}
+
+export interface SharedMobilityRentalAppLink {
+  storeUri?: string;
+  discoveryUri?: string;
+}
+
+export interface SharedMobilityRentalApps {
+  ios?: SharedMobilityRentalAppLink;
+  android?: SharedMobilityRentalAppLink;
+}
+
+export interface SharedMobilityAreaGeometry {
+  type: "Polygon" | "MultiPolygon";
+  coordinates: unknown;
+}
+
 export interface SharedMobilityStation {
   /**
    * Canonical `scheme:value` id, typically `<system-id>:<native>`. See
@@ -18,9 +41,14 @@ export interface SharedMobilityStation {
   emptySlots?: number;
   /** Total station capacity. */
   capacity?: number;
+  systemId?: string;
+  nativeId?: string;
   operator?: string;
+  branding?: SharedMobilityBranding;
   /** Vehicle form factor(s) available at this station. */
   vehicleTypes: VehicleFormFactor[];
+  /** Provider-specific vehicle type ids relevant to this station. */
+  vehicleTypeIds?: string[];
   /** Whether the station is currently operational. */
   isActive: boolean;
   /** Source system identifiers — all data sources that contributed to this station. */
@@ -46,6 +74,10 @@ export interface SharedMobilityStation {
   operatorNotes?: string;
   /** Per-station website or booking URL. */
   website?: string;
+  /** App store / discovery links for the operator. */
+  rentalApps?: SharedMobilityRentalApps;
+  /** Station area polygon when the source provides one. */
+  stationArea?: SharedMobilityAreaGeometry;
   /** Structured vehicle type details from GBFS (make, model, accessories, CO2). */
   vehicleTypeDetails?: VehicleTypeDetail[];
   /** Human-readable pricing summary (e.g., "from 0.28 €/km + 1.90 €/h"). */
@@ -57,6 +89,7 @@ export interface SharedMobilityStation {
 }
 
 export interface VehicleTypeDetail {
+  id?: string;
   name: string;
   formFactor?: VehicleFormFactor;
   make?: string;
@@ -66,6 +99,10 @@ export interface VehicleTypeDetail {
   co2PerKm?: number;
   riderCapacity?: number;
   returnConstraint?: string;
+  imageUrl?: string;
+  iconUrl?: string;
+  iconUrlDark?: string;
+  color?: string;
 }
 
 export interface PricingDetail {
@@ -94,11 +131,20 @@ export interface SharedMobilityVehicle {
   batteryLevel?: number;
   /** Estimated range in meters. */
   rangeMeters?: number;
+  systemId?: string;
+  nativeId?: string;
+  vehicleTypeId?: string;
   /** Whether currently reserved. */
   isReserved: boolean;
   /** Whether currently disabled. */
   isDisabled: boolean;
   operator?: string;
+  branding?: SharedMobilityBranding;
+  vehicleImageUrl?: string;
+  vehicleIconUrl?: string;
+  vehicleIconUrlDark?: string;
+  rentalUris?: { web?: string; android?: string; ios?: string };
+  rentalApps?: SharedMobilityRentalApps;
   sources: string[];
 }
 

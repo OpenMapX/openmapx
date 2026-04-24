@@ -12,7 +12,14 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
-import { fetchGbfsData } from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+import {
+  buildEnturGeofencingMapContext,
+  enrichEnturMobilityItems,
+} from "@openmapx/integration-shared-mobility/entur-mobility";
+import {
+  fetchGbfsData,
+  fetchSwissSharedMobilityDataForBbox,
+} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
@@ -72,6 +79,7 @@ class BikeSharingProvider implements DataSourceProvider {
   readonly meta = META;
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
+  readonly mapContextCacheTtl = 300;
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return [];
@@ -86,15 +94,23 @@ class BikeSharingProvider implements DataSourceProvider {
     ];
 
     // Fetch from all sources in parallel
-    const [nextbikeResult, cityBikesResult, donkeyResult, gbfsResult, dbBikeResult, motisResult] =
-      await Promise.allSettled([
-        searchNextbike(bbox),
-        searchCityBikes(bbox),
-        searchDonkey(bbox),
-        fetchGbfsData(bbox, BIKE_FORM_FACTORS),
-        searchDbBikes(bbox),
-        fetchMotisRentals(bboxArray, ["bicycle", "cargo_bicycle"]),
-      ]);
+    const [
+      nextbikeResult,
+      cityBikesResult,
+      donkeyResult,
+      gbfsResult,
+      swissGbfsResult,
+      dbBikeResult,
+      motisResult,
+    ] = await Promise.allSettled([
+      searchNextbike(bbox),
+      searchCityBikes(bbox),
+      searchDonkey(bbox),
+      fetchGbfsData(bbox, BIKE_FORM_FACTORS),
+      fetchSwissSharedMobilityDataForBbox(bbox, BIKE_FORM_FACTORS),
+      searchDbBikes(bbox),
+      fetchMotisRentals(bboxArray, ["bicycle", "cargo_bicycle"]),
+    ]);
 
     const allStations: SharedMobilityStation[] = [];
     const results: DataSourceResult[] = [];
@@ -119,6 +135,10 @@ class BikeSharingProvider implements DataSourceProvider {
       allStations.push(...gbfsResult.value.stations);
     }
 
+    if (swissGbfsResult.status === "fulfilled") {
+      allStations.push(...swissGbfsResult.value.stations);
+    }
+
     // DB Call-a-Bike / StadtRad stations
     if (dbBikeResult.status === "fulfilled") {
       allStations.push(...dbBikeResult.value.stations);
@@ -129,19 +149,29 @@ class BikeSharingProvider implements DataSourceProvider {
       allStations.push(...motisResult.value.stations);
     }
 
-    // Dedup and map stations
-    const deduped = dedupStations(allStations);
-    for (const s of deduped) {
+    // Collect all free-floating bikes: direct sources first, MOTIS last.
+    const allVehicles: SharedMobilityVehicle[] = [];
+    if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
+    if (swissGbfsResult.status === "fulfilled") allVehicles.push(...swissGbfsResult.value.vehicles);
+    if (dbBikeResult.status === "fulfilled") allVehicles.push(...dbBikeResult.value.vehicles);
+    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
+
+    const dedupedStations = dedupStations(allStations);
+    const dedupedVehicles = dedupVehicles(allVehicles);
+
+    // Entur-backed GBFS systems provide richer branding and geofencing context.
+    try {
+      await enrichEnturMobilityItems(dedupedStations, dedupedVehicles);
+    } catch (error) {
+      console.warn("[bike-sharing] Entur enrichment failed", error);
+    }
+
+    for (const s of dedupedStations) {
       updateCache(s.id, s);
       results.push(mapStationToResult(s));
     }
 
-    // Collect all free-floating bikes: direct sources first, MOTIS last.
-    const allVehicles: SharedMobilityVehicle[] = [];
-    if (dbBikeResult.status === "fulfilled") allVehicles.push(...dbBikeResult.value.vehicles);
-    if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
-
-    for (const v of dedupVehicles(allVehicles)) {
+    for (const v of dedupedVehicles) {
       updateCache(v.id, v);
       results.push(mapVehicleToResult(v));
     }
@@ -157,6 +187,14 @@ class BikeSharingProvider implements DataSourceProvider {
     }
 
     return null;
+  }
+
+  async getMapContext(
+    bbox: BoundingBox,
+    _filters?: Record<string, unknown>,
+    options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+  ) {
+    return buildEnturGeofencingMapContext(bbox, options);
   }
 }
 

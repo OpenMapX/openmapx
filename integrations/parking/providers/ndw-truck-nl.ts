@@ -9,8 +9,8 @@
  */
 
 import type { BoundingBox } from "@openmapx/core";
-import type { Datex2ParkingRecord, Datex2ParkingStatus } from "./datex2.js";
-import { parseDatex2Status, parseDatex2Table } from "./datex2.js";
+import type { DatexParkingRecord, DatexParkingStatus } from "@openmapx/mobility-formats";
+import { parseDatexParkingStatus, parseDatexParkingTable } from "@openmapx/mobility-formats";
 import type { ParkingFacility } from "./types.js";
 
 const TABLE_URL = "https://opendata.ndw.nu/Truckparking_Parking_Table.xml";
@@ -21,8 +21,8 @@ const STATUS_CACHE_TTL = 2 * 60 * 1000; // 2 min — real-time
 
 const COVERAGE_BBOX = { south: 50.7, west: 3.3, north: 53.6, east: 7.3 };
 
-let tableCache: { records: Datex2ParkingRecord[]; fetchedAt: number } | null = null;
-let statusCache: { statuses: Datex2ParkingStatus[]; fetchedAt: number } | null = null;
+let tableCache: { records: DatexParkingRecord[]; fetchedAt: number } | null = null;
+let statusCache: { statuses: DatexParkingStatus[]; fetchedAt: number } | null = null;
 
 function overlapsCoverage(bbox: BoundingBox): boolean {
   return (
@@ -33,7 +33,7 @@ function overlapsCoverage(bbox: BoundingBox): boolean {
   );
 }
 
-async function fetchTable(): Promise<Datex2ParkingRecord[]> {
+async function fetchTable(): Promise<DatexParkingRecord[]> {
   if (tableCache && Date.now() - tableCache.fetchedAt < TABLE_CACHE_TTL) {
     return tableCache.records;
   }
@@ -49,12 +49,12 @@ async function fetchTable(): Promise<Datex2ParkingRecord[]> {
   }
 
   const xml = await res.text();
-  const records = parseDatex2Table(xml);
+  const records = parseDatexParkingTable(xml);
   tableCache = { records, fetchedAt: Date.now() };
   return records;
 }
 
-async function fetchStatus(): Promise<Datex2ParkingStatus[]> {
+async function fetchStatus(): Promise<DatexParkingStatus[]> {
   if (statusCache && Date.now() - statusCache.fetchedAt < STATUS_CACHE_TTL) {
     return statusCache.statuses;
   }
@@ -70,16 +70,16 @@ async function fetchStatus(): Promise<Datex2ParkingStatus[]> {
   }
 
   const xml = await res.text();
-  const statuses = parseDatex2Status(xml);
+  const statuses = parseDatexParkingStatus(xml);
   statusCache = { statuses, fetchedAt: Date.now() };
   return statuses;
 }
 
 function buildFacilities(
-  records: Datex2ParkingRecord[],
-  statuses: Datex2ParkingStatus[],
+  records: DatexParkingRecord[],
+  statuses: DatexParkingStatus[],
 ): ParkingFacility[] {
-  const statusMap = new Map<string, Datex2ParkingStatus>();
+  const statusMap = new Map<string, DatexParkingStatus>();
   for (const s of statuses) statusMap.set(s.recordId, s);
 
   return records.map((rec) => {

@@ -16,6 +16,8 @@ import { TEAL } from "@/lib/theme";
 import { LineDetail } from "../transit/LineDetail";
 import { PlaceDeparturesView } from "../transit/PlaceDeparturesView";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
+import { StopBoardView } from "../transit/StopBoardView";
+import { StopInfrastructureSection } from "../transit/StopInfrastructureSection";
 import { TripDetailView } from "../transit/TripDetailView";
 import { PlaceInfoTab } from "./PlaceInfoTab";
 import { PlaceOverviewTab } from "./PlaceOverviewTab";
@@ -40,6 +42,9 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   const [showDepartures, setShowDepartures] = useState(false);
   const [departuresModeFilter, setDeparturesModeFilter] = useState<TransportMode | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<MergedRoute | null>(null);
+  const [activeStopBoard, setActiveStopBoard] = useState<{ stopId: string; title: string } | null>(
+    null,
+  );
   const activeTripDep = usePlaceStore((s) => s.activeTripDep);
   const setActiveTripDep = usePlaceStore((s) => s.setActiveTripDep);
   const setActiveRouteId = usePlaceStore((s) => s.setActiveRouteId);
@@ -62,10 +67,11 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     setShowDepartures(false);
     setDeparturesModeFilter(null);
     setSelectedRoute(null);
+    setActiveStopBoard(null);
     setActiveTripDep(null);
   }, [place.id]);
 
-  // View priority: TripDetailView > LineDetail > DeparturesView > StopMode > normal
+  // View priority: TripDetailView > LineDetail > StopBoardView > DeparturesView > StopMode > normal
   if (activeTripDep) {
     return (
       <TripDetailView
@@ -84,6 +90,18 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         place={place}
         onBack={() => setSelectedRoute(null)}
         clearSearchBar={clearSearchBar}
+      />
+    );
+  }
+
+  if (activeStopBoard) {
+    return (
+      <StopBoardView
+        stopId={activeStopBoard.stopId}
+        title={activeStopBoard.title}
+        onBack={() => setActiveStopBoard(null)}
+        clearSearchBar={clearSearchBar}
+        onDepartureClick={(dep) => setActiveTripDep(dep)}
       />
     );
   }
@@ -143,6 +161,10 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             setSelectedRoute(route);
           }}
           onOpenTripDetail={(dep) => setActiveTripDep(dep)}
+        />
+        <StopInfrastructureSection
+          place={place}
+          onOpenStopBoard={(stopId, title) => setActiveStopBoard({ stopId, title })}
         />
       </Box>
     );

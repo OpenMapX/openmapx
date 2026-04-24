@@ -48,7 +48,7 @@ describe("dedupStations", () => {
     expect(result[0].name).toBe("Station A");
   });
 
-  it("deduplicates by exact coordinate match at 4dp (first-seen wins)", () => {
+  it("deduplicates by exact coordinate match at 4dp and merges source attribution", () => {
     // Both will have the same coordKey via toFixed(4)
     const a = makeStation({
       id: "s1",
@@ -66,7 +66,7 @@ describe("dedupStations", () => {
     const result = dedupStations([a, b]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("s1");
-    expect(result[0].sources).toEqual(["gbfs/lime"]);
+    expect(result[0].sources).toEqual(["gbfs/lime", "gbfs/bolt"]);
   });
 
   it("deduplicates when within 50m and name similarity > 0.6", () => {
@@ -155,8 +155,47 @@ describe("dedupStations", () => {
     const result = dedupStations([primary, secondary]);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("live-1");
-    expect(result[0].sources).toEqual(["cambio-live"]);
+    expect(result[0].sources).toEqual(["cambio-live", "open-data"]);
     expect(result[0].availableVehicles).toBe(5);
+  });
+
+  it("fills missing station detail fields from later duplicate sources", () => {
+    const primary = makeStation({
+      id: "s1",
+      name: "Station A",
+      coordinates: [13.41, 52.521],
+      sources: ["gbfs/test"],
+      website: undefined,
+      pricingSummary: undefined,
+      rentalUris: undefined,
+    });
+    const enrichment = makeStation({
+      id: "s2",
+      name: "Station A",
+      coordinates: [13.41001, 52.52101],
+      sources: ["entur-mobility"],
+      website: "https://operator.example",
+      pricingSummary: "10.90 NOK + 150.00 NOK/h",
+      rentalUris: { ios: "ios://example" },
+      address: { city: "Oslo" },
+    });
+
+    const result = dedupStations([primary, enrichment]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].website).toBe("https://operator.example");
+    expect(result[0].pricingSummary).toBe("10.90 NOK + 150.00 NOK/h");
+    expect(result[0].rentalUris).toEqual({
+      web: undefined,
+      android: undefined,
+      ios: "ios://example",
+    });
+    expect(result[0].address).toEqual({
+      street: undefined,
+      city: "Oslo",
+      postcode: undefined,
+      country: undefined,
+    });
   });
 
   it("handles a mix of exact matches, fuzzy matches, and distinct stations", () => {
