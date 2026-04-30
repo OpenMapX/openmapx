@@ -147,6 +147,15 @@ export interface ServiceContainer {
   command?: string[] | string;
   entrypoint?: string[] | string;
   environment?: Record<string, string>;
+  /**
+   * `env_file` pass-through for docker-compose. Paths are resolved by compose
+   * relative to the compose-file directory (`infra/docker/`). Intended for
+   * services that want to forward every key from a user-maintained `.env`
+   * without each one being explicitly enumerated in `environment`. Only the
+   * app-api and app-web manifests should use this — consumer containers
+   * should get an explicit environment list for auditability.
+   */
+  envFile?: string[];
   workingDir?: string;
   user?: string;
   shmSize?: string;

@@ -16,6 +16,7 @@
   },
   "buildCommand": "openmapx services build osrm",
   "provides": ["routing-engine"],
+  "produces": [{ "type": "osrm-graph", "sourceDir": "data/osrm-graph" }],
   "consumes": [{ "type": "osrm-graph", "mountAt": "/data", "readOnly": true, "required": true }],
   "exposure": {
     "hostPorts": [{ "container": 5000, "host": 5000, "bindAddress": "127.0.0.1" }]

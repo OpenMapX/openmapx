@@ -16,7 +16,6 @@ RUN pnpm install --frozen-lockfile
 
 # Build
 FROM base AS builder
-RUN apk add --no-cache rsync
 WORKDIR /app
 
 COPY --from=deps /app ./

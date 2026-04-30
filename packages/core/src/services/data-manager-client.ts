@@ -158,6 +158,18 @@ export class DataManagerClient {
     };
   }
 
+  async removeGtfsFeed(slug: string): Promise<{ ok: boolean; removed: string[] }> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/datasets/gtfs/${encodeURIComponent(slug)}`,
+      this.authed({ method: "DELETE" }),
+    );
+    const parsed = (await res.json()) as { ok?: boolean; removed?: string[]; error?: string };
+    if (!res.ok) {
+      throw new Error(parsed.error ?? `delete /datasets/gtfs/${slug} failed: HTTP ${res.status}`);
+    }
+    return { ok: parsed.ok ?? true, removed: parsed.removed ?? [] };
+  }
+
   async downloadStyle(): Promise<{ ok: boolean }> {
     const res = await this.fetchImpl(
       `${this.baseUrl}/download/style`,

@@ -20,6 +20,10 @@
   },
   "buildCommand": "openmapx services build pelias",
   "provides": ["geocoder"],
+  "produces": [
+    { "type": "pelias-placeholder-data", "sourceDir": "data/pelias/placeholder" },
+    { "type": "pelias-whosonfirst-data", "sourceDir": "data/pelias/whosonfirst" }
+  ],
   "bindMounts": [{ "source": "config/pelias.json", "target": "/code/pelias.json" }],
   "exposure": {
     "hostPorts": [{ "container": 4000, "host": 4300, "bindAddress": "127.0.0.1" }]

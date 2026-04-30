@@ -239,6 +239,7 @@ export interface ComposeServiceSnippet {
   command?: string[] | string;
   entrypoint?: string[] | string;
   environment?: Record<string, string>;
+  env_file?: string[];
   working_dir?: string;
   user?: string;
   shm_size?: string;
@@ -279,6 +280,7 @@ export function renderServiceSnippet(
 
   if (c.command !== undefined) snippet.command = c.command;
   if (c.entrypoint !== undefined) snippet.entrypoint = c.entrypoint;
+  if (c.envFile?.length) snippet.env_file = [...c.envFile];
   if (c.environment) snippet.environment = { ...c.environment };
   // Overlay operator-resolved config onto the manifest's baseline environment.
   // Resolved values win over manifest defaults (that's the whole point of

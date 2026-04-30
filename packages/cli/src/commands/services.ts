@@ -5,6 +5,7 @@ import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { expandPresets, UnknownPresetError } from "../lib/presets";
 import { buildServices } from "../lib/service-builds";
 import {
   applyServiceSelection,
@@ -161,6 +162,23 @@ export function formatCapabilityInventory(rows: CapabilityInventoryRow[]): strin
       consumers: r.consumers?.join(", ") ?? "—",
     })),
   );
+}
+
+/**
+ * Merge a positional `ids` list with `--preset` expansions, exiting non-zero
+ * with the available preset list when an unknown preset is requested.
+ */
+function mergeIdsWithPresets(ids: string[], preset: string | undefined): string[] {
+  if (!preset) return ids;
+  try {
+    return [...ids, ...expandPresets([preset])];
+  } catch (err) {
+    if (err instanceof UnknownPresetError) {
+      log.err(err.message);
+      process.exit(1);
+    }
+    throw err;
+  }
 }
 
 export function registerServicesCommands(program: Command): void {
@@ -330,15 +348,24 @@ export function registerServicesCommands(program: Command): void {
     });
 
   services
-    .command("start <ids...>")
+    .command("start [ids...]")
     .description(
       "Render compose, auto-apply/prune hardlinks, then start one or more services (docker compose up -d)",
     )
-    .action(async (ids: string[]) => {
+    .option(
+      "--preset <names>",
+      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy)",
+    )
+    .action(async (ids: string[], options: { preset?: string }) => {
+      const allIds = mergeIdsWithPresets(ids, options.preset);
+      if (allIds.length === 0) {
+        log.err("No services selected. Pass <ids...> or --preset.");
+        process.exit(1);
+      }
       try {
         const rendered = await renderComposeForRepo({
           domain: process.env.DOMAIN ?? "localhost",
-          services: ids,
+          services: allIds,
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
         const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
@@ -349,38 +376,56 @@ export function registerServicesCommands(program: Command): void {
         log.err(`prepare/start failed: ${(err as Error).message}`);
         process.exit(1);
       }
-      const code = await dockerComposeStream(["up", "-d", ...ids]);
+      const code = await dockerComposeStream(["up", "-d", ...allIds]);
       process.exit(code);
     });
 
   services
-    .command("stop <ids...>")
+    .command("stop [ids...]")
     .description("Stop one or more services (docker compose stop)")
-    .action(async (ids: string[]) => {
-      const code = await dockerComposeStream(["stop", ...ids]);
+    .option("--preset <names>", "Comma/space-separated preset names")
+    .action(async (ids: string[], options: { preset?: string }) => {
+      const allIds = mergeIdsWithPresets(ids, options.preset);
+      if (allIds.length === 0) {
+        log.err("No services selected. Pass <ids...> or --preset.");
+        process.exit(1);
+      }
+      const code = await dockerComposeStream(["stop", ...allIds]);
       process.exit(code);
     });
 
   services
-    .command("restart <ids...>")
+    .command("restart [ids...]")
     .description(
       "In-place reboot of one or more services (docker compose restart — use `start` to pick up compose-file changes)",
     )
-    .action(async (ids: string[]) => {
-      const code = await dockerComposeStream(["restart", ...ids]);
+    .option("--preset <names>", "Comma/space-separated preset names")
+    .action(async (ids: string[], options: { preset?: string }) => {
+      const allIds = mergeIdsWithPresets(ids, options.preset);
+      if (allIds.length === 0) {
+        log.err("No services selected. Pass <ids...> or --preset.");
+        process.exit(1);
+      }
+      const code = await dockerComposeStream(["restart", ...allIds]);
       process.exit(code);
     });
 
   services
-    .command("recreate <ids...>")
+    .command("recreate [ids...]")
     .description(
       "Pull latest images, then force-recreate one or more services (render + hardlinks + docker compose up -d --force-recreate)",
     )
-    .action(async (ids: string[]) => {
+    .option("--preset <names>", "Comma/space-separated preset names")
+    .action(async (ids: string[], options: { preset?: string }) => {
+      const allIds = mergeIdsWithPresets(ids, options.preset);
+      if (allIds.length === 0) {
+        log.err("No services selected. Pass <ids...> or --preset.");
+        process.exit(1);
+      }
       try {
         const rendered = await renderComposeForRepo({
           domain: process.env.DOMAIN ?? "localhost",
-          services: ids,
+          services: allIds,
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
         const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
@@ -392,12 +437,12 @@ export function registerServicesCommands(program: Command): void {
         process.exit(1);
       }
 
-      const pullCode = await dockerComposeStream(["pull", ...ids]);
+      const pullCode = await dockerComposeStream(["pull", ...allIds]);
       if (pullCode !== 0) {
         log.warn("Some images could not be pulled (service may be locally built). Continuing.");
       }
 
-      const code = await dockerComposeStream(["up", "-d", "--force-recreate", ...ids]);
+      const code = await dockerComposeStream(["up", "-d", "--force-recreate", ...allIds]);
       process.exit(code);
     });
 

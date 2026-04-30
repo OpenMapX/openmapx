@@ -116,11 +116,17 @@ export function formatServiceIdList(ids: Iterable<string>): string {
  *   `process.env.OVERPASS_URL` directly (module-level initialisation).
  * - `nominatim`: `packages/shared-mobility/nominatim.ts` reads
  *   `process.env.NOMINATIM_URL` at module load time.
+ * - `motis`: `packages/shared-mobility/motis-rentals.ts` reads
+ *   `process.env.MOTIS_URL` at module load time for the local-MOTIS rentals
+ *   instance. (The `apps/api` motis manager additionally consults
+ *   `serviceUrl("motis")` at runtime, so this entry mainly fixes the rentals
+ *   client.)
  *
- * All other built-in backends (valhalla, osrm, motis, pelias, photon, otp)
- * are resolved at runtime through the live service registry (`serviceUrl()`),
- * so their manifest env-var defaults are never consulted while those services
- * are enabled.
+ * All other built-in backends (valhalla, osrm, pelias, photon, otp) are
+ * resolved at runtime through the live service registry (`serviceUrl()`), so
+ * their manifest env-var defaults are never consulted while those services
+ * are enabled. `transitous` is a public API only — there is no in-cluster
+ * service to point at — so its URL stays as the manifest default.
  *
  * When a service is co-deployed we override its manifest default (public API)
  * with the Docker-internal address. The operator's explicit host-env value
@@ -129,6 +135,7 @@ export function formatServiceIdList(ids: Iterable<string>): string {
 const SERVICE_ENV_URL_MAP: Array<{ serviceId: string; envVar: string; internalPort: number }> = [
   { serviceId: "overpass", envVar: "OVERPASS_URL", internalPort: 80 },
   { serviceId: "nominatim", envVar: "NOMINATIM_URL", internalPort: 8080 },
+  { serviceId: "motis", envVar: "MOTIS_URL", internalPort: 8080 },
 ];
 
 /**

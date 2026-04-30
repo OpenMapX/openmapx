@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
@@ -136,6 +138,33 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post("/download/style", async () => {
     await downloadStyle({ dataDir, store });
     return { ok: true };
+  });
+
+  app.delete<{ Params: { slug: string } }>("/datasets/gtfs/:slug", async (req, reply) => {
+    const slug = req.params.slug.trim();
+    if (!slug || slug.includes("/") || slug.includes("..")) {
+      reply.code(400);
+      return { ok: false, error: "invalid slug" };
+    }
+    const gtfsDir = join(dataDir, "gtfs");
+    if (!existsSync(gtfsDir)) {
+      reply.code(404);
+      return { ok: false, error: "gtfs dir does not exist" };
+    }
+    // Match `<slug>.gtfs.zip`, `<slug>.netex.zip`, or bare `<slug>.zip`.
+    const removed: string[] = [];
+    for (const name of readdirSync(gtfsDir)) {
+      if (name === `${slug}.gtfs.zip` || name === `${slug}.netex.zip` || name === `${slug}.zip`) {
+        rmSync(join(gtfsDir, name), { force: true });
+        removed.push(name);
+      }
+    }
+    if (removed.length === 0) {
+      reply.code(404);
+      return { ok: false, error: `no GTFS feed matched slug "${slug}"` };
+    }
+    store.remove("gtfs", slug);
+    return { ok: true, removed };
   });
 
   app.post<{ Body: { plan: HardlinkEntry[]; prune?: boolean } }>("/link", async (req) => {

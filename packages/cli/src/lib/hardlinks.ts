@@ -1,35 +1,18 @@
+// CLI-side hardlink apply. The heavy lifting lives in `@openmapx/hardlinks`
+// so the data-manager service and this host-side command use the same prune
+// semantics. See that package for the sentinel-tracked prune model.
+
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
-  existsSync,
-  linkSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-} from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+  type ApplyHardlinkResult,
+  applyHardlinkPlan,
+  type HardlinkEntry,
+} from "@openmapx/hardlinks";
 import { repoPaths } from "./paths";
 
-export interface HardlinkEntry {
-  source: string;
-  target: string;
-  consumerService: string;
-  dataType: string;
-  targetFilename?: string;
-}
-
-export interface ApplyHardlinkOptions {
-  rootDir: string;
-  prune?: boolean;
-}
-
-export interface ApplyHardlinkResult {
-  linked: number;
-  skipped: number;
-  pruned: number;
-}
-
-const HARDLINK_PLAN_FILENAME = "docker-compose.generated.hardlinks.json";
+export type { ApplyHardlinkResult, HardlinkEntry };
+export { applyHardlinkPlan };
 
 export interface ApplyGeneratedHardlinkOptions {
   rootDir?: string;
@@ -47,142 +30,7 @@ export interface ApplyGeneratedHardlinkResult extends ApplyHardlinkResult {
   planPath: string;
 }
 
-/**
- * The compose renderer emits plan paths relative to the compose project
- * directory (e.g. `data/osm`, `data/motis/osm-pbf`). The host data root is
- * already `<infra>/data`, so strip the leading `data/` segment.
- */
-function stripDataPrefix(p: string): string {
-  if (p === "data" || p === "data/") return "";
-  if (p.startsWith("data/")) return p.slice("data/".length);
-  return p;
-}
-
-function countFilesRecursive(path: string): number {
-  if (!existsSync(path)) return 0;
-  const stat = statSync(path);
-  if (stat.isFile()) return 1;
-  if (!stat.isDirectory()) return 0;
-  let count = 0;
-  for (const entry of readdirSync(path, { withFileTypes: true })) {
-    count += countFilesRecursive(join(path, entry.name));
-  }
-  return count;
-}
-
-function prunePath(path: string): number {
-  if (!existsSync(path)) return 0;
-  const removedFiles = countFilesRecursive(path);
-  rmSync(path, { recursive: true, force: true });
-  return removedFiles;
-}
-
-function linkFile(srcPath: string, tgtPath: string): ApplyHardlinkResult {
-  let pruned = 0;
-  if (existsSync(tgtPath)) {
-    const srcStat = statSync(srcPath);
-    const tgtStat = statSync(tgtPath);
-    if (tgtStat.isFile() && srcStat.ino === tgtStat.ino && srcStat.dev === tgtStat.dev) {
-      return { linked: 0, skipped: 1, pruned };
-    }
-    pruned += prunePath(tgtPath);
-  }
-  linkSync(srcPath, tgtPath);
-  return { linked: 1, skipped: 0, pruned };
-}
-
-function mergeResults(into: ApplyHardlinkResult, next: ApplyHardlinkResult): void {
-  into.linked += next.linked;
-  into.skipped += next.skipped;
-  into.pruned += next.pruned;
-}
-
-function linkTree(sourceDir: string, targetDir: string, prune: boolean): ApplyHardlinkResult {
-  const out: ApplyHardlinkResult = { linked: 0, skipped: 0, pruned: 0 };
-  if (existsSync(targetDir) && !statSync(targetDir).isDirectory()) {
-    out.pruned += prunePath(targetDir);
-  }
-  mkdirSync(targetDir, { recursive: true });
-  const sourceEntries = new Set<string>();
-  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
-    sourceEntries.add(entry.name);
-    const srcPath = join(sourceDir, entry.name);
-    const tgtPath = join(targetDir, entry.name);
-    if (entry.isDirectory()) {
-      mergeResults(out, linkTree(srcPath, tgtPath, prune));
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    mergeResults(out, linkFile(srcPath, tgtPath));
-  }
-
-  if (prune) {
-    for (const entry of readdirSync(targetDir, { withFileTypes: true })) {
-      if (sourceEntries.has(entry.name)) continue;
-      out.pruned += prunePath(join(targetDir, entry.name));
-    }
-  }
-  return out;
-}
-
-function linkSingleFileAs(
-  sourceDir: string,
-  targetDir: string,
-  targetFilename: string,
-  prune: boolean,
-): ApplyHardlinkResult {
-  const files = readdirSync(sourceDir, { withFileTypes: true }).filter((entry) => entry.isFile());
-  if (files.length !== 1) {
-    throw new Error(
-      `Cannot link ${sourceDir} as ${targetFilename}: expected exactly one source file, found ${files.length}`,
-    );
-  }
-  const file = files[0];
-  if (!file) return { linked: 0, skipped: 0, pruned: 0 };
-
-  const out: ApplyHardlinkResult = { linked: 0, skipped: 0, pruned: 0 };
-  if (existsSync(targetDir) && !statSync(targetDir).isDirectory()) {
-    out.pruned += prunePath(targetDir);
-  }
-  mkdirSync(targetDir, { recursive: true });
-  mergeResults(out, linkFile(join(sourceDir, file.name), join(targetDir, targetFilename)));
-
-  if (prune) {
-    for (const entry of readdirSync(targetDir, { withFileTypes: true })) {
-      if (entry.name === targetFilename) continue;
-      out.pruned += prunePath(join(targetDir, entry.name));
-    }
-  }
-  return out;
-}
-
-export function applyHardlinkPlan(
-  plan: HardlinkEntry[],
-  opts: ApplyHardlinkOptions,
-): ApplyHardlinkResult {
-  const prune = opts.prune !== false;
-  const out: ApplyHardlinkResult = { linked: 0, skipped: 0, pruned: 0 };
-
-  for (const entry of plan) {
-    const rawSource = isAbsolute(entry.source) ? entry.source : stripDataPrefix(entry.source);
-    const rawTarget = isAbsolute(entry.target) ? entry.target : stripDataPrefix(entry.target);
-    const source = isAbsolute(rawSource) ? rawSource : resolve(opts.rootDir, rawSource);
-    const target = isAbsolute(rawTarget) ? rawTarget : resolve(opts.rootDir, rawTarget);
-
-    if (!existsSync(source) || !statSync(source).isDirectory()) {
-      if (prune) out.pruned += prunePath(target);
-      continue;
-    }
-    if (relative(source, target) === "") continue;
-
-    const result = entry.targetFilename
-      ? linkSingleFileAs(source, target, entry.targetFilename, prune)
-      : linkTree(source, target, prune);
-    mergeResults(out, result);
-  }
-
-  return out;
-}
+const HARDLINK_PLAN_FILENAME = "docker-compose.generated.hardlinks.json";
 
 export function readGeneratedHardlinkPlan(rootDir?: string): {
   plan: HardlinkEntry[];

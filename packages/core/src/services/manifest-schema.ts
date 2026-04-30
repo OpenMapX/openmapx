@@ -146,11 +146,14 @@ const producesSchema = z.object({
 });
 
 // Matches a fully-substituted Docker Compose variable reference:
-// `${VAR}`, `${VAR:-default}`, or `$VAR`. Bind mount sources/targets that
-// use this form are passed through to the Compose parser at stack-up time
-// — app-api uses this for its host-path-agreeing mount pair so the operator
-// can set OPENMAPX_HOST_DIR in `.env` without re-rendering the manifest.
-const COMPOSE_VAR_SOURCE_REGEX = /^\$(\{[^{}\s]+\}|[A-Za-z_][A-Za-z0-9_]*)/;
+// `${VAR}`, `${VAR:-default}`, `${VAR:?error message}`, or `$VAR`. Bind mount
+// sources/targets that use this form are passed through to the Compose parser
+// at stack-up time — app-api uses this for its host-path-agreeing mount pair
+// so the operator can set OPENMAPX_HOST_DIR in `.env` without re-rendering
+// the manifest. The `:?…` error-on-unset form is allowed to contain spaces
+// inside the braces so operators get a readable message instead of a cryptic
+// compose error.
+const COMPOSE_VAR_SOURCE_REGEX = /^\$(\{[^{}]+\}|[A-Za-z_][A-Za-z0-9_]*)/;
 
 const bindMountSchema = z.object({
   source: z
@@ -206,6 +209,15 @@ const containerSchema = z.object({
   command: z.union([z.array(z.string()), z.string()]).optional(),
   entrypoint: z.union([z.array(z.string()), z.string()]).optional(),
   environment: z.record(z.string(), z.string()).optional(),
+  envFile: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .refine((s) => !pathHasParentEscape(s), "must not contain '..'")
+        .refine((s) => !s.startsWith("/"), "must be a relative path under infra/docker/"),
+    )
+    .optional(),
   workingDir: z.string().optional(),
   user: z.string().optional(),
   shmSize: z.string().optional(),

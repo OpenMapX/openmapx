@@ -19,11 +19,17 @@ import { repoPaths } from "./paths";
 
 export const MOTIS_DATA_DIR = "motis-data";
 export const MOTIS_FEED_PROXY_DIR = "motis-feed-proxy";
+export const MOTIS_FEED_PROXY_CONF_SUBDIR = "conf";
 export const MOTIS_CONFIG_FILENAME = "config.yml";
 export const MOTIS_LICENSE_FILENAME = "license.json";
 export const MOTIS_FEED_PROXY_CONFIG_FILENAME = "default.conf";
 export const DEFAULT_TRANSITOUS_REPO_URL = "https://github.com/public-transport/transitous.git";
-export const DEFAULT_TRANSITOUS_TOOLS_IMAGE = "openmapx/transitous-tools:local";
+// CI publishes a multi-arch transitous-tools image (.github/workflows/docker.yml).
+// Default to the registry image; ensureTransitousToolsImage falls back to a
+// local docker build when the registry pull fails (offline / private fork).
+export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
+  process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ??
+  "ghcr.io/medformatik/openmapx-transitous-tools:latest";
 export const OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV = "OPENMAPX_TRANSITOUS_FEED_PROXY_URL";
 export const DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://motis-feed-proxy";
 export const TRANSITOUS_FEED_PROXY_KEY_FILE_ENV = "TRANSITOUS_FEED_PROXY_KEY_FILE";
@@ -99,6 +105,7 @@ function clearPreparedFeedProxyInputs(feedProxyDir: string): void {
   for (const name of readdirSync(feedProxyDir)) {
     rmSync(join(feedProxyDir, name), { recursive: true, force: true });
   }
+  mkdirSync(join(feedProxyDir, MOTIS_FEED_PROXY_CONF_SUBDIR), { recursive: true });
 }
 
 function stageGtfsFeeds(gtfsDir: string, motisDir: string): string[] {
@@ -156,6 +163,17 @@ async function ensureTransitousToolsImage(
   image: string,
   runner: CommandRunner,
 ): Promise<void> {
+  // Try the registry first (fast: skip the multi-stage Python+Go build). Fall
+  // back to a local build only when pull fails so private forks / offline
+  // hosts still work.
+  if (image.includes("/") && !image.endsWith(":local")) {
+    try {
+      await runner("docker", ["pull", image], { cwd: rootDir, stdio: "inherit" });
+      return;
+    } catch {
+      // fall through to local build
+    }
+  }
   const contextDir = join(rootDir, "services", "motis", "tools", "transitous");
   await runner("docker", ["build", "-t", image, contextDir], { cwd: rootDir, stdio: "inherit" });
 }
@@ -281,7 +299,9 @@ function renderMotisFeedProxyConfig(feedProxyDir: string): {
   const varsPath = join(feedProxyDir, FEED_PROXY_VARS_FILENAME);
   const vars = readFeedProxyVars(varsPath);
   const configText = renderFeedProxyNginxConfig(vars);
-  const configPath = join(feedProxyDir, MOTIS_FEED_PROXY_CONFIG_FILENAME);
+  const confDir = join(feedProxyDir, MOTIS_FEED_PROXY_CONF_SUBDIR);
+  mkdirSync(confDir, { recursive: true });
+  const configPath = join(confDir, MOTIS_FEED_PROXY_CONFIG_FILENAME);
   writeFileSync(configPath, configText, "utf-8");
   const feedIds = new Set(Object.keys(vars));
   return { configPath, feedCount: feedIds.size, feedIds };

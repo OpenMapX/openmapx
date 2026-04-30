@@ -16,6 +16,7 @@
   },
   "buildCommand": "openmapx services build tileserver",
   "provides": ["tile-server"],
+  "produces": [{ "type": "tile-mbtiles", "sourceDir": "data/tile-mbtiles" }],
   "consumes": [
     { "type": "tile-mbtiles", "mountAt": "/data/mbtiles", "readOnly": true, "required": true },
     { "type": "tile-fonts", "mountAt": "/data/fonts", "readOnly": true, "required": true },

@@ -17,7 +17,6 @@ import {
 } from "../lib/env-defaults";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
-import { repoPaths } from "../lib/paths";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
 import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
@@ -432,22 +431,69 @@ export function registerDataCommands(program: Command): void {
   data
     .command("link")
     .description(
-      "Apply + prune the hardlink plan from the most recent compose render (keeps consumer dirs in sync with producer data)",
+      "Re-render the compose plan from the current service selection, then apply + prune the hardlink plan (keeps consumer dirs in sync with producer data)",
     )
     .action(async () => {
       try {
+        // Always render first so the plan file reflects the current
+        // service-selection. Running against a stale plan silently links
+        // dirs the operator no longer wants.
+        const rendered = await renderComposeForRepo({ domain: process.env.DOMAIN ?? "localhost" });
+        for (const warning of rendered.selectionWarnings) log.warn(warning);
         const result = applyGeneratedHardlinks({ prune: true, requirePlan: true });
         log.ok(
           `Linked ${result.linked} files (${result.skipped} already linked, ${result.pruned} stale file${result.pruned === 1 ? "" : "s"} pruned)`,
         );
       } catch (err) {
-        const paths = repoPaths();
-        const planPath = `${paths.infraDir}/docker-compose.generated.hardlinks.json`;
-        const message = (err as Error).message;
-        log.err(`link failed: ${message}`);
-        if (message.includes("Hardlink plan not found")) {
-          log.dim(`(expected plan at ${planPath}; run 'openmapx compose render' first)`);
+        log.err(`link failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("add-feed <url> [slug]")
+    .description("Download a single GTFS feed by URL (slug defaults to the basename of the URL)")
+    .action(async (url: string, slug: string | undefined) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const id = (slug ?? url.split("/").pop() ?? "").replace(/\.zip$/i, "").trim();
+      if (!id) {
+        log.err("Could not derive a slug from the URL — pass an explicit [slug] argument");
+        process.exit(1);
+      }
+      try {
+        const result = await client.downloadGtfs({
+          feeds: [{ id, country: "_user", url }],
+          countries: [],
+        });
+        if (result.failedCount > 0) {
+          const fail = result.failures[0];
+          throw new Error(fail?.message ?? "download failed");
         }
+        log.ok(`Added GTFS feed ${id}`);
+      } catch (err) {
+        log.err(`add-feed failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("remove-feed <slug>")
+    .description("Remove a single GTFS feed by slug (the *.gtfs.zip / *.netex.zip basename)")
+    .action(async (slug: string) => {
+      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      try {
+        const result = await client.removeGtfsFeed(slug);
+        if (result.removed.length === 0) {
+          log.info(`No GTFS feed matched slug "${slug}"`);
+          return;
+        }
+        log.ok(
+          `Removed GTFS feed${result.removed.length === 1 ? "" : "s"}: ${result.removed.join(", ")}`,
+        );
+      } catch (err) {
+        log.err(`remove-feed failed: ${(err as Error).message}`);
+        dataManagerHint();
         process.exit(1);
       }
     });

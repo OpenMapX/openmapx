@@ -6,6 +6,7 @@ import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { combineServiceSelection } from "../lib/preset-selection";
 import { applyServiceSelection } from "../lib/service-selection";
 
 const {
@@ -92,11 +93,16 @@ export function registerComposeCommands(program: Command): void {
     .description("Render docker-compose.generated.yml from manifests")
     .option("--domain <d>", "Public domain", process.env.DOMAIN ?? "localhost")
     .option("--services <ids>", "Comma/space-separated root service ids for this render")
-    .action(async (options: { domain: string; services?: string }) => {
+    .option(
+      "--preset <names>",
+      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy)",
+    )
+    .action(async (options: { domain: string; services?: string; preset?: string }) => {
       try {
+        const services = combineServiceSelection(options.services, options.preset);
         const r = await renderComposeForRepo({
           domain: options.domain,
-          services: options.services ? [options.services] : undefined,
+          services,
         });
         log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
         if (r.enabledServiceIds.length > 0) {
@@ -115,11 +121,16 @@ export function registerComposeCommands(program: Command): void {
     .description("Start the stack via generated compose")
     .option("--domain <d>", "Public domain", process.env.DOMAIN ?? "localhost")
     .option("--services <ids>", "Comma/space-separated root service ids for this run")
-    .action(async (options: { domain: string; services?: string }) => {
+    .option(
+      "--preset <names>",
+      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy)",
+    )
+    .action(async (options: { domain: string; services?: string; preset?: string }) => {
       try {
+        const services = combineServiceSelection(options.services, options.preset);
         const r = await renderComposeForRepo({
           domain: options.domain,
-          services: options.services ? [options.services] : undefined,
+          services,
         });
         log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
         for (const warning of r.selectionWarnings) log.warn(warning);

@@ -26,13 +26,17 @@ afterEach(() => {
 });
 
 describe("cli hardlink helpers", () => {
-  it("links files and prunes stale target files by default", () => {
+  it("links source files into target and leaves unknown pre-existing target files alone", () => {
     const src = join(tmp, "infra", "docker", "data", "osm");
     const tgt = join(tmp, "infra", "docker", "data", "valhalla", "osm-pbf");
     mkdirSync(src, { recursive: true });
     mkdirSync(tgt, { recursive: true });
     writeFileSync(join(src, "region.osm.pbf"), "fresh");
-    writeFileSync(join(tgt, "obsolete.osm.pbf"), "stale");
+    // A pre-existing file in the target we never linked (could be a
+    // container-written artifact like valhalla_tiles.tar). The new prune
+    // model must not delete it — only files we previously linked and that
+    // have since disappeared from source are removed.
+    writeFileSync(join(tgt, "valhalla_tiles.tar"), "tiles");
 
     const result = applyHardlinkPlan(
       [
@@ -46,12 +50,54 @@ describe("cli hardlink helpers", () => {
       { rootDir: join(tmp, "infra", "docker", "data") },
     );
 
-    expect(result).toEqual({ linked: 1, skipped: 0, pruned: 1 });
+    expect(result).toEqual({ linked: 1, skipped: 0, pruned: 0 });
     expect(readFileSync(join(tgt, "region.osm.pbf"), "utf-8")).toBe("fresh");
     expect(statSync(join(src, "region.osm.pbf")).ino).toBe(
       statSync(join(tgt, "region.osm.pbf")).ino,
     );
-    expect(existsSync(join(tgt, "obsolete.osm.pbf"))).toBe(false);
+    expect(existsSync(join(tgt, "valhalla_tiles.tar"))).toBe(true);
+  });
+
+  it("prunes only files we previously linked when the producer removes them", () => {
+    const dataRoot = join(tmp, "infra", "docker", "data");
+    const src = join(dataRoot, "gtfs");
+    const tgt = join(dataRoot, "motis", "gtfs");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "feed-a.zip"), "A");
+    writeFileSync(join(src, "feed-b.zip"), "B");
+
+    applyHardlinkPlan(
+      [
+        {
+          source: "data/gtfs",
+          target: "data/motis/gtfs",
+          consumerService: "motis",
+          dataType: "gtfs",
+        },
+      ],
+      { rootDir: dataRoot },
+    );
+
+    rmSync(join(src, "feed-b.zip"));
+    // Container meanwhile wrote a cache file we must not touch.
+    writeFileSync(join(tgt, "nigiri.cache"), "cache");
+
+    const result = applyHardlinkPlan(
+      [
+        {
+          source: "data/gtfs",
+          target: "data/motis/gtfs",
+          consumerService: "motis",
+          dataType: "gtfs",
+        },
+      ],
+      { rootDir: dataRoot },
+    );
+
+    expect(result.pruned).toBe(1);
+    expect(existsSync(join(tgt, "feed-a.zip"))).toBe(true);
+    expect(existsSync(join(tgt, "feed-b.zip"))).toBe(false);
+    expect(existsSync(join(tgt, "nigiri.cache"))).toBe(true);
   });
 
   it("applyGeneratedHardlinks can no-op when plan is missing", () => {

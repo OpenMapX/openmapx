@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveOsmUrl } from "../src/jobs/download-osm.js";
+import { resolveOsmMd5Url, resolveOsmUrl } from "../src/jobs/download-osm.js";
 
 describe("resolveOsmUrl", () => {
   it("returns Planet URL for 'planet'", () => {
@@ -22,5 +22,16 @@ describe("resolveOsmUrl", () => {
 
   it("rejects empty region", () => {
     expect(() => resolveOsmUrl("")).toThrow();
+  });
+});
+
+describe("resolveOsmMd5Url", () => {
+  it("appends .md5 to the PBF URL for checksum verification", () => {
+    expect(resolveOsmMd5Url(resolveOsmUrl("europe/germany"))).toBe(
+      "https://download.geofabrik.de/europe/germany-latest.osm.pbf.md5",
+    );
+    expect(resolveOsmMd5Url(resolveOsmUrl("planet"))).toBe(
+      "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf.md5",
+    );
   });
 });

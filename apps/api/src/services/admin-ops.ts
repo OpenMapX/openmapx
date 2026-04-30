@@ -386,7 +386,7 @@ export function getMotisTransitousStatus(): MotisTransitousStatus {
   const motisDir = join(DATA_DIR, "motis-data");
   const feedProxyDir = join(DATA_DIR, "motis-feed-proxy");
   const configPath = join(motisDir, "config.yml");
-  const feedProxyConfigPath = join(feedProxyDir, "default.conf");
+  const feedProxyConfigPath = join(feedProxyDir, "conf", "default.conf");
   const feedProxyVarsPath = join(feedProxyDir, "feed-proxy-vars.json");
 
   const feedProxyConfigFound = existsSync(feedProxyConfigPath);

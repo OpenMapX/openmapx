@@ -24,6 +24,10 @@
   },
   "buildCommand": "openmapx services build motis",
   "provides": ["transit-engine", "routing-engine"],
+  "produces": [
+    { "type": "motis-data", "sourceDir": "data/motis-data" },
+    { "type": "motis-feed-proxy-config", "sourceDir": "data/motis-feed-proxy/conf" }
+  ],
   "consumes": [{ "type": "motis-data", "mountAt": "/motis-data", "required": true }],
   "exposure": {
     "hostPorts": [{ "container": 8080, "host": 8081, "bindAddress": "127.0.0.1" }]

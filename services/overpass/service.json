@@ -41,7 +41,7 @@
   },
   "provides": ["osm-query"],
   "consumes": [{ "type": "osm-pbf-bz2", "mountAt": "/osm", "readOnly": true, "required": true }],
-  "volumes": [{ "name": "openmapx-overpass-db", "mountAt": "/db", "backup": true }],
+  "bindMounts": [{ "source": "@infra:data/overpass/db", "target": "/db", "readOnly": false }],
   "exposure": {
     "hostPorts": [{ "container": 80, "host": 8082, "bindAddress": "127.0.0.1" }]
   },

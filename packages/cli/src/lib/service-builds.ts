@@ -1,4 +1,5 @@
 import { services as coreServices } from "@openmapx/core/server";
+import { runningComposeServices } from "./docker";
 import { resolveBuildRegion } from "./env-defaults";
 import { buildMotisData } from "./motis-data";
 import { buildOsrmGraph } from "./osrm-graph";
@@ -12,6 +13,28 @@ import {
   DEFAULT_PELIAS_WHOSONFIRST_IMAGE,
 } from "./pelias-data";
 import { buildTileMbtiles, DEFAULT_PLANETILER_IMAGE } from "./tile-mbtiles";
+
+/**
+ * Services whose build step mutates the on-disk producer directory that the
+ * running container consumes via hardlink. Building with the container live
+ * yields a half-swapped state (the container keeps its open file handles on
+ * the *old* inodes while we stage new ones, so it reads stale data until it
+ * is restarted). Refusing to run while the consumer is up is simpler than a
+ * multi-phase atomic swap and matches operator expectations — nothing in
+ * this project supports live rebuilds.
+ *
+ * The check is keyed by service id; extend this set when adding a new
+ * `services build <id>` handler that stages into a shared producer dir.
+ */
+const BUILD_REFUSES_WHEN_CONSUMER_RUNNING: ReadonlySet<string> = new Set([
+  "motis",
+  "otp",
+  "osrm",
+  "pelias",
+  "pelias-pip",
+  "pelias-placeholder",
+  "tileserver",
+]);
 
 const { ServiceRegistry } = coreServices;
 type LoadedService = coreServices.LoadedService;
@@ -251,6 +274,23 @@ export async function buildServices(
   }
 
   log.info(`Build plan: ${plannedIds.join(", ")}`);
+
+  const idsToCheck = plannedIds.filter((id) => BUILD_REFUSES_WHEN_CONSUMER_RUNNING.has(id));
+  // For pelias specifically, ALL three consumer containers (api + pip +
+  // placeholder) read from the pelias build output. Even when we're building
+  // just "pelias" as a synonym for "the pelias data set", refuse if any of
+  // the three are running.
+  if (idsToCheck.includes("pelias")) {
+    idsToCheck.push("pelias-pip", "pelias-placeholder");
+  }
+  const running = await runningComposeServices(Array.from(new Set(idsToCheck)));
+  if (running.length > 0) {
+    throw new Error(
+      `Refusing to build: ${running.join(", ")} ${running.length === 1 ? "is" : "are"} running. ` +
+        `Stop first with \`openmapx services stop ${running.join(" ")}\` — live rebuilds ` +
+        `leave the consumer reading stale data until it's restarted.`,
+    );
+  }
 
   for (const item of plan) {
     log.dim(`Manifest command → ${item.buildCommand}`);

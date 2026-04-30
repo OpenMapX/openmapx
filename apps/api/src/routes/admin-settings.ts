@@ -120,7 +120,7 @@ const SETTING_DEFS: SettingDef[] = [
     label: "SMTP Password",
     type: "string",
     secret: true,
-    env: "SMTP_PASSWORD",
+    env: "SMTP_PASS",
     default: "",
   },
   {
@@ -128,7 +128,7 @@ const SETTING_DEFS: SettingDef[] = [
     key: "smtpTls",
     label: "Use TLS / STARTTLS",
     type: "boolean",
-    env: "SMTP_TLS",
+    env: "SMTP_SECURE",
     default: true,
   },
   {
@@ -137,7 +137,7 @@ const SETTING_DEFS: SettingDef[] = [
     label: "From Address",
     description: "e.g. noreply@example.com",
     type: "string",
-    env: "SMTP_FROM",
+    env: "EMAIL_FROM",
     default: "",
   },
   // Map
@@ -335,13 +335,13 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       const smtpHost = (process.env.SMTP_HOST ?? dbMap.smtpHost ?? "") as string;
       const smtpPort = Number(process.env.SMTP_PORT ?? dbMap.smtpPort ?? 587);
       const smtpUser = (process.env.SMTP_USER ?? dbMap.smtpUser ?? "") as string;
-      const smtpPassword = (process.env.SMTP_PASSWORD ?? dbMap.smtpPassword ?? "") as string;
-      const smtpTls = process.env.SMTP_TLS
-        ? process.env.SMTP_TLS === "true" || process.env.SMTP_TLS === "1"
+      const smtpPassword = (process.env.SMTP_PASS ?? dbMap.smtpPassword ?? "") as string;
+      const smtpTls = process.env.SMTP_SECURE
+        ? process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1"
         : dbMap.smtpTls !== undefined
           ? Boolean(dbMap.smtpTls)
           : true;
-      const smtpFrom = (process.env.SMTP_FROM ?? dbMap.smtpFromAddress ?? "") as string;
+      const smtpFrom = (process.env.EMAIL_FROM ?? dbMap.smtpFromAddress ?? "") as string;
       const instanceName = (process.env.INSTANCE_NAME ??
         dbMap.instanceName ??
         "OpenMapX") as string;

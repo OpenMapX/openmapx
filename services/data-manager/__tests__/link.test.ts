@@ -43,7 +43,7 @@ describe("applyHardlinkPlan", () => {
 
   it("strips leading `data/` from plan paths and resolves against rootDir", async () => {
     // Simulates the real compose-renderer output: `source: "data/osm"`,
-    // `target: "data/motis/osm-pbf"` — both resolved by applyHardlinkPlan
+    // `target: "data/motis/osm-input"` — both resolved by applyHardlinkPlan
     // against `rootDir` = the data-manager's /data mount (which already IS
     // `infra/docker/data/`). Plain resolve would land at `/data/data/osm`,
     // which 404s the directory and silently links zero files.
@@ -54,7 +54,7 @@ describe("applyHardlinkPlan", () => {
       [
         {
           source: "data/osm",
-          target: "data/motis/osm-pbf",
+          target: "data/motis/osm-input",
           consumerService: "motis",
           dataType: "osm-pbf",
         },
@@ -64,7 +64,7 @@ describe("applyHardlinkPlan", () => {
     expect(result.linked).toBe(1);
     expect(result.pruned).toBe(0);
     expect(statSync(join(tmp, "osm", "a.osm.pbf")).ino).toBe(
-      statSync(join(tmp, "motis", "osm-pbf", "a.osm.pbf")).ino,
+      statSync(join(tmp, "motis", "osm-input", "a.osm.pbf")).ino,
     );
   });
 
@@ -121,13 +121,20 @@ describe("applyHardlinkPlan", () => {
     expect(r2.pruned).toBe(0);
   });
 
-  it("replaces stale target files when the source inode changed", async () => {
+  it("re-links same-named files when the source inode changes", async () => {
     const src = join(tmp, "src");
     const tgt = join(tmp, "tgt");
     mkdirSync(src, { recursive: true });
-    mkdirSync(tgt, { recursive: true });
-    writeFileSync(join(src, "feed.zip"), "fresh");
-    writeFileSync(join(tgt, "feed.zip"), "stale");
+    writeFileSync(join(src, "feed.zip"), "A");
+
+    await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
+      { rootDir: tmp },
+    );
+
+    // Producer replaces the file atomically → new inode.
+    rmSync(join(src, "feed.zip"));
+    writeFileSync(join(src, "feed.zip"), "B");
 
     const result = await applyHardlinkPlan(
       [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
@@ -135,10 +142,34 @@ describe("applyHardlinkPlan", () => {
     );
 
     expect(result.linked).toBe(1);
-    expect(result.skipped).toBe(0);
-    expect(result.pruned).toBe(1);
-    expect(readFileSync(join(tgt, "feed.zip"), "utf-8")).toBe("fresh");
+    expect(readFileSync(join(tgt, "feed.zip"), "utf-8")).toBe("B");
     expect(statSync(join(src, "feed.zip")).ino).toBe(statSync(join(tgt, "feed.zip")).ino);
+  });
+
+  it("preserves files the container wrote into the consumer mount", async () => {
+    const src = join(tmp, "src");
+    const tgt = join(tmp, "tgt");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "input.pbf"), "PBF");
+
+    await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "valhalla", dataType: "osm-pbf" }],
+      { rootDir: tmp },
+    );
+
+    // Simulate container output — this is the file valhalla writes after
+    // building tiles. It must survive subsequent link applies.
+    writeFileSync(join(tgt, "valhalla_tiles.tar"), "tiles");
+    writeFileSync(join(tgt, "admins.sqlite"), "admins");
+
+    const result = await applyHardlinkPlan(
+      [{ source: src, target: tgt, consumerService: "valhalla", dataType: "osm-pbf" }],
+      { rootDir: tmp },
+    );
+
+    expect(result.pruned).toBe(0);
+    expect(existsSync(join(tgt, "valhalla_tiles.tar"))).toBe(true);
+    expect(existsSync(join(tgt, "admins.sqlite"))).toBe(true);
   });
 
   it("links exactly one source file under a requested target filename", async () => {
@@ -168,30 +199,7 @@ describe("applyHardlinkPlan", () => {
     );
   });
 
-  it("fails a targetFilename link when the source directory has multiple files", async () => {
-    const src = join(tmp, "osm");
-    const tgt = join(tmp, "nominatim", "osm-pbf");
-    mkdirSync(src, { recursive: true });
-    writeFileSync(join(src, "europe-germany.osm.pbf"), "PBF1");
-    writeFileSync(join(src, "planet.osm.pbf"), "PBF2");
-
-    await expect(
-      applyHardlinkPlan(
-        [
-          {
-            source: src,
-            target: tgt,
-            consumerService: "nominatim",
-            dataType: "osm-pbf",
-            targetFilename: "data.osm.pbf",
-          },
-        ],
-        { rootDir: tmp },
-      ),
-    ).rejects.toThrow(/expected exactly one source file/);
-  });
-
-  it("prunes stale target files that no longer exist in source", async () => {
+  it("prunes only target files we previously linked and that are gone from source", async () => {
     const src = join(tmp, "src");
     const tgt = join(tmp, "tgt");
     mkdirSync(src, { recursive: true });
@@ -201,6 +209,9 @@ describe("applyHardlinkPlan", () => {
       [{ source: src, target: tgt, consumerService: "motis", dataType: "gtfs" }],
       { rootDir: tmp },
     );
+
+    // Container writes its own file that was never linked — must survive.
+    writeFileSync(join(tgt, "nigiri.cache"), "cache");
     rmSync(join(src, "feed.zip"), { force: true });
 
     const result = await applyHardlinkPlan(
@@ -211,6 +222,7 @@ describe("applyHardlinkPlan", () => {
     expect(result.linked).toBe(0);
     expect(result.pruned).toBe(1);
     expect(existsSync(join(tgt, "feed.zip"))).toBe(false);
+    expect(existsSync(join(tgt, "nigiri.cache"))).toBe(true);
   });
 
   it("can keep stale target files when prune is disabled", async () => {
@@ -273,5 +285,18 @@ describe("applyHardlinkPlan", () => {
         { rootDir: tmp },
       ),
     ).rejects.toThrow(/escapes the data root/);
+  });
+
+  it("rejects plans whose target is nested inside source", async () => {
+    const src = join(tmp, "a");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "x"), "x");
+
+    await expect(
+      applyHardlinkPlan(
+        [{ source: "a", target: "a/inner", consumerService: "svc", dataType: "data" }],
+        { rootDir: tmp },
+      ),
+    ).rejects.toThrow(/nested inside source/);
   });
 });

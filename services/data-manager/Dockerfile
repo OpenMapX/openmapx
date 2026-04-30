@@ -1,3 +1,18 @@
+# syntax=docker/dockerfile:1.7
+#
+# IMPORTANT: build context MUST be the repo root. This Dockerfile reaches
+# outside its own directory to pick up:
+#   - pnpm-workspace.yaml + workspace package.json files (for dependency
+#     resolution of @openmapx/hardlinks)
+#   - services/motis/tools/transitous/requirements.txt (pulled into the
+#     runtime stage for the Transitous GTFS pipeline)
+#
+# Build command (from repo root):
+#   docker build -t openmapx-data-manager -f services/data-manager/Dockerfile .
+#
+# The GitHub Actions workflow at .github/workflows/docker.yml builds this
+# image with `context: .` for the same reason.
+
 FROM docker.io/golang:1.26 AS build-gtfsclean
 RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@latest
 
@@ -14,8 +29,9 @@ ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY services/data-manager/package.json services/data-manager/
+COPY packages/hardlinks/package.json packages/hardlinks/
 
-RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile
+RUN pnpm install --filter @openmapx/data-manager --frozen-lockfile
 
 FROM base AS prod-deps
 WORKDIR /app
@@ -23,12 +39,14 @@ ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY services/data-manager/package.json services/data-manager/
+COPY packages/hardlinks/package.json packages/hardlinks/
 
-RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile --prod --ignore-scripts
+RUN pnpm install --filter @openmapx/data-manager --frozen-lockfile --prod --ignore-scripts
 
 FROM deps AS builder
 WORKDIR /app
 
+COPY packages/hardlinks/ packages/hardlinks/
 COPY services/data-manager/ services/data-manager/
 
 WORKDIR /app/services/data-manager
@@ -52,6 +70,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-manager/node_modules
+# The shared @openmapx/hardlinks package ships its TypeScript source directly;
+# tsx/esm (preserved because it's a prod dep) transpiles it on import. This
+# matches how apps/api loads its dynamic integration code.
+COPY packages/hardlinks/ ./packages/hardlinks/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
 COPY services/data-manager/package.json ./services/data-manager/
 
@@ -69,4 +91,7 @@ USER datamgr:datamgr
 
 WORKDIR /app/services/data-manager
 EXPOSE 4000
-CMD ["node", "dist/index.js"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fs http://localhost:4000/status || exit 1
+# `--import tsx/esm` lets the compiled dist/index.js reach back into
+# @openmapx/hardlinks's .ts source without a separate build step.
+CMD ["node", "--import", "tsx/esm", "dist/index.js"]

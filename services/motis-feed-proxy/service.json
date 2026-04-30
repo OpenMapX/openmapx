@@ -26,7 +26,6 @@
     {
       "type": "motis-feed-proxy-config",
       "mountAt": "/etc/nginx/conf.d",
-      "targetFilename": "default.conf",
       "readOnly": true,
       "required": true
     }

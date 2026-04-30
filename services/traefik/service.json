@@ -19,9 +19,9 @@
   "provides": ["proxy"],
   "volumes": [{ "name": "openmapx-traefik-acme", "mountAt": "/etc/traefik", "backup": true }],
   "bindMounts": [
-    { "source": "@docker-socket", "target": "/var/run/docker.sock" },
-    { "source": "config/traefik.yml", "target": "/etc/traefik/traefik.yml" },
-    { "source": "config/dynamic", "target": "/etc/traefik/dynamic" }
+    { "source": "@docker-socket", "target": "/var/run/docker.sock", "readOnly": true },
+    { "source": "config/traefik.yml", "target": "/etc/traefik/traefik.yml", "readOnly": true },
+    { "source": "config/dynamic", "target": "/etc/traefik/dynamic", "readOnly": true }
   ],
   "exposure": {
     "hostPorts": [{ "container": 80, "host": 80 }, { "container": 443, "host": 443 }]

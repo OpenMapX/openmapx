@@ -9,16 +9,17 @@
     "image": "ghcr.io/medformatik/openmapx-api",
     "tag": "latest",
     "expose": [3001],
+    "envFile": [".env"],
     "environment": {
       "PORT": "3001",
       "HOST": "0.0.0.0",
       "DOMAIN": "${DOMAIN:-localhost}",
-      "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:-/app}",
+      "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — see infra/docker/.env.example}",
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx",
       "REDIS_URL": "redis://redis:6379",
       "DATA_MANAGER_URL": "${DATA_MANAGER_URL:-http://data-manager:4000}",
-      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN}",
-      "MOTIS_DATA_DIR": "${OPENMAPX_HOST_DIR:-/app}/infra/docker/data/motis-data",
+      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
+      "MOTIS_DATA_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data/motis-data",
       "OSRM_URL": "${OSRM_URL:-https://router.project-osrm.org}",
       "VALHALLA_URL": "${VALHALLA_URL:-https://valhalla1.openstreetmap.de}",
       "MOTIS_URL": "${MOTIS_URL:-https://api.transitous.org}",
@@ -87,8 +88,8 @@
       "readOnly": false
     },
     {
-      "source": "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
-      "target": "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — the app-api container invokes `docker compose` from inside the container and needs the host path of the checkout bind-mounted at the same absolute path}",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
       "readOnly": false
     }
   ],

@@ -15,6 +15,10 @@ export interface CurlAtomicOptions {
  * file, then renames into place on success. On failure (curl non-zero exit,
  * abort, etc.) the temp file is unlinked, so consumers never see a partial
  * download at the final path.
+ *
+ * When `targetPath` already exists, sends `If-Modified-Since: <mtime>` so
+ * upstream servers (e.g. Geofabrik) can short-circuit unchanged downloads
+ * with 304. On 304, the existing file is left in place and we return early.
  */
 export async function curlAtomic(
   url: string,
@@ -38,7 +42,18 @@ export async function curlAtomic(
     }
   }
 
-  const child = execa("curl", ["-fSL", "-o", tmpPath, url], { stdio: "inherit" });
+  // Skip the download entirely if the upstream resource hasn't changed since
+  // we last fetched it. `curl -z <file>` adds an `If-Modified-Since` header
+  // matching the file's mtime; combined with `-f --fail-with-body` curl exits
+  // 0 with no output on 304. Best-effort: any HEAD/GET failure falls through
+  // to a normal full download below.
+  const args = ["-fSL", "-o", tmpPath];
+  if (existsSync(targetPath)) {
+    args.push("-z", targetPath);
+  }
+  args.push(url);
+
+  const child = execa("curl", args, { stdio: "inherit" });
   const poll = opts.onProgress
     ? setInterval(() => {
         try {
@@ -53,6 +68,22 @@ export async function curlAtomic(
   try {
     await child;
     if (poll) clearInterval(poll);
+    // 304 Not Modified: curl writes nothing to the tmp path. Leave the
+    // existing target in place and return without renaming.
+    if (!existsSync(tmpPath) || statSync(tmpPath).size === 0) {
+      if (existsSync(tmpPath)) {
+        try {
+          unlinkSync(tmpPath);
+        } catch {
+          // best effort
+        }
+      }
+      if (existsSync(targetPath) && opts.onProgress) {
+        const size = statSync(targetPath).size;
+        opts.onProgress(size, size);
+      }
+      return;
+    }
     // One final update so the client sees 100%.
     if (opts.onProgress) {
       try {

@@ -26,6 +26,7 @@ export interface DatasetMetadata {
   sizeBytes: number;
   downloadedAt: string;
   sha256?: string;
+  md5?: string;
   path: string;
 }
 

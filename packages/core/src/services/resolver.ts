@@ -123,7 +123,11 @@ export function detectConsumesCycle(services: LoadedService[]): string[] | null 
             ? producersByType.get(c.type)?.[0]
             : undefined);
       }
-      if (producer) deps.push(producer);
+      // A service that produces AND consumes the same data type (e.g. osrm
+      // produces osrm-graph from its buildCommand, then its container consumes
+      // the same type) is NOT a cycle — the host-side hardlink apply mediates
+      // between source and target. `topologicalOrder` applies the same filter.
+      if (producer && producer !== s.manifest.id) deps.push(producer);
     }
     adj.set(s.manifest.id, deps);
   }

@@ -108,9 +108,9 @@ describe("buildMotisData", () => {
     expect(result.gtfsFeeds).toEqual([join(motisDir, "de_bvg.gtfs.zip")]);
     expect(result.configPath).toBe(join(motisDir, MOTIS_CONFIG_FILENAME));
     expect(result.licensePath).toBe(join(motisDir, MOTIS_LICENSE_FILENAME));
-    expect(result.feedProxyConfigPath).toBe(join(feedProxyDir, "default.conf"));
+    expect(result.feedProxyConfigPath).toBe(join(feedProxyDir, "conf", "default.conf"));
     expect(result.feedProxyFeedCount).toBe(1);
-    expect(readFileSync(join(feedProxyDir, "default.conf"), "utf-8")).toContain(
+    expect(readFileSync(join(feedProxyDir, "conf", "default.conf"), "utf-8")).toContain(
       'location "/feed/de-BVG-0"',
     );
     expect(result.transitousCatalogDir).toBe(
@@ -132,12 +132,7 @@ describe("buildMotisData", () => {
       },
       {
         command: "docker",
-        args: [
-          "build",
-          "-t",
-          DEFAULT_TRANSITOUS_TOOLS_IMAGE,
-          join(tmp, "services", "motis", "tools", "transitous"),
-        ],
+        args: ["pull", DEFAULT_TRANSITOUS_TOOLS_IMAGE],
         cwd: tmp,
       },
       {
@@ -316,7 +311,7 @@ describe("buildMotisData", () => {
     expect(result.configPath).toBeUndefined();
     expect(result.licensePath).toBeUndefined();
     expect(result.feedProxyConfigPath).toBe(
-      join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR, "default.conf"),
+      join(tmp, "infra", "docker", "data", MOTIS_FEED_PROXY_DIR, "conf", "default.conf"),
     );
     expect(result.feedProxyFeedCount).toBe(0);
     expect(existsSync(join(tmp, "infra", "docker", "data", MOTIS_DATA_DIR, "planet.osm.pbf"))).toBe(

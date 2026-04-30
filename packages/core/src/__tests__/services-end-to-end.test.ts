@@ -124,7 +124,8 @@ describe.skipIf(!manifestsPresent)(
           dataType: "otp-graph",
         }),
       );
-      expect(result.composeYaml).toContain("./data/otp/otp-graph:/var/opentripplanner:ro");
+      expect(result.composeYaml).toContain("./data/otp/otp-graph:/var/opentripplanner");
+      expect(result.composeYaml).not.toContain("./data/otp/otp-graph:/var/opentripplanner:ro");
       expect(result.composeYaml).not.toContain("./data/otp/osm-pbf");
       expect(result.composeYaml).not.toContain("./data/otp/gtfs");
     });

@@ -28,3 +28,21 @@ export async function dockerComposeStream(args: string[]): Promise<number> {
   const result = await sub;
   return result.exitCode ?? 0;
 }
+
+/**
+ * Return the subset of the given compose-service ids that have a container
+ * currently running. Uses `docker compose ps` against the generated compose
+ * file; services that aren't in the file or don't have a running container
+ * are omitted. Silently returns an empty array when docker is unavailable or
+ * the compose file hasn't been rendered yet — callers treat this as "we
+ * couldn't verify, proceed with a warning".
+ */
+export async function runningComposeServices(serviceIds: string[]): Promise<string[]> {
+  if (serviceIds.length === 0) return [];
+  const result = await dockerCompose(["ps", "--status=running", "--services", ...serviceIds]);
+  if (result.exitCode !== 0) return [];
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && serviceIds.includes(line));
+}

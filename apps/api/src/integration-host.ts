@@ -28,7 +28,7 @@ import { searchCatalog } from "./services/gtfs/catalog";
 import { gtfsManager } from "./services/gtfs/index";
 import * as gtfsQueries from "./services/gtfs/queries";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
-import { getSecret, resolveVaultSecrets } from "./services/secrets";
+import { getSecret, isSecretsConfigured, resolveVaultSecrets } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { requireAuth } from "./utils/require-auth";
 
@@ -407,6 +407,22 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
   return result;
 }
 
+function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
+  const schema = manifest.configSchema as { properties?: Record<string, unknown> } | undefined;
+  const props = schema?.properties;
+  if (!props) return false;
+  for (const value of Object.values(props)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      (value as Record<string, unknown>)["x-openmapx-secret"] === true
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function initIntegrations(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
   fastify: FastifyInstance<any, any, any, any>,
@@ -416,6 +432,27 @@ export async function initIntegrations(
   _integrationDirs = integrationDirs;
 
   const discovered = await discoverManifests(integrationDirs);
+
+  // Hard-fail at startup when any installed integration declares vault-backed
+  // secret fields but OPENMAPX_SECRETS_KEY is missing. The lazy fallback in
+  // secrets.ts already throws on first decrypt, but lazy failure means the
+  // operator only finds out via a 500 from a user-facing route; bailing here
+  // surfaces it as a boot error with a clear remediation hint.
+  if (!isSecretsConfigured()) {
+    const requiringSecrets = discovered.filter((d) =>
+      manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
+    );
+    if (requiringSecrets.length > 0) {
+      const names = requiringSecrets.map((d) => d.manifest.id).join(", ");
+      throw new Error(
+        `OPENMAPX_SECRETS_KEY is not set but the following integrations require it: ${names}. ` +
+          `Generate a key with: openssl rand -hex 32`,
+      );
+    }
+    fastify.log.warn(
+      "OPENMAPX_SECRETS_KEY is not set — vault-backed integration secrets cannot be stored or decrypted",
+    );
+  }
 
   // Topological sort by manifest.dependencies to ensure deps load first
   const sorted = topologicalSort(discovered);
