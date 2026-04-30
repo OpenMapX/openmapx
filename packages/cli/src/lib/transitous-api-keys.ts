@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { execa } from "execa";
 import { DEFAULT_TRANSITOUS_REPO_URL as DEFAULT_TRANSITOUS_REPO_URL_VALUE } from "./motis-data";
 import { repoPaths } from "./paths";
@@ -54,6 +54,15 @@ async function defaultRunner(
   opts: { cwd?: string; stdio?: "inherit" | "pipe" },
 ): Promise<void> {
   await execa(command, args, { cwd: opts.cwd, stdio: opts.stdio ?? "pipe" });
+}
+
+/** Defense-in-depth: refuse to write outside the monorepo root. */
+function assertInsideRoot(candidate: string, root: string): string {
+  const rel = relative(root, candidate);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`--output must resolve to a path inside ${root} (got ${candidate})`);
+  }
+  return candidate;
 }
 
 async function resetTransitousCatalog(catalogDir: string, runner: CommandRunner): Promise<void> {
@@ -222,7 +231,7 @@ export async function generateTransitousApiKeys(
   const paths = repoPaths(opts.rootDir);
   const dataDir = join(paths.infraDir, "data");
   const outputPath = opts.outputPath
-    ? resolve(paths.root, opts.outputPath)
+    ? assertInsideRoot(resolve(paths.root, opts.outputPath), paths.root)
     : join(paths.root, "services", "motis", "tools", "transitous", "api-keys.json");
 
   const catalogDir = await ensureTransitousCatalog(

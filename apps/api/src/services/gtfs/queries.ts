@@ -1,4 +1,4 @@
-import type { BBox } from "@openmapx/core";
+import { type BBox, isValidFeedSlug } from "@openmapx/core";
 import { mapGtfsRouteTypeToMode } from "@openmapx/mobility-formats";
 import { sql } from "./db";
 import type {
@@ -14,6 +14,22 @@ export function routeTypeToMode(routeType: number): string {
   return mapGtfsRouteTypeToMode(routeType);
 }
 
+/**
+ * Defense-in-depth guard for the `${schema}` interpolations below. Every
+ * persisted schema name is `gtfs_<slug>` where `<slug>` is feed-slug-shaped;
+ * route-level validation already enforces that. This guard prevents future
+ * callers from passing arbitrary identifiers — a single misuse would otherwise
+ * become a SQL-identifier injection.
+ */
+function assertValidGtfsSchema(schema: string): void {
+  if (!schema.startsWith("gtfs_")) {
+    throw new Error(`Invalid GTFS schema name "${schema}" — must begin with "gtfs_"`);
+  }
+  if (!isValidFeedSlug(schema.slice("gtfs_".length))) {
+    throw new Error(`Invalid GTFS schema name "${schema}"`);
+  }
+}
+
 // Stops
 
 /**
@@ -25,6 +41,7 @@ export async function getStopsInBbox(
   bbox: BBox,
   limit = 200,
 ): Promise<GtfsStopRow[]> {
+  assertValidGtfsSchema(schema);
   const [west, south, east, north] = bbox;
   const rows = await sql.unsafe(
     `
@@ -54,6 +71,7 @@ export async function getStopsInBbox(
  * Query a single stop by ID from a specific GTFS schema.
  */
 export async function getStopById(schema: string, stopId: string): Promise<GtfsStopRow | null> {
+  assertValidGtfsSchema(schema);
   const rows = await sql.unsafe(
     `
     SELECT
@@ -83,6 +101,7 @@ export async function searchStopsByName(
   query: string,
   limit = 20,
 ): Promise<GtfsStopRow[]> {
+  assertValidGtfsSchema(schema);
   const rows = await sql.unsafe(
     `
     SELECT
@@ -119,6 +138,7 @@ export async function getDepartures(
   stopId: string,
   minutes: number,
 ): Promise<GtfsDepartureRow[]> {
+  assertValidGtfsSchema(schema);
   // Check if service_days view exists
   const viewCheck = await sql.unsafe(
     `
@@ -167,6 +187,7 @@ export async function getArrivals(
   stopId: string,
   minutes: number,
 ): Promise<GtfsDepartureRow[]> {
+  assertValidGtfsSchema(schema);
   const viewCheck = await sql.unsafe(
     `
     SELECT EXISTS (
@@ -210,6 +231,7 @@ export async function getArrivals(
  * Query child stops (platforms) of a parent station.
  */
 export async function getChildStops(schema: string, parentStopId: string): Promise<GtfsStopRow[]> {
+  assertValidGtfsSchema(schema);
   const rows = await sql.unsafe(
     `
     SELECT
@@ -234,6 +256,7 @@ export async function getDeparturesByDate(
   stopId: string,
   date: string,
 ): Promise<GtfsDepartureRow[]> {
+  assertValidGtfsSchema(schema);
   const viewCheck = await sql.unsafe(
     `
     SELECT EXISTS (
@@ -286,6 +309,7 @@ export async function listGtfsSchemas(): Promise<string[]> {
 export async function getSchemaStats(
   schema: string,
 ): Promise<{ stops: number; routes: number; trips: number }> {
+  assertValidGtfsSchema(schema);
   const [stops, routes, trips] = await Promise.all([
     sql.unsafe(`SELECT COUNT(*) as c FROM "${schema}".stops WHERE location_type IN (0, 1)`),
     sql.unsafe(`SELECT COUNT(*) as c FROM "${schema}".routes`),
@@ -306,6 +330,7 @@ export function invalidateSchemaCaches(schema: string): void {
 }
 
 async function hasOriginalStopIdColumn(schema: string): Promise<boolean> {
+  assertValidGtfsSchema(schema);
   const cached = schemaStopOriginalIdSupport.get(schema);
   if (cached !== undefined) return cached;
 
@@ -336,6 +361,7 @@ export async function findRepresentativeTrip(
     stopNames?: string[];
   },
 ): Promise<GtfsRepresentativeTripRow | null> {
+  assertValidGtfsSchema(schema);
   const stopRefTerms = [
     ...new Set((options.stopRefs ?? []).map((value) => value.trim()).filter(Boolean)),
   ];
@@ -441,6 +467,7 @@ export async function findRepresentativeTrip(
 }
 
 export async function getTripStops(schema: string, tripId: string): Promise<GtfsTripStopRow[]> {
+  assertValidGtfsSchema(schema);
   const hasOriginalStopId = await hasOriginalStopIdColumn(schema);
   const originalStopIdExpr = hasOriginalStopId ? "s.original_stop_id" : "NULL::text";
   const rows = await sql.unsafe(
@@ -468,6 +495,7 @@ export async function getShapePoints(
   schema: string,
   shapeId: string,
 ): Promise<GtfsShapePointRow[]> {
+  assertValidGtfsSchema(schema);
   const rows = await sql.unsafe(
     `
     SELECT

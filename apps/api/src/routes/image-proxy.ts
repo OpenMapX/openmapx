@@ -118,13 +118,26 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
           return reply.status(413).send({ message: "Image too large" });
         }
 
-        // Stream with a hard byte counter so a missing/misleading Content-Length
-        // cannot trick the API into buffering unbounded memory.
         if (!upstream.body) {
           return reply.status(502).send({ message: "Empty upstream body" });
         }
+
+        // Stream the upstream body chunk-by-chunk to the client with a hard
+        // byte counter, so a missing or misleading Content-Length cannot
+        // force unbounded buffering on the proxy. Headers are flushed before
+        // the first chunk; on overflow we destroy the socket because the
+        // status line has already been sent.
+        reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
+        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+        reply.header("Access-Control-Allow-Origin", origins[0]);
+        if (contentLength && parseInt(contentLength, 10) <= MAX_SIZE) {
+          reply.header("Content-Length", contentLength);
+        }
+        reply.type(contentType);
+        // Flush headers — `reply.raw.flushHeaders()` is a no-op if already sent.
+        reply.raw.flushHeaders?.();
+
         const reader = upstream.body.getReader();
-        const chunks: Uint8Array[] = [];
         let total = 0;
         try {
           for (;;) {
@@ -133,24 +146,20 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
             total += value.byteLength;
             if (total > MAX_SIZE) {
               await reader.cancel().catch(() => {});
-              return reply.status(413).send({ message: "Image too large" });
+              reply.raw.destroy(new Error("Image too large"));
+              return reply;
             }
-            chunks.push(value);
+            // Backpressure: pause reading when the socket buffer is full.
+            const ok = reply.raw.write(Buffer.from(value));
+            if (!ok) {
+              await new Promise<void>((resolve) => reply.raw.once("drain", resolve));
+            }
           }
+          reply.raw.end();
         } finally {
           reader.releaseLock?.();
         }
-
-        reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-        reply.header("Access-Control-Allow-Origin", origins[0]);
-        reply.type(contentType);
-        return reply.send(
-          Buffer.concat(
-            chunks.map((c) => Buffer.from(c)),
-            total,
-          ),
-        );
+        return reply;
       } catch (err) {
         req.log.warn({ url, err }, "Image proxy fetch failed");
         return reply.status(502).send({ message: "Failed to fetch image" });

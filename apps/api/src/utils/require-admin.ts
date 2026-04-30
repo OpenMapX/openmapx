@@ -58,21 +58,26 @@ function isLocalAdminRequest(request: FastifyRequest): boolean {
   if (process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH === "1") return false;
   if (!LOOPBACK_ADDRESSES.has(request.ip)) return false;
 
-  const expected = getLocalAdminToken();
-  // Dev default: when no token is configured, keep the legacy behaviour of
-  // trusting any loopback process (the admin CLI and developer workflow rely
-  // on it). Production deployments SHOULD configure the token — see
-  // services/app-api/service.json. The header check below always runs when a
-  // token is configured, which blocks same-origin CSRF from a victim browser.
-  if (!expected) {
-    if (process.env.NODE_ENV === "production") return false;
-    return true;
-  }
-
   const header = request.headers[LOCAL_ADMIN_TOKEN_HEADER];
   const presented = Array.isArray(header) ? header[0] : header;
-  if (typeof presented !== "string" || !presented) return false;
-  return safeEqual(presented, expected);
+  const presentedString = typeof presented === "string" ? presented : "";
+
+  const expected = getLocalAdminToken();
+
+  // Dev default: when no token is configured, the developer workflow still
+  // wants `pnpm openmapx ...` to work without provisioning a token. We keep
+  // that, but require the request to carry the custom header — even with an
+  // empty value — so a malicious site cannot CSRF the admin endpoints via a
+  // simple `<form action="http://127.0.0.1:3001/api/admin/...">` POST. Custom
+  // headers cannot be set on simple cross-origin requests without a CORS
+  // preflight, which the API does not grant for admin routes.
+  if (!expected) {
+    if (process.env.NODE_ENV === "production") return false;
+    return presented !== undefined; // header present (possibly empty) is enough.
+  }
+
+  if (!presentedString) return false;
+  return safeEqual(presentedString, expected);
 }
 
 /**

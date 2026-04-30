@@ -11,11 +11,17 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fetchWithRedirects, USER_AGENT, validatePublicUrl } from "@openmapx/core";
+import { fetchWithRedirects, isValidFeedSlug, USER_AGENT, validatePublicUrl } from "@openmapx/core";
 import { safeDownload } from "@openmapx/core/server";
 import { gtfsDate, parseCsv, streamCsvBatches } from "./csv";
 import { sql } from "./db";
 import { invalidateSchemaCaches } from "./queries";
+
+function assertValidGtfsSchema(schema: string): void {
+  if (!schema.startsWith("gtfs_") || !isValidFeedSlug(schema.slice("gtfs_".length))) {
+    throw new Error(`Invalid GTFS schema name "${schema}"`);
+  }
+}
 
 const BATCH_SIZE = 5_000;
 const SWISS_REDIRECT_HOSTS = ["opentransportdata.swiss", "*.opentransportdata.swiss"];
@@ -597,6 +603,7 @@ export async function importGtfsFeed(
   schema: string,
   onProgress?: (stage: string) => void,
 ): Promise<ImportResult> {
+  assertValidGtfsSchema(schema);
   // Use mkdtempSync so the temp path is OS-generated — caller-derived data
   // never ends up in the filesystem path, and concurrent imports cannot collide.
   const tempDir = mkdtempSync(join(tmpdir(), "gtfs-import-"));
@@ -666,6 +673,7 @@ export async function importGtfsFeed(
 
 /** Remove an imported GTFS schema entirely. */
 export async function dropGtfsSchema(schema: string): Promise<void> {
+  assertValidGtfsSchema(schema);
   await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   invalidateSchemaCaches(schema);
 }

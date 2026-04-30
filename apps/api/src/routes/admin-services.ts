@@ -111,6 +111,20 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(400);
         return { error: "Invalid action — must be start | stop | restart" };
       }
+      // Verify the id is a known service before enqueueing — prevents the job
+      // runner from spawning a `docker compose start <unknown>` call (or worse,
+      // a flag-shaped id bleeding into the docker-compose argv).
+      let registry: ReturnType<typeof getServiceRegistry>;
+      try {
+        registry = getServiceRegistry();
+      } catch {
+        reply.status(503);
+        return { error: "Service registry not available" };
+      }
+      if (!registry.get(id)) {
+        reply.status(404);
+        return { error: `Service "${id}" not found` };
+      }
       const adminSession = getAdminSession(req);
 
       const jobId = await jobRunner.enqueue(

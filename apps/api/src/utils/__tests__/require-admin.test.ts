@@ -35,14 +35,29 @@ function makeApp() {
 }
 
 describe("requireAdmin loopback short-circuit", () => {
-  it("admits a loopback request without consulting better-auth", async () => {
+  it("admits a loopback request that carries the custom local-admin header", async () => {
     const app = makeApp();
     // app.inject() defaults remoteAddress to 127.0.0.1, which Fastify reports as `request.ip`.
-    const res = await app.inject({ method: "GET", url: "/protected" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { "x-openmapx-local-admin": "" },
+    });
     await app.close();
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ ok: true, userId: "loopback" });
     expect(mockGetSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects a loopback request lacking the custom header (CSRF guard) in dev", async () => {
+    mockGetSession.mockResolvedValue(null);
+    const app = makeApp();
+    // No header → simulate a same-origin <form action> CSRF attempt; browsers
+    // cannot set the custom header without a CORS preflight.
+    const res = await app.inject({ method: "GET", url: "/protected" });
+    await app.close();
+    expect(res.statusCode).toBe(401);
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
   });
 
   it("respects OPENMAPX_DISABLE_LOCALHOST_AUTH=1 (no short-circuit)", async () => {
