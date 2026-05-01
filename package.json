@@ -9,6 +9,7 @@
     "format": "biome format --write .",
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types",
+    "test": "turbo run test --concurrency=1",
     "prepare": "husky",
     "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
     "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts",

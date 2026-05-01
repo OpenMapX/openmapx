@@ -1,1 +1,1 @@
-pnpm biome check .
+pnpm lint && pnpm check-types && pnpm test
