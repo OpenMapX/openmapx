@@ -20,6 +20,7 @@ export const PRESETS: Record<string, readonly string[]> = {
   overpass: ["overpass"],
   tiles: ["tileserver"],
   martin: ["martin"],
+  dev: ["postgis", "redis"],
 };
 
 export type PresetName = keyof typeof PRESETS;

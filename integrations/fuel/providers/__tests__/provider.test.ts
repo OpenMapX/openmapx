@@ -17,12 +17,14 @@ vi.mock("../mapper.js", () => ({
   buildTankerkoenigDetail: vi.fn(),
 }));
 
-vi.mock("../../../overpass.service.js", () => ({
-  CATEGORY_FILTERS: {
-    fuel: [{ key: "amenity", value: "fuel" }],
-  },
-  searchByCategory: vi.fn(),
-}));
+vi.mock("@openmapx/core", async () => {
+  const actual = await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core");
+  return {
+    ...actual,
+    CATEGORY_FILTERS: { fuel: [{ key: "amenity", value: "fuel" }] },
+    searchByCategory: vi.fn(),
+  };
+});
 
 import { searchByCategory } from "@openmapx/core";
 import { searchFuelStations } from "../factory.js";
@@ -186,7 +188,7 @@ describe("fuelProvider.getDetail", () => {
     expect(result).toBe(enrichedDetail);
   });
 
-  it("tankerkoenig/ with invalid UUID skips API call", async () => {
+  it("tankerkoenig/ with invalid UUID skips API call and returns null", async () => {
     mockTankerkoenigKey = "test-key-123";
 
     const itemId = "tankerkoenig/not-a-uuid";
@@ -194,18 +196,17 @@ describe("fuelProvider.getDetail", () => {
     const result = await fuelProvider.getDetail(itemId);
 
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(result.id).toBe(itemId);
-    expect(result.source).toBe("unknown");
+    expect(result).toBeNull();
   });
 
-  it("tankerkoenig/ without API key skips API call", async () => {
+  it("tankerkoenig/ without API key skips API call and returns null", async () => {
     mockTankerkoenigKey = undefined;
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
     const result = await fuelProvider.getDetail(`tankerkoenig/${uuid}`);
 
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(result.source).toBe("unknown");
+    expect(result).toBeNull();
   });
 
   it("cached station returned via mapFuelStationToDetail", async () => {
@@ -229,25 +230,18 @@ describe("fuelProvider.getDetail", () => {
     expect(result).toBe(detail);
   });
 
-  it("fallback: minimal detail for unknown item", async () => {
+  it("returns null for unknown item with no cache entry", async () => {
     const result = await fuelProvider.getDetail("totally-unknown-fuel-999");
-
-    expect(result.id).toBe("totally-unknown-fuel-999");
-    expect(result.source).toBe("unknown");
-    expect(result.name).toBe("Gas Station");
-    expect(result.coordinates).toEqual([0, 0]);
-    expect(result.sections).toEqual([]);
+    expect(result).toBeNull();
   });
 
-  it("tankerkoenig/ API fetch failure falls through to cache/fallback", async () => {
+  it("tankerkoenig/ API fetch failure falls through to null when no cache entry", async () => {
     mockTankerkoenigKey = "test-key";
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
     mockFetch.mockRejectedValue(new Error("Network error"));
 
     const result = await fuelProvider.getDetail(`tankerkoenig/${uuid}`);
-
-    expect(result.source).toBe("unknown");
-    expect(result.name).toBe("Gas Station");
+    expect(result).toBeNull();
   });
 });

@@ -127,14 +127,21 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         // force unbounded buffering on the proxy. Headers are flushed before
         // the first chunk; on overflow we destroy the socket because the
         // status line has already been sent.
-        reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-        reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-        reply.header("Access-Control-Allow-Origin", origins[0]);
+        //
+        // Set headers via `reply.raw.setHeader` rather than `reply.header`:
+        // Fastify only flushes its internal header store when `reply.send`
+        // runs, and we bypass that here by writing to `reply.raw` directly.
+        // We also have to override the helmet defaults (Cross-Origin-
+        // Resource-Policy: same-origin would block cross-origin <img> loads,
+        // and the missing Content-Type combined with X-Content-Type-Options:
+        // nosniff would refuse to render the bytes as an image).
+        reply.raw.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+        reply.raw.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        reply.raw.setHeader("Access-Control-Allow-Origin", origins[0]);
+        reply.raw.setHeader("Content-Type", contentType);
         if (contentLength && parseInt(contentLength, 10) <= MAX_SIZE) {
-          reply.header("Content-Length", contentLength);
+          reply.raw.setHeader("Content-Length", contentLength);
         }
-        reply.type(contentType);
-        // Flush headers — `reply.raw.flushHeaders()` is a no-op if already sent.
         reply.raw.flushHeaders?.();
 
         const reader = upstream.body.getReader();

@@ -354,7 +354,7 @@ export function registerServicesCommands(program: Command): void {
     )
     .option(
       "--preset <names>",
-      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy)",
+      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
     .action(async (ids: string[], options: { preset?: string }) => {
       const allIds = mergeIdsWithPresets(ids, options.preset);

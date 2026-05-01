@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildSourceAttribution, extractSourcePrefix } from "../utils/attribution";
+import {
+  buildSourceAttribution,
+  extractSourcePrefix,
+  pickIntegrationForSources,
+} from "../utils/attribution";
 
 describe("extractSourcePrefix", () => {
   it("returns full string when no separator", () => {
@@ -78,5 +82,54 @@ describe("buildSourceAttribution", () => {
     ];
     const html = buildSourceAttribution(ds, ["custom"]);
     expect(html).toBe("Custom <b>attribution</b>");
+  });
+});
+
+describe("pickIntegrationForSources", () => {
+  const osmEntry = {
+    sourceId: "osm",
+    name: "OpenStreetMap",
+    url: "https://www.openstreetmap.org",
+    license: "ODbL",
+    providerCountry: "UK",
+    providerPrivacyUrl: "https://example.com",
+  };
+  const evCharging = {
+    id: "ev-charging",
+    dataSources: [{ ...osmEntry }, { ...osmEntry, sourceId: "ocm" }],
+  };
+  const fuel = {
+    id: "fuel",
+    dataSources: [{ ...osmEntry }, { ...osmEntry, sourceId: "tankerkoenig" }],
+  };
+  const parking = {
+    id: "parking",
+    dataSources: [
+      { ...osmEntry, sourceId: "nrw-mobidrom-parking" },
+      { ...osmEntry, sourceId: "apag" },
+      { ...osmEntry },
+    ],
+  };
+
+  it("picks the integration with the highest sourceId coverage", () => {
+    // Sources span apag + nrw + osm — only `parking` matches all three;
+    // `ev-charging`/`fuel` would only match the shared "osm" prefix and
+    // must not win the tie just by listing OSM earlier in the registry.
+    const picked = pickIntegrationForSources(
+      [evCharging, fuel, parking],
+      ["nrw-mobidrom-parking", "apag", "osm"],
+    );
+    expect(picked?.id).toBe("parking");
+  });
+
+  it("returns null when no integration matches", () => {
+    const picked = pickIntegrationForSources([evCharging, fuel], ["windy:cam-1"]);
+    expect(picked).toBeNull();
+  });
+
+  it("returns the first integration on a tie", () => {
+    // Only "osm" present → ev-charging, fuel, parking all score 1.
+    const picked = pickIntegrationForSources([evCharging, fuel, parking], ["osm:way/123"]);
+    expect(picked?.id).toBe("ev-charging");
   });
 });

@@ -1,9 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { validateManifest } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
 
-const INTEGRATIONS_DIR = resolve(process.cwd(), "../../integrations");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+// apps/api/src/services/__tests__ → repo root → integrations/
+const INTEGRATIONS_DIR = resolve(__dirname, "../../../../../integrations");
 
 function getIntegrationDirs(): string[] {
   if (!existsSync(INTEGRATIONS_DIR)) return [];

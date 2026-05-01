@@ -31,7 +31,7 @@ function roundWaypoints(wps: [number, number][]): [number, number][] {
 }
 
 export function setup(ctx: IntegrationContext): void {
-  const { getRoutingProvider, getOptimizeProvider } = createRoutingOrchestrator(ctx);
+  const { getRoutingProviders, getOptimizeProvider } = createRoutingOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/directions", async (req, reply) => {
     const {
@@ -98,8 +98,8 @@ export function setup(ctx: IntegrationContext): void {
     };
 
     const travelMode = mode as TravelMode;
-    const resolved = getRoutingProvider(travelMode);
-    if (!resolved) {
+    const resolvedChain = getRoutingProviders(travelMode);
+    if (resolvedChain.length === 0) {
       reply.status(503).send({ error: `No routing provider available for mode: ${mode}` });
       return;
     }
@@ -111,14 +111,27 @@ export function setup(ctx: IntegrationContext): void {
         hashKey("cache:directions", keyParams),
         3600,
         async () => {
-          const r = await resolved.provider.getRoute(waypoints, travelMode, routingOpts);
-          r.provider = resolved.integrationId;
-          return r;
+          let lastErr: unknown;
+          for (const resolved of resolvedChain) {
+            try {
+              const r = await resolved.provider.getRoute(waypoints, travelMode, routingOpts);
+              r.provider = resolved.integrationId;
+              return r;
+            } catch (err) {
+              lastErr = err;
+              ctx.log.warn(
+                `routing provider ${resolved.integrationId} failed; trying next`,
+                err as Error,
+              );
+            }
+          }
+          throw lastErr ?? new Error("All routing providers failed");
         },
       );
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(result);
-    } catch {
+    } catch (err) {
+      ctx.log.error("All routing providers failed", err as Error);
       reply.status(502).send({ error: "Routing unavailable" });
     }
   });

@@ -19,7 +19,7 @@ import {
   buildSourceAttribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
-  extractSourcePrefix,
+  pickIntegrationForSources,
   useIntegrationRegistry,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -278,13 +278,12 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
   const tc = useTranslations("common");
   const registry = useIntegrationRegistry();
 
-  // Find the integration whose dataSources contain a matching sourceId.
-  // This is independent of UI selection state so it works for both
-  // data-source layer clicks and useDataSourceMatch (regular POI).
-  const prefixes = new Set(detail.sources.map(extractSourcePrefix));
-  const meta = registry
-    .getByDomain("data-source")
-    .find((m) => m.dataSources?.some((ds) => prefixes.has(ds.sourceId)));
+  // Pick the data-source integration whose dataSources cover the most of
+  // detail.sources. Several integrations declare "osm" as a sourceId, so a
+  // first-match lookup would attribute a parking detail (sources include
+  // apag + nrw-mobidrom-parking + osm) to ev-charging just because that's
+  // the first integration whose dataSources mention "osm".
+  const meta = pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
   const html = meta?.dataSources ? buildSourceAttribution(meta.dataSources, detail.sources) : "";
 
   if (!html) return null;

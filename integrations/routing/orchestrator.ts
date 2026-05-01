@@ -28,6 +28,16 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     return null;
   }
 
+  /**
+   * Returns every provider that supports the requested mode, in registration
+   * order. The route handler iterates this chain so that a single provider's
+   * outage (e.g. the public OSRM demo returning 502) falls back to the next
+   * compatible provider instead of failing the request.
+   */
+  function getRoutingProviders(mode: TravelMode): ResolvedProvider[] {
+    return collectProviders().filter((e) => e.provider.supportedModes.includes(mode));
+  }
+
   function getOptimizeProvider(mode: TravelMode): ResolvedProvider | null {
     const providers = collectProviders();
 
@@ -43,5 +53,5 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     return null;
   }
 
-  return { getRoutingProvider, getOptimizeProvider };
+  return { getRoutingProvider, getRoutingProviders, getOptimizeProvider };
 }

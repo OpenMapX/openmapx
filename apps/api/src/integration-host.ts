@@ -30,6 +30,7 @@ import * as gtfsQueries from "./services/gtfs/queries";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
 import { getSecret, isSecretsConfigured, resolveVaultSecrets } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
+import { createIntegrationLogger } from "./utils/integration-logger";
 import { requireAuth } from "./utils/require-auth";
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
@@ -124,12 +125,7 @@ function createCacheClient(prefix: string): CacheClient {
 }
 
 function createLogger(integrationId: string, fastify: FastifyInstance): Logger {
-  return {
-    info: (msg, ...args) => fastify.log.info({ integration: integrationId }, msg, ...args),
-    warn: (msg, ...args) => fastify.log.warn({ integration: integrationId }, msg, ...args),
-    error: (msg, ...args) => fastify.log.error({ integration: integrationId }, msg, ...args),
-    debug: (msg, ...args) => fastify.log.debug({ integration: integrationId }, msg, ...args),
-  };
+  return createIntegrationLogger(integrationId, fastify);
 }
 
 function buildGtfsDeps() {

@@ -95,7 +95,7 @@ export function registerComposeCommands(program: Command): void {
     .option("--services <ids>", "Comma/space-separated root service ids for this render")
     .option(
       "--preset <names>",
-      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy)",
+      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
     .action(async (options: { domain: string; services?: string; preset?: string }) => {
       try {
@@ -123,7 +123,7 @@ export function registerComposeCommands(program: Command): void {
     .option("--services <ids>", "Comma/space-separated root service ids for this run")
     .option(
       "--preset <names>",
-      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy)",
+      "Comma/space-separated preset names (app, routing, transit, pelias, nominatim, photon, overpass, tiles, martin, proxy, dev)",
     )
     .action(async (options: { domain: string; services?: string; preset?: string }) => {
       try {

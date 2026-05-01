@@ -66,6 +66,36 @@ export function combineAttributions(attributions: string[]): string {
 }
 
 /**
+ * From a set of integrations, pick the one whose `dataSources` cover the
+ * most of `sources` (after prefix extraction).
+ *
+ * Several integrations declare the same generic `sourceId` (e.g. "osm" is
+ * shared across parking, ev-charging, fuel, webcam). A naive `find(...some)`
+ * picks the first integration that mentions any matching prefix, which can
+ * select an unrelated integration when the detail's primary sources happen
+ * to share only a generic prefix.
+ */
+export function pickIntegrationForSources<T extends { dataSources?: IntegrationDataSource[] }>(
+  integrations: T[],
+  sources: string[],
+): T | null {
+  const prefixes = new Set(sources.map(extractSourcePrefix));
+  let best: T | null = null;
+  let bestScore = 0;
+  for (const integration of integrations) {
+    let score = 0;
+    for (const ds of integration.dataSources ?? []) {
+      if (prefixes.has(ds.sourceId)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = integration;
+    }
+  }
+  return best;
+}
+
+/**
  * Extract source prefix from a source string (before first "/" or ":").
  * Examples: "tankerkoenig/uuid" → "tankerkoenig", "ocm:123" → "ocm", "felyx" → "felyx"
  */

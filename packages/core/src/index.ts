@@ -440,6 +440,7 @@ export {
   buildSourceAttribution,
   combineAttributions,
   extractSourcePrefix,
+  pickIntegrationForSources,
 } from "./utils/attribution";
 export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
