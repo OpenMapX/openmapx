@@ -8,7 +8,7 @@ overrides:
   '@hey-api/client-fetch': workspace:*
   react: 19.2.4
   react-dom: 19.2.4
-  '@tanstack/react-query': ^5.91.3
+  '@tanstack/react-query': ^5.100.7
   protobufjs: '>=7.5.5'
   uuid: '>=14.0.0'
   vite: ^8.0.5
@@ -202,7 +202,7 @@ importers:
         specifier: ^9.5.10
         version: 9.5.10(browserslist@4.28.2)(typescript@5.9.3)
       '@tanstack/react-query':
-        specifier: ^5.91.3
+        specifier: ^5.100.7
         version: 5.100.7(react@19.2.4)
       '@turf/area':
         specifier: ^7.3.5
@@ -837,7 +837,7 @@ importers:
         specifier: ^1.6.9
         version: 1.6.9(@better-auth/core@1.6.9(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.4.1))(jose@6.2.3)(kysely@0.28.16)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(better-auth@1.6.9(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9))(next@16.2.3(@opentelemetry/api@1.9.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.5))(better-call@1.3.5(zod@4.4.1))(nanostores@1.3.0)
       '@tanstack/react-query':
-        specifier: ^5.91.3
+        specifier: ^5.100.7
         version: 5.100.7(react@19.2.4)
       '@types/js-yaml':
         specifier: ^4.0.9
