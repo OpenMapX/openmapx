@@ -33,7 +33,7 @@
     "vitest": "^4.1.5"
   },
   "peerDependencies": {
-    "react": ">=19"
+    "react": ">=19.2.5"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.6.9",
