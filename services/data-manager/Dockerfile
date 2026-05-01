@@ -16,7 +16,7 @@
 FROM docker.io/golang:1.26 AS build-gtfsclean
 RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@latest
 
-FROM node:24-slim AS base
+FROM node:24.15.0-slim AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -52,7 +52,7 @@ COPY services/data-manager/ services/data-manager/
 WORKDIR /app/services/data-manager
 RUN pnpm build
 
-FROM node:24-slim AS runner
+FROM node:24.15.0-slim AS runner
 WORKDIR /app
 
 RUN apt-get update \

@@ -1,4 +1,4 @@
-FROM node:24-alpine AS base
+FROM node:24.15.0-alpine AS base
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
 COPY package.json /tmp/package.json
@@ -55,7 +55,7 @@ WORKDIR /app/apps/api
 RUN pnpm build
 
 # Production image
-FROM node:24-alpine AS runner
+FROM node:24.15.0-alpine AS runner
 WORKDIR /app
 
 # curl is required by the container healthcheck (generated from
