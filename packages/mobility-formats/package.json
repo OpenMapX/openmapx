@@ -11,16 +11,16 @@
   },
   "dependencies": {
     "@hey-api/openapi-ts": "^0.96.1",
-    "@scalar/openapi-parser": "^0.25.10",
+    "@scalar/openapi-parser": "^0.25.12",
     "csv-parse": "^6.2.1",
-    "fast-xml-parser": "^5.7.1",
+    "fast-xml-parser": "^5.7.2",
     "gbfs-typescript-types": "^1.0.14",
     "gtfs-realtime-bindings-transit": "^1.8.10",
     "yaml": "^2.8.3"
   },
   "devDependencies": {
-    "@types/node": "^25.5.2",
+    "@types/node": "^25.6.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.3"
+    "vitest": "^4.1.5"
   }
 }
