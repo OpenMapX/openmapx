@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.23
 #
 # IMPORTANT: build context MUST be the repo root. This Dockerfile reaches
 # outside its own directory to pick up:
