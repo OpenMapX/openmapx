@@ -10,7 +10,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@hey-api/openapi-ts": "^0.96.1",
+    "@hey-api/openapi-ts": "^0.97.0",
     "@scalar/openapi-parser": "^0.25.12",
     "csv-parse": "^6.2.1",
     "fast-xml-parser": "^5.7.2",
