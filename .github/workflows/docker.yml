@@ -10,7 +10,61 @@ env:
   IMAGE_PREFIX: ghcr.io/medformatik/openmapx
 
 jobs:
+  changes:
+    name: Detect changed apps
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      apps: ${{ steps.set.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: filter
+        if: github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'packages/**'
+              - 'integrations/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
+              - 'apps/api/Dockerfile'
+            web:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'integrations/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
+              - 'apps/web/Dockerfile'
+            data-manager:
+              - 'services/data-manager/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
+            transitous-tools:
+              - 'services/motis/tools/transitous/**'
+
+      - id: set
+        env:
+          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          FILTER_CHANGES: ${{ steps.filter.outputs.changes }}
+        run: |
+          if [ "$DISPATCH" = "true" ]; then
+            echo 'apps=["api","web","data-manager","transitous-tools"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "apps=${FILTER_CHANGES}" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    name: Build ${{ matrix.app }}
+    needs: changes
+    if: needs.changes.outputs.apps != '[]' && needs.changes.outputs.apps != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,24 +74,38 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - app: api
-            context: .
-            dockerfile: apps/api/Dockerfile
-          - app: web
-            context: .
-            dockerfile: apps/web/Dockerfile
-          - app: data-manager
-            context: .
-            dockerfile: services/data-manager/Dockerfile
-          - app: transitous-tools
-            context: services/motis/tools/transitous
-            dockerfile: services/motis/tools/transitous/Dockerfile
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
 
     steps:
       - uses: actions/checkout@v6
 
-      - uses: docker/setup-qemu-action@v4
+      - name: Resolve build context
+        id: ctx
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          case "$APP" in
+            api)
+              echo "context=." >> "$GITHUB_OUTPUT"
+              echo "dockerfile=apps/api/Dockerfile" >> "$GITHUB_OUTPUT"
+              ;;
+            web)
+              echo "context=." >> "$GITHUB_OUTPUT"
+              echo "dockerfile=apps/web/Dockerfile" >> "$GITHUB_OUTPUT"
+              ;;
+            data-manager)
+              echo "context=." >> "$GITHUB_OUTPUT"
+              echo "dockerfile=services/data-manager/Dockerfile" >> "$GITHUB_OUTPUT"
+              ;;
+            transitous-tools)
+              echo "context=services/motis/tools/transitous" >> "$GITHUB_OUTPUT"
+              echo "dockerfile=services/motis/tools/transitous/Dockerfile" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unknown app: $APP" >&2
+              exit 1
+              ;;
+          esac
 
       - uses: docker/setup-buildx-action@v4
 
@@ -58,14 +126,14 @@ jobs:
       - uses: docker/build-push-action@v7
         id: build
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
+          context: ${{ steps.ctx.outputs.context }}
+          file: ${{ steps.ctx.outputs.dockerfile }}
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
           provenance: mode=max
           sbom: true
 
