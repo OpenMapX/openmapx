@@ -69,7 +69,12 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      # Trivy scan + SARIF upload require Code Scanning, which needs
+      # GitHub Advanced Security on private repos. To enable: make the
+      # repo public OR set repo variable ENABLE_CODE_SCANNING=true
+      # under Settings → Secrets and variables → Actions → Variables.
       - name: Scan image with Trivy
+        if: vars.ENABLE_CODE_SCANNING == 'true'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.app }}@${{ steps.build.outputs.digest }}
@@ -80,7 +85,7 @@ jobs:
           exit-code: "0"
 
       - name: Upload Trivy results
-        if: always()
+        if: always() && vars.ENABLE_CODE_SCANNING == 'true'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.app }}.sarif

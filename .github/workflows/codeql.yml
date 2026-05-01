@@ -18,6 +18,11 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    # Code Scanning requires GitHub Advanced Security on private repos.
+    # To enable: make the repo public OR set repo variable
+    # ENABLE_CODE_SCANNING=true under Settings → Secrets and variables →
+    # Actions → Variables.
+    if: vars.ENABLE_CODE_SCANNING == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
