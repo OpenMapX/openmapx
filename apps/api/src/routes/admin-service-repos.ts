@@ -65,8 +65,13 @@ export async function registerAdminServiceReposRoutes(
   app.delete<{ Params: { hash: string } }>("/api/admin/service-repos/:hash", async (req, reply) => {
     const session = await requireAdmin(req, reply);
     if (!session) return;
-    await removeRepo(req.params.hash);
-    return { ok: true };
+    try {
+      await removeRepo(req.params.hash);
+      return { ok: true };
+    } catch (err) {
+      reply.status(400);
+      return { error: (err as Error).message };
+    }
   });
 
   // POST /api/admin/service-repos/:hash/refresh — git fetch + reset to origin/HEAD
@@ -75,12 +80,17 @@ export async function registerAdminServiceReposRoutes(
     async (req, reply) => {
       const session = await requireAdmin(req, reply);
       if (!session) return;
-      const row = await refreshRepo(req.params.hash);
-      if (!row) {
-        reply.status(404);
-        return { error: "repo not found" };
+      try {
+        const row = await refreshRepo(req.params.hash);
+        if (!row) {
+          reply.status(404);
+          return { error: "repo not found" };
+        }
+        return { repo: row };
+      } catch (err) {
+        reply.status(400);
+        return { error: (err as Error).message };
       }
-      return { repo: row };
     },
   );
 }

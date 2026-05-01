@@ -20,6 +20,14 @@ export function hashUrl(url: string): string {
   return createHash("sha256").update(url).digest("hex").slice(0, 16);
 }
 
+const REPO_HASH_RE = /^[a-f0-9]{16}$/;
+
+function assertRepoHash(hash: string): void {
+  if (typeof hash !== "string" || !REPO_HASH_RE.test(hash)) {
+    throw new InvalidGitUrlError("Invalid repository hash");
+  }
+}
+
 function communityDir(): string {
   return repoPaths(findRepoRoot()).communityDir;
 }
@@ -185,12 +193,14 @@ export async function listRepos(): Promise<ServiceRepositoryRow[]> {
 }
 
 export async function removeRepo(hash: string): Promise<void> {
+  assertRepoHash(hash);
   const target = join(communityDir(), hash);
   if (existsSync(target)) rmSync(target, { recursive: true, force: true });
   await db.delete(serviceRepository).where(eq(serviceRepository.hash, hash));
 }
 
 export async function refreshRepo(hash: string): Promise<ServiceRepositoryRow | null> {
+  assertRepoHash(hash);
   const [row] = await db
     .select()
     .from(serviceRepository)
