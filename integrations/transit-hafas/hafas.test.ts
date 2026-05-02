@@ -22,7 +22,7 @@ function mockNotOk() {
 }
 
 async function loadModule() {
-  return import("../hafas.js");
+  return import("./provider.js");
 }
 
 // Constants
@@ -53,7 +53,7 @@ describe("HAFAS_INSTANCES", () => {
     const vbb = HAFAS_INSTANCES.find((i) => i.id === "vbb");
     const bvg = HAFAS_INSTANCES.find((i) => i.id === "bvg");
 
-    expect(db?.prefix).toBe("db:");
+    expect(db?.prefix).toBe("db-hafas:");
     expect(vbb?.prefix).toBe("vbb:");
     expect(bvg?.prefix).toBe("bvg:");
   });
@@ -69,9 +69,9 @@ describe("instanceFromPrefix", () => {
     expect(inst?.id).toBe("vbb");
   });
 
-  it('returns db instance for "db:8000105"', async () => {
+  it('returns db instance for "db-hafas:8000105"', async () => {
     const { instanceFromPrefix } = await loadModule();
-    const inst = instanceFromPrefix("db:8000105");
+    const inst = instanceFromPrefix("db-hafas:8000105");
     expect(inst).not.toBeNull();
     expect(inst?.id).toBe("db");
   });
@@ -270,15 +270,15 @@ describe("getArrivals", () => {
 
     const { HAFAS_INSTANCES, getArrivals } = await loadModule();
     const db = HAFAS_INSTANCES.find((i) => i.id === "db") as HafasInstance;
-    const arrivals = await getArrivals(db, "db:8000105", 60);
+    const arrivals = await getArrivals(db, "db-hafas:8000105", 60);
 
     expect(arrivals).toHaveLength(1);
-    expect(arrivals[0].tripId).toBe("db:trip-arr");
+    expect(arrivals[0].tripId).toBe("db-hafas:trip-arr");
     expect(arrivals[0].route.mode).toBe("rail");
 
     const fetchUrl = mockFetch.mock.calls[0][0] as string;
     expect(fetchUrl).toContain("/stops/8000105/arrivals");
-    expect(fetchUrl).not.toContain("db%3A");
+    expect(fetchUrl).not.toContain("db-hafas%3A");
   });
 
   it("returns empty array on non-ok response", async () => {
@@ -286,7 +286,7 @@ describe("getArrivals", () => {
 
     const { HAFAS_INSTANCES, getArrivals } = await loadModule();
     const db = HAFAS_INSTANCES.find((i) => i.id === "db") as HafasInstance;
-    const arrivals = await getArrivals(db, "db:8000105", 30);
+    const arrivals = await getArrivals(db, "db-hafas:8000105", 30);
 
     expect(arrivals).toEqual([]);
   });
@@ -935,7 +935,7 @@ describe("getArrivals edge cases", () => {
 
     const { HAFAS_INSTANCES, getArrivals } = await loadModule();
     const db = HAFAS_INSTANCES.find((i) => i.id === "db") as HafasInstance;
-    const arrivals = await getArrivals(db, "db:8000105", 30);
+    const arrivals = await getArrivals(db, "db-hafas:8000105", 30);
 
     expect(arrivals).toEqual([]);
   });

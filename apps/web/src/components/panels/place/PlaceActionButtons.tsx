@@ -13,6 +13,7 @@ import {
   PANEL,
   useDirectionsStore,
   useIsSaved,
+  useNearbyPlacesStore,
   usePlaceStore,
   useSession,
   useSidebarStore,
@@ -22,6 +23,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { SavePlaceDialog } from "@/components/panels/saved/SavePlaceDialog";
+import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL, TEAL_LIGHT } from "@/lib/theme";
 
 interface ActionButtonProps {
@@ -94,27 +96,14 @@ export function PlaceActionButtons({ place }: Props) {
     useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
   };
 
+  const handleNearby = () => {
+    useNearbyPlacesStore.getState().setSourcePlace(place);
+    useSidebarStore.getState().openSidebar(PANEL.NEARBY);
+  };
+
   const handleShare = async () => {
-    const [lng, lat] = place.coordinates;
-    const params = new URLSearchParams({
-      place: place.id,
-      lat: lat.toFixed(6),
-      lng: lng.toFixed(6),
-      name: place.name,
-    });
-    if (place.category) params.set("category", place.category);
-    if (place.rawCategory) params.set("rawCategory", place.rawCategory);
-    const url = `${window.location.origin}/?${params.toString()}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: place.name, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        setSnackbar(t("linkCopied"));
-      }
-    } catch {
-      // User cancelled share dialog — ignore
-    }
+    const result = await shareCurrentUrl({ title: place.name });
+    if (result === "copied") setSnackbar(t("linkCopied"));
   };
 
   return (
@@ -138,7 +127,7 @@ export function PlaceActionButtons({ place }: Props) {
             }
           }}
         />
-        <ActionButton icon={<SearchIcon />} label={t("nearby")} />
+        <ActionButton icon={<SearchIcon />} label={t("nearby")} onClick={handleNearby} />
         <ActionButton icon={<ShareIcon />} label={t("share")} onClick={handleShare} />
       </Box>
 

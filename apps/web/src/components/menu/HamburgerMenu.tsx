@@ -20,6 +20,7 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
+import Snackbar from "@mui/material/Snackbar";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { PANEL, useMenuStore, useSidebarStore } from "@openmapx/core";
@@ -27,6 +28,7 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { locales } from "@/i18n/config";
+import { shareCurrentUrl } from "@/lib/deepLink";
 import { setLocaleAndReload } from "@/lib/setLocale";
 
 const localeNames: Record<string, string> = {
@@ -45,6 +47,7 @@ export function HamburgerMenu() {
   const { mode, setMode } = useColorScheme();
   const [langOpen, setLangOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
   const handleSaved = () => {
     close();
@@ -56,181 +59,193 @@ export function HamburgerMenu() {
     setLocaleAndReload(newLocale);
   };
 
+  const handleShareMap = async () => {
+    const result = await shareCurrentUrl({ title: "OpenMapX" });
+    close();
+    if (result === "copied") setSnackbarOpen(true);
+  };
+
   return (
-    <Drawer
-      variant="temporary"
-      anchor="left"
-      open={isOpen}
-      onClose={close}
-      slotProps={{
-        paper: {
-          sx: { width: DRAWER_WIDTH },
-        },
-      }}
-    >
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          px: 2,
-          py: 1.5,
+    <>
+      <Drawer
+        variant="temporary"
+        anchor="left"
+        open={isOpen}
+        onClose={close}
+        slotProps={{
+          paper: {
+            sx: { width: DRAWER_WIDTH },
+          },
         }}
       >
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          OpenMapX
-        </Typography>
-        <IconButton onClick={close} aria-label={tCommon("close")} size="small">
-          <CloseIcon />
-        </IconButton>
-      </Box>
-
-      <Divider />
-
-      <List disablePadding>
-        <ListItemButton sx={{ height: 48 }} onClick={handleSaved}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <BookmarkBorderIcon />
-          </ListItemIcon>
-          <ListItemText primary={t("saved")} />
-        </ListItemButton>
-
-        <ListItemButton
-          sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-          aria-disabled="true"
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            px: 2,
+            py: 1.5,
+          }}
         >
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <HistoryIcon />
-          </ListItemIcon>
-          <ListItemText primary={t("recent")} />
-        </ListItemButton>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            OpenMapX
+          </Typography>
+          <IconButton onClick={close} aria-label={tCommon("close")} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
 
-        <ListItemButton
-          sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-          aria-disabled="true"
-        >
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <ImageIcon />
-          </ListItemIcon>
-          <ListItemText primary={t("contributions")} />
-        </ListItemButton>
-      </List>
+        <Divider />
 
-      <Divider />
+        <List disablePadding>
+          <ListItemButton sx={{ height: 48 }} onClick={handleSaved}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <BookmarkBorderIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("saved")} />
+          </ListItemButton>
 
-      <List disablePadding>
-        <ListItemButton
-          sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-          aria-disabled="true"
-        >
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <LinkIcon />
-          </ListItemIcon>
-          <ListItemText primary={t("shareMap")} />
-        </ListItemButton>
+          <ListItemButton
+            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
+            aria-disabled="true"
+          >
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <HistoryIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("recent")} />
+          </ListItemButton>
 
-        <ListItemButton
-          sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-          aria-disabled="true"
-        >
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <PrintIcon />
-          </ListItemIcon>
-          <ListItemText primary={t("print")} />
-        </ListItemButton>
-      </List>
+          <ListItemButton
+            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
+            aria-disabled="true"
+          >
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <ImageIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("contributions")} />
+          </ListItemButton>
+        </List>
 
-      <Divider />
+        <Divider />
 
-      <List disablePadding>
-        <ListItemButton
-          sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-          aria-disabled="true"
-        >
-          <ListItemText primary={t("tips")} />
-        </ListItemButton>
+        <List disablePadding>
+          <ListItemButton sx={{ height: 48 }} onClick={handleShareMap}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <LinkIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("shareMap")} />
+          </ListItemButton>
 
-        <ListItemButton
-          sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
-          aria-disabled="true"
-        >
-          <ListItemText primary={t("help")} />
-        </ListItemButton>
-      </List>
+          <ListItemButton
+            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
+            aria-disabled="true"
+          >
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <PrintIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("print")} />
+          </ListItemButton>
+        </List>
 
-      <Divider />
+        <Divider />
 
-      <List disablePadding>
-        <ListItemButton sx={{ height: 48 }} onClick={() => setLangOpen((prev) => !prev)}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <TranslateIcon />
-          </ListItemIcon>
-          <ListItemText primary={t("language")} />
-        </ListItemButton>
+        <List disablePadding>
+          <ListItemButton
+            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
+            aria-disabled="true"
+          >
+            <ListItemText primary={t("tips")} />
+          </ListItemButton>
 
-        <Collapse in={langOpen}>
-          <List disablePadding>
-            {locales.map((l) => (
-              <ListItemButton
-                key={l}
-                sx={{ height: 44, pl: 4 }}
-                onClick={() => handleLanguageChange(l)}
-              >
-                <ListItemIcon sx={{ minWidth: 28 }}>
-                  {l === locale ? <CheckIcon fontSize="small" /> : null}
-                </ListItemIcon>
-                <ListItemText primary={localeNames[l] ?? l} />
-              </ListItemButton>
-            ))}
-          </List>
-        </Collapse>
+          <ListItemButton
+            sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
+            aria-disabled="true"
+          >
+            <ListItemText primary={t("help")} />
+          </ListItemButton>
+        </List>
 
-        <ListItemButton sx={{ height: 48 }} onClick={() => setThemeOpen((prev) => !prev)}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            {mode === "dark" ? (
-              <DarkModeIcon />
-            ) : mode === "light" ? (
-              <LightModeIcon />
-            ) : (
-              <SettingsBrightnessIcon />
-            )}
-          </ListItemIcon>
-          <ListItemText primary={t("theme")} />
-        </ListItemButton>
+        <Divider />
 
-        <Collapse in={themeOpen}>
-          <List disablePadding>
-            {(["light", "dark", "system"] as const).map((m) => (
-              <ListItemButton key={m} sx={{ height: 44, pl: 4 }} onClick={() => setMode(m)}>
-                <ListItemIcon sx={{ minWidth: 28 }}>
-                  {m === mode ? <CheckIcon fontSize="small" /> : null}
-                </ListItemIcon>
-                <ListItemText
-                  primary={t(
-                    m === "light" ? "themeLight" : m === "dark" ? "themeDark" : "themeSystem",
-                  )}
-                />
-              </ListItemButton>
-            ))}
-          </List>
-        </Collapse>
-      </List>
+        <List disablePadding>
+          <ListItemButton sx={{ height: 48 }} onClick={() => setLangOpen((prev) => !prev)}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <TranslateIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("language")} />
+          </ListItemButton>
 
-      <Divider />
+          <Collapse in={langOpen}>
+            <List disablePadding>
+              {locales.map((l) => (
+                <ListItemButton
+                  key={l}
+                  sx={{ height: 44, pl: 4 }}
+                  onClick={() => handleLanguageChange(l)}
+                >
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    {l === locale ? <CheckIcon fontSize="small" /> : null}
+                  </ListItemIcon>
+                  <ListItemText primary={localeNames[l] ?? l} />
+                </ListItemButton>
+              ))}
+            </List>
+          </Collapse>
 
-      <List disablePadding>
-        <ListItemButton component={Link} href="/privacy" sx={{ height: 48 }} onClick={close}>
-          <ListItemText primary={t("privacy")} />
-        </ListItemButton>
+          <ListItemButton sx={{ height: 48 }} onClick={() => setThemeOpen((prev) => !prev)}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              {mode === "dark" ? (
+                <DarkModeIcon />
+              ) : mode === "light" ? (
+                <LightModeIcon />
+              ) : (
+                <SettingsBrightnessIcon />
+              )}
+            </ListItemIcon>
+            <ListItemText primary={t("theme")} />
+          </ListItemButton>
 
-        <ListItemButton component={Link} href="/terms" sx={{ height: 48 }} onClick={close}>
-          <ListItemText primary={t("terms")} />
-        </ListItemButton>
+          <Collapse in={themeOpen}>
+            <List disablePadding>
+              {(["light", "dark", "system"] as const).map((m) => (
+                <ListItemButton key={m} sx={{ height: 44, pl: 4 }} onClick={() => setMode(m)}>
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    {m === mode ? <CheckIcon fontSize="small" /> : null}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={t(
+                      m === "light" ? "themeLight" : m === "dark" ? "themeDark" : "themeSystem",
+                    )}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          </Collapse>
+        </List>
 
-        <ListItemButton component={Link} href="/imprint" sx={{ height: 48 }} onClick={close}>
-          <ListItemText primary={t("imprint")} />
-        </ListItemButton>
-      </List>
-    </Drawer>
+        <Divider />
+
+        <List disablePadding>
+          <ListItemButton component={Link} href="/privacy" sx={{ height: 48 }} onClick={close}>
+            <ListItemText primary={t("privacy")} />
+          </ListItemButton>
+
+          <ListItemButton component={Link} href="/terms" sx={{ height: 48 }} onClick={close}>
+            <ListItemText primary={t("terms")} />
+          </ListItemButton>
+
+          <ListItemButton component={Link} href="/imprint" sx={{ height: 48 }} onClick={close}>
+            <ListItemText primary={t("imprint")} />
+          </ListItemButton>
+        </List>
+      </Drawer>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={2500}
+        onClose={() => setSnackbarOpen(false)}
+        message={tCommon("copied")}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
+    </>
   );
 }

@@ -47,6 +47,13 @@
     "zoomInToSearch": "Zoom in to see results in this area.",
     "partialResults": "Some results may be missing. Zoom in for complete results."
   },
+  "nearby": {
+    "title": "Nearby",
+    "around": "Around {name}",
+    "within": "Within {distance}",
+    "distanceAway": "{distance} away",
+    "sourceMissing": "Choose a place to see what is nearby."
+  },
   "map": {
     "myLocation": "My location",
     "goToMyLocationAriaLabel": "Go to my location",

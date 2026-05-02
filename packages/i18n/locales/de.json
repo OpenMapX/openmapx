@@ -47,6 +47,13 @@
     "zoomInToSearch": "Näher heranzoomen, um Ergebnisse in diesem Bereich zu sehen.",
     "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen."
   },
+  "nearby": {
+    "title": "In der Nähe",
+    "around": "Rund um {name}",
+    "within": "Innerhalb von {distance}",
+    "distanceAway": "{distance} entfernt",
+    "sourceMissing": "Wählen Sie einen Ort aus, um Orte in der Nähe zu sehen."
+  },
   "map": {
     "myLocation": "Mein Standort",
     "goToMyLocationAriaLabel": "Zu meinem Standort",

@@ -9,7 +9,7 @@
     "format": "biome format --write .",
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types",
-    "test": "turbo run test --concurrency=1",
+    "test": "vitest run",
     "prepare": "husky",
     "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
     "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts",
@@ -23,7 +23,8 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "turbo": "^2.9.7",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
   },
   "pnpm": {
     "overrides": {

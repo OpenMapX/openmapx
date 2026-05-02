@@ -21,6 +21,9 @@ jobs:
       TURBO_TELEMETRY_DISABLED: 1
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Needed so commitlint can walk the PR's commit range.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
 
       - uses: pnpm/action-setup@v6
 

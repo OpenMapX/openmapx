@@ -10,6 +10,7 @@ export interface OverlayStoreBase {
 }
 
 type GetState<T> = StoreApi<T>["getState"];
+type SetPartial<T> = (partial: Partial<T> | ((state: T) => Partial<T>)) => void;
 
 interface OverlayStoreConfig<
   TExtra extends Record<string, unknown>,
@@ -20,7 +21,7 @@ interface OverlayStoreConfig<
   overlayId?: string;
   extra: TExtra;
   actions?: (
-    set: (partial: Partial<OverlayStoreBase & TExtra>) => void,
+    set: SetPartial<OverlayStoreBase & TExtra>,
     get: GetState<OverlayStoreBase & TExtra & TActions>,
   ) => TActions;
   onClose?: () => Partial<TExtra>;
@@ -54,7 +55,11 @@ export function createOverlayStore<
 
   const store = create<FullState>((set, get) => {
     const extraActions = config.actions
-      ? config.actions((partial) => set(partial as Partial<FullState>), get as GetState<FullState>)
+      ? config.actions(
+          (partial) =>
+            set(partial as Partial<FullState> | ((state: FullState) => Partial<FullState>)),
+          get as GetState<FullState>,
+        )
       : ({} as TActions);
 
     return {

@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
+import { DeepLinkManager } from "@/components/map/DeepLinkManager";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
 import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
@@ -23,7 +24,7 @@ import { MapControls } from "@/components/map/MapControls";
 import { MapFooter } from "@/components/map/MapFooter";
 import { MapLayerHost } from "@/components/map/MapLayerHost";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
-import { PlaceDeepLink } from "@/components/map/PlaceDeepLink";
+import { NearbyPlaceMarkers } from "@/components/map/NearbyPlaceMarkers";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { StreetViewViewer } from "@/components/map/StreetViewViewer";
@@ -102,6 +103,7 @@ export default function HomePage() {
           <TransitItineraryLayer />
           <TransitVehicleLayer />
           <CategoryResultMarkers />
+          <NearbyPlaceMarkers />
           <DataSourceLayer />
           <SavedPlacesLayer />
           {/* All overlay/tool layers loaded dynamically by MapLayerHost */}
@@ -132,7 +134,7 @@ export default function HomePage() {
           <MapControls />
           <MapFooter />
           <Suspense>
-            <PlaceDeepLink />
+            <DeepLinkManager />
           </Suspense>
         </div>
       </ElevationHoverProvider>

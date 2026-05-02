@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import { CategoryResultsContent } from "./category/CategoryResultsContent";
 import { DataSourceFilterContent } from "./datasource/DataSourceFilterContent";
 import { DirectionsPanelContent } from "./directions/DirectionsPanelContent";
+import { NearbyPlacesContent } from "./nearby/NearbyPlacesContent";
 import { PlaceDetailCard } from "./place/PlaceDetailCard";
 import { PlacePanelContent } from "./place/PlacePanelContent";
 import { SavedPlacesContent } from "./saved/SavedPlacesContent";
@@ -18,6 +19,7 @@ export const SIDEBAR_PANELS: Record<string, PanelEntry> = {
   datasource: { component: DataSourceFilterContent },
   directions: { component: DirectionsPanelContent },
   saved: { component: SavedPlacesContent, contentSx: { pt: { xs: 0, sm: "72px" } } },
+  nearby: { component: NearbyPlacesContent },
 };
 
 export const DETAIL_PANELS: Record<string, ComponentType> = {

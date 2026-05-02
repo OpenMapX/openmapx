@@ -34,7 +34,7 @@ function fptfStop(overrides: Record<string, unknown> = {}) {
 // Module loader
 
 async function loadModule() {
-  return import("../db-vendo.js");
+  return import("./provider.js");
 }
 
 // getStop

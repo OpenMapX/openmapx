@@ -1,9 +1,14 @@
 import type { Place } from "@openmapx/core";
 import {
+  CATEGORY_FILTERS,
+  categoryPlaceToPlace,
   getPlaceResolver,
+  haversineDistance,
+  type OsmFilter,
   type PlaceIds,
   type PlaceResolverContext,
   parseId,
+  searchByCategory,
 } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import {
@@ -101,14 +106,154 @@ interface PlaceByIdQuery {
   hasAddress?: string;
 }
 
+interface NearbyPlacesQuery {
+  lat?: string;
+  lng?: string;
+  radius?: string;
+  excludeId?: string;
+  lang?: string;
+}
+
 interface CacheableError {
   statusCode: number;
   message: string;
 }
 
+const DEFAULT_NEARBY_RADIUS_METRES = 1000;
+const MIN_NEARBY_RADIUS_METRES = 50;
+const MAX_NEARBY_RADIUS_METRES = 2500;
+const NEARBY_LIMIT = 30;
+const NEARBY_CACHE_TTL_SECONDS = TTL.places.nearby;
+
+const NEARBY_CATEGORY_IDS = [
+  "restaurants",
+  "cafes",
+  "bars",
+  "supermarkets",
+  "pharmacies",
+  "atms",
+  "parks",
+  "museums",
+  "activities",
+  "hotels",
+  "schools",
+  "hospitals",
+  "libraries",
+  "cinemas",
+  "gyms",
+  "banks",
+  "churches",
+  "post_offices",
+  "parking",
+  "fuel",
+  "ev_charging",
+  "fire_stations",
+  "police",
+  "airports",
+  "toilets",
+  "drinking_water",
+] as const;
+
+function parseCoordinate(value: string | undefined, min: number, max: number): number | null {
+  const parsed = Number.parseFloat(value ?? "");
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return null;
+  return parsed;
+}
+
+function parseRadius(value: string | undefined): number {
+  const parsed = Number.parseFloat(value ?? "");
+  if (!Number.isFinite(parsed)) return DEFAULT_NEARBY_RADIUS_METRES;
+  return Math.min(MAX_NEARBY_RADIUS_METRES, Math.max(MIN_NEARBY_RADIUS_METRES, Math.round(parsed)));
+}
+
+function bboxFromRadius(lat: number, lng: number, radiusMetres: number) {
+  const latDelta = radiusMetres / 111_320;
+  const lngScale = Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+  const lngDelta = radiusMetres / (111_320 * lngScale);
+  return {
+    west: Math.max(-180, lng - lngDelta),
+    south: Math.max(-90, lat - latDelta),
+    east: Math.min(180, lng + lngDelta),
+    north: Math.min(90, lat + latDelta),
+  };
+}
+
+function nearbyFilters(): OsmFilter[] {
+  const seen = new Set<string>();
+  return NEARBY_CATEGORY_IDS.flatMap((categoryId) => CATEGORY_FILTERS[categoryId] ?? []).filter(
+    (filter) => {
+      const key = `${filter.key}:${filter.value}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    },
+  );
+}
+
+function roundForCache(value: number): number {
+  return Math.round(value * 10_000) / 10_000;
+}
+
 export const placesRoute: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/places", async () => {
-    return { data: [], message: "Not yet implemented" };
+  fastify.get<{
+    Querystring: NearbyPlacesQuery;
+  }>("/places", {
+    schema: {
+      querystring: {
+        type: "object",
+        properties: {
+          lat: { type: "string" },
+          lng: { type: "string" },
+          radius: { type: "string" },
+          excludeId: { type: "string" },
+          lang: { type: "string" },
+        },
+      },
+    },
+    handler: async (req, reply) => {
+      const lat = parseCoordinate(req.query.lat, -90, 90);
+      const lng = parseCoordinate(req.query.lng, -180, 180);
+      if (lat === null || lng === null) {
+        return reply.status(400).send({ error: "lat and lng query parameters are required" });
+      }
+
+      const radiusMetres = parseRadius(req.query.radius);
+      const center: [number, number] = [lng, lat];
+      const excludeId = req.query.excludeId?.trim();
+      const effectiveLang = req.query.lang ?? "en";
+      const cacheKey = [
+        "cache:places:nearby",
+        roundForCache(lat),
+        roundForCache(lng),
+        radiusMetres,
+        excludeId ?? "",
+        effectiveLang,
+      ].join(":");
+
+      try {
+        const places = await withCache(cacheKey, NEARBY_CACHE_TTL_SECONDS, async () => {
+          const bbox = bboxFromRadius(lat, lng, radiusMetres);
+          const candidates = await searchByCategory(nearbyFilters(), bbox);
+
+          return candidates
+            .filter((place) => place.id !== excludeId)
+            .map((place) => ({
+              place: categoryPlaceToPlace(place),
+              distance: haversineDistance(center, place.coordinates),
+            }))
+            .filter(({ distance }) => distance <= radiusMetres)
+            .sort((a, b) => a.distance - b.distance)
+            .slice(0, NEARBY_LIMIT)
+            .map(({ place }) => place);
+        });
+
+        reply.header("Cache-Control", `public, max-age=${NEARBY_CACHE_TTL_SECONDS}`);
+        return places;
+      } catch (err) {
+        fastify.log.error({ err }, "Failed to fetch nearby places");
+        return reply.status(500).send({ error: "Internal server error" });
+      }
+    },
   });
 
   fastify.get<{

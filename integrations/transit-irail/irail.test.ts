@@ -44,7 +44,7 @@ function mockStationsResponse() {
 }
 
 async function loadModule() {
-  return import("../irail.js");
+  return import("./provider.js");
 }
 
 describe("irail provider", () => {

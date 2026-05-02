@@ -22,6 +22,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Popover from "@mui/material/Popover";
+import Snackbar from "@mui/material/Snackbar";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { SavedPlace } from "@openmapx/core";
@@ -41,6 +42,7 @@ import {
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
+import { shareCurrentUrl } from "@/lib/deepLink";
 import { resolveListIcon } from "@/lib/listIcon";
 import { useMap } from "@/lib/MapContext";
 import { TEAL, TEAL_LIGHT } from "@/lib/theme";
@@ -73,6 +75,7 @@ export function SavedListDetail() {
   const [iconAnchor, setIconAnchor] = useState<HTMLElement | null>(null);
   const [noteEditId, setNoteEditId] = useState<string | null>(null);
   const [noteValue, setNoteValue] = useState("");
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
   const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     setMenuAnchor(e.currentTarget);
@@ -175,6 +178,11 @@ export function SavedListDetail() {
     setIconAnchor(null);
   };
 
+  const handleShare = async () => {
+    const result = await shareCurrentUrl({ title: resolveListName(list.name) });
+    if (result === "copied") setSnackbarOpen(true);
+  };
+
   return (
     <Box>
       <Box sx={{ px: 2, pb: 2 }}>
@@ -259,6 +267,7 @@ export function SavedListDetail() {
         <Box sx={{ display: "flex", gap: 1, mt: 1.5 }}>
           <Button
             startIcon={<ShareIcon sx={{ fontSize: 18 }} />}
+            onClick={handleShare}
             sx={{
               borderRadius: 24,
               bgcolor: TEAL_LIGHT,
@@ -440,6 +449,13 @@ export function SavedListDetail() {
           </Button>
         </DialogActions>
       </Dialog>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={2500}
+        onClose={() => setSnackbarOpen(false)}
+        message={tCommon("copied")}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Box>
   );
 }
