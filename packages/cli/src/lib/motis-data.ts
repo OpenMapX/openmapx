@@ -193,6 +193,8 @@ function dockerRunTransitousArgs(
   const args = [
     "run",
     "--rm",
+    "--name",
+    `openmapx-build-motis-${action}`,
     "-v",
     `${catalogDir}:/transitous`,
     "-v",

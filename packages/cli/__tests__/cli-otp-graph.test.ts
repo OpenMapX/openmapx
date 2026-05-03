@@ -56,6 +56,8 @@ describe("buildOtpGraph", () => {
     expect(calls[0]?.args).toEqual([
       "run",
       "--rm",
+      "--name",
+      "openmapx-build-otp",
       "-e",
       `JAVA_TOOL_OPTIONS=${DEFAULT_OTP_BUILD_JAVA_TOOL_OPTIONS}`,
       "-v",

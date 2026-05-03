@@ -54,6 +54,8 @@ function dockerPlanetilerArgs(
   return [
     "run",
     "--rm",
+    "--name",
+    "openmapx-build-tileserver",
     "-e",
     `JAVA_TOOL_OPTIONS=${javaToolOptions}`,
     "-v",

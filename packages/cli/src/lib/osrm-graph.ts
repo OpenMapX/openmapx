@@ -97,7 +97,19 @@ async function defaultRunner(
 }
 
 function dockerOsrmArgs(graphDir: string, image: string, command: string[]): string[] {
-  return ["run", "--rm", "-v", `${graphDir}:/data`, image, ...command];
+  // Container name is keyed off the OSRM subcommand (extract/partition/customize)
+  // so the three sequential builds don't collide and are easy to spot in `docker ps`.
+  const stage = command[0]?.replace(/^osrm-/, "") ?? "build";
+  return [
+    "run",
+    "--rm",
+    "--name",
+    `openmapx-build-osrm-${stage}`,
+    "-v",
+    `${graphDir}:/data`,
+    image,
+    ...command,
+  ];
 }
 
 /**

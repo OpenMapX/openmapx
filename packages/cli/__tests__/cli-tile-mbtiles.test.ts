@@ -49,6 +49,8 @@ describe("buildTileMbtiles", () => {
     expect(calls[0]?.args).toEqual([
       "run",
       "--rm",
+      "--name",
+      "openmapx-build-tileserver",
       "-e",
       `JAVA_TOOL_OPTIONS=${DEFAULT_PLANETILER_JAVA_TOOL_OPTIONS}`,
       "-v",

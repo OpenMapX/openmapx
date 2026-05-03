@@ -92,6 +92,8 @@ function dockerOtpArgs(
   return [
     "run",
     "--rm",
+    "--name",
+    "openmapx-build-otp",
     "-e",
     `JAVA_TOOL_OPTIONS=${javaToolOptions}`,
     "-v",
