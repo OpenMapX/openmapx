@@ -42,16 +42,17 @@ until pg_isready -U "$PG_USER" -d postgres -h /var/run/postgresql -q 2>/dev/null
   sleep 1
 done
 
-# Resync the superuser password from env. Pass it via psql's `-v`/`:'…'`
-# binding so libpq quotes it — embedded quotes / backslashes can't break out
-# of the SQL string. Suppressed `log_statement` for this one connection so
-# the password doesn't land in postgres logs.
+# Resync the superuser password from env. Embedded single quotes (the only
+# character that can break out of a SQL string literal in standard-conforming
+# mode) are doubled before interpolation. `log_statement=none` keeps the
+# ALTER off the postgres logs so the password doesn't land there in
+# plaintext.
 if [ -n "${POSTGRES_PASSWORD:-}" ]; then
+  ESCAPED_PASSWORD=${POSTGRES_PASSWORD//\'/\'\'}
   PGOPTIONS="-c log_statement=none" \
     psql -U "$PG_USER" -d postgres -h /var/run/postgresql \
       -v ON_ERROR_STOP=1 --no-psqlrc -q \
-      -v "pass=${POSTGRES_PASSWORD}" \
-      -c "ALTER USER \"${PG_USER}\" WITH PASSWORD :'pass';" >/dev/null
+      -c "ALTER USER \"${PG_USER}\" WITH PASSWORD '${ESCAPED_PASSWORD}';" >/dev/null
   echo "[openmapx-postgis] superuser password synced from env"
 fi
 
