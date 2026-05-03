@@ -292,7 +292,7 @@ export function registerServicesCommands(program: Command): void {
             domain: process.env.DOMAIN ?? "localhost",
           });
           for (const warning of rendered.selectionWarnings) log.warn(warning);
-          const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+          const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
           log.ok(
             `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
           );
@@ -330,7 +330,7 @@ export function registerServicesCommands(program: Command): void {
             domain: process.env.DOMAIN ?? "localhost",
           });
           for (const warning of rendered.selectionWarnings) log.warn(warning);
-          const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+          const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
           log.ok(
             `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
           );
@@ -368,7 +368,7 @@ export function registerServicesCommands(program: Command): void {
           services: allIds,
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
         log.ok(
           `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
         );
@@ -428,7 +428,7 @@ export function registerServicesCommands(program: Command): void {
           services: allIds,
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
         log.ok(
           `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
         );

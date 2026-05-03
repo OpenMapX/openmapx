@@ -100,14 +100,19 @@ describe("cli hardlink helpers", () => {
     expect(existsSync(join(tgt, "nigiri.cache"))).toBe(true);
   });
 
-  it("applyGeneratedHardlinks can no-op when plan is missing", () => {
-    const result = applyGeneratedHardlinks({ rootDir: tmp, requirePlan: false });
+  it("applyGeneratedHardlinks can no-op when plan is missing", async () => {
+    const result = await applyGeneratedHardlinks({
+      rootDir: tmp,
+      requirePlan: false,
+      forceLocal: true,
+    });
     expect(result.applied).toBe(false);
     expect(result.linked).toBe(0);
     expect(result.pruned).toBe(0);
+    expect(result.via).toBe("none");
   });
 
-  it("applyGeneratedHardlinks reads generated plan from infra/docker", () => {
+  it("applyGeneratedHardlinks reads generated plan from infra/docker", async () => {
     const dataRoot = join(tmp, "infra", "docker", "data");
     mkdirSync(join(dataRoot, "osm"), { recursive: true });
     writeFileSync(join(dataRoot, "osm", "planet.osm.pbf"), "PBF");
@@ -126,27 +131,136 @@ describe("cli hardlink helpers", () => {
       "utf-8",
     );
 
-    const result = applyGeneratedHardlinks({ rootDir: tmp, requirePlan: true, prune: true });
+    const result = await applyGeneratedHardlinks({
+      rootDir: tmp,
+      requirePlan: true,
+      prune: true,
+      forceLocal: true,
+    });
 
     expect(result.applied).toBe(true);
     expect(result.linked).toBe(1);
     expect(result.pruned).toBe(0);
+    expect(result.via).toBe("local");
     expect(readFileSync(join(dataRoot, "nominatim", "osm-pbf", "data.osm.pbf"), "utf-8")).toBe(
       "PBF",
     );
   });
 
-  it("applyGeneratedHardlinks creates data root even with an empty plan", () => {
+  it("applyGeneratedHardlinks creates data root even with an empty plan", async () => {
     const dataRoot = join(tmp, "infra", "docker", "data");
     rmSync(dataRoot, { recursive: true, force: true });
     writeFileSync(join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"), "[]");
 
-    const result = applyGeneratedHardlinks({ rootDir: tmp, requirePlan: true, prune: true });
+    const result = await applyGeneratedHardlinks({
+      rootDir: tmp,
+      requirePlan: true,
+      prune: true,
+      forceLocal: true,
+    });
 
     expect(result.applied).toBe(true);
     expect(result.linked).toBe(0);
     expect(result.pruned).toBe(0);
+    expect(result.via).toBe("local");
     expect(existsSync(dataRoot)).toBe(true);
     expect(statSync(dataRoot).isDirectory()).toBe(true);
+  });
+
+  it("falls through to the local linker when the data-manager probe fails", async () => {
+    const dataRoot = join(tmp, "infra", "docker", "data");
+    mkdirSync(join(dataRoot, "osm"), { recursive: true });
+    writeFileSync(join(dataRoot, "osm", "planet.osm.pbf"), "PBF");
+    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+    writeFileSync(
+      join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"),
+      JSON.stringify([
+        {
+          source: "data/osm",
+          target: "data/valhalla/osm-pbf",
+          consumerService: "valhalla",
+          dataType: "osm-pbf",
+        },
+      ]),
+      "utf-8",
+    );
+
+    // Point at a port we know nothing is listening on so the reachability
+    // probe times out fast — verifies the fallback wiring without standing
+    // up a fake HTTP server.
+    const result = await applyGeneratedHardlinks({
+      rootDir: tmp,
+      requirePlan: true,
+      prune: true,
+      dataManagerUrl: "http://127.0.0.1:1",
+      reachabilityTimeoutMs: 250,
+    });
+
+    expect(result.via).toBe("local");
+    expect(result.linked).toBe(1);
+  });
+
+  it("uses the data-manager API when reachable", async () => {
+    const dataRoot = join(tmp, "infra", "docker", "data");
+    mkdirSync(join(dataRoot, "osm"), { recursive: true });
+    writeFileSync(join(dataRoot, "osm", "planet.osm.pbf"), "PBF");
+    mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
+    writeFileSync(
+      join(tmp, "infra", "docker", "docker-compose.generated.hardlinks.json"),
+      JSON.stringify([
+        {
+          source: "data/osm",
+          target: "data/valhalla/osm-pbf",
+          consumerService: "valhalla",
+          dataType: "osm-pbf",
+        },
+      ]),
+      "utf-8",
+    );
+
+    // Tiny mock data-manager: serves /status (probe) and /link (apply).
+    const linkRequests: Array<{ plan: unknown; prune: unknown }> = [];
+    const { createServer } = await import("node:http");
+    const server = createServer((req, res) => {
+      if (req.url === "/status") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, uptime: 1, dataDir: "/data" }));
+        return;
+      }
+      if (req.url === "/link" && req.method === "POST") {
+        const chunks: Buffer[] = [];
+        req.on("data", (c) => chunks.push(Buffer.from(c)));
+        req.on("end", () => {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+          linkRequests.push({ plan: body.plan, prune: body.prune });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, linked: 7, skipped: 2, pruned: 1 }));
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const port = (server.address() as { port: number }).port;
+
+    try {
+      const result = await applyGeneratedHardlinks({
+        rootDir: tmp,
+        requirePlan: true,
+        prune: true,
+        dataManagerUrl: `http://127.0.0.1:${port}`,
+      });
+
+      expect(result.via).toBe("data-manager");
+      expect(result.linked).toBe(7);
+      expect(result.skipped).toBe(2);
+      expect(result.pruned).toBe(1);
+      expect(linkRequests).toHaveLength(1);
+      expect(linkRequests[0]?.prune).toBe(true);
+      expect(Array.isArray(linkRequests[0]?.plan)).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

@@ -265,7 +265,7 @@ async function runStyleDownload(client: services.DataManagerClient): Promise<voi
 async function renderAndApplyHardlinks(): Promise<void> {
   const rendered = await renderComposeForRepo({ domain: process.env.DOMAIN ?? "localhost" });
   for (const warning of rendered.selectionWarnings) log.warn(warning);
-  const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+  const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
   log.ok(
     `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
   );
@@ -440,7 +440,7 @@ export function registerDataCommands(program: Command): void {
         // dirs the operator no longer wants.
         const rendered = await renderComposeForRepo({ domain: process.env.DOMAIN ?? "localhost" });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
-        const result = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        const result = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
         log.ok(
           `Linked ${result.linked} files (${result.skipped} already linked, ${result.pruned} stale file${result.pruned === 1 ? "" : "s"} pruned)`,
         );

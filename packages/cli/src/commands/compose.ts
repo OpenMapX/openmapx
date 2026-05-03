@@ -134,7 +134,7 @@ export function registerComposeCommands(program: Command): void {
         });
         log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
         for (const warning of r.selectionWarnings) log.warn(warning);
-        const linked = applyGeneratedHardlinks({ prune: true, requirePlan: true });
+        const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
         log.ok(
           `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
         );
