@@ -1,9 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import { basename } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { createClient as generateOpenApiClient } from "@hey-api/openapi-ts";
 import { dereference, sanitize, validate } from "@scalar/openapi-parser";
 import YAML from "yaml";
+
+// `@hey-api/openapi-ts` is a build-time SDK generator that pulls in the full
+// TypeScript compiler. Importing it eagerly inflates downstream bundles
+// (apps/api ships dist/server.js via esbuild) and forces every transitive
+// consumer of this package to keep `typescript` as a runtime dependency.
+// `generateTompSdk` is the only caller, so load it lazily there.
 
 const TOMP_HTTP_METHODS = [
   "delete",
@@ -468,6 +473,7 @@ export async function generateTompSdk(options: GenerateTompSdkOptions): Promise<
     { client: "@hey-api/client-fetch", name: "@hey-api/sdk" },
   ];
 
+  const { createClient: generateOpenApiClient } = await import("@hey-api/openapi-ts");
   await generateOpenApiClient({
     input: document as never,
     output: options.outputPath,
