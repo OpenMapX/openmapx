@@ -31,6 +31,7 @@ export function CommandPaletteRow({ command, selected, onRun, showGroupChip = fa
       role="option"
       aria-selected={selected}
       selected={selected}
+      tabIndex={-1}
       onClick={(e) => onRun(command, e)}
       sx={{ borderRadius: 1, mx: 1, my: 0.25, minHeight: 44 }}
     >

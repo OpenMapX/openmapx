@@ -1,5 +1,6 @@
 "use client";
 
+import { useCommandPaletteStore } from "@openmapx/core";
 import { useCallback, useEffect, useState } from "react";
 import { CommandPalette } from "./CommandPalette";
 import { SEARCH_INPUT_ID } from "./constants";
@@ -20,10 +21,14 @@ export function GlobalKeybindings() {
     isShortcutsDialogOpen: shortcutsOpen,
   });
 
-  // Built-in: "/" focuses the SearchBar input.
+  // Built-in: "/" focuses the SearchBar input. Suppressed while the palette
+  // or shortcuts dialog is open so it doesn't focus the SearchBar behind a
+  // modal, and (like the rest of the listener) while the user is typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "/") return;
+      if (useCommandPaletteStore.getState().isOpen) return;
+      if (shortcutsOpen) return;
       const target = e.target;
       if (target instanceof HTMLElement) {
         const tag = target.tagName;
@@ -38,7 +43,7 @@ export function GlobalKeybindings() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [shortcutsOpen]);
 
   return (
     <>

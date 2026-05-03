@@ -63,6 +63,16 @@ describe("formatShortcut", () => {
   it("renders shift+letter as ⇧K on mac", () => {
     expect(formatShortcut(parseShortcut("Mod+Shift+K"), "mac")).toBe("⇧⌘K");
   });
+
+  it("uses Ctrl+Shift+K ordering on non-mac", () => {
+    // Regression: previously rendered "Shift+Ctrl+K" because Shift used
+    // unshift while Ctrl used push.
+    expect(formatShortcut(parseShortcut("Mod+Shift+K"), "other")).toBe("Ctrl+Shift+K");
+  });
+
+  it("uses Ctrl+Shift+Alt+K ordering on non-mac with all modifiers", () => {
+    expect(formatShortcut(parseShortcut("Mod+Shift+Alt+K"), "other")).toBe("Ctrl+Shift+Alt+K");
+  });
 });
 
 describe("matchChord", () => {

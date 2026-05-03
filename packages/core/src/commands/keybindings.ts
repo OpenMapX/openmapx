@@ -82,9 +82,19 @@ export function formatShortcut(seq: KeySequence, platform: Platform = getPlatfor
 
 function formatChord(chord: KeyChord, platform: Platform): string {
   const parts: string[] = [];
-  if (chord.ctrl) parts.push(platform === "mac" ? "⌘" : "Ctrl");
-  if (chord.shift) parts.unshift(platform === "mac" ? "⇧" : "Shift");
-  if (chord.alt) parts.unshift(platform === "mac" ? "⌥" : "Alt");
+  // Conventional modifier ordering:
+  // - mac (Apple HIG): Control, Option, Shift, Command — left to right
+  //   (we don't model Control separately, so emitted order is ⌥⇧⌘).
+  // - other (Windows/Linux): Ctrl, Shift, Alt.
+  if (platform === "mac") {
+    if (chord.alt) parts.push("⌥");
+    if (chord.shift) parts.push("⇧");
+    if (chord.ctrl) parts.push("⌘");
+  } else {
+    if (chord.ctrl) parts.push("Ctrl");
+    if (chord.shift) parts.push("Shift");
+    if (chord.alt) parts.push("Alt");
+  }
   const keyDisplay = chord.key.length === 1 ? chord.key.toUpperCase() : capitalize(chord.key);
   parts.push(keyDisplay);
   // On mac the modifier glyphs concatenate without separator; elsewhere we use "+".

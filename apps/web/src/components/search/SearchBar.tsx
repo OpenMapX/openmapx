@@ -61,6 +61,10 @@ import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 
+/** Pre-parsed once at module load — the shortcut never changes, no need to
+ *  re-parse it on every SearchBar render. */
+const PALETTE_SHORTCUT = parseShortcut("Mod+K");
+
 /** Bigram set of a string. */
 function bigrams(s: string): Map<string, number> {
   const map = new Map<string, number>();
@@ -628,7 +632,7 @@ export function SearchBar() {
                 },
               })}
             >
-              {formatShortcut(parseShortcut("Mod+K"), getPlatform())}
+              {formatShortcut(PALETTE_SHORTCUT, getPlatform())}
             </Box>
           </Tooltip>
 

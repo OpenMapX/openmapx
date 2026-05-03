@@ -15,6 +15,13 @@ import { type Command, formatShortcut, getPlatform, parseShortcut } from "@openm
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
+// Built-in shortcuts that aren't backed by a Command. Pre-parsed once.
+const BUILTIN_SHORTCUTS = {
+  palette: parseShortcut("Mod+K"),
+  help: parseShortcut("?"),
+  focusSearch: parseShortcut("/"),
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -32,17 +39,17 @@ export function KeyboardShortcutsDialog({ open, onClose, commands }: Props) {
       {
         id: "open-palette",
         label: t("open"),
-        shortcut: formatShortcut(parseShortcut("Mod+K"), platform),
+        shortcut: formatShortcut(BUILTIN_SHORTCUTS.palette, platform),
       },
       {
         id: "show-help",
         label: t("cmdShowShortcuts"),
-        shortcut: formatShortcut(parseShortcut("?"), platform),
+        shortcut: formatShortcut(BUILTIN_SHORTCUTS.help, platform),
       },
       {
         id: "focus-search",
         label: t("placeholder"),
-        shortcut: formatShortcut(parseShortcut("/"), platform),
+        shortcut: formatShortcut(BUILTIN_SHORTCUTS.focusSearch, platform),
       },
     ];
     const layers: Row[] = [];
