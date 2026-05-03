@@ -129,6 +129,64 @@ export async function promoteUserToAdmin(email: string, rootDir?: string): Promi
   }
 }
 
+/**
+ * Mark a user's email as verified. Useful for bootstrapping the first admin
+ * on a fresh deployment where SMTP isn't configured yet — Better Auth blocks
+ * sign-in until `emailVerified = true`, and without SMTP no verification mail
+ * is ever sent. After verifying + promoting one user, that user signs in,
+ * configures SMTP, and self-service signup works for everyone else.
+ */
+export async function markEmailVerified(email: string, rootDir?: string): Promise<void> {
+  if (!email?.includes("@")) {
+    throw new Error(`"${email}" does not look like an email address`);
+  }
+  const target = await resolvePostgresTarget(rootDir);
+  const paths = repoPaths(rootDir);
+  const result = await execa(
+    "docker",
+    [
+      "compose",
+      "-f",
+      paths.composeOutPath,
+      "exec",
+      "-T",
+      target.serviceId,
+      "psql",
+      "-U",
+      target.user,
+      "-d",
+      target.db,
+      "-v",
+      "ON_ERROR_STOP=1",
+      "--no-psqlrc",
+      "-A",
+      "-t",
+      "-v",
+      `email=${email}`,
+      "-c",
+      `UPDATE "user" SET email_verified = true WHERE email = :'email' RETURNING id;`,
+    ],
+    { cwd: paths.infraDir, reject: false },
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `psql failed (exit ${result.exitCode}): ${result.stderr?.trim() || result.stdout?.trim() || "no output"}`,
+    );
+  }
+  const updatedIds = (result.stdout ?? "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (updatedIds.length === 0) {
+    throw new Error(
+      `No user found with email "${email}". Sign up through the web UI first, then re-run this command.`,
+    );
+  }
+  if (updatedIds.length > 1) {
+    log.warn(`${updatedIds.length} users matched "${email}" — verified all of them`);
+  }
+}
+
 export async function listUsers(
   rootDir?: string,
 ): Promise<Array<{ id: string; email: string; name: string; role: string }>> {
@@ -177,6 +235,21 @@ export function registerUsersCommands(program: Command): void {
       try {
         await promoteUserToAdmin(email);
         log.ok(`Promoted ${email} to admin`);
+      } catch (err) {
+        log.err((err as Error).message);
+        process.exit(1);
+      }
+    });
+
+  users
+    .command("verify <email>")
+    .description(
+      "Mark a user's email as verified (bootstraps the first admin when SMTP isn't configured yet)",
+    )
+    .action(async (email: string) => {
+      try {
+        await markEmailVerified(email);
+        log.ok(`Marked ${email} as email-verified`);
       } catch (err) {
         log.err((err as Error).message);
         process.exit(1);
