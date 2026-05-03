@@ -4,20 +4,11 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { configureStorage, registerBuiltinIdSchemeViews } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { localStorageAdapter } from "../lib/storage";
 import { IntegrationProvider } from "../providers/IntegrationProvider";
 import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
-
-const GlobalKeybindings = dynamic(
-  () =>
-    import("../components/command-palette/GlobalKeybindings").then((m) => ({
-      default: m.GlobalKeybindings,
-    })),
-  { ssr: false },
-);
 
 configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
@@ -107,10 +98,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <CssBaseline />
         <ImpersonationBanner />
         <KeypairSessionGuard />
-        <IntegrationProvider>
-          {children}
-          <GlobalKeybindings />
-        </IntegrationProvider>
+        <IntegrationProvider>{children}</IntegrationProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -7,7 +7,6 @@ import {
   coordinateId,
   createPlace,
   isOverlayActive,
-  OVERLAY_REGISTRY,
   PANEL,
   parseShortcut,
   toggleOverlay,
@@ -42,6 +41,13 @@ const PARSED = {
   myLocation: parseShortcut("."),
   shortcuts: parseShortcut("?"),
 };
+
+/** Overlay ID mapping: integration IDs like "overlay-earthquakes" -> "earthquakes". */
+function integrationIdToOverlayId(integrationId: string): string {
+  if (integrationId === "overlay-traffic-tomtom") return "traffic";
+  if (integrationId === "street-view-mapillary") return "street-view";
+  return integrationId.replace(/^overlay-/, "").replace(/^tool-/, "");
+}
 
 interface UseCommandSourcesOptions {
   /** Called by the "Show keyboard shortcuts" command. */
@@ -102,29 +108,30 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     });
 
     // Overlays
-    for (const overlay of OVERLAY_REGISTRY) {
-      const meta = overlay.serviceId ? integrations.get(overlay.serviceId) : undefined;
-      const enStrings = meta?.strings?.en as { name?: string } | undefined;
-      const localeStrings = meta?.strings?.[locale] as { name?: string } | undefined;
-      const overlayLabel = localeStrings?.name ?? enStrings?.name ?? overlay.id;
+    for (const integration of integrations.getEnabled()) {
+      if (!integration.frontend?.overlay) continue;
+      const overlayId = integrationIdToOverlayId(integration.id);
+      const enStrings = integration.strings?.en as { name?: string } | undefined;
+      const localeStrings = integration.strings?.[locale] as { name?: string } | undefined;
+      const overlayLabel = localeStrings?.name ?? enStrings?.name ?? overlayId;
 
       // Keywords cover the canonical overlay id, the integration service id,
       // and the English name (locale-independent fallback). This means typing
       // "weather", "transit", etc. matches even when the user's locale uses a
       // different word for the displayed name. (scoreCommand lowercases.)
-      const keywords = [overlay.id, overlay.serviceId, enStrings?.name].filter((x): x is string =>
+      const keywords = [overlayId, integration.id, enStrings?.name].filter((x): x is string =>
         Boolean(x),
       );
 
       out.push({
-        id: `overlays.${overlay.id}`,
+        id: `overlays.${overlayId}`,
         group: "overlays",
         label: t("cmdToggleOverlay", { name: overlayLabel }),
         iconKey: "overlay",
         keywords,
-        isActive: () => isOverlayActive(overlay.id),
+        isActive: () => isOverlayActive(overlayId),
         run: () => {
-          toggleOverlay(overlay.id);
+          toggleOverlay(overlayId);
           return false;
         },
       });

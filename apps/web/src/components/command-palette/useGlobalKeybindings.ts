@@ -75,7 +75,7 @@ export function useGlobalKeybindings(opts: Options) {
     };
 
     const handleEsc = () => {
-      // Stack: palette → shortcuts dialog → sidebar → menu → blur
+      // Stack: palette → shortcuts dialog → sidebar → directions store → menu → blur
       const palette = useCommandPaletteStore.getState();
       if (palette.isOpen) {
         palette.close();
@@ -87,14 +87,14 @@ export function useGlobalKeybindings(opts: Options) {
         // (we explicitly do NOT preventDefault for that case).
         return false;
       }
-      const directions = useDirectionsStore.getState();
-      if (directions.isOpen) {
-        directions.close();
-        return true;
-      }
       const sidebar = useSidebarStore.getState();
       if (sidebar.activeSidebarId) {
         sidebar.closeSidebar();
+        return true;
+      }
+      const directions = useDirectionsStore.getState();
+      if (directions.isOpen) {
+        directions.close();
         return true;
       }
       const menu = useMenuStore.getState();
