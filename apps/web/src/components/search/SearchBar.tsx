@@ -605,6 +605,7 @@ export function SearchBar() {
               component="kbd"
               role="button"
               tabIndex={0}
+              aria-label={tCmd("open")}
               onClick={() => useCommandPaletteStore.getState().open()}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {

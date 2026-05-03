@@ -27,6 +27,9 @@ export function GlobalKeybindings() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "/") return;
+      // Plain "/" only — don't hijack browser/OS shortcuts like Ctrl+/, Cmd+/.
+      // (Shift+/ produces "?" so it never reaches this branch on most layouts.)
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (useCommandPaletteStore.getState().isOpen) return;
       if (shortcutsOpen) return;
       const target = e.target;

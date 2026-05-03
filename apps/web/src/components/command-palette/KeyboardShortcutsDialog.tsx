@@ -48,7 +48,7 @@ export function KeyboardShortcutsDialog({ open, onClose, commands }: Props) {
       },
       {
         id: "focus-search",
-        label: t("placeholder"),
+        label: t("cmdFocusSearch"),
         shortcut: formatShortcut(BUILTIN_SHORTCUTS.focusSearch, platform),
       },
     ];

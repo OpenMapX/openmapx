@@ -524,6 +524,7 @@
     "cmdShareMap": "Share map",
     "cmdMyLocation": "Go to my location",
     "cmdShowShortcuts": "Show keyboard shortcuts",
+    "cmdFocusSearch": "Focus search",
     "cmdSwitchLanguage": "Switch language: {locale}",
     "cmdOpenSaved": "Open saved places",
     "cmdOpenDirections": "Open directions",

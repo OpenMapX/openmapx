@@ -524,6 +524,7 @@
     "cmdShareMap": "Karte teilen",
     "cmdMyLocation": "Zu meinem Standort",
     "cmdShowShortcuts": "Tastenkürzel anzeigen",
+    "cmdFocusSearch": "Suche fokussieren",
     "cmdSwitchLanguage": "Sprache wechseln: {locale}",
     "cmdOpenSaved": "Gespeicherte Orte öffnen",
     "cmdOpenDirections": "Routenplanung öffnen",

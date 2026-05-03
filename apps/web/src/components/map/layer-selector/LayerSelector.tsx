@@ -19,6 +19,7 @@ import {
 import { useTranslations } from "next-intl";
 import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
+import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { DesktopMorePanel } from "./DesktopMorePanel";
@@ -96,7 +97,7 @@ export function LayerSelector() {
   }, []);
 
   // Allow the command palette (and other callers) to open the layer selector
-  // programmatically by dispatching `openmapx:open-layer-selector`. We only
+  // programmatically by dispatching `LAYER_SELECTOR_OPEN_EVENT`. We only
   // open the full "Map Details" popover — not the desktop quick-selector dock
   // (which would otherwise show simultaneously).
   useEffect(() => {
@@ -105,8 +106,8 @@ export function LayerSelector() {
         setAnchorEl(desktopAnchorRef.current);
       }
     };
-    window.addEventListener("openmapx:open-layer-selector", onOpen);
-    return () => window.removeEventListener("openmapx:open-layer-selector", onOpen);
+    window.addEventListener(LAYER_SELECTOR_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(LAYER_SELECTOR_OPEN_EVENT, onOpen);
   }, []);
 
   useEffect(() => {

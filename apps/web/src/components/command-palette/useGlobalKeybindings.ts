@@ -17,7 +17,10 @@ import { useEffect, useRef } from "react";
 
 const SEQUENCE_TIMEOUT_MS = 1200;
 
+// Pre-parsed once at module load so the keydown handler doesn't re-parse on
+// every keystroke.
 const PALETTE_TOGGLE = parseShortcut("Mod+K");
+const HELP_SEQ = parseShortcut("?");
 
 interface Options {
   commands: Command[];
@@ -80,7 +83,9 @@ export function useGlobalKeybindings(opts: Options) {
         return true;
       }
       if (isShortcutsOpenRef.current) {
-        // The shortcuts dialog handles its own close via onClose; we only consume the event.
+        // Defer to MUI: returning false leaves Esc unhandled here so the
+        // Dialog's own onClose fires and closes the shortcuts dialog
+        // (we explicitly do NOT preventDefault for that case).
         return false;
       }
       const directions = useDirectionsStore.getState();
@@ -142,8 +147,7 @@ export function useGlobalKeybindings(opts: Options) {
         }
       }
       // Built-in: ? opens shortcuts help (no underlying command shortcut bound)
-      const helpSeq = parseShortcut("?");
-      sequences.push(helpSeq);
+      sequences.push(HELP_SEQ);
 
       const result = matchSequence(buffer.current, event, sequences);
       if (result.kind === "match") {
@@ -152,7 +156,7 @@ export function useGlobalKeybindings(opts: Options) {
         const matched = result.consumed;
         const sameLen = (a: KeyChord[], b: KeyChord[]) =>
           a.length === b.length && a.every((c, i) => chordEqual(c, b[i]));
-        if (sameLen(matched, helpSeq)) {
+        if (sameLen(matched, HELP_SEQ)) {
           onOpenShortcutsRef.current();
         } else {
           const idx = sequences.findIndex((s) => sameLen(s, matched));

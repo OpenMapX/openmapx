@@ -28,6 +28,7 @@ import { useMemo } from "react";
 import { localeNames, locales } from "@/i18n/config";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { setLocaleAndReload } from "@/lib/setLocale";
+import { LAYER_SELECTOR_OPEN_EVENT } from "./constants";
 import { useMyLocation } from "./useMyLocation";
 
 const PARSED = {
@@ -186,7 +187,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         iconKey: "layer",
         shortcut: PARSED.layers,
         run: () => {
-          window.dispatchEvent(new CustomEvent("openmapx:open-layer-selector"));
+          window.dispatchEvent(new CustomEvent(LAYER_SELECTOR_OPEN_EVENT));
         },
       },
     );
