@@ -23,7 +23,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           # Needed so commitlint can walk the PR's commit range.
-          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
+          # Quoted because `&& 0 || 1` short-circuits past the falsy 0 and always returns 1.
+          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
 
       - uses: pnpm/action-setup@v6
 
