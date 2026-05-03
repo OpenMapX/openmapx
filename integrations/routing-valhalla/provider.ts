@@ -5,7 +5,15 @@
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 import { decodePolyline } from "@openmapx/core";
-import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
+import type {
+  MatchEdge,
+  MatchOptions,
+  MatchPoint,
+  MatchResult,
+  MatchTracePoint,
+  RoutingOptions,
+  RoutingProvider,
+} from "../routing/types.js";
 
 // Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
 // already folds in `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` + legacy
@@ -60,6 +68,37 @@ interface ValhallaResponse {
   alternates?: Array<{ trip: ValhallaTrip }>;
 }
 
+/**
+ * Discriminated union mirroring Valhalla's `date_time` shape: type 0 carries
+ * no value (engine uses "now"), types 1 and 2 require an explicit wall-clock.
+ */
+type ValhallaDateTime = { type: 0 } | { type: 1; value: string } | { type: 2; value: string };
+
+/**
+ * Build Valhalla's `date_time` object from routing options.
+ *
+ * Valhalla treats requests without `date_time` as time-agnostic, which means it
+ * ignores time-conditional OSM access tags (school zones, restricted hours,
+ * ferry schedules) and skips predicted-speed lookups even when historical
+ * traffic tiles exist. Sending `{ type: 0 }` (current departure) by default
+ * costs nothing and unlocks both behaviours.
+ *
+ * Per Valhalla API: type 0 = current depart, 1 = depart at, 2 = arrive by.
+ * `value` is `YYYY-MM-DDTHH:mm` in the local time zone of the route origin.
+ *
+ * Throws if both `departAt` and `arriveBy` are set; the API handler also
+ * rejects this case with 400, but enforcing it here protects future callers
+ * that compose the provider directly.
+ */
+function buildDateTime(options: RoutingOptions): ValhallaDateTime {
+  if (options.arriveBy && options.departAt) {
+    throw new Error("departAt and arriveBy are mutually exclusive");
+  }
+  if (options.arriveBy) return { type: 2, value: options.arriveBy };
+  if (options.departAt) return { type: 1, value: options.departAt };
+  return { type: 0 };
+}
+
 function transformLeg(leg: ValhallaLeg): RouteLeg {
   const coords = decodePolyline(leg.shape, 6);
   const steps: RouteStep[] = leg.maneuvers.map((m) => ({
@@ -109,9 +148,84 @@ function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
   };
 }
 
+/**
+ * Subset of Valhalla's `trace_attributes` response that we consume. The full
+ * shape includes ~30 attribute groups; we only request and parse the ones
+ * needed for the {@link MatchResult} contract.
+ *
+ * https://valhalla.github.io/valhalla/api/map-matching/api-reference/
+ */
+interface ValhallaTraceEdge {
+  way_id?: number;
+  length?: number; // km
+  speed?: number; // km/h
+  surface?: string;
+  names?: string[];
+  begin_shape_index?: number;
+  end_shape_index?: number;
+}
+
+interface ValhallaTraceMatchedPoint {
+  lat?: number;
+  lon?: number;
+  type?: "matched" | "interpolated" | "unmatched";
+  edge_index?: number;
+  distance_along_edge?: number; // 0–1 ratio along the matched edge
+  distance_from_trace_point?: number; // metres
+}
+
+interface ValhallaTraceAttributesResponse {
+  shape?: string;
+  edges?: ValhallaTraceEdge[];
+  matched_points?: ValhallaTraceMatchedPoint[];
+}
+
+const TRACE_ATTRIBUTE_FILTER = [
+  "edge.way_id",
+  "edge.length",
+  "edge.speed",
+  "edge.surface",
+  "edge.names",
+  "edge.begin_shape_index",
+  "edge.end_shape_index",
+  "matched.point",
+  "matched.type",
+  "matched.edge_index",
+  "matched.distance_along_edge",
+  "matched.distance_from_trace_point",
+  "shape",
+] as const;
+
+function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
+  return {
+    wayId: edge.way_id,
+    length: (edge.length ?? 0) * 1000, // km -> metres
+    speed: edge.speed,
+    surface: edge.surface,
+    names: edge.names,
+    beginShapeIndex: edge.begin_shape_index ?? 0,
+    endShapeIndex: edge.end_shape_index ?? 0,
+  };
+}
+
+function transformMatchedPoint(point: ValhallaTraceMatchedPoint): MatchPoint {
+  return {
+    lat: point.lat ?? 0,
+    lng: point.lon ?? 0,
+    type: point.type ?? "unmatched",
+    edgeIndex: point.edge_index,
+    // Pass through unchanged: Valhalla returns this as a 0–1 ratio along the
+    // edge. Consumers multiply by `edges[edge_index].length` (metres) to get
+    // an absolute offset.
+    distanceAlongEdgeRatio: point.distance_along_edge,
+    distanceFromTracePoint: point.distance_from_trace_point,
+  };
+}
+
 export const valhallaService: RoutingProvider = {
   id: "valhalla",
   supportedModes: ["walking", "cycling", "driving"] as TravelMode[],
+  supportsTimeAware: true,
 
   async getRoute(
     waypoints: [number, number][],
@@ -132,6 +246,7 @@ export const valhallaService: RoutingProvider = {
         units: options.units === "imperial" ? "miles" : "km",
         language: options.lang ?? "en",
       },
+      date_time: buildDateTime(options),
       elevation_interval: ELEVATION_INTERVAL,
     };
 
@@ -191,6 +306,7 @@ export const valhallaService: RoutingProvider = {
         units: options.units === "imperial" ? "miles" : "km",
         language: options.lang ?? "en",
       },
+      date_time: buildDateTime(options),
       elevation_interval: ELEVATION_INTERVAL,
     };
 
@@ -219,6 +335,58 @@ export const valhallaService: RoutingProvider = {
       routes,
       activeRouteIndex: 0,
       optimizedOrder,
+    };
+  },
+
+  /**
+   * Snap a recorded GPS trace to the road network via Valhalla's `trace_attributes`
+   * endpoint. Backed by Meili (HMM map matcher) which handles noisy GPS far better
+   * than OSRM's `match` service and returns per-edge OSM way ids and surface tags.
+   */
+  async getMatch(
+    trace: MatchTracePoint[],
+    mode: TravelMode,
+    options: MatchOptions = {},
+  ): Promise<MatchResult> {
+    if (trace.length < 2) {
+      throw new Error("trace requires at least 2 points");
+    }
+
+    const shape = trace.map((p) => {
+      const point: { lat: number; lon: number; time?: number } = { lat: p.lat, lon: p.lng };
+      if (p.time) {
+        // Valhalla expects unix epoch seconds; ISO inputs get converted here.
+        const ms = Date.parse(p.time);
+        if (!Number.isNaN(ms)) point.time = Math.round(ms / 1000);
+      }
+      return point;
+    });
+
+    const body = {
+      shape,
+      shape_match: options.shapeMatch ?? "walk_or_snap",
+      costing: COSTING_MAP[mode],
+      filters: { attributes: TRACE_ATTRIBUTE_FILTER, action: "include" },
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const res = await fetch(`${VALHALLA_URL}/trace_attributes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`Valhalla trace_attributes error ${res.status}`);
+
+    const data = (await res.json()) as ValhallaTraceAttributesResponse;
+
+    return {
+      geometry: data.shape ? decodePolyline(data.shape, 6) : [],
+      edges: (data.edges ?? []).map(transformTraceEdge),
+      points: (data.matched_points ?? []).map(transformMatchedPoint),
+      mode,
     };
   },
 };

@@ -9,6 +9,7 @@ import {
   OSRM_GRAPH_BASENAME,
   OSRM_GRAPH_DIR,
   OSRM_INPUT_FILENAME,
+  OSRM_TRAFFIC_FILENAME,
   resolveOsmPbfForOsrm,
 } from "../src/lib/osrm-graph";
 
@@ -98,5 +99,81 @@ describe("buildOsrmGraph", () => {
       ]),
     );
     expect(existsSync(result.graphPath)).toBe(true);
+  });
+
+  it("creates an empty segment-speed CSV and threads --segment-speed-file into osrm-customize", async () => {
+    const pbf = join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf");
+    writeFileSync(pbf, "PBF");
+
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const graphDir = join(tmp, "infra", "docker", "data", OSRM_GRAPH_DIR);
+    const runner: CommandRunner = async (command, args) => {
+      calls.push({ command, args });
+      if (args.includes("osrm-customize")) {
+        writeFileSync(join(graphDir, OSRM_GRAPH_BASENAME), "GRAPH");
+      }
+    };
+
+    await buildOsrmGraph({
+      rootDir: tmp,
+      region: "europe/germany",
+      image: "ghcr.io/project-osrm/osrm-backend:latest",
+      runner,
+    });
+
+    const csvPath = join(graphDir, OSRM_TRAFFIC_FILENAME);
+    expect(existsSync(csvPath)).toBe(true);
+    expect(readFileSync(csvPath, "utf-8")).toBe("");
+
+    const customizeCall = calls.find((call) => call.args.includes("osrm-customize"));
+    expect(customizeCall?.args).toEqual(
+      expect.arrayContaining([
+        "osrm-customize",
+        `/data/${OSRM_GRAPH_BASENAME}`,
+        "--segment-speed-file",
+        `/data/${OSRM_TRAFFIC_FILENAME}`,
+      ]),
+    );
+  });
+
+  it("rebuilds when the segment-speed CSV changes even if the PBF is identical", async () => {
+    const pbf = join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf");
+    writeFileSync(pbf, "PBF");
+
+    const graphDir = join(tmp, "infra", "docker", "data", OSRM_GRAPH_DIR);
+    let buildCount = 0;
+    const runner: CommandRunner = async (_command, args) => {
+      if (args.includes("osrm-customize")) {
+        buildCount += 1;
+        writeFileSync(join(graphDir, OSRM_GRAPH_BASENAME), "GRAPH");
+      }
+    };
+
+    await buildOsrmGraph({
+      rootDir: tmp,
+      region: "europe/germany",
+      image: "ghcr.io/project-osrm/osrm-backend:latest",
+      runner,
+    });
+    expect(buildCount).toBe(1);
+
+    // Identical inputs — no rebuild.
+    await buildOsrmGraph({
+      rootDir: tmp,
+      region: "europe/germany",
+      image: "ghcr.io/project-osrm/osrm-backend:latest",
+      runner,
+    });
+    expect(buildCount).toBe(1);
+
+    // Populate the CSV — should trigger a rebuild because the hash changed.
+    writeFileSync(join(graphDir, OSRM_TRAFFIC_FILENAME), "1,2,30\n");
+    await buildOsrmGraph({
+      rootDir: tmp,
+      region: "europe/germany",
+      image: "ghcr.io/project-osrm/osrm-backend:latest",
+      runner,
+    });
+    expect(buildCount).toBe(2);
   });
 });

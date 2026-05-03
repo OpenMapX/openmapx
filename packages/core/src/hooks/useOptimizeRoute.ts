@@ -11,6 +11,10 @@ interface OptimizeRouteParams {
   avoidTolls?: boolean;
   avoidFerries?: boolean;
   units?: "metric" | "imperial";
+  /** Wall-clock departure time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `arriveBy`. */
+  departAt?: string;
+  /** Wall-clock arrival time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `departAt`. */
+  arriveBy?: string;
 }
 
 export function useOptimizeRoute() {
@@ -22,6 +26,8 @@ export function useOptimizeRoute() {
       avoidTolls = false,
       avoidFerries = false,
       units = "metric",
+      departAt,
+      arriveBy,
     }: OptimizeRouteParams) => {
       const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
       return apiClient.get<DirectionsResult>(API_ENDPOINTS.directionsOptimize, {
@@ -31,6 +37,8 @@ export function useOptimizeRoute() {
         avoidTolls: String(avoidTolls),
         avoidFerries: String(avoidFerries),
         units,
+        ...(departAt && { departAt }),
+        ...(arriveBy && { arriveBy }),
       });
     },
   });

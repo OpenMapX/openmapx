@@ -12,6 +12,10 @@ interface UseDirectionsParams {
   avoidFerries?: boolean;
   units?: "metric" | "imperial";
   lang?: string;
+  /** Wall-clock departure time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `arriveBy`. */
+  departAt?: string;
+  /** Wall-clock arrival time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `departAt`. */
+  arriveBy?: string;
 }
 
 export function useDirections({
@@ -22,6 +26,8 @@ export function useDirections({
   avoidFerries = false,
   units = "metric",
   lang,
+  departAt,
+  arriveBy,
 }: UseDirectionsParams) {
   const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
 
@@ -35,6 +41,8 @@ export function useDirections({
       avoidFerries,
       units,
       lang,
+      departAt,
+      arriveBy,
     ],
     queryFn: () =>
       apiClient.get<DirectionsResult>(API_ENDPOINTS.directions, {
@@ -45,6 +53,8 @@ export function useDirections({
         avoidFerries: String(avoidFerries),
         units,
         ...(lang && { lang }),
+        ...(departAt && { departAt }),
+        ...(arriveBy && { arriveBy }),
       }),
     enabled: waypoints.length >= 2,
     staleTime: 120_000,

@@ -11,7 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { execa } from "execa";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
@@ -20,6 +20,13 @@ export const OSRM_GRAPH_DIR = "osrm-graph";
 export const OSRM_INPUT_FILENAME = "region.osm.pbf";
 export const OSRM_GRAPH_BASENAME = "region.osrm";
 export const DEFAULT_OSRM_PROFILE = "/opt/car.lua";
+/**
+ * Per-edge speed overrides consumed by `osrm-customize --segment-speed-file`.
+ * We always pass the flag (with an empty file by default) so swapping in a
+ * populated CSV becomes a config change instead of a pipeline rewrite. Format:
+ * `from_node,to_node,speed[,rate]` per row, no header.
+ */
+export const OSRM_TRAFFIC_FILENAME = "segment-speeds.csv";
 const PBF_HASH_FILE = ".osrm-pbf-hash";
 
 export type CommandRunner = (
@@ -51,6 +58,10 @@ export function resolveOsmPbfForOsrm(dataDir: string, region?: string): string {
 function clearPreviousOsrmGraph(graphDir: string): void {
   mkdirSync(graphDir, { recursive: true });
   for (const name of readdirSync(graphDir)) {
+    // Intentionally narrow: OSRM_TRAFFIC_FILENAME (segment-speeds.csv) and the
+    // .osrm-pbf-hash marker must survive a rebuild — the CSV is the
+    // traffic-refresh handoff and is hashed into the build cache key, so
+    // adding it to the cleanup pattern would break edge-weight updates.
     if (name === OSRM_INPUT_FILENAME || name.startsWith(`${OSRM_GRAPH_BASENAME}`)) {
       rmSync(join(graphDir, name), { recursive: true, force: true });
     }
@@ -62,6 +73,18 @@ function linkOrCopy(source: string, target: string): void {
     linkSync(source, target);
   } catch {
     copyFileSync(source, target);
+  }
+}
+
+/**
+ * Ensure the segment-speed CSV exists. We always pass `--segment-speed-file`
+ * to `osrm-customize` so the traffic-update path is wired even when no
+ * overrides are configured; OSRM accepts an empty file as zero overrides.
+ */
+function ensureTrafficCsv(csvPath: string): void {
+  if (!existsSync(csvPath)) {
+    mkdirSync(dirname(csvPath), { recursive: true });
+    writeFileSync(csvPath, "", "utf-8");
   }
 }
 
@@ -109,9 +132,12 @@ export async function buildOsrmGraph(opts: BuildOsrmGraphOptions): Promise<Build
 
   // Skip the build entirely if the input PBF hash matches the one captured
   // by the previous build AND the graph artefact still exists. The hash file
-  // also encodes the OSRM profile, so changing routing profiles forces a
-  // rebuild even on identical PBFs.
-  const newHash = `${profile}|${await hashPbf(sourcePbf)}`;
+  // also encodes the OSRM profile and the traffic CSV's content hash, so
+  // changing either forces a rebuild even on an identical PBF.
+  const trafficCsvPath = join(graphDir, OSRM_TRAFFIC_FILENAME);
+  ensureTrafficCsv(trafficCsvPath);
+  const trafficHash = createHash("sha256").update(readFileSync(trafficCsvPath)).digest("hex");
+  const newHash = `${profile}|${await hashPbf(sourcePbf)}|traffic:${trafficHash}`;
   const hashPath = join(graphDir, PBF_HASH_FILE);
   const graphPath = join(graphDir, OSRM_GRAPH_BASENAME);
   if (existsSync(hashPath) && existsSync(graphPath)) {
@@ -152,7 +178,12 @@ export async function buildOsrmGraph(opts: BuildOsrmGraphOptions): Promise<Build
   );
   await runner(
     "docker",
-    dockerOsrmArgs(graphDir, opts.image, ["osrm-customize", `/data/${OSRM_GRAPH_BASENAME}`]),
+    dockerOsrmArgs(graphDir, opts.image, [
+      "osrm-customize",
+      `/data/${OSRM_GRAPH_BASENAME}`,
+      "--segment-speed-file",
+      `/data/${OSRM_TRAFFIC_FILENAME}`,
+    ]),
     { cwd, stdio: "inherit" },
   );
 

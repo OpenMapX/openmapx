@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { IntegrationContext, TravelMode } from "@openmapx/core";
 import { createRoutingOrchestrator } from "./orchestrator.js";
+import { parseDateTime, parseTravelMode } from "./validation.js";
 
 /** Round a number to a fixed number of decimal places. */
 function round(value: number, decimals: number): number {
@@ -30,8 +31,29 @@ function roundWaypoints(wps: [number, number][]): [number, number][] {
   return wps.map((wp) => [round(wp[0], 4), round(wp[1], 4)]);
 }
 
+/**
+ * Cache TTL (seconds). When the caller pins a wall-clock (`departAt` or
+ * `arriveBy`), the engine response is deterministic for that time and we can
+ * cache aggressively. Without a pinned time, Valhalla treats the request as
+ * "now" — once predicted-traffic tiles land (Tier 3 #8), the answer drifts as
+ * "now" advances, so we keep the implicit-time TTL short.
+ */
+const CACHE_TTL_PINNED_SECONDS = 3600;
+const CACHE_TTL_IMPLICIT_SECONDS = 300;
+function cacheTtlSeconds(hasExplicitTime: boolean): number {
+  return hasExplicitTime ? CACHE_TTL_PINNED_SECONDS : CACHE_TTL_IMPLICIT_SECONDS;
+}
+
+/**
+ * Upper bound on `/match` trace size. A typical hour-long drive recorded at
+ * 1Hz is ~3.6k points; 10k gives generous headroom while preventing a single
+ * caller from queueing a multi-megabyte payload through Valhalla.
+ */
+const MAX_MATCH_TRACE_POINTS = 10_000;
+
 export function setup(ctx: IntegrationContext): void {
-  const { getRoutingProviders, getOptimizeProvider } = createRoutingOrchestrator(ctx);
+  const { getRoutingProviders, getOptimizeProvider, getMatchProvider } =
+    createRoutingOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/directions", async (req, reply) => {
     const {
@@ -46,6 +68,8 @@ export function setup(ctx: IntegrationContext): void {
       avoidFerries,
       units,
       lang,
+      departAt: departAtRaw,
+      arriveBy: arriveByRaw,
     } = req.query;
 
     let waypoints: [number, number][];
@@ -75,8 +99,23 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    if (mode === "transit") {
+    let travelMode: TravelMode;
+    let departAt: string | undefined;
+    let arriveBy: string | undefined;
+    try {
+      travelMode = parseTravelMode(mode);
+      departAt = parseDateTime(departAtRaw, "departAt");
+      arriveBy = parseDateTime(arriveByRaw, "arriveBy");
+    } catch (e) {
+      reply.status(400).send({ error: (e as Error).message });
+      return;
+    }
+    if (travelMode === "transit") {
       reply.status(400).send({ error: "Use /api/transit/plan for transit routing" });
+      return;
+    }
+    if (departAt && arriveBy) {
+      reply.status(400).send({ error: "departAt and arriveBy are mutually exclusive" });
       return;
     }
 
@@ -88,28 +127,34 @@ export function setup(ctx: IntegrationContext): void {
     };
 
     const keyParams = {
+      arriveBy: arriveBy ?? null,
       avoidFerries: opts.avoidFerries,
       avoidHighways: opts.avoidHighways,
       avoidTolls: opts.avoidTolls,
+      departAt: departAt ?? null,
       lang: lang ?? "en",
-      mode,
+      mode: travelMode,
       units: opts.units,
       waypoints: roundWaypoints(waypoints),
     };
 
-    const travelMode = mode as TravelMode;
-    const resolvedChain = getRoutingProviders(travelMode);
+    const requireTimeAware = Boolean(departAt || arriveBy);
+    const resolvedChain = getRoutingProviders(travelMode, { requireTimeAware });
     if (resolvedChain.length === 0) {
-      reply.status(503).send({ error: `No routing provider available for mode: ${mode}` });
+      const detail = requireTimeAware
+        ? `No time-aware routing provider available for mode: ${travelMode}`
+        : `No routing provider available for mode: ${travelMode}`;
+      reply.status(503).send({ error: detail });
       return;
     }
 
-    const routingOpts = { ...opts, lang };
+    const routingOpts = { ...opts, lang, departAt, arriveBy };
+    const ttl = cacheTtlSeconds(requireTimeAware);
 
     try {
       const result = await ctx.cache.withCache(
         hashKey("cache:directions", keyParams),
-        3600,
+        ttl,
         async () => {
           let lastErr: unknown;
           for (const resolved of resolvedChain) {
@@ -128,7 +173,7 @@ export function setup(ctx: IntegrationContext): void {
           throw lastErr ?? new Error("All routing providers failed");
         },
       );
-      reply.header("Cache-Control", "public, max-age=3600");
+      reply.header("Cache-Control", `public, max-age=${ttl}`);
       reply.send(result);
     } catch (err) {
       ctx.log.error("All routing providers failed", err as Error);
@@ -149,6 +194,8 @@ export function setup(ctx: IntegrationContext): void {
       avoidFerries,
       units,
       lang,
+      departAt: departAtRaw,
+      arriveBy: arriveByRaw,
     } = req.query;
 
     let waypoints: [number, number][];
@@ -178,6 +225,26 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    let travelMode: TravelMode;
+    let departAt: string | undefined;
+    let arriveBy: string | undefined;
+    try {
+      travelMode = parseTravelMode(mode);
+      departAt = parseDateTime(departAtRaw, "departAt");
+      arriveBy = parseDateTime(arriveByRaw, "arriveBy");
+    } catch (e) {
+      reply.status(400).send({ error: (e as Error).message });
+      return;
+    }
+    if (travelMode === "transit") {
+      reply.status(400).send({ error: "transit routing cannot be optimised here" });
+      return;
+    }
+    if (departAt && arriveBy) {
+      reply.status(400).send({ error: "departAt and arriveBy are mutually exclusive" });
+      return;
+    }
+
     const opts = {
       avoidHighways: avoidHighways === "true",
       avoidTolls: avoidTolls === "true",
@@ -186,40 +253,135 @@ export function setup(ctx: IntegrationContext): void {
     };
 
     const keyParams = {
+      arriveBy: arriveBy ?? null,
       avoidFerries: opts.avoidFerries,
       avoidHighways: opts.avoidHighways,
       avoidTolls: opts.avoidTolls,
+      departAt: departAt ?? null,
       lang: lang ?? "en",
-      mode,
+      mode: travelMode,
       optimize: true,
       units: opts.units,
       waypoints: roundWaypoints(waypoints),
     };
 
-    const travelMode = mode as TravelMode;
-    const resolved = getOptimizeProvider(travelMode);
+    const requireTimeAware = Boolean(departAt || arriveBy);
+    const resolved = getOptimizeProvider(travelMode, { requireTimeAware });
     const optimizeFn = resolved?.provider.optimizeRoute;
     if (!resolved || !optimizeFn) {
-      reply.status(503).send({ error: `No optimize provider available for mode: ${mode}` });
+      const detail = requireTimeAware
+        ? `No time-aware optimize provider available for mode: ${travelMode}`
+        : `No optimize provider available for mode: ${travelMode}`;
+      reply.status(503).send({ error: detail });
       return;
     }
 
-    const routingOpts = { ...opts, lang };
+    const routingOpts = { ...opts, lang, departAt, arriveBy };
+    const ttl = cacheTtlSeconds(requireTimeAware);
 
     try {
       const result = await ctx.cache.withCache(
         hashKey("cache:directions:optimize", keyParams),
-        3600,
+        ttl,
         async () => {
           const r = await optimizeFn(waypoints, travelMode, routingOpts);
           r.provider = resolved.integrationId;
           return r;
         },
       );
-      reply.header("Cache-Control", "public, max-age=3600");
+      reply.header("Cache-Control", `public, max-age=${ttl}`);
       reply.send(result);
     } catch {
       reply.status(502).send({ error: "Route optimization unavailable" });
+    }
+  });
+
+  /**
+   * POST /match — snap a recorded GPS trace to the road network and return
+   * per-edge attributes (OSM way ids, surface, speed, names). Backed by
+   * Valhalla's `trace_attributes` (Meili HMM map matcher). Not cached: traces
+   * are unique per request.
+   *
+   * Body shape:
+   *   {
+   *     trace: [{ lat, lng, time? }, ...],   // ≥2 points
+   *     mode?: "driving" | "walking" | "cycling",
+   *     shapeMatch?: "edge_walk" | "map_snap" | "walk_or_snap"
+   *   }
+   */
+  ctx.registerRoute("POST", "/match", async (req, reply) => {
+    const body = req.body as
+      | {
+          trace?: unknown;
+          mode?: unknown;
+          shapeMatch?: unknown;
+        }
+      | null
+      | undefined;
+
+    const rawTrace = body?.trace;
+    if (!Array.isArray(rawTrace) || rawTrace.length < 2) {
+      reply.status(400).send({ error: "trace must be an array of at least 2 points" });
+      return;
+    }
+    if (rawTrace.length > MAX_MATCH_TRACE_POINTS) {
+      reply.status(400).send({ error: `trace exceeds the ${MAX_MATCH_TRACE_POINTS}-point limit` });
+      return;
+    }
+
+    const trace: { lat: number; lng: number; time?: string }[] = [];
+    for (const p of rawTrace) {
+      if (
+        !p ||
+        typeof p !== "object" ||
+        typeof (p as { lat: unknown }).lat !== "number" ||
+        typeof (p as { lng: unknown }).lng !== "number"
+      ) {
+        reply.status(400).send({ error: "each trace point must have numeric lat and lng" });
+        return;
+      }
+      const point = p as { lat: number; lng: number; time?: unknown };
+      const out: { lat: number; lng: number; time?: string } = {
+        lat: point.lat,
+        lng: point.lng,
+      };
+      if (typeof point.time === "string") out.time = point.time;
+      trace.push(out);
+    }
+
+    let travelMode: TravelMode;
+    try {
+      travelMode = parseTravelMode(typeof body?.mode === "string" ? body.mode : undefined);
+    } catch (e) {
+      reply.status(400).send({ error: (e as Error).message });
+      return;
+    }
+    if (travelMode === "transit") {
+      reply.status(400).send({ error: "transit mode is not supported for map matching" });
+      return;
+    }
+
+    const shapeMatch =
+      typeof body?.shapeMatch === "string" &&
+      ["edge_walk", "map_snap", "walk_or_snap"].includes(body.shapeMatch)
+        ? (body.shapeMatch as "edge_walk" | "map_snap" | "walk_or_snap")
+        : undefined;
+
+    const resolved = getMatchProvider(travelMode);
+    if (!resolved?.provider.getMatch) {
+      reply
+        .status(503)
+        .send({ error: `No map-matching provider available for mode: ${travelMode}` });
+      return;
+    }
+
+    try {
+      const result = await resolved.provider.getMatch(trace, travelMode, { shapeMatch });
+      result.provider = resolved.integrationId;
+      reply.send(result);
+    } catch (err) {
+      ctx.log.error("map matching failed", err as Error);
+      reply.status(502).send({ error: "Map matching unavailable" });
     }
   });
 }

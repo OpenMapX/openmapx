@@ -1,12 +1,21 @@
 import type { IntegrationContext } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
 import { createRoutingOrchestrator } from "../orchestrator";
-import type { DirectionsResult, RoutingProvider, TravelMode } from "../types.js";
+import type { DirectionsResult, MatchResult, RoutingProvider, TravelMode } from "../types.js";
 
-function makeProvider(modes: TravelMode[], opts: { failing?: boolean } = {}): RoutingProvider {
-  return {
+function makeProvider(
+  modes: TravelMode[],
+  opts: {
+    failing?: boolean;
+    supportsMatch?: boolean;
+    supportsTimeAware?: boolean;
+    supportsOptimize?: boolean;
+  } = {},
+): RoutingProvider {
+  const provider: RoutingProvider = {
     id: "test-provider",
     supportedModes: modes,
+    supportsTimeAware: opts.supportsTimeAware,
     getRoute: vi.fn(async () => {
       if (opts.failing) throw new Error("upstream down");
       return {
@@ -16,6 +25,28 @@ function makeProvider(modes: TravelMode[], opts: { failing?: boolean } = {}): Ro
       } satisfies DirectionsResult;
     }),
   };
+  if (opts.supportsOptimize) {
+    provider.optimizeRoute = vi.fn(
+      async () =>
+        ({
+          waypoints: [],
+          routes: [],
+          activeRouteIndex: 0,
+        }) satisfies DirectionsResult,
+    );
+  }
+  if (opts.supportsMatch) {
+    provider.getMatch = vi.fn(
+      async () =>
+        ({
+          geometry: [],
+          edges: [],
+          points: [],
+          mode: modes[0],
+        }) satisfies MatchResult,
+    );
+  }
+  return provider;
 }
 
 function makeCtx(integrations: { id: string; provider: RoutingProvider }[]): IntegrationContext {
@@ -57,5 +88,86 @@ describe("routing orchestrator getRoutingProviders", () => {
     const ctx = makeCtx([{ id: "routing-osrm", provider: makeProvider(["driving"]) }]);
     const orch = createRoutingOrchestrator(ctx);
     expect(orch.getRoutingProviders("walking")).toEqual([]);
+  });
+});
+
+describe("routing orchestrator getMatchProvider", () => {
+  it("returns the first provider that implements getMatch and supports the mode", () => {
+    const osrm = makeProvider(["driving"]); // no getMatch
+    const valhalla = makeProvider(["driving", "walking", "cycling"], { supportsMatch: true });
+    const ctx = makeCtx([
+      { id: "routing-osrm", provider: osrm },
+      { id: "routing-valhalla", provider: valhalla },
+    ]);
+    const orch = createRoutingOrchestrator(ctx);
+    expect(orch.getMatchProvider("driving")?.integrationId).toBe("routing-valhalla");
+  });
+
+  it("returns null when no provider implements getMatch for the mode", () => {
+    const osrm = makeProvider(["driving"]);
+    const ctx = makeCtx([{ id: "routing-osrm", provider: osrm }]);
+    const orch = createRoutingOrchestrator(ctx);
+    expect(orch.getMatchProvider("driving")).toBeNull();
+  });
+});
+
+describe("routing orchestrator requireTimeAware filter", () => {
+  it("getRoutingProviders drops time-agnostic providers when requireTimeAware is set", () => {
+    const osrm = makeProvider(["driving"]); // supportsTimeAware undefined
+    const valhalla = makeProvider(["driving", "walking", "cycling"], {
+      supportsTimeAware: true,
+    });
+    const ctx = makeCtx([
+      { id: "routing-osrm", provider: osrm },
+      { id: "routing-valhalla", provider: valhalla },
+    ]);
+    const orch = createRoutingOrchestrator(ctx);
+
+    const all = orch.getRoutingProviders("driving");
+    expect(all.map((p) => p.integrationId)).toEqual(["routing-osrm", "routing-valhalla"]);
+
+    const timed = orch.getRoutingProviders("driving", { requireTimeAware: true });
+    expect(timed.map((p) => p.integrationId)).toEqual(["routing-valhalla"]);
+  });
+
+  it("getRoutingProviders returns empty when no time-aware provider supports the mode", () => {
+    const osrm = makeProvider(["driving"]);
+    const ctx = makeCtx([{ id: "routing-osrm", provider: osrm }]);
+    const orch = createRoutingOrchestrator(ctx);
+    expect(orch.getRoutingProviders("driving", { requireTimeAware: true })).toEqual([]);
+  });
+
+  it("getOptimizeProvider drops time-agnostic providers when requireTimeAware is set", () => {
+    const osrm = makeProvider(["driving"], { supportsOptimize: true });
+    const valhalla = makeProvider(["driving"], {
+      supportsOptimize: true,
+      supportsTimeAware: true,
+    });
+    const ctx = makeCtx([
+      { id: "routing-osrm", provider: osrm },
+      { id: "routing-valhalla", provider: valhalla },
+    ]);
+    const orch = createRoutingOrchestrator(ctx);
+
+    expect(orch.getOptimizeProvider("driving")?.integrationId).toBe("routing-osrm");
+    expect(orch.getOptimizeProvider("driving", { requireTimeAware: true })?.integrationId).toBe(
+      "routing-valhalla",
+    );
+  });
+
+  it("getOptimizeProvider does NOT cross-mode-fall-back when requireTimeAware is set", () => {
+    // Without requireTimeAware, the cross-mode fallback returns the lone
+    // optimize-capable provider even if it doesn't support the requested mode.
+    // With requireTimeAware, that fallback would silently drop the time
+    // semantics, so we want a clean null instead.
+    const driving = makeProvider(["driving"], {
+      supportsOptimize: true,
+      supportsTimeAware: false,
+    });
+    const ctx = makeCtx([{ id: "routing-osrm", provider: driving }]);
+    const orch = createRoutingOrchestrator(ctx);
+
+    expect(orch.getOptimizeProvider("walking")?.integrationId).toBe("routing-osrm");
+    expect(orch.getOptimizeProvider("walking", { requireTimeAware: true })).toBeNull();
   });
 });

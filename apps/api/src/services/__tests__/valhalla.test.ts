@@ -347,6 +347,48 @@ describe("valhallaService", () => {
       expect(body.alternates).toBe(3);
     });
 
+    it("defaults date_time to type 0 (current departure) when no time given", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.getRoute(waypoints, "driving");
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.date_time).toEqual({ type: 0 });
+    });
+
+    it("sets date_time type 1 with value when departAt is given", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.getRoute(waypoints, "driving", { departAt: "2026-05-04T08:30" });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.date_time).toEqual({ type: 1, value: "2026-05-04T08:30" });
+    });
+
+    it("sets date_time type 2 with value when arriveBy is given", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.getRoute(waypoints, "driving", { arriveBy: "2026-05-04T17:00" });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.date_time).toEqual({ type: 2, value: "2026-05-04T17:00" });
+    });
+
+    it("throws when both departAt and arriveBy are set", async () => {
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+
+      await expect(
+        valhallaService.getRoute(waypoints, "driving", {
+          departAt: "2026-05-04T08:30",
+          arriveBy: "2026-05-04T17:00",
+        }),
+      ).rejects.toThrow("departAt and arriveBy are mutually exclusive");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it("does not request alternates with 3+ waypoints", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
@@ -488,6 +530,212 @@ describe("valhallaService", () => {
       for (const loc of body.locations) {
         expect(loc.type).toBe("break");
       }
+    });
+
+    it("defaults date_time to type 0 when no time given", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOptimizeResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.optimizeRoute?.(fourWaypoints, "driving");
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.date_time).toEqual({ type: 0 });
+    });
+
+    it("threads departAt into date_time type 1", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeOptimizeResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.optimizeRoute?.(fourWaypoints, "driving", {
+        departAt: "2026-05-04T08:30",
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.date_time).toEqual({ type: 1, value: "2026-05-04T08:30" });
+    });
+  });
+
+  describe("getMatch()", () => {
+    const trace = [
+      { lat: 52.517, lng: 13.388 },
+      { lat: 52.521, lng: 13.392 },
+      { lat: 52.529, lng: 13.397 },
+    ];
+
+    function makeTraceResponse(overrides: Record<string, unknown> = {}) {
+      return {
+        shape: "encoded_polyline_data",
+        edges: [
+          {
+            way_id: 12345,
+            length: 0.5, // km
+            speed: 50,
+            surface: "paved",
+            names: ["Friedrichstraße"],
+            begin_shape_index: 0,
+            end_shape_index: 2,
+          },
+        ],
+        matched_points: [
+          {
+            lat: 52.517,
+            lon: 13.388,
+            type: "matched",
+            edge_index: 0,
+            distance_along_edge: 0.05, // 0–1 ratio along the matched edge
+            distance_from_trace_point: 4.2, // metres
+          },
+        ],
+        ...overrides,
+      };
+    }
+
+    it("POSTs to VALHALLA_URL/trace_attributes with shape + filters + walk_or_snap default", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeTraceResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.getMatch?.(trace, "driving");
+
+      const url = mockFetch.mock.calls[0][0] as string;
+      const init = mockFetch.mock.calls[0][1] as RequestInit;
+      const body = JSON.parse(init.body as string);
+
+      expect(url).toContain("/trace_attributes");
+      expect(init.method).toBe("POST");
+      expect(body.shape).toEqual([
+        { lat: 52.517, lon: 13.388 },
+        { lat: 52.521, lon: 13.392 },
+        { lat: 52.529, lon: 13.397 },
+      ]);
+      expect(body.shape_match).toBe("walk_or_snap");
+      expect(body.costing).toBe("auto");
+      expect(body.filters.action).toBe("include");
+      expect(body.filters.attributes).toEqual(expect.arrayContaining(["edge.way_id", "shape"]));
+    });
+
+    it("uses pedestrian costing for walking and bicycle for cycling", async () => {
+      mockFetch
+        .mockResolvedValueOnce(mockOk(makeTraceResponse()))
+        .mockResolvedValueOnce(mockOk(makeTraceResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.getMatch?.(trace, "walking");
+      await valhallaService.getMatch?.(trace, "cycling");
+
+      const body1 = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      const body2 = JSON.parse(mockFetch.mock.calls[1][1].body as string);
+      expect(body1.costing).toBe("pedestrian");
+      expect(body2.costing).toBe("bicycle");
+    });
+
+    it("honours an explicit shapeMatch option", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeTraceResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.getMatch?.(trace, "driving", { shapeMatch: "map_snap" });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.shape_match).toBe("map_snap");
+    });
+
+    it("converts ISO timestamps on trace points to unix epoch seconds", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeTraceResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      await valhallaService.getMatch?.(
+        [
+          { lat: 52.517, lng: 13.388, time: "2026-05-04T08:00:00Z" },
+          { lat: 52.521, lng: 13.392, time: "2026-05-04T08:00:30Z" },
+        ],
+        "driving",
+      );
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+      expect(body.shape[0]).toEqual({
+        lat: 52.517,
+        lon: 13.388,
+        time: Math.round(Date.parse("2026-05-04T08:00:00Z") / 1000),
+      });
+      expect(body.shape[1].time).toBe(Math.round(Date.parse("2026-05-04T08:00:30Z") / 1000));
+    });
+
+    it("transforms edges: way_id, length km->metres, names, shape indices", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeTraceResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const result = await valhallaService.getMatch?.(trace, "driving");
+      const edge = result?.edges[0];
+
+      expect(edge?.wayId).toBe(12345);
+      expect(edge?.length).toBe(500); // 0.5 km -> 500 m
+      expect(edge?.speed).toBe(50);
+      expect(edge?.surface).toBe("paved");
+      expect(edge?.names).toEqual(["Friedrichstraße"]);
+      expect(edge?.beginShapeIndex).toBe(0);
+      expect(edge?.endShapeIndex).toBe(2);
+    });
+
+    it("transforms matched_points: lon->lng, distance_along_edge passed through as ratio", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeTraceResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const result = await valhallaService.getMatch?.(trace, "driving");
+      const point = result?.points[0];
+
+      expect(point?.lng).toBe(13.388);
+      expect(point?.lat).toBe(52.517);
+      expect(point?.type).toBe("matched");
+      expect(point?.edgeIndex).toBe(0);
+      // Valhalla returns this as a 0–1 ratio along the edge; we pass it through
+      // unchanged so consumers can multiply by edges[edgeIndex].length themselves.
+      expect(point?.distanceAlongEdgeRatio).toBe(0.05);
+      expect(point?.distanceFromTracePoint).toBe(4.2);
+    });
+
+    it("returns the decoded polyline as geometry and mode in the result", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk(makeTraceResponse()));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const result = await valhallaService.getMatch?.(trace, "cycling");
+
+      expect(result?.mode).toBe("cycling");
+      // decodePolyline is module-mocked at the top of the file to a fixed shape.
+      expect(result?.geometry).toEqual([
+        [13.388, 52.517],
+        [13.392, 52.521],
+        [13.397, 52.529],
+        [13.405, 52.535],
+      ]);
+    });
+
+    it("returns empty arrays when Valhalla omits shape / edges / matched_points", async () => {
+      mockFetch.mockResolvedValueOnce(mockOk({}));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const result = await valhallaService.getMatch?.(trace, "driving");
+
+      expect(result?.geometry).toEqual([]);
+      expect(result?.edges).toEqual([]);
+      expect(result?.points).toEqual([]);
+    });
+
+    it("throws when the trace has fewer than 2 points", async () => {
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+
+      await expect(valhallaService.getMatch?.([{ lat: 1, lng: 2 }], "driving")).rejects.toThrow(
+        "trace requires at least 2 points",
+      );
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("throws on HTTP error", async () => {
+      mockFetch.mockResolvedValueOnce(mockNotOk(500));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+
+      await expect(valhallaService.getMatch?.(trace, "driving")).rejects.toThrow(
+        "Valhalla trace_attributes error 500",
+      );
     });
   });
 });
