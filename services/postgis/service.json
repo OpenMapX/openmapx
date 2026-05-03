@@ -21,10 +21,15 @@
     "command": ["postgres"],
     "healthcheck": {
       "type": "exec",
-      "command": ["pg_isready", "-U", "postgres"],
+      "command": [
+        "sh",
+        "-c",
+        "pg_isready -U \"${POSTGRES_USER:-postgres}\" -q && test -f /var/run/postgresql/openmapx-password-synced"
+      ],
       "interval": "10s",
       "timeout": "3s",
-      "retries": 5
+      "retries": 30,
+      "startPeriod": "30s"
     }
   },
   "provides": ["database"],

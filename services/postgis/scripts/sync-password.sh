@@ -15,6 +15,14 @@
 set -euo pipefail
 
 PG_USER="${POSTGRES_USER:-postgres}"
+# Sentinel file the healthcheck looks for. Postgres starts accepting TCP
+# connections a moment before the ALTER USER below runs, so without this
+# gate dependent containers (app-api) can race in, hit the still-stale
+# password, and crash-loop until they retry past the window. The sentinel
+# is recreated on every container start so a stale one from a previous
+# instance doesn't fool the healthcheck.
+SYNC_SENTINEL="/var/run/postgresql/openmapx-password-synced"
+rm -f "$SYNC_SENTINEL"
 
 # Forward SIGTERM/SIGINT to postgres so it gets a clean shutdown
 # (`docker stop`, compose down, host signals).
@@ -55,6 +63,11 @@ if [ -n "${POSTGRES_PASSWORD:-}" ]; then
       -c "ALTER USER \"${PG_USER}\" WITH PASSWORD '${ESCAPED_PASSWORD}';" >/dev/null
   echo "[openmapx-postgis] superuser password synced from env"
 fi
+
+# Mark the sync as done. Healthcheck only returns success after this exists,
+# so dependents waiting on `condition: service_healthy` start with a known-
+# good password baseline.
+touch "$SYNC_SENTINEL"
 
 # Hand control back to postgres in the foreground; container exit code
 # matches postgres'.
