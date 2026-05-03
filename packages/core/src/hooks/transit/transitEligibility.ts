@@ -139,7 +139,10 @@ const CATEGORY_BLOCKLIST = [
 
 /** Returns true when rawCategory indicates a transit-infrastructure place. */
 export function isTransitRawCategory(rawCategory: string): boolean {
-  const lower = rawCategory.toLowerCase();
+  // Categories arrive in OSM form ("fire_station", "amenity/fire_station") or
+  // prettified for display ("Fire Station"). Collapse whitespace to underscores
+  // so blocklist entries match either form.
+  const lower = rawCategory.toLowerCase().replace(/\s+/g, "_");
   if (CATEGORY_BLOCKLIST.some((bl) => lower.includes(bl))) return false;
   return CATEGORY_KEYWORDS.some((kw) => lower.includes(kw));
 }
