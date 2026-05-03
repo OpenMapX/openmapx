@@ -150,6 +150,7 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [shortcutPlatform, setShortcutPlatform] = useState<ReturnType<typeof getPlatform>>("other");
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
   const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
@@ -196,6 +197,10 @@ export function SearchBar() {
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    setShortcutPlatform(getPlatform());
   }, []);
 
   const handleBlur = useCallback(() => {
@@ -633,7 +638,7 @@ export function SearchBar() {
                 },
               })}
             >
-              {formatShortcut(PALETTE_SHORTCUT, getPlatform())}
+              {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
             </Box>
           </Tooltip>
 

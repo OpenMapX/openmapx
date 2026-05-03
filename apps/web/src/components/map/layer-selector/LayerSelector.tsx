@@ -135,8 +135,6 @@ export function LayerSelector() {
     };
   }, [mapReady, styleVersion, mapRef]);
 
-  if (hiddenByFloatingCard) return null;
-
   const open = Boolean(anchorEl);
   const trafficZoomTooLow = zoomLevel !== null && zoomLevel < trafficMinZoom;
 
@@ -150,9 +148,17 @@ export function LayerSelector() {
           left: { xs: 12, sm: hasSidePanel ? 412 : 12 },
           transition: "left 0.25s ease",
           zIndex: 10,
+          ...(hiddenByFloatingCard
+            ? {
+                width: 1,
+                height: 1,
+                opacity: 0,
+                pointerEvents: "none",
+              }
+            : null),
         }}
       >
-        {desktopDock ? (
+        {hiddenByFloatingCard ? null : desktopDock ? (
           <Box sx={{ position: "relative" }}>
             <Box
               sx={{

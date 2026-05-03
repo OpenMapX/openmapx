@@ -7,7 +7,12 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
-import { type Command, formatShortcut, getPlatform } from "@openmapx/core";
+import {
+  type Command,
+  formatShortcut,
+  getPlatform,
+  useIntegrationOverlayActive,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { SyntheticEvent } from "react";
 import { commandIcon } from "./commandIcons";
@@ -21,7 +26,9 @@ interface Props {
 
 export function CommandPaletteRow({ command, selected, onRun, showGroupChip = false }: Props) {
   const t = useTranslations("commandPalette");
-  const isActive = command.isActive?.() ?? false;
+  const overlayId = command.id.startsWith("overlays.") ? command.id.slice("overlays.".length) : "";
+  const overlayActive = useIntegrationOverlayActive(overlayId);
+  const isActive = overlayId ? overlayActive : (command.isActive?.() ?? false);
   const shortcutText = command.shortcut ? formatShortcut(command.shortcut, getPlatform()) : null;
   const groupKey = `group${command.group.charAt(0).toUpperCase()}${command.group.slice(1)}`;
 
