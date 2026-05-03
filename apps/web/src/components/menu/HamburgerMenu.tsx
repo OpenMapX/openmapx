@@ -27,14 +27,9 @@ import { PANEL, useMenuStore, useSidebarStore } from "@openmapx/core";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
-import { locales } from "@/i18n/config";
+import { localeNames, locales } from "@/i18n/config";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { setLocaleAndReload } from "@/lib/setLocale";
-
-const localeNames: Record<string, string> = {
-  en: "English",
-  de: "Deutsch",
-};
 
 const DRAWER_WIDTH = 280;
 

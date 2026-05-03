@@ -5,7 +5,10 @@ on:
     types: [opened, edited, synchronize, reopened]
 
 permissions:
-  pull-requests: read
+  # `pull-requests: write` is needed because `wip: true` makes the action
+  # set the PR check to "pending" while the title contains [WIP].
+  # See: https://github.com/amannn/action-semantic-pull-request#wip
+  pull-requests: write
 
 jobs:
   validate:

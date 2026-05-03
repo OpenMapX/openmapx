@@ -1,5 +1,6 @@
 import { buildAttributionHtml } from "@openmapx/core/server";
 import { Suspense } from "react";
+import { GlobalKeybindings } from "@/components/command-palette/GlobalKeybindings";
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
@@ -68,6 +69,7 @@ export default function HomePage() {
   const terrainTileUrl = getTerrainTileUrl();
   return (
     <MapProvider>
+      <GlobalKeybindings />
       <ElevationHoverProvider>
         <div className="relative w-full h-dvh overflow-hidden">
           <MapCanvas />

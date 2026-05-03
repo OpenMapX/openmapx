@@ -10,29 +10,16 @@ import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import { useMapStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { useMap } from "@/lib/MapContext";
 import { Pegman } from "./Pegman";
 
 export function MapControls() {
   const t = useTranslations("map");
-  const { zoomIn, zoomOut, resetBearing, flyTo } = useMap();
+  const { zoomIn, zoomOut, resetBearing } = useMap();
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
-  const setUserLocation = useMapStore((s) => s.setUserLocation);
-
-  const handleMyLocation = () => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lngLat: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        setUserLocation(lngLat);
-        flyTo(lngLat, 14);
-      },
-      () => {
-        // permission denied or unavailable — silently ignore
-      },
-    );
-  };
+  const handleMyLocation = useMyLocation();
 
   return (
     <Box

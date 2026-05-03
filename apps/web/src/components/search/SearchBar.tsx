@@ -24,18 +24,22 @@ import {
   createPlace,
   decodeShortPlusCode,
   detectShortPlusCodeCity,
+  formatShortcut,
+  getPlatform,
   idsFromPrimaryOrCoords,
   isTransitName,
   PANEL,
   parseCoordinateInput,
   parseDMSCoordinateInput,
   parsePlusCodeInput,
+  parseShortcut,
   resolveStopAsPlace,
   useActiveSidePanel,
   useAdaptiveDebounce,
   useAutocomplete,
   useCapabilities,
   useCategorySearchStore,
+  useCommandPaletteStore,
   useDataSourceStore,
   useDebounce,
   useDirectionsStore,
@@ -52,9 +56,14 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
+
+/** Pre-parsed once at module load — the shortcut never changes, no need to
+ *  re-parse it on every SearchBar render. */
+const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
 /** Bigram set of a string. */
 function bigrams(s: string): Map<string, number> {
@@ -124,6 +133,7 @@ export function SearchBar() {
   const t = useTranslations("search");
   const tModes = useTranslations("searchModes");
   const tSaved = useTranslations("saved");
+  const tCmd = useTranslations("commandPalette");
   const locale = useLocale();
   const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
     useSearchStore();
@@ -140,6 +150,7 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [shortcutPlatform, setShortcutPlatform] = useState<ReturnType<typeof getPlatform>>("other");
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
   const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
@@ -186,6 +197,10 @@ export function SearchBar() {
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    setShortcutPlatform(getPlatform());
   }, []);
 
   const handleBlur = useCallback(() => {
@@ -574,7 +589,7 @@ export function SearchBar() {
             onFocus={() => setIsFocused(true)}
             onBlur={handleBlur}
             placeholder={t("placeholder")}
-            inputProps={{ "aria-label": t("ariaLabel") }}
+            inputProps={{ id: SEARCH_INPUT_ID, "aria-label": t("ariaLabel") }}
             sx={{
               flex: 1,
               fontSize: 16,
@@ -589,6 +604,43 @@ export function SearchBar() {
           <IconButton type="submit" size="small" aria-label={t("searchAriaLabel")}>
             <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
           </IconButton>
+
+          <Tooltip title={tCmd("open")} placement="bottom">
+            <Box
+              component="kbd"
+              role="button"
+              tabIndex={0}
+              aria-label={tCmd("open")}
+              onClick={() => useCommandPaletteStore.getState().open()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  useCommandPaletteStore.getState().open();
+                }
+              }}
+              sx={(theme) => ({
+                display: { xs: "none", sm: "inline-flex" },
+                alignItems: "center",
+                fontFamily: "monospace",
+                fontSize: 11,
+                px: 0.75,
+                py: 0.25,
+                ml: 0.5,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+                color: "text.secondary",
+                cursor: "pointer",
+                userSelect: "none",
+                "&:hover": { bgcolor: "action.hover" },
+                "&:focus-visible": {
+                  outline: `2px solid ${theme.palette.primary.main}`,
+                  outlineOffset: 1,
+                },
+              })}
+            >
+              {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
+            </Box>
+          </Tooltip>
 
           {hasSidePanel ? (
             <IconButton

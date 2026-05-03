@@ -150,10 +150,33 @@ export type {
   MapOverlayProvider,
   StreetViewProvider,
 } from "./domains";
+
 // Git URL allowlist (shared by community service repos + community integrations).
 // The `gitShallowClone*` helpers that use these live in `./server` — they import
 // `node:fs` and would break the client bundle if re-exported here.
 
+// `repoPaths`, the `services` namespace, and `spawnWithBufferedLogs` use node:fs
+// / node:child_process — they live in `./server`, not this client-reachable barrel.
+// Command palette
+export type {
+  Command,
+  CommandGroup,
+  KeyChord,
+  KeyEventLike,
+  KeySequence,
+  Platform,
+  SequenceMatchResult,
+} from "./commands";
+export {
+  chordsEqual,
+  formatShortcut,
+  getPlatform,
+  matchChord,
+  matchSequence,
+  parseShortcut,
+  SCORE_CUTOFF,
+  scoreCommand,
+} from "./commands";
 export { ALLOWED_GIT_HOSTS, assertAllowedGitUrl, InvalidGitUrlError } from "./git-url";
 // Hooks — Transit
 export {
@@ -371,10 +394,9 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
-// `repoPaths`, the `services` namespace, and `spawnWithBufferedLogs` use node:fs
-// / node:child_process — they live in `./server`, not this client-reachable barrel.
 // Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
+export { useCommandPaletteStore } from "./stores/commandPaletteStore";
 export type { OverlayStoreBase } from "./stores/createOverlayStore";
 export {
   createOverlayStore,
