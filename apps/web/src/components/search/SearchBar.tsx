@@ -24,12 +24,15 @@ import {
   createPlace,
   decodeShortPlusCode,
   detectShortPlusCodeCity,
+  formatShortcut,
+  getPlatform,
   idsFromPrimaryOrCoords,
   isTransitName,
   PANEL,
   parseCoordinateInput,
   parseDMSCoordinateInput,
   parsePlusCodeInput,
+  parseShortcut,
   resolveStopAsPlace,
   useActiveSidePanel,
   useAdaptiveDebounce,
@@ -53,6 +56,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
@@ -576,7 +580,7 @@ export function SearchBar() {
             onFocus={() => setIsFocused(true)}
             onBlur={handleBlur}
             placeholder={t("placeholder")}
-            inputProps={{ "aria-label": t("ariaLabel") }}
+            inputProps={{ id: SEARCH_INPUT_ID, "aria-label": t("ariaLabel") }}
             sx={{
               flex: 1,
               fontSize: 16,
@@ -624,9 +628,7 @@ export function SearchBar() {
                 },
               })}
             >
-              {typeof navigator !== "undefined" && /mac|iphone|ipad|ipod/i.test(navigator.platform)
-                ? "⌘K"
-                : "Ctrl+K"}
+              {formatShortcut(parseShortcut("Mod+K"), getPlatform())}
             </Box>
           </Tooltip>
 

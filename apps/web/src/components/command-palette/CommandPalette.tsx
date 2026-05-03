@@ -6,6 +6,7 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   type Command,
+  getPlatform,
   SCORE_CUTOFF,
   scoreCommand,
   useCommandPaletteStore,
@@ -16,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommandPaletteFooter } from "./CommandPaletteFooter";
 import { CommandPaletteInput } from "./CommandPaletteInput";
 import { CommandPaletteList, getDefaultCommandPaletteRows } from "./CommandPaletteList";
+import { COMMAND_PALETTE_LISTBOX_ID, SEARCH_INPUT_ID } from "./constants";
 import { useCommandSources } from "./useCommandSources";
 
 interface Props {
@@ -55,7 +57,7 @@ export function CommandPalette({ onOpenShortcuts }: Props) {
     if (!q) return;
     requestAnimationFrame(() => {
       setSearchQuery(q);
-      const el = document.querySelector<HTMLInputElement>('input[aria-label="search"]');
+      const el = document.getElementById(SEARCH_INPUT_ID) as HTMLInputElement | null;
       el?.focus();
     });
   }, [close, query, setSearchQuery]);
@@ -109,7 +111,10 @@ export function CommandPalette({ onOpenShortcuts }: Props) {
 
   const runCommand = useCallback(
     (cmd: Command, event?: { metaKey?: boolean; ctrlKey?: boolean }) => {
-      const keepOpen = event?.metaKey || event?.ctrlKey;
+      // Platform-aware "keep open" modifier so Ctrl+Enter doesn't trigger
+      // it on macOS (where the user expects ⌘+Enter only).
+      const isMac = getPlatform() === "mac";
+      const keepOpen = isMac ? !!event?.metaKey : !!event?.ctrlKey;
       try {
         const result = cmd.run();
         if (!keepOpen && result !== false) close();
@@ -182,7 +187,7 @@ export function CommandPalette({ onOpenShortcuts }: Props) {
         onKeyDown={handleKeyDown}
         activeDescendantId={selectedDomId}
       />
-      <div id="command-palette-listbox" style={{ overflowY: "auto", flex: 1 }}>
+      <div style={{ overflowY: "auto", flex: 1 }}>
         {noRealMatches && (
           <Typography sx={{ px: 2, py: 1.5, color: "text.secondary", fontSize: 14 }}>
             {t("noResults")}
@@ -193,6 +198,7 @@ export function CommandPalette({ onOpenShortcuts }: Props) {
           rankedOverride={ranked}
           query={query}
           selectedId={selected?.id ?? null}
+          listboxId={COMMAND_PALETTE_LISTBOX_ID}
           onRun={(cmd, e) => {
             const evt = e as unknown as { metaKey?: boolean; ctrlKey?: boolean };
             runCommand(cmd, evt);

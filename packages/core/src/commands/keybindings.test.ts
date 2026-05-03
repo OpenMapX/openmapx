@@ -35,6 +35,11 @@ describe("parseShortcut", () => {
     expect(() => parseShortcut("")).toThrow();
     expect(() => parseShortcut("Mod+")).toThrow();
   });
+
+  it("throws on multiple non-modifier keys in one chord", () => {
+    expect(() => parseShortcut("Ctrl+K+L")).toThrow();
+    expect(() => parseShortcut("a+b")).toThrow();
+  });
 });
 
 describe("formatShortcut", () => {
@@ -104,19 +109,35 @@ describe("matchChord", () => {
 });
 
 describe("matchSequence", () => {
+  function evt(
+    key: string,
+    opts: Partial<{ ctrl: boolean; meta: boolean; shift: boolean; alt: boolean }> = {},
+  ): KeyEventLike {
+    return {
+      key,
+      ctrlKey: opts.ctrl ?? false,
+      metaKey: opts.meta ?? false,
+      shiftKey: opts.shift ?? false,
+      altKey: opts.alt ?? false,
+    };
+  }
+
   it("matches shifted punctuation by the produced key", () => {
-    const result = matchSequence(
-      [],
-      {
-        key: "?",
-        ctrlKey: false,
-        metaKey: false,
-        shiftKey: true,
-        altKey: false,
-      },
-      [parseShortcut("?")],
-      "mac",
-    );
+    const result = matchSequence([], evt("?", { shift: true }), [parseShortcut("?")], "mac");
     expect(result.kind).toBe("match");
+  });
+
+  it("does NOT match plain `g s` when Ctrl is held on mac", () => {
+    // Regression: Ctrl+G on mac would previously normalize to {key:'g'} and
+    // advance the buffer, then a plain 's' would complete a "g s" match.
+    const sequences = [parseShortcut("g s")];
+    const first = matchSequence([], evt("g", { ctrl: true }), sequences, "mac");
+    expect(first.kind).toBe("miss");
+  });
+
+  it("does NOT match plain `g s` when Meta is held on non-mac", () => {
+    const sequences = [parseShortcut("g s")];
+    const first = matchSequence([], evt("g", { meta: true }), sequences, "other");
+    expect(first.kind).toBe("miss");
   });
 });

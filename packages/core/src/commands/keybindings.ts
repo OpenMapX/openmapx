@@ -50,6 +50,7 @@ function parseChord(chordStr: string, original: string): KeyChord {
     throw new Error(`Invalid shortcut '${original}': empty segment in '${chordStr}'`);
   }
   const chord: KeyChord = { key: "" };
+  let keySet = false;
   for (const part of parts) {
     const lower = part.toLowerCase();
     if (lower === "mod") chord.ctrl = true;
@@ -58,9 +59,17 @@ function parseChord(chordStr: string, original: string): KeyChord {
     else if (lower === "alt" || lower === "option") chord.alt = true;
     else if (lower === "cmd" || lower === "meta")
       chord.ctrl = true; // collapse to ctrl
-    else chord.key = lower;
+    else {
+      if (keySet) {
+        throw new Error(
+          `Invalid shortcut '${original}': multiple non-modifier keys in '${chordStr}'`,
+        );
+      }
+      chord.key = lower;
+      keySet = true;
+    }
   }
-  if (!chord.key) {
+  if (!keySet) {
     throw new Error(`Invalid shortcut '${original}': no key in '${chordStr}'`);
   }
   return chord;
@@ -132,6 +141,13 @@ export function matchSequence(
   sequences: KeySequence[],
   platform: Platform = getPlatform(),
 ): SequenceMatchResult {
+  // Reject candidates carrying the non-primary modifier (Ctrl on mac,
+  // Meta on other) — same rule matchChord enforces. Without this, e.g.
+  // Ctrl+G on mac would normalise to {key:'g'} and incorrectly advance
+  // a "g s" sequence.
+  const otherMod = platform === "mac" ? event.ctrlKey : event.metaKey;
+  if (otherMod) return { kind: "miss" };
+
   // Build the "what would the buffer look like with this event?" candidate.
   const candidateChord: KeyChord = {
     key: event.key.toLowerCase(),

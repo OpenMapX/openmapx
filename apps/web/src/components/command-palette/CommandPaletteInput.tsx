@@ -7,6 +7,7 @@ import IconButton from "@mui/material/IconButton";
 import InputBase from "@mui/material/InputBase";
 import { useTranslations } from "next-intl";
 import { forwardRef, type KeyboardEvent } from "react";
+import { COMMAND_PALETTE_LISTBOX_ID } from "./constants";
 
 interface Props {
   query: string;
@@ -47,7 +48,7 @@ export const CommandPaletteInput = forwardRef<HTMLInputElement, Props>(function 
         inputProps={{
           role: "combobox",
           "aria-expanded": true,
-          "aria-controls": "command-palette-listbox",
+          "aria-controls": COMMAND_PALETTE_LISTBOX_ID,
           "aria-activedescendant": activeDescendantId ?? undefined,
           "aria-autocomplete": "list",
         }}

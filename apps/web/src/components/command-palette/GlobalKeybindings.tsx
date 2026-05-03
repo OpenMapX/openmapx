@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CommandPalette } from "./CommandPalette";
+import { SEARCH_INPUT_ID } from "./constants";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { useCommandSources } from "./useCommandSources";
 import { useGlobalKeybindings } from "./useGlobalKeybindings";
 
 export function GlobalKeybindings() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const commands = useCommandSources({ openShortcutsDialog: () => setShortcutsOpen(true) });
+  // Stable references so useCommandSources' useMemo deps don't churn.
+  const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
+  const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
+  const commands = useCommandSources({ openShortcutsDialog: openShortcuts });
 
   useGlobalKeybindings({
     commands,
-    onOpenShortcuts: () => setShortcutsOpen(true),
+    onOpenShortcuts: openShortcuts,
     isShortcutsDialogOpen: shortcutsOpen,
   });
 
@@ -25,9 +29,7 @@ export function GlobalKeybindings() {
         const tag = target.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
       }
-      const el = document.querySelector<HTMLInputElement>(
-        'input[aria-label="search"], input[placeholder*="Search"], input[placeholder*="Suchen"]',
-      );
+      const el = document.getElementById(SEARCH_INPUT_ID) as HTMLInputElement | null;
       if (el) {
         e.preventDefault();
         el.focus();
@@ -40,12 +42,8 @@ export function GlobalKeybindings() {
 
   return (
     <>
-      <CommandPalette onOpenShortcuts={() => setShortcutsOpen(true)} />
-      <KeyboardShortcutsDialog
-        open={shortcutsOpen}
-        onClose={() => setShortcutsOpen(false)}
-        commands={commands}
-      />
+      <CommandPalette onOpenShortcuts={openShortcuts} />
+      <KeyboardShortcutsDialog open={shortcutsOpen} onClose={closeShortcuts} commands={commands} />
     </>
   );
 }

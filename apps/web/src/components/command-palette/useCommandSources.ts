@@ -46,7 +46,7 @@ interface UseCommandSourcesOptions {
   openShortcutsDialog: () => void;
 }
 
-export function useCommandSources(opts: UseCommandSourcesOptions): Command[] {
+export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOptions): Command[] {
   const t = useTranslations("commandPalette");
   const locale = useLocale();
   const { setMode, mode } = useColorScheme();
@@ -253,7 +253,7 @@ export function useCommandSources(opts: UseCommandSourcesOptions): Command[] {
         iconKey: "help",
         shortcut: PARSED.shortcuts,
         run: () => {
-          opts.openShortcutsDialog();
+          openShortcutsDialog();
         },
       },
     );
@@ -285,6 +285,6 @@ export function useCommandSources(opts: UseCommandSourcesOptions): Command[] {
     mode,
     setMode,
     myLocation,
-    opts,
+    openShortcutsDialog,
   ]);
 }

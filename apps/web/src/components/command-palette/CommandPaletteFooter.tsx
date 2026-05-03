@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
+import { getPlatform } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 
 const KBD_SX = {
@@ -23,6 +24,8 @@ export function CommandPaletteFooter() {
   const isXs = useMediaQuery(theme.breakpoints.down("sm"));
   if (isXs) return null;
 
+  const modKey = getPlatform() === "mac" ? "⌘" : "Ctrl";
+
   return (
     <Box
       sx={{
@@ -38,7 +41,7 @@ export function CommandPaletteFooter() {
     >
       <FooterHint kbd={["↑", "↓"]} label={t("footerNavigate")} />
       <FooterHint kbd={["↵"]} label={t("footerSelect")} />
-      <FooterHint kbd={["⌘", "↵"]} label={t("footerSelectAndKeep")} />
+      <FooterHint kbd={[modKey, "↵"]} label={t("footerSelectAndKeep")} />
       <FooterHint kbd={["esc"]} label={t("footerClose")} />
     </Box>
   );

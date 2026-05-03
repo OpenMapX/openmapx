@@ -25,6 +25,9 @@ interface Props {
    * When `null`/`undefined`, the list renders grouped from `commands`.
    */
   rankedOverride?: Command[] | null;
+  /** id forwarded to the underlying `<List role="listbox">` so the input's
+   * `aria-controls` resolves to the actual listbox element. */
+  listboxId?: string;
 }
 
 export function CommandPaletteList({
@@ -33,13 +36,14 @@ export function CommandPaletteList({
   selectedId,
   onRun,
   rankedOverride,
+  listboxId,
 }: Props) {
   const t = useTranslations("commandPalette");
 
   if (rankedOverride) {
     // Filtered flat list
     return (
-      <List role="listbox" aria-label={t("placeholder")} sx={{ py: 0 }}>
+      <List id={listboxId} role="listbox" aria-label={t("placeholder")} sx={{ py: 0 }}>
         {rankedOverride.map((cmd) => (
           <CommandPaletteRow
             key={cmd.id}
@@ -56,7 +60,7 @@ export function CommandPaletteList({
   // Grouped, no query
   const visibleCommands = getDefaultCommandPaletteRows(commands);
   return (
-    <List role="listbox" aria-label={t("placeholder")} sx={{ py: 0 }}>
+    <List id={listboxId} role="listbox" aria-label={t("placeholder")} sx={{ py: 0 }}>
       {GROUP_ORDER.map((group) => {
         const groupCommands = visibleCommands.filter((c) => c.group === group);
         if (groupCommands.length === 0) return null;
