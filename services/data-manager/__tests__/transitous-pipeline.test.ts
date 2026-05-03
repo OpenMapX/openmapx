@@ -276,7 +276,7 @@ describe("downloadGtfsViaTransitous", () => {
     ]);
   });
 
-  it("does not count unchanged stale archives as freshly downloaded after a failed refresh", async () => {
+  it("preserves existing archives across a failed refresh and does not stamp them as freshly downloaded", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-transitous-stale-archive-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -330,12 +330,22 @@ describe("downloadGtfsViaTransitous", () => {
         message: "HTTP 503",
       },
     ]);
-    expect(existsSync(staleArchive)).toBe(false);
 
+    // Crash-resume: the previously downloaded archive stays on disk so the
+    // next run picks up where this one left off.
+    expect(existsSync(staleArchive)).toBe(true);
+    expect(readFileSync(staleArchive, "utf-8")).toBe("STALE");
+
+    // …and the store keeps the prior downloadedAt, not today's date — the
+    // unchanged archive is not counted as a fresh download.
     const state = JSON.parse(readFileSync(join(dataDir, ".data-manager-state.json"), "utf-8")) as {
       datasets: Array<{ id: string; downloadedAt: string }>;
     };
-    expect(state.datasets).toEqual([]);
+    expect(state.datasets).toHaveLength(1);
+    expect(state.datasets[0]).toMatchObject({
+      id: "de_bvg",
+      downloadedAt: "2026-04-19T12:00:00.000Z",
+    });
   });
 
   it("excludes Transitland GBFS-only sources from GTFS schedule counts", async () => {

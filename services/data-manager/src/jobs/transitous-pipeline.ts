@@ -408,13 +408,25 @@ function pruneFeedsOutsideCountryFilter(gtfsDir: string, countries: string[]): v
   }
 }
 
-function purgeFeedsForCountryFilter(gtfsDir: string, countries: string[]): void {
+/**
+ * After a fully-successful pipeline run, remove archives for feeds that the
+ * Transitous catalog no longer lists (i.e. feeds that disappeared upstream).
+ * Files still expected by the catalog are kept regardless of mtime, so feeds
+ * fetch.py left untouched because they were already up-to-date are preserved.
+ */
+function pruneFeedsNotInCatalog(
+  gtfsDir: string,
+  countries: string[],
+  expectedFeedIds: ReadonlySet<string>,
+): void {
   if (!existsSync(gtfsDir)) return;
   const selected = countries.length > 0 ? new Set(countries) : null;
   for (const name of readdirSync(gtfsDir)) {
     if (!GTFS_ARCHIVE_RE.test(name)) continue;
     const prefix = name.split(/[_-]/)[0]?.toLowerCase();
     if (selected && (!prefix || !selected.has(prefix))) continue;
+    const id = datasetIdFromArchive(name).toLowerCase();
+    if (expectedFeedIds.has(id)) continue;
     rmSync(join(gtfsDir, name), { force: true });
   }
 }
@@ -498,9 +510,27 @@ export async function downloadGtfsViaTransitous(
     }
     const skippedCount = requestedCount - selectedCount;
 
-    // Treat the selected-country refresh as authoritative: clear the matching
-    // archives first so disappeared or failed feeds do not linger as stale data.
-    purgeFeedsForCountryFilter(gtfsDir, countries);
+    // No upfront purge: a crash mid-pipeline (OOM, container restart) used to
+    // wipe everything before fetch.py could re-download it. Instead, the post-
+    // pipeline cleanup below removes only files no longer in the catalog, and
+    // only when the run completed without failures.
+    //
+    // Snapshot the mtime of every existing archive so that, on a partial
+    // failure, we can tell which entries fetch.py actually rewrote during
+    // this run versus archives left over from a previous run. This is more
+    // robust than a single pipeline-start timestamp because the test/fixture
+    // setup (and very fast pipelines) can land both file mtime and start
+    // timestamp inside the same millisecond.
+    const preFetchMtimes = new Map<string, number>();
+    for (const archive of scanGtfsArchives(gtfsDir)) {
+      try {
+        preFetchMtimes.set(archive.path, statSync(archive.path).mtimeMs);
+      } catch {
+        // Best effort — if we can't read mtime now we'll treat the archive as
+        // pre-existing and only count it as fresh if it gains a newer mtime.
+      }
+    }
+
     const parseFailures = selectedFeedFiles.flatMap((feed) =>
       feed.parseFailure ? [feed.parseFailure] : [],
     );
@@ -509,22 +539,62 @@ export async function downloadGtfsViaTransitous(
       ...parseFailures,
       ...(await runFetchPipeline(catalogDir, runnableFeedFiles, runner)),
     ];
-    if (failures.length === 0) {
-      await garbageCollectTransitousOutputs(catalogDir, runner);
-    }
-    pruneFeedsOutsideCountryFilter(gtfsDir, countries);
 
     const refreshedAt = now();
+    const expectedFeedIds = new Set(
+      selectedFeedFiles.flatMap((feed) =>
+        feed.activeScheduleSources.map((source) => source.id.toLowerCase()),
+      ),
+    );
+
+    if (failures.length === 0) {
+      // Full success — safe to garbage-collect Transitous intermediates and
+      // prune archives the catalog no longer lists. The store is replaced
+      // wholesale so it reflects exactly what's on disk.
+      await garbageCollectTransitousOutputs(catalogDir, runner);
+      pruneFeedsNotInCatalog(gtfsDir, countries, expectedFeedIds);
+      pruneFeedsOutsideCountryFilter(gtfsDir, countries);
+
+      const currentArchives = scanGtfsArchives(gtfsDir);
+      const datasets = currentArchives.map((archive) => toDatasetMetadata(archive, refreshedAt));
+      opts.store.replaceType("gtfs", datasets);
+      return {
+        requestedCount,
+        selectedCount,
+        skippedCount,
+        downloaded: datasets,
+        failures: [],
+        partialSuccess: false,
+      };
+    }
+
+    // Partial / full failure — preserve every existing archive so the next
+    // run can resume rather than start over. Only archives modified during
+    // this run are reported as freshly downloaded; existing archives keep
+    // their prior `downloadedAt` because we don't touch the store for them.
     const currentArchives = scanGtfsArchives(gtfsDir);
-    const datasets = currentArchives.map((archive) => toDatasetMetadata(archive, refreshedAt));
-    opts.store.replaceType("gtfs", datasets);
+    const freshlyWritten = currentArchives.filter((archive) => {
+      let mtimeMs: number;
+      try {
+        mtimeMs = statSync(archive.path).mtimeMs;
+      } catch {
+        return false;
+      }
+      const previous = preFetchMtimes.get(archive.path);
+      return previous === undefined || mtimeMs > previous;
+    });
+    const downloaded = freshlyWritten.map((archive) => toDatasetMetadata(archive, refreshedAt));
+    for (const dataset of downloaded) {
+      opts.store.upsert(dataset);
+    }
+
     return {
       requestedCount,
       selectedCount,
       skippedCount,
-      downloaded: datasets,
+      downloaded,
       failures,
-      partialSuccess: datasets.length > 0 && failures.length > 0,
+      partialSuccess: downloaded.length > 0 && failures.length > 0,
     };
   } finally {
     await resetTransitousCatalog(catalogDir, runner);
