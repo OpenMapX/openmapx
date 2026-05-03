@@ -17,6 +17,8 @@
     },
     "memory": "2g",
     "restart": "unless-stopped",
+    "entrypoint": ["/usr/local/bin/openmapx-postgis-entrypoint.sh"],
+    "command": ["postgres"],
     "healthcheck": {
       "type": "exec",
       "command": ["pg_isready", "-U", "postgres"],
@@ -27,6 +29,13 @@
   },
   "provides": ["database"],
   "volumes": [{ "name": "openmapx-pgdata", "mountAt": "/var/lib/postgresql", "backup": true }],
+  "bindMounts": [
+    {
+      "source": "scripts/sync-password.sh",
+      "target": "/usr/local/bin/openmapx-postgis-entrypoint.sh",
+      "readOnly": true
+    }
+  ],
   "exposure": {
     "hostPorts": [{ "container": 5432, "host": 5432, "bindAddress": "127.0.0.1" }]
   },
