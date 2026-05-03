@@ -150,4 +150,15 @@ describe("matchSequence", () => {
     const first = matchSequence([], evt("g", { meta: true }), sequences, "other");
     expect(first.kind).toBe("miss");
   });
+
+  it("returns matchedIndex of the matched sequence", () => {
+    const sequences = [parseShortcut("g s"), parseShortcut("g d"), parseShortcut("g n")];
+    const partial = matchSequence([], evt("g"), sequences, "mac");
+    expect(partial.kind).toBe("partial");
+    if (partial.kind !== "partial") return;
+    const final = matchSequence(partial.buffered, evt("d"), sequences, "mac");
+    expect(final.kind).toBe("match");
+    if (final.kind !== "match") return;
+    expect(final.matchedIndex).toBe(1);
+  });
 });

@@ -19,8 +19,12 @@ import { SEARCH_INPUT_ID } from "./constants";
 const SEQUENCE_TIMEOUT_MS = 1200;
 
 // Pre-parsed once at module load so the keydown handler doesn't re-parse on
-// every keystroke.
+// every keystroke. The handler indexes `[0]`, so this must stay a single chord.
 const PALETTE_TOGGLE = parseShortcut("Mod+K");
+if (PALETTE_TOGGLE.length !== 1) {
+  throw new Error("PALETTE_TOGGLE must be a single chord");
+}
+const PALETTE_TOGGLE_CHORD = PALETTE_TOGGLE[0];
 
 interface Options {
   commands: Command[];
@@ -115,7 +119,7 @@ export function useGlobalKeybindings(opts: Options) {
       }
 
       // 2. Cmd+K — handle from anywhere, even inputs
-      if (matchChord(event, PALETTE_TOGGLE[0])) {
+      if (matchChord(event, PALETTE_TOGGLE_CHORD)) {
         event.preventDefault();
         useCommandPaletteStore.getState().toggle();
         clearBuffer();
@@ -165,12 +169,8 @@ export function useGlobalKeybindings(opts: Options) {
       const result = matchSequence(buffer.current, event, sequences);
       if (result.kind === "match") {
         event.preventDefault();
-        const matched = result.consumed;
-        const idx = sequences.findIndex(
-          (s) => s.length === matched.length && s.every((c, i) => chordEqual(c, matched[i])),
-        );
-        if (idx >= 0) {
-          const cmd = cmdsForSeq[idx];
+        const cmd = cmdsForSeq[result.matchedIndex];
+        if (cmd) {
           try {
             cmd.run();
           } catch (e) {
@@ -202,15 +202,6 @@ export function useGlobalKeybindings(opts: Options) {
       clearBuffer();
     };
   }, []);
-}
-
-function chordEqual(a: KeyChord, b: KeyChord): boolean {
-  return (
-    a.key === b.key &&
-    (a.ctrl ?? false) === (b.ctrl ?? false) &&
-    (a.shift ?? false) === (b.shift ?? false) &&
-    (a.alt ?? false) === (b.alt ?? false)
-  );
 }
 
 // Re-export for callers that want to register their own non-command shortcuts.

@@ -1,5 +1,6 @@
 export type { KeyEventLike } from "./keybindings";
 export {
+  chordsEqual,
   formatShortcut,
   getPlatform,
   matchChord,

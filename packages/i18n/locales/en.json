@@ -510,6 +510,7 @@
     "nearbyMapCenter": "this area",
     "noResults": "No commands match",
     "searchOnMap": "Search “{query}” on map",
+    "expandMore": "Show {count} more",
     "active": "On",
     "footerNavigate": "Navigate",
     "footerSelect": "Select",

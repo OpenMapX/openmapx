@@ -136,7 +136,7 @@ export function matchChord(
 
 /** Try to advance the running buffer by one event. Returns: */
 export type SequenceMatchResult =
-  | { kind: "match"; consumed: KeyChord[] }
+  | { kind: "match"; consumed: KeyChord[]; matchedIndex: number }
   | { kind: "partial"; buffered: KeyChord[] }
   | { kind: "miss" };
 
@@ -171,11 +171,12 @@ export function matchSequence(
   if (!candidateChord.alt) delete candidateChord.alt;
   const next = [...buffer, candidateChord];
 
-  for (const seq of sequences) {
+  for (let i = 0; i < sequences.length; i++) {
+    const seq = sequences[i];
     if (seq.length < next.length) continue;
-    const matchesPrefix = next.every((c, i) => chordsEqual(c, seq[i]));
+    const matchesPrefix = next.every((c, j) => chordsEqual(c, seq[j]));
     if (!matchesPrefix) continue;
-    if (seq.length === next.length) return { kind: "match", consumed: next };
+    if (seq.length === next.length) return { kind: "match", consumed: next, matchedIndex: i };
     return { kind: "partial", buffered: next };
   }
   return { kind: "miss" };
@@ -185,7 +186,7 @@ function isShiftImplicitInKey(key: string): boolean {
   return key.length === 1 && key.toLowerCase() === key.toUpperCase();
 }
 
-function chordsEqual(a: KeyChord, b: KeyChord): boolean {
+export function chordsEqual(a: KeyChord, b: KeyChord): boolean {
   return (
     a.key === b.key &&
     (a.ctrl ?? false) === (b.ctrl ?? false) &&

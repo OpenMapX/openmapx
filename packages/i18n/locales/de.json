@@ -510,6 +510,7 @@
     "nearbyMapCenter": "diesen Bereich",
     "noResults": "Keine Befehle gefunden",
     "searchOnMap": "„{query}“ auf der Karte suchen",
+    "expandMore": "{count} weitere anzeigen",
     "active": "Ein",
     "footerNavigate": "Navigieren",
     "footerSelect": "Auswählen",

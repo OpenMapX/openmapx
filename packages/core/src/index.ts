@@ -168,6 +168,7 @@ export type {
   SequenceMatchResult,
 } from "./commands";
 export {
+  chordsEqual,
   formatShortcut,
   getPlatform,
   matchChord,

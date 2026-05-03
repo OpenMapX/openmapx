@@ -27,6 +27,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { localeNames, locales } from "@/i18n/config";
 import { shareCurrentUrl } from "@/lib/deepLink";
+import { useMapOptional } from "@/lib/MapContext";
 import { setLocaleAndReload } from "@/lib/setLocale";
 import { LAYER_SELECTOR_OPEN_EVENT } from "./constants";
 import { useMyLocation } from "./useMyLocation";
@@ -52,6 +53,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const locale = useLocale();
   const { setMode, mode } = useColorScheme();
   const myLocation = useMyLocation();
+  const hasMap = useMapOptional() !== null;
   const integrations = useIntegrationRegistry();
 
   const activeLayer = useLayerStore((s) => s.activeLayer);
@@ -109,10 +111,10 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
       // Keywords cover the canonical overlay id, the integration service id,
       // and the English name (locale-independent fallback). This means typing
       // "weather", "transit", etc. matches even when the user's locale uses a
-      // different word for the displayed name.
-      const keywords = [overlay.id, overlay.serviceId, enStrings?.name]
-        .filter((x): x is string => Boolean(x))
-        .map((x) => x.toLowerCase());
+      // different word for the displayed name. (scoreCommand lowercases.)
+      const keywords = [overlay.id, overlay.serviceId, enStrings?.name].filter((x): x is string =>
+        Boolean(x),
+      );
 
       out.push({
         id: `overlays.${overlay.id}`,
@@ -235,12 +237,20 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         shortcut: PARSED.theme,
         keywords: ["dark", "light", "system", "night"],
         run: () => {
-          const next = mode === "light" ? "dark" : mode === "dark" ? "system" : "light";
+          // `mode` may be undefined before MUI's color-scheme hydration; treat
+          // that as "system" so the first press is deterministic.
+          const current = mode ?? "system";
+          const next = current === "light" ? "dark" : current === "dark" ? "system" : "light";
           setMode(next);
           return false;
         },
       },
-      {
+    );
+
+    // "Go to my location" only makes sense on a map route; outside
+    // <MapProvider> the command would silently no-op (no flyTo, no prompt).
+    if (hasMap) {
+      out.push({
         id: "actions.myLocation",
         group: "actions",
         label: t("cmdMyLocation"),
@@ -249,18 +259,23 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         run: () => {
           myLocation();
         },
+      });
+    }
+
+    out.push({
+      // Note: `KeyboardShortcutsDialog` filters this command out of its own
+      // shortcut listing — the "Show keyboard shortcuts" row is hardcoded
+      // under Navigation there to keep ⌘K / ? / `/` together. Renaming
+      // `actions.shortcuts` will break that filter.
+      id: "actions.shortcuts",
+      group: "actions",
+      label: t("cmdShowShortcuts"),
+      iconKey: "help",
+      shortcut: PARSED.shortcuts,
+      run: () => {
+        openShortcutsDialog();
       },
-      {
-        id: "actions.shortcuts",
-        group: "actions",
-        label: t("cmdShowShortcuts"),
-        iconKey: "help",
-        shortcut: PARSED.shortcuts,
-        run: () => {
-          openShortcutsDialog();
-        },
-      },
-    );
+    });
 
     // Language switchers (one per non-current locale). Native names come from
     // the shared `localeNames` map in @openmapx/i18n.
@@ -272,7 +287,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         group: "actions",
         label: t("cmdSwitchLanguage", { locale: native }),
         iconKey: "language",
-        keywords: [loc, native.toLowerCase()],
+        keywords: [loc, native],
         run: () => setLocaleAndReload(loc),
       });
     }
@@ -288,6 +303,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     mode,
     setMode,
     myLocation,
+    hasMap,
     openShortcutsDialog,
   ]);
 }

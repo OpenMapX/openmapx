@@ -2,6 +2,7 @@
 
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import DirectionsIcon from "@mui/icons-material/Directions";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExploreIcon from "@mui/icons-material/Explore";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import LayersIcon from "@mui/icons-material/Layers";
@@ -39,6 +40,7 @@ const ICONS: Record<string, ReactNode> = {
   language: <TranslateIcon fontSize="small" />,
   "my-location": <MyLocationIcon fontSize="small" />,
   help: <HelpOutlineIcon fontSize="small" />,
+  expand: <ExpandMoreIcon fontSize="small" />,
 };
 
 export function commandIcon(iconKey: string): ReactNode {
