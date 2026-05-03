@@ -36,6 +36,7 @@ import {
   useAutocomplete,
   useCapabilities,
   useCategorySearchStore,
+  useCommandPaletteStore,
   useDataSourceStore,
   useDebounce,
   useDirectionsStore,
@@ -124,6 +125,7 @@ export function SearchBar() {
   const t = useTranslations("search");
   const tModes = useTranslations("searchModes");
   const tSaved = useTranslations("saved");
+  const tCmd = useTranslations("commandPalette");
   const locale = useLocale();
   const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
     useSearchStore();
@@ -589,6 +591,44 @@ export function SearchBar() {
           <IconButton type="submit" size="small" aria-label={t("searchAriaLabel")}>
             <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
           </IconButton>
+
+          <Tooltip title={tCmd("open")} placement="bottom">
+            <Box
+              component="kbd"
+              role="button"
+              tabIndex={0}
+              onClick={() => useCommandPaletteStore.getState().open()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  useCommandPaletteStore.getState().open();
+                }
+              }}
+              sx={(theme) => ({
+                display: { xs: "none", sm: "inline-flex" },
+                alignItems: "center",
+                fontFamily: "monospace",
+                fontSize: 11,
+                px: 0.75,
+                py: 0.25,
+                ml: 0.5,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 1,
+                color: "text.secondary",
+                cursor: "pointer",
+                userSelect: "none",
+                "&:hover": { bgcolor: "action.hover" },
+                "&:focus-visible": {
+                  outline: `2px solid ${theme.palette.primary.main}`,
+                  outlineOffset: 1,
+                },
+              })}
+            >
+              {typeof navigator !== "undefined" && /mac|iphone|ipad|ipod/i.test(navigator.platform)
+                ? "⌘K"
+                : "Ctrl+K"}
+            </Box>
+          </Tooltip>
 
           {hasSidePanel ? (
             <IconButton

@@ -95,6 +95,20 @@ export function LayerSelector() {
     };
   }, []);
 
+  // Allow the command palette (and other callers) to open the layer selector
+  // programmatically by dispatching `openmapx:open-layer-selector`. We only
+  // open the full "Map Details" popover — not the desktop quick-selector dock
+  // (which would otherwise show simultaneously).
+  useEffect(() => {
+    const onOpen = () => {
+      if (desktopAnchorRef.current) {
+        setAnchorEl(desktopAnchorRef.current);
+      }
+    };
+    window.addEventListener("openmapx:open-layer-selector", onOpen);
+    return () => window.removeEventListener("openmapx:open-layer-selector", onOpen);
+  }, []);
+
   useEffect(() => {
     if (!desktopDock) {
       setDesktopExpanded(false);

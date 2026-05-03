@@ -89,3 +89,8 @@ export function useMap(): MapContextValue {
   if (!ctx) throw new Error("useMap must be used within <MapProvider>");
   return ctx;
 }
+
+/** Returns the map context if available, or `null` outside `<MapProvider>`. */
+export function useMapOptional(): MapContextValue | null {
+  return useContext(MapContext);
+}
