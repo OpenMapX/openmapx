@@ -218,6 +218,7 @@ export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
 export { useAutocomplete } from "./hooks/useAutocomplete";
 export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities";
 export { isAreaTooLarge, useCategorySearch } from "./hooks/useCategorySearch";
+export { useChipTranslations } from "./hooks/useChipTranslations";
 // Hooks — General
 export { useCurrentWeather } from "./hooks/useCurrentWeather";
 export { useDataSourceMatch } from "./hooks/useDataSourceMatch";
@@ -250,8 +251,8 @@ export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { usePlacePhotos } from "./hooks/usePlacePhotos";
-// Hooks — Reviews (Mangrove)
 export { usePlaceReviews, useReviewAggregate } from "./hooks/usePlaceReviews";
+export { usePresetSuggest } from "./hooks/usePresetSuggest";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export {
   useCreateList,
@@ -394,6 +395,8 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
+export type { ChipTranslation } from "./services/presets/chip-translations";
+export type { PresetMatch } from "./services/presets/types";
 // Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export { useCommandPaletteStore } from "./stores/commandPaletteStore";
@@ -553,7 +556,7 @@ export type {
   PolygonGeometry,
 } from "./utils/overpass/types";
 export type { OsmFilter } from "./utils/overpass.service";
-export { CATEGORY_FILTERS, searchByCategory } from "./utils/overpass.service";
+export { CATEGORY_FILTERS, searchByCategory, searchByOsmTags } from "./utils/overpass.service";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,

@@ -1,5 +1,6 @@
 import type { BoundingBox } from "../types/geometry";
 import { overpassQuery } from "./overpass";
+import type { OverpassElement } from "./overpass/types";
 
 const MAX_RESULTS = 50;
 
@@ -209,6 +210,28 @@ function buildCategoryQuery(filters: OsmFilter[], bbox: BoundingBox): string {
   return `[out:json][timeout:15];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
 }
 
+/**
+ * Build an Overpass query for a single tag-set. All tag pairs are ANDed onto
+ * one element selector (unlike `buildCategoryQuery`, where each filter is an
+ * independent OR alternative). Wildcard values (`"*"`) become key-existence
+ * predicates (`["key"]`) instead of literal-string matches.
+ */
+function buildPresetQuery(tags: Record<string, string>, bbox: BoundingBox): string {
+  const { south, west, north, east } = bbox;
+  const bboxStr = `${south},${west},${north},${east}`;
+  const tagPredicates = Object.entries(tags)
+    .map(([key, value]) => (value === "*" ? `["${key}"]` : `["${key}"="${value}"]`))
+    .join("");
+  if (tagPredicates.length === 0) {
+    // Defensive: empty tag-set would otherwise match every node/way in the bbox.
+    return `[out:json][timeout:15];\n(\n);\nout center ${MAX_RESULTS};`;
+  }
+  const lines = [`node${tagPredicates}(${bboxStr});`, `way${tagPredicates}(${bboxStr});`].join(
+    "\n  ",
+  );
+  return `[out:json][timeout:15];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+}
+
 function formatAddress(tags: Record<string, string>): string | undefined {
   const street = tags["addr:street"];
   const number = tags["addr:housenumber"];
@@ -236,16 +259,9 @@ function getCategoryValue(tags: Record<string, string>): string | undefined {
   );
 }
 
-export async function searchByCategory(
-  filters: OsmFilter[],
-  bbox: BoundingBox,
-): Promise<CategoryPlaceResult[]> {
-  const query = buildCategoryQuery(filters, bbox);
-  const data = await overpassQuery(query);
-
+function mapOverpassElements(elements: readonly OverpassElement[]): CategoryPlaceResult[] {
   const results: CategoryPlaceResult[] = [];
-
-  for (const el of data.elements) {
+  for (const el of elements) {
     const tags = el.tags ?? {};
     const name =
       tags.name ??
@@ -284,6 +300,29 @@ export async function searchByCategory(
       openingHours: tags.opening_hours ?? undefined,
     });
   }
-
   return results;
+}
+
+export async function searchByCategory(
+  filters: OsmFilter[],
+  bbox: BoundingBox,
+): Promise<CategoryPlaceResult[]> {
+  const query = buildCategoryQuery(filters, bbox);
+  const data = await overpassQuery(query);
+  return mapOverpassElements(data.elements);
+}
+
+/**
+ * Search Overpass for OSM features whose tags match every entry in the supplied
+ * tag-set (AND semantics). Wildcard values (`"*"`) match any value for the key.
+ * Used for iD-preset-driven queries; for chip categories that union multiple
+ * alternatives, use `searchByCategory` instead.
+ */
+export async function searchByOsmTags(
+  tags: Record<string, string>,
+  bbox: BoundingBox,
+): Promise<CategoryPlaceResult[]> {
+  const query = buildPresetQuery(tags, bbox);
+  const data = await overpassQuery(query);
+  return mapOverpassElements(data.elements);
 }

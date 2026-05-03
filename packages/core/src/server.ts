@@ -55,6 +55,9 @@ export {
 export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
 // Service plugin system (manifest loader, compose renderer — all uses node:fs)
 export * as services from "./services";
+export { getChipTranslations, getPresetById, suggestPresets } from "./services/presets";
+export type { ChipTranslation } from "./services/presets/chip-translations";
+export type { PresetMatch } from "./services/presets/types";
 // Subprocess helper used by git-clone and the community-integration build step
 export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
 export type { Identified, Ids } from "./types/identified";

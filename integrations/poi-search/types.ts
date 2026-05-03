@@ -519,7 +519,16 @@ export interface PoiSearchProvider {
   search(
     category: string,
     bbox: BoundingBox,
-    options?: { lang?: string; filters?: Record<string, unknown> },
+    options?: {
+      lang?: string;
+      filters?: Record<string, unknown>;
+      /** Pre-derived OSM tag-set (AND semantics; `"*"` means key existence). When
+       *  present, the provider should query for features matching all of these
+       *  tags together instead of looking up `category` in its internal
+       *  `CATEGORY_FILTERS` map. Set by the orchestrator on `preset:`-prefixed
+       *  category requests. */
+      osmTags?: Record<string, string>;
+    },
   ): Promise<PoiSearchResult[]>;
   getDetail?(poiId: string): Promise<Place | null>;
 }

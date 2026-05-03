@@ -1,5 +1,6 @@
 import type { IntegrationContext } from "@openmapx/core";
 import { OverpassTimeoutError } from "@openmapx/core";
+import { getChipTranslations, suggestPresets } from "@openmapx/core/server";
 import { createPoiSearchOrchestrator } from "./orchestrator.js";
 
 function round(value: number, decimals: number): number {
@@ -53,5 +54,35 @@ export function setup(ctx: IntegrationContext): void {
       }
       throw err;
     }
+  });
+
+  ctx.registerRoute("GET", "/preset-suggest", async (req, reply) => {
+    const { q, lang, limit } = req.query as { q?: string; lang?: string; limit?: string };
+
+    if (!q || q.trim().length < 2) {
+      reply.header("Cache-Control", "public, max-age=60");
+      reply.send({ matches: [] });
+      return;
+    }
+
+    const parsedLimit = limit ? Number.parseInt(limit, 10) : Number.NaN;
+    const limitN = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(20, parsedLimit)) : 8;
+    const cacheKey = `preset-suggest:${lang ?? "en"}:${limitN}:${q.toLowerCase()}`;
+    const result = await ctx.cache.withCache(cacheKey, 300, async () => ({
+      matches: suggestPresets(q, lang, limitN),
+    }));
+
+    reply.header("Cache-Control", "public, max-age=300");
+    reply.send(result);
+  });
+
+  ctx.registerRoute("GET", "/chip-translations", async (req, reply) => {
+    const { lang } = req.query as { lang?: string };
+    const cacheKey = `chip-translations:${lang ?? "en"}`;
+    const result = await ctx.cache.withCache(cacheKey, 3600, async () => ({
+      translations: getChipTranslations(lang),
+    }));
+    reply.header("Cache-Control", "public, max-age=3600");
+    reply.send(result);
   });
 }

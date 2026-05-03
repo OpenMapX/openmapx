@@ -11,6 +11,8 @@ export const API_ENDPOINTS = {
   traffic: "/api/traffic",
   streetViewImages: "/api/integrations/street-view-mapillary/streetview/images",
   categorySearch: "/api/integrations/poi-search/search",
+  presetSuggest: "/api/integrations/poi-search/preset-suggest",
+  chipTranslations: "/api/integrations/poi-search/chip-translations",
   fuelPricesDetail: "/api/fuel-prices/detail",
   transitStops: "/api/integrations/transit/stops",
   transitStopsNearby: "/api/integrations/transit/stops/nearby",

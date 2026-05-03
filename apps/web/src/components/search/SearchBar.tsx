@@ -39,6 +39,7 @@ import {
   useAutocomplete,
   useCapabilities,
   useCategorySearchStore,
+  useChipTranslations,
   useCommandPaletteStore,
   useDataSourceStore,
   useDebounce,
@@ -48,6 +49,7 @@ import {
   useLabeledPlaces,
   useMenuStore,
   usePlaceStore,
+  usePresetSuggest,
   useSavedPlacesStore,
   useSearchStore,
   useSidebarStore,
@@ -155,6 +157,8 @@ export function SearchBar() {
   const debouncedGeoQuery = useDebounce(query, 400);
   const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
   const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale);
+  const { data: presetData } = usePresetSuggest(debouncedQuery, locale);
+  const { data: chipTranslations = {} } = useChipTranslations(locale);
 
   // Stop search — slower debounce to reduce transit API load
   const rawStopQuery = query.trim().length >= 2 ? query.trim() : "";
@@ -263,11 +267,24 @@ export function SearchBar() {
   const categorySuggestions = useMemo<AutocompleteResult[]>(() => {
     if (q.length < 1) return [];
     const lower = q.toLowerCase();
-    const poiMatches = CATEGORY_DEFINITIONS.filter((cat) =>
-      cat.label.toLowerCase().includes(lower),
-    ).map((cat) => ({
+    const lowerNormalized = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const poiMatches = CATEGORY_DEFINITIONS.filter((cat) => {
+      if (cat.label.toLowerCase().includes(lower)) return true;
+      const tr = chipTranslations[cat.id];
+      if (!tr) return false;
+      if (
+        tr.name
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .includes(lowerNormalized)
+      ) {
+        return true;
+      }
+      return tr.terms.some((term) => term.includes(lowerNormalized));
+    }).map((cat) => ({
       id: `category-${cat.id}`,
-      label: cat.label,
+      label: chipTranslations[cat.id]?.name ?? cat.label,
       sublabel: t("searchCategory"),
       type: "category" as const,
       iconPath: cat.iconPath,
@@ -282,7 +299,17 @@ export function SearchBar() {
         iconPath: ds.iconPath,
       }));
     return [...dsMatches, ...poiMatches];
-  }, [q, t, dataSourceCategories]);
+  }, [q, t, dataSourceCategories, chipTranslations]);
+
+  const presetSuggestions = useMemo<AutocompleteResult[]>(() => {
+    return (presetData?.matches ?? []).map((p) => ({
+      id: `category-preset:${p.id}`,
+      label: p.name,
+      sublabel: t("searchCategory"),
+      type: "category" as const,
+      presetIconKey: p.iconKey,
+    }));
+  }, [presetData, t]);
 
   const stopSuggestions = useMemo<AutocompleteResult[]>(
     () =>
@@ -350,6 +377,7 @@ export function SearchBar() {
         : [
             ...labeledSuggestions,
             ...categorySuggestions,
+            ...presetSuggestions,
             ...narrowResults(suggestions),
             ...narrowResults(stopSuggestions).slice(0, 3),
           ].sort((a, b) => searchRelevance(b, q) - searchRelevance(a, q))
@@ -363,7 +391,15 @@ export function SearchBar() {
           return dlng * dlng + dlat * dlat < 0.0001; // ~1 km
         }) === i,
     );
-  }, [q, syntheticResult, labeledSuggestions, categorySuggestions, suggestions, stopSuggestions]);
+  }, [
+    q,
+    syntheticResult,
+    labeledSuggestions,
+    categorySuggestions,
+    presetSuggestions,
+    suggestions,
+    stopSuggestions,
+  ]);
 
   if (directionsOpen) return null;
 

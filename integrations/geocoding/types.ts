@@ -23,6 +23,9 @@ export interface AutocompleteResult {
   type: "address" | "poi" | "street" | "region" | "category" | "transit_stop" | "labeled_place";
   /** SVG path `d` attribute for the icon (used for category suggestions). */
   iconPath?: string;
+  /** iD preset icon key (e.g. "maki-ice-cream", "temaki-helicopter").
+   *  When present, render via PresetIcon instead of iconPath. */
+  presetIconKey?: string;
   /** Full transit stop data (only when type is "transit_stop"). */
   transitStop?: TransitStop;
   /** Raw category string from the geocoding provider (e.g. "railway/station", "highway/bus_stop"). */

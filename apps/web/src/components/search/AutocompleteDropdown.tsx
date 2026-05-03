@@ -16,6 +16,7 @@ import type { AutocompleteResult } from "@openmapx/core";
 import { isTransitName } from "@openmapx/core";
 import { useEffect, useRef } from "react";
 import { TEAL } from "@/lib/theme";
+import { PresetIcon } from "./PresetIcon";
 
 interface AutocompleteDropdownProps {
   suggestions: AutocompleteResult[];
@@ -59,6 +60,8 @@ function getResultIcon(s: AutocompleteResult): React.ReactNode {
   }
 
   if (s.iconPath) return <CategorySvgIcon path={s.iconPath} />;
+
+  if (s.presetIconKey) return <PresetIcon iconKey={s.presetIconKey} size={20} />;
 
   // Transit stop detection by keywords in label/sublabel
   const text = `${s.label} ${s.sublabel ?? ""}`.toLowerCase();
