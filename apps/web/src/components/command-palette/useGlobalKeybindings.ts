@@ -21,11 +21,9 @@ const SEQUENCE_TIMEOUT_MS = 1200;
 // Pre-parsed once at module load so the keydown handler doesn't re-parse on
 // every keystroke.
 const PALETTE_TOGGLE = parseShortcut("Mod+K");
-const HELP_SEQ = parseShortcut("?");
 
 interface Options {
   commands: Command[];
-  onOpenShortcuts: () => void;
   /** Set to true when KeyboardShortcutsDialog is open (for Esc precedence). */
   isShortcutsDialogOpen: boolean;
 }
@@ -45,20 +43,16 @@ function isMobileLike(): boolean {
 }
 
 export function useGlobalKeybindings(opts: Options) {
-  const { commands, onOpenShortcuts, isShortcutsDialogOpen } = opts;
+  const { commands, isShortcutsDialogOpen } = opts;
   // Refs: avoid re-binding the listener every render; avoid storing in state.
   const commandsRef = useRef(commands);
   const buffer = useRef<KeyChord[]>([]);
   const timer = useRef<number | null>(null);
-  const onOpenShortcutsRef = useRef(onOpenShortcuts);
   const isShortcutsOpenRef = useRef(isShortcutsDialogOpen);
 
   useEffect(() => {
     commandsRef.current = commands;
   }, [commands]);
-  useEffect(() => {
-    onOpenShortcutsRef.current = onOpenShortcuts;
-  }, [onOpenShortcuts]);
   useEffect(() => {
     isShortcutsOpenRef.current = isShortcutsDialogOpen;
   }, [isShortcutsDialogOpen]);
@@ -156,7 +150,9 @@ export function useGlobalKeybindings(opts: Options) {
         return;
       }
 
-      // 5. Match against registered command shortcuts (sequences allowed)
+      // 5. Match against registered command shortcuts (sequences allowed).
+      // Includes `?` via the `actions.shortcuts` command, which is the single
+      // source of truth for opening the keyboard-shortcuts help.
       const sequences: KeySequence[] = [];
       const cmdsForSeq: Command[] = [];
       for (const c of commandsRef.current) {
@@ -165,27 +161,20 @@ export function useGlobalKeybindings(opts: Options) {
           cmdsForSeq.push(c);
         }
       }
-      // Built-in: ? opens shortcuts help (no underlying command shortcut bound)
-      sequences.push(HELP_SEQ);
 
       const result = matchSequence(buffer.current, event, sequences);
       if (result.kind === "match") {
         event.preventDefault();
-        // Find the matched sequence
         const matched = result.consumed;
-        const sameLen = (a: KeyChord[], b: KeyChord[]) =>
-          a.length === b.length && a.every((c, i) => chordEqual(c, b[i]));
-        if (sameLen(matched, HELP_SEQ)) {
-          onOpenShortcutsRef.current();
-        } else {
-          const idx = sequences.findIndex((s) => sameLen(s, matched));
-          if (idx >= 0 && idx < cmdsForSeq.length) {
-            const cmd = cmdsForSeq[idx];
-            try {
-              cmd.run();
-            } catch (e) {
-              console.error(`[command-palette] '${cmd.id}' failed:`, e);
-            }
+        const idx = sequences.findIndex(
+          (s) => s.length === matched.length && s.every((c, i) => chordEqual(c, matched[i])),
+        );
+        if (idx >= 0) {
+          const cmd = cmdsForSeq[idx];
+          try {
+            cmd.run();
+          } catch (e) {
+            console.error(`[command-palette] '${cmd.id}' failed:`, e);
           }
         }
         clearBuffer();

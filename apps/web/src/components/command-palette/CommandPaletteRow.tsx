@@ -43,6 +43,7 @@ export function CommandPaletteRow({ command, selected, onRun, showGroupChip = fa
             height={20}
             fill="currentColor"
             aria-hidden
+            focusable={false}
             style={{ display: "block" }}
           >
             <title>{command.label}</title>

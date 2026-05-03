@@ -25,7 +25,9 @@ interface Props {
   commands: Command[];
 }
 
-const SEARCH_FALLBACK_ID = "search.fallback";
+// Synthetic id (double-underscore prefix) so it can't collide with any real
+// command id in the `search` group.
+const SEARCH_FALLBACK_ID = "__search-fallback__";
 
 export function CommandPalette({ commands }: Props) {
   const theme = useTheme();

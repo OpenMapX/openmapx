@@ -17,7 +17,6 @@ export function GlobalKeybindings() {
 
   useGlobalKeybindings({
     commands,
-    onOpenShortcuts: openShortcuts,
     isShortcutsDialogOpen: shortcutsOpen,
   });
 
