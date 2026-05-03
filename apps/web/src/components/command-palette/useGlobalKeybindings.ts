@@ -14,6 +14,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { useEffect, useRef } from "react";
+import { SEARCH_INPUT_ID } from "./constants";
 
 const SEQUENCE_TIMEOUT_MS = 1200;
 
@@ -141,7 +142,21 @@ export function useGlobalKeybindings(opts: Options) {
         return;
       }
 
-      // 4. Match against registered command shortcuts (sequences allowed)
+      // 4. Built-in "/" — focus the SearchBar. Plain "/" only; modifier
+      // combos belong to the browser/OS. Inherits the typing-target,
+      // dialog-open, and mobile-guard suppression rules above.
+      if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const el = document.getElementById(SEARCH_INPUT_ID) as HTMLInputElement | null;
+        if (el) {
+          event.preventDefault();
+          el.focus();
+          el.select();
+        }
+        clearBuffer();
+        return;
+      }
+
+      // 5. Match against registered command shortcuts (sequences allowed)
       const sequences: KeySequence[] = [];
       const cmdsForSeq: Command[] = [];
       for (const c of commandsRef.current) {

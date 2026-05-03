@@ -18,16 +18,16 @@ import { CommandPaletteFooter } from "./CommandPaletteFooter";
 import { CommandPaletteInput } from "./CommandPaletteInput";
 import { CommandPaletteList, getDefaultCommandPaletteRows } from "./CommandPaletteList";
 import { COMMAND_PALETTE_LISTBOX_ID, SEARCH_INPUT_ID } from "./constants";
-import { useCommandSources } from "./useCommandSources";
 
 interface Props {
-  /** Called when the user runs the "Show keyboard shortcuts" command. */
-  onOpenShortcuts: () => void;
+  /** Command list — provided by `GlobalKeybindings` so the palette, the
+   * shortcuts dialog, and the global listener all share a single instance. */
+  commands: Command[];
 }
 
 const SEARCH_FALLBACK_ID = "search.fallback";
 
-export function CommandPalette({ onOpenShortcuts }: Props) {
+export function CommandPalette({ commands }: Props) {
   const theme = useTheme();
   const isXs = useMediaQuery(theme.breakpoints.down("sm"));
   const t = useTranslations("commandPalette");
@@ -61,8 +61,6 @@ export function CommandPalette({ onOpenShortcuts }: Props) {
       el?.focus();
     });
   }, [close, query, setSearchQuery]);
-
-  const commands = useCommandSources({ openShortcutsDialog: onOpenShortcuts });
 
   // Ranked filtered list when query is present, otherwise the raw command list.
   // When filtering, the synthetic "Search '<q>' on map" row is always appended so
