@@ -47,6 +47,7 @@ export const CommandPaletteInput = forwardRef<HTMLInputElement, Props>(function 
         fullWidth
         inputProps={{
           role: "combobox",
+          "aria-label": t("inputAriaLabel"),
           "aria-expanded": true,
           "aria-controls": COMMAND_PALETTE_LISTBOX_ID,
           "aria-activedescendant": activeDescendantId ?? undefined,

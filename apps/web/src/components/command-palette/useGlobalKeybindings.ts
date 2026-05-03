@@ -127,7 +127,11 @@ export function useGlobalKeybindings(opts: Options) {
         return;
       }
 
-      // 3. Suppress everything else when typing in an input or in a Dialog
+      // 3. Suppress everything else when the user is typing in an input,
+      // or when one of our own dialogs (palette, shortcuts help) is open so
+      // keystrokes inside those surfaces don't fire global shortcuts.
+      // (Other MUI Dialogs are not currently checked — Esc and ⌘K above
+      // are the only bindings expected to work over them.)
       if (isTypingTarget(event.target)) {
         clearBuffer();
         return;

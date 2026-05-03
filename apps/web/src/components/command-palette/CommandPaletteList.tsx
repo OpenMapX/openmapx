@@ -43,7 +43,7 @@ export function CommandPaletteList({
   if (rankedOverride) {
     // Filtered flat list
     return (
-      <List id={listboxId} role="listbox" aria-label={t("placeholder")} sx={{ py: 0 }}>
+      <List id={listboxId} role="listbox" aria-label={t("inputAriaLabel")} sx={{ py: 0 }}>
         {rankedOverride.map((cmd) => (
           <CommandPaletteRow
             key={cmd.id}
@@ -60,7 +60,7 @@ export function CommandPaletteList({
   // Grouped, no query
   const visibleCommands = getDefaultCommandPaletteRows(commands);
   return (
-    <List id={listboxId} role="listbox" aria-label={t("placeholder")} sx={{ py: 0 }}>
+    <List id={listboxId} role="listbox" aria-label={t("inputAriaLabel")} sx={{ py: 0 }}>
       {GROUP_ORDER.map((group) => {
         const groupCommands = visibleCommands.filter((c) => c.group === group);
         if (groupCommands.length === 0) return null;

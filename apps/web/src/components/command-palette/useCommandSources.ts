@@ -57,7 +57,6 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const globeView = useLayerStore((s) => s.globeView);
-  const setGlobeView = useLayerStore((s) => s.setGlobeView);
 
   return useMemo<Command[]>(() => {
     const out: Command[] = [];
@@ -91,7 +90,11 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
       iconKey: "globe",
       isActive: () => globeView,
       run: () => {
-        setGlobeView(!globeView);
+        // Read from the store at run-time so back-to-back invocations
+        // (e.g. ⌘+Enter held) toggle robustly instead of all reading the
+        // same captured value.
+        const current = useLayerStore.getState().globeView;
+        useLayerStore.getState().setGlobeView(!current);
         return false;
       },
     });
@@ -281,7 +284,6 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     activeLayer,
     setActiveLayer,
     globeView,
-    setGlobeView,
     integrations,
     mode,
     setMode,

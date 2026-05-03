@@ -499,6 +499,7 @@
   },
   "commandPalette": {
     "open": "Befehlspalette öffnen",
+    "inputAriaLabel": "Befehlspalette",
     "placeholder": "Befehl eingeben oder suchen…",
     "groupLayers": "Karten",
     "groupOverlays": "Overlays",

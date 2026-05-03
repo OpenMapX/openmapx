@@ -499,6 +499,7 @@
   },
   "commandPalette": {
     "open": "Open command palette",
+    "inputAriaLabel": "Command palette",
     "placeholder": "Type a command or search…",
     "groupLayers": "Layers",
     "groupOverlays": "Overlays",
