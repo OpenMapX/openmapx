@@ -89,6 +89,9 @@ importers:
       fastify:
         specifier: ^5.8.5
         version: 5.8.5
+      gtfs-realtime-bindings-transit:
+        specifier: ^1.8.10
+        version: 1.8.10
       hafas-client:
         specifier: ^6.3.6
         version: 6.3.6

@@ -1,6 +1,13 @@
 import { createRequire } from "node:module";
 import type * as GtfsRealtimeBindings from "gtfs-realtime-bindings-transit";
 
+// The published `gtfs-realtime-bindings-transit` package only exports a
+// `require` condition, so a static ESM `import` would fail under Node's
+// exports-field resolution. createRequire keeps interop simple at the cost
+// of needing the package to live somewhere on Node's resolution path at
+// runtime — apps/api lists it directly in its dependencies so esbuild
+// externalises the require() and pnpm symlinks the package under
+// apps/api/node_modules.
 const require = createRequire(import.meta.url);
 const bindings = require("gtfs-realtime-bindings-transit") as typeof GtfsRealtimeBindings;
 
