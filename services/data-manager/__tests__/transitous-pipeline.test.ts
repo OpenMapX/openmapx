@@ -63,7 +63,7 @@ describe("downloadGtfsViaTransitous", () => {
       opts: { cwd?: string; stdio?: "inherit" | "pipe" },
     ) => {
       calls.push({ command, args, cwd: opts.cwd });
-      if (command === "git" && args.join(" ") === `-C ${catalogDir} reset --hard HEAD`) {
+      if (command === "git" && args.includes("reset") && args.includes("--hard")) {
         writeFileSync(deFeedPath, originalDeFeed);
         return;
       }
@@ -110,11 +110,12 @@ describe("downloadGtfsViaTransitous", () => {
     };
     expect(state.datasets.map((dataset) => dataset.id)).toEqual(["de_bvg", "de_vbb"]);
 
+    const safeDir = `-c safe.directory=${catalogDir}`;
     const callSignatures = calls.map((call) => `${call.command} ${call.args.join(" ")}`);
-    expect(callSignatures).toContain(`git -C ${catalogDir} reset --hard HEAD`);
-    expect(callSignatures).toContain(`git -C ${catalogDir} pull --ff-only`);
+    expect(callSignatures).toContain(`git ${safeDir} -C ${catalogDir} reset --hard HEAD`);
+    expect(callSignatures).toContain(`git ${safeDir} -C ${catalogDir} pull --ff-only`);
     expect(callSignatures).toContain(
-      `git -C ${catalogDir} submodule update --init --checkout --depth 1`,
+      `git ${safeDir} -C ${catalogDir} submodule update --init --checkout --depth 1`,
     );
     expect(callSignatures).toContain("python3 ./src/fetch.py feeds/de.json");
     expect(callSignatures).toContain("python3 ./src/garbage-collect.py --non-interactive");
@@ -130,7 +131,7 @@ describe("downloadGtfsViaTransitous", () => {
       args: string[],
       _opts: { cwd?: string; stdio?: "inherit" | "pipe" },
     ) => {
-      if (command === "git" && args[0] === "clone") {
+      if (command === "git" && args.includes("clone")) {
         expect(existsSync(dataDir)).toBe(true);
         mkdirSync(join(catalogDir, ".git"), { recursive: true });
         mkdirSync(join(catalogDir, "feeds"), { recursive: true });
@@ -308,7 +309,7 @@ describe("downloadGtfsViaTransitous", () => {
       if (command === "python3" && args[0] === "./src/fetch.py") {
         throw new Error("HTTP 503");
       }
-      if (command === "git" && args.join(" ") === `-C ${catalogDir} reset --hard HEAD`) {
+      if (command === "git" && args.includes("reset") && args.includes("--hard")) {
         return;
       }
     };

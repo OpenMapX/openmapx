@@ -130,14 +130,31 @@ async function ensureTransitousCatalog(
   runner: CommandRunner,
 ): Promise<string> {
   const catalogDir = resolve(dataDir, TRANSITOUS_CATALOG_DIR);
+  // The catalog clone may have been written by the data-manager container
+  // (UID 1001 by default) and we're now running as the host operator (UID
+  // 1000). Modern git refuses to operate on a repo with mismatched
+  // ownership unless `safe.directory` is configured. Pass it inline on
+  // every invocation that targets the catalog so the build works without
+  // requiring the operator to fiddle with `git config --global` first.
+  const safeDirArgs = ["-c", `safe.directory=${catalogDir}`];
   if (existsSync(join(catalogDir, ".git"))) {
-    await runner("git", ["-C", catalogDir, "pull", "--ff-only"], {
+    await runner("git", [...safeDirArgs, "-C", catalogDir, "pull", "--ff-only"], {
       cwd: dataDir,
       stdio: "inherit",
     });
     await runner(
       "git",
-      ["-C", catalogDir, "submodule", "update", "--init", "--checkout", "--depth", "1"],
+      [
+        ...safeDirArgs,
+        "-C",
+        catalogDir,
+        "submodule",
+        "update",
+        "--init",
+        "--checkout",
+        "--depth",
+        "1",
+      ],
       {
         cwd: dataDir,
         stdio: "inherit",
@@ -149,7 +166,16 @@ async function ensureTransitousCatalog(
   rmSync(catalogDir, { recursive: true, force: true });
   await runner(
     "git",
-    ["clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules", repoUrl, catalogDir],
+    [
+      ...safeDirArgs,
+      "clone",
+      "--depth",
+      "1",
+      "--recurse-submodules",
+      "--shallow-submodules",
+      repoUrl,
+      catalogDir,
+    ],
     {
       cwd: dataDir,
       stdio: "inherit",

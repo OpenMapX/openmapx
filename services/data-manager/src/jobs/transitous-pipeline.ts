@@ -112,10 +112,15 @@ async function ensureTransitousCatalog(
 ): Promise<string> {
   mkdirSync(dataDir, { recursive: true });
   const catalogDir = resolve(dataDir, TRANSITOUS_CATALOG_DIR);
+  // The bind-mounted /data is shared between the data-manager container and
+  // the host CLI / build helpers, often running as different UIDs. Modern
+  // git refuses to operate on a repo whose .git owner doesn't match the
+  // current user, so pre-authorise the catalog path on every invocation.
+  const safeDirArgs = ["-c", `safe.directory=${catalogDir}`];
   if (existsSync(join(catalogDir, ".git"))) {
     await resetTransitousCatalog(catalogDir, runner);
     try {
-      await runner("git", ["-C", catalogDir, "pull", "--ff-only"], {
+      await runner("git", [...safeDirArgs, "-C", catalogDir, "pull", "--ff-only"], {
         cwd: dataDir,
         stdio: "pipe",
       });
@@ -124,7 +129,17 @@ async function ensureTransitousCatalog(
     }
     await runner(
       "git",
-      ["-C", catalogDir, "submodule", "update", "--init", "--checkout", "--depth", "1"],
+      [
+        ...safeDirArgs,
+        "-C",
+        catalogDir,
+        "submodule",
+        "update",
+        "--init",
+        "--checkout",
+        "--depth",
+        "1",
+      ],
       {
         cwd: dataDir,
         stdio: "pipe",
@@ -136,7 +151,16 @@ async function ensureTransitousCatalog(
   rmSync(catalogDir, { recursive: true, force: true });
   await runner(
     "git",
-    ["clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules", repoUrl, catalogDir],
+    [
+      ...safeDirArgs,
+      "clone",
+      "--depth",
+      "1",
+      "--recurse-submodules",
+      "--shallow-submodules",
+      repoUrl,
+      catalogDir,
+    ],
     {
       cwd: dataDir,
       stdio: "pipe",
@@ -147,10 +171,14 @@ async function ensureTransitousCatalog(
 
 async function resetTransitousCatalog(catalogDir: string, runner: CommandRunner): Promise<void> {
   try {
-    await runner("git", ["-C", catalogDir, "reset", "--hard", "HEAD"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
+    await runner(
+      "git",
+      ["-c", `safe.directory=${catalogDir}`, "-C", catalogDir, "reset", "--hard", "HEAD"],
+      {
+        cwd: catalogDir,
+        stdio: "pipe",
+      },
+    );
   } catch {
     // Best effort only — the fetch can still proceed against the cached catalog.
   }

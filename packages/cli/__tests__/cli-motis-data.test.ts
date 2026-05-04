@@ -120,6 +120,8 @@ describe("buildMotisData", () => {
       {
         command: "git",
         args: [
+          "-c",
+          `safe.directory=${join(tmp, "infra", "docker", "data", ".transitous-catalog")}`,
           "clone",
           "--depth",
           "1",
