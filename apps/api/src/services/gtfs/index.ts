@@ -337,12 +337,12 @@ class GtfsManager {
         feed.errorMessage = message;
       }
 
-      // Clean up partial schema on failure
-      try {
-        await dropGtfsSchema(schema);
-      } catch {
-        // ignore
-      }
+      // Don't drop the live schema on failure: with the atomic-swap import
+      // the live schema isn't touched until the very end, so any data here
+      // is the previous successful import — losing it on a transient failure
+      // (network blip, malformed CSV, OOM) is worse than leaving the feed
+      // marked "failed" while still serving the old version. The importer's
+      // own catch already cleans up the staging schema.
 
       console.error(`[gtfs] Import failed for "${slug}":`, message);
     } finally {

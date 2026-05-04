@@ -640,6 +640,11 @@ export async function importGtfsFeed(
   // Use mkdtempSync so the temp path is OS-generated — caller-derived data
   // never ends up in the filesystem path, and concurrent imports cannot collide.
   const tempDir = mkdtempSync(join(tmpdir(), "gtfs-import-"));
+  // All COPY work happens against this throwaway schema. Once the import
+  // succeeds, a single transaction renames it onto the live schema name —
+  // readers see the previous version right up until the rename, with no
+  // window where `gtfs_<slug>` is missing or half-populated.
+  const stagingSchema = `${schema}__staging`;
 
   try {
     // 1. Obtain the zip (download or copy local) and extract
@@ -647,53 +652,75 @@ export async function importGtfsFeed(
     const gtfsDir = await obtainAndExtract(normalized, tempDir);
     const hash = getHash(tempDir);
 
-    // 2. Create schema and tables (DROP/CREATE in DDL resets column layout; drop stale caches)
+    // 2. Create staging schema and tables. Drop any leftover staging from a
+    //    previous crashed import; the live schema is left alone until the
+    //    final swap below.
     onProgress?.("creating schema");
-    invalidateSchemaCaches(schema);
-    await sql.unsafe(createSchemaDDL(schema));
+    await sql.unsafe(`DROP SCHEMA IF EXISTS "${stagingSchema}" CASCADE`);
+    await sql.unsafe(createSchemaDDL(stagingSchema));
 
     // 3. Import data (order matters for FK constraints)
     onProgress?.("importing agency");
-    await importAgency(schema, gtfsDir);
+    await importAgency(stagingSchema, gtfsDir);
 
     onProgress?.("importing stops");
-    const stopCount = await importStops(schema, gtfsDir);
+    const stopCount = await importStops(stagingSchema, gtfsDir);
 
     onProgress?.("importing routes");
-    const routeCount = await importRoutes(schema, gtfsDir);
+    const routeCount = await importRoutes(stagingSchema, gtfsDir);
 
     onProgress?.("importing calendar");
-    await importCalendar(schema, gtfsDir);
-    await importCalendarDates(schema, gtfsDir);
+    await importCalendar(stagingSchema, gtfsDir);
+    await importCalendarDates(stagingSchema, gtfsDir);
 
     onProgress?.("importing trips");
-    const tripCount = await importTrips(schema, gtfsDir);
+    const tripCount = await importTrips(stagingSchema, gtfsDir);
 
     onProgress?.("importing stop_times");
-    await importStopTimes(schema, gtfsDir);
+    await importStopTimes(stagingSchema, gtfsDir);
 
     onProgress?.("importing shapes");
-    await importShapes(schema, gtfsDir);
+    await importShapes(stagingSchema, gtfsDir);
 
     // 4. Create indexes
     onProgress?.("creating indexes");
-    await sql.unsafe(createIndexesDDL(schema));
+    await sql.unsafe(createIndexesDDL(stagingSchema));
 
     // 5. Create service_days materialized view
     onProgress?.("creating service_days view");
     const hasCalendar =
-      (await sql.unsafe(`SELECT COUNT(*) as c FROM "${schema}".calendar`))[0].c > 0;
+      (await sql.unsafe(`SELECT COUNT(*) as c FROM "${stagingSchema}".calendar`))[0].c > 0;
     const hasCalendarDates =
-      (await sql.unsafe(`SELECT COUNT(*) as c FROM "${schema}".calendar_dates`))[0].c > 0;
+      (await sql.unsafe(`SELECT COUNT(*) as c FROM "${stagingSchema}".calendar_dates`))[0].c > 0;
 
     if (hasCalendar || hasCalendarDates) {
-      await sql.unsafe(createServiceDaysDDL(schema));
+      await sql.unsafe(createServiceDaysDDL(stagingSchema));
     }
 
     // 6. Compute bounding box
-    const bbox = await computeBbox(schema);
+    const bbox = await computeBbox(stagingSchema);
+
+    // 7. Atomic swap: drop the live schema and rename staging → live in a
+    //    single transaction. Readers either see the old data (before COMMIT)
+    //    or the new data (after COMMIT) — never a missing schema mid-import.
+    onProgress?.("swapping schema");
+    invalidateSchemaCaches(schema);
+    await sql.begin(async (tx) => {
+      await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
+    });
+    invalidateSchemaCaches(schema);
 
     return { schema, hash, stopCount, routeCount, tripCount, bbox };
+  } catch (err) {
+    // Best-effort staging cleanup so a failed import doesn't leave stale
+    // partial schemas around.
+    try {
+      await sql.unsafe(`DROP SCHEMA IF EXISTS "${stagingSchema}" CASCADE`);
+    } catch {
+      // ignore — main error wins
+    }
+    throw err;
   } finally {
     // Clean up temp directory
     try {
