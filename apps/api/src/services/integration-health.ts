@@ -245,7 +245,23 @@ export async function executeAllIntegrationHealthChecks(
   integrations: LoadedIntegration[],
 ): Promise<ServiceStatus[]> {
   const checks = integrations.filter((i) => i.manifest.healthCheck);
-  const results = await Promise.all(checks.map(executeIntegrationHealthCheck));
+  const results = await Promise.all(
+    checks.map(async (integration) => {
+      const subResults = await executeIntegrationHealthCheck(integration);
+      // Multi-check integrations (e.g. fuel with 4 country sub-checks) write
+      // entries under composite ids `<integration>:<sub>`, never under the
+      // bare id. The integration-list endpoint looks up the bare id, gets
+      // undefined, and the status dot renders orange "Unconfigured" even
+      // when the underlying probes succeed. Synthesize an aggregate for
+      // those integrations so callers that just want a single yes/no
+      // signal can rely on the bare id too.
+      if (subResults.length > 1 && subResults.every((r) => r.id !== integration.id)) {
+        const aggregate = aggregateHealth(integration.id, subResults);
+        if (aggregate) subResults.push(aggregate);
+      }
+      return subResults;
+    }),
+  );
   const filtered = results.flat();
 
   // Update the shared health cache and persist to health_history
@@ -261,6 +277,49 @@ export async function executeAllIntegrationHealthChecks(
   healthCacheUpdatedAt = Date.now();
 
   return filtered;
+}
+
+/**
+ * Combine per-sub-check results into a single integration-level signal.
+ * Priority: any down → down; else any up → up; else unconfigured. Returns
+ * `null` if there are no sub-checks to aggregate. Only used for the cache
+ * lookup by bare integration id; the per-integration GET endpoint still
+ * returns the raw array.
+ */
+function aggregateHealth(integrationId: string, subResults: ServiceStatus[]): ServiceStatus | null {
+  if (subResults.length === 0) return null;
+  const anyDown = subResults.find((r) => r.status === "down");
+  const anyUp = subResults.find((r) => r.status === "up");
+  if (anyDown) {
+    return {
+      id: integrationId,
+      name: anyDown.name.split(" — ")[0] ?? anyDown.name,
+      category: anyDown.category,
+      url: "",
+      status: "down",
+      error: anyDown.error,
+    };
+  }
+  if (anyUp) {
+    return {
+      id: integrationId,
+      name: anyUp.name.split(" — ")[0] ?? anyUp.name,
+      category: anyUp.category,
+      url: "",
+      status: "up",
+      responseTime: anyUp.responseTime,
+    };
+  }
+  // All sub-checks are unconfigured.
+  const first = subResults[0];
+  if (!first) return null;
+  return {
+    id: integrationId,
+    name: first.name.split(" — ")[0] ?? first.name,
+    category: first.category,
+    url: "",
+    status: "unconfigured",
+  };
 }
 
 // Shared health cache: latest health status per integration ID
