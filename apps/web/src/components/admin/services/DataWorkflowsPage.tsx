@@ -667,13 +667,19 @@ function GtfsSection({
   });
 
   const importMutation = useMutation({
-    mutationFn: async (input: { url: string; slug?: string; name?: string }) => {
+    mutationFn: async (input: {
+      url?: string;
+      motisArchiveId?: string;
+      slug?: string;
+      name?: string;
+    }) => {
       const res = await fetch(`${apiUrl}/api/gtfs/feeds`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: input.url.trim(),
+          url: input.url?.trim() || undefined,
+          motisArchiveId: input.motisArchiveId,
           slug: input.slug?.trim() || undefined,
           name: input.name?.trim() || undefined,
         }),
@@ -853,18 +859,18 @@ function GtfsSection({
                         <TableCell align="right">
                           <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                             {!pg && motis && (
-                              <Tooltip title="Import this MOTIS feed into Postgres (paste the upstream URL)">
-                                <Button
-                                  size="small"
-                                  onClick={() => {
-                                    setImportSlug(motis.id);
-                                    setImportName(motis.id);
-                                    setImportUrl("");
-                                    setImportOpen(true);
-                                  }}
-                                >
-                                  Import to Postgres
-                                </Button>
+                              <Tooltip title="Promote this MOTIS-fetched archive into Postgres (no re-download — apps/api reads the local zip directly)">
+                                <span>
+                                  <Button
+                                    size="small"
+                                    disabled={importMutation.isPending}
+                                    onClick={() =>
+                                      importMutation.mutate({ motisArchiveId: motis.id })
+                                    }
+                                  >
+                                    Import to Postgres
+                                  </Button>
+                                </span>
                               </Tooltip>
                             )}
                             {pg && (

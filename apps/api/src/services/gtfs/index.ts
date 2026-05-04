@@ -6,7 +6,7 @@ import {
   validatePublicUrl,
 } from "@openmapx/core";
 import { sql } from "./db";
-import { dropGtfsSchema, importGtfsFeed } from "./importer";
+import { dropGtfsSchema, type GtfsImportSource, importGtfsFeed } from "./importer";
 import type { CatalogFeed, FeedStatus, ImportedFeed } from "./types";
 
 /** Persisted schema names always have the `gtfs_<slug>` shape. Accept only slugs
@@ -164,9 +164,19 @@ class GtfsManager {
   /**
    * Import a GTFS feed (runs in background).
    * Returns immediately, import progress is tracked via feed status.
+   *
+   * `feed.url` is the canonical "where this feed came from" string and is
+   * persisted in `gtfs_feeds.url`. When `feed.localPath` is set, the importer
+   * reads the zip from that on-disk path instead of downloading — used for
+   * promoting a MOTIS-fetched archive in `/data/gtfs/` into Postgres without
+   * a redundant HTTP fetch. The url field is still persisted (typically a
+   * `local:` pseudo-URL identifying the source archive) so the feed origin
+   * stays self-describing.
    */
   async startImport(
-    feed: CatalogFeed | { name: string; url: string; source: string; countryCode: string },
+    feed:
+      | CatalogFeed
+      | { name: string; url: string; source: string; countryCode: string; localPath?: string },
     slug?: string,
   ): Promise<string> {
     const feedSlug =
@@ -180,6 +190,8 @@ class GtfsManager {
     if (this.importing.has(feedSlug)) {
       throw new Error(`Feed "${feedSlug}" is already being imported`);
     }
+
+    const localPath = "localPath" in feed ? feed.localPath : undefined;
 
     // Create or update metadata
     const importedFeed: ImportedFeed = {
@@ -209,23 +221,29 @@ class GtfsManager {
       [feedSlug, feed.name, feed.url, feed.source, feed.countryCode ?? "", schemaName],
     );
 
-    // Validate URL before starting import (SSRF prevention)
-    validatePublicUrl(feed.url);
+    // Validate URL only when we'll actually fetch it; local-path imports
+    // bypass HTTP entirely so SSRF / public-URL checks don't apply.
+    if (!localPath) {
+      validatePublicUrl(feed.url);
+    }
 
     // Run import in background
     this.importing.add(feedSlug);
-    this.runImport(feedSlug, feed.url, schemaName).catch((err) => {
+    const source: GtfsImportSource = localPath
+      ? { kind: "localPath", path: localPath }
+      : { kind: "url", url: feed.url };
+    this.runImport(feedSlug, source, schemaName).catch((err) => {
       console.error(`[gtfs] Import of "${feedSlug}" failed:`, err);
     });
 
     return feedSlug;
   }
 
-  private async runImport(slug: string, url: string, schema: string): Promise<void> {
+  private async runImport(slug: string, source: GtfsImportSource, schema: string): Promise<void> {
     try {
       await this.updateFeedStatus(slug, "downloading");
 
-      const result = await importGtfsFeed(url, schema, (stage) => {
+      const result = await importGtfsFeed(source, schema, (stage) => {
         const status = stage.includes("download") ? "downloading" : "importing";
         this.updateFeedStatus(slug, status).catch(() => {});
         const feed = this.feeds.get(slug);

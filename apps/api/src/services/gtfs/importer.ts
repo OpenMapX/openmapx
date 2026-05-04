@@ -1,12 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -213,19 +215,46 @@ async function resolveGtfsDownloadUrl(url: string): Promise<string> {
   }
 }
 
-async function downloadAndExtract(url: string, tempDir: string): Promise<string> {
-  const downloadUrl = await resolveGtfsDownloadUrl(url);
+/**
+ * Where the importer should obtain a GTFS zip:
+ *   - "url"       — fetch from upstream via the safe downloader (existing behaviour).
+ *   - "localPath" — read an already-downloaded zip from disk (data-manager's
+ *                   `/data/gtfs/` is the canonical source, exposed to apps/api
+ *                   via the OPENMAPX_HOST_DIR bind mount). Avoids re-downloading
+ *                   feeds the Transitous pipeline already fetched for MOTIS.
+ */
+export type GtfsImportSource = { kind: "url"; url: string } | { kind: "localPath"; path: string };
+
+async function obtainGtfsZip(source: GtfsImportSource, zipPath: string): Promise<void> {
+  if (source.kind === "url") {
+    const downloadUrl = await resolveGtfsDownloadUrl(source.url);
+    // Use the shared safe downloader: validates public URL + DNS, handles
+    // redirects manually through allowlist/validator, enforces a hard byte cap.
+    await safeDownload(downloadUrl, {
+      destPath: zipPath,
+      timeoutMs: 300_000,
+      maxBytes: 2 * 1024 * 1024 * 1024, // 2 GiB cap for GTFS zips
+      headers: { "User-Agent": USER_AGENT },
+    });
+    return;
+  }
+  // Local source — copy into the temp dir so the rest of the pipeline (unzip,
+  // hash, schema-validation cleanup) can treat it identically to a downloaded
+  // archive. The caller is responsible for confining `path` to a known-safe
+  // directory; the route handler that exposes this surface looks up the file
+  // by archive id against `getMotisGtfsArchives()`, so user input never reaches
+  // here directly.
+  if (!existsSync(source.path) || !statSync(source.path).isFile()) {
+    throw new Error(`GTFS archive not found at ${source.path}`);
+  }
+  copyFileSync(source.path, zipPath);
+}
+
+async function obtainAndExtract(source: GtfsImportSource, tempDir: string): Promise<string> {
   mkdirSync(tempDir, { recursive: true });
   const zipPath = join(tempDir, "feed.zip");
 
-  // Use the shared safe downloader: validates public URL + DNS, handles
-  // redirects manually through allowlist/validator, enforces a hard byte cap.
-  await safeDownload(downloadUrl, {
-    destPath: zipPath,
-    timeoutMs: 300_000,
-    maxBytes: 2 * 1024 * 1024 * 1024, // 2 GiB cap for GTFS zips
-    headers: { "User-Agent": USER_AGENT },
-  });
+  await obtainGtfsZip(source, zipPath);
 
   // Compute hash
   const hash = createHash("sha256").update(readFileSync(zipPath)).digest("hex");
@@ -599,19 +628,23 @@ export interface ImportResult {
 }
 
 export async function importGtfsFeed(
-  url: string,
+  source: string | GtfsImportSource,
   schema: string,
   onProgress?: (stage: string) => void,
 ): Promise<ImportResult> {
   assertValidGtfsSchema(schema);
+  // Backwards-compat: callers that still pass a bare URL get the same
+  // download-then-import flow as before.
+  const normalized: GtfsImportSource =
+    typeof source === "string" ? { kind: "url", url: source } : source;
   // Use mkdtempSync so the temp path is OS-generated — caller-derived data
   // never ends up in the filesystem path, and concurrent imports cannot collide.
   const tempDir = mkdtempSync(join(tmpdir(), "gtfs-import-"));
 
   try {
-    // 1. Download and extract
-    onProgress?.("downloading");
-    const gtfsDir = await downloadAndExtract(url, tempDir);
+    // 1. Obtain the zip (download or copy local) and extract
+    onProgress?.(normalized.kind === "url" ? "downloading" : "reading local archive");
+    const gtfsDir = await obtainAndExtract(normalized, tempDir);
     const hash = getHash(tempDir);
 
     // 2. Create schema and tables (DROP/CREATE in DDL resets column layout; drop stale caches)
