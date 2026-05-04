@@ -1,6 +1,5 @@
 "use client";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -11,12 +10,10 @@ import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
-import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
+import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
@@ -28,7 +25,6 @@ import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
@@ -115,48 +111,49 @@ export function BulkConfigure() {
     });
   }, [integrationsQuery.data]);
 
+  const unconfiguredCount = sortedIntegrations.filter((i) => !i.configured).length;
+
   return (
-    <Stack gap={3} maxWidth={1100} mx="auto" pb={6}>
-      <Stack direction="row" alignItems="center" gap={1}>
-        <Button
-          component={Link}
-          href="/admin/integrations"
-          startIcon={<ArrowBackIcon />}
-          size="small"
-          variant="text"
-        >
-          Back to integrations
-        </Button>
+    <Stack gap={2}>
+      <Stack
+        direction="row"
+        alignItems={{ xs: "flex-start", sm: "center" }}
+        justifyContent="space-between"
+        flexWrap="wrap"
+        gap={1}
+      >
+        <Typography variant="h5" fontWeight={700}>
+          Bulk Configure Integrations
+        </Typography>
+        <Stack direction="row" gap={0.75} flexWrap="wrap">
+          <Chip label={`${sortedIntegrations.length} total`} size="small" variant="outlined" />
+          {unconfiguredCount > 0 && (
+            <Chip
+              label={`${unconfiguredCount} unconfigured`}
+              size="small"
+              color="warning"
+              variant="outlined"
+            />
+          )}
+        </Stack>
       </Stack>
 
-      <Box>
-        <Typography variant="h5" fontWeight={700}>
-          Bulk Configure
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Configure all integrations on a single page. Each panel exposes the same form fields and
-          credentials as the per-integration page; expand the integration you want to set up. The
-          environment-variable catalogue at the bottom lists every override key for copy-paste into{" "}
-          <code>infra/docker/.env</code>.
-        </Typography>
-      </Box>
+      <Typography variant="body2" color="text.secondary">
+        Configure all integrations on a single page — each panel exposes the same form fields and
+        credentials as its per-integration page. The env-var catalogue at the bottom lists every
+        override key ready to paste into <code>infra/docker/.env</code>.
+      </Typography>
 
-      <Card variant="outlined">
-        <CardContent>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-            Integrations
-          </Typography>
-          {integrationsQuery.isLoading && <Skeleton variant="rectangular" height={120} />}
-          {integrationsQuery.isError && (
-            <Alert severity="error" variant="outlined">
-              Failed to load integrations.
-            </Alert>
-          )}
-          {sortedIntegrations.map((entry) => (
-            <IntegrationAccordion key={entry.id} entry={entry} />
-          ))}
-        </CardContent>
-      </Card>
+      {integrationsQuery.isLoading && <Skeleton variant="rectangular" height={200} />}
+      {integrationsQuery.isError && (
+        <Alert severity="error" variant="outlined">
+          Failed to load integrations.
+        </Alert>
+      )}
+
+      {sortedIntegrations.map((entry) => (
+        <IntegrationAccordion key={entry.id} entry={entry} />
+      ))}
 
       <EnvVarReferenceSection
         loading={envVarsQuery.isLoading}
@@ -194,7 +191,6 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
           borderRadius: 1,
           "&:first-of-type, &:last-of-type": { borderRadius: 1 },
         },
-        my: 0.5,
       }}
       variant="outlined"
     >
@@ -420,97 +416,93 @@ function EnvVarReferenceSection({
   }
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack direction="row" alignItems="center" gap={1} mb={1}>
-          <Typography variant="subtitle1" fontWeight={600}>
-            Environment-variable reference
-          </Typography>
-          <Box flex={1} />
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<ContentCopyIcon />}
-            onClick={copyAll}
-            disabled={loading || error || integrations.length === 0}
-          >
-            Copy all
-          </Button>
-        </Stack>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          Every integration field can be set via host env using the pattern{" "}
-          <code>INTEGRATION_&lt;ID&gt;_&lt;KEY&gt;</code>. Env always wins over admin-stored values.
-          Paste any subset of the lines below into <code>infra/docker/.env</code> and fill in the
-          right-hand side.
-        </Typography>
+    <Paper variant="outlined" sx={{ p: 3 }}>
+      <Stack direction="row" alignItems="center" gap={1} mb={1}>
+        <Typography variant="h6">Environment Variables</Typography>
+        <Box flex={1} />
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<ContentCopyIcon />}
+          onClick={copyAll}
+          disabled={loading || error || integrations.length === 0}
+        >
+          Copy all
+        </Button>
+      </Stack>
+      <Typography variant="body2" color="text.secondary" gutterBottom>
+        Every integration field can be set via host env using the pattern{" "}
+        <code>INTEGRATION_&lt;ID&gt;_&lt;KEY&gt;</code>. Env always wins over admin-stored values.
+        Paste any subset of the lines below into <code>infra/docker/.env</code> and fill in the
+        right-hand side.
+      </Typography>
 
-        {loading && <Skeleton variant="rectangular" height={200} sx={{ mt: 1 }} />}
-        {error && (
-          <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
-            Failed to load env-var catalogue.
-          </Alert>
-        )}
+      {loading && <Skeleton variant="rectangular" height={200} sx={{ mt: 1 }} />}
+      {error && (
+        <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
+          Failed to load env-var catalogue.
+        </Alert>
+      )}
 
-        {!loading && !error && (
-          <Stack gap={2} mt={2}>
-            {integrations.map((entry) => (
-              <Box key={entry.id}>
-                <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {entry.name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" fontFamily="monospace">
-                    {entry.id}
-                  </Typography>
-                  {!entry.enabled && <Chip label="disabled" size="small" variant="outlined" />}
-                </Stack>
-                <Stack
-                  component="pre"
-                  sx={{
-                    m: 0,
-                    p: 1.25,
-                    fontFamily: "monospace",
-                    fontSize: "0.8rem",
-                    bgcolor: "action.hover",
-                    borderRadius: 1,
-                    overflowX: "auto",
-                  }}
-                >
-                  {entry.envVars.map((v) => {
-                    const line = formatEnvLine(v);
-                    return (
-                      <Box
-                        key={v.key}
-                        component="span"
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 1,
-                          py: 0.25,
-                          color: v.present ? "success.main" : "text.primary",
-                        }}
-                      >
-                        <Box component="span" sx={{ flex: 1, whiteSpace: "pre" }}>
-                          {line}
-                        </Box>
-                        {v.present && (
-                          <Chip label="set" size="small" color="success" variant="outlined" />
-                        )}
-                        <Tooltip title="Copy line">
-                          <IconButton size="small" onClick={() => copyOne(line)}>
-                            <ContentCopyIcon fontSize="inherit" />
-                          </IconButton>
-                        </Tooltip>
+      {!loading && !error && (
+        <Stack gap={2} mt={2}>
+          {integrations.map((entry) => (
+            <Box key={entry.id}>
+              <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
+                <Typography variant="body2" fontWeight={600}>
+                  {entry.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                  {entry.id}
+                </Typography>
+                {!entry.enabled && <Chip label="disabled" size="small" variant="outlined" />}
+              </Stack>
+              <Stack
+                component="pre"
+                sx={{
+                  m: 0,
+                  p: 1.25,
+                  fontFamily: "monospace",
+                  fontSize: "0.8rem",
+                  bgcolor: "action.hover",
+                  borderRadius: 1,
+                  overflowX: "auto",
+                }}
+              >
+                {entry.envVars.map((v) => {
+                  const line = formatEnvLine(v);
+                  return (
+                    <Box
+                      key={v.key}
+                      component="span"
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        py: 0.25,
+                        color: v.present ? "success.main" : "text.primary",
+                      }}
+                    >
+                      <Box component="span" sx={{ flex: 1, whiteSpace: "pre" }}>
+                        {line}
                       </Box>
-                    );
-                  })}
-                </Stack>
-              </Box>
-            ))}
-          </Stack>
-        )}
-      </CardContent>
-    </Card>
+                      {v.present && (
+                        <Chip label="set" size="small" color="success" variant="outlined" />
+                      )}
+                      <Tooltip title="Copy line">
+                        <IconButton size="small" onClick={() => copyOne(line)}>
+                          <ContentCopyIcon fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            </Box>
+          ))}
+        </Stack>
+      )}
+    </Paper>
   );
 }
 
