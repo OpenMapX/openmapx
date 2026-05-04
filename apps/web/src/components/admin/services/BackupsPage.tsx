@@ -7,6 +7,7 @@ import RestoreIcon from "@mui/icons-material/Restore";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -39,6 +40,8 @@ interface BackupSummary {
   services: number;
   volumes: number;
   totalBytes: number;
+  corrupt?: boolean;
+  corruptReason?: string;
 }
 
 interface BackupsResponse {
@@ -256,24 +259,50 @@ export function BackupsPage() {
                   sortedBackups.map((backup) => (
                     <TableRow key={backup.name} hover>
                       <TableCell>
-                        <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
-                          {backup.name}
-                        </Typography>
+                        <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+                          <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
+                            {backup.name}
+                          </Typography>
+                          {backup.corrupt && (
+                            <Tooltip
+                              title={`Cannot be restored: ${backup.corruptReason ?? "manifest is missing or malformed"}`}
+                            >
+                              <Chip
+                                label="corrupt"
+                                size="small"
+                                color="warning"
+                                variant="outlined"
+                              />
+                            </Tooltip>
+                          )}
+                        </Stack>
                       </TableCell>
                       <TableCell>{new Date(backup.createdAt).toLocaleString()}</TableCell>
-                      <TableCell>{backup.openmapxVersion ?? "—"}</TableCell>
-                      <TableCell>{backup.services}</TableCell>
-                      <TableCell>{backup.volumes}</TableCell>
-                      <TableCell>{formatBytes(backup.totalBytes)}</TableCell>
+                      <TableCell>
+                        {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
+                      </TableCell>
+                      <TableCell>{backup.corrupt ? "—" : backup.services}</TableCell>
+                      <TableCell>{backup.corrupt ? "—" : backup.volumes}</TableCell>
+                      <TableCell>{backup.corrupt ? "—" : formatBytes(backup.totalBytes)}</TableCell>
                       <TableCell align="right">
                         <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
-                          <Tooltip title="Restore backup">
+                          <Tooltip
+                            title={
+                              backup.corrupt
+                                ? "Corrupt backup — cannot be restored"
+                                : "Restore backup"
+                            }
+                          >
                             <span>
                               <IconButton
                                 size="small"
                                 color="primary"
                                 onClick={() => setRestoreTarget(backup)}
-                                disabled={restoreMutation.isPending || deleteMutation.isPending}
+                                disabled={
+                                  backup.corrupt ||
+                                  restoreMutation.isPending ||
+                                  deleteMutation.isPending
+                                }
                               >
                                 <RestoreIcon fontSize="small" />
                               </IconButton>

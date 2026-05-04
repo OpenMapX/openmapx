@@ -499,9 +499,16 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
 
     const { backups } = listBackupSummaries();
-    if (!backups.some((backup) => backup.name === name)) {
+    const target = backups.find((backup) => backup.name === name);
+    if (!target) {
       reply.status(404);
       return { error: `Backup not found: ${name}` };
+    }
+    if (target.corrupt) {
+      reply.status(409);
+      return {
+        error: `Backup '${name}' is corrupt and cannot be restored: ${target.corruptReason ?? "unknown reason"}`,
+      };
     }
 
     const serviceIds = toIdList(req.body?.serviceIds);

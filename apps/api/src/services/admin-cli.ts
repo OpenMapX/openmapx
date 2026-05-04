@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { services as coreServices, findRepoRoot, repoPaths } from "@openmapx/core/server";
@@ -31,11 +31,24 @@ export interface ServiceSelectionSummary {
 
 export interface ListedBackupSummary {
   name: string;
+  /**
+   * For successfully-readable backups this is the manifest's createdAt.
+   * For corrupt entries (no/malformed manifest.json) we substitute the
+   * directory's filesystem mtime so the row can still sort sensibly.
+   */
   createdAt: string;
   openmapxVersion?: string;
   services: number;
   volumes: number;
   totalBytes: number;
+  /**
+   * True when the backup directory exists but the manifest is missing or
+   * malformed. Corrupt entries can be deleted (the directory still exists)
+   * but cannot be restored from. Surfaced to the admin UI so operators can
+   * see + clean them up instead of having them silently disappear.
+   */
+  corrupt?: boolean;
+  corruptReason?: string;
 }
 
 interface BackupManifest {
@@ -142,9 +155,10 @@ export function listBackupSummaries(rootDir?: string): {
   const backups: ListedBackupSummary[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    const manifestPath = join(root, entry.name, "manifest.json");
+    const dirPath = join(root, entry.name);
+    const manifestPath = join(dirPath, "manifest.json");
     if (!existsSync(manifestPath)) {
-      warnings.push(`skipping ${entry.name}: no manifest.json`);
+      backups.push(makeCorruptSummary(dirPath, entry.name, "no manifest.json"));
       continue;
     }
     try {
@@ -162,12 +176,31 @@ export function listBackupSummaries(rootDir?: string): {
         totalBytes,
       });
     } catch (err) {
-      warnings.push(`skipping ${entry.name}: ${(err as Error).message}`);
+      backups.push(makeCorruptSummary(dirPath, entry.name, (err as Error).message));
     }
   }
 
   backups.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   return { backups, warnings, root };
+}
+
+function makeCorruptSummary(dirPath: string, name: string, reason: string): ListedBackupSummary {
+  let createdAt = new Date(0).toISOString();
+  try {
+    createdAt = statSync(dirPath).mtime.toISOString();
+  } catch {
+    // Directory disappeared between readdir and stat — keep the epoch-zero
+    // sentinel so the row at least renders.
+  }
+  return {
+    name,
+    createdAt,
+    services: 0,
+    volumes: 0,
+    totalBytes: 0,
+    corrupt: true,
+    corruptReason: reason,
+  };
 }
 
 export function assertValidBackupName(name: string): void {
