@@ -400,6 +400,12 @@ function buildTransitousOriginIndex(): Map<string, string> {
     }
     for (const source of data.sources ?? []) {
       if (source.type && source.type !== "http" && source.type !== "transitland-atlas") continue;
+      // Skip GTFS-RT / GBFS / NeTEx — only the static GTFS schedule zip is what
+      // ends up in /data/gtfs/ as `<region>_<name>.gtfs.zip`. Many feeds list
+      // both the schedule and a realtime feed under the same `name`, and a
+      // last-write-wins index would otherwise map the archive to the RT URL.
+      const spec = (source.spec ?? "gtfs").toLowerCase();
+      if (spec !== "gtfs") continue;
       if (!source.name || !source.url) continue;
       const archiveId = `${region}_${source.name}`.toLowerCase();
       index.set(archiveId, source.url);
