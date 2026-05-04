@@ -304,7 +304,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
                     bgcolor: "background.paper",
                     boxShadow: 1,
                     p: 0.25,
-                    "&:hover": { bgcolor: "grey.200" },
+                    "&:hover": { bgcolor: "action.selected" },
                   }}
                 >
                   <CloseIcon sx={{ fontSize: 14 }} />

@@ -104,8 +104,10 @@ export function SearchInAreaChip() {
           ml: "10px",
           mr: "-4px",
         },
+        // `grey.100` is fixed-light; use the theme-aware hover token so
+        // the chip stays legible in dark mode.
         "&&:hover": {
-          bgcolor: "grey.100",
+          bgcolor: "action.hover",
         },
       }}
     />

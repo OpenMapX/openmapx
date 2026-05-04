@@ -174,15 +174,21 @@ export function JobDetail({ jobId }: { jobId: string }) {
           </Typography>
           <Box
             component="pre"
-            sx={{
+            sx={(theme) => ({
               mt: 0.5,
               p: 1,
+              // `grey.50` is a fixed-light hex regardless of palette mode,
+              // and `theme.palette.mode` always reads "light" under our CSS-
+              // variable theme. Use applyStyles("dark", …) to flip via the
+              // .dark class — same fix as the compose preview block.
               bgcolor: "grey.50",
+              color: "text.primary",
+              ...theme.applyStyles("dark", { bgcolor: "grey.900" }),
               borderRadius: 1,
               fontSize: "0.7rem",
               overflow: "auto",
               maxHeight: 120,
-            }}
+            })}
           >
             {JSON.stringify(data.result, null, 2)}
           </Box>

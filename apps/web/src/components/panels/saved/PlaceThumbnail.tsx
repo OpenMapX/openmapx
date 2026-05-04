@@ -27,7 +27,9 @@ export function PlaceThumbnail({ lat, lng, name, placeId, size = 64 }: Props) {
         width: size,
         height: size,
         borderRadius: 2,
-        bgcolor: "grey.200",
+        // Theme-aware placeholder surface — `grey.200` is a fixed-light
+        // shade and would stay near-white in dark mode.
+        bgcolor: "action.hover",
         flexShrink: 0,
         overflow: "hidden",
         display: "flex",

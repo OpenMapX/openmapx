@@ -219,7 +219,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
               borderRadius: "50%",
               boxShadow: 2,
               p: 0.75,
-              "&:hover": { bgcolor: "grey.100" },
+              "&:hover": { bgcolor: "action.hover" },
             }}
           >
             <CloseIcon sx={{ fontSize: 24, color: "text.primary" }} />
