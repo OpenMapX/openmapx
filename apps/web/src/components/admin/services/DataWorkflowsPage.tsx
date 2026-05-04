@@ -705,6 +705,32 @@ function GtfsSection({
     onError: (err) => setToast((err as Error).message),
   });
 
+  // MOTIS-only rows (no Postgres counterpart) — used by the bulk-import action.
+  const motisOnlyArchives = motisArchives.filter(
+    (archive) => !feeds.some((feed) => feed.slug.toLowerCase() === archive.id.toLowerCase()),
+  );
+
+  const bulkPromoteRunning = importMutation.isPending;
+  const bulkPromote = () => {
+    // Fire imports sequentially so the importer's per-feed mutex
+    // (`isImporting`) doesn't reject parallel attempts on the same slug
+    // and the data-manager's CPU/disk doesn't get hammered by 5 concurrent
+    // unzips. The mutation queue is a tiny finite-state loop — each `mutate`
+    // call hands off to the API, returns immediately, and the next iteration
+    // waits via `await` on the same promise the React mutation observes.
+    void (async () => {
+      for (const archive of motisOnlyArchives) {
+        try {
+          await importMutation.mutateAsync({ motisArchiveId: archive.id });
+        } catch (err) {
+          // Single failure shouldn't abort the rest of the batch — they're
+          // independent feeds. The mutation's onError already toasts.
+          console.error(`[gtfs] bulk import failed for ${archive.id}:`, err);
+        }
+      }
+    })();
+  };
+
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Stack direction="row" alignItems="center" spacing={1} mb={2}>
@@ -713,6 +739,24 @@ function GtfsSection({
           GTFS Feeds
         </Typography>
         <Box sx={{ flex: 1 }} />
+        {motisOnlyArchives.length > 0 && (
+          <Tooltip
+            title={
+              "Promote every MOTIS-only feed into Postgres in one go. Imports run sequentially; each one is the same `motisArchiveId` flow as the per-row button."
+            }
+          >
+            <span>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={bulkPromoteRunning}
+                onClick={bulkPromote}
+              >
+                Import all {motisOnlyArchives.length} to Postgres
+              </Button>
+            </span>
+          </Tooltip>
+        )}
         <Button variant="contained" size="small" onClick={() => setImportOpen(true)}>
           Import feed
         </Button>
