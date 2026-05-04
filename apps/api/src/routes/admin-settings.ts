@@ -17,6 +17,12 @@ interface SettingDef {
   secret?: boolean;
   env?: string;
   default: unknown;
+  /**
+   * Optional subgroup identifier. Settings sharing a subgroup render under a
+   * common subheader on the client. Used in the Email panel to split the
+   * SMTP / EmailLabs / Lettermint alternatives clearly.
+   */
+  subgroup?: string;
 }
 
 const SETTING_DEFS: SettingDef[] = [
@@ -89,53 +95,13 @@ const SETTING_DEFS: SettingDef[] = [
     type: "number",
     default: 8,
   },
-  // Email / SMTP
+  // Email — shared field used by every provider.
   {
     group: "email",
-    key: "smtpHost",
-    label: "SMTP Host",
-    type: "string",
-    env: "SMTP_HOST",
-    default: "",
-  },
-  {
-    group: "email",
-    key: "smtpPort",
-    label: "SMTP Port",
-    type: "number",
-    env: "SMTP_PORT",
-    default: 587,
-  },
-  {
-    group: "email",
-    key: "smtpUser",
-    label: "SMTP Username",
-    type: "string",
-    env: "SMTP_USER",
-    default: "",
-  },
-  {
-    group: "email",
-    key: "smtpPassword",
-    label: "SMTP Password",
-    type: "string",
-    secret: true,
-    env: "SMTP_PASS",
-    default: "",
-  },
-  {
-    group: "email",
-    key: "smtpTls",
-    label: "Use TLS / STARTTLS",
-    type: "boolean",
-    env: "SMTP_SECURE",
-    default: true,
-  },
-  {
-    group: "email",
+    subgroup: "common",
     key: "smtpFromAddress",
     label: "From Address",
-    description: "e.g. noreply@example.com",
+    description: "Used as the From header by every provider. e.g. noreply@example.com",
     type: "string",
     env: "EMAIL_FROM",
     default: "",
@@ -145,9 +111,9 @@ const SETTING_DEFS: SettingDef[] = [
   // through to Lettermint, then SMTP. See apps/api/src/utils/email.ts.
   {
     group: "email",
+    subgroup: "emaillabs",
     key: "emailLabsAppKey",
-    label: "EmailLabs App Key",
-    description: "Set all three EmailLabs fields to use it instead of SMTP.",
+    label: "App Key",
     type: "string",
     secret: true,
     env: "EMAILLABS_APP_KEY",
@@ -155,8 +121,9 @@ const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "email",
+    subgroup: "emaillabs",
     key: "emailLabsSecretKey",
-    label: "EmailLabs Secret Key",
+    label: "Secret Key",
     type: "string",
     secret: true,
     env: "EMAILLABS_SECRET_KEY",
@@ -164,8 +131,9 @@ const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "email",
+    subgroup: "emaillabs",
     key: "emailLabsSmtpAccount",
-    label: "EmailLabs SMTP Account",
+    label: "SMTP Account",
     type: "string",
     env: "EMAILLABS_SMTP_ACCOUNT",
     default: "",
@@ -173,13 +141,60 @@ const SETTING_DEFS: SettingDef[] = [
   // Lettermint (Dutch EU provider, 300 emails/mo free) — priority 2.
   {
     group: "email",
+    subgroup: "lettermint",
     key: "lettermintApiToken",
-    label: "Lettermint API Token",
-    description: "Set this to use Lettermint when EmailLabs is unconfigured.",
+    label: "API Token",
     type: "string",
     secret: true,
     env: "LETTERMINT_API_TOKEN",
     default: "",
+  },
+  // SMTP — universal fallback (priority 3).
+  {
+    group: "email",
+    subgroup: "smtp",
+    key: "smtpHost",
+    label: "Host",
+    type: "string",
+    env: "SMTP_HOST",
+    default: "",
+  },
+  {
+    group: "email",
+    subgroup: "smtp",
+    key: "smtpPort",
+    label: "Port",
+    type: "number",
+    env: "SMTP_PORT",
+    default: 587,
+  },
+  {
+    group: "email",
+    subgroup: "smtp",
+    key: "smtpUser",
+    label: "Username",
+    type: "string",
+    env: "SMTP_USER",
+    default: "",
+  },
+  {
+    group: "email",
+    subgroup: "smtp",
+    key: "smtpPassword",
+    label: "Password",
+    type: "string",
+    secret: true,
+    env: "SMTP_PASS",
+    default: "",
+  },
+  {
+    group: "email",
+    subgroup: "smtp",
+    key: "smtpTls",
+    label: "Use TLS / STARTTLS",
+    type: "boolean",
+    env: "SMTP_SECURE",
+    default: true,
   },
   // Map
   {
@@ -216,6 +231,7 @@ type SettingSource = "default" | "database" | "env";
 
 interface ResolvedSetting {
   group: string;
+  subgroup?: string;
   key: string;
   label: string;
   description?: string;
@@ -237,7 +253,7 @@ interface SettingsGroup {
 const GROUP_LABELS: Record<string, string> = {
   general: "General",
   auth: "Authentication",
-  email: "Email / SMTP",
+  email: "Email",
   map: "Map",
 };
 
@@ -278,6 +294,7 @@ async function resolveSettings(): Promise<SettingsGroup[]> {
     if (!grouped[def.group]) grouped[def.group] = [];
     grouped[def.group].push({
       group: def.group,
+      subgroup: def.subgroup,
       key: def.key,
       label: def.label,
       description: def.description,

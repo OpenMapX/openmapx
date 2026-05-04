@@ -34,6 +34,7 @@ import { useEnv } from "@/lib/EnvProvider";
 
 interface ResolvedSetting {
   group: string;
+  subgroup?: string;
   key: string;
   label: string;
   description?: string;
@@ -50,6 +51,46 @@ interface SettingsGroup {
   id: string;
   label: string;
   settings: ResolvedSetting[];
+}
+
+interface SettingsSection {
+  subgroup?: string;
+  settings: ResolvedSetting[];
+}
+
+// Subgroup display metadata. Keys must match the `subgroup` field on the
+// matching SettingDef in apps/api/src/routes/admin-settings.ts.
+const SUBGROUP_META: Record<string, { label: string; description?: string }> = {
+  common: {
+    label: "Common",
+    description: "Shared by every email provider below.",
+  },
+  emaillabs: {
+    label: "EmailLabs (priority 1)",
+    description: "Used when all three fields are set. Polish EU provider, 9k emails/mo free.",
+  },
+  lettermint: {
+    label: "Lettermint (priority 2)",
+    description:
+      "Used when EmailLabs is unconfigured and this token is set. Dutch EU provider, 300 emails/mo free.",
+  },
+  smtp: {
+    label: "SMTP (priority 3, fallback)",
+    description: "Used when neither EmailLabs nor Lettermint is configured. Any SMTP provider.",
+  },
+};
+
+function groupBySubgroup(settings: ResolvedSetting[]): SettingsSection[] {
+  const sections: SettingsSection[] = [];
+  for (const s of settings) {
+    const last = sections[sections.length - 1];
+    if (last && last.subgroup === s.subgroup) {
+      last.settings.push(s);
+    } else {
+      sections.push({ subgroup: s.subgroup, settings: [s] });
+    }
+  }
+  return sections;
 }
 
 function EnvOverrideBadge({ envVar }: { envVar: string }) {
@@ -267,21 +308,37 @@ function SettingsGroupPanel({
       </AccordionSummary>
       <AccordionDetails>
         <Stack gap={2.5}>
-          {group.settings.map((s) => (
-            <Stack key={s.key} gap={0.5}>
-              <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-                <SettingField
-                  setting={s}
-                  value={localValues[s.key]}
-                  onChange={(v) => setLocalValues((prev) => ({ ...prev, [s.key]: v }))}
-                />
-                {s.envOverride && s.envVar && <EnvOverrideBadge envVar={s.envVar} />}
-              </Stack>
-              {s.source === "database" && !s.envOverride && (
-                <Typography variant="caption" color="text.secondary" sx={{ pl: 0.5 }}>
-                  Source: database
-                </Typography>
+          {groupBySubgroup(group.settings).map((section) => (
+            <Stack key={section.subgroup ?? "__"} gap={1.25}>
+              {section.subgroup && SUBGROUP_META[section.subgroup] && (
+                <Stack gap={0.25}>
+                  <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                    {SUBGROUP_META[section.subgroup].label}
+                  </Typography>
+                  {SUBGROUP_META[section.subgroup].description && (
+                    <Typography variant="caption" color="text.secondary">
+                      {SUBGROUP_META[section.subgroup].description}
+                    </Typography>
+                  )}
+                </Stack>
               )}
+              {section.settings.map((s) => (
+                <Stack key={s.key} gap={0.5}>
+                  <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+                    <SettingField
+                      setting={s}
+                      value={localValues[s.key]}
+                      onChange={(v) => setLocalValues((prev) => ({ ...prev, [s.key]: v }))}
+                    />
+                    {s.envOverride && s.envVar && <EnvOverrideBadge envVar={s.envVar} />}
+                  </Stack>
+                  {s.source === "database" && !s.envOverride && (
+                    <Typography variant="caption" color="text.secondary" sx={{ pl: 0.5 }}>
+                      Source: database
+                    </Typography>
+                  )}
+                </Stack>
+              ))}
             </Stack>
           ))}
 
