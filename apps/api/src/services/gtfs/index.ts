@@ -6,7 +6,7 @@ import {
   validatePublicUrl,
 } from "@openmapx/core";
 import { sql } from "./db";
-import { dropGtfsSchema, type GtfsImportSource, importGtfsFeed } from "./importer";
+import { dropGtfsSchema, type GtfsImportSource, hashGtfsArchive, importGtfsFeed } from "./importer";
 import type { CatalogFeed, FeedStatus, ImportedFeed } from "./types";
 
 /** Persisted schema names always have the `gtfs_<slug>` shape. Accept only slugs
@@ -242,6 +242,42 @@ class GtfsManager {
   private async runImport(slug: string, source: GtfsImportSource, schema: string): Promise<void> {
     try {
       await this.updateFeedStatus(slug, "downloading");
+
+      // Fast-path for unchanged local archives. The importer's full pipeline
+      // takes 5–30 minutes per feed and DROPs/recreates the schema even when
+      // the bytes haven't moved. For the local-path case (operator promoting
+      // a MOTIS-fetched archive) we can sha256 the zip up front and short-
+      // circuit when it matches the previously persisted feed_hash. URL
+      // imports always fetch — without an ETag/Last-Modified probe we'd
+      // have to download the whole zip just to hash it, defeating the point.
+      if (source.kind === "localPath") {
+        const previous = this.feeds.get(slug);
+        if (previous?.feedHash && previous.status === "active") {
+          let currentHash: string;
+          try {
+            currentHash = hashGtfsArchive(source.path);
+          } catch (err) {
+            // Fall through into the normal import path; the importer reports
+            // a clearer error if the archive is gone.
+            console.warn(`[gtfs] hash check for "${slug}" failed, running full import:`, err);
+            currentHash = "";
+          }
+          if (currentHash && currentHash === previous.feedHash) {
+            const now = new Date().toISOString();
+            await sql.unsafe(
+              `UPDATE public.gtfs_feeds SET status = 'active', last_checked_at = NOW(), error_message = NULL, updated_at = NOW() WHERE slug = $1`,
+              [slug],
+            );
+            previous.status = "active";
+            previous.lastCheckedAt = now;
+            previous.errorMessage = null;
+            console.log(
+              `[gtfs] "${slug}" already at hash ${currentHash.slice(0, 12)}…, skipped re-import`,
+            );
+            return;
+          }
+        }
+      }
 
       const result = await importGtfsFeed(source, schema, (stage) => {
         const status = stage.includes("download") ? "downloading" : "importing";

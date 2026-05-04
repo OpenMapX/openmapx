@@ -710,3 +710,13 @@ export async function dropGtfsSchema(schema: string): Promise<void> {
   await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   invalidateSchemaCaches(schema);
 }
+
+/**
+ * Hash a GTFS zip on disk (sha256). Same algorithm the importer uses on the
+ * temp copy after extraction, so a matching value means the bytes are
+ * byte-identical to the last successful import. Used by the manager to
+ * skip the COPY pipeline when a re-import would produce the same schema.
+ */
+export function hashGtfsArchive(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
