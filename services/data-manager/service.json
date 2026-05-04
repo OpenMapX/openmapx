@@ -15,7 +15,7 @@
       "HOST": "0.0.0.0",
       "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}"
     },
-    "memory": "4g",
+    "memory": "8g",
     "restart": "unless-stopped",
     "healthcheck": {
       "type": "http",
