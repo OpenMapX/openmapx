@@ -806,10 +806,22 @@ async function resolveEnturGeofencingSystemIds(
   bbox: BoundingBox,
   systemIds: string[] | undefined,
 ): Promise<string[]> {
-  const explicit = [...new Set(systemIds ?? [])].sort();
-  if (explicit.length > 0) return explicit;
-
   const catalog = await loadCatalog();
+  const enturSystemIds = new Set(
+    catalog
+      .filter((entry) => entry.autoDiscoveryUrl.includes(ENTUR_GBFS_HOST))
+      .map((entry) => entry.systemId)
+      .filter((systemId) => systemId.length > 0),
+  );
+
+  const explicit = [...new Set(systemIds ?? [])].sort();
+  if (explicit.length > 0) {
+    // Only forward IDs that are actually hosted on Entur — otherwise the
+    // GraphQL endpoint rejects the unknown systemIds and the whole map
+    // context call fails.
+    return explicit.filter((id) => enturSystemIds.has(id));
+  }
+
   return [
     ...new Set(
       filterCatalogByBbox(catalog, bbox)

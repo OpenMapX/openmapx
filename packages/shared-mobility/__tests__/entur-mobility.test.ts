@@ -61,8 +61,18 @@ function makeStation(overrides?: Partial<SharedMobilityStation>): SharedMobility
   };
 }
 
+const VOI_OSLO_CATALOG_ENTRY = {
+  countryCode: "NO",
+  location: "Oslo",
+  name: "Voi Oslo",
+  systemId: "voi-oslo",
+  url: "https://example.com/voi-oslo",
+  autoDiscoveryUrl: "https://api.entur.io/mobility/v2/gbfs/v3/voi-oslo/gbfs",
+};
+
 describe("buildEnturGeofencingMapContext", () => {
   it("clips returned geometry to the requested bbox", async () => {
+    vi.mocked(loadCatalog).mockResolvedValue([VOI_OSLO_CATALOG_ENTRY]);
     mockFetchJson({
       data: {
         geofencingZones: [
@@ -126,6 +136,7 @@ describe("buildEnturGeofencingMapContext", () => {
   });
 
   it("filters out zones for other vehicle types", async () => {
+    vi.mocked(loadCatalog).mockResolvedValue([VOI_OSLO_CATALOG_ENTRY]);
     mockFetchJson({
       data: {
         geofencingZones: [
@@ -256,6 +267,29 @@ describe("buildEnturGeofencingMapContext", () => {
 
     expect(filterCatalogByBbox).toHaveBeenCalledWith(expect.any(Array), bbox);
     expect(context?.geojson.features[0].properties?.systemId).toBe("oslobysykkel");
+  });
+
+  it("returns null when explicit systemIds are not Entur-hosted", async () => {
+    vi.mocked(loadCatalog).mockResolvedValue([
+      {
+        countryCode: "DE",
+        location: "Aachen",
+        name: "Velocity Aachen",
+        systemId: "esel_ac",
+        url: "https://example.com/esel-ac",
+        autoDiscoveryUrl: "https://gbfs.example.de/esel_ac/gbfs.json",
+      },
+    ]);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const context = await buildEnturGeofencingMapContext(
+      { west: 6, south: 50, east: 7, north: 51 },
+      { systemIds: ["esel_ac", "dott-aachen", "nextbike_an"] },
+    );
+
+    expect(context).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
