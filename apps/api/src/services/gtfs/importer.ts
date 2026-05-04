@@ -12,9 +12,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fetchWithRedirects, isValidFeedSlug, USER_AGENT, validatePublicUrl } from "@openmapx/core";
-import { safeDownload } from "@openmapx/core/server";
+import { repoPaths, safeDownload } from "@openmapx/core/server";
 import { gtfsDate, parseCsv, streamCsvBatches } from "./csv";
 import { sql } from "./db";
 import { invalidateSchemaCaches } from "./queries";
@@ -22,6 +23,44 @@ import { invalidateSchemaCaches } from "./queries";
 function assertValidGtfsSchema(schema: string): void {
   if (!schema.startsWith("gtfs_") || !isValidFeedSlug(schema.slice("gtfs_".length))) {
     throw new Error(`Invalid GTFS schema name "${schema}"`);
+  }
+}
+
+// Mirrors admin-ops `findInfraDir()` so we don't pull that whole module in.
+function resolveCanonicalGtfsDir(): string {
+  if (process.env.DOCKER_INFRA_DIR) return resolve(process.env.DOCKER_INFRA_DIR, "data", "gtfs");
+  try {
+    return resolve(repoPaths().infraDir, "data", "gtfs");
+  } catch {
+    const thisFile = fileURLToPath(import.meta.url);
+    return resolve(
+      dirname(thisFile),
+      "..",
+      "..",
+      "..",
+      "..",
+      "..",
+      "infra",
+      "docker",
+      "data",
+      "gtfs",
+    );
+  }
+}
+
+const CANONICAL_GTFS_DIR = resolveCanonicalGtfsDir();
+
+function assertLocalPathSafe(rawPath: string): void {
+  const resolved = resolve(rawPath);
+  // Require the resolved path to be either CANONICAL_GTFS_DIR itself
+  // (impossible — it's a directory, not a file) or a child. The trailing
+  // separator guard prevents `…/data/gtfs-evil/feed.zip` from sneaking past
+  // a naive `startsWith` check.
+  const prefix = CANONICAL_GTFS_DIR.endsWith(sep) ? CANONICAL_GTFS_DIR : CANONICAL_GTFS_DIR + sep;
+  if (!resolved.startsWith(prefix)) {
+    throw new Error(
+      `Refusing to import GTFS archive from outside the canonical data dir: ${rawPath}`,
+    );
   }
 }
 
@@ -240,10 +279,11 @@ async function obtainGtfsZip(source: GtfsImportSource, zipPath: string): Promise
   }
   // Local source — copy into the temp dir so the rest of the pipeline (unzip,
   // hash, schema-validation cleanup) can treat it identically to a downloaded
-  // archive. The caller is responsible for confining `path` to a known-safe
-  // directory; the route handler that exposes this surface looks up the file
-  // by archive id against `getMotisGtfsArchives()`, so user input never reaches
-  // here directly.
+  // archive. The route handler that exposes this surface already looks up the
+  // file by archive id against `getMotisGtfsArchives()` so user input never
+  // reaches here directly, but defense-in-depth: insist the resolved path
+  // lives under the canonical GTFS directory before opening it.
+  assertLocalPathSafe(source.path);
   if (!existsSync(source.path) || !statSync(source.path).isFile()) {
     throw new Error(`GTFS archive not found at ${source.path}`);
   }
@@ -625,6 +665,30 @@ export interface ImportResult {
   routeCount: number;
   tripCount: number;
   bbox: [number, number, number, number] | null;
+  /** ISO `YYYY-MM-DD` — latest date the feed has scheduled service for, or null if no calendar info. */
+  serviceEndDate: string | null;
+}
+
+// Latest scheduled service date across `calendar` (`end_date`) and
+// `calendar_dates` (added exceptions). Routing on a date past this is
+// guaranteed to return no trips, so we use it as the feed's "expires on".
+async function computeServiceEndDate(schema: string): Promise<string | null> {
+  const result = await sql.unsafe(`
+    SELECT GREATEST(
+      (SELECT MAX(end_date) FROM "${schema}".calendar),
+      (SELECT MAX(date) FROM "${schema}".calendar_dates WHERE exception_type = 1)
+    ) as end_date
+  `);
+  const row = result[0];
+  if (!row?.end_date) return null;
+  // postgres-js returns DATEs as JS Date objects with UTC midnight; format manually
+  // to keep the calendar-day semantics intact regardless of TZ.
+  const d = row.end_date instanceof Date ? row.end_date : new Date(String(row.end_date));
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export async function importGtfsFeed(
@@ -697,8 +761,9 @@ export async function importGtfsFeed(
       await sql.unsafe(createServiceDaysDDL(stagingSchema));
     }
 
-    // 6. Compute bounding box
+    // 6. Compute bounding box and feed expiry
     const bbox = await computeBbox(stagingSchema);
+    const serviceEndDate = await computeServiceEndDate(stagingSchema);
 
     // 7. Atomic swap: drop the live schema and rename staging → live in a
     //    single transaction. Readers either see the old data (before COMMIT)
@@ -711,7 +776,7 @@ export async function importGtfsFeed(
     });
     invalidateSchemaCaches(schema);
 
-    return { schema, hash, stopCount, routeCount, tripCount, bbox };
+    return { schema, hash, stopCount, routeCount, tripCount, bbox, serviceEndDate };
   } catch (err) {
     // Best-effort staging cleanup so a failed import doesn't leave stale
     // partial schemas around.

@@ -62,6 +62,7 @@ function makeFeed(slug: string, schemaName: string): ImportedFeed {
     slug,
     name: `Feed ${slug}`,
     url: `https://example.com/${slug}.zip`,
+    originUrl: null,
     source: "transitous",
     countryCode: "de",
     schemaName,
@@ -74,6 +75,7 @@ function makeFeed(slug: string, schemaName: string): ImportedFeed {
     stopCount: 100,
     routeCount: 20,
     tripCount: 500,
+    serviceEndDate: null,
     currentStage: null,
   };
 }

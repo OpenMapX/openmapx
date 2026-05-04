@@ -84,6 +84,7 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
           source: body.source ?? "motis-local",
           countryCode: body.countryCode ?? "",
           localPath,
+          originUrl: archive.originUrl,
         },
         slug,
       );

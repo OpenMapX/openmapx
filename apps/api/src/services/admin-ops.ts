@@ -1,5 +1,5 @@
 import { execFile as execFileCb } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -355,13 +355,63 @@ export interface MotisGtfsArchive {
   sizeBytes: number;
   modifiedAt: string;
   format: "gtfs" | "netex";
+  /** Upstream HTTP URL the archive was fetched from, looked up in the Transitous catalog. */
+  originUrl?: string;
 }
 
 const GTFS_ARCHIVE_RE = /^([^.][^/]*?)\.(gtfs|netex)\.zip$/i;
 
+interface TransitousCatalogSource {
+  name?: string;
+  type?: string;
+  url?: string;
+  spec?: string;
+}
+
+interface TransitousCatalogFile {
+  sources?: TransitousCatalogSource[];
+}
+
+// `de_DELFI` -> upstream HTTP url. Matches the archive id format produced by
+// the Transitous pipeline (`<region>_<source-name>`); we lowercase keys so a
+// case-mismatched archive on disk still resolves.
+function buildTransitousOriginIndex(): Map<string, string> {
+  const index = new Map<string, string>();
+  const feedsDir = join(DATA_DIR, ".transitous-catalog", "feeds");
+  if (!existsSync(feedsDir)) return index;
+  let entries: string[];
+  try {
+    entries = readdirSync(feedsDir);
+  } catch {
+    return index;
+  }
+  for (const file of entries) {
+    if (!file.endsWith(".json")) continue;
+    const region = file
+      .replace(/\.json$/, "")
+      .split("-")[0]
+      ?.toLowerCase();
+    if (!region) continue;
+    let data: TransitousCatalogFile;
+    try {
+      data = JSON.parse(readFileSync(join(feedsDir, file), "utf-8")) as TransitousCatalogFile;
+    } catch {
+      continue;
+    }
+    for (const source of data.sources ?? []) {
+      if (source.type && source.type !== "http" && source.type !== "transitland-atlas") continue;
+      if (!source.name || !source.url) continue;
+      const archiveId = `${region}_${source.name}`.toLowerCase();
+      index.set(archiveId, source.url);
+    }
+  }
+  return index;
+}
+
 export async function getMotisGtfsArchives(): Promise<MotisGtfsArchive[]> {
   const gtfsDir = join(DATA_DIR, "gtfs");
   if (!existsSync(gtfsDir)) return [];
+  const originIndex = buildTransitousOriginIndex();
   try {
     const entries = await readdir(gtfsDir);
     const archives: MotisGtfsArchive[] = [];
@@ -379,6 +429,7 @@ export async function getMotisGtfsArchives(): Promise<MotisGtfsArchive[]> {
           sizeBytes: stat.size,
           modifiedAt: stat.mtime.toISOString(),
           format,
+          originUrl: originIndex.get(id.toLowerCase()),
         });
       } catch {
         // Skip a missing/unreadable entry rather than failing the whole list.

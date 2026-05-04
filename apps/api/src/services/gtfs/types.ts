@@ -16,6 +16,14 @@ export interface ImportedFeed {
   slug: string;
   name: string;
   url: string;
+  /**
+   * Optional upstream HTTP URL the feed was originally fetched from when
+   * `url` is now a `local:<filename>` pseudo-URL pointing at a MOTIS-fetched
+   * archive. Lets the UI render "imported from local zip · originally
+   * https://www.vbb.de/…" and unblocks future "refresh from upstream" actions.
+   * `null` for direct-URL imports where `url` already is the origin.
+   */
+  originUrl: string | null;
   source: string;
   countryCode: string;
   schemaName: string;
@@ -28,6 +36,14 @@ export interface ImportedFeed {
   stopCount: number | null;
   routeCount: number | null;
   tripCount: number | null;
+  /**
+   * Last calendar date the feed schedules service for. Computed from
+   * `MAX(calendar.end_date)` plus added `calendar_dates` exceptions during
+   * import; null when the feed lacks any calendar data. ISO `YYYY-MM-DD`.
+   * Surfaced in the admin UI to flag stale feeds — once this passes "today"
+   * the feed is no longer routable for that day.
+   */
+  serviceEndDate: string | null;
   /**
    * Live import-stage label streamed from the importer (e.g. `"importing
    * stop_times"`, `"swapping schema"`). Set while `status` is `downloading`

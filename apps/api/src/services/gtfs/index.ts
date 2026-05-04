@@ -24,6 +24,7 @@ const METADATA_TABLE_DDL = `
     slug TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     url TEXT NOT NULL,
+    origin_url TEXT,
     source TEXT NOT NULL,
     country_code TEXT,
     bbox JSONB,
@@ -36,6 +37,7 @@ const METADATA_TABLE_DDL = `
     stop_count INTEGER,
     route_count INTEGER,
     trip_count INTEGER,
+    service_end_date DATE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   );
@@ -43,6 +45,19 @@ const METADATA_TABLE_DDL = `
 
 function bboxOverlaps(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
+}
+
+// postgres-js returns DATE columns as JS Date objects pegged to UTC midnight.
+// `toISOString().slice(0,10)` would shift across timezones — read the UTC parts
+// directly so the calendar day stays intact.
+function formatDateOnly(value: unknown): string | null {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 // GtfsManager
@@ -78,6 +93,7 @@ class GtfsManager {
           slug: persistedSlug,
           name: row.name as string,
           url: row.url as string,
+          originUrl: (row.origin_url as string | null) ?? null,
           source: row.source as string,
           countryCode: (row.country_code as string) ?? "",
           schemaName: persistedSchema,
@@ -90,6 +106,7 @@ class GtfsManager {
           stopCount: row.stop_count as number | null,
           routeCount: row.route_count as number | null,
           tripCount: row.trip_count as number | null,
+          serviceEndDate: row.service_end_date ? formatDateOnly(row.service_end_date) : null,
           currentStage: null,
         };
         this.feeds.set(feed.slug, feed);
@@ -177,7 +194,19 @@ class GtfsManager {
   async startImport(
     feed:
       | CatalogFeed
-      | { name: string; url: string; source: string; countryCode: string; localPath?: string },
+      | {
+          name: string;
+          url: string;
+          source: string;
+          countryCode: string;
+          localPath?: string;
+          /**
+           * Upstream HTTP URL the feed was originally fetched from. Persisted
+           * separately from `url` so a `local:<filename>` pseudo-URL doesn't
+           * lose the origin when an operator promotes a MOTIS-fetched archive.
+           */
+          originUrl?: string;
+        },
     slug?: string,
   ): Promise<string> {
     const feedSlug =
@@ -193,6 +222,7 @@ class GtfsManager {
     }
 
     const localPath = "localPath" in feed ? feed.localPath : undefined;
+    const originUrl = "originUrl" in feed ? (feed.originUrl ?? null) : null;
 
     // Create or update metadata. Preserve any prior `currentStage` only
     // until the import actually starts emitting fresh stage updates.
@@ -201,6 +231,10 @@ class GtfsManager {
       slug: feedSlug,
       name: feed.name,
       url: feed.url,
+      // Prefer an explicit originUrl from the caller, fall back to whatever
+      // we already had (preserves the upstream URL across re-imports that
+      // didn't supply it again).
+      originUrl: originUrl ?? previous?.originUrl ?? null,
       source: feed.source,
       countryCode: feed.countryCode ?? "",
       schemaName,
@@ -213,16 +247,29 @@ class GtfsManager {
       stopCount: previous?.stopCount ?? null,
       routeCount: previous?.routeCount ?? null,
       tripCount: previous?.tripCount ?? null,
+      serviceEndDate: previous?.serviceEndDate ?? null,
       currentStage: null,
     };
     this.feeds.set(feedSlug, importedFeed);
 
     await sql.unsafe(
-      `INSERT INTO public.gtfs_feeds (slug, name, url, source, country_code, schema_name, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+      `INSERT INTO public.gtfs_feeds (slug, name, url, origin_url, source, country_code, schema_name, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
        ON CONFLICT (slug) DO UPDATE SET
-         url = $3, status = 'pending', error_message = NULL, updated_at = NOW()`,
-      [feedSlug, feed.name, feed.url, feed.source, feed.countryCode ?? "", schemaName],
+         url = $3,
+         origin_url = COALESCE($4, public.gtfs_feeds.origin_url),
+         status = 'pending',
+         error_message = NULL,
+         updated_at = NOW()`,
+      [
+        feedSlug,
+        feed.name,
+        feed.url,
+        importedFeed.originUrl,
+        feed.source,
+        feed.countryCode ?? "",
+        schemaName,
+      ],
     );
 
     // Validate URL only when we'll actually fetch it; local-path imports
@@ -306,15 +353,17 @@ class GtfsManager {
           stop_count = $3,
           route_count = $4,
           trip_count = $5,
+          service_end_date = $6::date,
           error_message = NULL,
           updated_at = NOW()
-        WHERE slug = $6`,
+        WHERE slug = $7`,
         [
           result.bbox ? JSON.stringify(result.bbox) : null,
           result.hash,
           result.stopCount,
           result.routeCount,
           result.tripCount,
+          result.serviceEndDate,
           slug,
         ],
       );
@@ -329,6 +378,7 @@ class GtfsManager {
         feed.stopCount = result.stopCount;
         feed.routeCount = result.routeCount;
         feed.tripCount = result.tripCount;
+        feed.serviceEndDate = result.serviceEndDate;
         feed.errorMessage = null;
         feed.currentStage = null;
       }

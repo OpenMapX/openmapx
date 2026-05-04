@@ -58,12 +58,16 @@ interface GtfsFeed {
   slug: string;
   name: string;
   url: string;
+  /** Upstream HTTP URL when `url` is a `local:` pseudo-URL — null for direct URL imports. */
+  originUrl?: string | null;
   source?: string;
   status: string;
   importedAt?: string;
   /** Live importer stage label (e.g. "importing stop_times") while status is `downloading`/`importing`. */
   currentStage?: string | null;
   errorMessage?: string | null;
+  /** ISO `YYYY-MM-DD` — last calendar date the feed schedules service for. */
+  serviceEndDate?: string | null;
   rowCounts?: { stops?: number; routes?: number; trips?: number };
 }
 
@@ -74,6 +78,8 @@ interface MotisGtfsArchive {
   sizeBytes: number;
   modifiedAt: string;
   format: "gtfs" | "netex";
+  /** Upstream HTTP URL the archive was fetched from, derived from the Transitous catalog. */
+  originUrl?: string;
 }
 
 interface MotisTransitousStatus {
@@ -117,6 +123,40 @@ function formatDate(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function renderExpiryCell(serviceEndDate: string | null | undefined): ReactNode {
+  if (!serviceEndDate) return "—";
+  // The service end date is a UTC calendar day; compare against today's UTC
+  // calendar day so a feed valid through "today" doesn't show as expired
+  // depending on the operator's timezone offset.
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const [y, m, d] = serviceEndDate.split("-").map(Number);
+  if (!y || !m || !d) return "—";
+  const endUtc = Date.UTC(y, m - 1, d);
+  const daysUntil = Math.round((endUtc - todayUtc) / 86_400_000);
+  const formatted = new Date(endUtc).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  let color: "default" | "success" | "warning" | "error" = "default";
+  let label = formatted;
+  if (daysUntil < 0) {
+    color = "error";
+    label = `${formatted} · expired ${-daysUntil}d ago`;
+  } else if (daysUntil < 7) {
+    color = "error";
+    label = `${formatted} · ${daysUntil}d`;
+  } else if (daysUntil < 30) {
+    color = "warning";
+    label = `${formatted} · ${daysUntil}d`;
+  } else {
+    color = "success";
+    label = `${formatted} · ${daysUntil}d`;
+  }
+  return <Chip size="small" color={color} variant="outlined" label={label} />;
 }
 
 const BUILD_LABELS: Record<string, string> = {
@@ -850,6 +890,7 @@ function GtfsSection({
                     <TableCell>Status</TableCell>
                     <TableCell>Stops</TableCell>
                     <TableCell>Routes</TableCell>
+                    <TableCell>Expires</TableCell>
                     <TableCell>Updated</TableCell>
                     <TableCell align="right" />
                   </TableRow>
@@ -860,6 +901,10 @@ function GtfsSection({
                     const motis = row.motis;
                     const displayName = pg?.name ?? motis?.id ?? row.key;
                     const updatedIso = pg?.importedAt ?? motis?.modifiedAt;
+                    // Prefer the Postgres-recorded origin (it survives MOTIS-side cleanup) and
+                    // fall back to the catalog-derived MOTIS archive URL when the feed only
+                    // exists on disk.
+                    const originUrl = pg?.originUrl ?? motis?.originUrl ?? null;
                     const status = pg?.status ?? (motis ? "motis-only" : "—");
                     const statusColor: "success" | "warning" | "default" | "info" =
                       status === "active"
@@ -882,6 +927,31 @@ function GtfsSection({
                               {pg ? `g-${pg.slug}` : row.key}
                               {motis ? ` · ${formatBytes(motis.sizeBytes)}` : ""}
                             </Typography>
+                            {originUrl && (
+                              <Tooltip title={originUrl}>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{
+                                    maxWidth: 280,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  origin:{" "}
+                                  <Box
+                                    component="a"
+                                    href={originUrl}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    sx={{ color: "inherit", textDecoration: "underline" }}
+                                  >
+                                    {originUrl}
+                                  </Box>
+                                </Typography>
+                              </Tooltip>
+                            )}
                           </Stack>
                         </TableCell>
                         <TableCell>
@@ -932,6 +1002,7 @@ function GtfsSection({
                         </TableCell>
                         <TableCell>{pg?.rowCounts?.stops?.toLocaleString() ?? "—"}</TableCell>
                         <TableCell>{pg?.rowCounts?.routes?.toLocaleString() ?? "—"}</TableCell>
+                        <TableCell>{renderExpiryCell(pg?.serviceEndDate)}</TableCell>
                         <TableCell>{updatedIso ? formatDate(updatedIso) : "—"}</TableCell>
                         <TableCell align="right">
                           <Stack direction="row" spacing={0.5} justifyContent="flex-end">
