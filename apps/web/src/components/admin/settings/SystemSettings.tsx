@@ -235,7 +235,19 @@ function SettingsGroupPanel({
   const hasEnvOverrides = group.settings.some((s) => s.envOverride);
 
   return (
-    <Accordion defaultExpanded={group.id === "general"} variant="outlined" disableGutters>
+    <Accordion
+      defaultExpanded={group.id === "general"}
+      variant="outlined"
+      disableGutters
+      // MUI's Accordion styles only round the first-of-type's top and the
+      // last-of-type's bottom — the inner accordions render flat, which
+      // looks broken next to the rounded ExportImportSection Paper. Force
+      // full rounding on every panel so they all match.
+      sx={{
+        borderRadius: 1,
+        "&:first-of-type, &:last-of-type, &.Mui-expanded": { borderRadius: 1 },
+      }}
+    >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
         <Stack direction="row" alignItems="center" gap={1}>
           <Typography fontWeight={600}>{group.label}</Typography>
