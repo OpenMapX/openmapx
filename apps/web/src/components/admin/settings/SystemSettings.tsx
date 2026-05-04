@@ -239,13 +239,16 @@ function SettingsGroupPanel({
       defaultExpanded={group.id === "general"}
       variant="outlined"
       disableGutters
-      // MUI's Accordion styles only round the first-of-type's top and the
-      // last-of-type's bottom — the inner accordions render flat, which
-      // looks broken next to the rounded ExportImportSection Paper. Force
-      // full rounding on every panel so they all match.
+      // MUI's Accordion variant rule sets borderRadius: 0 on the root and
+      // only re-rounds the first-of-type's top and last-of-type's bottom,
+      // so middle panels render flat. Match the same .MuiAccordion-rounded
+      // specificity to override every corner on every panel; without the
+      // double-class scope our plain `&` rule loses the cascade.
       sx={{
-        borderRadius: 1,
-        "&:first-of-type, &:last-of-type, &.Mui-expanded": { borderRadius: 1 },
+        "&.MuiAccordion-rounded": {
+          borderRadius: 1,
+          "&:first-of-type, &:last-of-type": { borderRadius: 1 },
+        },
       }}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
