@@ -2,7 +2,6 @@
 
 import FilterListIcon from "@mui/icons-material/FilterList";
 import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import Alert from "@mui/material/Alert";
@@ -11,7 +10,6 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
-import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
@@ -364,13 +362,12 @@ export function IntegrationList() {
               <TableCell>Quality</TableCell>
               <TableCell>Health</TableCell>
               <TableCell>Enabled</TableCell>
-              <TableCell align="right" />
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8}>
+                <TableCell colSpan={7}>
                   <Typography variant="body2" color="text.secondary" align="center" py={3}>
                     No integrations match your filters
                   </Typography>
@@ -388,12 +385,21 @@ export function IntegrationList() {
                   />
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2" fontWeight={600} lineHeight={1.2}>
-                    {integration.name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {integration.id}
-                  </Typography>
+                  <Stack gap={0.25}>
+                    <Typography
+                      component={Link}
+                      href={`/admin/integrations/${integration.id}`}
+                      variant="body2"
+                      fontWeight={600}
+                      lineHeight={1.2}
+                      sx={{ textDecoration: "none", color: "primary.main" }}
+                    >
+                      {integration.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {integration.id}
+                    </Typography>
+                  </Stack>
                 </TableCell>
                 <TableCell>
                   <Stack direction="row" gap={0.5} flexWrap="wrap">
@@ -425,17 +431,6 @@ export function IntegrationList() {
                         onChange={(e) => toggleIntegration(integration.id, e.target.checked)}
                       />
                     </span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell align="right">
-                  <Tooltip title="View details">
-                    <IconButton
-                      size="small"
-                      component={Link}
-                      href={`/admin/integrations/${integration.id}`}
-                    >
-                      <OpenInNewIcon fontSize="small" />
-                    </IconButton>
                   </Tooltip>
                 </TableCell>
               </TableRow>
