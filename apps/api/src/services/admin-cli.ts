@@ -179,6 +179,14 @@ export function assertValidBackupName(name: string): void {
 /**
  * Spawn the OpenMapX CLI from the monorepo and mirror output into job logs.
  * This keeps admin operations behaviour aligned with existing CLI workflows.
+ *
+ * We invoke the CLI through tsx (a workspace dep of packages/cli) rather
+ * than `node --experimental-strip-types` directly: Node's strip-types
+ * loader requires explicit `.ts`/`.js` extensions on every relative
+ * import, which the CLI source doesn't have, so the equivalent node
+ * invocation aborts with ERR_MODULE_NOT_FOUND on the first
+ * `import "./commands/backup"` line. tsx mirrors what `pnpm openmapx`
+ * uses on the host.
  */
 export async function runOpenmapxCliJobCommand(ctx: JobContext, args: string[]): Promise<void> {
   const rootDir = findRepoRoot();
@@ -187,17 +195,24 @@ export async function runOpenmapxCliJobCommand(ctx: JobContext, args: string[]):
     throw new Error(`CLI entry not found at ${cliEntry}`);
   }
 
+  // tsx is a regular dependency of packages/cli, so it's always present in
+  // the CLI package's local node_modules whether the install was a pnpm
+  // workspace install on the host or the production install baked into the
+  // app-api Docker image.
+  const tsxBin = join(rootDir, "packages", "cli", "node_modules", ".bin", "tsx");
+  if (!existsSync(tsxBin)) {
+    throw new Error(
+      `tsx not found at ${tsxBin}. Run \`pnpm install\` to populate packages/cli/node_modules.`,
+    );
+  }
+
   await ctx.log(`$ openmapx ${args.join(" ")}`);
 
-  const child = spawn(
-    process.execPath,
-    ["--experimental-strip-types", "--no-warnings", cliEntry, ...args],
-    {
-      cwd: rootDir,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
+  const child = spawn(tsxBin, [cliEntry, ...args], {
+    cwd: rootDir,
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   let logChain: Promise<void> = Promise.resolve();
   const enqueueLog = (line: string, stream: "stdout" | "stderr") => {
