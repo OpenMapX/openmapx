@@ -36,6 +36,7 @@ import { statusRoute } from "./routes/status";
 import { tilesRoute } from "./routes/tiles";
 import { trafficRoute } from "./routes/traffic";
 import { winterSportsRoute } from "./routes/winter-sports";
+import { pruneAuditLog, pruneCompletedJobs } from "./services/activity-retention";
 import {
   handleBackupOperationJob,
   handleDataOperationJob,
@@ -208,11 +209,24 @@ server.get("/api/id-schemes", async () =>
 await jobRunner.initialize();
 
 // Prune old health history records daily
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const AUDIT_RETENTION_DAYS = Number(process.env.AUDIT_LOG_RETENTION_DAYS ?? 90);
+const JOB_RETENTION_DAYS = Number(process.env.ADMIN_JOB_RETENTION_DAYS ?? 30);
+
 setInterval(
   () =>
     void pruneOldRecords(30).catch((err) => server.log.warn(err, "Health history prune failed")),
-  24 * 60 * 60 * 1000,
+  ONE_DAY_MS,
 );
+
+setInterval(() => {
+  void pruneAuditLog(AUDIT_RETENTION_DAYS).catch((err) =>
+    server.log.warn(err, "Audit log prune failed"),
+  );
+  void pruneCompletedJobs(JOB_RETENTION_DAYS).catch((err) =>
+    server.log.warn(err, "Admin job prune failed"),
+  );
+}, ONE_DAY_MS);
 
 // Register job handlers
 jobRunner.register("service.start", async (ctx) => {
