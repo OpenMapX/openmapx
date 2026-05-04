@@ -31,7 +31,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "TomTom Traffic API Key",
         "description": "TomTom Traffic API key.",
         "x-openmapx-secret": true
       }

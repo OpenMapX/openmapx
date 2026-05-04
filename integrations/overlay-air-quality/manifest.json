@@ -32,7 +32,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "OpenAQ API Key",
         "description": "OpenAQ API key.",
         "x-openmapx-secret": true
       }

@@ -16,7 +16,7 @@
       },
       "githubToken": {
         "type": "string",
-        "title": "GitHub token",
+        "title": "GitHub API Token (Transit Registry)",
         "description": "Optional GitHub API token. Raises the unauthenticated 60/hr rate limit to 5000/hr when fetching the registry from api.github.com.",
         "x-openmapx-secret": true
       }

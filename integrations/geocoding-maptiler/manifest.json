@@ -17,7 +17,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "MapTiler API Key",
         "description": "MapTiler API key. Get one at maptiler.com/cloud.",
         "x-openmapx-secret": true,
         "x-openmapx-sharedSecretName": "maptiler-api-key"

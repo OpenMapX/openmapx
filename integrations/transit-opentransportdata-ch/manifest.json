@@ -15,7 +15,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "OpenTransportData CH API Key",
         "description": "API key from api-manager.opentransportdata.swiss for OJP, live alerts, GTFS-RT and optional formation access.",
         "x-openmapx-secret": true,
         "x-openmapx-sharedSecretName": "opentransportdata-ch-api-key"

@@ -25,13 +25,13 @@
       },
       "clientId": {
         "type": "string",
-        "title": "Client ID",
+        "title": "DB BahnPark Client ID",
         "description": "Deutsche Bahn Parking API client ID.",
         "x-openmapx-secret": true
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "DB BahnPark API Key",
         "description": "Deutsche Bahn Parking API key.",
         "x-openmapx-secret": true,
         "x-openmapx-sharedSecretName": "db-parking-api-key"

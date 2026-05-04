@@ -25,7 +25,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "Tankerkönig API Key",
         "description": "Tankerkoenig API key for German fuel prices.",
         "x-openmapx-secret": true
       }

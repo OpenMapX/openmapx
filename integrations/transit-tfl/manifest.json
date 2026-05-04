@@ -15,7 +15,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "TfL API Key",
         "description": "Transport for London API key.",
         "x-openmapx-secret": true
       }

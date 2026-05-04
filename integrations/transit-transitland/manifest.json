@@ -15,7 +15,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "Transitland API Key",
         "description": "Transitland API key.",
         "x-openmapx-secret": true
       }

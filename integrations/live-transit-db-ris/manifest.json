@@ -18,13 +18,13 @@
       },
       "clientId": {
         "type": "string",
-        "title": "Client ID",
+        "title": "DB RIS Maps Client ID",
         "description": "Deutsche Bahn RIS API client ID.",
         "x-openmapx-secret": true
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "DB RIS Maps API Key",
         "description": "Deutsche Bahn RIS API key.",
         "x-openmapx-secret": true,
         "x-openmapx-sharedSecretName": "db-ris-api-key"

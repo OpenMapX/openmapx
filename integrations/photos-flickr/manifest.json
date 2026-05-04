@@ -17,7 +17,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "Flickr API Key",
         "description": "Flickr API key.",
         "x-openmapx-secret": true
       }

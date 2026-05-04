@@ -32,7 +32,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "NASA FIRMS Map Key",
         "description": "NASA FIRMS map key.",
         "x-openmapx-secret": true
       }

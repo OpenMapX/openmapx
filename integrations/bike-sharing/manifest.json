@@ -25,13 +25,13 @@
       },
       "clientId": {
         "type": "string",
-        "title": "Client ID",
+        "title": "DB Call-a-Bike Client ID",
         "description": "Deutsche Bahn GBFS client ID.",
         "x-openmapx-secret": true
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "DB Call-a-Bike API Key",
         "description": "Deutsche Bahn GBFS API key.",
         "x-openmapx-secret": true
       }

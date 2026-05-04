@@ -15,7 +15,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "MBTA API Key",
         "description": "MBTA v3 API key.",
         "x-openmapx-secret": true
       }

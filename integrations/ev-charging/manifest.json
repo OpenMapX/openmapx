@@ -25,7 +25,7 @@
       },
       "apiKey": {
         "type": "string",
-        "title": "API Key",
+        "title": "OpenChargeMap API Key",
         "description": "OpenChargeMap API key.",
         "x-openmapx-secret": true
       }

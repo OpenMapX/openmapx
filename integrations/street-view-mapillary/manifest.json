@@ -30,7 +30,7 @@
       },
       "accessToken": {
         "type": "string",
-        "title": "Access Token",
+        "title": "Mapillary Access Token",
         "description": "Mapillary client access token for the Graph API.",
         "x-openmapx-secret": true,
         "x-openmapx-sharedSecretName": "mapillary-token"
