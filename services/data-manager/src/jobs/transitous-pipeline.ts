@@ -18,7 +18,12 @@ export const DEFAULT_TRANSITOUS_REPO_URL = "https://github.com/public-transport/
 export const DEFAULT_TRANSITOUS_API_KEYS_PATH = "/config/transitous/api-keys.json";
 const TRANSITOUS_CATALOG_DIR = ".transitous-catalog";
 const TRANSITOUS_DOWNLOADS_DIR = ".transitous-downloads";
-const GTFS_ARCHIVE_RE = /\.(gtfs|netex)\.zip$/i;
+// Match published GTFS / NeTEx archives only. `.tmp-*.gtfs.zip` and any
+// other dotfile-prefixed name is excluded — gtfsclean writes its working
+// output as `.tmp-<id>.gtfs.zip` and renames atomically at the end, so a
+// half-written tmp file should never end up in the dataset registry or
+// the prune scans (where its mid-rename mtime would briefly look "fresh").
+const GTFS_ARCHIVE_RE = /^[^.][^/]*\.(gtfs|netex)\.zip$/i;
 
 type CommandRunner = (
   command: string,
