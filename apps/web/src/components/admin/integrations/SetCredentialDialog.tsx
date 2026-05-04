@@ -2,7 +2,6 @@
 
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
@@ -96,14 +95,6 @@ export function SetCredentialDialog({
               {description}
             </Typography>
           )}
-          <Alert severity="warning" variant="outlined">
-            For production deployments, prefer setting credentials via environment variables (e.g.{" "}
-            <code>
-              INTEGRATION_{integrationId.replace(/-/g, "_").toUpperCase()}_
-              {credentialKey.toUpperCase()}
-            </code>
-            ). Vault credentials are encrypted with AES-256-GCM.
-          </Alert>
           <TextField
             label={title}
             type={showValue ? "text" : "password"}

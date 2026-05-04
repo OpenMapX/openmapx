@@ -443,13 +443,6 @@ function CredentialsTab({
       )}
 
       {secretCredentials.length > 0 && (
-        <Alert severity="info" variant="outlined">
-          For production deployments, prefer setting credentials via environment variables. Vault
-          credentials are encrypted at rest using AES-256-GCM.
-        </Alert>
-      )}
-
-      {secretCredentials.length > 0 && (
         <Card variant="outlined">
           <CardContent>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
