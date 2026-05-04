@@ -26,7 +26,7 @@
     }
   },
   "volumes": [
-    { "name": "openmapx-esdata", "mountAt": "/usr/share/elasticsearch/data", "backup": true }
+    { "name": "openmapx-esdata", "mountAt": "/usr/share/elasticsearch/data", "backup": false }
   ],
   "exposure": {
     "hostPorts": [{ "container": 9200, "host": 9200, "bindAddress": "127.0.0.1" }]
