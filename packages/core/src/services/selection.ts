@@ -168,11 +168,15 @@ export function buildAppApiServiceEnv(
 
   // Forward dynamic operator override families into the API container so
   // env-based integration/service config still works without an `env_file`
-  // blanket pass-through in compose.
-  for (const [key, value] of Object.entries(hostEnv)) {
-    if (value === undefined) continue;
+  // blanket pass-through in compose. Emit a Docker Compose substitution
+  // placeholder rather than the actual value so secrets stay in the
+  // operator's `infra/docker/.env` instead of being baked into the
+  // committable `docker-compose.generated.yml` (anything in the rendered
+  // YAML can leak via backups / debug logs / accidental commits).
+  for (const key of Object.keys(hostEnv)) {
+    if (hostEnv[key] === undefined) continue;
     if (APP_API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-      next[key] = value;
+      next[key] = `\${${key}:-}`;
     }
   }
 

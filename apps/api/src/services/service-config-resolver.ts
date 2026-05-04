@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { serviceConfig } from "../db/schema";
 
-const { configSchemaKeys, resolveServiceConfigFromEnv } = coreServices;
+const { configSchemaKeys, resolveServiceConfigFromEnv, serviceConfigEnvPrefix } = coreServices;
 
 // Re-export the core types so callers (route handlers, tests) don't need to
 // reach into `@openmapx/core` directly. Services can in principle land on any
@@ -117,6 +117,14 @@ export async function resolveServiceConfigWithSources(
  * Batch version: resolve configs for many services in parallel. Used by the
  * compose-render path where we need the full map before handing control to
  * the renderer.
+ *
+ * For values whose source is `env`, emit a Docker Compose substitution
+ * placeholder (`${SERVICE_<ID>_<KEY>:-}`) instead of the literal value, so
+ * operator-set env values (which can include secrets) stay in
+ * `infra/docker/.env` and never get baked into the rendered YAML. Values
+ * sourced from defaults or the database are written verbatim — the database
+ * isn't expected to hold secrets today (no `x-openmapx-secret` field on any
+ * service configSchema), and defaults are public manifest values.
  */
 export async function resolveAllServiceConfigs(
   manifests: ResolveServiceConfigInput[],
@@ -124,9 +132,14 @@ export async function resolveAllServiceConfigs(
   const entries = await Promise.all(
     manifests.map(async (m) => {
       const resolved = await resolveServiceConfigWithSources(m);
+      const prefix = serviceConfigEnvPrefix(m.id);
       const flat: Record<string, unknown> = {};
       for (const [key, entry] of Object.entries(resolved)) {
-        flat[key] = entry.value;
+        if (entry.source === "env") {
+          flat[key] = `\${${prefix}${key.toUpperCase()}:-}`;
+        } else {
+          flat[key] = entry.value;
+        }
       }
       return [m.id, flat] as const;
     }),

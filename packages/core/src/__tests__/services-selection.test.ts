@@ -79,8 +79,12 @@ describe("service selection helpers", () => {
       OPENMAPX_ENABLED_SERVICES: "app-api,osrm,valhalla,overpass",
       // overpass is enabled and no host OVERPASS_URL set → internal URL injected
       OVERPASS_URL: "http://overpass:80",
-      INTEGRATION_PHOTOS_FLICKR_APIKEY: "flickr-key",
-      SERVICE_VALHALLA_BUILD_ELEVATION: "false",
+      // INTEGRATION_*/SERVICE_* values are emitted as Docker Compose
+      // substitution placeholders so the actual secret/config value is
+      // resolved from infra/docker/.env at compose-up time and never
+      // baked into the rendered YAML.
+      INTEGRATION_PHOTOS_FLICKR_APIKEY: "${INTEGRATION_PHOTOS_FLICKR_APIKEY:-}",
+      SERVICE_VALHALLA_BUILD_ELEVATION: "${SERVICE_VALHALLA_BUILD_ELEVATION:-}",
     });
   });
 
