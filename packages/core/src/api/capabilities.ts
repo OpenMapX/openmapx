@@ -1,4 +1,10 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+// Server-side fetches must prefer the internal Docker URL — see the
+// matching comment in `./integrations.ts` for the rationale.
+const API_URL = (
+  process.env.INTERNAL_API_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:3001"
+).replace(/\/+$/, "");
 
 export async function fetchCapabilities(): Promise<Record<string, boolean>> {
   try {
