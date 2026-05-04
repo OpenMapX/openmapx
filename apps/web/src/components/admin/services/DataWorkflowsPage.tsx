@@ -600,6 +600,10 @@ function BuildsSection({ builds }: { builds: BuildStatus[] }) {
 function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importSlug, setImportSlug] = useState("");
+  const [importName, setImportName] = useState("");
 
   const removeMutation = useMutation({
     mutationFn: async (slug: string) => {
@@ -616,6 +620,36 @@ function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
     onError: () => setToast("Failed to remove feed."),
   });
 
+  const importMutation = useMutation({
+    mutationFn: async (input: { url: string; slug?: string; name?: string }) => {
+      const res = await fetch(`${apiUrl}/api/gtfs/feeds`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: input.url.trim(),
+          slug: input.slug?.trim() || undefined,
+          name: input.name?.trim() || undefined,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        slug?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(body.error ?? `Import failed (HTTP ${res.status})`);
+      return body.slug;
+    },
+    onSuccess: (slug) => {
+      setToast(`Import started for "${slug}". Watch the table for progress.`);
+      setImportOpen(false);
+      setImportUrl("");
+      setImportSlug("");
+      setImportName("");
+      void queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
+    },
+    onError: (err) => setToast((err as Error).message),
+  });
+
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Stack direction="row" alignItems="center" spacing={1} mb={2}>
@@ -624,15 +658,67 @@ function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
           GTFS Feeds
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Button
-          component={Link}
-          href="/admin/integrations/transit-gtfs-local"
-          variant="outlined"
-          size="small"
-        >
-          Manage Feeds
+        <Button variant="contained" size="small" onClick={() => setImportOpen(true)}>
+          Import feed
         </Button>
       </Stack>
+
+      <Dialog open={importOpen} onClose={() => setImportOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Import GTFS feed</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              Paste the URL of a GTFS .zip. The importer will stream the archive, parse the CSVs,
+              and load them into a dedicated `gtfs_&lt;slug&gt;` Postgres schema. Slug is
+              auto-derived from the URL filename if you leave it blank.
+            </Typography>
+            <TextField
+              label="GTFS zip URL"
+              placeholder="https://example.com/feed.gtfs.zip"
+              fullWidth
+              size="small"
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              autoFocus
+            />
+            <TextField
+              label="Slug (optional)"
+              placeholder="vbb"
+              helperText="Used as the Postgres schema name (gtfs_<slug>) and the gtfs-local provider prefix (g-<slug>:). Lowercase letters, digits, hyphens, underscores."
+              fullWidth
+              size="small"
+              value={importSlug}
+              onChange={(e) => setImportSlug(e.target.value)}
+            />
+            <TextField
+              label="Display name (optional)"
+              placeholder="VBB Berlin-Brandenburg"
+              fullWidth
+              size="small"
+              value={importName}
+              onChange={(e) => setImportName(e.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportOpen(false)} disabled={importMutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!importUrl.trim() || importMutation.isPending}
+            onClick={() =>
+              importMutation.mutate({
+                url: importUrl,
+                slug: importSlug,
+                name: importName,
+              })
+            }
+          >
+            {importMutation.isPending ? "Starting…" : "Start import"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {feeds.length === 0 ? (
         <Alert severity="info">No GTFS feeds imported yet.</Alert>
