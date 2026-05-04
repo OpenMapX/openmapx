@@ -21,7 +21,7 @@ export function registerBuiltinIdSchemeViews(): void {
   if (registered) return;
   registered = true;
 
-  // --- Canonical open identifiers ----------------------------------------
+  // Canonical open identifiers
 
   registerIdSchemeView({
     scheme: "osm",
@@ -45,7 +45,7 @@ export function registerBuiltinIdSchemeViews(): void {
     },
   });
 
-  // --- Transit / stations ------------------------------------------------
+  // Transit / stations
 
   registerIdSchemeView({
     scheme: "eva",
@@ -61,7 +61,7 @@ export function registerBuiltinIdSchemeViews(): void {
     displayOrder: 40,
   });
 
-  // --- Cross-reference schemes (populated by knowledge enrichment) -------
+  // Cross-reference schemes (populated by knowledge enrichment)
 
   registerIdSchemeView({
     scheme: "googleMaps",
@@ -124,7 +124,7 @@ export function registerBuiltinIdSchemeViews(): void {
     },
   });
 
-  // --- Internal schemes (hidden from user-facing id lists) ---------------
+  // Internal schemes (hidden from user-facing id lists)
 
   for (const scheme of ["coordinate", "stylePoi", "label", "saved", "streetView"]) {
     registerIdSchemeView({ scheme, label: scheme, internal: true });

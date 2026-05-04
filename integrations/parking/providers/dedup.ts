@@ -44,7 +44,7 @@ function facilityPriority(f: ParkingFacility): number {
   return getSourcePriority(f.sources[0]);
 }
 
-// -- Clustering parameters ---------------------------------------------------
+// Clustering parameters
 
 /** Distance below which two facilities are considered the same regardless of name. */
 const ALWAYS_MERGE_M = 40;
@@ -63,7 +63,7 @@ const METERS_PER_DEG_LAT = 111_320;
 /** Clamp cos(lat) to keep the neighbour range bounded near the poles. */
 const MIN_LAT_COS = 0.01;
 
-// -- Haversine distance ------------------------------------------------------
+// Haversine distance
 
 const EARTH_M = 6_371_000;
 
@@ -79,7 +79,7 @@ export function haversineMeters(a: [number, number], b: [number, number]): numbe
   return 2 * EARTH_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-// -- Name similarity ---------------------------------------------------------
+// Name similarity
 
 /**
  * Generic parking-related tokens stripped before comparing names. These appear
@@ -142,7 +142,7 @@ function nameSimilarity(a: string | undefined, b: string | undefined): number {
   return intersect / Math.min(setA.size, setB.size);
 }
 
-// -- Type compatibility ------------------------------------------------------
+// Type compatibility
 
 /**
  * On-street parking is a distinct physical category — merging it with a
@@ -155,7 +155,7 @@ function typesCompatible(a: ParkingType, b: ParkingType): boolean {
   return true;
 }
 
-// -- Cluster predicate -------------------------------------------------------
+// Cluster predicate
 
 function shouldCluster(a: ParkingFacility, b: ParkingFacility): boolean {
   if (!typesCompatible(a.parkingType, b.parkingType)) return false;
@@ -165,7 +165,7 @@ function shouldCluster(a: ParkingFacility, b: ParkingFacility): boolean {
   return nameSimilarity(a.name, b.name) >= NAME_SIM_THRESHOLD;
 }
 
-// -- Union-find --------------------------------------------------------------
+// Union-find
 
 class UnionFind {
   private parent: number[];
@@ -194,7 +194,7 @@ class UnionFind {
   }
 }
 
-// -- Spatial bucketing -------------------------------------------------------
+// Spatial bucketing
 
 function bucketKey(f: ParkingFacility): string {
   const [lng, lat] = f.coordinates;
@@ -228,7 +228,7 @@ function neighborKeys(key: string, lat: number): string[] {
   return out;
 }
 
-// -- Field-level merge helpers ----------------------------------------------
+// Field-level merge helpers
 
 /**
  * Return the highest-priority member's value that passes `pick`, else
@@ -302,7 +302,7 @@ function dedupeSources(primary: string, all: string[]): string[] {
   return Array.from(seen.values());
 }
 
-// -- Cluster merge -----------------------------------------------------------
+// Cluster merge
 
 function mergeCluster(cluster: ParkingFacility[]): ParkingFacility {
   const members = [...cluster].sort((a, b) => facilityPriority(a) - facilityPriority(b));
@@ -365,7 +365,7 @@ function mergeCluster(cluster: ParkingFacility[]): ParkingFacility {
   };
 }
 
-// -- Public API --------------------------------------------------------------
+// Public API
 
 /**
  * Deduplicates and merges parking facilities by clustering nearby entries.
