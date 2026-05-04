@@ -32,6 +32,11 @@ export function SidebarShell({ children, contentSx }: SidebarShellProps) {
             width: { xs: "100%", sm: PANEL_WIDTH },
             height: { xs: "auto", sm: "100dvh" },
             maxHeight: { xs: "60dvh", sm: "none" },
+            // Sidebar uses background.default rather than background.paper so
+            // floating detail cards (DetailShell, MapClickFloatingCard, place
+            // panels) sit visibly elevated on top of it
+            // (#f5f5f5 vs #fff in light; #1c1c1c vs #2d2d2d in dark).
+            bgcolor: "background.default",
             overflowY: "auto",
             borderRadius: { xs: "16px 16px 0 0", sm: 0 },
             boxShadow: { xs: 6, sm: "4px 0 12px var(--omx-shadow-soft)" },
