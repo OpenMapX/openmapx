@@ -158,7 +158,7 @@ export function BulkConfigure() {
         override key ready to paste into <code>infra/docker/.env</code>.
       </Typography>
 
-      {integrationsQuery.isLoading && <Skeleton variant="rectangular" height={200} />}
+      {integrationsQuery.isLoading && <Skeleton variant="rounded" height={200} />}
       {integrationsQuery.isError && (
         <Alert severity="error" variant="outlined">
           Failed to load integrations.
@@ -459,7 +459,7 @@ function EnvVarReferenceSection({
         right-hand side.
       </Typography>
 
-      {loading && <Skeleton variant="rectangular" height={200} sx={{ mt: 1 }} />}
+      {loading && <Skeleton variant="rounded" height={200} sx={{ mt: 1 }} />}
       {error && (
         <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
           Failed to load env-var catalogue.
