@@ -64,6 +64,15 @@ interface GtfsFeed {
   rowCounts?: { stops?: number; routes?: number; trips?: number };
 }
 
+interface MotisGtfsArchive {
+  /** Filename minus .gtfs.zip / .netex.zip — matches against Postgres slugs case-insensitively. */
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  format: "gtfs" | "netex";
+}
+
 interface MotisTransitousStatus {
   configFound: boolean;
   datasetCount: number;
@@ -80,6 +89,7 @@ interface DataResponse {
   osm: OsmInfo;
   builds: BuildStatus[];
   gtfsFeeds: GtfsFeed[];
+  motisGtfsArchives?: MotisGtfsArchive[];
   motisTransitous: MotisTransitousStatus;
   fetchedAt: string;
 }
@@ -597,7 +607,43 @@ function BuildsSection({ builds }: { builds: BuildStatus[] }) {
   );
 }
 
-function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
+// One row per logical feed. A feed counts as the "same" feed across stores
+// when its slug (Postgres) matches the MOTIS archive id case-insensitively
+// — that's how the GTFS importer normalises names anyway.
+interface UnifiedGtfsRow {
+  /** Display key: feed slug if imported, otherwise the MOTIS archive id. */
+  key: string;
+  postgres?: GtfsFeed;
+  motis?: MotisGtfsArchive;
+}
+
+function buildUnifiedRows(feeds: GtfsFeed[], archives: MotisGtfsArchive[]): UnifiedGtfsRow[] {
+  const byKey = new Map<string, UnifiedGtfsRow>();
+  for (const feed of feeds) {
+    const key = feed.slug.toLowerCase();
+    byKey.set(key, { key: feed.slug, postgres: feed });
+  }
+  for (const archive of archives) {
+    const key = archive.id.toLowerCase();
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.motis = archive;
+    } else {
+      byKey.set(key, { key: archive.id, motis: archive });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function GtfsSection({
+  feeds,
+  motisArchives,
+  apiUrl,
+}: {
+  feeds: GtfsFeed[];
+  motisArchives: MotisGtfsArchive[];
+  apiUrl: string;
+}) {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -720,65 +766,130 @@ function GtfsSection({ feeds, apiUrl }: { feeds: GtfsFeed[]; apiUrl: string }) {
         </DialogActions>
       </Dialog>
 
-      {feeds.length === 0 ? (
-        <Alert severity="info">No GTFS feeds imported yet.</Alert>
-      ) : (
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Slug</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Stops</TableCell>
-                <TableCell>Routes</TableCell>
-                <TableCell>Imported</TableCell>
-                <TableCell align="right" />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {feeds.map((feed) => (
-                <TableRow key={feed.slug} hover>
-                  <TableCell>
-                    <Typography variant="caption" fontFamily="monospace">
-                      g-{feed.slug}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{feed.name}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={feed.status}
-                      size="small"
-                      color={
-                        feed.status === "ready"
-                          ? "success"
-                          : feed.status === "importing"
-                            ? "warning"
-                            : "default"
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>{feed.rowCounts?.stops?.toLocaleString() ?? "—"}</TableCell>
-                  <TableCell>{feed.rowCounts?.routes?.toLocaleString() ?? "—"}</TableCell>
-                  <TableCell>{feed.importedAt ? formatDate(feed.importedAt) : "—"}</TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Remove feed">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => removeMutation.mutate(feed.slug)}
-                        disabled={removeMutation.isPending}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+      {(() => {
+        const rows = buildUnifiedRows(feeds, motisArchives);
+        if (rows.length === 0) {
+          return (
+            <Alert severity="info">
+              No GTFS feeds yet. Either run{" "}
+              <Box component="code" sx={{ fontFamily: "monospace" }}>
+                pnpm openmapx data download gtfs --countries de
+              </Box>{" "}
+              to populate MOTIS, or click <strong>Import feed</strong> to load a single feed into
+              Postgres for SQL-based stop search.
+            </Alert>
+          );
+        }
+        return (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              <strong>MOTIS</strong> = raw GTFS zip on disk consumed by the MOTIS engine at startup
+              (transit routing). <strong>Postgres</strong> = imported into a dedicated schema for
+              SQL-based stop/route lookups (place panel, transit-gtfs-local provider). The same
+              upstream feed can live in either or both.
+            </Typography>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Feed</TableCell>
+                    <TableCell>Stores</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Stops</TableCell>
+                    <TableCell>Routes</TableCell>
+                    <TableCell>Updated</TableCell>
+                    <TableCell align="right" />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((row) => {
+                    const pg = row.postgres;
+                    const motis = row.motis;
+                    const displayName = pg?.name ?? motis?.id ?? row.key;
+                    const updatedIso = pg?.importedAt ?? motis?.modifiedAt;
+                    const status = pg?.status ?? (motis ? "motis-only" : "—");
+                    const statusColor: "success" | "warning" | "default" | "info" =
+                      status === "active"
+                        ? "success"
+                        : status === "importing" || status === "downloading"
+                          ? "warning"
+                          : status === "motis-only"
+                            ? "info"
+                            : "default";
+                    return (
+                      <TableRow key={row.key} hover>
+                        <TableCell>
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2">{displayName}</Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              fontFamily="monospace"
+                            >
+                              {pg ? `g-${pg.slug}` : row.key}
+                              {motis ? ` · ${formatBytes(motis.sizeBytes)}` : ""}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={0.5}>
+                            {motis && <Chip label="MOTIS" size="small" variant="outlined" />}
+                            {pg && (
+                              <Chip
+                                label="Postgres"
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            )}
+                          </Stack>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={status} size="small" color={statusColor} />
+                        </TableCell>
+                        <TableCell>{pg?.rowCounts?.stops?.toLocaleString() ?? "—"}</TableCell>
+                        <TableCell>{pg?.rowCounts?.routes?.toLocaleString() ?? "—"}</TableCell>
+                        <TableCell>{updatedIso ? formatDate(updatedIso) : "—"}</TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                            {!pg && motis && (
+                              <Tooltip title="Import this MOTIS feed into Postgres (paste the upstream URL)">
+                                <Button
+                                  size="small"
+                                  onClick={() => {
+                                    setImportSlug(motis.id);
+                                    setImportName(motis.id);
+                                    setImportUrl("");
+                                    setImportOpen(true);
+                                  }}
+                                >
+                                  Import to Postgres
+                                </Button>
+                              </Tooltip>
+                            )}
+                            {pg && (
+                              <Tooltip title="Remove from Postgres (the MOTIS zip on disk is untouched)">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => removeMutation.mutate(pg.slug)}
+                                  disabled={removeMutation.isPending}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        );
+      })()}
 
       <Snackbar
         open={!!toast}
@@ -890,7 +1001,11 @@ export function DataWorkflowsPage() {
       <Stack spacing={3}>
         <DataOperationsSection apiUrl={apiUrl} />
         <OsmSection osm={data.osm} />
-        <GtfsSection feeds={data.gtfsFeeds} apiUrl={apiUrl} />
+        <GtfsSection
+          feeds={data.gtfsFeeds}
+          motisArchives={data.motisGtfsArchives ?? []}
+          apiUrl={apiUrl}
+        />
         <MotisTransitousSection status={data.motisTransitous} />
         <BuildsSection builds={data.builds} />
       </Stack>

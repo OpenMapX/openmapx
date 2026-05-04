@@ -341,6 +341,56 @@ export async function getBuildStatuses(): Promise<BuildStatus[]> {
   );
 }
 
+// Lightweight directory listing of the GTFS archives MOTIS reads at startup.
+// Files appear here once `pnpm openmapx data download gtfs ...` (or the
+// data-manager Transitous pipeline directly) has dropped them in /data/gtfs/.
+// Distinct from the Postgres-imported feeds tracked by gtfsManager — the
+// admin UI surfaces both lists together so an operator can see at a glance
+// which feeds live in MOTIS, in Postgres, or in both.
+
+export interface MotisGtfsArchive {
+  /** Filename minus `.gtfs.zip` / `.netex.zip`. Stable id for matching against Postgres slugs. */
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  format: "gtfs" | "netex";
+}
+
+const GTFS_ARCHIVE_RE = /^([^.][^/]*?)\.(gtfs|netex)\.zip$/i;
+
+export async function getMotisGtfsArchives(): Promise<MotisGtfsArchive[]> {
+  const gtfsDir = join(DATA_DIR, "gtfs");
+  if (!existsSync(gtfsDir)) return [];
+  try {
+    const entries = await readdir(gtfsDir);
+    const archives: MotisGtfsArchive[] = [];
+    for (const name of entries) {
+      const match = GTFS_ARCHIVE_RE.exec(name);
+      if (!match) continue;
+      const id = match[1];
+      const format = match[2].toLowerCase() as "gtfs" | "netex";
+      if (!id) continue;
+      try {
+        const stat = statSync(join(gtfsDir, name));
+        archives.push({
+          id,
+          filename: name,
+          sizeBytes: stat.size,
+          modifiedAt: stat.mtime.toISOString(),
+          format,
+        });
+      } catch {
+        // Skip a missing/unreadable entry rather than failing the whole list.
+      }
+    }
+    archives.sort((a, b) => a.id.localeCompare(b.id));
+    return archives;
+  } catch {
+    return [];
+  }
+}
+
 export interface MotisTransitousStatus {
   configFound: boolean;
   datasetCount: number;
