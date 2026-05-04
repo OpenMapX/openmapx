@@ -23,6 +23,13 @@ interface SettingDef {
    * SMTP / EmailLabs / Lettermint alternatives clearly.
    */
   subgroup?: string;
+  /**
+   * Show this setting only when another setting in the same group has a
+   * matching value. Evaluated client-side against the current local form
+   * state. Used in the Map panel so MapTiler / Custom-style fields don't
+   * render when the chosen Style Provider doesn't need them.
+   */
+  showWhen?: { key: string; equals: unknown | unknown[] };
 }
 
 const SETTING_DEFS: SettingDef[] = [
@@ -215,6 +222,7 @@ const SETTING_DEFS: SettingDef[] = [
     secret: true,
     env: "NEXT_PUBLIC_MAPTILER_KEY",
     default: "",
+    showWhen: { key: "styleProvider", equals: "maptiler" },
   },
   {
     group: "map",
@@ -224,6 +232,7 @@ const SETTING_DEFS: SettingDef[] = [
     type: "string",
     env: "CUSTOM_STYLE_URL",
     default: "",
+    showWhen: { key: "styleProvider", equals: "custom" },
   },
 ];
 
@@ -242,6 +251,7 @@ interface ResolvedSetting {
   source: SettingSource;
   envVar?: string;
   envOverride: boolean;
+  showWhen?: { key: string; equals: unknown | unknown[] };
 }
 
 interface SettingsGroup {
@@ -305,6 +315,7 @@ async function resolveSettings(): Promise<SettingsGroup[]> {
       source,
       envVar: def.env,
       envOverride: source === "env",
+      showWhen: def.showWhen,
     });
   }
 

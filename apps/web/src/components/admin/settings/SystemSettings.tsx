@@ -45,6 +45,14 @@ interface ResolvedSetting {
   source: "default" | "database" | "env";
   envVar?: string;
   envOverride: boolean;
+  showWhen?: { key: string; equals: unknown | unknown[] };
+}
+
+function isVisible(setting: ResolvedSetting, values: Record<string, unknown>): boolean {
+  const cond = setting.showWhen;
+  if (!cond) return true;
+  const current = values[cond.key];
+  return Array.isArray(cond.equals) ? cond.equals.includes(current) : current === cond.equals;
 }
 
 interface SettingsGroup {
@@ -256,7 +264,13 @@ function SettingsGroupPanel({
     mutationFn: async () => {
       const body: Record<string, unknown> = {};
       for (const s of group.settings) {
-        if (!s.envOverride) body[s.key] = localValues[s.key];
+        if (s.envOverride) continue;
+        // Don't write fields hidden by their showWhen predicate — we'd
+        // otherwise clobber the stored value of the inactive provider
+        // (e.g. saving with styleProvider=self-hosted shouldn't reset
+        // maptilerApiKey or customStyleUrl).
+        if (!isVisible(s, localValues)) continue;
+        body[s.key] = localValues[s.key];
       }
       const res = await fetch(`${env.apiUrl}/api/admin/settings`, {
         method: "PATCH",
@@ -274,6 +288,7 @@ function SettingsGroupPanel({
   });
 
   const hasEnvOverrides = group.settings.some((s) => s.envOverride);
+  const visibleSettings = group.settings.filter((s) => isVisible(s, localValues));
 
   return (
     <Accordion
@@ -308,7 +323,7 @@ function SettingsGroupPanel({
       </AccordionSummary>
       <AccordionDetails>
         <Stack gap={2.5}>
-          {groupBySubgroup(group.settings).map((section) => (
+          {groupBySubgroup(visibleSettings).map((section) => (
             <Stack key={section.subgroup ?? "__"} gap={1.25}>
               {section.subgroup && SUBGROUP_META[section.subgroup] && (
                 <Stack gap={0.25}>
