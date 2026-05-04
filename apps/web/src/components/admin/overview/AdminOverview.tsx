@@ -25,6 +25,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
 
@@ -151,11 +152,18 @@ function jobStatusColor(status: string): "default" | "success" | "error" | "warn
 
 // Main
 
+// Collapsed list size for the Needs Attention + Credentials Overview
+// sections — the page becomes scroll-bound at scale, so we hide the rest
+// behind a "Show N more" toggle.
+const COLLAPSED_LIST_LIMIT = 3;
+
 export function AdminOverview() {
   const env = useEnv();
   const apiUrl = env.apiUrl;
   const qc = useQueryClient();
   const showToast = useAdminToast();
+  const [attentionExpanded, setAttentionExpanded] = useState(false);
+  const [credentialsExpanded, setCredentialsExpanded] = useState(false);
 
   const { data, isLoading } = useQuery<OverviewData>({
     queryKey: ["admin", "overview"],
@@ -406,7 +414,10 @@ export function AdminOverview() {
             Needs Attention
           </Typography>
           <Stack gap={1}>
-            {data.attention.map((item) => (
+            {(attentionExpanded
+              ? data.attention
+              : data.attention.slice(0, COLLAPSED_LIST_LIMIT)
+            ).map((item) => (
               <Alert
                 key={`${item.type}-${item.message}`}
                 severity={item.severity}
@@ -421,6 +432,17 @@ export function AdminOverview() {
                 {item.message}
               </Alert>
             ))}
+            {data.attention.length > COLLAPSED_LIST_LIMIT && (
+              <Button
+                size="small"
+                onClick={() => setAttentionExpanded((v) => !v)}
+                sx={{ alignSelf: "flex-start" }}
+              >
+                {attentionExpanded
+                  ? "Show less"
+                  : `Show ${data.attention.length - COLLAPSED_LIST_LIMIT} more`}
+              </Button>
+            )}
           </Stack>
         </Box>
       )}
@@ -448,7 +470,10 @@ export function AdminOverview() {
             </Alert>
           ) : (
             <Stack gap={1}>
-              {missingCredentialIntegrations.slice(0, 6).map((entry) => (
+              {(credentialsExpanded
+                ? missingCredentialIntegrations
+                : missingCredentialIntegrations.slice(0, COLLAPSED_LIST_LIMIT)
+              ).map((entry) => (
                 <Alert
                   key={entry.integrationId}
                   severity="warning"
@@ -468,6 +493,17 @@ export function AdminOverview() {
                   {entry.missingCredentials === 1 ? "" : "s"}
                 </Alert>
               ))}
+              {missingCredentialIntegrations.length > COLLAPSED_LIST_LIMIT && (
+                <Button
+                  size="small"
+                  onClick={() => setCredentialsExpanded((v) => !v)}
+                  sx={{ alignSelf: "flex-start" }}
+                >
+                  {credentialsExpanded
+                    ? "Show less"
+                    : `Show ${missingCredentialIntegrations.length - COLLAPSED_LIST_LIMIT} more`}
+                </Button>
+              )}
             </Stack>
           )}
         </Box>
