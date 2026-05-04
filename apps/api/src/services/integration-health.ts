@@ -98,14 +98,20 @@ async function executeSingleHealthCheck(
     const start = Date.now();
     try {
       const result = await integration.customHealthCheck();
+      // Normalize the unconfigured-with-message shape to match the
+      // manifest `requiredConfigKeys` path: surface the reason in `url`
+      // (rendered muted gray) rather than `error` (rendered red), so the
+      // status dashboard treats missing config consistently regardless of
+      // which path produced it.
+      const isUnconfigured = result.status === "unconfigured";
       return {
         id,
         name,
         category,
-        url: hc.url ?? "",
+        url: isUnconfigured && result.error ? result.error : (hc.url ?? ""),
         status: result.status,
         responseTime: result.responseTime ?? Date.now() - start,
-        error: result.error,
+        error: isUnconfigured ? undefined : result.error,
       };
     } catch (err) {
       return {
