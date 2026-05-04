@@ -320,6 +320,51 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     );
   });
 
+  // GET /admin/integrations/env-vars — bulk env-var catalogue used by the
+  // /admin/integrations/bulk page so the operator can copy a complete list
+  // of host overrides into infra/docker/.env without opening each
+  // integration. Returned values are never the secret bodies — only field
+  // names, present/missing flags, and non-secret defaults.
+  app.get("/admin/integrations/env-vars", async () => {
+    const all = getAllIntegrations();
+    const integrations = all
+      .map((integration) => {
+        const props = (integration.manifest.configSchema?.properties ?? {}) as Record<
+          string,
+          {
+            title?: string;
+            description?: string;
+            default?: unknown;
+            "x-openmapx-secret"?: boolean;
+          }
+        >;
+        const idEnv = integration.id.replace(/-/g, "_").toUpperCase();
+        const envVars = Object.entries(props)
+          .filter(([key]) => key !== "type" && key !== "properties" && key !== "enabled")
+          .map(([key, def]) => {
+            const name = `INTEGRATION_${idEnv}_${key.toUpperCase()}`;
+            const secret = def?.["x-openmapx-secret"] === true;
+            return {
+              key,
+              name,
+              title: def?.title ?? key,
+              description: def?.description,
+              secret,
+              present: !!process.env[name],
+              defaultValue: secret ? undefined : (def?.default ?? undefined),
+            };
+          });
+        return {
+          id: integration.id,
+          name: getIntegrationDisplayName(integration),
+          enabled: integration.enabled,
+          envVars,
+        };
+      })
+      .filter((entry) => entry.envVars.length > 0);
+    return { integrations };
+  });
+
   app.get<{ Params: { id: string } }>("/admin/integrations/:id", async (request, reply) => {
     const integration = getIntegration(request.params.id);
     if (!integration) return reply.status(404).send({ error: "Integration not found" });

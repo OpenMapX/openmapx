@@ -4,6 +4,7 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
+import TuneIcon from "@mui/icons-material/Tune";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -442,6 +443,15 @@ export function IntegrationList() {
       <Divider />
 
       <Stack direction="row" gap={1.5} justifyContent="flex-end">
+        <Button
+          component={Link}
+          href="/admin/integrations/bulk"
+          variant="outlined"
+          size="small"
+          startIcon={<TuneIcon />}
+        >
+          Bulk Configure
+        </Button>
         <Button
           variant="outlined"
           size="small"

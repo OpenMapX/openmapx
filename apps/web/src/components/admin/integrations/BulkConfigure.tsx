@@ -1,0 +1,548 @@
+"use client";
+
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import DeleteIcon from "@mui/icons-material/Delete";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import KeyIcon from "@mui/icons-material/Key";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
+import Skeleton from "@mui/material/Skeleton";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
+import { useAdminToast } from "../shared/AdminToast";
+import { ConfigSchemaForm } from "./ConfigSchemaForm";
+import { SetCredentialDialog } from "./SetCredentialDialog";
+
+type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
+
+interface CredentialStatus {
+  key: string;
+  title: string;
+  description?: string;
+  source: "vault" | "env" | "missing";
+  sharedSecretName?: string;
+  updatedAt?: string;
+  updatedBy?: string | null;
+  isLegacyEnvVar: boolean;
+  required: boolean;
+}
+
+interface IntegrationListEntry {
+  id: string;
+  name: string;
+  enabled: boolean;
+  configured: boolean;
+}
+
+interface IntegrationDetail {
+  id: string;
+  name: string;
+  manifest: { configSchema?: Record<string, unknown> };
+  resolvedConfig: Record<string, { value: unknown; source: ConfigSource }>;
+  credentialStatus: CredentialStatus[];
+  secretsConfigured: boolean;
+}
+
+interface EnvVarEntry {
+  key: string;
+  name: string;
+  title: string;
+  description?: string;
+  secret: boolean;
+  present: boolean;
+  defaultValue?: unknown;
+}
+
+interface EnvVarIntegration {
+  id: string;
+  name: string;
+  enabled: boolean;
+  envVars: EnvVarEntry[];
+}
+
+export function BulkConfigure() {
+  const env = useEnv();
+  const apiUrl = env.apiUrl;
+
+  const integrationsQuery = useQuery<IntegrationListEntry[]>({
+    queryKey: ["admin", "integrations", "list"],
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/admin/integrations`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load integrations");
+      return res.json();
+    },
+  });
+
+  const envVarsQuery = useQuery<{ integrations: EnvVarIntegration[] }>({
+    queryKey: ["admin", "integrations", "env-vars"],
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/admin/integrations/env-vars`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load env-var catalogue");
+      return res.json();
+    },
+  });
+
+  const sortedIntegrations = useMemo(() => {
+    const list = integrationsQuery.data ?? [];
+    // Unconfigured first, then by name — surfaces what needs attention.
+    return [...list].sort((a, b) => {
+      if (a.configured !== b.configured) return a.configured ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [integrationsQuery.data]);
+
+  return (
+    <Stack gap={3} maxWidth={1100} mx="auto" pb={6}>
+      <Stack direction="row" alignItems="center" gap={1}>
+        <Button
+          component={Link}
+          href="/admin/integrations"
+          startIcon={<ArrowBackIcon />}
+          size="small"
+          variant="text"
+        >
+          Back to integrations
+        </Button>
+      </Stack>
+
+      <Box>
+        <Typography variant="h5" fontWeight={700}>
+          Bulk Configure
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Configure all integrations on a single page. Each panel exposes the same form fields and
+          credentials as the per-integration page; expand the integration you want to set up. The
+          environment-variable catalogue at the bottom lists every override key for copy-paste into{" "}
+          <code>infra/docker/.env</code>.
+        </Typography>
+      </Box>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            Integrations
+          </Typography>
+          {integrationsQuery.isLoading && <Skeleton variant="rectangular" height={120} />}
+          {integrationsQuery.isError && (
+            <Alert severity="error" variant="outlined">
+              Failed to load integrations.
+            </Alert>
+          )}
+          {sortedIntegrations.map((entry) => (
+            <IntegrationAccordion key={entry.id} entry={entry} />
+          ))}
+        </CardContent>
+      </Card>
+
+      <EnvVarReferenceSection
+        loading={envVarsQuery.isLoading}
+        error={envVarsQuery.isError}
+        integrations={envVarsQuery.data?.integrations ?? []}
+      />
+    </Stack>
+  );
+}
+
+function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
+  const env = useEnv();
+  const apiUrl = env.apiUrl;
+  const [open, setOpen] = useState(false);
+
+  const detailQuery = useQuery<IntegrationDetail>({
+    queryKey: ["admin", "integrations", entry.id],
+    enabled: open,
+    queryFn: async () => {
+      const res = await fetch(`${apiUrl}/api/admin/integrations/${entry.id}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`Failed to load ${entry.id}`);
+      return res.json();
+    },
+  });
+
+  return (
+    <Accordion
+      expanded={open}
+      onChange={(_, v) => setOpen(v)}
+      disableGutters
+      sx={{
+        "&.MuiAccordion-rounded": {
+          borderRadius: 1,
+          "&:first-of-type, &:last-of-type": { borderRadius: 1 },
+        },
+        my: 0.5,
+      }}
+      variant="outlined"
+    >
+      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap" flex={1}>
+          <Typography fontWeight={600}>{entry.name}</Typography>
+          <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+            {entry.id}
+          </Typography>
+          {!entry.configured && (
+            <Chip label="unconfigured" size="small" color="warning" variant="outlined" />
+          )}
+          {!entry.enabled && (
+            <Chip label="disabled" size="small" color="default" variant="outlined" />
+          )}
+        </Stack>
+      </AccordionSummary>
+      <AccordionDetails>
+        {detailQuery.isLoading && <Skeleton variant="rectangular" height={200} />}
+        {detailQuery.isError && (
+          <Alert severity="error" variant="outlined">
+            Failed to load configuration for {entry.id}.
+          </Alert>
+        )}
+        {detailQuery.data && <IntegrationPanel data={detailQuery.data} />}
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
+function IntegrationPanel({ data }: { data: IntegrationDetail }) {
+  const hasConfig = !!data.manifest.configSchema;
+  const secretCredentials = data.credentialStatus.filter((c) => !c.isLegacyEnvVar);
+
+  if (!hasConfig && data.credentialStatus.length === 0) {
+    return (
+      <Alert severity="info" variant="outlined">
+        This integration has no configurable fields or credentials.
+      </Alert>
+    );
+  }
+
+  return (
+    <Stack gap={2.5}>
+      {hasConfig && (
+        <Box>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Configuration
+          </Typography>
+          <ConfigSchemaForm
+            integrationId={data.id}
+            schema={data.manifest.configSchema}
+            resolvedConfig={data.resolvedConfig}
+          />
+        </Box>
+      )}
+
+      {secretCredentials.length > 0 && (
+        <Box>
+          <Divider sx={{ my: 1 }} />
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Credentials
+          </Typography>
+          <CredentialsTable
+            integrationId={data.id}
+            secretsConfigured={data.secretsConfigured}
+            credentials={secretCredentials}
+          />
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
+function CredentialsTable({
+  integrationId,
+  secretsConfigured,
+  credentials,
+}: {
+  integrationId: string;
+  secretsConfigured: boolean;
+  credentials: CredentialStatus[];
+}) {
+  const env = useEnv();
+  const apiUrl = env.apiUrl;
+  const qc = useQueryClient();
+  const showToast = useAdminToast();
+  const [dialogField, setDialogField] = useState<CredentialStatus | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (key: string) => {
+      const res = await fetch(`${apiUrl}/api/admin/credentials/${integrationId}/${key}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete credential");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      showToast("Credential deleted");
+    },
+    onError: (e) => showToast(e instanceof Error ? e.message : "Delete failed", "error"),
+  });
+
+  return (
+    <>
+      {!secretsConfigured && (
+        <Alert severity="warning" variant="outlined" sx={{ mb: 1 }}>
+          Vault not configured — set <code>OPENMAPX_SECRETS_KEY</code> to enable storing credentials
+          in the admin panel. You can still set them via environment variables.
+        </Alert>
+      )}
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Credential</TableCell>
+              <TableCell>Source</TableCell>
+              <TableCell align="right">Action</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {credentials.map((cred) => (
+              <TableRow key={cred.key}>
+                <TableCell>
+                  <Stack direction="row" alignItems="center" gap={0.75}>
+                    <KeyIcon fontSize="small" sx={{ color: "text.secondary" }} />
+                    <Typography variant="body2" fontWeight={600}>
+                      {cred.title}
+                    </Typography>
+                  </Stack>
+                  {cred.description && (
+                    <Typography variant="caption" color="text.secondary" pl={2.5}>
+                      {cred.description}
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label={cred.source}
+                    size="small"
+                    color={
+                      cred.source === "vault" ? "info" : cred.source === "env" ? "success" : "error"
+                    }
+                    variant="outlined"
+                    sx={{ fontSize: "0.7rem" }}
+                  />
+                </TableCell>
+                <TableCell align="right">
+                  <Stack direction="row" justifyContent="flex-end" gap={0.5}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => setDialogField(cred)}
+                      disabled={!secretsConfigured}
+                    >
+                      {cred.source === "vault" ? "Rotate" : "Set"}
+                    </Button>
+                    {cred.source === "vault" && (
+                      <Tooltip title="Delete from vault">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => deleteMutation.mutate(cred.key)}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Stack>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {dialogField && (
+        <SetCredentialDialog
+          open={true}
+          onClose={() => setDialogField(null)}
+          integrationId={integrationId}
+          credentialKey={dialogField.key}
+          title={dialogField.title}
+          description={dialogField.description}
+        />
+      )}
+    </>
+  );
+}
+
+function EnvVarReferenceSection({
+  loading,
+  error,
+  integrations,
+}: {
+  loading: boolean;
+  error: boolean;
+  integrations: EnvVarIntegration[];
+}) {
+  const showToast = useAdminToast();
+
+  const block = useMemo(() => buildEnvBlock(integrations), [integrations]);
+
+  async function copyAll() {
+    try {
+      await navigator.clipboard.writeText(block);
+      showToast("Copied env-var catalogue");
+    } catch {
+      showToast("Copy failed — select and copy manually", "error");
+    }
+  }
+
+  async function copyOne(line: string) {
+    try {
+      await navigator.clipboard.writeText(line);
+      showToast("Copied");
+    } catch {
+      showToast("Copy failed", "error");
+    }
+  }
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack direction="row" alignItems="center" gap={1} mb={1}>
+          <Typography variant="subtitle1" fontWeight={600}>
+            Environment-variable reference
+          </Typography>
+          <Box flex={1} />
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<ContentCopyIcon />}
+            onClick={copyAll}
+            disabled={loading || error || integrations.length === 0}
+          >
+            Copy all
+          </Button>
+        </Stack>
+        <Typography variant="body2" color="text.secondary" gutterBottom>
+          Every integration field can be set via host env using the pattern{" "}
+          <code>INTEGRATION_&lt;ID&gt;_&lt;KEY&gt;</code>. Env always wins over admin-stored values.
+          Paste any subset of the lines below into <code>infra/docker/.env</code> and fill in the
+          right-hand side.
+        </Typography>
+
+        {loading && <Skeleton variant="rectangular" height={200} sx={{ mt: 1 }} />}
+        {error && (
+          <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
+            Failed to load env-var catalogue.
+          </Alert>
+        )}
+
+        {!loading && !error && (
+          <Stack gap={2} mt={2}>
+            {integrations.map((entry) => (
+              <Box key={entry.id}>
+                <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
+                  <Typography variant="body2" fontWeight={600}>
+                    {entry.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                    {entry.id}
+                  </Typography>
+                  {!entry.enabled && <Chip label="disabled" size="small" variant="outlined" />}
+                </Stack>
+                <Stack
+                  component="pre"
+                  sx={{
+                    m: 0,
+                    p: 1.25,
+                    fontFamily: "monospace",
+                    fontSize: "0.8rem",
+                    bgcolor: "action.hover",
+                    borderRadius: 1,
+                    overflowX: "auto",
+                  }}
+                >
+                  {entry.envVars.map((v) => {
+                    const line = formatEnvLine(v);
+                    return (
+                      <Box
+                        key={v.key}
+                        component="span"
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          py: 0.25,
+                          color: v.present ? "success.main" : "text.primary",
+                        }}
+                      >
+                        <Box component="span" sx={{ flex: 1, whiteSpace: "pre" }}>
+                          {line}
+                        </Box>
+                        {v.present && (
+                          <Chip label="set" size="small" color="success" variant="outlined" />
+                        )}
+                        <Tooltip title="Copy line">
+                          <IconButton size="small" onClick={() => copyOne(line)}>
+                            <ContentCopyIcon fontSize="inherit" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatEnvLine(v: EnvVarEntry): string {
+  // Show non-secret defaults as a hint after the equals sign so the operator
+  // knows what value the integration falls back to. Secrets get an empty
+  // value; the operator pastes the real one.
+  if (v.secret) return `# ${v.title}\n${v.name}=`;
+  const hasDefault =
+    v.defaultValue !== undefined && v.defaultValue !== null && v.defaultValue !== "";
+  const trailing = hasDefault ? `   # default: ${formatDefault(v.defaultValue)}` : "";
+  return `# ${v.title}\n${v.name}=${trailing}`;
+}
+
+function formatDefault(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function buildEnvBlock(integrations: EnvVarIntegration[]): string {
+  const sections: string[] = [];
+  for (const entry of integrations) {
+    sections.push(`# ─── ${entry.name} (${entry.id}) ───`);
+    for (const v of entry.envVars) {
+      sections.push(formatEnvLine(v));
+    }
+    sections.push("");
+  }
+  return sections.join("\n").trimEnd();
+}
