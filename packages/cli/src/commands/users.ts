@@ -108,7 +108,12 @@ async function updateUserByEmail(opts: UpdateUserOptions): Promise<string[]> {
     throw new Error(`"${opts.email}" does not look like an email address`);
   }
   const target = await resolvePostgresTarget(opts.rootDir);
-  const sql = `UPDATE "user" SET ${opts.setClause} WHERE email = ${quoteSqlLiteral(opts.email)} RETURNING id;`;
+  // Wrap the UPDATE in a CTE and SELECT the returned ids in a separate step.
+  // A bare `UPDATE … RETURNING` makes psql emit both the row ids AND the
+  // protocol-level command tag (`UPDATE <n>`) on stdout, even under `-A -t`,
+  // so the naive split-by-newline used to falsely report N+1 matches. The
+  // CTE turns the final result into a SELECT, which `-t` does strip cleanly.
+  const sql = `WITH updated AS (UPDATE "user" SET ${opts.setClause} WHERE email = ${quoteSqlLiteral(opts.email)} RETURNING id) SELECT id FROM updated;`;
   const stdout = await execPsql(target, sql, opts.rootDir);
   const ids = stdout
     .split("\n")
