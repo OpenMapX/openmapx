@@ -1,135 +1,174 @@
-# Turborepo starter
+<div align="center">
 
-This Turborepo starter is maintained by the Turborepo core team.
+# OpenMapX
 
-## Using this example
+**A fully self-hostable, open-data Google Maps alternative — built entirely from open-source services and open data.**
 
-Run the following command:
+[![CI](https://github.com/Medformatik/openmapx/actions/workflows/ci.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Medformatik/openmapx/actions/workflows/codeql.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/codeql.yml)
+[![Docker](https://github.com/Medformatik/openmapx/actions/workflows/docker.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/docker.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D24-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-10-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![Fastify](https://img.shields.io/badge/Fastify-5-000?logo=fastify&logoColor=white)](https://fastify.dev)
+[![MapLibre](https://img.shields.io/badge/MapLibre-GL%20JS%205-396cb2?logo=maplibre&logoColor=white)](https://maplibre.org)
+[![Turborepo](https://img.shields.io/badge/Turborepo-2-EF4444?logo=turborepo&logoColor=white)](https://turborepo.dev)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](#contributing)
 
-```sh
-npx create-turbo@latest
+[Documentation (Wiki)](https://github.com/Medformatik/openmapx/wiki) • [Self-Hosting Guide](https://github.com/Medformatik/openmapx/wiki/Self-Hosting-Guide) • [Architecture](https://github.com/Medformatik/openmapx/wiki/Architecture) • [CLI Reference](https://github.com/Medformatik/openmapx/wiki/CLI-Reference) • [Integration System](https://github.com/Medformatik/openmapx/wiki/Integration-System)
+
+</div>
+
+---
+
+OpenMapX is a complete mapping platform you run on your own infrastructure: search, routing, public transit, street-level imagery, POI data, weather, reviews, and dozens of overlays — all served from open data and open-source backends. The application stack is described declaratively by **service plugins** (`services/<slug>/service.json`) and **integration plugins** (`integrations/<id>/manifest.json`), and the entire Docker Compose deployment is rendered on demand from those manifests. There is no hand-maintained `docker-compose.yml`.
+
+## Highlights
+
+- **Complete mapping platform** — geocoding, routing, public transit, live vehicles, street view, POI search, knowledge enrichment, reviews, weather, dozens of overlays
+- **Two-layer plugin system** — *services* (containers: Valhalla, Nominatim, MOTIS, …) and *integrations* (app features: providers, overlays, data sources, tools). Both support community plugins from any Git URL
+- **75+ built-in integrations** across 12 domains and **20+ built-in services** rendered into a generated `docker-compose.yml`
+- **Self-host everything** — no service is mandatory and every external dependency can be replaced by a self-hosted alternative
+- **Open data** — OpenStreetMap, GTFS via Transitous, Wikidata, Wikipedia, Mapillary, NASA, NOAA, ECCC, DWD, MeteoAlarm, OpenAQ, USGS, NPS, and more
+- **Privacy-first** — no third-party analytics; all upstream calls proxied through your API server so providers see your IP, not the user's
+- **First-class admin UI** — service catalog, integration config, capability bindings, audit log, users, jobs, compose preview, data workflows
+- **Modern stack** — Next.js 16, Fastify 5, MapLibre GL JS 5, MUI 7, PostgreSQL + PostGIS, Valkey (Redis), Drizzle ORM, Better Auth, TypeScript end-to-end
+
+## Two plugin systems
+
+OpenMapX has two complementary plugin layers. Knowing which is which makes everything else easier to read.
+
+| Layer | Lives in | Manifest | Purpose |
+|---|---|---|---|
+| **Services** | `services/<slug>/` | `service.json` | Backend daemons that run as Docker containers (databases, routing engines, geocoders, transit engines, tile servers). Each declares its image, ports, volumes, capabilities (`provides:`), data inputs (`consumes:`), and exposure. |
+| **Integrations** | `integrations/<id>/` | `manifest.json` | App-level features that consume services and external APIs (geocoding, routing, transit, overlays, data sources, photos, reviews, weather, knowledge). Each declares its domain, frontend components, backend routes, config schema, attribution, and which services it `requires:`. |
+
+Both layers support **community plugins** managed from the admin panel and the `openmapx` CLI.
+
+## Architecture at a glance
+
+```mermaid
+graph TD
+    Internet((Internet)) --> Traefik
+
+    subgraph "Reverse Proxy"
+        Traefik["Traefik :80/:443<br/>TLS via Let's Encrypt"]
+    end
+
+    Traefik --> Web["app-web :3000<br/>Next.js"]
+    Traefik --> API["app-api :3001<br/>Fastify"]
+    Traefik --> TileServer["tileserver :8080<br/>Vector + raster tiles"]
+    Traefik --> Martin["martin :3000<br/>PostGIS vector tiles"]
+
+    subgraph "API Server"
+        IntHost["Integration Host<br/>75+ built-in + community"]
+        Orchestrators["Domain orchestrators<br/>(geocoding, routing, transit, ...)"]
+        SvcRegistry["Service Registry"]
+        Bindings["Capability Bindings"]
+    end
+
+    API --> IntHost
+    IntHost --> Orchestrators
+    IntHost --> SvcRegistry
+    IntHost --> Bindings
+
+    subgraph "Routing"
+        Valhalla["valhalla :8002"]
+        OSRM["osrm :5000"]
+    end
+
+    subgraph "Transit"
+        MOTIS["motis :8081"]
+        OTP["otp :8090"]
+    end
+
+    subgraph "Geocoding"
+        Photon["photon :2322"]
+        Nominatim["nominatim :8088"]
+        Pelias["pelias :4000"]
+    end
+
+    subgraph "Infrastructure"
+        PG["postgis :5432"]
+        Redis["redis (Valkey) :6379"]
+        ES["elasticsearch :9200"]
+        DM["data-manager :4000"]
+    end
+
+    Orchestrators --> Valhalla
+    Orchestrators --> OSRM
+    Orchestrators --> MOTIS
+    Orchestrators --> OTP
+    Orchestrators --> Photon
+    Orchestrators --> Nominatim
+    Orchestrators --> Pelias
+    API --> PG
+    API --> Redis
+    Pelias --> ES
+    Martin --> PG
 ```
 
-## What's inside?
+All containers communicate over the internal `openmapx` Docker network. Only Traefik (and any service that explicitly opts into `exposure.hostPorts`) is reachable from outside the host. See the [Architecture wiki page](https://github.com/Medformatik/openmapx/wiki/Architecture) for the full picture.
 
-This Turborepo includes the following packages/apps:
+## CLI
 
-### Apps and Packages
+The `openmapx` CLI is the operator's command-line front end for the entire self-hosting workflow. It runs directly off TypeScript via Node's `--experimental-strip-types` (no build step).
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```bash
+pnpm openmapx services enable|disable|list|start|stop|restart|build|status|logs
+pnpm openmapx compose render|up|down
+pnpm openmapx data download|link|status
+pnpm openmapx repos list|add|refresh|remove          # community service repositories
+pnpm openmapx integrations list|install|validate|build
+pnpm openmapx users list|create|promote
+pnpm openmapx check                                  # environment + manifest validation
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+See the [CLI Reference](https://github.com/Medformatik/openmapx/wiki/CLI-Reference) for every command, flag, and preset.
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+## Admin panel
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+Once the stack is running, `/admin` exposes the full operations surface (gated by `requireAdmin`):
 
-### Develop
+- **Services** — installed services with status, manifest viewer, per-service config, logs, start/stop/restart
+- **Service catalog** — community-installable services discovered from registered repositories
+- **Service repositories** — register, refresh, remove community service Git repositories
+- **Integrations** — per-integration config (5-layer cascade), capability binding picker, health, logs
+- **Capability bindings** — pick which provider satisfies an integration's capability when multiple installed services match
+- **Users** — Better Auth admin (roles, sessions, ban, impersonate)
+- **Audit log, jobs, compose preview, data workflows, status, settings, store, activity**
 
-To develop all apps and packages, run the following command:
+See [Admin Panel](https://github.com/Medformatik/openmapx/wiki/Admin-Panel) for screenshots and details.
 
-```
-cd my-turborepo
+## Tech stack
 
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js 16, React 19, MapLibre GL JS 5, MUI 7, Tailwind 4, Zustand, TanStack Query, next-intl, Framer Motion, Serwist |
+| API | Fastify 5, Drizzle ORM, Better Auth (email/password, OAuth OSM/Mapillary, passkeys, 2FA, admin role) |
+| Data | PostgreSQL 18 + PostGIS 3.6, Valkey 8 (Redis-compatible), Elasticsearch (Pelias backend) |
+| Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner |
+| Geocoding | Photon, Nominatim, Pelias |
+| Tiles | TileServer GL, Martin (PostGIS vector tiles) |
+| Tooling | Turborepo, pnpm 10, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik |
+| Language | TypeScript end-to-end (Node 24+) |
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
+## Contributing
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Contributions are welcome — bug reports, feature requests, integrations, services, and documentation improvements all help. Before opening a PR:
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
+1. Open an issue if the change is non-trivial so we can align on scope.
+2. Run `pnpm lint`, `pnpm check-types`, and `pnpm test` locally — the CI workflow runs the same checks.
+3. Use [Conventional Commits](https://www.conventionalcommits.org/) (enforced by Commitlint + Husky).
+4. For new community plugins, see [Community Integrations](https://github.com/Medformatik/openmapx/wiki/Community-Integrations) or [Community Service Repositories](https://github.com/Medformatik/openmapx/wiki/Community-Service-Repositories).
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+## Acknowledgements
 
-### Remote Caching
+OpenMapX stands on a huge stack of open data and open-source software. Special thanks to:
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+[OpenStreetMap](https://www.openstreetmap.org) contributors · [Valhalla](https://github.com/valhalla/valhalla) · [OSRM](https://github.com/Project-OSRM/osrm-backend) · [MOTIS](https://github.com/motis-project/motis) · [OpenTripPlanner](https://github.com/opentripplanner/OpenTripPlanner) · [Nominatim](https://nominatim.org) · [Photon](https://photon.komoot.io) · [Pelias](https://github.com/pelias/pelias) · [Transitous](https://transitous.org) · [MapLibre](https://maplibre.org) · [TileServer GL](https://github.com/maptiler/tileserver-gl) · [Martin](https://github.com/maplibre/martin) · [Overpass API](https://overpass-api.de) · [Mapillary](https://www.mapillary.com) · [Wikidata](https://www.wikidata.org) / [Wikipedia](https://www.wikipedia.org) · [Mangrove Reviews](https://mangrove.reviews) · the many transit agencies who publish open data feeds.
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+## License
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+A `LICENSE` file has not yet been added to this repository. Until one is published, all rights are reserved by the author. Please open an issue if you intend to use, fork, or redistribute the code.
