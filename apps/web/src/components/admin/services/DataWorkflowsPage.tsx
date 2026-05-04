@@ -469,7 +469,7 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
             <TextField
               size="small"
               label="Transitous repo URL"
-              placeholder="https://github.com/transitous/transitous"
+              placeholder="https://github.com/public-transport/transitous"
               value={apiKeysRepoUrl}
               onChange={(e) => setApiKeysRepoUrl(e.target.value)}
             />

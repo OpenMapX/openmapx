@@ -206,9 +206,17 @@ export async function runOpenmapxCliJobCommand(ctx: JobContext, args: string[]):
     );
   }
 
+  // The CLI imports `@integrations/poi-search` via the tsconfig path alias
+  // declared in packages/cli/tsconfig.json. tsx applies tsconfig paths from
+  // a single tsconfig.json (resolved from cwd by default, and there's no
+  // tsconfig at the repo root), so point it at the CLI's tsconfig
+  // explicitly. Same effect as `pnpm -C packages/cli exec tsx src/index.ts`
+  // on the host.
+  const tsxTsconfig = join(rootDir, "packages", "cli", "tsconfig.json");
+
   await ctx.log(`$ openmapx ${args.join(" ")}`);
 
-  const child = spawn(tsxBin, [cliEntry, ...args], {
+  const child = spawn(tsxBin, ["--tsconfig", tsxTsconfig, cliEntry, ...args], {
     cwd: rootDir,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],

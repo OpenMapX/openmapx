@@ -2881,7 +2881,7 @@ Not applicable (generic protocol, no third-party service terms).
 
 ## Transitous
 
-### GitHub Tree API — `https://api.github.com/repos/transitous/transitous/git/trees/main?recursive=1`
+### GitHub Tree API — `https://api.github.com/repos/public-transport/transitous/git/trees/main?recursive=1`
 - License: Proprietary (GitHub ToS)
 - Data sent: No user data (static resource)
 - Data received: Full recursive file tree of the Transitous repo; paths matching feeds/*.json extracted as feed definition files
@@ -2896,7 +2896,7 @@ Not applicable (generic protocol, no third-party service terms).
 - Env vars: `GITHUB_TOKEN` — optional
 - Self-hostable: No
 
-### Raw Feed Files — `https://raw.githubusercontent.com/transitous/transitous/main/feeds/{country}.json`
+### Raw Feed Files — `https://raw.githubusercontent.com/public-transport/transitous/main/feeds/{country}.json`
 - Data sent: Country identifier (file path)
 - Data received: Feed definitions: name, type, download URL, license (SPDX), skip flag. Only type=http + spec=gtfs entries included.
 - Purpose: Build the GTFS feed catalog from Transitous feed definitions. Cached 24h in memory.
