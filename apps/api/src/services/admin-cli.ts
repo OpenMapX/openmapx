@@ -258,7 +258,21 @@ export async function runOpenmapxCliJobCommand(ctx: JobContext, args: string[]):
   let logChain: Promise<void> = Promise.resolve();
   const enqueueLog = (line: string, stream: "stdout" | "stderr") => {
     if (!line.trim()) return;
-    logChain = logChain.then(() => ctx.log(line, stream));
+    // Each ctx.log inserts into admin_job_log. If the database is briefly
+    // unreachable — e.g. when this same job is recreating postgis — the
+    // insert rejects with EAI_AGAIN. Without a per-step catch the
+    // rejection propagates through the whole chain (and from there into
+    // an unhandled promise rejection that brings the whole api process
+    // down). A failed log line is recoverable: drop it on the floor with
+    // a console warning and keep the chain alive so subsequent log lines
+    // and the final status update still go through.
+    logChain = logChain.then(() =>
+      ctx.log(line, stream).catch((err) => {
+        console.warn(
+          `[admin-cli] failed to persist job log line: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }),
+    );
   };
 
   const stdout = createInterface({ input: child.stdout });

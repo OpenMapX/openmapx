@@ -55,10 +55,24 @@ class AdminJobRunner {
   }
 
   async initialize(): Promise<void> {
-    // Reset interrupted running jobs back to queued on startup
+    // Mark jobs that were running when the api process died as failed.
+    //
+    // Earlier this re-queued them, but that turned a job that crashed
+    // the api once into a crash loop: the job re-runs immediately on
+    // startup, hits the same condition that killed the api before
+    // (commonly `service.bulk` recreating postgis while the api was
+    // logging to it), and dies again before clearing its own row.
+    //
+    // Failing the row instead is safe: the operator can re-trigger the
+    // intent from the admin UI, and they'll see in the activity log that
+    // the previous attempt was aborted by an api restart.
     await db
       .update(adminJob)
-      .set({ status: "queued", startedAt: null })
+      .set({
+        status: "failed",
+        finishedAt: new Date(),
+        error: "Job interrupted by api restart — re-run if still needed",
+      })
       .where(eq(adminJob.status, "running"));
     void this.pump();
   }
