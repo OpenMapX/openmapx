@@ -342,8 +342,16 @@ async function batchInsert(
 ): Promise<void> {
   if (rows.length === 0) return;
 
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE);
+  // Postgres caps bound parameters per statement at 65535 (uint16 - 1). At
+  // BATCH_SIZE=5000 rows × 14 cols (stops) we'd send 70k placeholders and
+  // postgres-js bails with MAX_PARAMETERS_EXCEEDED before the network. Shrink
+  // the batch so `rowsPerBatch * columns.length <= 65500` (small headroom for
+  // the connection's own bookkeeping params).
+  const maxRowsByParams = Math.max(1, Math.floor(65500 / columns.length));
+  const effectiveBatchSize = Math.min(BATCH_SIZE, maxRowsByParams);
+
+  for (let i = 0; i < rows.length; i += effectiveBatchSize) {
+    const batch = rows.slice(i, i + effectiveBatchSize);
     const placeholders = batch
       .map((row, ri) => `(${row.map((_, ci) => `$${ri * columns.length + ci + 1}`).join(", ")})`)
       .join(", ");
