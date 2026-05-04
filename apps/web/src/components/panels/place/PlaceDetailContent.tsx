@@ -256,10 +256,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         sx={{
           position: "sticky",
           top: 0,
-          // Use background.default rather than background.paper so the tab
-          // strip is visibly tinted off the panel body below it
-          // (#f5f5f5 vs #fff in light, #1c1c1c vs #2d2d2d in dark).
-          bgcolor: "background.default",
+          bgcolor: "background.paper",
           zIndex: 1,
           minHeight: 48,
           "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },
