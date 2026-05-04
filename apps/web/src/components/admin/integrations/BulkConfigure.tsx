@@ -229,7 +229,9 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
-        {detailQuery.isLoading && <Skeleton variant="rectangular" height={200} />}
+        {/* No loading skeleton — the lazy-load is short enough that the
+            shimmer is more distracting than waiting briefly on an empty
+            panel. Errors and resolved data render normally. */}
         {detailQuery.isError && (
           <Alert severity="error" variant="outlined">
             Failed to load configuration for {entry.id}.
