@@ -16,6 +16,7 @@
 export { categoryPlaceToPlace } from "@integrations/poi-search/types";
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
 export { fetchIntegrations } from "./api/integrations";
+export { serverApiUrl } from "./api/server-url";
 // Git clone helpers (shared by community service repos + community integrations)
 export {
   type GitShallowCloneOptions,

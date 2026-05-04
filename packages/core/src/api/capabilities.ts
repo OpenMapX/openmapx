@@ -1,14 +1,8 @@
-// Server-side fetches must prefer the internal Docker URL — see the
-// matching comment in `./integrations.ts` for the rationale.
-const API_URL = (
-  process.env.INTERNAL_API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:3001"
-).replace(/\/+$/, "");
+import { serverApiUrl } from "./server-url";
 
 export async function fetchCapabilities(): Promise<Record<string, boolean>> {
   try {
-    const res = await fetch(`${API_URL}/api/capabilities`, {
+    const res = await fetch(`${serverApiUrl()}/api/capabilities`, {
       next: { revalidate: 3600 },
     } as RequestInit);
     if (!res.ok) return {};
