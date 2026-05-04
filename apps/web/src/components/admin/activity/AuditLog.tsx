@@ -24,10 +24,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { TableSkeleton } from "../shared/TableSkeleton";
+import { ActorCell } from "./ActorCell";
 
 interface AuditEntry {
   id: string;
   actorId: string | null;
+  actor: { id: string; name: string; email: string } | null;
   targetId: string | null;
   targetType: string | null;
   action: string;
@@ -356,9 +358,7 @@ export function AuditLog() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Typography variant="caption" color="text.secondary" fontFamily="monospace">
-                      {entry.actorId ? `${entry.actorId.slice(0, 12)}…` : "system"}
-                    </Typography>
+                    <ActorCell actorId={entry.actorId} actor={entry.actor} />
                   </TableCell>
                   <TableCell>
                     {entry.details && Object.keys(entry.details).length > 0 ? (

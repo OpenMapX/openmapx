@@ -35,6 +35,7 @@ import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposePs, type PsEntry } from "../utils/docker-compose";
 import { healthCheckSweepLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
+import { resolveActors } from "../utils/resolve-actor";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 
 const SENSITIVE_KEY_RE = /key|secret|token|password|credential|api_?key/i;
@@ -759,7 +760,14 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         .offset(Number(offset)),
       db.select({ total: count() }).from(adminJob).where(where),
     ]);
-    return { jobs, total: countRow?.total ?? 0 };
+    const actors = await resolveActors(jobs.map((j) => j.createdBy));
+    return {
+      jobs: jobs.map((j) => ({
+        ...j,
+        actor: j.createdBy ? (actors.get(j.createdBy) ?? null) : null,
+      })),
+      total: countRow?.total ?? 0,
+    };
   });
 
   app.get<{ Params: { id: string } }>("/admin/jobs/:id", async (request, reply) => {
@@ -927,6 +935,13 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         .offset(Number(offset)),
       db.select({ total: count() }).from(adminAuditLog).where(where),
     ]);
-    return { entries, total: countRow?.total ?? 0 };
+    const actors = await resolveActors(entries.map((e) => e.actorId));
+    return {
+      entries: entries.map((e) => ({
+        ...e,
+        actor: e.actorId ? (actors.get(e.actorId) ?? null) : null,
+      })),
+      total: countRow?.total ?? 0,
+    };
   });
 }

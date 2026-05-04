@@ -23,6 +23,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { TableSkeleton } from "../shared/TableSkeleton";
+import { ActorCell } from "./ActorCell";
 import { JobDetail } from "./JobDetail";
 import { JobStatusChip } from "./JobStatusChip";
 
@@ -34,6 +35,7 @@ interface AdminJob {
   error: string | null;
   progress: number | null;
   createdBy: string | null;
+  actor: { id: string; name: string; email: string } | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -95,9 +97,7 @@ function JobRow({ job }: { job: AdminJob }) {
           <JobStatusChip status={job.status} />
         </TableCell>
         <TableCell>
-          <Typography variant="caption" color="text.secondary">
-            {job.createdBy ? `${job.createdBy.slice(0, 8)}…` : "—"}
-          </Typography>
+          <ActorCell actorId={job.createdBy} actor={job.actor} />
         </TableCell>
         <TableCell>
           <Tooltip title={new Date(job.createdAt).toLocaleString()}>
