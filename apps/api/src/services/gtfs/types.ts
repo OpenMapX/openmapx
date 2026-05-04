@@ -28,6 +28,13 @@ export interface ImportedFeed {
   stopCount: number | null;
   routeCount: number | null;
   tripCount: number | null;
+  /**
+   * Live import-stage label streamed from the importer (e.g. `"importing
+   * stop_times"`, `"swapping schema"`). Set while `status` is `downloading`
+   * or `importing`, cleared back to null on success/failure. Transient,
+   * not persisted in `gtfs_feeds` — the admin UI polls it.
+   */
+  currentStage: string | null;
 }
 
 /** Row from a GTFS stops query */

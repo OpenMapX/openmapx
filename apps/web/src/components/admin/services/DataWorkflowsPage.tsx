@@ -61,6 +61,9 @@ interface GtfsFeed {
   source?: string;
   status: string;
   importedAt?: string;
+  /** Live importer stage label (e.g. "importing stop_times") while status is `downloading`/`importing`. */
+  currentStage?: string | null;
+  errorMessage?: string | null;
   rowCounts?: { stops?: number; routes?: number; trips?: number };
 }
 
@@ -851,7 +854,37 @@ function GtfsSection({
                           </Stack>
                         </TableCell>
                         <TableCell>
-                          <Chip label={status} size="small" color={statusColor} />
+                          <Stack spacing={0.25}>
+                            <Chip label={status} size="small" color={statusColor} />
+                            {pg?.currentStage &&
+                              (status === "importing" || status === "downloading") && (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ pl: 0.25 }}
+                                >
+                                  {pg.currentStage}
+                                </Typography>
+                              )}
+                            {pg?.errorMessage && status === "failed" && (
+                              <Tooltip title={pg.errorMessage}>
+                                <Typography
+                                  variant="caption"
+                                  color="error"
+                                  sx={{
+                                    pl: 0.25,
+                                    maxWidth: 200,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    cursor: "help",
+                                  }}
+                                >
+                                  {pg.errorMessage}
+                                </Typography>
+                              </Tooltip>
+                            )}
+                          </Stack>
                         </TableCell>
                         <TableCell>{pg?.rowCounts?.stops?.toLocaleString() ?? "—"}</TableCell>
                         <TableCell>{pg?.rowCounts?.routes?.toLocaleString() ?? "—"}</TableCell>
@@ -967,7 +1000,16 @@ export function DataWorkflowsPage() {
     queryKey: ["admin-services-data"],
     queryFn: () =>
       fetch(`${apiUrl}/api/admin/services/data`, { credentials: "include" }).then((r) => r.json()),
-    refetchInterval: 30_000,
+    // Tighten the refetch cadence to 3s whenever a GTFS import is mid-flight
+    // so the live `currentStage` progress label updates in close to real time.
+    // Falls back to the lazy 30s interval otherwise.
+    refetchInterval: (query) => {
+      const latest = query.state.data;
+      const inFlight = latest?.gtfsFeeds.some(
+        (f) => f.status === "downloading" || f.status === "importing",
+      );
+      return inFlight ? 3_000 : 30_000;
+    },
   });
 
   if (isLoading) {

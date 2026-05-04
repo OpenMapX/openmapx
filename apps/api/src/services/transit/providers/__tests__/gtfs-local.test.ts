@@ -74,6 +74,7 @@ function makeFeed(slug: string, schemaName: string): ImportedFeed {
     stopCount: 100,
     routeCount: 20,
     tripCount: 500,
+    currentStage: null,
   };
 }
 

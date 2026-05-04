@@ -90,6 +90,7 @@ class GtfsManager {
           stopCount: row.stop_count as number | null,
           routeCount: row.route_count as number | null,
           tripCount: row.trip_count as number | null,
+          currentStage: null,
         };
         this.feeds.set(feed.slug, feed);
       }
@@ -193,7 +194,9 @@ class GtfsManager {
 
     const localPath = "localPath" in feed ? feed.localPath : undefined;
 
-    // Create or update metadata
+    // Create or update metadata. Preserve any prior `currentStage` only
+    // until the import actually starts emitting fresh stage updates.
+    const previous = this.feeds.get(feedSlug);
     const importedFeed: ImportedFeed = {
       slug: feedSlug,
       name: feed.name,
@@ -202,14 +205,15 @@ class GtfsManager {
       countryCode: feed.countryCode ?? "",
       schemaName,
       status: "pending",
-      bbox: null,
-      feedHash: null,
-      importedAt: null,
-      lastCheckedAt: null,
+      bbox: previous?.bbox ?? null,
+      feedHash: previous?.feedHash ?? null,
+      importedAt: previous?.importedAt ?? null,
+      lastCheckedAt: previous?.lastCheckedAt ?? null,
       errorMessage: null,
-      stopCount: null,
-      routeCount: null,
-      tripCount: null,
+      stopCount: previous?.stopCount ?? null,
+      routeCount: previous?.routeCount ?? null,
+      tripCount: previous?.tripCount ?? null,
+      currentStage: null,
     };
     this.feeds.set(feedSlug, importedFeed);
 
@@ -271,6 +275,7 @@ class GtfsManager {
             previous.status = "active";
             previous.lastCheckedAt = now;
             previous.errorMessage = null;
+            previous.currentStage = null;
             console.log(
               `[gtfs] "${slug}" already at hash ${currentHash.slice(0, 12)}…, skipped re-import`,
             );
@@ -283,7 +288,10 @@ class GtfsManager {
         const status = stage.includes("download") ? "downloading" : "importing";
         this.updateFeedStatus(slug, status).catch(() => {});
         const feed = this.feeds.get(slug);
-        if (feed) feed.status = status;
+        if (feed) {
+          feed.status = status;
+          feed.currentStage = stage;
+        }
       });
 
       // Update metadata with results
@@ -322,6 +330,7 @@ class GtfsManager {
         feed.routeCount = result.routeCount;
         feed.tripCount = result.tripCount;
         feed.errorMessage = null;
+        feed.currentStage = null;
       }
 
       console.log(
@@ -335,6 +344,7 @@ class GtfsManager {
       if (feed) {
         feed.status = "failed";
         feed.errorMessage = message;
+        feed.currentStage = null;
       }
 
       // Don't drop the live schema on failure: with the atomic-swap import
