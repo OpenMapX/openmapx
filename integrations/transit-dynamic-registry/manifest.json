@@ -27,7 +27,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "url": "https://api.github.com/repos/public-transport/transport-apis/git/trees/v1"
+    "url": "https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@HEAD"
   },
   "dataSources": [
     {

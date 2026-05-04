@@ -106,9 +106,17 @@ async function checkRedis(): Promise<ServiceStatus> {
 
 async function checkGitHub(): Promise<ServiceStatus> {
   const start = Date.now();
+  // GITHUB_TOKEN is the same token gtfs/catalog.ts uses; without it,
+  // anonymous calls share the 60 req/h IP-wide bucket with every other
+  // unauthenticated GitHub probe and exhaust quickly. Authenticate when
+  // we have a token so the status check reports actual reachability,
+  // not rate-limit pressure.
+  const token = process.env.GITHUB_TOKEN;
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   try {
     const res = await fetch("https://api.github.com/zen", {
       signal: AbortSignal.timeout(TIMEOUT),
+      headers,
     });
     return {
       id: "github",
