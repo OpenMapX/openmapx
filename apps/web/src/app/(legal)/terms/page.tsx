@@ -3,6 +3,7 @@ import { fetchCapabilities, fetchIntegrations, sectionSlug } from "@openmapx/cor
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
+import { serverApiUrl } from "@/lib/env";
 
 const sectionsEn: LegalSection[] = [
   { id: sectionSlug("1. Scope and Provider"), label: "Scope and Provider" },
@@ -84,7 +85,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 async function fetchDynamicAttribution(integrations: LoadedIntegrationMeta[]): Promise<unknown[]> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+  const apiUrl = serverApiUrl();
   const results: unknown[] = [];
 
   for (const integration of integrations) {

@@ -2,12 +2,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
+import { serverApiUrl } from "@/lib/env";
 
 async function getAdminSession() {
   const cookieStore = await cookies();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
-  const res = await fetch(`${apiUrl}/api/me`, {
+  const res = await fetch(`${serverApiUrl()}/api/me`, {
     headers: { cookie: cookieStore.toString() },
     cache: "no-store",
   });
@@ -19,9 +18,8 @@ async function getAdminSession() {
 }
 
 async function getSelfHosted(cookieHeader: string): Promise<boolean> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
   try {
-    const res = await fetch(`${apiUrl}/api/admin/deployment`, {
+    const res = await fetch(`${serverApiUrl()}/api/admin/deployment`, {
       headers: { cookie: cookieHeader },
       cache: "no-store",
     });
