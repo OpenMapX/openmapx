@@ -33,6 +33,21 @@ const ALLOWED_HOSTS = [
   // Windy webcams — `images-webcams.windy.com` etc. serve still-image
   // previews for the Windy webcam integration.
   "windy.com",
+  // Webcam-integration provider stills (`integrations/webcam/providers/*`).
+  // Each entry covers the operator domain + any subdomains via the existing
+  // endsWith('.<host>') match. AWS S3 buckets (e.g. TfL JamCam) are
+  // intentionally excluded — opening *.amazonaws.com is too permissive.
+  "nps.gov", // NPS — `www.nps.gov/...`
+  "dot.ca.gov", // Caltrans — `cwwp2.dot.ca.gov`
+  "tripcheck.com", // Oregon DOT — `tripcheck.com/RoadCams/...`
+  "511ny.org", // New York 511
+  "511ga.org", // Georgia 511
+  "fl511.com", // Florida 511
+  "az511.com", // Arizona 511
+  "511.idaho.gov", // Idaho 511 (exact host)
+  "ibi511.com", // shared ibi511 host (Utah uses prod-ut.ibi511.com)
+  "511la.org", // Louisiana 511
+  "511pa.com", // Pennsylvania 511 (covers www.511pa.com)
 ];
 
 function isAllowedHost(hostname: string): boolean {
