@@ -34,6 +34,18 @@ async function resolvePostgresTarget(rootDir?: string): Promise<PostgresTarget> 
 }
 
 /**
+ * Quote a string for safe interpolation into a SQL string literal. Postgres
+ * standard-conforming mode treats `'` as the only character that closes a
+ * literal, so doubling it is sufficient. We rely on this rather than psql's
+ * `-v name=…` + `:'name'` substitution because that path is silently a no-op
+ * under `psql -c` in modern psql (15+) — the literal `:'name'` ends up in
+ * the SQL and produces a syntax error.
+ */
+function quoteSqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
  * Run `psql -c <sql>` inside the postgis container via the generated
  * compose file. Returns trimmed stdout (minus trailing empty lines).
  */
@@ -75,58 +87,51 @@ export async function execPsql(
   return (result.stdout ?? "").trim();
 }
 
-export async function promoteUserToAdmin(email: string, rootDir?: string): Promise<void> {
-  if (!email?.includes("@")) {
-    throw new Error(`"${email}" does not look like an email address`);
-  }
-  const target = await resolvePostgresTarget(rootDir);
+interface UpdateUserOptions {
+  /** Email of the user to update. */
+  email: string;
+  /** SQL `SET` clause body, e.g. `role = 'admin'`. */
+  setClause: string;
+  /** Verb shown in the not-found / multiple-matches error/warning text. */
+  actionVerb: string;
+  rootDir?: string;
+}
 
-  // Parameterise via psql's `-v` / `:'var'` quoting so the email is safely
-  // escaped by libpq rather than injected into the SQL literal.
-  const paths = repoPaths(rootDir);
-  const result = await execa(
-    "docker",
-    [
-      "compose",
-      "-f",
-      paths.composeOutPath,
-      "exec",
-      "-T",
-      target.serviceId,
-      "psql",
-      "-U",
-      target.user,
-      "-d",
-      target.db,
-      "-v",
-      "ON_ERROR_STOP=1",
-      "--no-psqlrc",
-      "-A",
-      "-t",
-      "-v",
-      `email=${email}`,
-      "-c",
-      `UPDATE "user" SET role = 'admin' WHERE email = :'email' RETURNING id;`,
-    ],
-    { cwd: paths.infraDir, reject: false },
-  );
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `psql failed (exit ${result.exitCode}): ${result.stderr?.trim() || result.stdout?.trim() || "no output"}`,
-    );
+/**
+ * Run `UPDATE "user" SET <setClause> WHERE email = '<email>' RETURNING id;`
+ * inside the postgis container. Centralises the email validation, escaping,
+ * exec wiring, and "no rows matched" error messaging used by every user
+ * mutation command.
+ */
+async function updateUserByEmail(opts: UpdateUserOptions): Promise<string[]> {
+  if (!opts.email?.includes("@")) {
+    throw new Error(`"${opts.email}" does not look like an email address`);
   }
-  const updatedIds = (result.stdout ?? "")
+  const target = await resolvePostgresTarget(opts.rootDir);
+  const sql = `UPDATE "user" SET ${opts.setClause} WHERE email = ${quoteSqlLiteral(opts.email)} RETURNING id;`;
+  const stdout = await execPsql(target, sql, opts.rootDir);
+  const ids = stdout
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (updatedIds.length === 0) {
+  if (ids.length === 0) {
     throw new Error(
-      `No user found with email "${email}". Sign up through the web UI first, then re-run this command.`,
+      `No user found with email "${opts.email}". Sign up through the web UI first, then re-run this command.`,
     );
   }
-  if (updatedIds.length > 1) {
-    log.warn(`${updatedIds.length} users matched "${email}" — promoted all of them`);
+  if (ids.length > 1) {
+    log.warn(`${ids.length} users matched "${opts.email}" — ${opts.actionVerb} all of them`);
   }
+  return ids;
+}
+
+export async function promoteUserToAdmin(email: string, rootDir?: string): Promise<void> {
+  await updateUserByEmail({
+    email,
+    setClause: "role = 'admin'",
+    actionVerb: "promoted",
+    rootDir,
+  });
 }
 
 /**
@@ -137,54 +142,21 @@ export async function promoteUserToAdmin(email: string, rootDir?: string): Promi
  * configures SMTP, and self-service signup works for everyone else.
  */
 export async function markEmailVerified(email: string, rootDir?: string): Promise<void> {
-  if (!email?.includes("@")) {
-    throw new Error(`"${email}" does not look like an email address`);
-  }
-  const target = await resolvePostgresTarget(rootDir);
-  const paths = repoPaths(rootDir);
-  const result = await execa(
-    "docker",
-    [
-      "compose",
-      "-f",
-      paths.composeOutPath,
-      "exec",
-      "-T",
-      target.serviceId,
-      "psql",
-      "-U",
-      target.user,
-      "-d",
-      target.db,
-      "-v",
-      "ON_ERROR_STOP=1",
-      "--no-psqlrc",
-      "-A",
-      "-t",
-      "-v",
-      `email=${email}`,
-      "-c",
-      `UPDATE "user" SET email_verified = true WHERE email = :'email' RETURNING id;`,
-    ],
-    { cwd: paths.infraDir, reject: false },
-  );
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `psql failed (exit ${result.exitCode}): ${result.stderr?.trim() || result.stdout?.trim() || "no output"}`,
-    );
-  }
-  const updatedIds = (result.stdout ?? "")
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (updatedIds.length === 0) {
-    throw new Error(
-      `No user found with email "${email}". Sign up through the web UI first, then re-run this command.`,
-    );
-  }
-  if (updatedIds.length > 1) {
-    log.warn(`${updatedIds.length} users matched "${email}" — verified all of them`);
-  }
+  await updateUserByEmail({
+    email,
+    setClause: "email_verified = true",
+    actionVerb: "verified",
+    rootDir,
+  });
+}
+
+export async function demoteUserFromAdmin(email: string, rootDir?: string): Promise<void> {
+  await updateUserByEmail({
+    email,
+    setClause: "role = 'user'",
+    actionVerb: "demoted",
+    rootDir,
+  });
 }
 
 export async function listUsers(
@@ -261,44 +233,7 @@ export function registerUsersCommands(program: Command): void {
     .description("Remove admin role from a user (sets role back to user)")
     .action(async (email: string) => {
       try {
-        const target = await resolvePostgresTarget();
-        const paths = repoPaths();
-        const result = await execa(
-          "docker",
-          [
-            "compose",
-            "-f",
-            paths.composeOutPath,
-            "exec",
-            "-T",
-            target.serviceId,
-            "psql",
-            "-U",
-            target.user,
-            "-d",
-            target.db,
-            "-v",
-            "ON_ERROR_STOP=1",
-            "--no-psqlrc",
-            "-A",
-            "-t",
-            "-v",
-            `email=${email}`,
-            "-c",
-            `UPDATE "user" SET role = 'user' WHERE email = :'email' RETURNING id;`,
-          ],
-          { cwd: paths.infraDir, reject: false },
-        );
-        if (result.exitCode !== 0) {
-          throw new Error(result.stderr?.trim() || result.stdout?.trim() || "psql failed");
-        }
-        const ids = (result.stdout ?? "")
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        if (ids.length === 0) {
-          throw new Error(`No user found with email "${email}"`);
-        }
+        await demoteUserFromAdmin(email);
         log.ok(`Demoted ${email} to user`);
       } catch (err) {
         log.err((err as Error).message);
