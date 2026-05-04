@@ -442,6 +442,22 @@ function datasetIdFromArchive(name: string): string {
   return name.replace(/\.zip$/i, "");
 }
 
+/**
+ * Remove store entries for GTFS feeds whose archive no longer exists on
+ * disk. Called at the top of every Transitous run so a previous crash that
+ * left a `.tmp-*` upsert behind, or an operator-deleted archive, doesn't
+ * stay in the registry forever — the resume (failure) path of the pipeline
+ * never replaces the store wholesale, so without this nudge stale entries
+ * persist indefinitely.
+ */
+function pruneOrphanedGtfsDatasets(store: StateStore): void {
+  for (const dataset of store.getAll()) {
+    if (dataset.type !== "gtfs") continue;
+    if (existsSync(dataset.path)) continue;
+    store.remove("gtfs", dataset.id);
+  }
+}
+
 function scanGtfsArchives(gtfsDir: string): GtfsArchiveSnapshot[] {
   if (!existsSync(gtfsDir)) return [];
   return readdirSync(gtfsDir)
@@ -486,6 +502,11 @@ export async function downloadGtfsViaTransitous(
   );
   try {
     ensureTransitousWorkdirs(catalogDir, gtfsDir, downloadsDir);
+    // Drop any GTFS dataset entries whose archive is no longer on disk.
+    // Keeps the registry self-healing across crashes / .tmp-* renames /
+    // operator deletions, even when the pipeline ends in the resume
+    // (failure) branch and never gets to wholesale-replace the store.
+    pruneOrphanedGtfsDatasets(opts.store);
     applyApiKeysOverlay(
       catalogDir,
       opts.apiKeysPath ?? process.env.TRANSITOUS_API_KEYS_PATH ?? DEFAULT_TRANSITOUS_API_KEYS_PATH,
