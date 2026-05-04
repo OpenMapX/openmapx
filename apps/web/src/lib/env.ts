@@ -61,7 +61,3 @@ export function buildClientEnv(): ClientEnv {
         : "/api/tiles/terrain/{z}/{x}/{y}.png"),
   };
 }
-
-// Re-export so existing `@/lib/env` imports keep working; canonical
-// implementation lives in @openmapx/core/server.
-export { serverApiUrl } from "@openmapx/core/server";

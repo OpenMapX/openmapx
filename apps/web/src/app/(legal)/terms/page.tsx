@@ -1,9 +1,13 @@
 import type { LoadedIntegrationMeta } from "@openmapx/core";
-import { fetchCapabilities, fetchIntegrations, sectionSlug } from "@openmapx/core/server";
+import {
+  fetchCapabilities,
+  fetchIntegrations,
+  sectionSlug,
+  serverApiUrl,
+} from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
-import { serverApiUrl } from "@/lib/env";
 
 const sectionsEn: LegalSection[] = [
   { id: sectionSlug("1. Scope and Provider"), label: "Scope and Provider" },

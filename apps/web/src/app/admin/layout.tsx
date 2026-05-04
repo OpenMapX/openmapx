@@ -1,8 +1,8 @@
+import { serverApiUrl } from "@openmapx/core/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { serverApiUrl } from "@/lib/env";
 
 async function getAdminSession() {
   const cookieStore = await cookies();
