@@ -115,16 +115,38 @@ interface AdminSidebarProps {
   selfHosted?: boolean;
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({
+  item,
+  active,
+  sectionActive = false,
+}: {
+  item: NavItem;
+  active: boolean;
+  /**
+   * True when this entry is the parent of an active sub-item but not itself
+   * the deepest match. Renders as a muted "section header" (bold text, no
+   * filled pill) so the active sub-item below stays the visual focus instead
+   * of stacking two identical pills.
+   */
+  sectionActive?: boolean;
+}) {
+  // The leaf (Mui-selected) styling and the section-active styling are
+  // mutually exclusive — `selected` flips MUI's filled background, which is
+  // what we explicitly want to avoid for `sectionActive`.
+  const showFilled = active && !sectionActive;
   return (
     <ListItem disablePadding>
       <ListItemButton
         component={Link}
         href={item.href}
-        selected={active}
+        selected={showFilled}
         sx={{
           borderRadius: 1,
           mx: 1,
+          ...(sectionActive && {
+            color: "primary.main",
+            "& .MuiListItemIcon-root": { color: "primary.main" },
+          }),
           "&.Mui-selected": {
             bgcolor: "primary.main",
             color: "primary.contrastText",
@@ -136,7 +158,10 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
         <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
         <ListItemText
           primary={item.label}
-          primaryTypographyProps={{ fontSize: 14, fontWeight: active ? 600 : 400 }}
+          primaryTypographyProps={{
+            fontSize: 14,
+            fontWeight: active || sectionActive ? 600 : 400,
+          }}
         />
       </ListItemButton>
     </ListItem>
@@ -200,20 +225,24 @@ export function AdminSidebar({ open, onClose, selfHosted = false }: AdminSidebar
       </Toolbar>
       <Divider />
       <List dense sx={{ pt: 1, flex: 1 }}>
-        {navItems.map((item) => (
-          <Box key={item.href}>
-            <NavLink item={item} active={isActive(item)} />
-            {item.href === "/admin/services" && selfHosted && (
-              <Collapse in={servicesExpanded} timeout="auto" unmountOnExit>
-                <List dense disablePadding>
-                  {SERVICES_SUB_ITEMS.map((sub) => (
-                    <SubNavLink key={sub.href} item={sub} active={isSubActive(sub)} />
-                  ))}
-                </List>
-              </Collapse>
-            )}
-          </Box>
-        ))}
+        {navItems.map((item) => {
+          const hasActiveChild =
+            item.href === "/admin/services" && selfHosted && SERVICES_SUB_ITEMS.some(isSubActive);
+          return (
+            <Box key={item.href}>
+              <NavLink item={item} active={isActive(item)} sectionActive={hasActiveChild} />
+              {item.href === "/admin/services" && selfHosted && (
+                <Collapse in={servicesExpanded} timeout="auto" unmountOnExit>
+                  <List dense disablePadding>
+                    {SERVICES_SUB_ITEMS.map((sub) => (
+                      <SubNavLink key={sub.href} item={sub} active={isSubActive(sub)} />
+                    ))}
+                  </List>
+                </Collapse>
+              )}
+            </Box>
+          );
+        })}
       </List>
     </>
   );
