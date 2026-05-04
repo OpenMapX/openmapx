@@ -184,6 +184,64 @@ async function resetTransitousCatalog(catalogDir: string, runner: CommandRunner)
   }
 }
 
+/**
+ * Walk the catalog's `feeds/*.json` files and mark every `transitland-atlas`
+ * source whose `transitland-atlas-id` is no longer in the local
+ * `transitland-atlas/feeds/` submodule as `skip: true`.
+ *
+ * Upstream Transitous occasionally lands a catalog change before the
+ * matching atlas update is mirrored, leaving sources whose atlas reference
+ * resolves to nothing. fetch.py exits 1 on the first such source, killing
+ * the rest of the country's pipeline. Marking them skipped lets the rest
+ * of the feeds proceed; once upstream catches up, a clean catalog pull
+ * stops triggering this code path.
+ */
+function skipUnresolvableAtlasSources(catalogDir: string): void {
+  const atlasDir = join(catalogDir, "transitland-atlas", "feeds");
+  const feedsDir = join(catalogDir, "feeds");
+  if (!existsSync(atlasDir) || !existsSync(feedsDir)) return;
+
+  const knownAtlasIds = new Set<string>();
+  for (const fileName of readdirSync(atlasDir)) {
+    if (!fileName.endsWith(".json")) continue;
+    try {
+      const data = JSON.parse(readFileSync(join(atlasDir, fileName), "utf-8")) as {
+        feeds?: Array<{ id?: string }>;
+      };
+      for (const feed of data.feeds ?? []) {
+        if (feed.id) knownAtlasIds.add(feed.id);
+      }
+    } catch {
+      // Tolerate a malformed atlas file rather than refusing to mark anything.
+    }
+  }
+
+  for (const fileName of readdirSync(feedsDir)) {
+    if (!fileName.endsWith(".json")) continue;
+    const feedPath = join(feedsDir, fileName);
+    let data: { sources?: Array<Record<string, unknown>> };
+    try {
+      data = JSON.parse(readFileSync(feedPath, "utf-8")) as {
+        sources?: Array<Record<string, unknown>>;
+      };
+    } catch {
+      continue;
+    }
+    let modified = false;
+    for (const source of data.sources ?? []) {
+      if (source.type !== "transitland-atlas") continue;
+      const atlasId = source["transitland-atlas-id"];
+      if (typeof atlasId !== "string" || knownAtlasIds.has(atlasId)) continue;
+      if (source.skip === true) continue;
+      source.skip = true;
+      modified = true;
+    }
+    if (modified) {
+      writeFileSync(feedPath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+    }
+  }
+}
+
 function applyApiKeysOverlay(catalogDir: string, overlayPath: string): number {
   if (!existsSync(overlayPath)) return 0;
 
@@ -535,6 +593,11 @@ export async function downloadGtfsViaTransitous(
     // operator deletions, even when the pipeline ends in the resume
     // (failure) branch and never gets to wholesale-replace the store.
     pruneOrphanedGtfsDatasets(opts.store);
+    // Sanitise the catalog before fetch.py reads it. Sources referencing
+    // atlas feeds that have been dropped (or aren't yet mirrored) make
+    // fetch.py exit on the first one and abandon every later source in
+    // the same country.
+    skipUnresolvableAtlasSources(catalogDir);
     applyApiKeysOverlay(
       catalogDir,
       opts.apiKeysPath ?? process.env.TRANSITOUS_API_KEYS_PATH ?? DEFAULT_TRANSITOUS_API_KEYS_PATH,

@@ -184,6 +184,70 @@ async function ensureTransitousCatalog(
   return catalogDir;
 }
 
+/**
+ * Walk the catalog's `feeds/*.json` files and mark every `transitland-atlas`
+ * source whose `transitland-atlas-id` is no longer present in the local
+ * `transitland-atlas/feeds/` submodule as `skip: true`.
+ *
+ * Upstream Transitous occasionally lands a catalog change before the
+ * matching atlas update is mirrored, or vice versa, leaving sources whose
+ * atlas reference resolves to nothing. Both `fetch.py` and
+ * `generate-motis-config.py` exit `1` on the first such source, which kills
+ * the build for unrelated reasons. Marking them `skip: true` lets the rest
+ * of the catalog proceed; once upstream catches up, a clean catalog pull
+ * stops triggering this code path.
+ *
+ * Returns the number of sources newly marked. Idempotent across runs.
+ */
+function skipUnresolvableAtlasSources(catalogDir: string): number {
+  const atlasDir = join(catalogDir, "transitland-atlas", "feeds");
+  const feedsDir = join(catalogDir, "feeds");
+  if (!existsSync(atlasDir) || !existsSync(feedsDir)) return 0;
+
+  const knownAtlasIds = new Set<string>();
+  for (const fileName of readdirSync(atlasDir)) {
+    if (!fileName.endsWith(".json")) continue;
+    try {
+      const data = JSON.parse(readFileSync(join(atlasDir, fileName), "utf-8")) as {
+        feeds?: Array<{ id?: string }>;
+      };
+      for (const feed of data.feeds ?? []) {
+        if (feed.id) knownAtlasIds.add(feed.id);
+      }
+    } catch {
+      // Skip a malformed atlas file rather than refusing to mark anything.
+    }
+  }
+
+  let markedCount = 0;
+  for (const fileName of readdirSync(feedsDir)) {
+    if (!fileName.endsWith(".json")) continue;
+    const feedPath = join(feedsDir, fileName);
+    let data: { sources?: Array<Record<string, unknown>> };
+    try {
+      data = JSON.parse(readFileSync(feedPath, "utf-8")) as {
+        sources?: Array<Record<string, unknown>>;
+      };
+    } catch {
+      continue;
+    }
+    let modified = false;
+    for (const source of data.sources ?? []) {
+      if (source.type !== "transitland-atlas") continue;
+      const atlasId = source["transitland-atlas-id"];
+      if (typeof atlasId !== "string" || knownAtlasIds.has(atlasId)) continue;
+      if (source.skip === true) continue;
+      source.skip = true;
+      markedCount++;
+      modified = true;
+    }
+    if (modified) {
+      writeFileSync(feedPath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+    }
+  }
+  return markedCount;
+}
+
 async function ensureTransitousToolsImage(
   rootDir: string,
   image: string,
@@ -426,6 +490,10 @@ export async function buildMotisData(
   }
 
   const transitousCatalogDir = await ensureTransitousCatalog(dataDir, transitousRepoUrl, runner);
+  // Sanitise the catalog before any container runs against it. Sources
+  // referencing atlas feeds that were dropped (or not yet mirrored) make
+  // generate-motis-config.py exit on the first one and kill the build.
+  skipUnresolvableAtlasSources(transitousCatalogDir);
   const transitousDownloadsDir = resolve(dataDir, TRANSITOUS_DOWNLOADS_DIR);
   const feedProxyKeyFile = ensureFeedProxyKeyFile(feedProxyDir);
   mkdirSync(transitousDownloadsDir, { recursive: true });
