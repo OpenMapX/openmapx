@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function StatusPage() {
   return (
-    <div className="h-dvh overflow-auto bg-gray-50 px-4 py-8">
+    <div className="h-dvh overflow-auto bg-gray-50 dark:bg-neutral-950 px-4 py-8">
       <StatusDashboard />
     </div>
   );
