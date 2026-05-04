@@ -1,4 +1,5 @@
 import {
+  createWriteStream,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -8,6 +9,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createGzip } from "node:zlib";
 import { PLATFORM_VERSION } from "@openmapx/core";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
@@ -476,9 +479,15 @@ async function pgDumpToFile(
   db: string,
   outFile: string,
 ): Promise<void> {
-  // `docker compose exec -T <svc> pg_dump -U <user> <db>` → gzip → outFile.
-  // We pipe the dump through gzip ourselves rather than relying on `sh -c`
-  // inside the container (avoids an extra shell + escaping).
+  // `docker compose exec -T <svc> pg_dump -U <user> <db>` streamed
+  // through Node's zlib gzip into outFile.
+  //
+  // Earlier this used `execa(... gzip ...)` with `input: sub.stdout`, but
+  // execa v9 buffers each child's stdout into its result object by
+  // default — so even though gzip was the real consumer, the dump was
+  // also being held in memory and OOM-killed Node on multi-hundred-MB
+  // dumps. Stream directly via createGzip() + pipeline() so nothing
+  // touches the JS heap and we skip the extra `gzip` subprocess.
   const sub = execa(
     "docker",
     [
@@ -495,22 +504,22 @@ async function pgDumpToFile(
       "--no-privileges",
       db,
     ],
-    { cwd: ctx.cwd, reject: false, stderr: "pipe" },
+    { cwd: ctx.cwd, reject: false, stderr: "pipe", buffer: { stdout: false } },
   );
 
-  const gzip = execa("gzip", ["-c"], {
-    cwd: ctx.cwd,
-    reject: false,
-    input: sub.stdout ?? undefined,
-    stdout: { file: outFile },
-  });
+  if (!sub.stdout) {
+    throw new Error("pg_dump subprocess has no stdout stream");
+  }
 
-  const [pgRes, gzipRes] = await Promise.all([sub, gzip]);
+  const out = createWriteStream(outFile);
+  const gzip = createGzip();
+
+  // Run the stream pipeline and the subprocess wait in parallel; both
+  // must succeed before the dump is considered complete.
+  const pipePromise = pipeline(sub.stdout, gzip, out);
+  const [pgRes] = await Promise.all([sub, pipePromise]);
   if (pgRes.exitCode !== 0) {
     throw new Error(`pg_dump failed (exit ${pgRes.exitCode}): ${pgRes.stderr ?? ""}`);
-  }
-  if (gzipRes.exitCode !== 0) {
-    throw new Error(`gzip failed (exit ${gzipRes.exitCode}): ${gzipRes.stderr ?? ""}`);
   }
 }
 
