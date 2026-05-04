@@ -6,6 +6,7 @@ import Chip from "@mui/material/Chip";
 import FormControl from "@mui/material/FormControl";
 import IconButton from "@mui/material/IconButton";
 import InputLabel from "@mui/material/InputLabel";
+import ListSubheader from "@mui/material/ListSubheader";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
@@ -35,39 +36,136 @@ interface AuditEntry {
   createdAt: string;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  "integration.config.update": "Config Updated",
-  "integration.enabled": "Enabled",
-  "integration.disabled": "Disabled",
-  "integration.reload": "Integration Reload",
-  "integration.reload.all": "Reload All",
-  "credential.set": "Credential Set",
-  "credential.delete": "Credential Deleted",
-  "job.cancel": "Job Canceled",
-  "user.ban": "User Banned",
-  "user.unban": "User Unbanned",
-  "user.role.change": "Role Changed",
-  "user.delete": "User Deleted",
-  "user.impersonate": "Impersonate",
-};
+// Grouped catalogue of every action emitted by `writeAuditLog` across the
+// admin API. Keep this in sync with the call sites under
+// `apps/api/src/routes/admin*.ts`.
+const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, label: string]> }> = [
+  {
+    label: "Integrations",
+    actions: [
+      ["integration.config.update", "Config Updated"],
+      ["integration.enabled", "Enabled"],
+      ["integration.disabled", "Disabled"],
+      ["integration.reload", "Reload"],
+      ["integration.reload.all", "Reload All"],
+      ["integration.config.export", "Config Exported"],
+      ["integration.config.import", "Config Imported"],
+    ],
+  },
+  {
+    label: "Credentials",
+    actions: [
+      ["credential.set", "Credential Set"],
+      ["credential.delete", "Credential Deleted"],
+    ],
+  },
+  {
+    label: "Services",
+    actions: [
+      ["service.start", "Started"],
+      ["service.stop", "Stopped"],
+      ["service.restart", "Restarted"],
+      ["service.bulk.start", "Bulk Start"],
+      ["service.bulk.stop", "Bulk Stop"],
+      ["service.bulk.restart", "Bulk Restart"],
+      ["service.bulk.recreate", "Bulk Recreate"],
+      ["service.bulk.build", "Bulk Build"],
+      ["service.selection.update", "Selection Updated"],
+      ["service.config.update", "Config Updated"],
+      ["service.health_check", "Health Check"],
+    ],
+  },
+  {
+    label: "Data",
+    actions: [
+      ["data.download-osm", "Download OSM"],
+      ["data.download-gtfs", "Download GTFS"],
+      ["data.download-style", "Download Style"],
+      ["data.update", "Update"],
+      ["data.convert-overpass", "Convert Overpass"],
+      ["data.link", "Link"],
+      ["data.clean", "Clean"],
+      ["data.generate-api-keys", "Generate API Keys"],
+    ],
+  },
+  {
+    label: "Backups",
+    actions: [
+      ["backup.create", "Create"],
+      ["backup.restore", "Restore"],
+      ["backup.delete", "Delete"],
+    ],
+  },
+  {
+    label: "Settings",
+    actions: [
+      ["settings.update", "Updated"],
+      ["settings.test_email", "Test Email"],
+      ["settings.export", "Exported"],
+      ["settings.import", "Imported"],
+    ],
+  },
+  {
+    label: "Service Store",
+    actions: [
+      ["store.install", "Install"],
+      ["store.update", "Update"],
+      ["store.remove", "Remove"],
+      ["store.refresh_catalog", "Refresh Catalog"],
+      ["store.add_source", "Add Source"],
+      ["store.remove_source", "Remove Source"],
+    ],
+  },
+  {
+    label: "Jobs",
+    actions: [["job.cancel", "Canceled"]],
+  },
+];
 
-const KNOWN_ACTIONS = Object.keys(ACTION_LABELS);
+const ACTION_LABELS: Record<string, string> = Object.fromEntries(
+  ACTION_GROUPS.flatMap((g) => g.actions),
+);
 
-const TARGET_TYPES = ["integration", "user", "job", "credential"];
+const TARGET_TYPES = [
+  "integration",
+  "credential",
+  "service",
+  "data",
+  "backup",
+  "settings",
+  "store",
+  "job",
+  "user",
+];
+
+const DESTRUCTIVE_ACTIONS = new Set([
+  "credential.delete",
+  "service.stop",
+  "service.bulk.stop",
+  "backup.delete",
+  "store.remove",
+  "store.remove_source",
+  "job.cancel",
+]);
 
 function ActionChip({ action }: { action: string }) {
-  const isDestructive = action.includes("delete") || action.includes("ban");
-  const isWrite =
-    action.includes("set") ||
-    action.includes("update") ||
-    action.includes("enabled") ||
-    action.includes("disabled");
-  const color = isDestructive ? "error" : isWrite ? "primary" : "default";
+  const category = action.split(".")[0] ?? "";
+  const isDestructive = DESTRUCTIVE_ACTIONS.has(action);
+  const isAuth = category === "user" || category === "credential";
+  // Destructive → error; auth/credential mutations → warning;
+  // every other write → primary; unknown actions → default.
+  const color = isDestructive
+    ? "error"
+    : isAuth
+      ? "warning"
+      : ACTION_LABELS[action]
+        ? "primary"
+        : "default";
   return (
     <Chip
       label={ACTION_LABELS[action] ?? action}
       size="small"
-      color={color as "error" | "primary" | "default"}
+      color={color as "error" | "primary" | "warning" | "default"}
       variant="outlined"
     />
   );
@@ -131,11 +229,14 @@ export function AuditLog() {
             }}
           >
             <MenuItem value="">All actions</MenuItem>
-            {KNOWN_ACTIONS.map((a) => (
-              <MenuItem key={a} value={a}>
-                {ACTION_LABELS[a] ?? a}
-              </MenuItem>
-            ))}
+            {ACTION_GROUPS.flatMap((group) => [
+              <ListSubheader key={`hdr-${group.label}`}>{group.label}</ListSubheader>,
+              ...group.actions.map(([action, label]) => (
+                <MenuItem key={action} value={action}>
+                  {label}
+                </MenuItem>
+              )),
+            ])}
           </Select>
         </FormControl>
 
