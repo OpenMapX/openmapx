@@ -44,13 +44,13 @@ function deriveCategoryOrder(services: ServiceStatus[]): string[] {
 const STATUS_COLORS: Record<string, string> = {
   up: "bg-green-500",
   down: "bg-red-500",
-  unconfigured: "bg-gray-300",
+  unconfigured: "bg-gray-300 dark:bg-neutral-600",
 };
 
 const STATUS_TEXT_COLORS: Record<string, string> = {
-  up: "text-green-600",
-  down: "text-red-600",
-  unconfigured: "text-gray-400",
+  up: "text-green-600 dark:text-green-400",
+  down: "text-red-600 dark:text-red-400",
+  unconfigured: "text-gray-400 dark:text-neutral-500",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -112,9 +112,9 @@ export default function StatusDashboard() {
     <div>
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold text-gray-900">System Status</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-neutral-100">System Status</h1>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none">
+            <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-neutral-400 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={autoRefresh}
@@ -127,7 +127,7 @@ export default function StatusDashboard() {
               type="button"
               onClick={fetchStatus}
               disabled={loading}
-              className="px-3 py-1.5 text-sm font-medium bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              className="px-3 py-1.5 text-sm font-medium bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-700 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-neutral-700 dark:text-neutral-100 disabled:opacity-50 transition-colors"
             >
               {loading ? "Checking\u2026" : "Refresh"}
             </button>
@@ -136,19 +136,25 @@ export default function StatusDashboard() {
 
         {data && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mb-6">
-            <span className="text-green-600 font-medium">{upCount} operational</span>
-            {downCount > 0 && <span className="text-red-600 font-medium">{downCount} down</span>}
-            {unconfiguredCount > 0 && (
-              <span className="text-gray-400">{unconfiguredCount} not configured</span>
+            <span className="text-green-600 dark:text-green-400 font-medium">
+              {upCount} operational
+            </span>
+            {downCount > 0 && (
+              <span className="text-red-600 dark:text-red-400 font-medium">{downCount} down</span>
             )}
-            <span className="text-gray-400 ml-auto">
+            {unconfiguredCount > 0 && (
+              <span className="text-gray-400 dark:text-neutral-500">
+                {unconfiguredCount} not configured
+              </span>
+            )}
+            <span className="text-gray-400 dark:text-neutral-500 ml-auto">
               {new Date(data.timestamp).toLocaleString()}
             </span>
           </div>
         )}
 
         {error && !data && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700 mb-6">
+          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-4 text-sm text-red-700 dark:text-red-300 mb-6">
             Failed to load status: {error}
           </div>
         )}
@@ -157,10 +163,10 @@ export default function StatusDashboard() {
           <div className="space-y-6">
             {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse">
-                <div className="h-4 w-32 bg-gray-200 rounded mb-2" />
-                <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-                  <div className="h-4 bg-gray-100 rounded w-full" />
-                  <div className="h-4 bg-gray-100 rounded w-3/4" />
+                <div className="h-4 w-32 bg-gray-200 dark:bg-neutral-700 rounded mb-2" />
+                <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg p-4 space-y-3">
+                  <div className="h-4 bg-gray-100 dark:bg-neutral-700 rounded w-full" />
+                  <div className="h-4 bg-gray-100 dark:bg-neutral-700 rounded w-3/4" />
                 </div>
               </div>
             ))}
@@ -172,34 +178,42 @@ export default function StatusDashboard() {
           if (!services?.length) return null;
           return (
             <div key={category} className="mb-6">
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <h2 className="text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
                 {category}
               </h2>
-              <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100 shadow-sm">
+              <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg divide-y divide-gray-100 dark:divide-neutral-700/60 shadow-sm">
                 {services.map((s) => (
                   <div key={s.id} className="px-4 py-3 flex items-start gap-3">
                     <span
-                      className={`mt-1.5 shrink-0 w-2.5 h-2.5 rounded-full ${STATUS_COLORS[s.status] ?? "bg-gray-300"}`}
+                      className={`mt-1.5 shrink-0 w-2.5 h-2.5 rounded-full ${STATUS_COLORS[s.status] ?? "bg-gray-300 dark:bg-neutral-600"}`}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="font-medium text-sm text-gray-900">{s.name}</span>
+                        <span className="font-medium text-sm text-gray-900 dark:text-neutral-100">
+                          {s.name}
+                        </span>
                         <span
-                          className={`text-xs font-medium ${STATUS_TEXT_COLORS[s.status] ?? "text-gray-400"}`}
+                          className={`text-xs font-medium ${STATUS_TEXT_COLORS[s.status] ?? "text-gray-400 dark:text-neutral-500"}`}
                         >
                           {STATUS_LABELS[s.status] ?? s.status}
                         </span>
                         {s.responseTime != null && (
-                          <span className="text-xs text-gray-400">{s.responseTime}ms</span>
+                          <span className="text-xs text-gray-400 dark:text-neutral-500">
+                            {s.responseTime}ms
+                          </span>
                         )}
                       </div>
                       <div
-                        className="text-xs text-gray-500 font-mono truncate mt-0.5"
+                        className="text-xs text-gray-500 dark:text-neutral-400 font-mono truncate mt-0.5"
                         title={s.url}
                       >
                         {s.url}
                       </div>
-                      {s.error && <div className="text-xs text-red-500 mt-0.5">{s.error}</div>}
+                      {s.error && (
+                        <div className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                          {s.error}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -208,7 +222,9 @@ export default function StatusDashboard() {
           );
         })}
 
-        <div className="text-center text-xs text-gray-400 mt-8 pb-4">OpenMapX Status Dashboard</div>
+        <div className="text-center text-xs text-gray-400 dark:text-neutral-500 mt-8 pb-4">
+          OpenMapX Status Dashboard
+        </div>
       </div>
     </div>
   );
