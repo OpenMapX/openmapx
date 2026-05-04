@@ -120,6 +120,20 @@ const ACTION_GROUPS: Array<{ label: string; actions: Array<[action: string, labe
     label: "Jobs",
     actions: [["job.cancel", "Canceled"]],
   },
+  {
+    label: "Users",
+    actions: [
+      ["user.create", "Created"],
+      ["user.delete", "Deleted"],
+      ["user.role.change", "Role Changed"],
+      ["user.ban", "Banned"],
+      ["user.unban", "Unbanned"],
+      ["user.impersonate", "Impersonated"],
+      ["user.password.set", "Password Set"],
+      ["user.session.revoke", "Session Revoked"],
+      ["user.sessions.revoke_all", "All Sessions Revoked"],
+    ],
+  },
 ];
 
 const ACTION_LABELS: Record<string, string> = Object.fromEntries(
@@ -146,6 +160,10 @@ const DESTRUCTIVE_ACTIONS = new Set([
   "store.remove",
   "store.remove_source",
   "job.cancel",
+  "user.delete",
+  "user.ban",
+  "user.session.revoke",
+  "user.sessions.revoke_all",
 ]);
 
 function ActionChip({ action }: { action: string }) {

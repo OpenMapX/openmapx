@@ -8,6 +8,7 @@ import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
+import { auditAdminActionsHook } from "./utils/auth-audit-hook";
 import { sendMail } from "./utils/email";
 import {
   emailOtpEmail,
@@ -133,6 +134,9 @@ export const auth = betterAuth({
         },
       },
     },
+  },
+  hooks: {
+    after: auditAdminActionsHook,
   },
   plugins: [
     i18n({
