@@ -194,13 +194,13 @@ export function SavedListDetail() {
               width: 40,
               height: 40,
               borderRadius: 1,
-              bgcolor: "grey.100",
+              bgcolor: "action.hover",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: isDefault ? "default" : "pointer",
               flexShrink: 0,
-              ...(!isDefault && { "&:hover": { bgcolor: "grey.200" } }),
+              ...(!isDefault && { "&:hover": { bgcolor: "action.selected" } }),
             }}
           >
             {resolveListIcon(list.icon, 28)}
