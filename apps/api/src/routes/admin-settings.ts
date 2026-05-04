@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { createTransport } from "nodemailer";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { appLogger } from "../services/app-logger";
 import { writeAuditLog } from "../utils/audit-log";
+import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
 import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 
@@ -138,6 +138,47 @@ const SETTING_DEFS: SettingDef[] = [
     description: "e.g. noreply@example.com",
     type: "string",
     env: "EMAIL_FROM",
+    default: "",
+  },
+  // EmailLabs (Polish EU provider, 9k emails/mo free) — priority 1.
+  // Send picks EmailLabs when all three fields are set, otherwise falls
+  // through to Lettermint, then SMTP. See apps/api/src/utils/email.ts.
+  {
+    group: "email",
+    key: "emailLabsAppKey",
+    label: "EmailLabs App Key",
+    description: "Set all three EmailLabs fields to use it instead of SMTP.",
+    type: "string",
+    secret: true,
+    env: "EMAILLABS_APP_KEY",
+    default: "",
+  },
+  {
+    group: "email",
+    key: "emailLabsSecretKey",
+    label: "EmailLabs Secret Key",
+    type: "string",
+    secret: true,
+    env: "EMAILLABS_SECRET_KEY",
+    default: "",
+  },
+  {
+    group: "email",
+    key: "emailLabsSmtpAccount",
+    label: "EmailLabs SMTP Account",
+    type: "string",
+    env: "EMAILLABS_SMTP_ACCOUNT",
+    default: "",
+  },
+  // Lettermint (Dutch EU provider, 300 emails/mo free) — priority 2.
+  {
+    group: "email",
+    key: "lettermintApiToken",
+    label: "Lettermint API Token",
+    description: "Set this to use Lettermint when EmailLabs is unconfigured.",
+    type: "string",
+    secret: true,
+    env: "LETTERMINT_API_TOKEN",
     default: "",
   },
   // Map
@@ -329,28 +370,16 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     async (request, reply) => {
       const adminSession = getAdminSession(request);
 
-      const rows = await db.select().from(systemSettings);
-      const dbMap = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+      const config = await loadEmailConfig();
 
-      const smtpHost = (process.env.SMTP_HOST ?? dbMap.smtpHost ?? "") as string;
-      const smtpPort = Number(process.env.SMTP_PORT ?? dbMap.smtpPort ?? 587);
-      const smtpUser = (process.env.SMTP_USER ?? dbMap.smtpUser ?? "") as string;
-      const smtpPassword = (process.env.SMTP_PASS ?? dbMap.smtpPassword ?? "") as string;
-      const smtpTls = process.env.SMTP_SECURE
-        ? process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1"
-        : dbMap.smtpTls !== undefined
-          ? Boolean(dbMap.smtpTls)
-          : true;
-      const smtpFrom = (process.env.EMAIL_FROM ?? dbMap.smtpFromAddress ?? "") as string;
-      const instanceName = (process.env.INSTANCE_NAME ??
-        dbMap.instanceName ??
-        "OpenMapX") as string;
-
-      if (!smtpHost) {
+      // Validate the active provider has the inputs it needs before
+      // attempting to send. Errors here become 400s so the operator gets
+      // an actionable message in the admin UI.
+      if (config.provider === "smtp" && !config.smtp.host) {
         return reply.status(400).send({ error: "SMTP host is not configured" });
       }
-      if (!smtpFrom) {
-        return reply.status(400).send({ error: "SMTP from address is not configured" });
+      if (!config.from) {
+        return reply.status(400).send({ error: "From address is not configured" });
       }
 
       const recipientEmail = adminSession.user.email;
@@ -358,33 +387,43 @@ export async function adminSettingsRoute(app: FastifyInstance) {
         return reply.status(400).send({ error: "Your account has no email address" });
       }
 
-      const transport = createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: smtpUser ? { user: smtpUser, pass: smtpPassword } : undefined,
-        tls: smtpTls ? { rejectUnauthorized: false } : undefined,
-      });
+      const rows = await db.select().from(systemSettings);
+      const dbMap = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+      const instanceName = (process.env.INSTANCE_NAME ??
+        dbMap.instanceName ??
+        "OpenMapX") as string;
+
+      const subject = `[${instanceName}] Test Email`;
+      const sentAt = new Date().toISOString();
+      const text = `This is a test email from ${instanceName}.\n\nIf you received this, your ${config.provider} settings are configured correctly.\n\nSent at: ${sentAt}`;
+      const html = `<p>This is a test email from <strong>${instanceName}</strong>.</p><p>If you received this, your ${config.provider} settings are configured correctly.</p><p><small>Sent at: ${sentAt}</small></p>`;
 
       try {
-        await transport.sendMail({
-          from: `${instanceName} <${smtpFrom}>`,
-          to: recipientEmail,
-          subject: `[${instanceName}] Test Email`,
-          text: `This is a test email from ${instanceName}.\n\nIf you received this, your SMTP settings are configured correctly.\n\nSent at: ${new Date().toISOString()}`,
-          html: `<p>This is a test email from <strong>${instanceName}</strong>.</p><p>If you received this, your SMTP settings are configured correctly.</p><p><small>Sent at: ${new Date().toISOString()}</small></p>`,
-        });
+        switch (config.provider) {
+          case "emaillabs":
+            await sendViaEmailLabs({ to: recipientEmail, subject, text, html }, config);
+            break;
+          case "lettermint":
+            await sendViaLettermint({ to: recipientEmail, subject, text, html }, config);
+            break;
+          case "smtp":
+            await sendViaSmtp({ to: recipientEmail, subject, text, html }, config);
+            break;
+        }
 
         await writeAuditLog({
           actorId: adminSession.user.id,
           targetType: "settings",
           targetId: "email",
           action: "settings.test_email",
-          details: { recipient: recipientEmail, status: "sent" },
+          details: { recipient: recipientEmail, provider: config.provider, status: "sent" },
           request,
         });
 
-        return { ok: true, message: `Test email sent to ${recipientEmail}` };
+        return {
+          ok: true,
+          message: `Test email sent to ${recipientEmail} via ${config.provider}`,
+        };
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -393,7 +432,12 @@ export async function adminSettingsRoute(app: FastifyInstance) {
           targetType: "settings",
           targetId: "email",
           action: "settings.test_email",
-          details: { recipient: recipientEmail, status: "failed", error: errorMessage },
+          details: {
+            recipient: recipientEmail,
+            provider: config.provider,
+            status: "failed",
+            error: errorMessage,
+          },
           request,
         });
 
@@ -401,8 +445,6 @@ export async function adminSettingsRoute(app: FastifyInstance) {
           error: "Failed to send test email",
           details: errorMessage,
         });
-      } finally {
-        transport.close();
       }
     },
   );
