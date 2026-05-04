@@ -108,7 +108,17 @@ function JobRow({ job }: { job: AdminJob }) {
         </TableCell>
       </TableRow>
       <TableRow>
-        <TableCell colSpan={5} sx={{ py: 0, px: 2, bgcolor: "grey.50" }}>
+        <TableCell
+          colSpan={5}
+          sx={{
+            py: 0,
+            px: 2,
+            // grey.50 is fixed light regardless of mode — pick the
+            // surface tint per palette mode so the expanded row stays
+            // legible in dark mode.
+            bgcolor: (theme) => (theme.palette.mode === "dark" ? "grey.900" : "grey.50"),
+          }}
+        >
           <Collapse in={expanded} unmountOnExit>
             <Box py={1.5}>
               <JobDetail jobId={job.id} />

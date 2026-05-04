@@ -95,7 +95,16 @@ export function ComposePreview() {
       </Stack>
       <Paper
         variant="outlined"
-        sx={{ p: 2, maxHeight: "70vh", overflow: "auto", bgcolor: "grey.50" }}
+        sx={{
+          p: 2,
+          maxHeight: "70vh",
+          overflow: "auto",
+          // grey.50 is a fixed light color regardless of palette mode, so it
+          // produced near-invisible light-on-light text in dark mode. Pick
+          // the surface based on the active mode so contrast stays correct.
+          bgcolor: (theme) => (theme.palette.mode === "dark" ? "grey.900" : "grey.50"),
+          color: "text.primary",
+        }}
       >
         <pre
           style={{
