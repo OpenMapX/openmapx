@@ -184,18 +184,18 @@ export function BackupsPage() {
       </Stack>
 
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
           <TextField
             label="Backup name (optional)"
             size="small"
             value={createName}
             onChange={(e) => setCreateName(e.target.value)}
             placeholder="e.g. pre-upgrade-2026-04-21"
-            helperText="Allowed: letters, numbers, dot, dash, underscore"
             sx={{ minWidth: { xs: "100%", sm: 320 } }}
           />
           <Button
             variant="contained"
+            size="small"
             onClick={() => createMutation.mutate(createName)}
             disabled={createMutation.isPending}
           >
@@ -205,6 +205,9 @@ export function BackupsPage() {
             Open Activity
           </Button>
         </Stack>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+          Allowed: letters, numbers, dot, dash, underscore.
+        </Typography>
       </Paper>
 
       {isLoading && (
