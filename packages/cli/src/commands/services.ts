@@ -363,9 +363,13 @@ export function registerServicesCommands(program: Command): void {
         process.exit(1);
       }
       try {
+        // Don't pass `services: allIds` — that would narrow the persisted
+        // compose YAML to just the start target list and drop every other
+        // enabled service. Render the full enabled selection (env /
+        // service-selection.json) and then `up -d` only the requested
+        // subset. Same rationale as the `recreate` branch below.
         const rendered = await renderComposeForRepo({
           domain: process.env.DOMAIN ?? "localhost",
-          services: allIds,
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
         const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
@@ -423,9 +427,17 @@ export function registerServicesCommands(program: Command): void {
         process.exit(1);
       }
       try {
+        // Render compose with the *currently-enabled* selection (read from
+        // env / service-selection.json) — NOT scoped to allIds. Passing
+        // `services: allIds` here would narrow the persisted compose YAML
+        // to just the recreate target list, dropping every other enabled
+        // service. The api container would then read the resulting
+        // OPENMAPX_ENABLED_SERVICES on next start, narrow its registry to
+        // the same subset, and bake the narrow set back into the next
+        // render — a self-reinforcing fault that needs a manual
+        // `compose render` to recover.
         const rendered = await renderComposeForRepo({
           domain: process.env.DOMAIN ?? "localhost",
-          services: allIds,
         });
         for (const warning of rendered.selectionWarnings) log.warn(warning);
         const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
