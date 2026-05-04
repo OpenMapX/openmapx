@@ -102,14 +102,28 @@ export function BulkConfigure() {
     },
   });
 
+  // The env-vars endpoint already filters out integrations whose configSchema
+  // exposes nothing beyond the `enabled` toggle (no real fields, no
+  // credentials). Use the same set on the integrations panel so we don't
+  // render rows that just say "No editable configuration fields…" and waste
+  // vertical space.
+  const configurableIds = useMemo(
+    () => new Set((envVarsQuery.data?.integrations ?? []).map((i) => i.id)),
+    [envVarsQuery.data],
+  );
+
   const sortedIntegrations = useMemo(() => {
     const list = integrationsQuery.data ?? [];
+    // Until the env-vars query lands, fall back to showing everything so the
+    // page isn't blank — the filter applies once both queries resolve.
+    const filtered =
+      configurableIds.size > 0 ? list.filter((i) => configurableIds.has(i.id)) : list;
     // Unconfigured first, then by name — surfaces what needs attention.
-    return [...list].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (a.configured !== b.configured) return a.configured ? 1 : -1;
       return a.name.localeCompare(b.name);
     });
-  }, [integrationsQuery.data]);
+  }, [integrationsQuery.data, configurableIds]);
 
   const unconfiguredCount = sortedIntegrations.filter((i) => !i.configured).length;
 
@@ -186,6 +200,12 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
       expanded={open}
       onChange={(_, v) => setOpen(v)}
       disableGutters
+      // Disable the Collapse animation. The body lazy-loads on expand, so
+      // MUI measures `scrollHeight` (= the Skeleton's height) when the
+      // animation starts and the accordion settles to that, then jumps to
+      // the real content height once the query resolves. Snapping open is
+      // cleaner than animate-then-jump.
+      slotProps={{ transition: { timeout: 0 } }}
       sx={{
         "&.MuiAccordion-rounded": {
           borderRadius: 1,
