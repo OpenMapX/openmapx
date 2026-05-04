@@ -9,7 +9,9 @@
     "image": "ghcr.io/medformatik/openmapx-data-manager",
     "tag": "latest",
     "expose": [4000],
+    "user": "${UID:-1000}:${GID:-1000}",
     "environment": {
+      "HOME": "/tmp",
       "DATA_DIR": "/data",
       "PORT": "4000",
       "HOST": "0.0.0.0",
