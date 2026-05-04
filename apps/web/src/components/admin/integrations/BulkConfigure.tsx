@@ -243,11 +243,25 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
   );
 }
 
-function IntegrationPanel({ data }: { data: IntegrationDetail }) {
-  const hasConfig = !!data.manifest.configSchema;
-  const secretCredentials = data.credentialStatus.filter((c) => !c.isLegacyEnvVar);
+function hasEditableConfigFields(schema: Record<string, unknown> | undefined): boolean {
+  if (!schema) return false;
+  const props = (schema.properties ?? schema) as Record<string, { "x-openmapx-secret"?: boolean }>;
+  return Object.entries(props).some(([key, def]) => {
+    if (key === "type" || key === "properties") return false;
+    if (key === "enabled") return false;
+    if (def?.["x-openmapx-secret"]) return false;
+    return true;
+  });
+}
 
-  if (!hasConfig && data.credentialStatus.length === 0) {
+function IntegrationPanel({ data }: { data: IntegrationDetail }) {
+  const secretCredentials = data.credentialStatus.filter((c) => !c.isLegacyEnvVar);
+  // Only render the Configuration block if ConfigSchemaForm would actually
+  // produce inputs. Otherwise it falls back to a "No editable configuration
+  // fields…" info alert which is just noise next to a Credentials table.
+  const showConfig = hasEditableConfigFields(data.manifest.configSchema);
+
+  if (!showConfig && data.credentialStatus.length === 0) {
     return (
       <Alert severity="info" variant="outlined">
         This integration has no configurable fields or credentials.
@@ -257,7 +271,7 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
 
   return (
     <Stack gap={2.5}>
-      {hasConfig && (
+      {showConfig && (
         <Box>
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
             Configuration
@@ -272,7 +286,7 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
 
       {secretCredentials.length > 0 && (
         <Box>
-          <Divider sx={{ my: 1 }} />
+          {showConfig && <Divider sx={{ my: 1 }} />}
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
             Credentials
           </Typography>
