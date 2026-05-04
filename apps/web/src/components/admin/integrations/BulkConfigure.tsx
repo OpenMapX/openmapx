@@ -431,12 +431,23 @@ function EnvVarReferenceSection({
 }) {
   const showToast = useAdminToast();
 
-  const block = useMemo(() => buildEnvBlock(integrations), [integrations]);
+  const allBlock = useMemo(() => buildEnvBlock(integrations, () => true), [integrations]);
+  const configBlock = useMemo(() => buildEnvBlock(integrations, (v) => !v.secret), [integrations]);
+  const credentialBlock = useMemo(
+    () => buildEnvBlock(integrations, (v) => v.secret),
+    [integrations],
+  );
+  const hasConfigVars = configBlock.length > 0;
+  const hasCredentialVars = credentialBlock.length > 0;
 
-  async function copyAll() {
+  async function copy(text: string, label: string) {
+    if (!text) {
+      showToast(`Nothing to copy (${label})`, "error");
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(block);
-      showToast("Copied env-var catalogue");
+      await navigator.clipboard.writeText(text);
+      showToast(`Copied ${label}`);
     } catch {
       showToast("Copy failed — select and copy manually", "error");
     }
@@ -453,14 +464,32 @@ function EnvVarReferenceSection({
 
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
-      <Stack direction="row" alignItems="center" gap={1} mb={1}>
+      <Stack direction="row" alignItems="center" gap={1} mb={1} flexWrap="wrap">
         <Typography variant="h6">Environment Variables</Typography>
         <Box flex={1} />
         <Button
           size="small"
           variant="outlined"
           startIcon={<ContentCopyIcon />}
-          onClick={copyAll}
+          onClick={() => copy(configBlock, "config env vars")}
+          disabled={loading || error || !hasConfigVars}
+        >
+          Copy config
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<ContentCopyIcon />}
+          onClick={() => copy(credentialBlock, "credential env vars")}
+          disabled={loading || error || !hasCredentialVars}
+        >
+          Copy credentials
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<ContentCopyIcon />}
+          onClick={() => copy(allBlock, "env-var catalogue")}
           disabled={loading || error || integrations.length === 0}
         >
           Copy all
@@ -563,11 +592,19 @@ function formatDefault(value: unknown): string {
   }
 }
 
-function buildEnvBlock(integrations: EnvVarIntegration[]): string {
+function buildEnvBlock(
+  integrations: EnvVarIntegration[],
+  filter: (v: EnvVarEntry) => boolean,
+): string {
   const sections: string[] = [];
   for (const entry of integrations) {
+    const filtered = entry.envVars.filter(filter);
+    // Skip integrations whose envVars all got filtered out so the block
+    // doesn't end up with orphan section headers when copying just config
+    // or just credentials.
+    if (filtered.length === 0) continue;
     sections.push(`# ─── ${entry.name} (${entry.id}) ───`);
-    for (const v of entry.envVars) {
+    for (const v of filtered) {
       sections.push(formatEnvLine(v));
     }
     sections.push("");
