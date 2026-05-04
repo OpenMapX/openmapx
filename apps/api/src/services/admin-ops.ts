@@ -35,12 +35,28 @@ export interface HardlinkApplySummary {
 }
 
 // Path resolution
+//
+// Order of preference (matches the rest of apps/api):
+//   1. `DOCKER_INFRA_DIR` — explicit override.
+//   2. `OPENMAPX_ROOT_DIR` (resolved by `repoPaths()`) — set by the rendered
+//      compose to the host repo path that is bind-mounted at the same
+//      absolute path inside the container, so `<root>/infra/docker/data`
+//      always points at the real data dir.
+//   3. Walk up from this file's location — only useful in dev (`pnpm dev`),
+//      because esbuild's bundled `apps/api/dist/server.js` collapses the
+//      directory layout and a `../../../..` walk lands on `/app`.
 
 function findInfraDir(): string {
   if (process.env.DOCKER_INFRA_DIR) return process.env.DOCKER_INFRA_DIR;
-  // Compute from this file: apps/api/src/services/ → ../../../../infra/docker
-  const thisFile = fileURLToPath(import.meta.url);
-  return join(dirname(thisFile), "..", "..", "..", "..", "infra", "docker");
+  try {
+    return repoPaths().infraDir;
+  } catch {
+    // `findRepoRoot()` couldn't see a workspace marker (bundled prod build
+    // without OPENMAPX_ROOT_DIR set, or running outside the repo tree).
+    // Fall back to the relative-walk heuristic.
+    const thisFile = fileURLToPath(import.meta.url);
+    return join(dirname(thisFile), "..", "..", "..", "..", "infra", "docker");
+  }
 }
 
 export const INFRA_DIR = findInfraDir();
