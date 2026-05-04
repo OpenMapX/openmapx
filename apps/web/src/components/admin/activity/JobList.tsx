@@ -110,14 +110,14 @@ function JobRow({ job }: { job: AdminJob }) {
       <TableRow>
         <TableCell
           colSpan={5}
-          sx={{
+          sx={(theme) => ({
             py: 0,
             px: 2,
-            // grey.50 is fixed light regardless of mode — pick the
-            // surface tint per palette mode so the expanded row stays
-            // legible in dark mode.
-            bgcolor: (theme) => (theme.palette.mode === "dark" ? "grey.900" : "grey.50"),
-          }}
+            // `theme.palette.mode` always reads "light" with our CSS-vars
+            // theme, so apply a dark-scope override instead of branching.
+            bgcolor: "grey.50",
+            ...theme.applyStyles("dark", { bgcolor: "grey.900" }),
+          })}
         >
           <Collapse in={expanded} unmountOnExit>
             <Box py={1.5}>

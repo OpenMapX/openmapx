@@ -95,16 +95,22 @@ export function ComposePreview() {
       </Stack>
       <Paper
         variant="outlined"
-        sx={{
+        sx={(theme) => ({
           p: 2,
           maxHeight: "70vh",
           overflow: "auto",
-          // grey.50 is a fixed light color regardless of palette mode, so it
-          // produced near-invisible light-on-light text in dark mode. Pick
-          // the surface based on the active mode so contrast stays correct.
-          bgcolor: (theme) => (theme.palette.mode === "dark" ? "grey.900" : "grey.50"),
+          // grey.50 is a fixed-light hex regardless of palette mode, and
+          // `theme.palette.mode` always reads "light" under our CSS-variable
+          // theme (the runtime mode switches via the .dark class, not the
+          // JS theme object). `applyStyles("dark", …)` is the supported way
+          // to scope styles to the dark color scheme — produces a `.dark &`
+          // selector that overrides the base bgcolor.
+          bgcolor: "grey.50",
           color: "text.primary",
-        }}
+          ...theme.applyStyles("dark", {
+            bgcolor: "grey.900",
+          }),
+        })}
       >
         <pre
           style={{
