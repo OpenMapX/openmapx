@@ -253,10 +253,15 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
       <Tabs
         value={tab}
         onChange={(_, v: number) => setTab(v)}
-        sx={{
+        sx={(theme) => ({
           position: "sticky",
           top: 0,
+          // Light mode: keep the tabs flush with the panel body (#fff on
+          // #fff) — separation is handled by the bottom border below.
+          // Dark mode: switch to background.default (#1c1c1c) so the tab
+          // strip is visibly tinted off the body's #2d2d2d.
           bgcolor: "background.paper",
+          ...theme.applyStyles("dark", { bgcolor: "background.default" }),
           zIndex: 1,
           minHeight: 48,
           "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },
@@ -283,7 +288,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             },
           },
           borderBottom: "1px solid var(--omx-border-light)",
-        }}
+        })}
       >
         <Tab label={t("overview")} />
         <Tab label={t("reviews")} />
