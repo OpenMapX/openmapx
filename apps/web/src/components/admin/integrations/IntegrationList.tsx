@@ -272,38 +272,6 @@ export function IntegrationList() {
         </Stack>
       </Stack>
 
-      <Stack direction="row" gap={1.5} flexWrap="wrap" justifyContent="flex-end">
-        <Button
-          component={Link}
-          href="/admin/integrations/bulk"
-          variant="outlined"
-          size="small"
-          startIcon={<TuneIcon />}
-        >
-          Bulk Configure
-        </Button>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={
-            healthMutation.isPending ? <CircularProgress size={14} /> : <HealthAndSafetyIcon />
-          }
-          onClick={() => healthMutation.mutate()}
-          disabled={healthMutation.isPending || reloadMutation.isPending}
-        >
-          Run Health Checks
-        </Button>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={reloadMutation.isPending ? <CircularProgress size={14} /> : <RefreshIcon />}
-          onClick={() => reloadMutation.mutate()}
-          disabled={reloadMutation.isPending || healthMutation.isPending}
-        >
-          Reload All
-        </Button>
-      </Stack>
-
       <Stack direction="row" gap={1.5} flexWrap="wrap" alignItems="center">
         <TextField
           size="small"
@@ -381,6 +349,38 @@ export function IntegrationList() {
             Clear
           </Button>
         )}
+
+        <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ ml: { sm: "auto" } }}>
+          <Button
+            component={Link}
+            href="/admin/integrations/bulk"
+            variant="outlined"
+            size="small"
+            startIcon={<TuneIcon />}
+          >
+            Bulk Configure
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={
+              healthMutation.isPending ? <CircularProgress size={14} /> : <HealthAndSafetyIcon />
+            }
+            onClick={() => healthMutation.mutate()}
+            disabled={healthMutation.isPending || reloadMutation.isPending}
+          >
+            Run Health Checks
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={reloadMutation.isPending ? <CircularProgress size={14} /> : <RefreshIcon />}
+            onClick={() => reloadMutation.mutate()}
+            disabled={reloadMutation.isPending || healthMutation.isPending}
+          >
+            Reload All
+          </Button>
+        </Stack>
       </Stack>
 
       <TableContainer component={Paper} variant="outlined">
