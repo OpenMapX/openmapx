@@ -363,6 +363,7 @@ export {
 // Mangrove (Open Reviews Standard)
 export {
   base64UrlToBytes,
+  buildMangroveQueryUri,
   buildMangroveSubjectUri,
   bytesToBase64Url,
   createWebAuthnIdentity,
@@ -375,6 +376,7 @@ export {
   fingerprintPem,
   type GeoExperienceContext,
   generateKeypair,
+  haversineDistanceMeters,
   isWebAuthnAvailable,
   jwkToKeypair,
   keypairToJwk,
@@ -383,7 +385,11 @@ export {
   type MangroveKeypair,
   type MangroveReviewPayload,
   type MangroveSubject,
+  type ParsedMangroveGeoUri,
+  parseMangroveGeoUri,
   publicKeyToPem,
+  QUERY_UNCERTAINTY_METERS,
+  REVIEW_MATCH_MAX_DISTANCE_METERS,
   type SerializedMangroveKeypair,
   signMangroveReview,
   toMangroveExportJwk,

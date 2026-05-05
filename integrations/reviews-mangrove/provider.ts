@@ -1,11 +1,11 @@
-import { buildMangroveSubjectUri } from "@openmapx/core";
-import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "../reviews/types.js";
 import {
-  mangroveGetReviews,
-  mangroveGetSubject,
-  mangroveSubmit,
-  mangroveUploadImage,
-} from "./client.js";
+  buildMangroveQueryUri,
+  haversineDistanceMeters,
+  parseMangroveGeoUri,
+  REVIEW_MATCH_MAX_DISTANCE_METERS,
+} from "@openmapx/core";
+import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "../reviews/types.js";
+import { mangroveGetReviews, mangroveSubmit, mangroveUploadImage } from "./client.js";
 import type { MangroveWirePayload, MangroveWireReview } from "./types.js";
 
 const MARESI_PREFIX = "urn:maresi:";
@@ -50,18 +50,43 @@ function toReview(subject: ReviewSubject, wire: MangroveWireReview): Review {
 }
 
 /**
+ * Mangrove's `/reviews?sub=geo:...` filter is `is_spatially_close OR sub
+ * ILIKE '%q=NAME%'`, so dropping `q=` from our query URI removes the global
+ * name-match path. Even so, we tighten with our own haversine cap because:
+ *  - reviews submitted with very large `u` can match well beyond our place;
+ *  - upstream radius is `stored_u + query_u`, which we want to bound.
+ *
+ * `urn:maresi:` action records (edit/delete) carry no geo of their own — we
+ * keep them here and let `applyMutations` drop ones whose target wasn't
+ * spatially-matched.
+ */
+function isWireReviewWithinSubject(wire: MangroveWireReview, subject: ReviewSubject): boolean {
+  const sub = wire.payload?.sub;
+  if (typeof sub !== "string") return false;
+  if (sub.startsWith(MARESI_PREFIX)) return true;
+  if (!sub.startsWith("geo:")) return false;
+  const parsed = parseMangroveGeoUri(sub);
+  if (!parsed) return false;
+  const dist = haversineDistanceMeters(
+    { lat: parsed.lat, lng: parsed.lng },
+    { lat: subject.lat, lng: subject.lng },
+  );
+  return dist <= REVIEW_MATCH_MAX_DISTANCE_METERS;
+}
+
+/**
  * Collapse a Mangrove review chain (originals + action records) to one effective
  * record per original-id. Per Mangrove spec:
  *  - `edit` replaces the original's displayable fields (rating, opinion, images, …).
  *  - `delete` removes the target from display entirely.
  *  - edit/delete MUST be signed by the same keypair as the original.
  *
- * Note on Mangrove's response shape: the public API already deduplicates a
- * review chain in geo-sub queries — for an edited review, only the LATEST edit
- * record is returned (the original and intermediate edits are elided). That
- * means an edit can arrive without its referenced original in our mutation
- * list; we treat that edit as the authoritative record and key it by its
- * `targetId` so subsequent edits line up.
+ * Mangrove's geo-sub response with `latest_edits_only` (default true) can
+ * elide originals when their latest edit is what's returned. We previously
+ * trusted such orphan mutations at face value, but now that we explicitly
+ * spatial-filter originals, an absent original means the target is outside
+ * our radius — so we drop the orphan rather than synthesizing a phantom
+ * review at the queried location.
  */
 function applyMutations(reviews: Review[]): Review[] {
   const effective = new Map<string, Review>();
@@ -77,28 +102,21 @@ function applyMutations(reviews: Review[]): Review[] {
   for (const m of mutations) {
     if (!m.targetId) continue;
     const original = effective.get(m.targetId);
-
-    // If the original is present, enforce the same-author rule before letting
-    // the mutation through. If the server already elided the original, we
-    // trust the mutation at face value — Mangrove itself enforces the
-    // signing-key match on write.
-    if (original && original.author.kid !== m.author.kid) continue;
+    if (!original) continue;
+    if (original.author.kid !== m.author.kid) continue;
 
     if (m.action === "delete") {
       effective.delete(m.targetId);
     } else if (m.action === "edit") {
-      const merged: Review = original
-        ? {
-            ...original,
-            rating: m.rating ?? original.rating,
-            stars: m.stars ?? original.stars,
-            opinion: m.opinion ?? original.opinion,
-            images: m.images ?? original.images,
-            createdAt: m.createdAt,
-            metadata: { ...original.metadata, ...m.metadata },
-          }
-        : { ...m, id: m.targetId, action: undefined, targetId: undefined };
-      effective.set(m.targetId, merged);
+      effective.set(m.targetId, {
+        ...original,
+        rating: m.rating ?? original.rating,
+        stars: m.stars ?? original.stars,
+        opinion: m.opinion ?? original.opinion,
+        images: m.images ?? original.images,
+        createdAt: m.createdAt,
+        metadata: { ...original.metadata, ...m.metadata },
+      });
     }
     // "report_abuse" and "equivalence" don't change display here.
   }
@@ -106,35 +124,65 @@ function applyMutations(reviews: Review[]): Review[] {
   return Array.from(effective.values());
 }
 
+/**
+ * Compute aggregate stats locally from the already-filtered review list.
+ *
+ * Why not call `/subject/{sub}`? That endpoint applies the same flawed
+ * spatial-OR-name match as `/reviews`, so its `count` and `quality` for a
+ * `geo:` subject can include reviews from completely different branches of
+ * the same chain. Computing locally over our spatially-filtered set is the
+ * only way to get correct numbers per place.
+ */
+function aggregateFromReviews(reviews: Review[]): ReviewAggregate {
+  let opinionCount = 0;
+  let positiveCount = 0;
+  let ratingSum = 0;
+  let ratingCount = 0;
+
+  for (const r of reviews) {
+    if (r.opinion) opinionCount += 1;
+    if (typeof r.rating === "number") {
+      ratingCount += 1;
+      ratingSum += r.rating;
+      if (r.rating >= 50) positiveCount += 1;
+    }
+  }
+
+  const quality = ratingCount > 0 ? ratingSum / ratingCount : 0;
+  return {
+    count: reviews.length,
+    opinionCount,
+    positiveCount,
+    // Confirmation count needs maresi-subject join we don't fetch here; the
+    // UI doesn't surface it for individual places, so 0 is acceptable.
+    confirmedCount: 0,
+    quality,
+    stars: quality / 20,
+  };
+}
+
 export const mangroveProvider: ReviewProvider = {
   id: "mangrove",
   name: "Mangrove.reviews",
 
   async getReviews(subject: ReviewSubject): Promise<Review[]> {
-    // Mangrove's geo-sub query already includes edit/delete records whose
-    // `original_sub` resolves to this geo URI, so one round trip is enough.
-    const sub = buildMangroveSubjectUri(subject);
+    // Query without `q=NAME` so Mangrove's spatial-OR-name filter doesn't
+    // bleed in same-named reviews from across the world. The post-filter
+    // below tightens the upstream `stored_u + query_u` radius to a sane cap.
+    const sub = buildMangroveQueryUri(subject);
     const { reviews } = await mangroveGetReviews(sub, { limit: 200 });
-    const mapped = reviews.map((r) => toReview(subject, r));
+    const mapped = reviews
+      .filter((r) => isWireReviewWithinSubject(r, subject))
+      .map((r) => toReview(subject, r));
     return applyMutations(mapped);
   },
 
   async getAggregate(subject: ReviewSubject): Promise<ReviewAggregate> {
-    const sub = buildMangroveSubjectUri(subject);
+    // Compute from the spatially-filtered review list; `/subject/{sub}` has
+    // the same flawed matching as `/reviews` and would over-count.
     try {
-      const s = await mangroveGetSubject(sub);
-      // `quality` is null for tiny aggregates; fall back to a straight average
-      // over the reviews if we need to. For now, return 0 stars — the UI
-      // computes an average from the review list anyway.
-      const quality = typeof s.quality === "number" ? s.quality : 0;
-      return {
-        count: s.count,
-        opinionCount: s.opinion_count,
-        positiveCount: s.positive_count,
-        confirmedCount: s.confirmed_count,
-        quality,
-        stars: quality / 20,
-      };
+      const reviews = await mangroveProvider.getReviews(subject);
+      return aggregateFromReviews(reviews);
     } catch {
       return {
         count: 0,

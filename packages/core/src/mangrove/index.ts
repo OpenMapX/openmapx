@@ -21,9 +21,18 @@ export {
 } from "./keypair";
 export type { MangroveReviewPayload } from "./sign";
 export { fingerprintPem, signMangroveReview } from "./sign";
-export type { GeoExperienceContext, MangroveSubject } from "./subject";
+export type {
+  GeoExperienceContext,
+  MangroveSubject,
+  ParsedMangroveGeoUri,
+} from "./subject";
 export {
+  buildMangroveQueryUri,
   buildMangroveSubjectUri,
   DEFAULT_UNCERTAINTY_METERS,
   EXPERIENCE_CONTEXT_GEO,
+  haversineDistanceMeters,
+  parseMangroveGeoUri,
+  QUERY_UNCERTAINTY_METERS,
+  REVIEW_MATCH_MAX_DISTANCE_METERS,
 } from "./subject";
