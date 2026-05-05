@@ -30,7 +30,10 @@ export function TrafficLayer() {
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (showTraffic && !map.getSource(TRAFFIC_SOURCE_ID)) {
         map.addSource(TRAFFIC_SOURCE_ID, {

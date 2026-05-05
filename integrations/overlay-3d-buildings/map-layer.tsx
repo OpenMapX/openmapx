@@ -66,7 +66,10 @@ export function BuildingExtrusionLayer() {
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (layerVisible) {
         setOriginalBuildingLayersVisibility(map, false);

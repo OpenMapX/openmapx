@@ -155,7 +155,10 @@ export function CategoryResultMarkers() {
     };
 
     const sync = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", sync);
+        return;
+      }
 
       if (!activeCategory) {
         removeCategoryLayers();

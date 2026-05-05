@@ -123,9 +123,70 @@ export function WeatherLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    if (!layerVisible || activeSubLayer !== "radar" || allFrames.length === 0 || !radarHost) {
-      // Clean up radar layers
+    const syncLayer = () => {
+      if (!layerVisible || activeSubLayer !== "radar" || allFrames.length === 0 || !radarHost) {
+        // Clean up radar layers
+        for (let i = 0; i < allFrames.length; i++) {
+          const layerId = `${RADAR_LAYER_PREFIX}${i}`;
+          const sourceId = `${RADAR_SOURCE_PREFIX}${i}`;
+          try {
+            if (map.getLayer(layerId)) map.removeLayer(layerId);
+            if (map.getSource(sourceId)) map.removeSource(sourceId);
+          } catch {
+            // ignore
+          }
+        }
+        return;
+      }
+
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
+
+      const beforeId = getFirstSymbolLayerId(map);
+      // During playback, bias the window forward to preload upcoming frames
+      const preloadAhead = radarPlaying ? 2 : 0;
+      const halfWindow = Math.floor(WINDOW_SIZE / 2);
+      const windowStart = Math.max(0, radarFrameIndex - halfWindow);
+      const windowEnd = Math.min(allFrames.length, windowStart + WINDOW_SIZE + preloadAhead);
+
+      for (let i = windowStart; i < windowEnd; i++) {
+        const sourceId = `${RADAR_SOURCE_PREFIX}${i}`;
+        const layerId = `${RADAR_LAYER_PREFIX}${i}`;
+        const frame = allFrames[i];
+
+        if (!map.getSource(sourceId)) {
+          const proxyTileUrl = `${env.apiUrl}/api/integrations/overlay-weather/radar/tile/{z}/{x}/{y}?path=${encodeURIComponent(frame.path)}`;
+          map.addSource(sourceId, {
+            type: "raster",
+            tiles: [proxyTileUrl],
+            tileSize: 256,
+            maxzoom: 7,
+            attribution: attributionHtml,
+          });
+        }
+
+        if (!map.getLayer(layerId)) {
+          map.addLayer(
+            {
+              id: layerId,
+              type: "raster",
+              source: sourceId,
+              paint: {
+                "raster-opacity": i === radarFrameIndex ? 0.7 : 0,
+              },
+            },
+            beforeId,
+          );
+        } else {
+          map.setPaintProperty(layerId, "raster-opacity", i === radarFrameIndex ? 0.7 : 0);
+        }
+      }
+
+      // Remove sources outside window
       for (let i = 0; i < allFrames.length; i++) {
+        if (i >= windowStart && i < windowEnd) continue;
         const layerId = `${RADAR_LAYER_PREFIX}${i}`;
         const sourceId = `${RADAR_SOURCE_PREFIX}${i}`;
         try {
@@ -135,63 +196,9 @@ export function WeatherLayer() {
           // ignore
         }
       }
-      return;
-    }
+    };
 
-    if (!map.isStyleLoaded()) return;
-
-    const beforeId = getFirstSymbolLayerId(map);
-    // During playback, bias the window forward to preload upcoming frames
-    const preloadAhead = radarPlaying ? 2 : 0;
-    const halfWindow = Math.floor(WINDOW_SIZE / 2);
-    const windowStart = Math.max(0, radarFrameIndex - halfWindow);
-    const windowEnd = Math.min(allFrames.length, windowStart + WINDOW_SIZE + preloadAhead);
-
-    for (let i = windowStart; i < windowEnd; i++) {
-      const sourceId = `${RADAR_SOURCE_PREFIX}${i}`;
-      const layerId = `${RADAR_LAYER_PREFIX}${i}`;
-      const frame = allFrames[i];
-
-      if (!map.getSource(sourceId)) {
-        const proxyTileUrl = `${env.apiUrl}/api/integrations/overlay-weather/radar/tile/{z}/{x}/{y}?path=${encodeURIComponent(frame.path)}`;
-        map.addSource(sourceId, {
-          type: "raster",
-          tiles: [proxyTileUrl],
-          tileSize: 256,
-          maxzoom: 7,
-          attribution: attributionHtml,
-        });
-      }
-
-      if (!map.getLayer(layerId)) {
-        map.addLayer(
-          {
-            id: layerId,
-            type: "raster",
-            source: sourceId,
-            paint: {
-              "raster-opacity": i === radarFrameIndex ? 0.7 : 0,
-            },
-          },
-          beforeId,
-        );
-      } else {
-        map.setPaintProperty(layerId, "raster-opacity", i === radarFrameIndex ? 0.7 : 0);
-      }
-    }
-
-    // Remove sources outside window
-    for (let i = 0; i < allFrames.length; i++) {
-      if (i >= windowStart && i < windowEnd) continue;
-      const layerId = `${RADAR_LAYER_PREFIX}${i}`;
-      const sourceId = `${RADAR_SOURCE_PREFIX}${i}`;
-      try {
-        if (map.getLayer(layerId)) map.removeLayer(layerId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
-      } catch {
-        // ignore
-      }
-    }
+    syncLayer();
   }, [
     mapReady,
     styleVersion,
@@ -212,46 +219,53 @@ export function WeatherLayer() {
 
     const owmLayerName = OWM_LAYER_MAP[activeSubLayer];
 
-    if (!layerVisible || !owmLayerName) {
-      try {
-        if (map.getLayer(OWM_LAYER_ID)) map.removeLayer(OWM_LAYER_ID);
-        if (map.getSource(OWM_SOURCE_ID)) map.removeSource(OWM_SOURCE_ID);
-      } catch {
-        // ignore
+    const syncLayer = () => {
+      if (!layerVisible || !owmLayerName) {
+        try {
+          if (map.getLayer(OWM_LAYER_ID)) map.removeLayer(OWM_LAYER_ID);
+          if (map.getSource(OWM_SOURCE_ID)) map.removeSource(OWM_SOURCE_ID);
+        } catch {
+          // ignore
+        }
+        return;
       }
-      return;
-    }
 
-    if (!map.isStyleLoaded()) return;
-
-    const tileUrl = `${env.apiUrl}/api/integrations/overlay-weather/tiles/${owmLayerName}/{z}/{x}/{y}.png`;
-
-    if (map.getSource(OWM_SOURCE_ID)) {
-      // Update tile URL when sub-layer changes
-      try {
-        if (map.getLayer(OWM_LAYER_ID)) map.removeLayer(OWM_LAYER_ID);
-        map.removeSource(OWM_SOURCE_ID);
-      } catch {
-        // ignore
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
       }
-    }
 
-    map.addSource(OWM_SOURCE_ID, {
-      type: "raster",
-      tiles: [tileUrl],
-      tileSize: 256,
-      attribution: attributionHtml,
-    });
+      const tileUrl = `${env.apiUrl}/api/integrations/overlay-weather/tiles/${owmLayerName}/{z}/{x}/{y}.png`;
 
-    map.addLayer(
-      {
-        id: OWM_LAYER_ID,
+      if (map.getSource(OWM_SOURCE_ID)) {
+        // Update tile URL when sub-layer changes
+        try {
+          if (map.getLayer(OWM_LAYER_ID)) map.removeLayer(OWM_LAYER_ID);
+          map.removeSource(OWM_SOURCE_ID);
+        } catch {
+          // ignore
+        }
+      }
+
+      map.addSource(OWM_SOURCE_ID, {
         type: "raster",
-        source: OWM_SOURCE_ID,
-        paint: { "raster-opacity": 0.5 },
-      },
-      getFirstSymbolLayerId(map),
-    );
+        tiles: [tileUrl],
+        tileSize: 256,
+        attribution: attributionHtml,
+      });
+
+      map.addLayer(
+        {
+          id: OWM_LAYER_ID,
+          type: "raster",
+          source: OWM_SOURCE_ID,
+          paint: { "raster-opacity": 0.5 },
+        },
+        getFirstSymbolLayerId(map),
+      );
+    };
+
+    syncLayer();
   }, [mapReady, styleVersion, mapRef, layerVisible, activeSubLayer, env.apiUrl]);
 
   // Cleanup on unmount

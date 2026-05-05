@@ -330,7 +330,10 @@ export function DataSourceLayer() {
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (!activeSource || !activeMeta) {
         if (activeSource) removeLayers(map, activeSource);

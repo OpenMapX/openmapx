@@ -222,7 +222,10 @@ export function EnvironmentLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (!map.getSource(ENV_SOURCE_ID)) {
         map.addSource(ENV_SOURCE_ID, {

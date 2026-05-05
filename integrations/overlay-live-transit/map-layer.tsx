@@ -326,6 +326,7 @@ export function LiveTransitLayer() {
 
   const [snapshot, setSnapshot] = useState<LiveTransitSnapshot | null>(null);
   const [renderVehicles, setRenderVehicles] = useState<ParsedVehicle[]>([]);
+  const [styleReadyTick, setStyleReadyTick] = useState(0);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const popupVehicleIdRef = useRef<string | null>(null);
   const layerInitRef = useRef(false);
@@ -557,7 +558,14 @@ export function LiveTransitLayer() {
       return;
     }
 
-    if (!map.isStyleLoaded() || layerInitRef.current) return;
+    if (layerInitRef.current) return;
+    if (!map.isStyleLoaded()) {
+      // styledata fires during loading but doesn't reliably re-fire after
+      // sources finish, so register a one-shot idle listener that bumps a
+      // local counter to re-run this effect once the style is settled.
+      map.once("idle", () => setStyleReadyTick((t) => t + 1));
+      return;
+    }
 
     loadTransitVehicleMarkers(map);
     sourceFeaturesRef.current = new Map();
@@ -622,6 +630,14 @@ export function LiveTransitLayer() {
 
     layerInitRef.current = true;
 
+    // If a snapshot fetch already resolved while the source didn't exist yet
+    // (deep-link path: setLayerVisible runs before the style finishes loading),
+    // push the latest vehicles into the freshly-created source. Otherwise the
+    // map would stay empty until the next poll tick (15 s).
+    if (renderVehiclesRef.current.length > 0) {
+      updateSourceData(renderVehiclesRef.current);
+    }
+
     return () => {
       map.off("click", ICON_LAYER, handleClick);
       map.off("mouseenter", ICON_LAYER, handleMouseEnter);
@@ -647,7 +663,9 @@ export function LiveTransitLayer() {
     mapRef,
     resetSnapshotMeta,
     selectVehicle,
+    styleReadyTick,
     styleVersion,
+    updateSourceData,
   ]);
 
   useEffect(() => {

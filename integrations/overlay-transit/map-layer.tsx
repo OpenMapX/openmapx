@@ -33,7 +33,10 @@ export function TransitLayer() {
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (showTransit && !map.getLayer(TRANSIT_LAYER_ID)) {
         const reference = findVectorLineReference(map, TRANSIT_LAYER_HINTS);

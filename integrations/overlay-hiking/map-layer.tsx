@@ -31,7 +31,10 @@ export function HikingTrailsLayer() {
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (layerVisible && !map.getSource(RASTER_SOURCE_ID)) {
         map.addSource(RASTER_SOURCE_ID, {

@@ -113,7 +113,10 @@ export function NearbyPlaceMarkers() {
     };
 
     const sync = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", sync);
+        return;
+      }
       if (!sourcePlace || places.length === 0) {
         removeLayers();
         return;

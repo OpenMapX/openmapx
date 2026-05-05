@@ -145,7 +145,10 @@ export function AirQualityLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (!map.getSource(AQ_SOURCE_ID)) {
         map.addSource(AQ_SOURCE_ID, {

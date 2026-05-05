@@ -245,7 +245,10 @@ export function WinterSportsLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayers);
+        return;
+      }
 
       // Raster source (OpenSnowMap)
       if (!map.getSource(RASTER_SOURCE_ID)) {

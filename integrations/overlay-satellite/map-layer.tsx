@@ -120,44 +120,51 @@ export function SatelliteLayer() {
       }
     }
 
-    if (!map.isStyleLoaded()) return;
+    const buildLayer = () => {
+      if (!map.isStyleLoaded()) {
+        map.once("idle", buildLayer);
+        return;
+      }
 
-    // Handle key change requiring full rebuild (layer definition changed, different maxZoom)
-    if (prevKeyRef.current !== key) {
-      const prevLayerId = prevKeyRef.current ? prevKeyRef.current.split(":")[0] : "";
-      prevKeyRef.current = key;
-      if (prevLayerId && prevLayerId !== def.id) {
-        try {
-          if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-          if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-        } catch {
-          // ignore
+      // Handle key change requiring full rebuild (layer definition changed, different maxZoom)
+      if (prevKeyRef.current !== key) {
+        const prevLayerId = prevKeyRef.current ? prevKeyRef.current.split(":")[0] : "";
+        prevKeyRef.current = key;
+        if (prevLayerId && prevLayerId !== def.id) {
+          try {
+            if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+            if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+          } catch {
+            // ignore
+          }
         }
       }
-    }
 
-    if (!map.getSource(SOURCE_ID)) {
-      map.addSource(SOURCE_ID, {
-        type: "raster",
-        tiles: [tileUrl],
-        tileSize: 256,
-        maxzoom: def.maxZoom,
-        attribution: attributionHtml,
-      });
-    }
-
-    if (!map.getLayer(LAYER_ID)) {
-      map.addLayer(
-        {
-          id: LAYER_ID,
+      if (!map.getSource(SOURCE_ID)) {
+        map.addSource(SOURCE_ID, {
           type: "raster",
-          source: SOURCE_ID,
-          paint: { "raster-opacity": opacity, "raster-fade-duration": 0 },
-        },
-        getFirstSymbolLayerId(map),
-      );
-      map.triggerRepaint();
-    }
+          tiles: [tileUrl],
+          tileSize: 256,
+          maxzoom: def.maxZoom,
+          attribution: attributionHtml,
+        });
+      }
+
+      if (!map.getLayer(LAYER_ID)) {
+        map.addLayer(
+          {
+            id: LAYER_ID,
+            type: "raster",
+            source: SOURCE_ID,
+            paint: { "raster-opacity": opacity, "raster-fade-duration": 0 },
+          },
+          getFirstSymbolLayerId(map),
+        );
+        map.triggerRepaint();
+      }
+    };
+
+    buildLayer();
 
     map.on("styledata", syncLayer);
     return () => {

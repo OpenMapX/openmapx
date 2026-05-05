@@ -53,7 +53,10 @@ export function StreetViewLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayers);
+        return;
+      }
 
       if (!map.getSource(MLY_SOURCE_ID)) {
         map.addSource(MLY_SOURCE_ID, {

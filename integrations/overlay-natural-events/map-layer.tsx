@@ -176,7 +176,10 @@ export function NaturalEventLayer() {
         return;
       }
 
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        map.once("idle", syncLayer);
+        return;
+      }
 
       if (!map.getSource(SOURCE_ID)) {
         map.addSource(SOURCE_ID, {

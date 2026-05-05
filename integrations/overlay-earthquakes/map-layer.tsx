@@ -266,7 +266,9 @@ export function EarthquakeLayer() {
           fetchEarthquakes();
         }
       } catch {
-        // Style not ready — styledata will retry
+        // Style not ready — styledata fires during loading but doesn't
+        // reliably re-fire after sources finish, so register an idle retry.
+        map.once("idle", syncLayers);
       }
     };
 

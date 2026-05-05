@@ -39,7 +39,13 @@ export function RasterBaseLayer({
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) return;
+      if (!map.isStyleLoaded()) {
+        // `styledata` fires during loading (always with isStyleLoaded()=false)
+        // but doesn't fire reliably once sources finish — register a one-shot
+        // `idle` retry so this layer attaches after the map settles.
+        map.once("idle", syncLayer);
+        return;
+      }
       const shouldShow = activeLayer === activeWhen;
 
       if (tiles.length === 0) return;
