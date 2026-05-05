@@ -3,7 +3,6 @@
 import EditIcon from "@mui/icons-material/Edit";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RateReviewIcon from "@mui/icons-material/RateReview";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
@@ -20,6 +19,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
+import { AuthDialog } from "@/components/auth/AuthDialog";
 import { MangroveSetupWizard } from "@/components/auth/MangroveSetupWizard";
 import { MangroveUnlockDialog } from "@/components/auth/MangroveUnlockDialog";
 import { DeleteReviewDialog } from "./reviews/DeleteReviewDialog";
@@ -72,6 +72,7 @@ export function PlaceReviewsTab({ place }: Props) {
   const [pending, setPending] = useState<PendingAction>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
 
   const ownReview = reviewsQuery.data?.find((r) => publicPem && r.author.kid === publicPem) ?? null;
 
@@ -131,26 +132,25 @@ export function PlaceReviewsTab({ place }: Props) {
         isLoading={aggregateQuery.isLoading}
       />
 
-      {/* Write / edit CTA */}
-      {isSignedIn ? (
-        <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={ownReview ? <EditIcon /> : <RateReviewIcon />}
-            onClick={() => {
-              gatedAction(ownReview ? { kind: "edit", review: ownReview } : { kind: "write" });
-            }}
-            sx={{ flex: 1, textTransform: "none" }}
-          >
-            {ownReview ? t("editReview") : t("writeReview")}
-          </Button>
-        </Box>
-      ) : (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {t("reviewSignInCta")}
-        </Alert>
-      )}
+      {/* Write / edit CTA — logged-out users get the same button but it
+          opens the auth dialog instead of starting the gated review flow. */}
+      <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={ownReview ? <EditIcon /> : <RateReviewIcon />}
+          onClick={() => {
+            if (!isSignedIn) {
+              setAuthOpen(true);
+              return;
+            }
+            gatedAction(ownReview ? { kind: "edit", review: ownReview } : { kind: "write" });
+          }}
+          sx={{ flex: 1, textTransform: "none" }}
+        >
+          {ownReview ? t("editReview") : t("writeReview")}
+        </Button>
+      </Box>
 
       <ReviewList
         reviews={reviewsQuery.data}
@@ -244,6 +244,7 @@ export function PlaceReviewsTab({ place }: Props) {
           if (needsUnlock) setPending(null);
         }}
       />
+      <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
     </Box>
   );
 }

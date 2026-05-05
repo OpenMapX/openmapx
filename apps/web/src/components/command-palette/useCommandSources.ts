@@ -20,6 +20,7 @@ import {
   useNearbyPlacesStore,
   usePlaceStore,
   useSearchStore,
+  useSession,
   useSidebarStore,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
@@ -61,6 +62,8 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const myLocation = useMyLocation();
   const hasMap = useMapOptional() !== null;
   const integrations = useIntegrationRegistry();
+  const { data: session } = useSession();
+  const isSignedIn = !!session?.user?.id;
 
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
@@ -138,15 +141,19 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     }
 
     // Panels
-    out.push(
-      {
+    if (isSignedIn) {
+      // Saved lists/labels are stored per-user behind auth — only surface
+      // the command when the user can actually use it.
+      out.push({
         id: "panels.saved",
         group: "panels",
         label: t("cmdOpenSaved"),
         iconKey: "saved",
         shortcut: PARSED.saved,
         run: () => useSidebarStore.getState().openSidebar(PANEL.SAVED),
-      },
+      });
+    }
+    out.push(
       {
         id: "panels.directions",
         group: "panels",
@@ -307,6 +314,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     setActiveLayer,
     globeView,
     integrations,
+    isSignedIn,
     mode,
     setMode,
     myLocation,

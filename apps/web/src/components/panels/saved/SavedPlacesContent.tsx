@@ -2,8 +2,9 @@
 
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
-import { useSavedPlacesStore } from "@openmapx/core";
+import { useSavedPlacesStore, useSession, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useEffect } from "react";
 import { TEAL } from "@/lib/theme";
 import { SavedLabeledTab } from "./SavedLabeledTab";
 import { SavedListDetail } from "./SavedListDetail";
@@ -14,6 +15,21 @@ export function SavedPlacesContent() {
   const activeTab = useSavedPlacesStore((s) => s.activeTab);
   const setActiveTab = useSavedPlacesStore((s) => s.setActiveTab);
   const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
+  const { data: session, isPending } = useSession();
+
+  // Defense-in-depth: refuse to mount when the user is not signed in.
+  // The HamburgerMenu and command palette already gate Saved on auth, but
+  // a deep link (e.g. ?panel=saved) would otherwise mount an empty panel
+  // backed by 401s. Once the session resolves, close the sidebar so the
+  // user lands back on the map. Do not auto-open AuthDialog here — that's
+  // the caller's responsibility (HamburgerMenu does this).
+  useEffect(() => {
+    if (isPending) return;
+    if (!session?.user?.id) {
+      useSidebarStore.getState().closeAll();
+    }
+  }, [isPending, session?.user?.id]);
+  if (!isPending && !session?.user?.id) return null;
 
   if (selectedListId !== null) {
     return <SavedListDetail />;

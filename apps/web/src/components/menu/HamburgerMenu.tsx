@@ -23,10 +23,11 @@ import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import { PANEL, useMenuStore, useSidebarStore } from "@openmapx/core";
+import { PANEL, useMenuStore, useSession, useSidebarStore } from "@openmapx/core";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { AuthDialog } from "@/components/auth/AuthDialog";
 import { localeNames, locales } from "@/i18n/config";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { setLocaleAndReload } from "@/lib/setLocale";
@@ -40,12 +41,22 @@ export function HamburgerMenu() {
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
   const { mode, setMode } = useColorScheme();
+  const { data: session } = useSession();
+  const isSignedIn = !!session?.user?.id;
   const [langOpen, setLangOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
 
   const handleSaved = () => {
     close();
+    if (!isSignedIn) {
+      // Saved lists/labels are stored per-user behind auth; the API returns
+      // 401 anyway. Prompt the user to sign in instead of opening an empty
+      // panel.
+      setAuthOpen(true);
+      return;
+    }
     useSidebarStore.getState().openSidebar(PANEL.SAVED);
   };
 
@@ -241,6 +252,7 @@ export function HamburgerMenu() {
         message={tCommon("copied")}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
+      <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   );
 }
