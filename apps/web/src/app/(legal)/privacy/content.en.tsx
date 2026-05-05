@@ -702,7 +702,9 @@ function ServiceTable({ rows }: { rows: ServiceRow[] }) {
         </TableHead>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={`${row.service}-${row.country}-${row.purpose}`}>
+            <TableRow
+              key={`${row.service}-${row.country}-${row.purpose}-${row.dataSent}-${row.privacy}`}
+            >
               <TableCell>{row.service}</TableCell>
               <TableCell>{row.purpose}</TableCell>
               <TableCell>{row.dataSent}</TableCell>
