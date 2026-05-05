@@ -9,7 +9,7 @@
     "build:sw": "esbuild src/sw.ts --bundle --outfile=public/sw.js --format=iife --platform=browser --define:process.env.NODE_ENV='\"production\"'",
     "build:copy-assets": "mkdir -p .next/standalone/apps/web/public .next/standalone/apps/web/.next/static && cp -R public/. .next/standalone/apps/web/public/ && cp -R .next/static/. .next/standalone/apps/web/.next/static/",
     "start": "node .next/standalone/apps/web/server.js",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.sw.json",
     "icons:sync": "node scripts/copy-preset-icons.mjs"
   },
   "dependencies": {
@@ -31,7 +31,9 @@
     "@openmapx/i18n": "workspace:*",
     "@serwist/next": "^9.5.10",
     "@serwist/window": "^9.5.10",
+    "@tanstack/query-sync-storage-persister": "^5.100.9",
     "@tanstack/react-query": "^5.100.7",
+    "@tanstack/react-query-persist-client": "^5.100.9",
     "@turf/area": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "@turf/length": "^7.3.5",

@@ -3,8 +3,10 @@
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { configureStorage, registerBuiltinIdSchemeViews } from "@openmapx/core";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { localStorageAdapter } from "../lib/storage";
 import { IntegrationProvider } from "../providers/IntegrationProvider";
@@ -64,6 +66,26 @@ const theme = createTheme({
   },
 });
 
+// Persist a curated subset of TanStack Query cache to localStorage so warm
+// starts (including offline cold-starts) hydrate with the user's last data
+// instead of an empty cache. Allowlist by first key segment — admin/auth/live
+// data is excluded so it always re-fetches.
+const PERSIST_ALLOWED_KEY_ROOTS = new Set([
+  "place",
+  "weather",
+  "nearby",
+  "isochrone",
+  "sun-times",
+  "directions",
+  "route",
+  "geocode",
+]);
+
+function isPersistableQuery(queryKey: readonly unknown[]): boolean {
+  const root = queryKey[0];
+  return typeof root === "string" && PERSIST_ALLOWED_KEY_ROOTS.has(root);
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -80,26 +102,44 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   );
 
-  useEffect(() => {
-    // Only register in production — sw.js is only generated during `next build`.
-    // Matches the `disable: NODE_ENV === "development"` in next.config.ts.
-    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
-      // Dynamic import — @serwist/window is client-only, must not run on server
-      import("@serwist/window").then(({ Serwist }) => {
-        const sw = new Serwist("/sw.js", { scope: "/" });
-        sw.register().catch((err) => console.warn("SW registration failed:", err));
-      });
-    }
-  }, []);
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <ImpersonationBanner />
-        <KeypairSessionGuard />
-        <IntegrationProvider>{children}</IntegrationProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+  // Persister is created lazily client-side so SSR doesn't touch localStorage.
+  const [persister] = useState(() =>
+    typeof window === "undefined"
+      ? null
+      : createSyncStoragePersister({
+          storage: window.localStorage,
+          key: "openmapx-query-cache",
+          throttleTime: 1000,
+        }),
   );
+
+  const inner = (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <ImpersonationBanner />
+      <KeypairSessionGuard />
+      <IntegrationProvider>{children}</IntegrationProvider>
+    </ThemeProvider>
+  );
+
+  if (persister) {
+    return (
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{
+          persister,
+          maxAge: 24 * 60 * 60 * 1000,
+          buster: "v1",
+          dehydrateOptions: {
+            shouldDehydrateQuery: (q) =>
+              q.state.status === "success" && isPersistableQuery(q.queryKey),
+          },
+        }}
+      >
+        {inner}
+      </PersistQueryClientProvider>
+    );
+  }
+
+  return <QueryClientProvider client={queryClient}>{inner}</QueryClientProvider>;
 }

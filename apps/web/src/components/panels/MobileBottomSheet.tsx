@@ -207,6 +207,7 @@ export function MobileBottomSheet({ id, zIndex, contentSx, children }: Props) {
             minHeight: 0,
             overflowY: "auto",
             overscrollBehavior: "contain",
+            paddingBottom: "var(--omx-safe-bottom)",
           }}
         >
           {children}

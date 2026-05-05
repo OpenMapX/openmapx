@@ -14,8 +14,8 @@ export function TopRightControls() {
       sx={{
         display: { xs: "none", sm: "flex" },
         position: "absolute",
-        top: 12,
-        right: 12,
+        top: "calc(12px + var(--omx-safe-top))",
+        right: "calc(12px + var(--omx-safe-right))",
         alignItems: "center",
         gap: 1,
         zIndex: 10,

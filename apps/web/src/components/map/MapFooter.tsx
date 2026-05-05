@@ -19,8 +19,11 @@ export function MapFooter() {
       component="footer"
       sx={{
         position: "absolute",
-        bottom: 0,
-        left: { xs: 0, sm: shifted ? PANEL_WIDTH : 0 },
+        bottom: "var(--omx-safe-bottom)",
+        left: {
+          xs: "var(--omx-safe-left)",
+          sm: shifted ? `calc(${PANEL_WIDTH}px + var(--omx-safe-left))` : "var(--omx-safe-left)",
+        },
         zIndex: 5,
         display: "flex",
         gap: "0.6em",

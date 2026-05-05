@@ -302,7 +302,9 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         label: t("cmdSwitchLanguage", { locale: native }),
         iconKey: "language",
         keywords: [loc, native],
-        run: () => setLocaleAndReload(loc),
+        run: () => {
+          void setLocaleAndReload(loc);
+        },
       });
     }
 

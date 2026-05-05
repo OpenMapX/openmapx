@@ -4,12 +4,14 @@ import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
+import DownloadForOfflineIcon from "@mui/icons-material/DownloadForOffline";
 import HistoryIcon from "@mui/icons-material/History";
 import ImageIcon from "@mui/icons-material/Image";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import LinkIcon from "@mui/icons-material/Link";
 import PrintIcon from "@mui/icons-material/Print";
 import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
+import StorageIcon from "@mui/icons-material/Storage";
 import TranslateIcon from "@mui/icons-material/Translate";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
@@ -28,6 +30,8 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { InstallEntry, IosInstallHintDialog } from "@/components/pwa/InstallEntry";
+import { StorageDialog } from "@/components/settings/StorageDialog";
 import { localeNames, locales } from "@/i18n/config";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { setLocaleAndReload } from "@/lib/setLocale";
@@ -47,6 +51,8 @@ export function HamburgerMenu() {
   const [themeOpen, setThemeOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
+  const [iosHintOpen, setIosHintOpen] = useState(false);
 
   const handleSaved = () => {
     close();
@@ -135,6 +141,33 @@ export function HamburgerMenu() {
         <Divider />
 
         <List disablePadding>
+          <InstallEntry onClick={close} onIosHintNeeded={() => setIosHintOpen(true)} />
+
+          <ListItemButton
+            component={Link}
+            href="/settings/offline"
+            sx={{ height: 48 }}
+            onClick={close}
+          >
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <DownloadForOfflineIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("offlineMaps")} />
+          </ListItemButton>
+
+          <ListItemButton
+            sx={{ height: 48 }}
+            onClick={() => {
+              close();
+              setStorageOpen(true);
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <StorageIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("storage")} />
+          </ListItemButton>
+
           <ListItemButton sx={{ height: 48 }} onClick={handleShareMap}>
             <ListItemIcon sx={{ minWidth: 40 }}>
               <LinkIcon />
@@ -253,6 +286,8 @@ export function HamburgerMenu() {
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
+      <StorageDialog open={storageOpen} onClose={() => setStorageOpen(false)} />
+      <IosInstallHintDialog open={iosHintOpen} onClose={() => setIosHintOpen(false)} />
     </>
   );
 }

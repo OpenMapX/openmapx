@@ -78,7 +78,10 @@ export function SearchInAreaChip() {
         position: "absolute",
         // Below the category chips row:
         // Desktop: chips at top=18, height=40px → top=66; Mobile: chips at top=72 → top=120
-        top: { xs: 120, sm: 66 },
+        top: {
+          xs: "calc(120px + var(--omx-safe-top))",
+          sm: "calc(66px + var(--omx-safe-top))",
+        },
         // When the floating card is open, center in the remaining map area to its right.
         // Remaining area: FLOATING_CARD_RIGHT_EDGE → 100vw, center = (edge + 100%) / 2
         left: {

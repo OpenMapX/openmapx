@@ -612,9 +612,12 @@ export function SearchBar() {
       <Box
         sx={{
           position: "absolute",
-          top: 12,
-          left: 12,
-          right: { xs: 12, sm: "auto" },
+          top: "calc(12px + var(--omx-safe-top))",
+          left: "calc(12px + var(--omx-safe-left))",
+          right: {
+            xs: "calc(12px + var(--omx-safe-right))",
+            sm: "auto",
+          },
           // Above CategoryChips (z-index 10) so the dropdown covers the chip
           // band on mobile when the user is typing — the chips stay rendered
           // (cheap, ready when search is dismissed) but visually hidden. In

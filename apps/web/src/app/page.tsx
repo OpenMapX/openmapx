@@ -35,6 +35,7 @@ import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
 import { PanelHost } from "@/components/panels/PanelHost";
+import { ShareIntentHandler } from "@/components/pwa/ShareIntentHandler";
 import { CategoryChips } from "@/components/search/CategoryChips";
 import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
 import { SearchBar } from "@/components/search/SearchBar";
@@ -128,7 +129,7 @@ export default function HomePage() {
           <MapClickFloatingCard />
           <TopRightControls />
           <StreetViewViewer />
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex flex-col-reverse items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
+          <div className="absolute bottom-[calc(1rem+var(--omx-safe-bottom))] left-1/2 -translate-x-1/2 z-10 flex flex-col-reverse items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
             {/* All legends/toolbars loaded dynamically by LegendHost */}
             <LegendHost />
           </div>
@@ -137,6 +138,9 @@ export default function HomePage() {
           <MapFooter />
           <Suspense>
             <DeepLinkManager />
+          </Suspense>
+          <Suspense>
+            <ShareIntentHandler />
           </Suspense>
         </div>
       </ElevationHoverProvider>

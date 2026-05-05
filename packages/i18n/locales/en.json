@@ -886,9 +886,61 @@
     "termsDescription": "Terms of service and conditions of use for OpenMapX.",
     "account": "Account"
   },
+  "settings": {
+    "title": "Settings",
+    "offline": "Offline maps",
+    "offlineDescription": "Download map areas to use without an internet connection.",
+    "downloadNewArea": "Download a new area",
+    "areaName": "Area name",
+    "areaNamePlaceholder": "e.g. Berlin city center",
+    "moveToSelect": "Move and zoom the map to select the area you want to download.",
+    "minZoom": "Min zoom",
+    "maxZoom": "Max zoom",
+    "estimatedTiles": "~{count} tiles",
+    "estimatedSize": "~{size}",
+    "tooLarge": "Too many tiles. Reduce the zoom range or shrink the area.",
+    "startDownload": "Start download",
+    "cancel": "Cancel",
+    "noAreas": "No offline areas yet.",
+    "downloading": "Downloading…",
+    "ready": "Ready",
+    "paused": "Paused",
+    "errorStatus": "Error",
+    "tilesProgress": "{done} / {total}",
+    "remove": "Remove",
+    "removeArea": "Remove offline area?",
+    "removeAreaDescription": "This will delete the cached map data for \"{name}\" ({size}).",
+    "storageTitle": "Storage",
+    "storageDescription": "Cached map tiles, search results, and offline areas.",
+    "totalUsed": "Used: {used} of {total} ({percent}%)",
+    "appShell": "App shell",
+    "mapTiles": "Map tiles",
+    "vectorTiles": "Vector tiles",
+    "apiResponses": "API responses",
+    "offlineAreas": "Offline areas",
+    "clearTiles": "Clear cached tiles",
+    "clearTilesDescription": "Removes all map tiles cached on the fly. Your downloaded offline areas are kept.",
+    "back": "Back to map"
+  },
+  "pwa": {
+    "updateAvailable": "A new version is available",
+    "reload": "Reload",
+    "installTitle": "Install OpenMapX",
+    "iosHintTitle": "Install on iPhone or iPad",
+    "iosHintDescription": "Tap the Share button, then choose \"Add to Home Screen\" to install OpenMapX.",
+    "gotIt": "Got it"
+  },
   "offline": {
     "youreOffline": "You're offline — showing cached data",
-    "backOnline": "Back online"
+    "backOnline": "Back online",
+    "pageTitle": "You're offline",
+    "pageDescription": "OpenMapX couldn't reach the network. Cached map tiles, places, and routes from earlier in your session are still available.",
+    "retry": "Try again",
+    "openMap": "Open the map",
+    "stillWorks": "What still works",
+    "stillWorksTiles": "Map tiles you've recently viewed",
+    "stillWorksRoutes": "Routes and places you've already opened",
+    "stillWorksDownloaded": "Areas you've downloaded for offline use"
   },
   "streetView": {
     "coverage": "Coverage",
@@ -1066,6 +1118,8 @@
     "recent": "Recent",
     "contributions": "My contributions",
     "shareMap": "Share or embed map",
+    "offlineMaps": "Offline maps",
+    "storage": "Storage",
     "print": "Print",
     "tips": "Tips and tricks",
     "help": "Help",
@@ -1136,11 +1190,5 @@
     "clickToPlace": "Click on the map to set origin",
     "dragToMove": "Drag the marker to move",
     "close": "Close travel time"
-  },
-  "settings": {
-    "title": "Settings",
-    "legal": "Legal",
-    "signIn": "Sign in",
-    "signOut": "Sign out"
   }
 }

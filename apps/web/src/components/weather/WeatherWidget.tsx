@@ -71,8 +71,11 @@ export function WeatherWidget() {
     <Box
       sx={{
         position: "absolute",
-        top: { xs: 118, sm: 74 },
-        left: 12,
+        top: {
+          xs: "calc(118px + var(--omx-safe-top))",
+          sm: "calc(74px + var(--omx-safe-top))",
+        },
+        left: "calc(12px + var(--omx-safe-left))",
         zIndex: 9,
         width: { xs: "calc(100% - 110px)", sm: "auto" },
       }}

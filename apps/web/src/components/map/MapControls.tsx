@@ -48,10 +48,13 @@ export function MapControls() {
       sx={{
         position: "absolute",
         bottom: {
-          xs: followHeight > 0 ? followHeight + PANEL_GAP : BASE_BOTTOM,
-          sm: BASE_BOTTOM,
+          xs:
+            followHeight > 0
+              ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
+              : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+          sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
         },
-        right: 12,
+        right: "calc(12px + var(--omx-safe-right))",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",

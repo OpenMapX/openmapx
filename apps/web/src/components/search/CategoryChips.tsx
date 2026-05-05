@@ -150,9 +150,12 @@ export function CategoryChips() {
       ref={scrollRef}
       sx={{
         position: "absolute",
-        top: { xs: 72, sm: 18 },
-        left: { xs: 0, sm: 420 },
-        right: { xs: 0, sm: 108 },
+        top: {
+          xs: "calc(72px + var(--omx-safe-top))",
+          sm: "calc(18px + var(--omx-safe-top))",
+        },
+        left: { xs: "var(--omx-safe-left)", sm: "calc(420px + var(--omx-safe-left))" },
+        right: { xs: "var(--omx-safe-right)", sm: "calc(108px + var(--omx-safe-right))" },
         zIndex: 10,
         display: "flex",
         alignItems: "center",

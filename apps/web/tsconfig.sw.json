@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["webworker", "esnext"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src/sw.ts"],
+  "exclude": ["node_modules"]
+}

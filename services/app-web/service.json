@@ -38,7 +38,17 @@
     "proxy": {
       "enabled": true,
       "pathPrefix": "/",
-      "priority": 1
+      "priority": 1,
+      "additionalRoutes": [
+        {
+          "path": "/sw.js",
+          "middleware": ["sw-no-cache@file"]
+        },
+        {
+          "path": "/manifest.webmanifest",
+          "middleware": ["manifest-short-cache@file"]
+        }
+      ]
     }
   },
   "ui": { "category": "application" }

@@ -886,9 +886,61 @@
     "termsDescription": "Nutzungsbedingungen f\u00fcr OpenMapX.",
     "account": "Konto"
   },
+  "settings": {
+    "title": "Einstellungen",
+    "offline": "Offline-Karten",
+    "offlineDescription": "Lade Kartenbereiche herunter, um sie ohne Internetverbindung zu verwenden.",
+    "downloadNewArea": "Neuen Bereich herunterladen",
+    "areaName": "Name des Bereichs",
+    "areaNamePlaceholder": "z. B. Berlin Innenstadt",
+    "moveToSelect": "Verschiebe und zoome die Karte, um den herunterzuladenden Bereich auszuwählen.",
+    "minZoom": "Min. Zoom",
+    "maxZoom": "Max. Zoom",
+    "estimatedTiles": "~{count} Kacheln",
+    "estimatedSize": "~{size}",
+    "tooLarge": "Zu viele Kacheln. Reduziere den Zoom-Bereich oder verkleinere den Ausschnitt.",
+    "startDownload": "Download starten",
+    "cancel": "Abbrechen",
+    "noAreas": "Noch keine Offline-Bereiche.",
+    "downloading": "Lädt herunter…",
+    "ready": "Bereit",
+    "paused": "Pausiert",
+    "errorStatus": "Fehler",
+    "tilesProgress": "{done} / {total}",
+    "remove": "Entfernen",
+    "removeArea": "Offline-Bereich entfernen?",
+    "removeAreaDescription": "Dies löscht die gecachten Kartendaten für \"{name}\" ({size}).",
+    "storageTitle": "Speicher",
+    "storageDescription": "Zwischengespeicherte Kartenkacheln, Suchergebnisse und Offline-Bereiche.",
+    "totalUsed": "Belegt: {used} von {total} ({percent}%)",
+    "appShell": "App-Shell",
+    "mapTiles": "Kartenkacheln",
+    "vectorTiles": "Vektor-Kacheln",
+    "apiResponses": "API-Antworten",
+    "offlineAreas": "Offline-Bereiche",
+    "clearTiles": "Zwischengespeicherte Kacheln löschen",
+    "clearTilesDescription": "Entfernt alle automatisch zwischengespeicherten Kartenkacheln. Deine heruntergeladenen Offline-Bereiche bleiben erhalten.",
+    "back": "Zurück zur Karte"
+  },
+  "pwa": {
+    "updateAvailable": "Eine neue Version ist verfügbar",
+    "reload": "Neu laden",
+    "installTitle": "OpenMapX installieren",
+    "iosHintTitle": "Auf iPhone oder iPad installieren",
+    "iosHintDescription": "Tippe auf das Teilen-Symbol und wähle \"Zum Home-Bildschirm\" aus, um OpenMapX zu installieren.",
+    "gotIt": "Verstanden"
+  },
   "offline": {
     "youreOffline": "Keine Internetverbindung — zwischengespeicherte Daten werden angezeigt",
-    "backOnline": "Wieder online"
+    "backOnline": "Wieder online",
+    "pageTitle": "Du bist offline",
+    "pageDescription": "OpenMapX kann das Netzwerk nicht erreichen. Zwischengespeicherte Kartenkacheln, Orte und Routen aus dieser Sitzung sind weiterhin verfügbar.",
+    "retry": "Erneut versuchen",
+    "openMap": "Karte öffnen",
+    "stillWorks": "Was weiterhin funktioniert",
+    "stillWorksTiles": "Kürzlich angesehene Kartenkacheln",
+    "stillWorksRoutes": "Bereits geöffnete Routen und Orte",
+    "stillWorksDownloaded": "Heruntergeladene Offline-Bereiche"
   },
   "streetView": {
     "coverage": "Abdeckung",
@@ -1066,6 +1118,8 @@
     "recent": "Zuletzt verwendet",
     "contributions": "Meine Beiträge",
     "shareMap": "Karte teilen oder einbetten",
+    "offlineMaps": "Offline-Karten",
+    "storage": "Speicher",
     "print": "Drucken",
     "tips": "Tipps und Tricks",
     "help": "Hilfe",
@@ -1136,11 +1190,5 @@
     "clickToPlace": "Klicke auf die Karte, um den Startpunkt zu setzen",
     "dragToMove": "Marker ziehen zum Verschieben",
     "close": "Reisezeit schließen"
-  },
-  "settings": {
-    "title": "Einstellungen",
-    "legal": "Rechtliches",
-    "signIn": "Anmelden",
-    "signOut": "Abmelden"
   }
 }

@@ -38,7 +38,7 @@ export function OfflineNotice() {
       <Snackbar
         open={isOffline}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        sx={{ zIndex: 1400 }}
+        sx={{ zIndex: 1400, mb: "var(--omx-safe-bottom)" }}
       >
         <Alert severity="warning" variant="filled" sx={{ width: "100%" }}>
           {t("youreOffline")}
@@ -51,7 +51,7 @@ export function OfflineNotice() {
         autoHideDuration={3000}
         onClose={() => setShowOnline(false)}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        sx={{ zIndex: 1400 }}
+        sx={{ zIndex: 1400, mb: "var(--omx-safe-bottom)" }}
       >
         <Alert severity="success" variant="filled" sx={{ width: "100%" }}>
           {t("backOnline")}

@@ -9,3 +9,20 @@ http:
       headers:
         customResponseHeaders:
           Cache-Control: "public, max-age=86400, stale-while-revalidate=604800"
+
+    # Service worker file. Browsers cap SW max-age at 24h regardless, but
+    # an explicit no-store + must-revalidate makes intent clear and prevents
+    # any intermediate proxy/CDN from holding a stale `sw.js` that would
+    # delay update rollouts after a deploy.
+    sw-no-cache:
+      headers:
+        customResponseHeaders:
+          Cache-Control: "no-cache, no-store, must-revalidate"
+          Pragma: "no-cache"
+
+    # Web app manifest. Short cache so manifest.ts changes (icons, share
+    # target, shortcuts) propagate quickly without holding a stale copy.
+    manifest-short-cache:
+      headers:
+        customResponseHeaders:
+          Cache-Control: "public, max-age=300, must-revalidate"

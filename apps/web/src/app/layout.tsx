@@ -1,6 +1,6 @@
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
@@ -8,6 +8,9 @@ import "mapillary-js/dist/mapillary.css";
 import "maplibre-theme/icons.default.css";
 import "maplibre-theme/classic.css";
 import "./globals.css";
+import { OfflineNotice } from "@/components/OfflineNotice";
+import { SwUpdateNotice } from "@/components/pwa/SwUpdateNotice";
+import { InstallPromptCapture } from "@/components/pwa/useInstallPrompt";
 import { EnvProvider } from "@/lib/EnvProvider";
 import { buildClientEnv } from "@/lib/env";
 import { Providers } from "./providers";
@@ -22,6 +25,34 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "OpenMapX",
   description: "Open-data maps — a Google Maps alternative",
+  applicationName: "OpenMapX",
+  appleWebApp: {
+    capable: true,
+    title: "OpenMapX",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: [
+      { url: "/icons/app/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/app/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/app/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/app/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#007b8b" },
+    { media: "(prefers-color-scheme: dark)", color: "#1c1c1c" },
+  ],
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -39,7 +70,18 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <AppRouterCacheProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
             <EnvProvider config={clientEnv}>
-              <Providers>{children}</Providers>
+              <Providers>
+                {children}
+                {/* Mounted at the root so the SW registers, the offline
+                    notice surfaces on every route, and the install-prompt
+                    listener attaches before `beforeinstallprompt` fires (it
+                    would be missed if it lived inside the HamburgerMenu's
+                    temporary Drawer subtree). Each component is a client
+                    island with its own production / serviceWorker guards. */}
+                <OfflineNotice />
+                <SwUpdateNotice />
+                <InstallPromptCapture />
+              </Providers>
             </EnvProvider>
           </NextIntlClientProvider>
         </AppRouterCacheProvider>
