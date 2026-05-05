@@ -1,5 +1,6 @@
 "use client";
 
+import CloseIcon from "@mui/icons-material/Close";
 import KeyIcon from "@mui/icons-material/Key";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
@@ -18,6 +19,7 @@ import Typography from "@mui/material/Typography";
 import { authClient, oauthProviders } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 
 type AuthMode = "sign-in" | "sign-up" | "2fa" | "forgot-password" | "reset-password";
 
@@ -29,6 +31,7 @@ interface AuthDialogProps {
 export function AuthDialog({ open, onClose }: AuthDialogProps) {
   const t = useTranslations("auth");
   const tc = useTranslations("common");
+  const fullScreen = useFullScreenOnMobile();
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -228,13 +231,18 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
       onClose={handleClose}
       maxWidth="xs"
       fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: "12px",
-          p: 0,
-        },
-      }}
+      fullScreen={fullScreen}
+      PaperProps={{ sx: [mobileFullScreenDialogPaperSx, { p: 0 }] }}
     >
+      {fullScreen && (
+        <IconButton
+          onClick={handleClose}
+          aria-label={tc("close")}
+          sx={{ position: "absolute", top: 8, right: 8, zIndex: 1 }}
+        >
+          <CloseIcon />
+        </IconButton>
+      )}
       <DialogContent sx={{ px: 5, py: 4 }}>
         {/* Logo / Title */}
         <Box sx={{ textAlign: "center", mb: 3 }}>

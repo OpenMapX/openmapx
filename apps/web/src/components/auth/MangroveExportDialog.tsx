@@ -18,6 +18,7 @@ import Typography from "@mui/material/Typography";
 import { toMangroveExportJwk, useMangroveKeypairExport } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 
 interface Props {
   open: boolean;
@@ -27,6 +28,7 @@ interface Props {
 export function MangroveExportDialog({ open, onClose }: Props) {
   const t = useTranslations("account");
   const tc = useTranslations("common");
+  const fullScreen = useFullScreenOnMobile();
   const { privateJwk, reason } = useMangroveKeypairExport();
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -64,7 +66,14 @@ export function MangroveExportDialog({ open, onClose }: Props) {
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="sm"
+      fullScreen={fullScreen}
+      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
+    >
       <DialogTitle>{t("mangroveExportTitle")}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>

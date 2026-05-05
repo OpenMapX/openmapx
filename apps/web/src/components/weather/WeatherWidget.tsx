@@ -2,8 +2,10 @@
 
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
+import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   buildSourceAttribution,
   useCurrentWeather,
@@ -17,6 +19,8 @@ import { WeatherIcon } from "./WeatherIcon";
 import { windDirectionLabel } from "./weatherUtils";
 
 export function WeatherWidget() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { mapRef, mapReady } = useMap();
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [zoom, setZoom] = useState(0);
@@ -32,6 +36,7 @@ export function WeatherWidget() {
   const debouncedUpdate = useDebouncedCallback(updateCenter, 2000);
 
   useEffect(() => {
+    if (isMobile) return;
     const map = mapRef.current;
     if (!map || !mapReady) return;
     updateCenter();
@@ -39,16 +44,17 @@ export function WeatherWidget() {
     return () => {
       map.off("moveend", debouncedUpdate);
     };
-  }, [mapRef, mapReady, updateCenter, debouncedUpdate]);
+  }, [isMobile, mapRef, mapReady, updateCenter, debouncedUpdate]);
 
+  // Pass nulls on mobile so the underlying query is disabled — no fetch.
   const { data } = useCurrentWeather(
-    center && zoom >= 8 ? center.lat : null,
-    center && zoom >= 8 ? center.lng : null,
+    !isMobile && center && zoom >= 8 ? center.lat : null,
+    !isMobile && center && zoom >= 8 ? center.lng : null,
   );
 
   const registry = useIntegrationRegistry();
 
-  if (!data || zoom < 8) return null;
+  if (isMobile || !data || zoom < 8) return null;
 
   const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);

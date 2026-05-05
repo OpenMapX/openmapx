@@ -34,6 +34,7 @@ import { authClient, getInitials, oauthProviders } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
+import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import { MangroveAccountSection } from "./MangroveAccountSection";
 
 interface AccountSettingsDialogProps {
@@ -46,6 +47,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
   const t = useTranslations("account");
   const tc = useTranslations("common");
   const locale = useLocale();
+  const fullScreen = useFullScreenOnMobile();
   const [name, setName] = useState(user.name);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
@@ -397,7 +399,8 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       onClose={onClose}
       maxWidth="sm"
       fullWidth
-      PaperProps={{ sx: { borderRadius: "12px" } }}
+      fullScreen={fullScreen}
+      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
     >
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <PersonIcon />

@@ -3,6 +3,7 @@
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import DirectionsIcon from "@mui/icons-material/Directions";
+import HighlightOffIcon from "@mui/icons-material/HighlightOff";
 import MenuIcon from "@mui/icons-material/Menu";
 import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
@@ -11,8 +12,10 @@ import IconButton from "@mui/material/IconButton";
 import InputBase from "@mui/material/InputBase";
 import Paper from "@mui/material/Paper";
 import Skeleton from "@mui/material/Skeleton";
+import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import type { AutocompleteResult, LngLat, TransitStop } from "@openmapx/core";
 import {
   API_ENDPOINTS,
@@ -58,10 +61,12 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AccountAvatarButton } from "@/components/auth/AccountAvatarButton";
 import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
+import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
 
 /** Pre-parsed once at module load — the shortcut never changes, no need to
  *  re-parse it on every SearchBar render. */
@@ -136,7 +141,10 @@ export function SearchBar() {
   const tModes = useTranslations("searchModes");
   const tSaved = useTranslations("saved");
   const tCmd = useTranslations("commandPalette");
+  const tCommon = useTranslations("common");
   const locale = useLocale();
+  const muiTheme = useTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
   const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
     useSearchStore();
   const { setSelectedPlace } = usePlaceStore();
@@ -576,142 +584,315 @@ export function SearchBar() {
   const showSkeleton =
     isFocused && query.trim().length >= 2 && isFetching && !showDropdown && !syntheticResult;
 
+  // Mobile: when the search is focused, the bar takes over the full viewport
+  // Pure CSS transition — same component,same focus/dropdown state,
+  // just a different layout.
+  const fullScreen = isMobile && isFocused;
+
+  const handleBack = () => {
+    setIsFocused(false);
+    inputRef.current?.blur();
+  };
+
   return (
-    <Box
-      sx={{
-        position: "absolute",
-        top: 12,
-        left: 12,
-        zIndex: 10,
-        width: { xs: "calc(100% - 110px)", sm: "auto" },
-      }}
-    >
-      <Paper
-        elevation={isFocused ? 4 : 2}
+    <>
+      {/* Full-screen backdrop on mobile while the search is focused — the
+          bar and results panel float on this white surface, hiding the map
+          and bottom sheet underneath. */}
+      {fullScreen && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            bgcolor: "background.paper",
+            zIndex: 12,
+          }}
+        />
+      )}
+      <Box
         sx={{
-          width: { xs: "100%", sm: 376 },
-          borderRadius: showDropdown ? "24px 24px 16px 16px" : "24px",
-          overflow: "hidden",
-          transition: "box-shadow 0.2s, border-radius 0.15s",
-          bgcolor: "background.paper",
+          position: "absolute",
+          top: 12,
+          left: 12,
+          right: { xs: 12, sm: "auto" },
+          // Above CategoryChips (z-index 10) so the dropdown covers the chip
+          // band on mobile when the user is typing — the chips stay rendered
+          // (cheap, ready when search is dismissed) but visually hidden. In
+          // fullscreen the bar sits above the white backdrop (z 12).
+          zIndex: fullScreen ? 13 : 11,
+          width: { xs: "auto", sm: "auto" },
         }}
       >
-        {/* Search input row */}
-        <Box
-          component="form"
-          onSubmit={handleSubmit}
-          sx={{ display: "flex", alignItems: "center", height: 48, px: 0.5 }}
+        <Paper
+          elevation={fullScreen ? 0 : isFocused ? 4 : 2}
+          sx={{
+            width: { xs: "100%", sm: 376 },
+            borderRadius: !fullScreen && showDropdown ? "24px 24px 16px 16px" : "24px",
+            overflow: "hidden",
+            transition: "box-shadow 0.2s, border-radius 0.15s, background-color 0.15s",
+            // Bar turns into a light grey pill while focused,
+            // signalling the active state without changing
+            // its size or position.
+            bgcolor: fullScreen ? "action.hover" : "background.paper",
+          }}
         >
-          {selectedListId ? (
-            <IconButton size="small" sx={{ ml: 0.5, mr: 0.5 }} onClick={clearSelectedList}>
-              <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-            </IconButton>
-          ) : (
-            <IconButton
-              size="small"
-              sx={{ ml: 0.5, mr: 0.5 }}
-              onClick={openMenu}
-              aria-label={t("menuAriaLabel")}
-            >
-              <MenuIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-            </IconButton>
-          )}
-
-          <InputBase
-            inputRef={inputRef}
-            value={query}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setIsFocused(true)}
-            onBlur={handleBlur}
-            placeholder={t("placeholder")}
-            inputProps={{ id: SEARCH_INPUT_ID, "aria-label": t("ariaLabel") }}
+          {/* Search input row */}
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
             sx={{
-              flex: 1,
-              fontSize: 16,
-              "& input": {
-                padding: 0,
-                paddingLeft: "8px",
-                "&::placeholder": { color: "text.secondary", opacity: 1 },
-              },
+              display: "flex",
+              alignItems: "center",
+              height: 48,
+              px: 0.5,
+              // The app-wide MuiIconButton override sets borderRadius: 8 (a
+              // rounded square) which clashes with the pill-shaped search bar.
+              // Force circular hover/focus halos for icons inside the bar so
+              // they feel native to its rounded geometry.
+              "& .MuiIconButton-root": { borderRadius: "50%" },
             }}
-          />
-
-          <IconButton type="submit" size="small" aria-label={t("searchAriaLabel")}>
-            <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-          </IconButton>
-
-          <Tooltip title={tCmd("open")} placement="bottom">
-            <Box
-              component="kbd"
-              role="button"
-              tabIndex={0}
-              aria-label={tCmd("open")}
-              onClick={() => useCommandPaletteStore.getState().open()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  useCommandPaletteStore.getState().open();
-                }
-              }}
-              sx={(theme) => ({
-                display: { xs: "none", sm: "inline-flex" },
-                alignItems: "center",
-                fontFamily: "monospace",
-                fontSize: 11,
-                px: 0.75,
-                py: 0.25,
-                ml: 0.5,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: 1,
-                color: "text.secondary",
-                cursor: "pointer",
-                userSelect: "none",
-                "&:hover": { bgcolor: "action.hover" },
-                "&:focus-visible": {
-                  outline: `2px solid ${theme.palette.primary.main}`,
-                  outlineOffset: 1,
-                },
-              })}
-            >
-              {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
-            </Box>
-          </Tooltip>
-
-          {hasSidePanel ? (
-            <IconButton
-              size="small"
-              aria-label={t("closePanelAriaLabel")}
-              sx={{ ml: 1, mr: 0.5 }}
-              onClick={() => {
-                closeSidePanel();
-                setQuery("");
-              }}
-            >
-              <CloseIcon sx={{ fontSize: 22, color: "text.secondary" }} />
-            </IconButton>
-          ) : (
-            <Tooltip title={t("directionsTooltip")} placement="bottom">
+          >
+            {fullScreen ? (
               <IconButton
                 size="small"
-                aria-label={t("getDirectionsAriaLabel")}
-                sx={{ ml: 1, mr: 0.5 }}
+                sx={{ ml: 0.5, mr: 0.5 }}
+                onClick={handleBack}
+                aria-label={tCommon("back")}
+              >
+                <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+              </IconButton>
+            ) : selectedListId ? (
+              <IconButton size="small" sx={{ ml: 0.5, mr: 0.5 }} onClick={clearSelectedList}>
+                <ArrowBackIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+              </IconButton>
+            ) : (
+              <IconButton
+                size="small"
+                sx={{ ml: 0.5, mr: 0.5 }}
+                onClick={openMenu}
+                aria-label={t("menuAriaLabel")}
+              >
+                <MenuIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+              </IconButton>
+            )}
+
+            <InputBase
+              inputRef={inputRef}
+              value={query}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onFocus={() => setIsFocused(true)}
+              onBlur={handleBlur}
+              placeholder={t("placeholder")}
+              inputProps={{ id: SEARCH_INPUT_ID, "aria-label": t("ariaLabel") }}
+              sx={{
+                flex: 1,
+                fontSize: 16,
+                "& input": {
+                  padding: 0,
+                  paddingLeft: "8px",
+                  "&::placeholder": { color: "text.secondary", opacity: 1 },
+                },
+              }}
+            />
+
+            {fullScreen && query.length > 0 ? (
+              <IconButton
+                size="small"
                 onClick={() => {
-                  openDirections();
-                  useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+                  setQuery("");
+                  inputRef.current?.focus();
+                }}
+                aria-label={tCommon("clear")}
+              >
+                <HighlightOffIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+              </IconButton>
+            ) : (
+              !fullScreen && (
+                <IconButton
+                  type="submit"
+                  size="small"
+                  aria-label={t("searchAriaLabel")}
+                  sx={{ display: { xs: "none", sm: "inline-flex" } }}
+                >
+                  <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+                </IconButton>
+              )
+            )}
+
+            <Tooltip title={tCmd("open")} placement="bottom">
+              <Box
+                component="kbd"
+                role="button"
+                tabIndex={0}
+                aria-label={tCmd("open")}
+                onClick={() => useCommandPaletteStore.getState().open()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    useCommandPaletteStore.getState().open();
+                  }
+                }}
+                sx={(theme) => ({
+                  display: { xs: "none", sm: "inline-flex" },
+                  alignItems: "center",
+                  fontFamily: "monospace",
+                  fontSize: 11,
+                  px: 0.75,
+                  py: 0.25,
+                  ml: 0.5,
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: 1,
+                  color: "text.secondary",
+                  cursor: "pointer",
+                  userSelect: "none",
+                  "&:hover": { bgcolor: "action.hover" },
+                  "&:focus-visible": {
+                    outline: `2px solid ${theme.palette.primary.main}`,
+                    outlineOffset: 1,
+                  },
+                })}
+              >
+                {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
+              </Box>
+            </Tooltip>
+
+            {!fullScreen &&
+              (hasSidePanel ? (
+                <IconButton
+                  size="small"
+                  aria-label={t("closePanelAriaLabel")}
+                  sx={{ ml: 1, mr: 0.5 }}
+                  onClick={() => {
+                    closeSidePanel();
+                    setQuery("");
+                  }}
+                >
+                  <CloseIcon sx={{ fontSize: 22, color: "text.secondary" }} />
+                </IconButton>
+              ) : (
+                <Tooltip title={t("directionsTooltip")} placement="bottom">
+                  <IconButton
+                    size="small"
+                    aria-label={t("getDirectionsAriaLabel")}
+                    sx={{ ml: 1, mr: 0.5 }}
+                    onClick={() => {
+                      openDirections();
+                      useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
+                    }}
+                  >
+                    <DirectionsIcon sx={{ fontSize: 22, color: TEAL }} />
+                  </IconButton>
+                </Tooltip>
+              ))}
+
+            {/* Account avatar — inline in the search bar on mobile.
+              The desktop equivalent is a separate floating control
+              rendered by TopRightControls. Hidden when the search
+              has expanded to fullscreen — it's not relevant
+              while the user is typing a query. */}
+            {!fullScreen && (
+              <Box sx={{ display: { xs: "inline-flex", sm: "none" }, ml: 0.25, mr: 0.25 }}>
+                <AccountAvatarButton size={32} />
+              </Box>
+            )}
+          </Box>
+
+          {/* Suggestions list — directly attached inside the same card.
+            Skipped on mobile-fullscreen, where the dropdown is rendered as
+            a full-width sibling panel below the bar (see end of return). */}
+          {!fullScreen && showDropdown && (
+            <>
+              <Divider />
+              <Box
+                sx={{
+                  maxHeight: fullScreen ? "none" : 320,
+                  flex: fullScreen ? 1 : "none",
+                  minHeight: 0,
+                  overflowY: "auto",
                 }}
               >
-                <DirectionsIcon sx={{ fontSize: 22, color: TEAL }} />
-              </IconButton>
-            </Tooltip>
+                <AutocompleteDropdown
+                  suggestions={displaySuggestions}
+                  onSelect={handleSelect}
+                  highlightedIndex={highlightedIndex}
+                />
+                {geocodingAttribution && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{
+                      display: "block",
+                      p: 0.5,
+                      textAlign: "center",
+                      fontSize: 10.5,
+                      "& a": { color: "text.secondary", textDecoration: "underline" },
+                    }}
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
+                    dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
+                  />
+                )}
+              </Box>
+            </>
           )}
-        </Box>
 
-        {/* Suggestions list — directly attached inside the same card */}
-        {showDropdown && (
-          <>
-            <Divider />
-            <Box sx={{ maxHeight: 320, overflowY: "auto" }}>
+          {/* Skeleton rows shown while the first results are loading */}
+          {!fullScreen && showSkeleton && (
+            <>
+              <Divider />
+              {[0, 1, 2].map((i) => (
+                <Box
+                  key={i}
+                  sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.25 }}
+                >
+                  <Skeleton variant="circular" width={20} height={20} />
+                  <Box sx={{ flex: 1 }}>
+                    <Skeleton variant="text" width="55%" height={16} />
+                    <Skeleton variant="text" width="35%" height={13} />
+                  </Box>
+                </Box>
+              ))}
+            </>
+          )}
+        </Paper>
+      </Box>
+
+      {/* Fullscreen results panel — only mounted on mobile while the bar
+        is focused. Sits on top of the white backdrop, below the bar (with
+        a small breathing gap), and fills the rest of the viewport. Empty
+        query → labeled places; otherwise → autocomplete dropdown. */}
+      {fullScreen && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: 72,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 13,
+            overflowY: "auto",
+            bgcolor: "background.paper",
+          }}
+        >
+          {query.trim().length === 0 ? (
+            <MobileSearchEmptyState
+              onSelectPlace={(p) => {
+                setQuery(p.label);
+                setIsFocused(false);
+                flyTo([p.lng, p.lat], 15);
+                setSelectedPlace(
+                  createPlace({
+                    ...idsFromPrimaryOrCoords(p.placeId ?? p.id, [p.lng, p.lat]),
+                    name: p.name,
+                    address: p.address ?? p.name,
+                    coordinates: [p.lng, p.lat],
+                  }),
+                );
+                useSidebarStore.getState().openSidebar(PANEL.PLACE);
+              }}
+            />
+          ) : showDropdown ? (
+            <>
               <AutocompleteDropdown
                 suggestions={displaySuggestions}
                 onSelect={handleSelect}
@@ -723,7 +904,7 @@ export function SearchBar() {
                   color="text.secondary"
                   sx={{
                     display: "block",
-                    p: 0.5,
+                    p: 1,
                     textAlign: "center",
                     fontSize: 10.5,
                     "& a": { color: "text.secondary", textDecoration: "underline" },
@@ -732,29 +913,25 @@ export function SearchBar() {
                   dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
                 />
               )}
-            </Box>
-          </>
-        )}
-
-        {/* Skeleton rows shown while the first results are loading */}
-        {showSkeleton && (
-          <>
-            <Divider />
-            {[0, 1, 2].map((i) => (
-              <Box
-                key={i}
-                sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.25 }}
-              >
-                <Skeleton variant="circular" width={20} height={20} />
-                <Box sx={{ flex: 1 }}>
-                  <Skeleton variant="text" width="55%" height={16} />
-                  <Skeleton variant="text" width="35%" height={13} />
+            </>
+          ) : showSkeleton ? (
+            <Box>
+              {[0, 1, 2].map((i) => (
+                <Box
+                  key={i}
+                  sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.25 }}
+                >
+                  <Skeleton variant="circular" width={20} height={20} />
+                  <Box sx={{ flex: 1 }}>
+                    <Skeleton variant="text" width="55%" height={16} />
+                    <Skeleton variant="text" width="35%" height={13} />
+                  </Box>
                 </Box>
-              </Box>
-            ))}
-          </>
-        )}
-      </Paper>
-    </Box>
+              ))}
+            </Box>
+          ) : null}
+        </Box>
+      )}
+    </>
   );
 }

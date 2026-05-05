@@ -45,7 +45,9 @@
     "noStopsFound": "Keine Haltestellen in diesem Bereich gefunden.",
     "failedToLoad": "Ergebnisse konnten nicht geladen werden. Erneut versuchen.",
     "zoomInToSearch": "Näher heranzoomen, um Ergebnisse in diesem Bereich zu sehen.",
-    "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen."
+    "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen.",
+    "emptyStateSignedOut": "Melde dich an, um deine gespeicherten Orte hier zu sehen.",
+    "emptyStateNoLabels": "Deine gespeicherten Orte erscheinen hier."
   },
   "nearby": {
     "title": "In der Nähe",

@@ -31,7 +31,6 @@ export function UserLocationMarker() {
         return;
       }
 
-      // Build the Google Maps-style blue dot
       const wrapper = document.createElement("div");
       wrapper.style.cssText = "position:relative;width:16px;height:16px;";
 

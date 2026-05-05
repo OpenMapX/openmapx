@@ -30,6 +30,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 
 type Experience = GeoExperienceContext;
 
@@ -79,6 +80,7 @@ function RequiredMark() {
 export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
+  const fullScreen = useFullScreenOnMobile();
   const { keypair, publicPem, isLoading: keypairLoading } = useUserKeypair();
   const { data: session } = useSession();
   const sessionName = session?.user?.name?.trim();
@@ -192,6 +194,8 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
       onClose={onClose}
       fullWidth
       maxWidth="sm"
+      fullScreen={fullScreen}
+      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
       aria-labelledby="write-review-title"
     >
       <DialogTitle

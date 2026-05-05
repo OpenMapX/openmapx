@@ -13,6 +13,7 @@ import { usePlaceStore } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TEAL } from "@/lib/theme";
+import { useFloatingMobileSheetHandle } from "../MobileBottomSheet";
 import { LineDetail } from "../transit/LineDetail";
 import { PlaceDeparturesView } from "../transit/PlaceDeparturesView";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
@@ -71,6 +72,22 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     setActiveTripDep(null);
   }, [place.id]);
 
+  // A Place represents a transit stop when the geocoder/synthetic builder
+  // tagged it as such — makeSyntheticStopPlace + geocodeStopAsPlace always
+  // set rawCategory = "transit_stop". Stop mode never renders the photo
+  // hero, so suppress floating-handle mode there too.
+  const isStopMode = place.rawCategory === "transit_stop";
+  const placePhotos = place.photos ?? [];
+  const hasPhoto =
+    !isStopMode &&
+    placePhotos.length > 0 &&
+    (placePhotos[0].url.startsWith("https://") || placePhotos[0].url.startsWith("http://"));
+  // When a photo hero is rendered as the first child, let the mobile sheet's
+  // drag pill float over it so the image reaches the rounded sheet corners.
+  // No-op on desktop and when no photo is available. Must be called before
+  // any conditional return — hooks rules.
+  useFloatingMobileSheetHandle(hasPhoto);
+
   // View priority: TripDetailView > LineDetail > StopBoardView > DeparturesView > StopMode > normal
   if (activeTripDep) {
     return (
@@ -121,11 +138,6 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     );
   }
 
-  // A Place represents a transit stop when the geocoder/synthetic builder
-  // tagged it as such — makeSyntheticStopPlace + geocodeStopAsPlace always
-  // set rawCategory = "transit_stop".
-  const isStopMode = place.rawCategory === "transit_stop";
-
   if (isStopMode) {
     return (
       <Box>
@@ -169,11 +181,6 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
       </Box>
     );
   }
-
-  const placePhotos = place.photos ?? [];
-  const hasPhoto =
-    placePhotos.length > 0 &&
-    (placePhotos[0].url.startsWith("https://") || placePhotos[0].url.startsWith("http://"));
 
   return (
     <>

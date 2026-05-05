@@ -33,8 +33,7 @@ interface AddressFormatter {
 // many extra fields (ISO3166-2-lvl4 → "DE-BE", amenity/bar/shop POI names,
 // suburb, borough, neighbourhood, …) that the OpenCage formatter doesn't
 // recognize; unrecognized keys get dumped into the `attention` placeholder
-// which prefixes the output. Whitelisting keeps the rendered line close to
-// what Google Maps shows: "{road} {house_number}, {postcode} {city}, {country}".
+// which prefixes the output.
 const FORMATTER_KEYS = [
   "road",
   "house_number",

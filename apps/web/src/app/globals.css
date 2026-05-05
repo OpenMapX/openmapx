@@ -58,10 +58,6 @@ main {
   font-size: 10px;
 }
 
-.maplibregl-ctrl-attrib-button {
-  display: none;
-}
-
 /* Shared MapLibre popup styling */
 @layer base {
   .omx-popup.maplibregl-popup .maplibregl-popup-content {

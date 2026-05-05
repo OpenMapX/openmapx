@@ -31,6 +31,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 
 type Mode = "unencrypted" | "passphrase" | "passphrase+webauthn";
 type Step = "chooseMode" | "importJwk" | "configure" | "confirmUnencrypted";
@@ -89,6 +90,7 @@ export function MangroveSetupWizard({
 }: Props) {
   const t = useTranslations("account");
   const tc = useTranslations("common");
+  const fullScreen = useFullScreenOnMobile();
   const setup = useSetupKeypair();
 
   const [step, setStep] = useState<Step>("chooseMode");
@@ -194,7 +196,14 @@ export function MangroveSetupWizard({
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      fullWidth
+      maxWidth="sm"
+      fullScreen={fullScreen}
+      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
+    >
       <DialogTitle>
         {step === "chooseMode"
           ? t("mangroveSetupTitle")

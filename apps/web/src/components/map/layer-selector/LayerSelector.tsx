@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useMapAttributionExpanded } from "@/lib/mapAttributionExpanded";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -44,6 +45,7 @@ export function LayerSelector() {
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const activeLayer = useLayerStore((s) => s.activeLayer);
+  const attributionExpanded = useMapAttributionExpanded();
 
   const hiddenByFloatingCard =
     (activeCategory !== null && selectedPlace !== null) || (hasSidePanel && selectedPlace !== null);
@@ -56,7 +58,7 @@ export function LayerSelector() {
       setAnchorEl(desktopAnchorRef.current);
       return;
     }
-    setAnchorEl(event.currentTarget);
+    setAnchorEl((current) => (current ? null : event.currentTarget));
   };
 
   const handleClose = () => {
@@ -146,7 +148,7 @@ export function LayerSelector() {
           position: "absolute",
           bottom: 26,
           left: { xs: 12, sm: hasSidePanel ? 412 : 12 },
-          transition: "left 0.25s ease",
+          transition: "left 0.25s ease, opacity 0.18s ease",
           zIndex: 10,
           ...(hiddenByFloatingCard
             ? {
@@ -154,6 +156,12 @@ export function LayerSelector() {
                 height: 1,
                 opacity: 0,
                 pointerEvents: "none",
+              }
+            : null),
+          ...(attributionExpanded
+            ? {
+                opacity: { xs: 0, sm: 1 },
+                pointerEvents: { xs: "none", sm: "auto" },
               }
             : null),
         }}
@@ -244,7 +252,7 @@ export function LayerSelector() {
           </Box>
         ) : (
           <Tooltip title={t("layers")} placement="right">
-            <Paper elevation={3} sx={{ borderRadius: "12px", overflow: "hidden" }}>
+            <Paper elevation={3} sx={{ borderRadius: "50%", overflow: "hidden" }}>
               <IconButton
                 onClick={handleOpen}
                 aria-label={t("openLayerMenu")}
@@ -254,6 +262,7 @@ export function LayerSelector() {
                 sx={{
                   width: 44,
                   height: 44,
+                  borderRadius: "50%",
                   color: "text.primary",
                 }}
               >
@@ -273,7 +282,7 @@ export function LayerSelector() {
         disableEnforceFocus
         disableAutoFocus
         disableRestoreFocus
-        hideBackdrop
+        hideBackdrop={desktopDock}
         anchorOrigin={
           desktopDock
             ? { vertical: "bottom", horizontal: "left" }
@@ -281,7 +290,8 @@ export function LayerSelector() {
         }
         transformOrigin={{ vertical: "bottom", horizontal: "left" }}
         slotProps={{
-          root: { sx: { pointerEvents: "none" } },
+          root: desktopDock ? { sx: { pointerEvents: "none" } } : undefined,
+          backdrop: desktopDock ? undefined : { invisible: true },
           paper: {
             sx: {
               pointerEvents: "auto",

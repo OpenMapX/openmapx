@@ -9,6 +9,7 @@ import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
+import { useMapAttributionExpandedObserver } from "@/lib/mapAttributionExpanded";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,6 +20,7 @@ export function MapCanvas() {
   const resolvedMode = mode === "system" ? systemMode : mode;
   const mapStyle = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
+  useMapAttributionExpandedObserver();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: mapStyle intentionally excluded — style changes handled by the style-swap effect below
   useEffect(() => {
@@ -55,7 +57,15 @@ export function MapCanvas() {
         canvasContextAttributes: { antialias: true },
       });
 
-      map.addControl(new maplibregl.AttributionControl({ compact: false }), "bottom-right");
+      // `compact` left undefined → MapLibre auto-collapses to an "i" button
+      // below 640px viewport width, which keeps the attribution from wrapping
+      // across the footer/legal links on mobile. The control's <details>
+      // element renders open by default in compact mode, so force it closed
+      // once after mounting.
+      map.addControl(new maplibregl.AttributionControl(), "bottom-right");
+      const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+      if (attrib instanceof HTMLDetailsElement) attrib.open = false;
+      attrib?.classList.remove("maplibregl-compact-show");
 
       map.on("moveend", () => {
         const c = map.getCenter();

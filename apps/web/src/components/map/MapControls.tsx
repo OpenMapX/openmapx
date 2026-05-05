@@ -10,9 +10,16 @@ import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import { useMapStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
+import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/MobileBottomSheet";
 import { useMap } from "@/lib/MapContext";
+import { useMapAttributionExpanded } from "@/lib/mapAttributionExpanded";
+import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { Pegman } from "./Pegman";
+
+const BASE_BOTTOM = 48;
+const PANEL_GAP = 12;
 
 export function MapControls() {
   const t = useTranslations("map");
@@ -20,21 +27,42 @@ export function MapControls() {
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
+  const mobilePanelHeight = useMobilePanelMaxHeight();
+  const attributionExpanded = useMapAttributionExpanded();
+  const [vh, setVh] = useState(0);
+  useEffect(() => {
+    const update = () => setVh(window.innerHeight);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  // Cap how far the controls follow the sheet — when the user drags above the
+  // medium snap, the sheet covers the controls anyway, so freezing the offset
+  // here keeps them in their last reachable position rather than scrolling
+  // them off the top of the visible map area.
+  const followHeight =
+    vh > 0 ? Math.min(mobilePanelHeight, vh * MOBILE_SHEET_FOLLOW_CAP_FRACTION) : mobilePanelHeight;
 
   return (
     <Box
       sx={{
         position: "absolute",
-        bottom: 48,
+        bottom: {
+          xs: followHeight > 0 ? followHeight + PANEL_GAP : BASE_BOTTOM,
+          sm: BASE_BOTTOM,
+        },
         right: 12,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         gap: 1,
         zIndex: 10,
+        opacity: { xs: attributionExpanded ? 0 : 1, sm: 1 },
+        pointerEvents: { xs: attributionExpanded ? "none" : "auto", sm: "auto" },
+        transition: "bottom 0.25s ease, opacity 0.18s ease",
       }}
     >
-      {/* My location — topmost, matches Google Maps order */}
+      {/* My location */}
       <Tooltip title={t("myLocation")} placement="left">
         <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
           <IconButton

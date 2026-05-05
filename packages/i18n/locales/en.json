@@ -45,7 +45,9 @@
     "noStopsFound": "No stops found in this area.",
     "failedToLoad": "Failed to load results. Try again.",
     "zoomInToSearch": "Zoom in to see results in this area.",
-    "partialResults": "Some results may be missing. Zoom in for complete results."
+    "partialResults": "Some results may be missing. Zoom in for complete results.",
+    "emptyStateSignedOut": "Sign in to see your saved places here.",
+    "emptyStateNoLabels": "Your saved places will appear here."
   },
   "nearby": {
     "title": "Nearby",

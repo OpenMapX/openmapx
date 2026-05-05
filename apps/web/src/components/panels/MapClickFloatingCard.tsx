@@ -72,7 +72,7 @@ export function MapClickFloatingCard() {
         bottom: 24,
         left: "50%",
         transform: "translateX(-50%)",
-        zIndex: 10,
+        zIndex: { xs: 11, sm: 10 },
         width: { xs: "calc(100% - 32px)", sm: 320 },
         maxWidth: 320,
         borderRadius: 2,
