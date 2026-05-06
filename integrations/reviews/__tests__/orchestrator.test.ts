@@ -1,6 +1,6 @@
 import type { LoadedIntegration } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
-import { getReviewProviders } from "../orchestrator.js";
+import { cacheKeyForSubject, getReviewProviders } from "../orchestrator.js";
 import type { ReviewProvider } from "../types.js";
 
 function reviewProvider(id: string): ReviewProvider {
@@ -64,5 +64,23 @@ describe("getReviewProviders", () => {
     ]);
 
     expect(providers.map((p) => p.id)).toEqual(["first", "second", "third"]);
+  });
+});
+
+describe("cacheKeyForSubject", () => {
+  it("separates otherwise-identical subjects by OSM identity", () => {
+    const base = { lat: 50.7750682, lng: 6.0877905, name: "Frittenwerk" };
+
+    expect(cacheKeyForSubject({ ...base, osmId: "node/4506022549" })).not.toBe(
+      cacheKeyForSubject({ ...base, osmId: "node/1" }),
+    );
+  });
+
+  it("normalizes OSM refs in cache keys", () => {
+    const base = { lat: 50.7750682, lng: 6.0877905, name: "Frittenwerk" };
+
+    expect(cacheKeyForSubject({ ...base, osmId: "osm:Node/4506022549/7" })).toBe(
+      cacheKeyForSubject({ ...base, osmId: "node/4506022549" }),
+    );
   });
 });

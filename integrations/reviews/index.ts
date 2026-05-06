@@ -107,6 +107,10 @@ export function setup(ctx: IntegrationContext): void {
             lat: Number(body.invalidate.lat),
             lng: Number(body.invalidate.lng),
             name: String(body.invalidate.name),
+            osmId:
+              typeof body.invalidate.osmId === "string"
+                ? body.invalidate.osmId.trim() || undefined
+                : undefined,
           };
           const segment = cacheKeyForSubject(subject);
           await Promise.allSettled([

@@ -9,7 +9,7 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { MergedRoute, Place, TransportMode } from "@openmapx/core";
-import { usePlaceStore } from "@openmapx/core";
+import { usePlaceStore, useReviewAggregate } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TEAL } from "@/lib/theme";
@@ -77,6 +77,19 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   // set rawCategory = "transit_stop". Stop mode never renders the photo
   // hero, so suppress floating-handle mode there too.
   const isStopMode = place.rawCategory === "transit_stop";
+  const [lng, lat] = place.coordinates;
+  const headerAggregateQuery = useReviewAggregate(lat, lng, place.name, {
+    osmId: place.ids?.osm,
+    enabled: !isStopMode,
+  });
+  const headerReviewStats =
+    headerAggregateQuery.data !== undefined
+      ? headerAggregateQuery.data.count > 0
+        ? { rating: headerAggregateQuery.data.stars, count: headerAggregateQuery.data.count }
+        : null
+      : place.rating
+        ? { rating: place.rating, count: place.reviewCount ?? 0 }
+        : null;
   const placePhotos = place.photos ?? [];
   const hasPhoto =
     !isStopMode &&
@@ -236,14 +249,14 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         <Typography variant="h6" fontWeight={600} gutterBottom sx={{ pr: onClose ? 4 : 0 }}>
           {place.name}
         </Typography>
-        {place.rating && (
+        {headerReviewStats && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
             <Typography variant="body2" fontWeight={600}>
-              {place.rating.toFixed(1)}
+              {headerReviewStats.rating.toFixed(1)}
             </Typography>
             <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
             <Typography variant="body2" color="text.secondary">
-              ({place.reviewCount?.toLocaleString(locale)})
+              ({headerReviewStats.count.toLocaleString(locale)})
             </Typography>
           </Box>
         )}

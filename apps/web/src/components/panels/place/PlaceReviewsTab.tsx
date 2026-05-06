@@ -50,8 +50,8 @@ export function PlaceReviewsTab({ place }: Props) {
   // Mangrove's metadata.osm_id is reserved for `node|way|relation/ID[/VERSION]`.
   const subject = { lat, lng, name: place.name, osmId: place.ids?.osm };
 
-  const aggregateQuery = useReviewAggregate(lat, lng, place.name);
-  const reviewsQuery = usePlaceReviews(lat, lng, place.name);
+  const aggregateQuery = useReviewAggregate(lat, lng, place.name, { osmId: place.ids?.osm });
+  const reviewsQuery = usePlaceReviews(lat, lng, place.name, { osmId: place.ids?.osm });
 
   // Attribution pulled from each review provider's manifest `dataSources`
   // (same pattern as PlaceWeather, DataSourceSections, etc.). Today we show

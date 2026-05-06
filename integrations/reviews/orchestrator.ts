@@ -1,4 +1,5 @@
 import type { LoadedIntegration } from "@openmapx/core";
+import { normalizeOsmElementRef } from "@openmapx/core";
 import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "./types.js";
 
 export function getReviewProviders(integrations: LoadedIntegration[]): ReviewProvider[] {
@@ -86,7 +87,7 @@ export async function uploadReviewImage(
   return p.uploadImage(file, filename);
 }
 
-/** Stable cache key segment from (lat, lng, name). */
+/** Stable cache key segment from (lat, lng, name, optional OSM identity). */
 export function cacheKeyForSubject(subject: ReviewSubject): string {
   const lat = subject.lat.toFixed(6);
   const lng = subject.lng.toFixed(6);
@@ -95,5 +96,6 @@ export function cacheKeyForSubject(subject: ReviewSubject): string {
     .toLowerCase()
     .replace(/[^\w]+/g, "-")
     .slice(0, 60);
-  return `${lat}:${lng}:${nameSlug}`;
+  const osm = normalizeOsmElementRef(subject.osmId)?.replace("/", "-") ?? "no-osm";
+  return `${lat}:${lng}:${nameSlug}:${osm}`;
 }

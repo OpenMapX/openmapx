@@ -56,12 +56,13 @@ async function safeAggregate(
   lat: number,
   lng: number,
   name: string,
+  osmId: string | undefined,
   providers: ReviewProvider[],
 ): Promise<{ stars: number; count: number } | null> {
   if (!name) return null;
   try {
     const result = await Promise.race([
-      fetchAggregate({ lat, lng, name }, providers),
+      fetchAggregate({ lat, lng, name, osmId }, providers),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
     ]);
     if (!result || result.count < 3 || result.stars <= 0) return null;
@@ -92,7 +93,13 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     : [];
   const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
   const [plng, plat] = enriched.coordinates;
-  const reviewStats = await safeAggregate(plat, plng, enriched.name, reviewProviders);
+  const reviewStats = await safeAggregate(
+    plat,
+    plng,
+    enriched.name,
+    enriched.ids?.osm,
+    reviewProviders,
+  );
   return {
     ...enriched,
     ...knowledge,

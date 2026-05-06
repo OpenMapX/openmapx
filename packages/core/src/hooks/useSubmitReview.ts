@@ -77,7 +77,12 @@ export function useSubmitReview() {
       const jwt = await signMangroveReview(payload, keypair);
       return apiClient.post<SubmitResponse>(API_ENDPOINTS.reviewSubmit, {
         jwt,
-        invalidate: { lat: input.subject.lat, lng: input.subject.lng, name: input.subject.name },
+        invalidate: {
+          lat: input.subject.lat,
+          lng: input.subject.lng,
+          name: input.subject.name,
+          osmId: input.subject.osmId,
+        },
       });
     },
     onSuccess: (_data, vars) => {
