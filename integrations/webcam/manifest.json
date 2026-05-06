@@ -186,6 +186,11 @@
       "type": "http",
       "urlTemplate": "https://www.mass511.com/api/v2/get/cameras?key=${dotMaApiKey}&format=json",
       "requiredConfigKeys": ["dotMaApiKey"]
+    },
+    {
+      "name": "OpenStreetMap Overpass",
+      "type": "http",
+      "url": "https://overpass-api.de/api/status"
     }
   ],
   "quality": "built-in",

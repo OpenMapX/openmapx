@@ -58,6 +58,11 @@
       "name": "Minetur (ES)",
       "type": "ping",
       "url": "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/"
+    },
+    {
+      "name": "OpenStreetMap Overpass",
+      "type": "http",
+      "url": "https://overpass-api.de/api/status"
     }
   ],
   "quality": "built-in",

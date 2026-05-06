@@ -6,6 +6,18 @@
   "domains": ["photos"],
   "dependencies": ["geocoding"],
   "backend": { "routes": true },
+  "healthCheck": [
+    {
+      "name": "OpenStreetMap",
+      "type": "http",
+      "url": "https://www.openstreetmap.org/api/0.6/capabilities"
+    },
+    {
+      "name": "Google Photos",
+      "type": "ping",
+      "url": "https://photos.google.com/"
+    }
+  ],
   "quality": "built-in",
   "category": "External",
   "dataSources": [

@@ -37,10 +37,23 @@
       }
     }
   },
-  "healthCheck": {
-    "type": "http",
-    "url": "https://hiking.waymarkedtrails.org/api/v1/list/search?query=test&limit=1"
-  },
+  "healthCheck": [
+    {
+      "name": "Waymarked Trails",
+      "type": "http",
+      "url": "https://hiking.waymarkedtrails.org/api/v1/list/search?query=test&limit=1"
+    },
+    {
+      "name": "Refuges.info",
+      "type": "http",
+      "url": "https://www.refuges.info/api/bbox?bbox=6.85,45.9,6.86,45.91&format=geojson&detail=simple&nb_points=1"
+    },
+    {
+      "name": "OpenStreetMap Overpass",
+      "type": "http",
+      "url": "https://overpass-api.de/api/status"
+    }
+  ],
   "quality": "built-in",
   "category": "Map Overlays",
   "dataSources": [

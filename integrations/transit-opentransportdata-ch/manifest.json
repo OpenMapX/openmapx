@@ -98,9 +98,98 @@
   "backend": {
     "routes": false
   },
-  "healthCheck": {
-    "type": "custom"
-  },
+  "healthCheck": [
+    {
+      "name": "OJP",
+      "type": "ping",
+      "url": "https://api.opentransportdata.swiss/ojp20",
+      "urlTemplate": "${ojpEndpoint}",
+      "headers": {
+        "Authorization": "Bearer ${apiKey}"
+      },
+      "requiredConfigKeys": ["apiKey"]
+    },
+    {
+      "name": "OJP geometry / OSM attribution",
+      "type": "http",
+      "url": "https://www.openstreetmap.org/api/0.6/capabilities"
+    },
+    {
+      "name": "GTFS static timetable",
+      "type": "http",
+      "url": "https://opentransportdata.swiss/en/cookbook/timetable-cookbook/gtfs/"
+    },
+    {
+      "name": "GTFS Realtime Service Alerts",
+      "type": "http",
+      "url": "https://api.opentransportdata.swiss/la/gtfs-sa",
+      "urlTemplate": "${gtfsSaEndpoint}",
+      "headers": {
+        "Authorization": "Bearer ${apiKey}"
+      },
+      "requiredConfigKeys": ["apiKey"]
+    },
+    {
+      "name": "GTFS Realtime Trip Updates",
+      "type": "http",
+      "url": "https://api.opentransportdata.swiss/la/gtfs-rt",
+      "urlTemplate": "${gtfsRtEndpoint}",
+      "headers": {
+        "Authorization": "Bearer ${apiKey}"
+      },
+      "requiredConfigKeys": ["apiKey"]
+    },
+    {
+      "name": "SIRI Situation Exchange",
+      "type": "http",
+      "url": "https://api.opentransportdata.swiss/la/siri-sx",
+      "urlTemplate": "${siriSxEndpoint}",
+      "headers": {
+        "Authorization": "Bearer ${apiKey}"
+      },
+      "requiredConfigKeys": ["apiKey"]
+    },
+    {
+      "name": "OJP Fare",
+      "type": "ping",
+      "url": "https://api.opentransportdata.swiss/ojpfare",
+      "urlTemplate": "${ojpFareEndpoint}",
+      "headers": {
+        "Authorization": "Bearer ${apiKey}"
+      },
+      "requiredConfigKeys": ["apiKey"]
+    },
+    {
+      "name": "Train formation",
+      "type": "ping",
+      "url": "https://api.opentransportdata.swiss/formation",
+      "urlTemplate": "${formationEndpoint}",
+      "headers": {
+        "Authorization": "Bearer ${apiKey}"
+      },
+      "requiredConfigKeys": ["apiKey"]
+    },
+    {
+      "name": "Occupancy forecast",
+      "type": "http",
+      "url": "https://data.opentransportdata.swiss/en/dataset/occupancy-forecast-json-dataset/permalink"
+    },
+    {
+      "name": "GO realtime",
+      "type": "http",
+      "url": "https://data.opentransportdata.swiss/dataset/27aba9bd-59ed-4d7c-bc71-a3813d1d1799/resource/83b8b8d0-e345-453b-857e-1192d48c4c64/download/go-realtime.csv"
+    },
+    {
+      "name": "GO SIRI-SX",
+      "type": "http",
+      "url": "https://data.opentransportdata.swiss/dataset/b3ac097b-ff72-4a1f-9d69-76e72962d769/resource/a8312f3a-18a6-4e92-9906-bbb623a24369/download/go-siri-sx.csv"
+    },
+    {
+      "name": "Master data",
+      "type": "http",
+      "url": "https://data.opentransportdata.swiss/en/dataset/service-points-actual-date"
+    }
+  ],
   "dataSources": [
     {
       "sourceId": "opentransportdata-ch-ojp",

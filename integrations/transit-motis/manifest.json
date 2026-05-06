@@ -44,10 +44,19 @@
   "backend": {
     "routes": true
   },
-  "healthCheck": {
-    "type": "http",
-    "url": "https://api.transitous.org/api/v1/geocode?text=test"
-  },
+  "healthCheck": [
+    {
+      "name": "Transitous",
+      "type": "http",
+      "url": "https://api.transitous.org/api/v1/geocode?text=test"
+    },
+    {
+      "name": "MOTIS self-hosted",
+      "type": "ping",
+      "urlTemplate": "${endpoint}/api/v1/geocode?text=test",
+      "requiredConfigKeys": ["endpoint"]
+    }
+  ],
   "dataSources": [
     {
       "sourceId": "transitous",

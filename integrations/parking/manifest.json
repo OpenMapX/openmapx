@@ -160,6 +160,12 @@
       "url": "https://datos.madrid.es/egob/catalogo/202625-0-aparcamientos-publicos.json"
     },
     {
+      "name": "NE Travel Data (Newcastle)",
+      "type": "ping",
+      "url": "https://www.netraveldata.co.uk/api/v1/carpark/static",
+      "requiredConfigKeys": ["utmcUsername", "utmcPassword"]
+    },
+    {
       "name": "NDW Truck Parking (NL)",
       "type": "http",
       "url": "https://opendata.ndw.nu/Truckparking_Parking_Status.xml"
@@ -198,6 +204,11 @@
       "name": "NRW Mobidrom (GOLDBECK)",
       "type": "http",
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-goldbeck-parking-services.json"
+    },
+    {
+      "name": "OpenStreetMap Overpass",
+      "type": "http",
+      "url": "https://overpass-api.de/api/status"
     }
   ],
   "quality": "built-in",

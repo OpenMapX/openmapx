@@ -62,6 +62,31 @@
       "name": "Donkey Republic",
       "type": "ping",
       "url": "https://stables.donkey.bike/api/public/nearby?latitude=52.52&longitude=13.405&radius=1"
+    },
+    {
+      "name": "Deutsche Bahn GBFS",
+      "type": "http",
+      "url": "https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de/CallABike/system_information",
+      "headers": {
+        "DB-Client-ID": "${clientId}",
+        "DB-Api-Key": "${apiKey}"
+      },
+      "requiredConfigKeys": ["clientId", "apiKey"]
+    },
+    {
+      "name": "GBFS Catalog",
+      "type": "http",
+      "url": "https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv"
+    },
+    {
+      "name": "Entur Mobility",
+      "type": "ping",
+      "url": "https://api.entur.io/mobility/v2/graphql"
+    },
+    {
+      "name": "Transitous Rentals",
+      "type": "http",
+      "url": "https://api.transitous.org/api/v1/geocode?text=test"
     }
   ],
   "quality": "built-in",

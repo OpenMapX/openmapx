@@ -61,9 +61,26 @@
   "backend": {
     "routes": false
   },
-  "healthCheck": {
-    "type": "custom"
-  },
+  "healthCheck": [
+    {
+      "name": "Entur Journey Planner",
+      "type": "ping",
+      "url": "https://api.entur.io/journey-planner/v3/graphql",
+      "urlTemplate": "${journeyPlannerEndpoint}"
+    },
+    {
+      "name": "Entur Vehicle Positions",
+      "type": "ping",
+      "url": "https://api.entur.io/realtime/v2/vehicles/graphql",
+      "urlTemplate": "${vehiclesEndpoint}"
+    },
+    {
+      "name": "Entur National Stop Register",
+      "type": "ping",
+      "url": "https://api.entur.io/stop-places/v1/read",
+      "urlTemplate": "${nsrEndpoint}"
+    }
+  ],
   "dataSources": [
     {
       "sourceId": "entur-journey-planner",
