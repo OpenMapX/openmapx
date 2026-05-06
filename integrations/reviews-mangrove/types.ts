@@ -6,6 +6,8 @@ export interface MangroveWireReview {
   kid: string;
   payload: MangroveWirePayload;
   scheme?: string;
+  /** Present on latest edit/delete records returned for the original place subject. */
+  original_sub?: string;
 }
 
 export interface MangroveWirePayload {

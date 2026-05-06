@@ -18,7 +18,13 @@ const FETCH_TIMEOUT_MS = 8_000;
 
 export async function mangroveGetReviews(
   sub: string,
-  opts?: { limit?: number; offset?: number; issuers?: boolean; maresiSubjects?: boolean },
+  opts?: {
+    limit?: number;
+    offset?: number;
+    issuers?: boolean;
+    maresiSubjects?: boolean;
+    latestEditsOnly?: boolean;
+  },
 ): Promise<MangroveWireReviewsResponse> {
   const url = new URL(`${MANGROVE_API_URL}/reviews`);
   url.searchParams.set("sub", sub);
@@ -26,6 +32,9 @@ export async function mangroveGetReviews(
   if (opts?.offset !== undefined) url.searchParams.set("offset", String(opts.offset));
   if (opts?.issuers) url.searchParams.set("issuers", "true");
   if (opts?.maresiSubjects) url.searchParams.set("maresi_subjects", "true");
+  if (opts?.latestEditsOnly !== undefined) {
+    url.searchParams.set("latest_edits_only", String(opts.latestEditsOnly));
+  }
 
   const res = await fetch(url.toString(), {
     headers: JSON_HEADERS,

@@ -1,8 +1,11 @@
 import {
   buildMangroveQueryUri,
   haversineDistanceMeters,
+  normalizeMangrovePlaceName,
+  normalizeOsmElementRef,
   parseMangroveGeoUri,
   REVIEW_MATCH_MAX_DISTANCE_METERS,
+  REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS,
 } from "@openmapx/core";
 import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "../reviews/types.js";
 import { mangroveGetReviews, mangroveSubmit, mangroveUploadImage } from "./client.js";
@@ -25,6 +28,13 @@ function toReview(subject: ReviewSubject, wire: MangroveWireReview): Review {
 
   const stars = payload.rating !== undefined ? payload.rating / 20 : undefined;
 
+  const license =
+    metadata.license === "CC-BY-SA-4.0"
+      ? "CC-BY-SA-4.0"
+      : metadata.license === "CC-BY-4.0"
+        ? "CC-BY-4.0"
+        : undefined;
+
   return {
     id: wire.signature,
     subject,
@@ -44,9 +54,19 @@ function toReview(subject: ReviewSubject, wire: MangroveWireReview): Review {
       clientId: metadata.client_id,
       experienceContext: metadata.experience_context,
       isAffiliated: metadata.is_affiliated,
-      license: metadata.license === "CC-BY-SA-4.0" ? "CC-BY-SA-4.0" : "CC-BY-4.0",
+      license,
     },
   };
+}
+
+function wireSubjectForPlaceMatch(wire: MangroveWireReview): string | undefined {
+  const sub = wire.payload?.sub;
+  if (typeof sub !== "string") return undefined;
+  if (sub.startsWith("geo:")) return sub;
+  if (sub.startsWith(MARESI_PREFIX) && typeof wire.original_sub === "string") {
+    return wire.original_sub;
+  }
+  return undefined;
 }
 
 /**
@@ -56,14 +76,19 @@ function toReview(subject: ReviewSubject, wire: MangroveWireReview): Review {
  *  - reviews submitted with very large `u` can match well beyond our place;
  *  - upstream radius is `stored_u + query_u`, which we want to bound.
  *
- * `urn:maresi:` action records (edit/delete) carry no geo of their own — we
- * keep them here and let `applyMutations` drop ones whose target wasn't
- * spatially-matched.
+ * `urn:maresi:` action records (edit/delete) carry no geo in `payload.sub`;
+ * Mangrove returns their reviewed place in `original_sub` when they appear in
+ * a geo-subject query, so we match against that original subject.
+ *
+ * Spatial closeness is necessary but not sufficient. Dense map areas can have
+ * unrelated POIs inside one another's uncertainty radius, so non-action
+ * reviews also need either matching OSM metadata or, when OSM metadata is
+ * incomplete, a matching `geo:` `q=` place name. Records without either
+ * identity signal only attach at a very small distance.
  */
 function isWireReviewWithinSubject(wire: MangroveWireReview, subject: ReviewSubject): boolean {
-  const sub = wire.payload?.sub;
-  if (typeof sub !== "string") return false;
-  if (sub.startsWith(MARESI_PREFIX)) return true;
+  const sub = wireSubjectForPlaceMatch(wire);
+  if (!sub) return false;
   if (!sub.startsWith("geo:")) return false;
   const parsed = parseMangroveGeoUri(sub);
   if (!parsed) return false;
@@ -71,7 +96,71 @@ function isWireReviewWithinSubject(wire: MangroveWireReview, subject: ReviewSubj
     { lat: parsed.lat, lng: parsed.lng },
     { lat: subject.lat, lng: subject.lng },
   );
-  return dist <= REVIEW_MATCH_MAX_DISTANCE_METERS;
+  if (dist > REVIEW_MATCH_MAX_DISTANCE_METERS) return false;
+
+  const reviewOsmId = normalizeOsmElementRef(wire.payload.metadata?.osm_id);
+  const subjectOsmId = normalizeOsmElementRef(subject.osmId);
+  if (reviewOsmId && subjectOsmId) return reviewOsmId === subjectOsmId;
+
+  const reviewName = normalizeMangrovePlaceName(parsed.name);
+  const subjectName = normalizeMangrovePlaceName(subject.name);
+  if (reviewName && subjectName) return reviewName === subjectName;
+
+  return dist <= REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS;
+}
+
+function mergeMetadata(
+  original: Review["metadata"],
+  update: Review["metadata"],
+): Review["metadata"] {
+  const merged: Review["metadata"] = { ...(original ?? {}) };
+  for (const [key, value] of Object.entries(update ?? {})) {
+    if (value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  return merged;
+}
+
+function normalizeReviewAuthorNickname(nickname: string | undefined): string | undefined {
+  const normalized = nickname?.normalize("NFKC").trim().toLowerCase();
+  return normalized ? normalized : undefined;
+}
+
+function dedupKeyForEffectiveReview(review: Review): string {
+  const nickname = normalizeReviewAuthorNickname(review.author.nickname);
+  return nickname ? `${review.author.kid}\n${nickname}` : review.author.kid;
+}
+
+function isNewerReview(candidate: Review, current: Review): boolean {
+  const candidateTime = Date.parse(candidate.createdAt);
+  const currentTime = Date.parse(current.createdAt);
+  if (candidateTime !== currentTime) return candidateTime > currentTime;
+  return candidate.id > current.id;
+}
+
+/**
+ * Collapse duplicate original reviews after action projection. OpenMapX treats
+ * a place review as the author's current opinion for that place; imported
+ * sources can still contain several original records for one author/place
+ * without using Mangrove's edit chain. Keeping the newest effective review
+ * prevents one author/source-account from voting multiple times.
+ *
+ * The nickname participates in the key because legacy imports may be signed by
+ * one importer key while preserving the original reviewer only as metadata.
+ */
+function collapseDuplicateEffectiveReviews(reviews: Review[]): Review[] {
+  const byAuthor = new Map<string, Review>();
+
+  for (const review of reviews) {
+    const key = dedupKeyForEffectiveReview(review);
+    const current = byAuthor.get(key);
+    if (!current || isNewerReview(review, current)) {
+      byAuthor.set(key, review);
+    }
+  }
+
+  return Array.from(byAuthor.values());
 }
 
 /**
@@ -81,12 +170,12 @@ function isWireReviewWithinSubject(wire: MangroveWireReview, subject: ReviewSubj
  *  - `delete` removes the target from display entirely.
  *  - edit/delete MUST be signed by the same keypair as the original.
  *
- * Mangrove's geo-sub response with `latest_edits_only` (default true) can
- * elide originals when their latest edit is what's returned. We previously
- * trusted such orphan mutations at face value, but now that we explicitly
- * spatial-filter originals, an absent original means the target is outside
- * our radius — so we drop the orphan rather than synthesizing a phantom
- * review at the queried location.
+ * Mangrove's geo-sub response with `latest_edits_only` (default true) returns
+ * the latest edit record instead of the original. We fetch original records
+ * as a companion read when actions are present so partial edits can preserve
+ * original fields such as images. If that companion read fails, an edit whose
+ * `original_sub` matched the place is still shown as a best-effort effective
+ * review under the original review id.
  */
 function applyMutations(reviews: Review[]): Review[] {
   const effective = new Map<string, Review>();
@@ -102,7 +191,17 @@ function applyMutations(reviews: Review[]): Review[] {
   for (const m of mutations) {
     if (!m.targetId) continue;
     const original = effective.get(m.targetId);
-    if (!original) continue;
+    if (!original) {
+      if (m.action === "edit") {
+        effective.set(m.targetId, {
+          ...m,
+          id: m.targetId,
+          action: undefined,
+          targetId: undefined,
+        });
+      }
+      continue;
+    }
     if (original.author.kid !== m.author.kid) continue;
 
     if (m.action === "delete") {
@@ -115,7 +214,7 @@ function applyMutations(reviews: Review[]): Review[] {
         opinion: m.opinion ?? original.opinion,
         images: m.images ?? original.images,
         createdAt: m.createdAt,
-        metadata: { ...original.metadata, ...m.metadata },
+        metadata: mergeMetadata(original.metadata, m.metadata),
       });
     }
     // "report_abuse" and "equivalence" don't change display here.
@@ -170,11 +269,25 @@ export const mangroveProvider: ReviewProvider = {
     // bleed in same-named reviews from across the world. The post-filter
     // below tightens the upstream `stored_u + query_u` radius to a sane cap.
     const sub = buildMangroveQueryUri(subject);
-    const { reviews } = await mangroveGetReviews(sub, { limit: 200 });
+    const latest = await mangroveGetReviews(sub, { limit: 200 });
+    const hasAction = latest.reviews.some(
+      (r) => r.payload.action && r.payload.sub?.startsWith(MARESI_PREFIX),
+    );
+    const originalReviews = hasAction
+      ? await mangroveGetReviews(sub, { limit: 200, latestEditsOnly: false })
+          .then((r) => r.reviews)
+          .catch(() => [])
+      : [];
+    const seen = new Set<string>();
+    const reviews = [...originalReviews, ...latest.reviews].filter((r) => {
+      if (seen.has(r.signature)) return false;
+      seen.add(r.signature);
+      return true;
+    });
     const mapped = reviews
       .filter((r) => isWireReviewWithinSubject(r, subject))
       .map((r) => toReview(subject, r));
-    return applyMutations(mapped);
+    return collapseDuplicateEffectiveReviews(applyMutations(mapped));
   },
 
   async getAggregate(subject: ReviewSubject): Promise<ReviewAggregate> {
