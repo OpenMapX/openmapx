@@ -82,6 +82,16 @@ export interface GtfsDepartureRow {
   stop_sequence: number;
 }
 
+export interface GtfsRouteRow {
+  route_id: string;
+  route_short_name: string | null;
+  route_long_name: string | null;
+  route_type: number;
+  route_color: string | null;
+  route_text_color: string | null;
+  agency_name: string | null;
+}
+
 export interface GtfsRepresentativeTripRow {
   trip_id: string;
   route_id: string;
@@ -104,6 +114,10 @@ export interface GtfsTripStopRow {
   platform_code: string | null;
   original_stop_id: string | null;
   stop_sequence: number;
+  /** Scheduled arrival as ISO string, joined from stop_times. */
+  t_arrival: string | null;
+  /** Scheduled departure as ISO string, joined from stop_times. */
+  t_departure: string | null;
 }
 
 export interface GtfsShapePointRow {

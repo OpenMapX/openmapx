@@ -1,4 +1,13 @@
-import type { BBox, Departure, TransitStop, TransportMode } from "@openmapx/core";
+import type {
+  BBox,
+  Departure,
+  GeoJSONLineString,
+  TransitRoute,
+  TransitStop,
+  TransportMode,
+  VehicleJourney,
+  VehicleJourneyStop,
+} from "@openmapx/core";
 
 /**
  * Transit provider backed by locally-imported GTFS feeds in PostGIS.
@@ -18,6 +27,40 @@ export interface GtfsStopRow {
   parent_station: string | null;
   platform_code: string | null;
   route_types: number[] | null;
+}
+
+/** Row from a GTFS trip-stops query (sequence + scheduled times). */
+export interface GtfsTripStopRow {
+  stop_id: string;
+  stop_name: string;
+  stop_lat: number;
+  stop_lon: number;
+  parent_station: string | null;
+  platform_code: string | null;
+  original_stop_id: string | null;
+  stop_sequence: number;
+  /** Scheduled arrival as ISO string, anchored to CURRENT_DATE (see queries.ts). */
+  t_arrival: string | null;
+  /** Scheduled departure as ISO string, anchored to CURRENT_DATE (see queries.ts). */
+  t_departure: string | null;
+}
+
+/** Row from a GTFS routes query (joined with agency for operator name). */
+export interface GtfsRouteRow {
+  route_id: string;
+  route_short_name: string | null;
+  route_long_name: string | null;
+  route_type: number;
+  route_color: string | null;
+  route_text_color: string | null;
+  agency_name: string | null;
+}
+
+/** Row from a GTFS shapes query. */
+export interface GtfsShapePointRow {
+  shape_pt_lat: number;
+  shape_pt_lon: number;
+  shape_pt_sequence: number;
 }
 
 /** Row from a GTFS departure or arrival query */
@@ -54,6 +97,18 @@ export interface GtfsDeps {
     getArrivals(schema: string, stopId: string, minutes: number): Promise<GtfsDepartureRow[]>;
     getDeparturesByDate(schema: string, stopId: string, date: string): Promise<GtfsDepartureRow[]>;
     getChildStops(schema: string, stopId: string): Promise<GtfsStopRow[]>;
+    getTripStops(schema: string, tripId: string): Promise<GtfsTripStopRow[]>;
+    getRouteById(schema: string, routeId: string): Promise<GtfsRouteRow | null>;
+    getRoutesForStop(schema: string, stopId: string): Promise<GtfsRouteRow[]>;
+    getRouteStops(schema: string, routeId: string, hintStopId?: string): Promise<GtfsTripStopRow[]>;
+    getTripShapeId(schema: string, tripId: string): Promise<string | null>;
+    getTripStopSequenceRange(
+      schema: string,
+      tripId: string,
+      fromStopId: string,
+      toStopId: string,
+    ): Promise<{ from: number; to: number } | null>;
+    getShapePoints(schema: string, shapeId: string): Promise<GtfsShapePointRow[]>;
   };
 }
 
@@ -249,6 +304,45 @@ export async function getTimetable(stopId: string, date: string): Promise<Depart
   }
 }
 
+/**
+ * Fetch the ordered stop list for a single trip. Used by the trip-detail
+ * panel via the orchestrator's `getVehicleJourney`.
+ *
+ * The `tripId` arrives prefixed with `g-<slug>:` from the merged-departure
+ * dedup; we strip the prefix to get the raw GTFS `trip_id` before querying
+ * the feed's schema. Returns null when the prefix doesn't resolve to an
+ * active feed or the trip has no stop_times rows.
+ */
+export async function getVehicleJourney(tripId: string): Promise<VehicleJourney | null> {
+  const { manager, queries } = deps();
+  const schema = manager.getSchemaForStopId(tripId);
+  const originalTripId = manager.getOriginalStopId(tripId);
+  const slug = manager.getSlugFromStopId(tripId);
+  if (!schema || !originalTripId || !slug) return null;
+
+  try {
+    const rows = await queries.getTripStops(schema, originalTripId);
+    if (rows.length === 0) return null;
+    const stops: VehicleJourneyStop[] = rows.map((row) => ({
+      stopId: `g-${slug}:${row.stop_id}`,
+      name: row.stop_name ?? "",
+      lat: row.stop_lat,
+      lng: row.stop_lon,
+      platform: row.platform_code ?? undefined,
+      scheduledArrival: row.t_arrival ?? undefined,
+      scheduledDeparture: row.t_departure ?? undefined,
+    }));
+    return {
+      id: tripId,
+      name: originalTripId,
+      provider: `gtfs-${slug}`,
+      stops,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getPlatformStops(stopId: string): Promise<TransitStop[]> {
   const { manager, queries } = deps();
   const schema = manager.getSchemaForStopId(stopId);
@@ -261,6 +355,183 @@ export async function getPlatformStops(stopId: string): Promise<TransitStop[]> {
     return rows.map((row) => rowToStop(row, slug));
   } catch {
     return [];
+  }
+}
+
+function rowToRoute(row: GtfsRouteRow, slug: string): TransitRoute {
+  return {
+    id: `g-${slug}:${row.route_id}`,
+    shortName: row.route_short_name ?? "",
+    longName: row.route_long_name ?? "",
+    mode: toTransportMode(row.route_type),
+    color: row.route_color?.replace(/^#/, "") ?? undefined,
+    textColor: row.route_text_color?.replace(/^#/, "") ?? undefined,
+    operatorName: row.agency_name ?? "",
+  };
+}
+
+/** Single route by id. Returns null when the prefix doesn't resolve to an active feed. */
+export async function getRoute(routeId: string): Promise<TransitRoute | null> {
+  const { manager, queries } = deps();
+  const schema = manager.getSchemaForStopId(routeId);
+  const originalRouteId = manager.getOriginalStopId(routeId);
+  const slug = manager.getSlugFromStopId(routeId);
+  if (!schema || !originalRouteId || !slug) return null;
+
+  try {
+    const row = await queries.getRouteById(schema, originalRouteId);
+    if (!row) return null;
+    return rowToRoute(row, slug);
+  } catch {
+    return null;
+  }
+}
+
+/** Routes that serve a given stop. */
+export async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> {
+  const { manager, queries } = deps();
+  const schema = manager.getSchemaForStopId(stopId);
+  const originalId = manager.getOriginalStopId(stopId);
+  const slug = manager.getSlugFromStopId(stopId);
+  if (!schema || !originalId || !slug) return [];
+
+  try {
+    const rows = await queries.getRoutesForStop(schema, originalId);
+    return rows.map((row) => rowToRoute(row, slug));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Stops served by a route. `hintStopId` (if supplied and on the same feed)
+ * biases the picked representative trip toward the direction the user
+ * clicked from.
+ */
+export async function getRouteStops(routeId: string, hintStopId?: string): Promise<TransitStop[]> {
+  const { manager, queries } = deps();
+  const schema = manager.getSchemaForStopId(routeId);
+  const originalRouteId = manager.getOriginalStopId(routeId);
+  const slug = manager.getSlugFromStopId(routeId);
+  if (!schema || !originalRouteId || !slug) return [];
+
+  // Hint must come from the same feed; cross-feed hints are silently ignored.
+  let originalHint: string | undefined;
+  if (hintStopId) {
+    const hintSlug = manager.getSlugFromStopId(hintStopId);
+    if (hintSlug === slug) {
+      originalHint = manager.getOriginalStopId(hintStopId) ?? undefined;
+    }
+  }
+
+  try {
+    const rows = await queries.getRouteStops(schema, originalRouteId, originalHint);
+    return rows.map((row) => ({
+      id: `g-${slug}:${row.stop_id}`,
+      name: row.stop_name ?? "Unknown",
+      lat: row.stop_lat,
+      lng: row.stop_lon,
+      modes: [],
+      platformCode: row.platform_code ?? undefined,
+      parentStationId: row.parent_station ? `g-${slug}:${row.parent_station}` : undefined,
+      provider: `gtfs-${slug}`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Trip shape as a GeoJSON LineString. When `fromStopId`/`toStopId` are
+ * supplied, the shape is trimmed to the matching stop_sequence range so the
+ * directions panel can render only the relevant leg.
+ *
+ * Trimming uses stop locations (not shape_dist_traveled, which most feeds
+ * omit): we pick the shape points whose nearest-stop window falls within
+ * [fromSeq, toSeq] using a simple bracket search.
+ */
+export async function getLegGeometry(
+  tripId: string,
+  fromStopId?: string,
+  toStopId?: string,
+): Promise<GeoJSONLineString | null> {
+  const { manager, queries } = deps();
+  const schema = manager.getSchemaForStopId(tripId);
+  const originalTripId = manager.getOriginalStopId(tripId);
+  const slug = manager.getSlugFromStopId(tripId);
+  if (!schema || !originalTripId || !slug) return null;
+
+  try {
+    const shapeId = await queries.getTripShapeId(schema, originalTripId);
+    if (!shapeId) return null;
+    const points = await queries.getShapePoints(schema, shapeId);
+    if (points.length === 0) return null;
+
+    // No trim requested → full shape.
+    if (!fromStopId || !toStopId) {
+      return {
+        type: "LineString",
+        coordinates: points.map((p) => [p.shape_pt_lon, p.shape_pt_lat]),
+      };
+    }
+
+    // Resolve the original stop ids on the same feed; otherwise fall through
+    // to full shape rather than returning a misleading empty leg.
+    const fromSlug = manager.getSlugFromStopId(fromStopId);
+    const toSlug = manager.getSlugFromStopId(toStopId);
+    const fromOriginal = manager.getOriginalStopId(fromStopId);
+    const toOriginal = manager.getOriginalStopId(toStopId);
+    if (fromSlug !== slug || toSlug !== slug || !fromOriginal || !toOriginal) {
+      return {
+        type: "LineString",
+        coordinates: points.map((p) => [p.shape_pt_lon, p.shape_pt_lat]),
+      };
+    }
+
+    const range = await queries.getTripStopSequenceRange(
+      schema,
+      originalTripId,
+      fromOriginal,
+      toOriginal,
+    );
+    if (!range) {
+      return {
+        type: "LineString",
+        coordinates: points.map((p) => [p.shape_pt_lon, p.shape_pt_lat]),
+      };
+    }
+
+    // Without shape_dist_traveled we approximate: split shape proportionally
+    // by stop_sequence position within the trip's full stop list. Looking up
+    // the trip's total stop count keeps the math simple — bracket the shape
+    // by [from/total, to/total] of its length.
+    const tripStops = await queries.getTripStops(schema, originalTripId);
+    if (tripStops.length === 0) {
+      return {
+        type: "LineString",
+        coordinates: points.map((p) => [p.shape_pt_lon, p.shape_pt_lat]),
+      };
+    }
+    const minSeq = Math.min(...tripStops.map((s) => s.stop_sequence));
+    const maxSeq = Math.max(...tripStops.map((s) => s.stop_sequence));
+    const span = Math.max(maxSeq - minSeq, 1);
+    const startFrac = (range.from - minSeq) / span;
+    const endFrac = (range.to - minSeq) / span;
+    const startIdx = Math.max(0, Math.floor(startFrac * (points.length - 1)));
+    const endIdx = Math.min(points.length - 1, Math.ceil(endFrac * (points.length - 1)));
+    const slice = points.slice(startIdx, endIdx + 1);
+    if (slice.length < 2) {
+      return {
+        type: "LineString",
+        coordinates: points.map((p) => [p.shape_pt_lon, p.shape_pt_lat]),
+      };
+    }
+    return {
+      type: "LineString",
+      coordinates: slice.map((p) => [p.shape_pt_lon, p.shape_pt_lat]),
+    };
+  } catch {
+    return null;
   }
 }
 

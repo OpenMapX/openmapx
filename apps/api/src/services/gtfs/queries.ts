@@ -4,6 +4,7 @@ import { sql } from "./db";
 import type {
   GtfsDepartureRow,
   GtfsRepresentativeTripRow,
+  GtfsRouteRow,
   GtfsShapePointRow,
   GtfsStopRow,
   GtfsTripStopRow,
@@ -470,6 +471,12 @@ export async function getTripStops(schema: string, tripId: string): Promise<Gtfs
   assertValidGtfsSchema(schema);
   const hasOriginalStopId = await hasOriginalStopIdColumn(schema);
   const originalStopIdExpr = hasOriginalStopId ? "s.original_stop_id" : "NULL::text";
+  // GTFS `trip_id` is not date-stamped (the same id can run on many service
+  // days), so we anchor the schedule to CURRENT_DATE for display purposes.
+  // The trip-detail UI cares about the wall-clock time of day, not the
+  // calendar date — and GTFS times can exceed 24h (e.g. 25:30:00 for an
+  // overnight leg), so adding to a date keeps the resulting timestamp
+  // well-formed for formatTime.
   const rows = await sql.unsafe(
     `
     SELECT
@@ -480,7 +487,9 @@ export async function getTripStops(schema: string, tripId: string): Promise<Gtfs
       s.parent_station,
       s.platform_code,
       ${originalStopIdExpr} AS original_stop_id,
-      st.stop_sequence
+      st.stop_sequence,
+      (CURRENT_DATE + st.arrival_time) AS t_arrival,
+      (CURRENT_DATE + st.departure_time) AS t_departure
     FROM "${schema}".stop_times st
     JOIN "${schema}".stops s ON s.stop_id = st.stop_id
     WHERE st.trip_id = $1
@@ -509,4 +518,156 @@ export async function getShapePoints(
     [shapeId],
   );
   return rows as unknown as GtfsShapePointRow[];
+}
+
+/**
+ * Single route by id, joined with the agency for operator name.
+ */
+export async function getRouteById(schema: string, routeId: string): Promise<GtfsRouteRow | null> {
+  assertValidGtfsSchema(schema);
+  const rows = await sql.unsafe(
+    `
+    SELECT
+      r.route_id,
+      r.route_short_name,
+      r.route_long_name,
+      r.route_type,
+      r.route_color,
+      r.route_text_color,
+      a.agency_name
+    FROM "${schema}".routes r
+    LEFT JOIN "${schema}".agency a ON a.agency_id = r.agency_id
+    WHERE r.route_id = $1
+    LIMIT 1
+    `,
+    [routeId],
+  );
+  return rows.length > 0 ? (rows[0] as unknown as GtfsRouteRow) : null;
+}
+
+/**
+ * Distinct routes whose trips visit a given stop. Joins stop_times → trips →
+ * routes and dedupes on route_id.
+ */
+export async function getRoutesForStop(schema: string, stopId: string): Promise<GtfsRouteRow[]> {
+  assertValidGtfsSchema(schema);
+  const rows = await sql.unsafe(
+    `
+    SELECT DISTINCT ON (r.route_id)
+      r.route_id,
+      r.route_short_name,
+      r.route_long_name,
+      r.route_type,
+      r.route_color,
+      r.route_text_color,
+      a.agency_name
+    FROM "${schema}".stop_times st
+    JOIN "${schema}".trips t ON t.trip_id = st.trip_id
+    JOIN "${schema}".routes r ON r.route_id = t.route_id
+    LEFT JOIN "${schema}".agency a ON a.agency_id = r.agency_id
+    WHERE st.stop_id = $1
+    ORDER BY r.route_id
+    `,
+    [stopId],
+  );
+  return rows as unknown as GtfsRouteRow[];
+}
+
+/**
+ * Stops served by a route. Picks one representative trip — preferring a trip
+ * that visits `hintStopId` so the returned stop sequence reflects the
+ * direction of travel the user clicked from. Falls back to the trip with the
+ * most stops on this route when no hint is supplied or none matches.
+ */
+export async function getRouteStops(
+  schema: string,
+  routeId: string,
+  hintStopId?: string,
+): Promise<GtfsTripStopRow[]> {
+  assertValidGtfsSchema(schema);
+  const hasOriginalStopId = await hasOriginalStopIdColumn(schema);
+  const originalStopIdExpr = hasOriginalStopId ? "s.original_stop_id" : "NULL::text";
+  // Two-step: pick the representative trip, then return its stops. Done as a
+  // single CTE so the schema interpolation only happens once.
+  const rows = await sql.unsafe(
+    `
+    WITH chosen_trip AS (
+      SELECT t.trip_id, COUNT(st2.stop_id) AS stop_count,
+        BOOL_OR(st2.stop_id = $2) AS has_hint
+      FROM "${schema}".trips t
+      JOIN "${schema}".stop_times st2 ON st2.trip_id = t.trip_id
+      WHERE t.route_id = $1
+      GROUP BY t.trip_id
+      ORDER BY has_hint DESC, stop_count DESC
+      LIMIT 1
+    )
+    SELECT
+      s.stop_id,
+      s.stop_name,
+      s.stop_lat,
+      s.stop_lon,
+      s.parent_station,
+      s.platform_code,
+      ${originalStopIdExpr} AS original_stop_id,
+      st.stop_sequence,
+      (CURRENT_DATE + st.arrival_time) AS t_arrival,
+      (CURRENT_DATE + st.departure_time) AS t_departure
+    FROM "${schema}".stop_times st
+    JOIN "${schema}".stops s ON s.stop_id = st.stop_id
+    JOIN chosen_trip ct ON ct.trip_id = st.trip_id
+    ORDER BY st.stop_sequence
+    `,
+    [routeId, hintStopId ?? ""],
+  );
+  return rows as unknown as GtfsTripStopRow[];
+}
+
+/**
+ * Resolve a trip's `shape_id` from the trips table. Returns null when the
+ * trip has no shape (some feeds omit shapes.txt entirely).
+ */
+export async function getTripShapeId(schema: string, tripId: string): Promise<string | null> {
+  assertValidGtfsSchema(schema);
+  const rows = await sql.unsafe(
+    `
+    SELECT shape_id
+    FROM "${schema}".trips
+    WHERE trip_id = $1
+    LIMIT 1
+    `,
+    [tripId],
+  );
+  if (rows.length === 0) return null;
+  const shapeId = (rows[0] as unknown as { shape_id: string | null }).shape_id;
+  return shapeId ?? null;
+}
+
+/**
+ * Map a stop_id pair to its inclusive `stop_sequence` range on a trip. Used to
+ * trim a shape to a leg of the trip — only meaningful when both stops are on
+ * the trip's stop_times. Returns null when either stop isn't found.
+ */
+export async function getTripStopSequenceRange(
+  schema: string,
+  tripId: string,
+  fromStopId: string,
+  toStopId: string,
+): Promise<{ from: number; to: number } | null> {
+  assertValidGtfsSchema(schema);
+  const rows = await sql.unsafe(
+    `
+    SELECT stop_id, stop_sequence
+    FROM "${schema}".stop_times
+    WHERE trip_id = $1 AND stop_id IN ($2, $3)
+    `,
+    [tripId, fromStopId, toStopId],
+  );
+  let from: number | null = null;
+  let to: number | null = null;
+  for (const r of rows as unknown as Array<{ stop_id: string; stop_sequence: number }>) {
+    if (r.stop_id === fromStopId) from = r.stop_sequence;
+    if (r.stop_id === toStopId) to = r.stop_sequence;
+  }
+  if (from === null || to === null) return null;
+  return from <= to ? { from, to } : { from: to, to: from };
 }

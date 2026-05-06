@@ -39,6 +39,15 @@ export function setup(ctx: IntegrationContext): void {
     getDepartures: (id: string, min: number) => gtfsLocal.getDepartures(id, min),
     getArrivals: (id: string, min: number) => gtfsLocal.getArrivals(id, min),
     searchByName: (q: string, limit: number) => gtfsLocal.searchByName(q, limit),
+    getStopPlatforms: (id: string) => gtfsLocal.getPlatformStops(id),
+    getStopTimetable: (id: string, date: string) => gtfsLocal.getTimetable(id, date),
+    getVehicleJourney: (tripId: string) => gtfsLocal.getVehicleJourney(tripId),
+    getRoute: (routeId: string) => gtfsLocal.getRoute(routeId),
+    getRouteStops: (routeId: string, hintStopId?: string) =>
+      gtfsLocal.getRouteStops(routeId, hintStopId),
+    getRoutesForStop: (stopId: string) => gtfsLocal.getRoutesForStop(stopId),
+    getLegGeometry: (tripId: string, fromStopId?: string, toStopId?: string) =>
+      gtfsLocal.getLegGeometry(tripId, fromStopId, toStopId),
   });
 }
 
