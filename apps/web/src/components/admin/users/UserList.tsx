@@ -36,7 +36,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { authClient, getInitials } from "@openmapx/core";
+import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -420,11 +420,12 @@ export function UserList() {
                   users.map((user) => {
                     const isSelf = user.id === currentUserId;
                     const isLastAdmin = user.role === "admin" && adminCount === 1;
+                    const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
                     return (
                       <TableRow key={user.id} hover>
                         <TableCell sx={{ pr: 0 }}>
                           <Avatar
-                            src={user.image ?? undefined}
+                            src={avatarSrc}
                             alt={user.name}
                             sx={{ width: 28, height: 28, fontSize: 11, bgcolor: "primary.main" }}
                           >

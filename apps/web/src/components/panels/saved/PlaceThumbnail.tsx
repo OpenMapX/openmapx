@@ -2,7 +2,7 @@
 
 import BookmarkIcon from "@mui/icons-material/Bookmark";
 import Box from "@mui/material/Box";
-import { usePlaceDetails } from "@openmapx/core";
+import { proxyImageUrl, usePlaceDetails } from "@openmapx/core";
 import { useState } from "react";
 
 interface Props {
@@ -40,7 +40,7 @@ export function PlaceThumbnail({ lat, lng, name, placeId, size = 64 }: Props) {
       {showImage ? (
         <Box
           component="img"
-          src={url}
+          src={proxyImageUrl(url)}
           alt={name}
           onError={() => setFailed(true)}
           sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}

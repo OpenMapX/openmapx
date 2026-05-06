@@ -29,7 +29,7 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { authClient, getInitials } from "@openmapx/core";
+import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -68,6 +68,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
   const [role, setRole] = useState<string>(user.role ?? "user");
   const [banOpen, setBanOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
 
   const dirty = name !== user.name || email !== user.email || role !== (user.role ?? "user");
 
@@ -108,7 +109,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
     <Stack gap={3}>
       <Stack direction="row" alignItems="center" gap={2}>
         <Avatar
-          src={user.image ?? undefined}
+          src={avatarSrc}
           sx={{ width: 56, height: 56, fontSize: 20, bgcolor: "primary.main" }}
         >
           {!user.image && getInitials(user.name, user.email)}

@@ -12,7 +12,7 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
-import { authClient, getInitials, useKeypairStore } from "@openmapx/core";
+import { authClient, getInitials, proxyImageUrl, useKeypairStore } from "@openmapx/core";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
@@ -45,6 +45,7 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
   };
 
   const initials = getInitials(user.name, user.email);
+  const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
 
   return (
     <Menu
@@ -71,7 +72,7 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
       {/* User info header */}
       <Box sx={{ px: 2, py: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
         <Avatar
-          src={user.image ?? undefined}
+          src={avatarSrc}
           sx={{
             width: 40,
             height: 40,

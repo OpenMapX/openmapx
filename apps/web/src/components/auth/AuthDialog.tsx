@@ -562,6 +562,15 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 {t("continueWith", { provider: provider.name })}
               </Button>
             ))}
+            {oauthProviders.length > 0 && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mt: -0.5, mb: 1.5, textAlign: "center", lineHeight: 1.35 }}
+              >
+                {t("oauthDirectDisclosure")}
+              </Typography>
+            )}
 
             {/* Toggle sign-in / sign-up */}
             <Box sx={{ textAlign: "center" }}>

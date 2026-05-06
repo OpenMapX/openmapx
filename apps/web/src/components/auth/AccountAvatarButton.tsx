@@ -4,7 +4,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import Avatar from "@mui/material/Avatar";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
-import { getInitials, useSession } from "@openmapx/core";
+import { getInitials, proxyImageUrl, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import { AccountMenu } from "./AccountMenu";
@@ -29,6 +29,7 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
   const avatarRef = useRef<HTMLButtonElement>(null);
 
   const user = session?.user ?? null;
+  const avatarSrc = user?.image ? proxyImageUrl(user.image) : undefined;
 
   const handleAvatarClick = () => {
     if (user) {
@@ -47,7 +48,7 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
           ref={avatarRef}
           component="button"
           aria-label={t("account")}
-          src={user?.image ?? undefined}
+          src={avatarSrc}
           onClick={handleAvatarClick}
           sx={[
             {

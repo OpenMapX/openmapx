@@ -27,6 +27,7 @@ const ALLOWED_HOSTS = [
   "photos.app.goo.gl",
   "photos.google.com",
   // OpenStreetMap / other
+  "openstreetmap.org", // OAuth/profile avatars and other OSM-hosted user images
   "tile.openstreetmap.org",
   // Entur Mobility branding/vehicle assets exposed by the server-side provider.
   "api.entur.io",

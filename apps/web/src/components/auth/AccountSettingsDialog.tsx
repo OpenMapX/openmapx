@@ -30,7 +30,7 @@ import ListItemText from "@mui/material/ListItemText";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
-import { authClient, getInitials, oauthProviders } from "@openmapx/core";
+import { authClient, getInitials, oauthProviders, proxyImageUrl } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
@@ -48,6 +48,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
   const tc = useTranslations("common");
   const locale = useLocale();
   const fullScreen = useFullScreenOnMobile();
+  const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
   const [name, setName] = useState(user.name);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
@@ -425,7 +426,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
           <Avatar
-            src={user.image ?? undefined}
+            src={avatarSrc}
             sx={{ width: 56, height: 56, bgcolor: "primary.main", fontSize: 22 }}
           >
             {getInitials(user.name, user.email)}

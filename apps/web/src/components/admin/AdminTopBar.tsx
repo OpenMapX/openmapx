@@ -10,7 +10,7 @@ import IconButton from "@mui/material/IconButton";
 import Toolbar from "@mui/material/Toolbar";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { getInitials } from "@openmapx/core";
+import { getInitials, proxyImageUrl } from "@openmapx/core";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SIDEBAR_WIDTH } from "./AdminSidebar";
@@ -60,6 +60,7 @@ function useBreadcrumbs(): { label: string; href: string }[] {
 
 export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarProps) {
   const breadcrumbs = useBreadcrumbs();
+  const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
 
   return (
     <AppBar
@@ -112,7 +113,7 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Avatar
-            src={user.image}
+            src={avatarSrc}
             alt={user.name}
             sx={{
               width: 36,
