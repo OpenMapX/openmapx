@@ -211,6 +211,15 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
       const cloudPlan = await planWithInstance(transitousInstance, params);
       return cloudPlan ? { ...cloudPlan, provider: "mo" } : null;
     },
+    async getVehicleJourney(tripId: string) {
+      const localId = withPrefix(tripId, "ms:");
+      const cloudId = withPrefix(tripId, "mo:");
+      if (await isMotisReachableCached()) {
+        const local = await motis.getTrip(motisLocalInstance, localId);
+        if (local) return local;
+      }
+      return motis.getTrip(transitousInstance, cloudId);
+    },
   });
 
   // Register dynamic attribution endpoint
@@ -230,5 +239,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
       motis.getDepartures(transitousInstance, withPrefix(id, "mo:"), min),
     getArrivals: (id: string, min: number) =>
       motis.getArrivals(transitousInstance, withPrefix(id, "mo:"), min),
+    getVehicleJourney: (tripId: string) =>
+      motis.getTrip(transitousInstance, withPrefix(tripId, "mo:")),
   });
 }
