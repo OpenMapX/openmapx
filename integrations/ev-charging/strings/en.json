@@ -1,11 +1,16 @@
 {
   "name": "EV Charging Stations",
-  "description": "Electric vehicle charging station locations and connector details",
+  "description": "Electric vehicle charging station locations and connector details from official national feeds, OpenChargeMap, NOBIL, and OpenStreetMap",
   "dataSources": [
     {
-      "purpose": "EV charging station locations with connector details, power levels, and availability",
+      "purpose": "EV charging station locations with connector details, power levels, availability, merged provider records, and data-provider/license attribution",
       "dataSent": "Bounding box coordinates (south, west, north, east), optional filters (connector type, usage type, status)",
-      "dataReceived": "Charging stations with connector types, power levels, operator info, pricing, availability status"
+      "dataReceived": "Charging stations with connector types, power levels, operator info, pricing, availability status, merged source ids, and per-record data-provider/license metadata when available"
+    },
+    {
+      "purpose": "Official and national EV charging station datasets for the United States, Germany, France, Switzerland, Norway, and Sweden",
+      "dataSent": "Bounding box coordinates (south, west, north, east); configured AFDC and NOBIL API keys are sent only server-side when those sources are enabled",
+      "dataReceived": "Charging station records with location, operator, connector, access, payment, opening-hours, source, and license metadata"
     },
     {
       "purpose": "EV charging station locations from OpenStreetMap (secondary source, global fallback)",

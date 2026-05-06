@@ -1,63 +1,78 @@
-import type { BoundingBox, DataSourceResult } from "@openmapx/core";
+import type { BoundingBox, DataSourceDetail } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { EvChargingStation } from "../types.js";
 
-vi.mock("../ocm.js", () => ({
-  searchOcm: vi.fn(),
-  getOcmDetail: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  const sourceA = {
+    id: "source-a",
+    priority: 0,
+    search: vi.fn(),
+    canFetchDetail: vi.fn(),
+    fetchDetail: vi.fn(),
+  };
+  const sourceB = {
+    id: "source-b",
+    priority: 1,
+    search: vi.fn(),
+    canFetchDetail: vi.fn(),
+    fetchDetail: vi.fn(),
+  };
+  return { sourceA, sourceB };
+});
 
-vi.mock("../osm.js", () => ({
-  searchOsmCharging: vi.fn(),
-  getOsmChargingNode: vi.fn(),
-}));
-
-vi.mock("../ocm-mapper.js", () => ({
-  mapOcmToResult: vi.fn(),
-  mapOcmToDetail: vi.fn(),
-}));
-
-vi.mock("../osm-mapper.js", () => ({
-  mapOsmToResult: vi.fn(),
-  mapOsmToDetail: vi.fn(),
+vi.mock("../registry.js", () => ({
+  EV_CHARGING_SOURCE_REGISTRY: [mocks.sourceA, mocks.sourceB],
 }));
 
 vi.mock("../dedup.js", () => ({
-  deduplicateByCoordinates: vi.fn((items: unknown[]) => items),
+  deduplicateChargingStations: vi.fn((items: unknown[]) => items),
+  haversineMeters: vi.fn(() => 0),
+}));
+
+vi.mock("../station-mapper.js", () => ({
+  mapStationToResult: vi.fn((station: EvChargingStation) => ({
+    id: station.id,
+    name: station.name,
+    coordinates: station.coordinates,
+    source: station.sources[0],
+    sources: station.sources,
+    variant: "unknown",
+  })),
+  mapStationToDetail: vi.fn((station: EvChargingStation) => ({
+    id: station.id,
+    sources: station.sources,
+    name: station.name,
+    coordinates: station.coordinates,
+    sections: [],
+  })),
 }));
 
 vi.mock("../reference.js", () => ({
   getEvChargingFilters: vi.fn(),
 }));
 
-import { deduplicateByCoordinates } from "../dedup.js";
-import { getOcmDetail, searchOcm } from "../ocm.js";
-import { mapOcmToDetail, mapOcmToResult } from "../ocm-mapper.js";
-import { getOsmChargingNode, searchOsmCharging } from "../osm.js";
-import { mapOsmToDetail, mapOsmToResult } from "../osm-mapper.js";
+import { deduplicateChargingStations } from "../dedup.js";
 import { evChargingProvider } from "../provider.js";
+import { mapStationToDetail, mapStationToResult } from "../station-mapper.js";
 
 afterEach(() => {
   vi.clearAllMocks();
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
 function makeBbox(): BoundingBox {
-  return { south: 48.0, west: 11.0, north: 49.0, east: 12.0 };
+  return { south: 48, west: 11, north: 49, east: 12 };
 }
 
-function makeResult(id: string, variant: string): DataSourceResult {
+function makeStation(id: string, sources = ["source-a"]): EvChargingStation {
   return {
     id,
     name: `Station ${id}`,
     coordinates: [11.5, 48.5],
-    source: "ocm",
-    variant,
-    status: "available",
+    sources,
+    sourceItemIds: [id],
+    connectors: [],
   };
 }
-
-// Meta
 
 describe("evChargingProvider meta", () => {
   it("has id 'ev-charging'", () => {
@@ -71,151 +86,90 @@ describe("evChargingProvider meta", () => {
   });
 });
 
-// search()
-
 describe("evChargingProvider.search", () => {
-  it("calls OCM and OSM in parallel and combines results", async () => {
-    const ocmRaw = [{ id: 1 }];
-    const osmRaw = [{ id: 2 }];
-    vi.mocked(searchOcm).mockResolvedValue(ocmRaw as never);
-    vi.mocked(searchOsmCharging).mockResolvedValue(osmRaw as never);
-
-    const ocmMapped = makeResult("ocm:1", "fast");
-    const osmMapped = makeResult("osm:2", "slow");
-    vi.mocked(mapOcmToResult).mockReturnValue(ocmMapped);
-    vi.mocked(mapOsmToResult).mockReturnValue(osmMapped);
-    vi.mocked(deduplicateByCoordinates).mockReturnValue([ocmMapped, osmMapped]);
-
-    const results = await evChargingProvider.search(makeBbox());
-
-    expect(searchOcm).toHaveBeenCalledOnce();
-    expect(searchOsmCharging).toHaveBeenCalledOnce();
-    expect(deduplicateByCoordinates).toHaveBeenCalledWith([ocmMapped, osmMapped]);
-    expect(results).toEqual([ocmMapped, osmMapped]);
-  });
-
-  it("OCM mapped first for dedup priority", async () => {
-    vi.mocked(searchOcm).mockResolvedValue([{ id: 10 }] as never);
-    vi.mocked(searchOsmCharging).mockResolvedValue([{ id: 20 }] as never);
-    vi.mocked(mapOcmToResult).mockReturnValue(makeResult("ocm:10", "fast"));
-    vi.mocked(mapOsmToResult).mockReturnValue(makeResult("osm:20", "slow"));
-
-    await evChargingProvider.search(makeBbox());
-
-    const call = vi.mocked(deduplicateByCoordinates).mock.calls[0][0];
-    expect(call[0].id).toBe("ocm:10");
-    expect(call[1].id).toBe("osm:20");
-  });
-
-  it("OCM fails gracefully, OSM results still returned", async () => {
-    vi.mocked(searchOcm).mockRejectedValue(new Error("OCM down"));
-    vi.mocked(searchOsmCharging).mockResolvedValue([{ id: 3 }] as never);
-
-    const osmMapped = makeResult("osm:3", "slow");
-    vi.mocked(mapOsmToResult).mockReturnValue(osmMapped);
-    vi.mocked(deduplicateByCoordinates).mockReturnValue([osmMapped]);
-
-    const results = await evChargingProvider.search(makeBbox());
-    expect(results).toEqual([osmMapped]);
-    expect(mapOcmToResult).not.toHaveBeenCalled();
-  });
-
-  it("OSM fails gracefully, OCM results still returned", async () => {
-    vi.mocked(searchOcm).mockResolvedValue([{ id: 4 }] as never);
-    vi.mocked(searchOsmCharging).mockRejectedValue(new Error("OSM down"));
-
-    const ocmMapped = makeResult("ocm:4", "ultra-rapid");
-    vi.mocked(mapOcmToResult).mockReturnValue(ocmMapped);
-    vi.mocked(deduplicateByCoordinates).mockReturnValue([ocmMapped]);
-
-    const results = await evChargingProvider.search(makeBbox());
-    expect(results).toEqual([ocmMapped]);
-    expect(mapOsmToResult).not.toHaveBeenCalled();
-  });
-
-  it("both fail → returns empty array", async () => {
-    vi.mocked(searchOcm).mockRejectedValue(new Error("OCM down"));
-    vi.mocked(searchOsmCharging).mockRejectedValue(new Error("OSM down"));
-    vi.mocked(deduplicateByCoordinates).mockReturnValue([]);
-
-    const results = await evChargingProvider.search(makeBbox());
-    expect(results).toEqual([]);
-  });
-});
-
-// Speed filter (client-side only — provider does not filter by speed)
-
-describe("evChargingProvider.search speed filter", () => {
-  it("ignores speed filter (applied client-side)", async () => {
-    vi.mocked(searchOcm).mockResolvedValue([]);
-    vi.mocked(searchOsmCharging).mockResolvedValue([]);
-    const items = [
-      makeResult("a", "slow"),
-      makeResult("b", "fast"),
-      makeResult("c", "ultra-rapid"),
-    ];
-    vi.mocked(deduplicateByCoordinates).mockReturnValue(items);
+  it("searches registered sources, merges stations, and maps results", async () => {
+    const a = makeStation("a", ["source-a"]);
+    const b = makeStation("b", ["source-b"]);
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([a]);
+    vi.mocked(mocks.sourceB.search).mockResolvedValue([b]);
+    vi.mocked(deduplicateChargingStations).mockReturnValue([a, b]);
 
     const results = await evChargingProvider.search(makeBbox(), { speed: "fast" });
-    expect(results).toHaveLength(3);
+
+    expect(mocks.sourceA.search).toHaveBeenCalledWith(makeBbox(), { speed: "fast" });
+    expect(mocks.sourceB.search).toHaveBeenCalledWith(makeBbox(), { speed: "fast" });
+    expect(deduplicateChargingStations).toHaveBeenCalledWith([a, b]);
+    expect(mapStationToResult).toHaveBeenCalledTimes(2);
+    expect(results.map((result) => result.id)).toEqual(["a", "b"]);
+  });
+
+  it("keeps fulfilled source results when another source fails", async () => {
+    const a = makeStation("source-fallback", ["source-a"]);
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([a]);
+    vi.mocked(mocks.sourceB.search).mockRejectedValue(new Error("source down"));
+    vi.mocked(deduplicateChargingStations).mockReturnValue([a]);
+
+    const results = await evChargingProvider.search(makeBbox());
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe("source-fallback");
+  });
+
+  it("returns empty results when all sources fail", async () => {
+    vi.mocked(mocks.sourceA.search).mockRejectedValue(new Error("down"));
+    vi.mocked(mocks.sourceB.search).mockRejectedValue(new Error("down"));
+    vi.mocked(deduplicateChargingStations).mockReturnValue([]);
+
+    await expect(evChargingProvider.search(makeBbox())).resolves.toEqual([]);
   });
 });
 
-// getDetail()
-
 describe("evChargingProvider.getDetail", () => {
-  it("'ocm:' prefix calls getOcmDetail and maps result", async () => {
-    const poi = { id: 42 };
-    vi.mocked(getOcmDetail).mockResolvedValue(poi as never);
-    const mapped = {
-      id: "ocm:42",
-      source: "ocm",
-      name: "Station",
-      coordinates: [11, 48] as [number, number],
+  it("returns merged cached detail after search", async () => {
+    const station = makeStation("cached-detail", ["source-a", "source-b"]);
+    const detail = {
+      id: station.id,
+      sources: station.sources,
+      name: station.name,
+      coordinates: station.coordinates,
       sections: [],
-    };
-    vi.mocked(mapOcmToDetail).mockReturnValue(mapped);
+    } satisfies DataSourceDetail;
 
-    const result = await evChargingProvider.getDetail("ocm:42");
-    expect(getOcmDetail).toHaveBeenCalledWith("42");
-    expect(mapOcmToDetail).toHaveBeenCalledWith(poi);
-    expect(result).toBe(mapped);
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([station]);
+    vi.mocked(mocks.sourceB.search).mockResolvedValue([]);
+    vi.mocked(deduplicateChargingStations).mockReturnValue([station]);
+    vi.mocked(mapStationToDetail).mockReturnValue(detail);
+
+    await evChargingProvider.search(makeBbox());
+    const result = await evChargingProvider.getDetail("cached-detail");
+
+    expect(result).toBe(detail);
+    expect(mocks.sourceA.fetchDetail).not.toHaveBeenCalled();
   });
 
-  it("'osm:' prefix calls getOsmChargingNode with numeric ID", async () => {
-    const node = { id: 12345, tags: {} };
-    vi.mocked(getOsmChargingNode).mockResolvedValue(node as never);
-    const mapped = {
-      id: "osm:12345",
-      source: "osm",
-      name: "Charger",
-      coordinates: [11, 48] as [number, number],
-      sections: [],
-    };
-    vi.mocked(mapOsmToDetail).mockReturnValue(mapped);
+  it("fetches by source prefix and enriches nearby records on cache miss", async () => {
+    const primary = makeStation("source-a:123", ["source-a"]);
+    const nearby = makeStation("source-b:456", ["source-b"]);
+    const merged = makeStation("source-a:123", ["source-a", "source-b"]);
+    vi.mocked(mocks.sourceA.canFetchDetail).mockReturnValue(true);
+    vi.mocked(mocks.sourceA.fetchDetail).mockResolvedValue(primary);
+    vi.mocked(mocks.sourceA.search).mockResolvedValue([primary]);
+    vi.mocked(mocks.sourceB.search).mockResolvedValue([nearby]);
+    vi.mocked(deduplicateChargingStations).mockReturnValue([merged]);
 
-    const result = await evChargingProvider.getDetail("osm:12345");
-    expect(getOsmChargingNode).toHaveBeenCalledWith(12345);
-    expect(mapOsmToDetail).toHaveBeenCalledWith(node);
-    expect(result).toBe(mapped);
+    const result = await evChargingProvider.getDetail("source-a:123");
+
+    expect(mocks.sourceA.fetchDetail).toHaveBeenCalledWith("source-a:123");
+    expect(mocks.sourceA.search).toHaveBeenCalledOnce();
+    expect(mocks.sourceB.search).toHaveBeenCalledOnce();
+    expect(mapStationToDetail).toHaveBeenCalledWith(merged);
+    expect(result?.sources).toEqual(["source-a", "source-b"]);
   });
 
-  it("'ocm:' prefix returns null when getOcmDetail returns null", async () => {
-    vi.mocked(getOcmDetail).mockResolvedValue(null as never);
+  it("returns null for an unknown prefix", async () => {
+    vi.mocked(mocks.sourceA.canFetchDetail).mockReturnValue(false);
+    vi.mocked(mocks.sourceB.canFetchDetail).mockReturnValue(false);
 
-    const result = await evChargingProvider.getDetail("ocm:999");
-    expect(result).toBeNull();
-  });
-
-  it("'osm:' prefix returns null when getOsmChargingNode returns null", async () => {
-    vi.mocked(getOsmChargingNode).mockResolvedValue(null as never);
-
-    const result = await evChargingProvider.getDetail("osm:888");
-    expect(result).toBeNull();
-  });
-
-  it("unknown prefix returns null", async () => {
-    const result = await evChargingProvider.getDetail("xyz:100");
-    expect(result).toBeNull();
+    await expect(evChargingProvider.getDetail("unknown:100")).resolves.toBeNull();
   });
 });

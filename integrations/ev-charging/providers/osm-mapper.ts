@@ -1,6 +1,9 @@
 import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
 import { formatAddress } from "../../geocoding/format-address.js";
 import type { OsmChargingStation } from "./osm.js";
+import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
+import type { EvChargingConnector, EvChargingStation } from "./types.js";
+import { connector, parseLocalizedNumber } from "./utils.js";
 
 /** Maps OSM socket:* tags to human-readable connector labels. */
 const SOCKET_TAG_MAP: Record<string, string> = {
@@ -64,6 +67,14 @@ function inferVariant(tags: Record<string, string>): string {
   return "unknown";
 }
 
+function inferStatus(tags: Record<string, string>): EvChargingStation["status"] {
+  if (tags["disused:amenity"] === "charging_station" || tags.disused === "yes") {
+    return "not-operational";
+  }
+  if (tags.proposed === "yes" || tags.construction === "yes") return "planned";
+  return "operational";
+}
+
 function buildOsmSummary(tags: Record<string, string>): string {
   const parts: string[] = [];
 
@@ -85,22 +96,45 @@ function buildOsmSummary(tags: Record<string, string>): string {
   return parts.join(" \u00B7 ");
 }
 
-export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
-  const name = station.tags.name || station.tags.operator || "EV Charging Station";
-
-  // Build connector rows from socket tags with quantities
-  const connectorRows: (string | number)[][] = [];
-  for (const [tagKey, label] of Object.entries(SOCKET_TAG_MAP)) {
-    const value = station.tags[tagKey];
-    if (value && value !== "no" && value !== "0") {
-      const qty = Number.parseInt(value, 10);
-      connectorRows.push([label, "—", Number.isNaN(qty) ? 1 : qty, "Available"]);
-    }
+function getOutputPower(tags: Record<string, string>, tagKey?: string): number | undefined {
+  if (tagKey) {
+    const specific = parseLocalizedNumber(tags[`${tagKey}:output`]);
+    if (specific) return specific;
   }
+  return parseLocalizedNumber(tags["charging_station:output"] ?? tags.output);
+}
+
+function getPaymentMethods(tags: Record<string, string>): string[] | undefined {
+  const methods = Object.entries(tags)
+    .filter(([key, value]) => key.startsWith("payment:") && value !== "no" && value !== "0")
+    .map(([key]) => key.slice("payment:".length).replace(/_/g, " "));
+  return methods.length > 0 ? methods : undefined;
+}
+
+function getConnectors(tags: Record<string, string>): EvChargingConnector[] {
+  const connectors: EvChargingConnector[] = [];
+  for (const [tagKey, label] of Object.entries(SOCKET_TAG_MAP)) {
+    const value = tags[tagKey];
+    if (!value || value === "no" || value === "0") continue;
+    const qty = Number.parseInt(value, 10);
+    connectors.push(
+      connector({
+        type: label,
+        powerKw: getOutputPower(tags, tagKey),
+        quantity: Number.isNaN(qty) ? 1 : qty,
+      }),
+    );
+  }
+  return connectors;
+}
+
+export function mapOsmToStation(station: OsmChargingStation): EvChargingStation {
+  const name = station.tags.name || station.tags.operator || "EV Charging Station";
 
   return {
     id: `osm:${station.id}`,
     sources: ["osm"],
+    sourceItemIds: [`osm:${station.id}`],
     name,
     coordinates: [station.lon, station.lat],
     address: {
@@ -124,39 +158,25 @@ export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
           url: station.tags["contact:website"] || station.tags.website,
         }
       : undefined,
-    usageInfo: station.tags.fee
-      ? {
-          type: station.tags.access ?? "Public",
-          cost: station.tags.fee === "no" ? "Free" : (station.tags.charge ?? "Paid"),
-        }
-      : undefined,
-    sections:
-      connectorRows.length > 0
-        ? [
-            {
-              title: "Connectors",
-              type: "table" as const,
-              columns: ["Type", "Power", "Qty", "Status"],
-              rows: connectorRows,
-            },
-          ]
-        : [],
+    status: inferStatus(station.tags),
+    usageType: station.tags.access ?? "Public",
+    usageCost: station.tags.fee === "no" ? "Free" : station.tags.charge,
+    openingHours: station.tags.opening_hours,
+    access: station.tags.description ?? station.tags.note,
+    paymentMethods: getPaymentMethods(station.tags),
+    connectors: getConnectors(station.tags),
     osmTags: station.tags,
   };
 }
 
-export function mapOsmToResult(station: OsmChargingStation): DataSourceResult {
-  const name = station.tags.name || station.tags.operator || "Charging Station";
+export function mapOsmToDetail(station: OsmChargingStation): DataSourceDetail {
+  return mapStationToDetail(mapOsmToStation(station));
+}
 
+export function mapOsmToResult(station: OsmChargingStation): DataSourceResult {
   return {
-    id: `osm:${station.id}`,
-    name,
-    coordinates: [station.lon, station.lat],
-    source: "osm",
+    ...mapStationToResult(mapOsmToStation(station)),
     variant: inferVariant(station.tags),
-    status:
-      station.tags["disused:amenity"] === "charging_station" ? "not-operational" : "operational",
     summary: buildOsmSummary(station.tags),
-    operator: station.tags.operator || station.tags.network,
   };
 }

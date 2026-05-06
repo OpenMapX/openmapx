@@ -1,6 +1,7 @@
 import type { DataSourceResult } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { deduplicateByCoordinates } from "../dedup.js";
+import { deduplicateByCoordinates, deduplicateChargingStations } from "../dedup.js";
+import type { EvChargingStation } from "../types.js";
 
 function makeResult(
   overrides: Partial<DataSourceResult> & Pick<DataSourceResult, "id" | "coordinates">,
@@ -158,5 +159,110 @@ describe("deduplicateByCoordinates", () => {
     expect(deduped[0].operator).toBe("Ionity");
     expect(deduped[0].sortValues).toEqual({ power: 22 });
     expect(deduped[0].coordinates).toEqual([13.377, 52.52]);
+  });
+});
+
+function makeStation(
+  overrides: Partial<EvChargingStation> & Pick<EvChargingStation, "id" | "coordinates">,
+): EvChargingStation {
+  return {
+    name: "EV Charging Station",
+    sources: ["ocm"],
+    connectors: [],
+    ...overrides,
+  };
+}
+
+describe("deduplicateChargingStations", () => {
+  it("merges co-located stations and preserves connector and attribution data", () => {
+    const official = makeStation({
+      id: "bnetza:1",
+      name: "Main Street Chargers",
+      coordinates: [13.377, 52.52],
+      sources: ["bnetza"],
+      connectors: [{ type: "Type 2", powerKw: 22, quantity: 2 }],
+      operator: { name: "City Utility" },
+    });
+    const ocm = makeStation({
+      id: "ocm:99",
+      name: "Main Street Chargers",
+      coordinates: [13.37704, 52.52003],
+      sources: ["ocm"],
+      connectors: [{ type: "CCS", powerKw: 150, quantity: 1 }],
+      attributions: [
+        {
+          text: "Imported Provider",
+          url: "https://example.test",
+          license: "Provider license",
+        },
+      ],
+    });
+
+    const merged = deduplicateChargingStations([ocm, official]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe("bnetza:1");
+    expect(merged[0].sources).toEqual(["bnetza", "ocm"]);
+    expect(merged[0].operator?.name).toBe("City Utility");
+    expect(merged[0].connectors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "Type 2", quantity: 2 }),
+        expect.objectContaining({ type: "CCS", powerKw: 150, quantity: 1 }),
+      ]),
+    );
+    expect(merged[0].attributions?.[0]?.text).toBe("Imported Provider");
+  });
+
+  it("sums same-source connector quantities before comparing duplicate providers", () => {
+    const pdc1 = makeStation({
+      id: "france-irve:a",
+      name: "Gare Centrale",
+      coordinates: [2.35, 48.85],
+      sources: ["france-irve"],
+      connectors: [{ type: "Type 2", powerKw: 22, quantity: 1 }],
+    });
+    const pdc2 = makeStation({
+      id: "france-irve:b",
+      name: "Gare Centrale",
+      coordinates: [2.35, 48.85],
+      sources: ["france-irve"],
+      connectors: [{ type: "Type 2", powerKw: 22, quantity: 1 }],
+    });
+    const ocm = makeStation({
+      id: "ocm:station",
+      name: "Gare Centrale",
+      coordinates: [2.35002, 48.85001],
+      sources: ["ocm"],
+      connectors: [{ type: "Type 2", powerKw: 22, quantity: 1 }],
+    });
+
+    const merged = deduplicateChargingStations([pdc1, pdc2, ocm]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].sources).toEqual(["france-irve", "ocm"]);
+    expect(merged[0].connectors).toEqual([
+      expect.objectContaining({ type: "Type 2", powerKw: 22, quantity: 2 }),
+    ]);
+  });
+
+  it("keeps nearby stations separate when names and operators do not match", () => {
+    const first = makeStation({
+      id: "bnetza:first",
+      name: "Mall East",
+      coordinates: [13.377, 52.52],
+      sources: ["bnetza"],
+      operator: { name: "Operator A" },
+    });
+    const second = makeStation({
+      id: "bnetza:second",
+      name: "Hotel West",
+      coordinates: [13.377, 52.52055],
+      sources: ["bnetza"],
+      operator: { name: "Operator B" },
+    });
+
+    const merged = deduplicateChargingStations([first, second]);
+
+    expect(merged).toHaveLength(2);
   });
 });

@@ -7,12 +7,11 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
-import { deduplicateByCoordinates } from "./dedup.js";
-import { getOcmDetail, searchOcm } from "./ocm.js";
-import { mapOcmToDetail, mapOcmToResult } from "./ocm-mapper.js";
-import { getOsmChargingNode, searchOsmCharging } from "./osm.js";
-import { mapOsmToDetail, mapOsmToResult } from "./osm-mapper.js";
+import { deduplicateChargingStations, haversineMeters } from "./dedup.js";
 import { getEvChargingFilters } from "./reference.js";
+import { EV_CHARGING_SOURCE_REGISTRY } from "./registry.js";
+import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
+import type { EvChargingStation } from "./types.js";
 
 const META: DataSourceMeta = {
   minZoom: 8,
@@ -36,46 +35,86 @@ class EvChargingProvider implements DataSourceProvider {
   readonly id = "ev-charging";
   readonly meta = META;
   readonly serviceIds = [];
+  readonly searchCacheTtl = 60;
+  readonly detailCacheTtl = 60;
+
+  private stationCache = new Map<string, EvChargingStation>();
+
+  private cacheStation(station: EvChargingStation): void {
+    const keys = [station.id, ...(station.sourceItemIds ?? [])];
+    for (const key of keys) {
+      if (this.stationCache.size >= 5000) {
+        const firstKey = this.stationCache.keys().next().value;
+        if (firstKey !== undefined) this.stationCache.delete(firstKey);
+      }
+      this.stationCache.set(key, station);
+    }
+  }
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return getEvChargingFilters();
   }
 
   async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
-    // Query OCM and Overpass in parallel
-    const [ocmResult, osmResult] = await Promise.allSettled([
-      searchOcm(bbox, filters),
-      searchOsmCharging(bbox),
-    ]);
+    const results = await Promise.allSettled(
+      EV_CHARGING_SOURCE_REGISTRY.map((source) => source.search(bbox, filters)),
+    );
 
-    const ocmResults: DataSourceResult[] =
-      ocmResult.status === "fulfilled" ? ocmResult.value.map(mapOcmToResult) : [];
-
-    const osmResults: DataSourceResult[] =
-      osmResult.status === "fulfilled" ? osmResult.value.map(mapOsmToResult) : [];
-
-    // OCM first for dedup priority
-    const combined = [...ocmResults, ...osmResults];
-    return deduplicateByCoordinates(combined);
+    const allStations = results.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    );
+    const merged = deduplicateChargingStations(allStations);
+    for (const station of merged) this.cacheStation(station);
+    return merged.map(mapStationToResult);
   }
 
   async getDetail(itemId: string): Promise<DataSourceDetail | null> {
-    if (itemId.startsWith("ocm:")) {
-      const ocmId = itemId.slice(4);
-      const poi = await getOcmDetail(ocmId);
-      if (poi) {
-        return mapOcmToDetail(poi);
-      }
-    }
+    const cached = this.stationCache.get(itemId);
+    if (cached) return mapStationToDetail(cached);
 
-    // For OSM items, fetch the actual node from Overpass
-    if (itemId.startsWith("osm:")) {
-      const osmId = Number(itemId.slice(4));
-      const node = await getOsmChargingNode(osmId);
-      if (node) return mapOsmToDetail(node);
-    }
+    const primary = await this.fetchByPrefix(itemId);
+    if (!primary) return null;
 
+    const enriched = await this.enrichStation(primary);
+    this.cacheStation(enriched);
+    return mapStationToDetail(enriched);
+  }
+
+  private async fetchByPrefix(itemId: string): Promise<EvChargingStation | null> {
+    for (const source of EV_CHARGING_SOURCE_REGISTRY) {
+      if (!source.canFetchDetail?.(itemId) || !source.fetchDetail) continue;
+      const station = await source.fetchDetail(itemId);
+      if (station) return station;
+    }
     return null;
+  }
+
+  private async enrichStation(station: EvChargingStation): Promise<EvChargingStation> {
+    const [lng, lat] = station.coordinates;
+    const margin = 0.002;
+    const bbox: BoundingBox = {
+      south: lat - margin,
+      west: lng - margin,
+      north: lat + margin,
+      east: lng + margin,
+    };
+
+    const results = await Promise.allSettled(
+      EV_CHARGING_SOURCE_REGISTRY.map((source) => source.search(bbox)),
+    );
+    const nearby = results.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+    const merged = deduplicateChargingStations([station, ...nearby]);
+    const ids = new Set([station.id, ...(station.sourceItemIds ?? [])]);
+
+    return (
+      merged.find((candidate) =>
+        [candidate.id, ...(candidate.sourceItemIds ?? [])].some((id) => ids.has(id)),
+      ) ??
+      merged.find(
+        (candidate) => haversineMeters(candidate.coordinates, station.coordinates) <= 150,
+      ) ??
+      station
+    );
   }
 }
 

@@ -1,5 +1,47 @@
-import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
-import type { OcmPoi } from "./ocm-types.js";
+import type { DataSourceAttribution, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type { OcmDataProvider, OcmPoi } from "./ocm-types.js";
+import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
+import type { EvChargingStation, EvChargingStatus } from "./types.js";
+import { connector } from "./utils.js";
+
+const OCM_ABOUT_URL = "https://openchargemap.org/about";
+
+function isSafeHttpUrl(value: string | undefined): value is string {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function isOcmContributorProvider(provider: OcmDataProvider): boolean {
+  return (
+    provider.ID === 1 ||
+    provider.Title.toLowerCase().includes("open charge map contributor") ||
+    provider.Title.toLowerCase() === "open charge map"
+  );
+}
+
+function normalizeProviderLicense(provider: OcmDataProvider): string {
+  const license = provider.License?.trim();
+  if (license) return license;
+  if (provider.IsOpenDataLicensed === true) return "Open data license (provider-specific)";
+  return "Provider-specific license";
+}
+
+function getOcmProviderAttribution(poi: OcmPoi): DataSourceAttribution | undefined {
+  const provider = poi.DataProvider;
+  if (!provider || isOcmContributorProvider(provider)) return undefined;
+
+  return {
+    text: provider.Title,
+    url: isSafeHttpUrl(provider.WebsiteURL) ? provider.WebsiteURL : OCM_ABOUT_URL,
+    license: normalizeProviderLicense(provider),
+    licenseUrl: isSafeHttpUrl(provider.License) ? provider.License : OCM_ABOUT_URL,
+  };
+}
 
 function getMaxPower(poi: OcmPoi): number {
   if (!poi.Connections?.length) return 0;
@@ -20,7 +62,7 @@ export function getVariant(poi: OcmPoi): string {
   return "ultra-rapid";
 }
 
-export function getStatus(poi: OcmPoi): string {
+export function getStatus(poi: OcmPoi): EvChargingStatus {
   if (poi.StatusType?.IsOperational === false) {
     const title = poi.StatusType.Title?.toLowerCase() ?? "";
     if (title.includes("planned") || title.includes("construction")) {
@@ -68,66 +110,19 @@ export function buildSummary(poi: OcmPoi): string {
   return parts.join(" \u00B7 ");
 }
 
-export function mapOcmToResult(poi: OcmPoi): DataSourceResult {
+export function mapOcmToStation(poi: OcmPoi): EvChargingStation {
+  const providerAttribution = getOcmProviderAttribution(poi);
+
   return {
     id: `ocm:${poi.ID}`,
     name: poi.AddressInfo.Title || "EV Charging Station",
     coordinates: [poi.AddressInfo.Longitude, poi.AddressInfo.Latitude],
-    source: "ocm",
-    variant: getVariant(poi),
-    status: getStatus(poi),
-    summary: buildSummary(poi),
-    operator: poi.OperatorInfo?.Title,
-  };
-}
-
-export function mapOcmToDetail(poi: OcmPoi): DataSourceDetail {
-  const sections: DataSourceDetail["sections"] = [];
-
-  // Connector table
-  if (poi.Connections?.length) {
-    const rows: (string | number)[][] = poi.Connections.map((conn) => [
-      conn.ConnectionType?.Title ?? "Unknown",
-      conn.PowerKW ? `${conn.PowerKW} kW` : "-",
-      conn.CurrentType?.Title ?? "-",
-      conn.Quantity ?? 1,
-      conn.StatusType?.Title ?? poi.StatusType?.Title ?? "-",
-    ]);
-
-    sections.push({
-      title: "Connectors",
-      type: "table",
-      columns: ["Type", "Power", "Current", "Qty", "Status"],
-      rows,
-    });
-  }
-
-  // Usage info as text section
-  if (poi.UsageCost || poi.UsageType?.Title) {
-    const usageLines: string[] = [];
-    if (poi.UsageType?.Title) usageLines.push(`Access: ${poi.UsageType.Title}`);
-    if (poi.UsageCost) usageLines.push(`Cost: ${poi.UsageCost}`);
-    sections.push({
-      title: "Usage",
-      type: "list",
-      items: usageLines,
-    });
-  }
-
-  // Access comments
-  if (poi.AddressInfo.AccessComments) {
-    sections.push({
-      title: "Access",
-      type: "text",
-      content: poi.AddressInfo.AccessComments,
-    });
-  }
-
-  return {
-    id: `ocm:${poi.ID}`,
     sources: ["ocm"],
-    name: poi.AddressInfo.Title || "EV Charging Station",
-    coordinates: [poi.AddressInfo.Longitude, poi.AddressInfo.Latitude],
+    sourceItemIds: [`ocm:${poi.ID}`, poi.UUID ? `ocm:${poi.UUID}` : undefined].filter(
+      (id): id is string => Boolean(id),
+    ),
+    attributions: providerAttribution ? [providerAttribution] : undefined,
+    status: getStatus(poi),
     address: {
       line1: poi.AddressInfo.AddressLine1,
       town: poi.AddressInfo.Town,
@@ -135,19 +130,40 @@ export function mapOcmToDetail(poi: OcmPoi): DataSourceDetail {
       postcode: poi.AddressInfo.Postcode,
       country: poi.AddressInfo.Country?.Title,
     },
-    operator: poi.OperatorInfo
-      ? {
-          name: poi.OperatorInfo.Title,
-          url: poi.OperatorInfo.WebsiteURL,
-        }
-      : undefined,
-    usageInfo: poi.UsageType
-      ? {
-          type: poi.UsageType.Title,
-          cost: poi.UsageCost,
-          membershipRequired: poi.UsageType.IsMembershipRequired,
-        }
-      : undefined,
-    sections,
+    operator:
+      poi.OperatorInfo?.Title && !poi.OperatorInfo.IsPrivateIndividual
+        ? {
+            name: poi.OperatorInfo.Title,
+            url: poi.OperatorInfo.WebsiteURL,
+          }
+        : undefined,
+    usageType: poi.UsageType?.Title,
+    usageCost: poi.UsageCost,
+    membershipRequired: poi.UsageType?.IsMembershipRequired,
+    access: poi.AddressInfo.AccessComments,
+    connectors: (poi.Connections ?? []).map((conn) =>
+      connector({
+        type: conn.ConnectionType?.Title,
+        powerKw: conn.PowerKW,
+        currentType: conn.CurrentType?.Title,
+        quantity: conn.Quantity,
+        status: conn.StatusType?.Title ?? poi.StatusType?.Title,
+        reference: conn.Reference,
+      }),
+    ),
+    updatedAt: poi.DateLastStatusUpdate ?? poi.DateLastVerified ?? poi.DateLastConfirmed,
+    sourceUrl: poi.AddressInfo.RelatedURL,
+  };
+}
+
+export function mapOcmToDetail(poi: OcmPoi): DataSourceDetail {
+  return mapStationToDetail(mapOcmToStation(poi));
+}
+
+export function mapOcmToResult(poi: OcmPoi): DataSourceResult {
+  return {
+    ...mapStationToResult(mapOcmToStation(poi)),
+    summary: buildSummary(poi),
+    variant: getVariant(poi),
   };
 }

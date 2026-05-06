@@ -28,6 +28,18 @@
         "title": "OpenChargeMap API Key",
         "description": "OpenChargeMap API key.",
         "x-openmapx-secret": true
+      },
+      "afdcApiKey": {
+        "type": "string",
+        "title": "AFDC/NLR API Key",
+        "description": "National Renewable Laboratory / AFDC developer API key for U.S. charging stations.",
+        "x-openmapx-secret": true
+      },
+      "nobilApiKey": {
+        "type": "string",
+        "title": "NOBIL API Key",
+        "description": "NOBIL API key for Norway and Sweden charging station data.",
+        "x-openmapx-secret": true
       }
     }
   },
@@ -37,23 +49,134 @@
       "optional": true
     }
   ],
-  "healthCheck": {
-    "type": "http",
-    "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${apiKey}&latitude=0&longitude=0&distance=100",
-    "requiredConfigKeys": ["apiKey"]
-  },
+  "healthCheck": [
+    {
+      "name": "OpenChargeMap",
+      "type": "http",
+      "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${apiKey}&latitude=0&longitude=0&distance=100",
+      "requiredConfigKeys": ["apiKey"]
+    },
+    {
+      "name": "AFDC (US)",
+      "type": "http",
+      "urlTemplate": "https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key=${afdcApiKey}&fuel_type=ELEC&latitude=38.8977&longitude=-77.0365&radius=1&limit=1&format=json",
+      "requiredConfigKeys": ["afdcApiKey"]
+    },
+    {
+      "name": "Bundesnetzagentur (DE)",
+      "type": "http",
+      "url": "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/DownloadundKontakt.html"
+    },
+    {
+      "name": "France IRVE",
+      "type": "http",
+      "url": "https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/mobilityref-france-irve-220/records?limit=1"
+    },
+    {
+      "name": "SFOE (CH)",
+      "type": "http",
+      "url": "https://data.geo.admin.ch/ch.bfe.ladestellen-elektromobilitaet/status/oicp/ch.bfe.ladestellen-elektromobilitaet.json"
+    },
+    {
+      "name": "NOBIL",
+      "type": "http",
+      "urlTemplate": "https://nobil.no/api/server/search.php?apikey=${nobilApiKey}&apiversion=3&action=search&type=rectangle&northeast=%2859.95%2C10.85%29&southwest=%2859.85%2C10.65%29&limit=1&format=json",
+      "requiredConfigKeys": ["nobilApiKey"]
+    },
+    {
+      "name": "OpenStreetMap / Overpass",
+      "type": "ping",
+      "url": "https://overpass-api.de/api/status"
+    }
+  ],
   "quality": "built-in",
-  "category": "Data Overlays",
+  "category": "EV Charging",
   "dataSources": [
     {
       "sourceId": "ocm",
       "name": "OpenChargeMap",
       "url": "https://api.openchargemap.io/",
-      "license": "CC BY 4.0",
+      "license": "Mixed: OpenChargeMap-contributed data is CC BY 4.0; imported provider licenses vary",
       "licenseUrl": "https://openchargemap.org/site/about/terms",
-      "commercialUse": "yes",
+      "attribution": "© <a href=\"https://openchargemap.org\" target=\"_blank\" rel=\"noopener noreferrer\">OpenChargeMap</a> and its listed data providers (license varies per provider)",
+      "commercialUse": "conditional",
       "providerCountry": "AU",
       "providerPrivacyUrl": "https://www.openchargemap.org/about/terms",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "afdc",
+      "name": "Alternative Fuels Data Center",
+      "url": "https://afdc.energy.gov/stations/",
+      "license": "AFDC/NLR data terms",
+      "licenseUrl": "https://afdc.energy.gov/data_download",
+      "attribution": "Alternative Fuels Data Center, U.S. Department of Energy",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://afdc.energy.gov/stations-privacy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "bnetza",
+      "name": "Bundesnetzagentur Ladesäulenregister",
+      "url": "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/DownloadundKontakt.html",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "bundesnetzagentur.de",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bundesnetzagentur.de/DE/Service/Datenschutz/start.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "france-irve",
+      "name": "Base nationale consolidée des IRVE",
+      "url": "https://www.data.gouv.fr/fr/datasets/fichier-consolide-des-bornes-de-recharge-pour-vehicules-electriques/",
+      "license": "Licence Ouverte / Open Licence 2.0",
+      "licenseUrl": "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0",
+      "attribution": "transport.data.gouv.fr / data.gouv.fr contributors",
+      "commercialUse": "yes",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://www.data.gouv.fr/pages/suivi",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "swiss-sfoe",
+      "name": "Charging points for electric cars (SFOE)",
+      "url": "https://opendata.swiss/en/dataset/ladestationen-fuer-elektroautos",
+      "license": "opendata.swiss terms of use (terms_by_ask)",
+      "licenseUrl": "https://opendata.swiss/terms-of-use#terms_by_ask",
+      "attribution": "Swiss Federal Office of Energy SFOE and charging infrastructure operators",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://www.admin.ch/en/terms-and-conditions",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "nobil",
+      "name": "NOBIL",
+      "url": "https://info.nobil.no/api",
+      "license": "CC BY 4.0 with NOBIL API usage terms",
+      "licenseUrl": "https://info.nobil.no/api",
+      "attribution": "NOBIL by Enova / Norwegian EV Association",
+      "commercialUse": "conditional",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://info.nobil.no/om?catid=8%3Aom&id=246%3Anobil-privacy-policy&view=article",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
