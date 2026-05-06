@@ -4,7 +4,7 @@
   "dataSources": [
     {
       "purpose": "Webcam-Streams weltweit (Tourismus, Wetter, Verkehr)",
-      "dataSent": "Begrenzungsrahmen-Koordinaten (Nord, Süd, Ost, West)",
+      "dataSent": "Begrenzungsrahmen-Koordinaten über das Backend; der Browser lädt den Windy-Player bzw. Medien direkt, wenn ein Live- oder Timelapse-Embed geöffnet wird",
       "dataReceived": "Webcam-Cluster/Punkte mit Name, Koordinaten, Vorschau-URL, Stream-URL, Aufrufzahl, Kategorien"
     },
     {
@@ -19,8 +19,8 @@
     },
     {
       "purpose": "Londoner Verkehrskameras (TfL JamCams)",
-      "dataSent": "Keine Nutzerdaten (gesamter JamCam-Datensatz wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
-      "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL"
+      "dataSent": "Keine Nutzerdaten beim Katalogabruf; der Browser lädt TfL-Videomedien direkt, wenn der Videoclip angezeigt wird",
+      "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Video-URL"
     },
     {
       "purpose": "US-Nationalpark-Webcams (NPS)",
@@ -29,7 +29,7 @@
     },
     {
       "purpose": "Verkehrskameras des Staates New York (511NY)",
-      "dataSent": "Keine Nutzerdaten (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
+      "dataSent": "Keine Nutzerdaten beim Katalogabruf; der Browser lädt 511NY-HLS-Medien direkt, wenn der Live-Stream geöffnet wird",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, HLS-Videostream-URL, Straßenname, Fahrtrichtung"
     },
     {

@@ -10,12 +10,14 @@ import PaymentsIcon from "@mui/icons-material/Payments";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import { type PricingPlanEntry, proxyImageUrl } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
 import { TEAL } from "@/lib/theme";
@@ -292,6 +294,95 @@ function ImageSection({ section }: { section: StructuredSection }) {
   );
 }
 
+function isExternalBrowserUrl(url: string): boolean {
+  if (!/^https?:\/\//i.test(url)) return false;
+  if (typeof window === "undefined") return true;
+  try {
+    return new URL(url).origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
+  const t = useTranslations("dataSources");
+  const [acceptedEmbedUrl, setAcceptedEmbedUrl] = useState<string | null>(null);
+
+  if (!section.embedUrl) return null;
+
+  const loaded = !isExternalBrowserUrl(section.embedUrl) || acceptedEmbedUrl === section.embedUrl;
+
+  if (!loaded) {
+    return (
+      <Box
+        sx={{
+          mb: 1,
+          minHeight: 156,
+          aspectRatio: "16/9",
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 2,
+          bgcolor: "action.hover",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          px: 2,
+        }}
+      >
+        <Box sx={{ maxWidth: 300 }}>
+          <VideocamIcon sx={{ fontSize: 24, color: "text.secondary", mb: 0.5 }} />
+          <Typography variant="body2" fontWeight={600}>
+            {t("externalMediaTitle")}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            {t("externalMediaBody")}
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setAcceptedEmbedUrl(section.embedUrl ?? null)}
+            sx={{ mt: 1.25, textTransform: "none", fontWeight: 600 }}
+          >
+            {t("loadExternalMedia")}
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (section.embedType === "video") {
+    return (
+      <Box sx={{ mb: 1 }}>
+        <HlsVideo
+          src={section.embedUrl}
+          controls
+          autoPlay
+          muted
+          style={{ width: "100%", borderRadius: 8, display: "block" }}
+        />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ mb: 1 }}>
+      <Box
+        component="iframe"
+        src={section.embedUrl}
+        sandbox="allow-scripts allow-same-origin"
+        sx={{
+          width: "100%",
+          aspectRatio: "16/9",
+          border: "none",
+          borderRadius: 2,
+          display: "block",
+        }}
+      />
+    </Box>
+  );
+}
+
 function SectionContent({
   section,
   pricingLabels,
@@ -351,36 +442,7 @@ function SectionContent({
     }
 
     case "embed":
-      if (!section.embedUrl) return null;
-      if (section.embedType === "video") {
-        return (
-          <Box sx={{ mb: 1 }}>
-            <HlsVideo
-              src={section.embedUrl}
-              controls
-              autoPlay
-              muted
-              style={{ width: "100%", borderRadius: 8, display: "block" }}
-            />
-          </Box>
-        );
-      }
-      return (
-        <Box sx={{ mb: 1 }}>
-          <Box
-            component="iframe"
-            src={section.embedUrl}
-            sandbox="allow-scripts allow-same-origin"
-            sx={{
-              width: "100%",
-              aspectRatio: "16/9",
-              border: "none",
-              borderRadius: 2,
-              display: "block",
-            }}
-          />
-        </Box>
-      );
+      return <ExternalMediaEmbed section={section} />;
 
     default:
       return null;
@@ -394,7 +456,9 @@ function StructuredSectionCard({
   section: StructuredSection;
   pricingLabels?: StructuredSectionsProps["pricingLabels"];
 }) {
-  const [expanded, setExpanded] = useState(!section.collapsed);
+  const collapsed = section.collapsed ?? section.type === "embed";
+  const [expanded, setExpanded] = useState(!collapsed);
+  const deferCollapsedContent = collapsed && section.type === "embed";
 
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
@@ -409,14 +473,14 @@ function StructuredSectionCard({
               alignItems: "center",
               justifyContent: "space-between",
               mb: expanded ? 0.5 : 0,
-              ...(section.collapsed ? { cursor: "pointer" } : {}),
+              ...(collapsed ? { cursor: "pointer" } : {}),
             }}
-            onClick={section.collapsed ? () => setExpanded((value) => !value) : undefined}
+            onClick={collapsed ? () => setExpanded((value) => !value) : undefined}
           >
             <Typography variant="body2" fontWeight={600}>
               {section.title}
             </Typography>
-            {section.collapsed && (
+            {collapsed && (
               <IconButton size="small" sx={{ ml: 0.5, p: 0 }}>
                 <ExpandMoreIcon
                   sx={{
@@ -428,8 +492,12 @@ function StructuredSectionCard({
               </IconButton>
             )}
           </Box>
-          {section.collapsed ? (
-            <Collapse in={expanded}>
+          {collapsed ? (
+            <Collapse
+              in={expanded}
+              mountOnEnter={deferCollapsedContent}
+              unmountOnExit={deferCollapsedContent}
+            >
               <SectionContent section={section} pricingLabels={pricingLabels} />
             </Collapse>
           ) : (

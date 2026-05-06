@@ -10,6 +10,17 @@ vi.mock("@/components/ui/HlsVideo", () => ({
   ),
 }));
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) =>
+    (
+      ({
+        externalMediaTitle: "External media",
+        externalMediaBody: "Loads from the camera provider.",
+        loadExternalMedia: "Load media",
+      }) as Record<string, string>
+    )[key] ?? key,
+}));
+
 vi.mock("@/lib/theme", () => ({
   TEAL: "#008080",
 }));
@@ -32,5 +43,25 @@ describe("StructuredSections", () => {
       "http://localhost:3001/api/image-proxy?url=https%3A%2F%2Fapi.entur.io%2Fmobility%2Fassets%2Fvehicle.png",
     );
     expect(markup).not.toContain('src="https://api.entur.io');
+  });
+
+  it("does not load external embed URLs before the media gate is accepted", () => {
+    const markup = renderToStaticMarkup(
+      <StructuredSections
+        sections={[
+          {
+            title: "Traffic camera",
+            type: "embed",
+            embedType: "video",
+            embedUrl: "https://camera.example.test/live.m3u8",
+            collapsed: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("External media");
+    expect(markup).toContain("Load media");
+    expect(markup).not.toContain("https://camera.example.test/live.m3u8");
   });
 });

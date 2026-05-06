@@ -201,7 +201,7 @@
       "commercialUse": "conditional",
       "providerCountry": "CZ",
       "providerPrivacyUrl": "https://account.windy.com/agreements/windy-privacy-policy",
-      "endUserExposure": "server-only",
+      "endUserExposure": "mixed",
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
@@ -245,7 +245,7 @@
       "commercialUse": "yes",
       "providerCountry": "UK",
       "providerPrivacyUrl": "https://tfl.gov.uk/corporate/privacy-and-cookies/",
-      "endUserExposure": "server-only",
+      "endUserExposure": "mixed",
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false
@@ -273,7 +273,7 @@
       "commercialUse": "unknown",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://511ny.org/privacy",
-      "endUserExposure": "server-only",
+      "endUserExposure": "mixed",
       "personalData": false,
       "cookies": false,
       "dpaAvailable": false

@@ -4,7 +4,7 @@
   "dataSources": [
     {
       "purpose": "Webcam streams worldwide (tourism, weather, traffic)",
-      "dataSent": "Bounding box coordinates (north, south, east, west)",
+      "dataSent": "Bounding box coordinates via backend; browser loads Windy player/media directly when a live or timelapse embed is opened",
       "dataReceived": "Webcam clusters/points with name, coordinates, thumbnail URL, stream URL, view count, categories"
     },
     {
@@ -19,8 +19,8 @@
     },
     {
       "purpose": "London traffic cameras (TfL JamCams)",
-      "dataSent": "No user data (fetches entire JamCam dataset, filtered server-side to bounding box)",
-      "dataReceived": "Traffic cameras with name, coordinates, still image URL"
+      "dataSent": "No user data for catalog fetch; browser loads TfL video media directly when the video clip is displayed",
+      "dataReceived": "Traffic cameras with name, coordinates, still image URL, video URL"
     },
     {
       "purpose": "US National Park webcams (NPS)",
@@ -29,7 +29,7 @@
     },
     {
       "purpose": "New York State traffic cameras (511NY)",
-      "dataSent": "No user data (fetches entire camera list, filtered server-side to bounding box)",
+      "dataSent": "No user data for catalog fetch; browser loads 511NY HLS media directly when the live stream is opened",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, HLS video stream URL, roadway name, direction of travel"
     },
     {
