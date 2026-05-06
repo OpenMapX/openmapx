@@ -3,7 +3,7 @@ import {
   cacheKeyForSubject,
   fetchAggregate,
   fetchReviews,
-  initReviewsOrchestrator,
+  getReviewProviders,
   submitReview,
   uploadReviewImage,
 } from "./orchestrator.js";
@@ -31,8 +31,6 @@ function parseSubject(query: Record<string, string>): ReviewSubject | null {
 }
 
 export function setup(ctx: IntegrationContext): void {
-  initReviewsOrchestrator(ctx);
-
   /** GET /reviews — list reviews for a subject (Redis-cached). */
   ctx.registerRoute("GET", "/reviews", async (req, reply) => {
     const subject = parseSubject(req.query);
@@ -42,7 +40,10 @@ export function setup(ctx: IntegrationContext): void {
     }
     const key = `cache:reviews:list:${cacheKeyForSubject(subject)}`;
     try {
-      const reviews = await ctx.cache.withCache(key, READ_TTL_SECONDS, () => fetchReviews(subject));
+      const reviews = await ctx.cache.withCache(key, READ_TTL_SECONDS, () => {
+        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        return fetchReviews(subject, providers);
+      });
       // Redis handles server-side caching; tell the browser to always revalidate
       // so post-write invalidations (edits, deletes) are visible immediately.
       reply.header("Cache-Control", "no-store");
@@ -62,9 +63,10 @@ export function setup(ctx: IntegrationContext): void {
     }
     const key = `cache:reviews:agg:${cacheKeyForSubject(subject)}`;
     try {
-      const aggregate = await ctx.cache.withCache(key, READ_TTL_SECONDS, () =>
-        fetchAggregate(subject),
-      );
+      const aggregate = await ctx.cache.withCache(key, READ_TTL_SECONDS, () => {
+        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        return fetchAggregate(subject, providers);
+      });
       reply.header("Cache-Control", "no-store");
       reply.send({ aggregate });
     } catch (err) {
@@ -93,7 +95,8 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       try {
-        const result = await submitReview(jwt);
+        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        const result = await submitReview(jwt, providers);
         // Best-effort cache invalidation for this subject's reads.
         if (
           body?.invalidate?.lat !== undefined &&
@@ -162,7 +165,8 @@ export function setup(ctx: IntegrationContext): void {
         (typeof body.filename === "string" && body.filename.trim()) || `upload.${ext}`;
       const blob = new Blob([buffer], { type: normalizedMime });
       try {
-        const result = await uploadReviewImage(blob, filename);
+        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        const result = await uploadReviewImage(blob, filename, providers);
         reply.send(result);
       } catch (err) {
         ctx.log.error("reviews:image upload failed", err);

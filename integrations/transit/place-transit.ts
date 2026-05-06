@@ -1,6 +1,5 @@
 import type {
   BBox,
-  CacheClient,
   Departure,
   Facility,
   IntegrationContext,
@@ -30,28 +29,35 @@ const TTL = {
   placeFacilities: 86400,
 };
 
-let _orchestrator: TransitOrchestrator | null = null;
-let _cache: CacheClient | null = null;
-
-/** Must be called during setup() to provide the integration context. */
-export function initTransitOrchestrator(
-  ctx: IntegrationContext,
-  orchestrator: TransitOrchestrator,
-): void {
-  _cache = ctx.cache;
-  _orchestrator = orchestrator;
-}
-
-function orch(): TransitOrchestrator {
-  if (!_orchestrator)
-    throw new Error("Transit orchestrator not initialized — call initTransitOrchestrator first");
-  return _orchestrator;
-}
-
-function cache(): CacheClient {
-  if (!_cache)
-    throw new Error("Transit orchestrator not initialized — call initTransitOrchestrator first");
-  return _cache;
+export interface PlaceTransit {
+  getLinkedStops(lat: number, lng: number, name: string, placeId?: string): Promise<TransitStop[]>;
+  getMergedRoutes(lat: number, lng: number, name: string, placeId?: string): Promise<MergedRoute[]>;
+  getMergedDepartures(
+    lat: number,
+    lng: number,
+    name: string,
+    minutes: number,
+    placeId?: string,
+  ): Promise<MergedDeparture[]>;
+  getMergedArrivals(
+    lat: number,
+    lng: number,
+    name: string,
+    minutes: number,
+    placeId?: string,
+  ): Promise<MergedDeparture[]>;
+  getMergedAlerts(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<ServiceAlert[]>;
+  getMergedFacilities(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<Facility[]>;
 }
 
 /** Build a deterministic cache key from prefix + data. */
@@ -90,398 +96,418 @@ function placeCacheId(lat: number, lng: number, name: string, placeId?: string):
 
 // Linked stops
 
-/**
- * Find all transit stops that belong to a given OSM place.
- * Returns ALL stops within 1 km with name similarity >= 0.4 — NOT deduplicated —
- * so that multiple providers' entries for the same physical station are all kept
- * (their routes/departures will be merged separately).
- */
-export async function getLinkedStops(
-  lat: number,
-  lng: number,
-  name: string,
-  placeId?: string,
-): Promise<TransitStop[]> {
-  const key = hashKey("transit:place-stops", { id: placeCacheId(lat, lng, name, placeId) });
-  const cached = await cache().get<TransitStop[]>(key);
-  if (cached) return cached;
+export function createPlaceTransit(
+  ctx: IntegrationContext,
+  orchestrator: TransitOrchestrator,
+): PlaceTransit {
+  const cache = ctx.cache;
 
-  // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
-  // providers from distant regions don't contribute stops that share stop-database
-  // IDs but would then return their own regional routes via getRoutesForStop.
-  const buf = 1.0;
-  const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
-  // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
-  // providers indexing either form are found, then deduplicate by stop id.
-  const variants = getQueryVariants(name);
-  const variantResults = await Promise.all(
-    variants.map((v) => orch().searchByNameRaw(v, 30, placeBbox)),
-  );
-  const seen = new Set<string>();
-  const raw = variantResults.flat().filter((s) => {
-    if (seen.has(s.id)) return false;
-    seen.add(s.id);
-    return true;
-  });
-  const normVariants = variants
-    .map((v) => normalizeLinkName(v))
-    .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
+  /**
+   * Find all transit stops that belong to a given OSM place.
+   * Returns ALL stops within 1 km with name similarity >= 0.4 — NOT deduplicated —
+   * so that multiple providers' entries for the same physical station are all kept
+   * (their routes/departures will be merged separately).
+   */
+  async function getLinkedStops(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<TransitStop[]> {
+    const key = hashKey("transit:place-stops", { id: placeCacheId(lat, lng, name, placeId) });
+    const cached = await cache.get<TransitStop[]>(key);
+    if (cached) return cached;
 
-  // First-pass candidates: distance + fuzzy name match against any query variant.
-  const prelim = raw.filter((stop) => {
-    if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
-    const stopNorm = normalizeLinkName(stop.name);
-    if (!stopNorm) return false;
-    let best = 0;
+    // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
+    // providers from distant regions don't contribute stops that share stop-database
+    // IDs but would then return their own regional routes via getRoutesForStop.
+    const buf = 1.0;
+    const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
+    // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
+    // providers indexing either form are found, then deduplicate by stop id.
+    const variants = getQueryVariants(name);
+    const variantResults = await Promise.all(
+      variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
+    );
+    const seen = new Set<string>();
+    const raw = variantResults.flat().filter((s) => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+    const normVariants = variants
+      .map((v) => normalizeLinkName(v))
+      .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
+
+    // First-pass candidates: distance + fuzzy name match against any query variant.
+    const prelim = raw.filter((stop) => {
+      if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
+      const stopNorm = normalizeLinkName(stop.name);
+      if (!stopNorm) return false;
+      let best = 0;
+      for (const q of normVariants) {
+        const score = diceSimilarity(stopNorm, q);
+        if (score > best) best = score;
+      }
+      return best >= MIN_NAME_DICE;
+    });
+
+    if (prelim.length === 0) {
+      await cache.set(key, [], TTL.placeStops);
+      return [];
+    }
+
+    // Second-pass pruning: avoid linking by city token only.
+    // Keep candidates that share at least one informative token from the place
+    // name variants (tokens present in some, but not all, prelim candidates).
+    const tokenFreq = new Map<string, number>();
+    const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
+    for (const tokens of prelimTokenSets) {
+      for (const t of tokens) {
+        tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+      }
+    }
+
+    const placeTokens = new Set<string>();
     for (const q of normVariants) {
-      const score = diceSimilarity(stopNorm, q);
-      if (score > best) best = score;
+      for (const t of tokenizeLinkName(q)) {
+        if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
+        if (/^\d+$/.test(t)) continue;
+        placeTokens.add(t);
+      }
     }
-    return best >= MIN_NAME_DICE;
-  });
 
-  if (prelim.length === 0) {
-    await cache().set(key, [], TTL.placeStops);
-    return [];
+    const informativeTokens = Array.from(placeTokens).filter((t) => {
+      const count = tokenFreq.get(t) ?? 0;
+      return count > 0 && count < prelim.length;
+    });
+
+    const linked =
+      informativeTokens.length === 0
+        ? prelim
+        : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
+
+    await cache.set(key, linked, TTL.placeStops);
+    return linked;
   }
 
-  // Second-pass pruning: avoid linking by city token only.
-  // Keep candidates that share at least one informative token from the place
-  // name variants (tokens present in some, but not all, prelim candidates).
-  const tokenFreq = new Map<string, number>();
-  const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
-  for (const tokens of prelimTokenSets) {
-    for (const t of tokens) {
-      tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+  // Route merging
+
+  /**
+   * Fetch routes for all linked stops and merge across providers.
+   *
+   * Deduplication key: (mode, shortName)
+   * - Same route from DB + iRail -> providers: ["db", "irail"], keep entry with color data
+   * - Same route from 3 DB bus platforms -> providers: ["db"] (one entry)
+   */
+  async function getMergedRoutes(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<MergedRoute[]> {
+    const cacheId = placeCacheId(lat, lng, name, placeId);
+    const key = hashKey("transit:place-routes", { id: cacheId });
+    const cached = await cache.get<MergedRoute[]>(key);
+    if (cached) return cached;
+
+    const stops = await getLinkedStops(lat, lng, name, placeId);
+    if (stops.length === 0) {
+      await cache.set(key, [], TTL.placeRoutes);
+      return [];
     }
-  }
 
-  const placeTokens = new Set<string>();
-  for (const q of normVariants) {
-    for (const t of tokenizeLinkName(q)) {
-      if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
-      if (/^\d+$/.test(t)) continue;
-      placeTokens.add(t);
-    }
-  }
+    // Fetch routes for all stops in parallel
+    const routeResults = await Promise.allSettled(
+      stops.map((s) => orchestrator.getRoutesForStop(s.id)),
+    );
 
-  const informativeTokens = Array.from(placeTokens).filter((t) => {
-    const count = tokenFreq.get(t) ?? 0;
-    return count > 0 && count < prelim.length;
-  });
+    // Map: "(mode):(shortName)" -> best MergedRoute candidate
+    const byKey = new Map<string, MergedRoute>();
 
-  const linked =
-    informativeTokens.length === 0
-      ? prelim
-      : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
+    for (let i = 0; i < stops.length; i++) {
+      const result = routeResults[i];
+      if (result.status !== "fulfilled") continue;
+      const providerName = stops[i].provider;
 
-  await cache().set(key, linked, TTL.placeStops);
-  return linked;
-}
+      for (const route of result.value) {
+        if (isTripNumber(route.shortName)) continue;
+        const k = `${route.mode}:${normalizeShortName(route.shortName)}`;
+        const existing = byKey.get(k);
 
-// Route merging
-
-/**
- * Fetch routes for all linked stops and merge across providers.
- *
- * Deduplication key: (mode, shortName)
- * - Same route from DB + iRail -> providers: ["db", "irail"], keep entry with color data
- * - Same route from 3 DB bus platforms -> providers: ["db"] (one entry)
- */
-export async function getMergedRoutes(
-  lat: number,
-  lng: number,
-  name: string,
-  placeId?: string,
-): Promise<MergedRoute[]> {
-  const cacheId = placeCacheId(lat, lng, name, placeId);
-  const key = hashKey("transit:place-routes", { id: cacheId });
-  const cached = await cache().get<MergedRoute[]>(key);
-  if (cached) return cached;
-
-  const stops = await getLinkedStops(lat, lng, name, placeId);
-  if (stops.length === 0) {
-    await cache().set(key, [], TTL.placeRoutes);
-    return [];
-  }
-
-  // Fetch routes for all stops in parallel
-  const routeResults = await Promise.allSettled(stops.map((s) => orch().getRoutesForStop(s.id)));
-
-  // Map: "(mode):(shortName)" -> best MergedRoute candidate
-  const byKey = new Map<string, MergedRoute>();
-
-  for (let i = 0; i < stops.length; i++) {
-    const result = routeResults[i];
-    if (result.status !== "fulfilled") continue;
-    const providerName = stops[i].provider;
-
-    for (const route of result.value) {
-      if (isTripNumber(route.shortName)) continue;
-      const k = `${route.mode}:${normalizeShortName(route.shortName)}`;
-      const existing = byKey.get(k);
-
-      if (!existing) {
-        // First time seeing this route
-        byKey.set(k, {
-          ...route,
-          providers: [providerName],
-          hintStopId: stops[i].id,
-        } as MergedRoute);
-      } else {
-        // Already seen — merge providers
-        if (!existing.providers.includes(providerName)) {
-          existing.providers.push(providerName);
-        }
-        if (!existing.hintStopId) {
-          existing.hintStopId = stops[i].id;
-        }
-        // Prefer entry with color data
-        if (!existing.color && route.color) {
-          existing.color = route.color;
-          existing.textColor = route.textColor;
+        if (!existing) {
+          // First time seeing this route
+          byKey.set(k, {
+            ...route,
+            providers: [providerName],
+            hintStopId: stops[i].id,
+          } as MergedRoute);
+        } else {
+          // Already seen — merge providers
+          if (!existing.providers.includes(providerName)) {
+            existing.providers.push(providerName);
+          }
+          if (!existing.hintStopId) {
+            existing.hintStopId = stops[i].id;
+          }
+          // Prefer entry with color data
+          if (!existing.color && route.color) {
+            existing.color = route.color;
+            existing.textColor = route.textColor;
+          }
         }
       }
     }
+
+    const merged = Array.from(byKey.values());
+    // Sort by mode then shortName for stable display order
+    merged.sort((a, b) => {
+      if (a.mode !== b.mode) return a.mode.localeCompare(b.mode);
+      return a.shortName.localeCompare(b.shortName);
+    });
+
+    await cache.set(key, merged, TTL.placeRoutes);
+    return merged;
   }
 
-  const merged = Array.from(byKey.values());
-  // Sort by mode then shortName for stable display order
-  merged.sort((a, b) => {
-    if (a.mode !== b.mode) return a.mode.localeCompare(b.mode);
-    return a.shortName.localeCompare(b.shortName);
-  });
+  // Timetable merging (shared by departures & arrivals)
 
-  await cache().set(key, merged, TTL.placeRoutes);
-  return merged;
-}
+  /**
+   * Merge departures/arrivals from all linked stops using multi-key dedup.
+   *
+   * Deduplication keys per entry:
+   *   k1 (primary):   normalizedShortName + scheduledAt
+   *   k2 (secondary): normalizedHeadsign + scheduledAt + platform
+   *   k3 (fallback):  normalizedHeadsign + scheduledAt (no platform)
+   *
+   * Not cached — caller refetches every 30s for real-time data.
+   */
+  async function buildMergedTimetable(
+    stops: TransitStop[],
+    fetchFn: (stopId: string, minutes: number) => Promise<Departure[]>,
+    minutes: number,
+  ): Promise<MergedDeparture[]> {
+    if (stops.length === 0) return [];
 
-// Timetable merging (shared by departures & arrivals)
+    const results = await Promise.allSettled(stops.map((s) => fetchFn(s.id, minutes)));
+    const byKey = new Map<string, MergedDeparture>();
 
-/**
- * Merge departures/arrivals from all linked stops using multi-key dedup.
- *
- * Deduplication keys per entry:
- *   k1 (primary):   normalizedShortName + scheduledAt
- *   k2 (secondary): normalizedHeadsign + scheduledAt + platform
- *   k3 (fallback):  normalizedHeadsign + scheduledAt (no platform)
- *
- * Not cached — caller refetches every 30s for real-time data.
- */
-async function buildMergedTimetable(
-  stops: TransitStop[],
-  fetchFn: (stopId: string, minutes: number) => Promise<Departure[]>,
-  minutes: number,
-): Promise<MergedDeparture[]> {
-  if (stops.length === 0) return [];
-
-  const results = await Promise.allSettled(stops.map((s) => fetchFn(s.id, minutes)));
-  const byKey = new Map<string, MergedDeparture>();
-
-  function mergeInto(
-    existing: MergedDeparture,
-    dep: DepartureWithFeed,
-    providerNames: string[],
-  ): void {
-    for (const p of providerNames) {
-      if (!existing.providers.includes(p)) existing.providers.push(p);
-    }
-    if (dep.tripId) {
-      if (!existing.tripId) existing.tripId = dep.tripId;
-      // Collect all non-empty tripIds for fallback lookups
-      if (!existing.tripIds) existing.tripIds = existing.tripId ? [existing.tripId] : [];
-      if (!existing.tripIds.includes(dep.tripId)) existing.tripIds.push(dep.tripId);
-    }
-    // Keep the earlier scheduledAt (providers may differ by 1-2 min for the same departure)
-    if (dep.scheduledAt && dep.scheduledAt < existing.scheduledAt) {
-      existing.scheduledAt = dep.scheduledAt;
-    }
-    if (!existing.expectedAt && dep.expectedAt) {
-      existing.expectedAt = dep.expectedAt;
-      existing.delaySeconds = dep.delaySeconds;
-    }
-    if (!existing.platform && dep.platform) existing.platform = dep.platform;
-    if (dep.canceled) existing.canceled = true;
-    if (dep.remarks?.length) {
-      const existingTexts = new Set((existing.remarks ?? []).map((r) => r.text));
-      for (const r of dep.remarks) {
-        if (!existingTexts.has(r.text)) {
-          existing.remarks = existing.remarks ?? [];
-          existing.remarks.push(r);
-          existingTexts.add(r.text);
+    function mergeInto(
+      existing: MergedDeparture,
+      dep: DepartureWithFeed,
+      providerNames: string[],
+    ): void {
+      for (const p of providerNames) {
+        if (!existing.providers.includes(p)) existing.providers.push(p);
+      }
+      if (dep.tripId) {
+        if (!existing.tripId) existing.tripId = dep.tripId;
+        // Collect all non-empty tripIds for fallback lookups
+        if (!existing.tripIds) existing.tripIds = existing.tripId ? [existing.tripId] : [];
+        if (!existing.tripIds.includes(dep.tripId)) existing.tripIds.push(dep.tripId);
+      }
+      // Keep the earlier scheduledAt (providers may differ by 1-2 min for the same departure)
+      if (dep.scheduledAt && dep.scheduledAt < existing.scheduledAt) {
+        existing.scheduledAt = dep.scheduledAt;
+      }
+      if (!existing.expectedAt && dep.expectedAt) {
+        existing.expectedAt = dep.expectedAt;
+        existing.delaySeconds = dep.delaySeconds;
+      }
+      if (!existing.platform && dep.platform) existing.platform = dep.platform;
+      if (dep.canceled) existing.canceled = true;
+      if (dep.remarks?.length) {
+        const existingTexts = new Set((existing.remarks ?? []).map((r) => r.text));
+        for (const r of dep.remarks) {
+          if (!existingTexts.has(r.text)) {
+            existing.remarks = existing.remarks ?? [];
+            existing.remarks.push(r);
+            existingTexts.add(r.text);
+          }
         }
       }
     }
-  }
 
-  for (let i = 0; i < stops.length; i++) {
-    const result = results[i];
-    if (result.status !== "fulfilled") continue;
-    const stopProvider = stops[i].provider;
+    for (let i = 0; i < stops.length; i++) {
+      const result = results[i];
+      if (result.status !== "fulfilled") continue;
+      const stopProvider = stops[i].provider;
 
-    for (const dep of result.value as DepartureWithFeed[]) {
-      // Include both feed-level tag (e.g. "de_DELFI") and instance provider (e.g. "mo")
-      const feedProviders: string[] = [];
-      if (dep.feedTag) feedProviders.push(dep.feedTag);
-      if (stopProvider && stopProvider !== dep.feedTag) feedProviders.push(stopProvider);
-      const providerName = feedProviders[0] ?? stopProvider;
-      // Two adjacent 2-min buckets eliminate boundary issues (e.g. 22:41 vs 22:42)
-      const [bucket0, bucket1] = bucketTimestamps(dep.scheduledAt);
-      const normShort = normalizeShortName(dep.route.shortName);
-      const normHeadsign = dep.headsign ? normalizeHeadsign(dep.headsign) : null;
+      for (const dep of result.value as DepartureWithFeed[]) {
+        // Include both feed-level tag (e.g. "de_DELFI") and instance provider (e.g. "mo")
+        const feedProviders: string[] = [];
+        if (dep.feedTag) feedProviders.push(dep.feedTag);
+        if (stopProvider && stopProvider !== dep.feedTag) feedProviders.push(stopProvider);
+        const providerName = feedProviders[0] ?? stopProvider;
+        // Two adjacent 2-min buckets eliminate boundary issues (e.g. 22:41 vs 22:42)
+        const [bucket0, bucket1] = bucketTimestamps(dep.scheduledAt);
+        const normShort = normalizeShortName(dep.route.shortName);
+        const normHeadsign = dep.headsign ? normalizeHeadsign(dep.headsign) : null;
 
-      // Build all candidate keys (primary bucket + neighbor bucket)
-      const k1a = `${normShort}:${bucket0}`;
-      const k1b = `${normShort}:${bucket1}`;
-      const k2a =
-        normHeadsign && dep.platform ? `trip:${normHeadsign}:${bucket0}:${dep.platform}` : null;
-      const k2b =
-        normHeadsign && dep.platform ? `trip:${normHeadsign}:${bucket1}:${dep.platform}` : null;
-      const k3a = normHeadsign ? `trip:${normHeadsign}:${bucket0}` : null;
-      const k3b = normHeadsign ? `trip:${normHeadsign}:${bucket1}` : null;
+        // Build all candidate keys (primary bucket + neighbor bucket)
+        const k1a = `${normShort}:${bucket0}`;
+        const k1b = `${normShort}:${bucket1}`;
+        const k2a =
+          normHeadsign && dep.platform ? `trip:${normHeadsign}:${bucket0}:${dep.platform}` : null;
+        const k2b =
+          normHeadsign && dep.platform ? `trip:${normHeadsign}:${bucket1}:${dep.platform}` : null;
+        const k3a = normHeadsign ? `trip:${normHeadsign}:${bucket0}` : null;
+        const k3b = normHeadsign ? `trip:${normHeadsign}:${bucket1}` : null;
 
-      // Look up in both buckets
-      const existing =
-        byKey.get(k1a) ??
-        byKey.get(k1b) ??
-        (k2a ? byKey.get(k2a) : undefined) ??
-        (k2b ? byKey.get(k2b) : undefined) ??
-        (k3a ? byKey.get(k3a) : undefined) ??
-        (k3b ? byKey.get(k3b) : undefined);
+        // Look up in both buckets
+        const existing =
+          byKey.get(k1a) ??
+          byKey.get(k1b) ??
+          (k2a ? byKey.get(k2a) : undefined) ??
+          (k2b ? byKey.get(k2b) : undefined) ??
+          (k3a ? byKey.get(k3a) : undefined) ??
+          (k3b ? byKey.get(k3b) : undefined);
 
-      if (!existing) {
-        const entry: MergedDeparture = {
-          ...dep,
-          providers: feedProviders.length ? [...feedProviders] : [providerName],
-          tripIds: dep.tripId ? [dep.tripId] : [],
-        };
-        // Register under primary bucket keys only (neighbor is for lookup, not storage)
-        byKey.set(k1a, entry);
-        if (k2a) byKey.set(k2a, entry);
-        if (k3a) byKey.set(k3a, entry);
-      } else {
-        // Register alias keys so future lookups from either bucket find this entry
-        if (!byKey.has(k1a)) byKey.set(k1a, existing);
-        if (!byKey.has(k1b)) byKey.set(k1b, existing);
-        if (k2a && !byKey.has(k2a)) byKey.set(k2a, existing);
-        if (k2b && !byKey.has(k2b)) byKey.set(k2b, existing);
-        if (k3a && !byKey.has(k3a)) byKey.set(k3a, existing);
-        if (k3b && !byKey.has(k3b)) byKey.set(k3b, existing);
-        mergeInto(existing, dep, feedProviders.length ? feedProviders : [providerName]);
-      }
-    }
-  }
-
-  const unique = new Set(byKey.values());
-  return Array.from(unique).sort(
-    (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
-  );
-}
-
-export async function getMergedDepartures(
-  lat: number,
-  lng: number,
-  name: string,
-  minutes: number,
-  placeId?: string,
-): Promise<MergedDeparture[]> {
-  const stops = await getLinkedStops(lat, lng, name, placeId);
-  return buildMergedTimetable(stops, (id, min) => orch().getDepartures(id, min), minutes);
-}
-
-export async function getMergedArrivals(
-  lat: number,
-  lng: number,
-  name: string,
-  minutes: number,
-  placeId?: string,
-): Promise<MergedDeparture[]> {
-  const stops = await getLinkedStops(lat, lng, name, placeId);
-  return buildMergedTimetable(stops, (id, min) => orch().getArrivals(id, min), minutes);
-}
-
-// Alert merging
-
-/**
- * Fetch alerts for all linked stops and deduplicate by alert id.
- * Cached 60 seconds.
- */
-export async function getMergedAlerts(
-  lat: number,
-  lng: number,
-  name: string,
-  placeId?: string,
-): Promise<ServiceAlert[]> {
-  const cacheId = placeCacheId(lat, lng, name, placeId);
-  const key = hashKey("transit:place-alerts", { id: cacheId });
-  const cached = await cache().get<ServiceAlert[]>(key);
-  if (cached) return cached;
-
-  const stops = await getLinkedStops(lat, lng, name, placeId);
-  if (stops.length === 0) {
-    await cache().set(key, [], TTL.placeAlerts);
-    return [];
-  }
-
-  const alertResults = await Promise.allSettled(stops.map((s) => orch().getStopAlerts(s.id)));
-  const byId = new Map<string, ServiceAlert>();
-
-  for (const result of alertResults) {
-    if (result.status !== "fulfilled") continue;
-    for (const alert of result.value) {
-      const existing = byId.get(alert.id);
-      if (!existing) {
-        byId.set(alert.id, alert);
-      } else {
-        // Same alert from a second stop — merge providers
-        for (const p of alert.providers) {
-          if (!existing.providers.includes(p)) existing.providers.push(p);
+        if (!existing) {
+          const entry: MergedDeparture = {
+            ...dep,
+            providers: feedProviders.length ? [...feedProviders] : [providerName],
+            tripIds: dep.tripId ? [dep.tripId] : [],
+          };
+          // Register under primary bucket keys only (neighbor is for lookup, not storage)
+          byKey.set(k1a, entry);
+          if (k2a) byKey.set(k2a, entry);
+          if (k3a) byKey.set(k3a, entry);
+        } else {
+          // Register alias keys so future lookups from either bucket find this entry
+          if (!byKey.has(k1a)) byKey.set(k1a, existing);
+          if (!byKey.has(k1b)) byKey.set(k1b, existing);
+          if (k2a && !byKey.has(k2a)) byKey.set(k2a, existing);
+          if (k2b && !byKey.has(k2b)) byKey.set(k2b, existing);
+          if (k3a && !byKey.has(k3a)) byKey.set(k3a, existing);
+          if (k3b && !byKey.has(k3b)) byKey.set(k3b, existing);
+          mergeInto(existing, dep, feedProviders.length ? feedProviders : [providerName]);
         }
       }
     }
+
+    const unique = new Set(byKey.values());
+    return Array.from(unique).sort(
+      (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
+    );
   }
 
-  const merged = Array.from(byId.values());
-  await cache().set(key, merged, TTL.placeAlerts);
-  return merged;
-}
-
-// Facility merging
-
-/**
- * Fetch facilities for all linked stops and deduplicate by facility id.
- * Cached 24 hours.
- */
-export async function getMergedFacilities(
-  lat: number,
-  lng: number,
-  name: string,
-  placeId?: string,
-): Promise<Facility[]> {
-  const cacheId = placeCacheId(lat, lng, name, placeId);
-  const key = hashKey("transit:place-facilities", { id: cacheId });
-  const cached = await cache().get<Facility[]>(key);
-  if (cached) return cached;
-
-  const stops = await getLinkedStops(lat, lng, name, placeId);
-  if (stops.length === 0) {
-    await cache().set(key, [], TTL.placeFacilities);
-    return [];
+  async function getMergedDepartures(
+    lat: number,
+    lng: number,
+    name: string,
+    minutes: number,
+    placeId?: string,
+  ): Promise<MergedDeparture[]> {
+    const stops = await getLinkedStops(lat, lng, name, placeId);
+    return buildMergedTimetable(stops, (id, min) => orchestrator.getDepartures(id, min), minutes);
   }
 
-  const facResults = await Promise.allSettled(
-    stops.map((s) => orch().getFacilities(s.id) as Promise<Facility[]>),
-  );
-  const byId = new Map<string, Facility>();
+  async function getMergedArrivals(
+    lat: number,
+    lng: number,
+    name: string,
+    minutes: number,
+    placeId?: string,
+  ): Promise<MergedDeparture[]> {
+    const stops = await getLinkedStops(lat, lng, name, placeId);
+    return buildMergedTimetable(stops, (id, min) => orchestrator.getArrivals(id, min), minutes);
+  }
 
-  for (const result of facResults) {
-    if (result.status !== "fulfilled" || !Array.isArray(result.value)) continue;
-    for (const fac of result.value) {
-      if (!byId.has(fac.id)) byId.set(fac.id, fac);
+  // Alert merging
+
+  /**
+   * Fetch alerts for all linked stops and deduplicate by alert id.
+   * Cached 60 seconds.
+   */
+  async function getMergedAlerts(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<ServiceAlert[]> {
+    const cacheId = placeCacheId(lat, lng, name, placeId);
+    const key = hashKey("transit:place-alerts", { id: cacheId });
+    const cached = await cache.get<ServiceAlert[]>(key);
+    if (cached) return cached;
+
+    const stops = await getLinkedStops(lat, lng, name, placeId);
+    if (stops.length === 0) {
+      await cache.set(key, [], TTL.placeAlerts);
+      return [];
     }
+
+    const alertResults = await Promise.allSettled(
+      stops.map((s) => orchestrator.getStopAlerts(s.id)),
+    );
+    const byId = new Map<string, ServiceAlert>();
+
+    for (const result of alertResults) {
+      if (result.status !== "fulfilled") continue;
+      for (const alert of result.value) {
+        const existing = byId.get(alert.id);
+        if (!existing) {
+          byId.set(alert.id, alert);
+        } else {
+          // Same alert from a second stop — merge providers
+          for (const p of alert.providers) {
+            if (!existing.providers.includes(p)) existing.providers.push(p);
+          }
+        }
+      }
+    }
+
+    const merged = Array.from(byId.values());
+    await cache.set(key, merged, TTL.placeAlerts);
+    return merged;
   }
 
-  const merged = Array.from(byId.values());
-  await cache().set(key, merged, TTL.placeFacilities);
-  return merged;
+  // Facility merging
+
+  /**
+   * Fetch facilities for all linked stops and deduplicate by facility id.
+   * Cached 24 hours.
+   */
+  async function getMergedFacilities(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<Facility[]> {
+    const cacheId = placeCacheId(lat, lng, name, placeId);
+    const key = hashKey("transit:place-facilities", { id: cacheId });
+    const cached = await cache.get<Facility[]>(key);
+    if (cached) return cached;
+
+    const stops = await getLinkedStops(lat, lng, name, placeId);
+    if (stops.length === 0) {
+      await cache.set(key, [], TTL.placeFacilities);
+      return [];
+    }
+
+    const facResults = await Promise.allSettled(
+      stops.map((s) => orchestrator.getFacilities(s.id) as Promise<Facility[]>),
+    );
+    const byId = new Map<string, Facility>();
+
+    for (const result of facResults) {
+      if (result.status !== "fulfilled" || !Array.isArray(result.value)) continue;
+      for (const fac of result.value) {
+        if (!byId.has(fac.id)) byId.set(fac.id, fac);
+      }
+    }
+
+    const merged = Array.from(byId.values());
+    await cache.set(key, merged, TTL.placeFacilities);
+    return merged;
+  }
+
+  return {
+    getLinkedStops,
+    getMergedRoutes,
+    getMergedDepartures,
+    getMergedArrivals,
+    getMergedAlerts,
+    getMergedFacilities,
+  };
 }

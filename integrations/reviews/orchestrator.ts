@@ -1,17 +1,10 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { LoadedIntegration } from "@openmapx/core";
 import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "./types.js";
 
-let _ctx: IntegrationContext | null = null;
-
-export function initReviewsOrchestrator(ctx: IntegrationContext): void {
-  _ctx = ctx;
-}
-
-function getReviewProviders(): ReviewProvider[] {
-  if (!_ctx)
-    throw new Error("Reviews orchestrator not initialized — call initReviewsOrchestrator first");
+export function getReviewProviders(integrations: LoadedIntegration[]): ReviewProvider[] {
   const providers: ReviewProvider[] = [];
-  for (const integration of _ctx.getIntegrationsByDomain("reviews")) {
+  for (const integration of integrations) {
+    if (!integration.enabled || !integration.manifest.domains.includes("reviews")) continue;
     for (const p of (integration.providers.get("reviews") ?? []) as ReviewProvider[]) {
       providers.push(p);
     }
@@ -19,21 +12,14 @@ function getReviewProviders(): ReviewProvider[] {
   return providers;
 }
 
-/** Returns the first registered provider, or throws if none are installed. */
-function getPrimaryProvider(): ReviewProvider {
-  const providers = getReviewProviders();
-  if (providers.length === 0) {
-    throw new Error("No review providers registered");
-  }
-  return providers[0];
-}
-
 /**
  * Merge reviews from all providers, deduplicated by id (= signature).
  * Sort newest-first.
  */
-export async function fetchReviews(subject: ReviewSubject): Promise<Review[]> {
-  const providers = getReviewProviders();
+export async function fetchReviews(
+  subject: ReviewSubject,
+  providers: ReviewProvider[],
+): Promise<Review[]> {
   if (providers.length === 0) return [];
 
   const settled = await Promise.allSettled(providers.map((p) => p.getReviews(subject)));
@@ -55,8 +41,10 @@ export async function fetchReviews(subject: ReviewSubject): Promise<Review[]> {
  * Fetch aggregate from the first available provider. Future work: merge multi-provider
  * aggregates weighted by confidence. Returns a zero-aggregate on total failure.
  */
-export async function fetchAggregate(subject: ReviewSubject): Promise<ReviewAggregate> {
-  const providers = getReviewProviders();
+export async function fetchAggregate(
+  subject: ReviewSubject,
+  providers: ReviewProvider[],
+): Promise<ReviewAggregate> {
   const zero: ReviewAggregate = {
     count: 0,
     opinionCount: 0,
@@ -76,15 +64,24 @@ export async function fetchAggregate(subject: ReviewSubject): Promise<ReviewAggr
 }
 
 /** Forward a signed JWT to the primary provider. Throws if the provider can't submit. */
-export async function submitReview(signedJwt: string): Promise<{ id: string }> {
-  const p = getPrimaryProvider();
+export async function submitReview(
+  signedJwt: string,
+  providers: ReviewProvider[],
+): Promise<{ id: string }> {
+  const p = providers[0];
+  if (!p) throw new Error("No review providers registered");
   if (!p.submit) throw new Error(`Provider ${p.id} does not support submissions`);
   return p.submit(signedJwt);
 }
 
 /** Upload an image via the primary provider. */
-export async function uploadReviewImage(file: Blob, filename: string): Promise<{ src: string }> {
-  const p = getPrimaryProvider();
+export async function uploadReviewImage(
+  file: Blob,
+  filename: string,
+  providers: ReviewProvider[],
+): Promise<{ src: string }> {
+  const p = providers[0];
+  if (!p) throw new Error("No review providers registered");
   if (!p.uploadImage) throw new Error(`Provider ${p.id} does not support image uploads`);
   return p.uploadImage(file, filename);
 }

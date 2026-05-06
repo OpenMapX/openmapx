@@ -1,8 +1,7 @@
 import type { IntegrationContext } from "@openmapx/core";
-import { initPhotosOrchestrator, resolveOsmTags, searchPhotos } from "./orchestrator.js";
+import { getPhotoProviders, resolveOsmTags, searchPhotos } from "./orchestrator.js";
 
 export function setup(ctx: IntegrationContext): void {
-  initPhotosOrchestrator(ctx);
   ctx.registerRoute("GET", "/search", async (req, reply) => {
     const lat = Number.parseFloat(req.query.lat);
     const lng = Number.parseFloat(req.query.lng);
@@ -31,7 +30,8 @@ export function setup(ctx: IntegrationContext): void {
         if (placeId) {
           osmTags = await resolveOsmTags(placeId, name, lat, lng);
         }
-        return searchPhotos({ lat, lng, name, limit, osmTags });
+        const providers = getPhotoProviders(ctx.getIntegrationsByDomain("photos"));
+        return searchPhotos({ lat, lng, name, limit, osmTags }, providers);
       });
 
       reply.header("Cache-Control", "public, max-age=3600");

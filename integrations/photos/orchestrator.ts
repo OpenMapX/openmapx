@@ -1,27 +1,19 @@
-import type { IntegrationContext, PlacePhoto } from "@openmapx/core";
+import type { LoadedIntegration, PlacePhoto } from "@openmapx/core";
 import { parseId } from "@openmapx/core";
 import { lookupByNameAndCoords, lookupByOsmRef } from "../geocoding/place-lookup.js";
 import type { PhotoProvider, PhotoQuery } from "./types.js";
-
-let _ctx: IntegrationContext | null = null;
-
-/** Must be called during setup() to provide the integration context. */
-export function initPhotosOrchestrator(ctx: IntegrationContext): void {
-  _ctx = ctx;
-}
 
 // Providers in this list are ordered last (street-level imagery — shown after editorial photos)
 const DEPRIORITIZED_PROVIDER_IDS = new Set(["mapillary", "panoramax"]);
 
 /**
- * Collect photo providers from all integrations registered under the "photos" domain.
+ * Collect photo providers from integrations registered under the "photos" domain.
  * Street-level imagery providers (mapillary, panoramax) are sorted to the end.
  */
-function getPhotoProviders(): PhotoProvider[] {
-  if (!_ctx)
-    throw new Error("Photos orchestrator not initialized — call initPhotosOrchestrator first");
+export function getPhotoProviders(integrations: LoadedIntegration[]): PhotoProvider[] {
   const providers: PhotoProvider[] = [];
-  for (const integration of _ctx.getIntegrationsByDomain("photos")) {
+  for (const integration of integrations) {
+    if (!integration.enabled || !integration.manifest.domains.includes("photos")) continue;
     for (const p of (integration.providers.get("photos") ?? []) as PhotoProvider[]) {
       providers.push(p);
     }
@@ -42,9 +34,10 @@ function getPhotoProviders(): PhotoProvider[] {
  *
  * Never throws — individual provider failures are silently dropped.
  */
-export async function searchPhotos(query: PhotoQuery): Promise<PlacePhoto[]> {
-  const providers = getPhotoProviders();
-
+export async function searchPhotos(
+  query: PhotoQuery,
+  providers: PhotoProvider[],
+): Promise<PlacePhoto[]> {
   const totalLimit = query.limit ?? 20;
   const perProvider = Math.max(6, Math.ceil(totalLimit / Math.max(providers.length, 1)));
 
@@ -67,9 +60,10 @@ export async function searchPhotos(query: PhotoQuery): Promise<PlacePhoto[]> {
  * Only calls providers that support searchByTags — no geo-search, no coordinate queries.
  * Never throws — individual provider failures are silently dropped.
  */
-export async function searchHeroPhotos(osmTags: Record<string, string>): Promise<PlacePhoto[]> {
-  const providers = getPhotoProviders();
-
+export async function searchHeroPhotos(
+  osmTags: Record<string, string>,
+  providers: PhotoProvider[],
+): Promise<PlacePhoto[]> {
   // OSM image tags first
   const imageTagPhotos = await extractImageTagPhotos(osmTags);
 

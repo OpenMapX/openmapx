@@ -1,14 +1,6 @@
 import type { BBox, IntegrationContext } from "@openmapx/core";
 import { createTransitOrchestrator, getTransitProviderAttribution } from "./orchestrator.js";
-import {
-  getLinkedStops,
-  getMergedAlerts,
-  getMergedArrivals,
-  getMergedDepartures,
-  getMergedFacilities,
-  getMergedRoutes,
-  initTransitOrchestrator,
-} from "./place-transit.js";
+import { createPlaceTransit } from "./place-transit.js";
 import type { GeoJSONLineString } from "./types.js";
 
 function parseBBox(q: Record<string, string>): BBox | null {
@@ -57,7 +49,7 @@ function utcTime(): string {
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createTransitOrchestrator(ctx);
-  initTransitOrchestrator(ctx, orchestrator);
+  const placeTransit = createPlaceTransit(ctx, orchestrator);
 
   // GET /stops
   ctx.registerRoute("GET", "/stops", async (req, reply) => {
@@ -110,7 +102,12 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-    const result = await getLinkedStops(place.lat, place.lng, place.name, req.query.place_id);
+    const result = await placeTransit.getLinkedStops(
+      place.lat,
+      place.lng,
+      place.name,
+      req.query.place_id,
+    );
     reply.send(result);
   });
 
@@ -246,7 +243,12 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-    const result = await getMergedRoutes(place.lat, place.lng, place.name, req.query.place_id);
+    const result = await placeTransit.getMergedRoutes(
+      place.lat,
+      place.lng,
+      place.name,
+      req.query.place_id,
+    );
     reply.send(result);
   });
 
@@ -473,7 +475,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "no-store");
-    const result = await getMergedDepartures(
+    const result = await placeTransit.getMergedDepartures(
       place.lat,
       place.lng,
       place.name,
@@ -496,7 +498,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "no-store");
-    const result = await getMergedArrivals(
+    const result = await placeTransit.getMergedArrivals(
       place.lat,
       place.lng,
       place.name,
@@ -514,7 +516,12 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
-    const result = await getMergedAlerts(place.lat, place.lng, place.name, req.query.place_id);
+    const result = await placeTransit.getMergedAlerts(
+      place.lat,
+      place.lng,
+      place.name,
+      req.query.place_id,
+    );
     reply.send(result);
   });
 
@@ -526,7 +533,12 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-    const result = await getMergedFacilities(place.lat, place.lng, place.name, req.query.place_id);
+    const result = await placeTransit.getMergedFacilities(
+      place.lat,
+      place.lng,
+      place.name,
+      req.query.place_id,
+    );
     reply.send(result);
   });
 

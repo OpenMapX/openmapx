@@ -1,7 +1,11 @@
 import { lookupByCoords, lookupByNameAndCoords } from "@integrations/geocoding/place-lookup";
-import { deduplicatePhotos, searchHeroPhotos } from "@integrations/photos/orchestrator";
-import { fetchAggregate } from "@integrations/reviews/orchestrator";
-import type { Place } from "@openmapx/core";
+import {
+  deduplicatePhotos,
+  getPhotoProviders,
+  searchHeroPhotos,
+} from "@integrations/photos/orchestrator";
+import { fetchAggregate, getReviewProviders } from "@integrations/reviews/orchestrator";
+import type { Place, ReviewProvider } from "@openmapx/core";
 import {
   CATEGORY_FILTERS,
   categoryPlaceToPlace,
@@ -14,6 +18,7 @@ import {
   searchByCategory,
 } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
+import { getAllIntegrations } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
@@ -51,11 +56,12 @@ async function safeAggregate(
   lat: number,
   lng: number,
   name: string,
+  providers: ReviewProvider[],
 ): Promise<{ stars: number; count: number } | null> {
   if (!name) return null;
   try {
     const result = await Promise.race([
-      fetchAggregate({ lat, lng, name }),
+      fetchAggregate({ lat, lng, name }, providers),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
     ]);
     if (!result || result.count < 3 || result.stars <= 0) return null;
@@ -78,10 +84,15 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     ...knowledge
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
-  const heroPhotos = enriched.osmTags ? await searchHeroPhotos(enriched.osmTags) : [];
+  const allIntegrations = getAllIntegrations();
+  const photoProviders = getPhotoProviders(allIntegrations);
+  const reviewProviders = getReviewProviders(allIntegrations);
+  const heroPhotos = enriched.osmTags
+    ? await searchHeroPhotos(enriched.osmTags, photoProviders)
+    : [];
   const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
   const [plng, plat] = enriched.coordinates;
-  const reviewStats = await safeAggregate(plat, plng, enriched.name);
+  const reviewStats = await safeAggregate(plat, plng, enriched.name, reviewProviders);
   return {
     ...enriched,
     ...knowledge,

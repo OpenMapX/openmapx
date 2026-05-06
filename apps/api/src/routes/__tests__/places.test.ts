@@ -67,15 +67,21 @@ vi.mock("../../services/knowledge/index.js", () => ({
 
 // Mock photo service
 
-vi.mock("../../../../../integrations/photos/orchestrator.js", () => ({
+vi.mock("@integrations/photos/orchestrator", () => ({
+  getPhotoProviders: vi.fn().mockReturnValue([]),
   searchHeroPhotos: vi.fn().mockResolvedValue([]),
   deduplicatePhotos: vi.fn((photos: unknown[]) => photos),
 }));
 
 // Mock reviews orchestrator — `fetchAggregate` would otherwise hit the
 // real Mangrove service via safeAggregate on every `/places/:id` call.
-vi.mock("../../../../../integrations/reviews/orchestrator.js", () => ({
+vi.mock("@integrations/reviews/orchestrator", () => ({
+  getReviewProviders: vi.fn().mockReturnValue([]),
   fetchAggregate: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("../../integration-host.js", () => ({
+  getAllIntegrations: vi.fn().mockReturnValue([]),
 }));
 
 // Mock DB RIS service
