@@ -25,7 +25,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { maptilerStyleUrl } from "@/lib/map";
+import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
 import { PhotoAttribution } from "./PhotoAttribution";
 
 interface Props {
@@ -513,12 +513,23 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
 
     let cancelled = false;
 
-    import("maplibre-gl").then(({ default: maplibregl }) => {
-      if (cancelled || !el || !env.maptilerKey) return;
+    // Mirror MapCanvas: when the operator runs the openmapx-streets style
+    // off a self-hosted tileserver, fetch the style as a JSON object and
+    // patch in tiles/sprite/glyphs from env. Otherwise fall back to the
+    // MapTiler Cloud style URL (requires `env.maptilerKey`).
+    (async () => {
+      const [{ default: maplibregl }, style] = await Promise.all([
+        import("maplibre-gl"),
+        env.styleProvider === "openmapx"
+          ? loadOpenMapXStyle(env)
+          : Promise.resolve(maptilerStyleUrl("bright-v2", env)),
+      ]);
+      if (cancelled || !el) return;
+      if (env.styleProvider !== "openmapx" && !env.maptilerKey) return;
 
       const map = new maplibregl.Map({
         container: el,
-        style: maptilerStyleUrl("bright-v2", env),
+        style: style as string | maplibregl.StyleSpecification,
         center: [lng, lat],
         zoom: 16,
         interactive: false,
@@ -528,6 +539,8 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
       const marker = new maplibregl.Marker({ color: "#e53935" }).setLngLat([lng, lat]).addTo(map);
 
       mapRef.current = { map, marker };
+    })().catch(() => {
+      // Style load or MapLibre import failed — leave the container empty.
     });
 
     return () => {
