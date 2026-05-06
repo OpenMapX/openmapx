@@ -9,7 +9,9 @@ import type {
 } from "@openmapx/core";
 import {
   applyClientSideFilters,
+  buildRuntimeAttributionHtml,
   buildSourceAttribution,
+  combineAttributions,
   createPlace,
   isPointInBBox,
   PANEL,
@@ -25,8 +27,10 @@ import {
 } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -58,7 +62,12 @@ function mapContextOutlineLayerId(dsId: string) {
   return `ds-${dsId}-map-context-outline`;
 }
 
-function buildGeoJson(results: DataSourceResult[], attributionHtml: string, imageId?: string) {
+function buildGeoJson(
+  results: DataSourceResult[],
+  attributionHtml: string,
+  translateSummary: (summary: string | undefined) => string | undefined,
+  imageId?: string,
+) {
   return {
     type: "FeatureCollection" as const,
     features: results.map((r) => ({
@@ -73,7 +82,7 @@ function buildGeoJson(results: DataSourceResult[], attributionHtml: string, imag
         source: r.source,
         variant: r.variant,
         status: r.status ?? "",
-        summary: r.summary ?? "",
+        summary: translateSummary(r.summary) ?? "",
         operator: r.operator ?? "",
         ...(imageId ? { imageId } : {}),
       },
@@ -159,6 +168,7 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
 }
 
 export function DataSourceLayer() {
+  const t = useTranslations("dataSources");
   const { mapRef, mapReady, styleVersion } = useMap();
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const filters = useDataSourceStore((s) => s.filters);
@@ -257,8 +267,13 @@ export function DataSourceLayer() {
     if (!activeSource || visibleResults.length === 0) return "";
     const meta = registry.get(activeSource);
     if (!meta?.dataSources) return "";
-    const visibleSources = [...new Set(visibleResults.map((r) => r.source))];
-    return buildSourceAttribution(meta.dataSources, visibleSources);
+    const visibleSources = [
+      ...new Set(visibleResults.flatMap((result) => result.sources ?? [result.source])),
+    ];
+    const manifestAttribution = buildSourceAttribution(meta.dataSources, visibleSources);
+    const perResultAttributions = visibleResults.flatMap((result) => result.attributions ?? []);
+    const runtimeAttributions = perResultAttributions.map(buildRuntimeAttributionHtml);
+    return combineAttributions([manifestAttribution, ...runtimeAttributions]);
   }, [activeSource, registry, visibleResults]);
 
   // Show pin marker for hovered item
@@ -353,7 +368,12 @@ export function DataSourceLayer() {
 
       const useIconMarkers = activeMeta.markerStyle.type === "icon";
       const imageId = useIconMarkers ? `ds-marker-${activeSource}` : undefined;
-      const geojson = buildGeoJson(filteredResults, mapAttribution, imageId);
+      const geojson = buildGeoJson(
+        filteredResults,
+        mapAttribution,
+        (summary) => translateDataSourceSummary(summary, t),
+        imageId,
+      );
 
       // MapLibre doesn't support updating source attribution after creation,
       // so recreate the source when attribution changes.
@@ -585,6 +605,7 @@ export function DataSourceLayer() {
     mapRef,
     mapAttribution,
     mapContext,
+    t,
   ]);
 
   const { setSelectedPlace } = usePlaceStore();

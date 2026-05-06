@@ -43,6 +43,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
+import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { TEAL } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 
@@ -535,7 +536,9 @@ export function DataSourceFilterContent() {
                       >
                         {result.summary && (
                           <Typography variant="caption" color="text.secondary">
-                            <FormattedSummary text={result.summary} />
+                            <FormattedSummary
+                              text={translateDataSourceSummary(result.summary, t) ?? result.summary}
+                            />
                           </Typography>
                         )}
                         {result.status && result.status !== "unknown" && (
@@ -747,6 +750,7 @@ function ChipFilterSection({
   onToggle: (filterId: string, optionId: string | number) => void;
   renderIcon?: (optionId: string | number) => React.ReactElement | undefined;
 }) {
+  const t = useTranslations("dataSources");
   if (filterDef.type !== "multi-select" || !filterDef.options) return null;
 
   const selected = (currentValue as (string | number)[] | undefined) ?? [];
@@ -754,7 +758,7 @@ function ChipFilterSection({
   return (
     <Box sx={{ mb: 2 }}>
       <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
-        {filterDef.label}
+        {translateDataSourceLabel(filterDef.label, t)}
       </Typography>
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
         {filterDef.options.map((opt) => {
@@ -763,7 +767,7 @@ function ChipFilterSection({
           return (
             <Chip
               key={String(opt.id)}
-              label={opt.label}
+              label={translateDataSourceLabel(opt.label, t)}
               size="small"
               variant={isSelected ? "filled" : "outlined"}
               {...(icon ? { icon } : {})}

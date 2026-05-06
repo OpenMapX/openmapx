@@ -17,13 +17,14 @@ import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import {
   buildSourceAttribution,
+  type DataSourceAttribution,
   type DataSourceDetail,
   type DataSourceDetailSection,
   pickIntegrationForSources,
   useIntegrationRegistry,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { TEAL } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
@@ -86,6 +87,11 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "ndw-truck-nl": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "autobahn-de": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "opendatahub-it": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
+  "opentransportdata-ch-parking": {
+    icon: <LocalParkingIcon sx={{ fontSize: 20 }} />,
+    titleKey: "parking",
+  },
+  "cita-lu": { icon: <LocalParkingIcon sx={{ fontSize: 20 }} />, titleKey: "parking" },
   "nrw-mobidrom-parking": {
     icon: <LocalParkingIcon sx={{ fontSize: 20 }} />,
     titleKey: "parking",
@@ -171,8 +177,10 @@ const SECTION_TITLE_KEYS: Record<string, string> = {
   Usage: "sectionUsage",
   Access: "sectionAccess",
   Facility: "sectionFacility",
+  "Data Quality": "sectionDataQuality",
   Fee: "sectionFee",
   Payment: "sectionPayment",
+  Source: "sectionSource",
 };
 
 /** Map API row labels (left column of key-value tables) to i18n keys. */
@@ -201,7 +209,11 @@ const ROW_LABEL_KEYS: Record<string, string> = {
   Capacity: "rowCapacity",
   Status: "rowStatus",
   Access: "rowAccess",
+  "Data Freshness": "rowDataFreshness",
   "Nearest Station": "rowNearestStation",
+  Source: "rowSource",
+  "Source ID": "rowSourceId",
+  License: "rowLicense",
   // Parking type values
   "Parking Garage": "parkingGarage",
   "Underground Garage": "undergroundGarage",
@@ -244,10 +256,53 @@ const ROW_LABEL_KEYS: Record<string, string> = {
   Yes: "yes",
   Open: "open",
   Closed: "closed",
+  Stale: "stale",
   Customers: "customers",
   Private: "private",
   Permit: "permit",
 };
+
+const DETAIL_TEXT_KEYS: Record<string, string> = {
+  "1 day (P-Card)": "dur1dayPCard",
+  "1 month (long-term)": "dur1monthLong",
+  "1 month (reserved)": "dur1monthReserved",
+  "1 week (P-Card)": "dur1weekPCard",
+  "EV Charging Available": "evChargingAvailable",
+  "Free Parking": "freeParking",
+  "Max day price": "tariffMaxDayPrice",
+  Monthly: "tariffMonthly",
+  "Monthly (resident)": "tariffMonthlyResident",
+  "Monthly pass": "tariffMonthlyPass",
+  "Paid Parking": "paidParking",
+  "Realtime availability is older than 30 minutes.": "qualityRealtimeAvailabilityStale",
+  "Realtime free-space count exceeded capacity and was clamped.":
+    "qualityFreeSpacesClampedToCapacity",
+  "Realtime free-space count was negative and was clamped to 0.":
+    "qualityNegativeFreeSpacesClamped",
+  "Yearly pass": "tariffYearlyPass",
+};
+
+const DURATION_MINUTES_RE = /^(\d+) min$/;
+const DURATION_HOURS_RE = /^(\d+) hours?$/;
+const DURATION_HOURS_SHORT_RE = /^(\d+)h$/;
+const DURATION_DAYS_RE = /^(\d+) days?$/;
+
+function translateDetailText(value: string | undefined, t: ReturnType<typeof useTranslations>) {
+  if (!value) return value;
+  const key = DETAIL_TEXT_KEYS[value] ?? ROW_LABEL_KEYS[value];
+  if (key) return t(key);
+
+  const minutes = value.match(DURATION_MINUTES_RE);
+  if (minutes) return t("durationMinutes", { count: Number(minutes[1]) });
+
+  const hours = value.match(DURATION_HOURS_RE) ?? value.match(DURATION_HOURS_SHORT_RE);
+  if (hours) return t("durationHours", { count: Number(hours[1]) });
+
+  const days = value.match(DURATION_DAYS_RE);
+  if (days) return t("durationDays", { count: Number(days[1]) });
+
+  return value;
+}
 
 function translateStructuredSection(
   section: DataSourceDetailSection,
@@ -261,14 +316,16 @@ function translateStructuredSection(
           const labelStr = String(label);
           const valueStr = String(value);
           return [
-            ROW_LABEL_KEYS[labelStr] ? t(ROW_LABEL_KEYS[labelStr]) : labelStr,
-            ROW_LABEL_KEYS[valueStr] ? t(ROW_LABEL_KEYS[valueStr]) : value,
+            translateDetailText(labelStr, t) ?? labelStr,
+            translateDetailText(valueStr, t) ?? value,
           ] satisfies (string | number)[];
         })
       : section.rows;
 
   return {
     ...section,
+    content: translateDetailText(section.content, t),
+    items: section.items?.map((item) => translateDetailText(item, t) ?? item),
     title: translatedTitle,
     rows: translatedRows,
   };
@@ -285,17 +342,75 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
   // the first integration whose dataSources mention "osm".
   const meta = pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
   const html = meta?.dataSources ? buildSourceAttribution(meta.dataSources, detail.sources) : "";
+  const detailAttributions = detail.attributions ?? [];
 
-  if (!html) return null;
+  if (!html && detailAttributions.length === 0) return null;
 
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: attribution HTML from trusted integration manifests
-        dangerouslySetInnerHTML={{ __html: `${tc("data")}: ${html}` }}
-      />
+      <Typography variant="caption" color="text.secondary" component="div">
+        {tc("data")}:{" "}
+        {html && (
+          <Box
+            component="span"
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: attribution HTML from trusted integration manifests
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )}
+        {detailAttributions.map((attribution, index) => (
+          <Fragment key={detailAttributionKey(attribution)}>
+            {(html || index > 0) && " · "}
+            <DetailAttribution attribution={attribution} />
+          </Fragment>
+        ))}
+      </Typography>
+    </Box>
+  );
+}
+
+function detailAttributionKey(attribution: DataSourceAttribution): string {
+  return [attribution.text, attribution.url, attribution.license, attribution.licenseUrl]
+    .filter(Boolean)
+    .join("|");
+}
+
+function safeExternalUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function DetailAttribution({ attribution }: { attribution: DataSourceAttribution }) {
+  const providerUrl = safeExternalUrl(attribution.url);
+  const licenseUrl = safeExternalUrl(attribution.licenseUrl);
+
+  return (
+    <Box component="span">
+      ©{" "}
+      {providerUrl ? (
+        <Link href={providerUrl} target="_blank" rel="noopener noreferrer" color="inherit">
+          {attribution.text}
+        </Link>
+      ) : (
+        attribution.text
+      )}
+      {attribution.license &&
+        (licenseUrl ? (
+          <>
+            {" "}
+            (
+            <Link href={licenseUrl} target="_blank" rel="noopener noreferrer" color="inherit">
+              {attribution.license}
+            </Link>
+            )
+          </>
+        ) : (
+          ` (${attribution.license})`
+        ))}
     </Box>
   );
 }
