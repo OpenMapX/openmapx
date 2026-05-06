@@ -1,5 +1,23 @@
 import type { Place } from "../../types/place";
 
+function categoryTokens(value: string): string[] {
+  return (
+    value
+      // Providers use a mix of OSM separators, display labels, and camelCase.
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  );
+}
+
+function containsTokenSequence(tokens: readonly string[], sequence: readonly string[]): boolean {
+  if (sequence.length === 0 || sequence.length > tokens.length) return false;
+
+  return tokens.some((_, index) =>
+    sequence.every((token, offset) => tokens[index + offset] === token),
+  );
+}
+
 /**
  * Keywords matched against rawCategory / category strings from geocoding providers.
  *   MapTiler:          "transit_station", "bus_station", "ferry_terminal", …
@@ -137,20 +155,21 @@ const CATEGORY_BLOCKLIST = [
   "construction",
 ] as const;
 
+const CATEGORY_KEYWORD_TOKENS = CATEGORY_KEYWORDS.map(categoryTokens);
+const CATEGORY_BLOCKLIST_TOKENS = CATEGORY_BLOCKLIST.map(categoryTokens);
+const NAME_KEYWORD_TOKENS = NAME_KEYWORDS.map(categoryTokens);
+
 /** Returns true when rawCategory indicates a transit-infrastructure place. */
 export function isTransitRawCategory(rawCategory: string): boolean {
-  // Categories arrive in OSM form ("fire_station", "amenity/fire_station") or
-  // prettified for display ("Fire Station"). Collapse whitespace to underscores
-  // so blocklist entries match either form.
-  const lower = rawCategory.toLowerCase().replace(/\s+/g, "_");
-  if (CATEGORY_BLOCKLIST.some((bl) => lower.includes(bl))) return false;
-  return CATEGORY_KEYWORDS.some((kw) => lower.includes(kw));
+  const tokens = categoryTokens(rawCategory);
+  if (CATEGORY_BLOCKLIST_TOKENS.some((bl) => containsTokenSequence(tokens, bl))) return false;
+  return CATEGORY_KEYWORD_TOKENS.some((kw) => containsTokenSequence(tokens, kw));
 }
 
 /** Returns true when a search-result name looks like a transit stop/station. */
 export function isTransitName(name: string): boolean {
-  const lower = name.toLowerCase();
-  return NAME_KEYWORDS.some((kw) => lower.includes(kw));
+  const tokens = categoryTokens(name);
+  return NAME_KEYWORD_TOKENS.some((kw) => containsTokenSequence(tokens, kw));
 }
 
 /**
