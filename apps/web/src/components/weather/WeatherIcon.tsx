@@ -1,7 +1,10 @@
 "use client";
 
-import { Icon } from "@iconify/react";
+import { addCollection, Icon } from "@iconify/react/offline";
 import { weatherCodeToIcon } from "@openmapx/core";
+import weatherMeteocons from "./meteocons.json";
+
+addCollection(weatherMeteocons);
 
 interface Props {
   code: number;
