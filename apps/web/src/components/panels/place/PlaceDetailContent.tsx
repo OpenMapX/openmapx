@@ -278,10 +278,14 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           top: 0,
           // Light mode: keep the tabs flush with the panel body (#fff on
           // #fff) — separation is handled by the bottom border below.
-          // Dark mode: switch to background.default (#1c1c1c) so the tab
-          // strip is visibly tinted off the body's #2d2d2d.
+          // Dark mode in the full sidebar: SidebarShell uses
+          // background.default (#1c1c1c), so drop the tab strip to the
+          // same surface for a visibly tinted strip off the body's
+          // #2d2d2d. In the floating DetailShell card the body is
+          // already background.paper (#2d2d2d) and we want the tabs to
+          // sit flush on that surface — so leave the default in place.
           bgcolor: "background.paper",
-          ...theme.applyStyles("dark", { bgcolor: "background.default" }),
+          ...(clearSearchBar ? theme.applyStyles("dark", { bgcolor: "background.default" }) : {}),
           zIndex: 1,
           minHeight: 48,
           "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },
