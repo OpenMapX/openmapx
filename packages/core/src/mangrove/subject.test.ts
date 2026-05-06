@@ -3,6 +3,8 @@ import {
   buildMangroveQueryUri,
   buildMangroveSubjectUri,
   haversineDistanceMeters,
+  normalizeMangrovePlaceName,
+  normalizeOsmElementRef,
   parseMangroveGeoUri,
   REVIEW_MATCH_MAX_DISTANCE_METERS,
 } from "./subject";
@@ -51,6 +53,32 @@ describe("parseMangroveGeoUri", () => {
 
   it("returns null for malformed coords", () => {
     expect(parseMangroveGeoUri("geo:not-a-number,6.08")).toBeNull();
+  });
+});
+
+describe("normalizeOsmElementRef", () => {
+  it("normalizes supported OSM refs and drops version suffixes", () => {
+    expect(normalizeOsmElementRef("osm:Node/4506022549/7")).toBe("node/4506022549");
+    expect(normalizeOsmElementRef("way/123")).toBe("way/123");
+    expect(normalizeOsmElementRef("relation/456/3")).toBe("relation/456");
+  });
+
+  it("rejects malformed refs", () => {
+    expect(normalizeOsmElementRef("n4506022549")).toBeUndefined();
+    expect(normalizeOsmElementRef("node/not-a-number")).toBeUndefined();
+  });
+});
+
+describe("normalizeMangrovePlaceName", () => {
+  it("normalizes accents, apostrophes and punctuation for exact equality", () => {
+    expect(normalizeMangrovePlaceName("Caffè Milano")).toBe("caffe milano");
+    expect(normalizeMangrovePlaceName("McDonald's")).toBe("mcdonalds");
+  });
+
+  it("keeps different nearby POI names distinct", () => {
+    expect(normalizeMangrovePlaceName("Zahnärzte am Klenkes")).not.toBe(
+      normalizeMangrovePlaceName("Frittenwerk"),
+    );
   });
 });
 

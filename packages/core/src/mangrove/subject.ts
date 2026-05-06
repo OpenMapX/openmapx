@@ -17,6 +17,14 @@ export const DEFAULT_UNCERTAINTY_METERS = 30;
 export const REVIEW_MATCH_MAX_DISTANCE_METERS = 80;
 
 /**
+ * Fallback cap for legacy/third-party reviews that have a `geo:` subject but
+ * no usable name (`q=`) or OSM metadata. Such records are inherently ambiguous
+ * in dense POI clusters, so only attach them when the pin is effectively on
+ * top of the selected place.
+ */
+export const REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS = 15;
+
+/**
  * Uncertainty (meters) used for read queries. Larger than the submit value so
  * the upstream spatial filter (`stored_u + query_u`) returns reviews submitted
  * with sloppy GPS, then we tighten with our own post-filter.
@@ -132,6 +140,39 @@ export function parseMangroveGeoUri(uri: string): ParsedMangroveGeoUri | null {
     }
   }
   return { lat, lng, name, uncertainty };
+}
+
+/**
+ * Normalize Mangrove/OSM metadata references to `node|way|relation/id`.
+ *
+ * Mangrove imports commonly store `metadata.osm_id` as `node/123`, while OSM
+ * references may optionally include a version suffix. For review linking, the
+ * element identity matters; the historical version does not.
+ */
+export function normalizeOsmElementRef(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value.trim().toLowerCase().replace(/^osm:/, "");
+  const match = cleaned.match(/^(node|way|relation)\/(\d+)(?:\/\d+)?$/);
+  if (!match) return undefined;
+  return `${match[1]}/${match[2]}`;
+}
+
+/**
+ * Normalize a human-facing place name for conservative equality checks. This
+ * is intentionally not fuzzy matching: nearby restaurants, cafes and shops can
+ * share tokens, so substring matching would reintroduce review bleed.
+ */
+export function normalizeMangrovePlaceName(value: string | undefined): string | undefined {
+  const normalized = value
+    ?.normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/['’`]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  return normalized || undefined;
 }
 
 /** Great-circle distance between two lat/lng points, in meters. */

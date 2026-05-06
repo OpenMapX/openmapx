@@ -32,7 +32,10 @@ export {
   DEFAULT_UNCERTAINTY_METERS,
   EXPERIENCE_CONTEXT_GEO,
   haversineDistanceMeters,
+  normalizeMangrovePlaceName,
+  normalizeOsmElementRef,
   parseMangroveGeoUri,
   QUERY_UNCERTAINTY_METERS,
   REVIEW_MATCH_MAX_DISTANCE_METERS,
+  REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS,
 } from "./subject";
