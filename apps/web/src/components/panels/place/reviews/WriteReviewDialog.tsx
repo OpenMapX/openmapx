@@ -22,6 +22,7 @@ import {
   EXPERIENCE_CONTEXT_GEO,
   fingerprintPem,
   type GeoExperienceContext,
+  proxyImageUrl,
   type Review,
   useSession,
   useSubmitReview,
@@ -285,36 +286,39 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
             {t("addPhotos")}
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-            {images.map((img) => (
-              <Box
-                key={img.src}
-                sx={{
-                  position: "relative",
-                  width: 72,
-                  height: 72,
-                  borderRadius: 1,
-                  backgroundImage: `url("${img.src}")`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }}
-              >
-                <IconButton
-                  size="small"
-                  onClick={() => removeImage(img.src)}
+            {images.map((img) => {
+              const previewSrc = proxyImageUrl(img.src);
+              return (
+                <Box
+                  key={img.src}
                   sx={{
-                    position: "absolute",
-                    top: -6,
-                    right: -6,
-                    bgcolor: "background.paper",
-                    boxShadow: 1,
-                    p: 0.25,
-                    "&:hover": { bgcolor: "action.selected" },
+                    position: "relative",
+                    width: 72,
+                    height: 72,
+                    borderRadius: 1,
+                    backgroundImage: `url("${previewSrc}")`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
                   }}
                 >
-                  <CloseIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              </Box>
-            ))}
+                  <IconButton
+                    size="small"
+                    onClick={() => removeImage(img.src)}
+                    sx={{
+                      position: "absolute",
+                      top: -6,
+                      right: -6,
+                      bgcolor: "background.paper",
+                      boxShadow: 1,
+                      p: 0.25,
+                      "&:hover": { bgcolor: "action.selected" },
+                    }}
+                  >
+                    <CloseIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Box>
+              );
+            })}
             {images.length < MAX_PHOTOS && (
               <Button
                 component="label"

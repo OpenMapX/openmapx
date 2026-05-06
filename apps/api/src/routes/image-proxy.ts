@@ -30,6 +30,9 @@ const ALLOWED_HOSTS = [
   "tile.openstreetmap.org",
   // Entur Mobility branding/vehicle assets exposed by the server-side provider.
   "api.entur.io",
+  // Mangrove review photos. Passive thumbnail loads should not expose the
+  // viewer's IP address to Mangrove's file host.
+  "files.mangrove.reviews",
   // Windy webcams — `images-webcams.windy.com` etc. serve still-image
   // previews for the Windy webcam integration.
   "windy.com",

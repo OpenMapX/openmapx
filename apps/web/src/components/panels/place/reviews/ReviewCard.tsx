@@ -16,7 +16,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
-import { fingerprintPem, type Review } from "@openmapx/core";
+import { fingerprintPem, proxyImageUrl, type Review } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { StarDisplay } from "./StarDisplay";
@@ -123,24 +123,27 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
             mt: 1,
           }}
         >
-          {review.images.map((img) => (
-            <Box
-              key={img.src}
-              component="a"
-              href={img.src}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{
-                aspectRatio: "1 / 1",
-                borderRadius: 1,
-                backgroundImage: `url("${img.src}")`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                display: "block",
-              }}
-              aria-label={img.label ?? "Review photo"}
-            />
-          ))}
+          {review.images.map((img) => {
+            const thumbnailSrc = proxyImageUrl(img.src);
+            return (
+              <Box
+                key={img.src}
+                component="a"
+                href={img.src}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{
+                  aspectRatio: "1 / 1",
+                  borderRadius: 1,
+                  backgroundImage: `url("${thumbnailSrc}")`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  display: "block",
+                }}
+                aria-label={img.label ?? "Review photo"}
+              />
+            );
+          })}
         </Box>
       )}
 
