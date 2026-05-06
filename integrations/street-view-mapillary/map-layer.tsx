@@ -28,7 +28,7 @@ export function StreetViewLayer() {
   const meta = registry.get("street-view-mapillary");
   const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useStreetViewStore((s) => s.layerVisible);
-  const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
+  const requestImageLoad = useStreetViewStore((s) => s.requestImageLoad);
   useOverlayExclusion("street-view", layerVisible);
   useLayerReanchor(MLY_LAYERS, layerVisible);
 
@@ -147,7 +147,7 @@ export function StreetViewLayer() {
 
     const handleClick = (e: MapLayerMouseEvent) => {
       const id = e.features?.[0]?.properties?.id;
-      if (id != null) setActiveImageId(String(id));
+      if (id != null) requestImageLoad(String(id));
     };
 
     const handleMouseMove = (e: MapMouseEvent) => {
@@ -173,7 +173,7 @@ export function StreetViewLayer() {
       map.off("mousemove", handleMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, styleVersion, mapRef, layerVisible, setActiveImageId]);
+  }, [mapReady, styleVersion, mapRef, layerVisible, requestImageLoad]);
 
   return null;
 }

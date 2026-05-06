@@ -23,7 +23,7 @@ export function Pegman() {
   const { mapRef, mapReady } = useMap();
   const t = useTranslations("streetView");
   const setLayerVisible = useStreetViewStore((s) => s.setLayerVisible);
-  const setActiveImageId = useStreetViewStore((s) => s.setActiveImageId);
+  const requestImageLoad = useStreetViewStore((s) => s.requestImageLoad);
 
   const [dragging, setDragging] = useState(false);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
@@ -76,7 +76,7 @@ export function Pegman() {
     const dot = findNearestDot(e.clientX, e.clientY);
     if (dot?.id != null) {
       setLayerVisible(false);
-      setActiveImageId(String(dot.id));
+      requestImageLoad(String(dot.id));
     } else {
       setLayerVisible(false);
     }

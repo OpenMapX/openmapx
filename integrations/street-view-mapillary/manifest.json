@@ -55,7 +55,7 @@
       "providerCountry": "IE",
       "providerPrivacyUrl": "https://www.mapillary.com/privacy",
       "endUserExposure": "direct",
-      "personalData": false,
+      "personalData": true,
       "cookies": false,
       "dpaAvailable": false
     }

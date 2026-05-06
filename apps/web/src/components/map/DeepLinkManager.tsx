@@ -322,7 +322,7 @@ function applyOverlaySettings(parsed: ParsedDeepLink): void {
   const environmentSensor = oneOf(settings.envSensor, ENVIRONMENT_SENSORS);
   if (environmentSensor) useEnvironmentStore.getState().setSensorType(environmentSensor);
 
-  if (settings.sv) useStreetViewStore.getState().setActiveImageId(settings.sv);
+  if (settings.sv) useStreetViewStore.getState().requestImageLoad(settings.sv);
 
   const trailId = finiteNumber(settings.trail);
   if (trailId !== undefined) useHikingStore.getState().selectTrail(trailId);
