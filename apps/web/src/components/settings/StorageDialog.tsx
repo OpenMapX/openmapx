@@ -7,11 +7,22 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
+import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import {
+  clearRecentMapDataCache,
+  getStoredQueryCacheBytes,
+  isRecentMapDataCacheEnabled,
+  isRecentMapDataQueryKey,
+  setRecentMapDataCacheEnabled,
+} from "@/lib/recentMapDataCache";
 import { formatBytes } from "@/lib/storageFormat";
 
 interface CacheRow {
@@ -30,6 +41,7 @@ const ROW_LABELS: Record<string, string> = {
   "static-assets": "appShell",
   pages: "appShell",
   "app-shell-v1": "appShell",
+  "openmapx-preferences": "preferences",
   "map-tiles": "mapTiles",
   "mapillary-tiles": "mapTiles",
   "vector-tiles": "vectorTiles",
@@ -53,10 +65,20 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
     total.percent = total.quota > 0 ? Math.round((total.used / total.quota) * 100) : 0;
   }
 
-  if (typeof caches === "undefined") return { total, rows: [] };
+  const rows: CacheRow[] = [];
+  const queryCacheBytes = getStoredQueryCacheBytes();
+  if (queryCacheBytes > 0) {
+    rows.push({
+      cacheName: "openmapx-query-cache",
+      label: t("recentMapDataCache"),
+      bytes: queryCacheBytes,
+      count: 1,
+    });
+  }
+
+  if (typeof caches === "undefined") return { total, rows };
 
   const names = await caches.keys();
-  const rows: CacheRow[] = [];
   for (const name of names) {
     const cache = await caches.open(name);
     const reqs = await cache.keys();
@@ -102,8 +124,10 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
 
 export function StorageDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useTranslations("settings");
+  const queryClient = useQueryClient();
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recentMapDataCacheEnabled, setRecentMapDataCacheEnabledState] = useState(false);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -116,8 +140,35 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
 
   useEffect(() => {
     if (!open) return;
+    setRecentMapDataCacheEnabledState(isRecentMapDataCacheEnabled());
     void refresh();
   }, [open, refresh]);
+
+  const handleRecentMapDataCacheChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const enabled = event.target.checked;
+    setRecentMapDataCacheEnabledState(enabled);
+    setBusy(true);
+    try {
+      await setRecentMapDataCacheEnabled(enabled);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleClearRecentMapData = async () => {
+    setBusy(true);
+    try {
+      await queryClient.cancelQueries({
+        predicate: (query) => isRecentMapDataQueryKey(query.queryKey),
+      });
+      queryClient.removeQueries({ predicate: (query) => isRecentMapDataQueryKey(query.queryKey) });
+      await clearRecentMapDataCache();
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleClearTiles = async () => {
     if (typeof caches === "undefined") return;
@@ -135,6 +186,31 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
       <DialogTitle>{t("storageTitle")}</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>{t("storageDescription")}</DialogContentText>
+
+        <Box sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={recentMapDataCacheEnabled}
+                disabled={busy}
+                onChange={(event) => {
+                  void handleRecentMapDataCacheChange(event);
+                }}
+              />
+            }
+            label={
+              <Stack spacing={0.5}>
+                <Typography variant="body2" fontWeight={600}>
+                  {t("rememberRecentMapData")}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {t("rememberRecentMapDataDescription")}
+                </Typography>
+              </Stack>
+            }
+            sx={{ alignItems: "flex-start", m: 0 }}
+          />
+        </Box>
 
         {info?.total.quota ? (
           <Box sx={{ mb: 2 }}>
@@ -171,14 +247,27 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
           )}
         </Stack>
 
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            {t("clearTilesDescription")}
-          </Typography>
-          <Button color="warning" onClick={handleClearTiles} disabled={busy}>
-            {t("clearTiles")}
-          </Button>
-        </Box>
+        <Divider sx={{ my: 3 }} />
+
+        <Stack spacing={2}>
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {t("clearRecentMapDataDescription")}
+            </Typography>
+            <Button color="warning" onClick={handleClearRecentMapData} disabled={busy}>
+              {t("clearRecentMapData")}
+            </Button>
+          </Box>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {t("clearTilesDescription")}
+            </Typography>
+            <Button color="warning" onClick={handleClearTiles} disabled={busy}>
+              {t("clearTiles")}
+            </Button>
+          </Box>
+        </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t("cancel")}</Button>

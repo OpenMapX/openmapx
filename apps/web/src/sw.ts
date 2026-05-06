@@ -34,6 +34,50 @@ const APP_SHELL_CACHE = "app-shell-v1";
 // downloaded tiles would be unreachable.
 const APP_SHELL_URLS = [HOME_URL, OFFLINE_URL, "/manifest.webmanifest"];
 const OFFLINE_AREA_CACHE_PREFIX = "offline-area-";
+const RECENT_MAP_DATA_CACHE_NAMES = [
+  "api-geodata",
+  "api-category-search",
+  "api-autocomplete",
+  "api-weather",
+  "api-photos",
+] as const;
+const RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE = "openmapx-preferences";
+const RECENT_MAP_DATA_CACHE_PREFERENCE_URL = "/__openmapx/recent-map-data-cache-enabled";
+
+let recentMapDataCacheEnabled: boolean | null = null;
+
+function clearRecentMapDataRuntimeCaches(): Promise<boolean[]> {
+  return Promise.all(RECENT_MAP_DATA_CACHE_NAMES.map((name) => caches.delete(name)));
+}
+
+async function readRecentMapDataCachePreference(): Promise<boolean> {
+  if (recentMapDataCacheEnabled !== null) return recentMapDataCacheEnabled;
+
+  if (!(await caches.has(RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE))) {
+    recentMapDataCacheEnabled = false;
+    return false;
+  }
+
+  const cache = await caches.open(RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE);
+  const response = await cache.match(RECENT_MAP_DATA_CACHE_PREFERENCE_URL);
+  recentMapDataCacheEnabled = response ? (await response.text()) === "true" : false;
+  return recentMapDataCacheEnabled;
+}
+
+async function writeRecentMapDataCachePreference(enabled: boolean): Promise<void> {
+  recentMapDataCacheEnabled = enabled;
+
+  if (enabled) {
+    const cache = await caches.open(RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE);
+    await cache.put(RECENT_MAP_DATA_CACHE_PREFERENCE_URL, new Response("true"));
+    return;
+  }
+
+  await Promise.all([
+    caches.delete(RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE),
+    clearRecentMapDataRuntimeCaches(),
+  ]);
+}
 
 /**
  * Looks up a request in any user-downloaded offline-area cache. Used by tile
@@ -62,6 +106,16 @@ function withOfflineFirst(strategy: Strategy): RouteHandlerCallback {
   return async (options: RouteHandlerCallbackOptions) => {
     const offlineMatch = await matchOfflineArea(options.request);
     if (offlineMatch) return offlineMatch;
+    return strategy.handle(options);
+  };
+}
+
+function withRecentMapDataCache(strategy: Strategy): RouteHandlerCallback {
+  return async (options: RouteHandlerCallbackOptions) => {
+    if (!(await readRecentMapDataCachePreference())) {
+      return fetch(options.request);
+    }
+
     return strategy.handle(options);
   };
 }
@@ -97,9 +151,9 @@ const serwist = new Serwist({
       }),
     },
 
-    // MapTiler tiles / style / sprite / glyphs — offline-area first, then SWR.
+    // MapTiler tiles / style / sprite / glyphs via API proxy — offline-area first, then SWR.
     {
-      matcher: /^https:\/\/api\.maptiler\.com\/.*/i,
+      matcher: /\/api\/maptiler\//i,
       handler: withOfflineFirst(
         new StaleWhileRevalidate({
           cacheName: "map-tiles",
@@ -108,9 +162,9 @@ const serwist = new Serwist({
       ),
     },
 
-    // Mapillary tiles — StaleWhileRevalidate
+    // Mapillary coverage tiles via API proxy — StaleWhileRevalidate
     {
-      matcher: /^https:\/\/tiles\.mapillary\.com\/.*/i,
+      matcher: /\/api\/mapillary\/tiles\//i,
       handler: new StaleWhileRevalidate({
         cacheName: "mapillary-tiles",
         plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 3 * 24 * 60 * 60 })],
@@ -139,48 +193,58 @@ const serwist = new Serwist({
       matcher: ({ url }: { url: URL }) =>
         /\/api\/integrations\/(geocoding\/geocode|routing\/directions)/.test(url.pathname) ||
         (/\/api\/places\//.test(url.pathname) && !url.pathname.includes("/places/search")),
-      handler: new StaleWhileRevalidate({
-        cacheName: "api-geodata",
-        plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
-      }),
+      handler: withRecentMapDataCache(
+        new StaleWhileRevalidate({
+          cacheName: "api-geodata",
+          plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
+        }),
+      ),
     },
 
     // Category search — NetworkFirst (contains live fuel prices)
     {
       matcher: /\/api\/places\/search/,
-      handler: new NetworkFirst({
-        cacheName: "api-category-search",
-        networkTimeoutSeconds: 5,
-        plugins: [new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 5 * 60 })],
-      }),
+      handler: withRecentMapDataCache(
+        new NetworkFirst({
+          cacheName: "api-category-search",
+          networkTimeoutSeconds: 5,
+          plugins: [new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 5 * 60 })],
+        }),
+      ),
     },
 
     // Autocomplete — NetworkFirst (fresh suggestions always preferred)
     {
       matcher: /\/api\/integrations\/geocoding\/autocomplete/,
-      handler: new NetworkFirst({
-        cacheName: "api-autocomplete",
-        networkTimeoutSeconds: 3,
-        plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 })],
-      }),
+      handler: withRecentMapDataCache(
+        new NetworkFirst({
+          cacheName: "api-autocomplete",
+          networkTimeoutSeconds: 3,
+          plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 })],
+        }),
+      ),
     },
 
     // Weather — StaleWhileRevalidate (conditions change slowly)
     {
       matcher: /\/api\/integrations\/weather\//,
-      handler: new StaleWhileRevalidate({
-        cacheName: "api-weather",
-        plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 60 })],
-      }),
+      handler: withRecentMapDataCache(
+        new StaleWhileRevalidate({
+          cacheName: "api-weather",
+          plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 60 })],
+        }),
+      ),
     },
 
     // Photos — StaleWhileRevalidate (photo results are stable)
     {
       matcher: /\/api\/integrations\/photos\//,
-      handler: new StaleWhileRevalidate({
-        cacheName: "api-photos",
-        plugins: [new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 })],
-      }),
+      handler: withRecentMapDataCache(
+        new StaleWhileRevalidate({
+          cacheName: "api-photos",
+          plugins: [new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+        }),
+      ),
     },
 
     // Self-hosted vector tiles & font glyphs (.pbf) — offline-area first,
@@ -248,6 +312,10 @@ self.addEventListener("install", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+
+  if (event.data?.type === "SET_RECENT_MAP_DATA_CACHE_ENABLED") {
+    event.waitUntil(writeRecentMapDataCachePreference(event.data.enabled === true));
   }
 });
 
