@@ -146,7 +146,7 @@ export function WeatherAlertLayer() {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
           attribution:
-            '© <a href="https://www.weather.gov/" target="_blank">NOAA</a> · <a href="https://weather.gc.ca/" target="_blank">ECCC</a> · <a href="https://www.dwd.de/" target="_blank">DWD</a> · <a href="https://www.meteoalarm.org/" target="_blank">MeteoAlarm</a>',
+            '© <a href="https://www.weather.gov/" target="_blank" rel="noreferrer">NOAA</a> · <a href="https://weather.gc.ca/" target="_blank" rel="noreferrer">ECCC</a> · <a href="https://www.dwd.de/" target="_blank" rel="noreferrer">DWD</a> · <a href="https://www.meteoalarm.org/" target="_blank" rel="noreferrer">MeteoAlarm</a>',
         });
       }
 

@@ -207,10 +207,18 @@ export const statusRoute: FastifyPluginAsync = async (fastify) => {
     const { executeAllIntegrationHealthChecks } = await import("../services/integration-health.js");
     const allIntegrations = getAllIntegrations().filter((i) => i.enabled);
     const integrationResults = await executeAllIntegrationHealthChecks(allIntegrations);
+    const multiCheckIntegrationIds = new Set(
+      allIntegrations
+        .filter((i) => Array.isArray(i.manifest.healthCheck) && i.manifest.healthCheck.length > 1)
+        .map((i) => i.id),
+    );
+    const visibleIntegrationResults = integrationResults.filter(
+      (result) => !multiCheckIntegrationIds.has(result.id),
+    );
 
     return {
       timestamp: new Date().toISOString(),
-      services: [...platformResults, ...integrationResults],
+      services: [...platformResults, ...visibleIntegrationResults],
     };
   });
 };

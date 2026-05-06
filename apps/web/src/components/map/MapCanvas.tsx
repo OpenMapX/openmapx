@@ -57,15 +57,39 @@ export function MapCanvas() {
         canvasContextAttributes: { antialias: true },
       });
 
-      // `compact` left undefined → MapLibre auto-collapses to an "i" button
-      // below 640px viewport width, which keeps the attribution from wrapping
-      // across the footer/legal links on mobile. The control's <details>
-      // element renders open by default in compact mode, so force it closed
-      // once after mounting.
-      map.addControl(new maplibregl.AttributionControl(), "bottom-right");
-      const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-      if (attrib instanceof HTMLDetailsElement) attrib.open = false;
-      attrib?.classList.remove("maplibregl-compact-show");
+      // MapLibre's built-in auto-compact uses the *map element* width, which
+      // drops below 640px on desktop whenever a side panel is open and
+      // incorrectly collapses the attribution into an "i" button. Drive the
+      // compact flag from the *viewport* width instead, and only let MapLibre's
+      // auto-mode (compact: undefined) decide on mobile, where the attribution
+      // would otherwise wrap across the footer/legal links.
+      const mobileViewport = window.matchMedia("(max-width: 640px)");
+      let attribControl = new maplibregl.AttributionControl({
+        compact: mobileViewport.matches ? undefined : false,
+      });
+      map.addControl(attribControl, "bottom-right");
+      const closeDetails = () => {
+        const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+        if (attrib instanceof HTMLDetailsElement) attrib.open = false;
+        attrib?.classList.remove("maplibregl-compact-show");
+      };
+      closeDetails();
+
+      // Re-create the control when the viewport crosses the mobile breakpoint
+      // (e.g. window resize on a laptop, device rotation). MapLibre exposes no
+      // runtime setter for `compact`, so swap the control instance.
+      const handleViewportChange = () => {
+        map.removeControl(attribControl);
+        attribControl = new maplibregl.AttributionControl({
+          compact: mobileViewport.matches ? undefined : false,
+        });
+        map.addControl(attribControl, "bottom-right");
+        closeDetails();
+      };
+      mobileViewport.addEventListener("change", handleViewportChange);
+      map.once("remove", () => {
+        mobileViewport.removeEventListener("change", handleViewportChange);
+      });
 
       map.on("moveend", () => {
         const c = map.getCenter();

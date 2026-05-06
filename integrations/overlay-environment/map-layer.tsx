@@ -363,7 +363,7 @@ export function EnvironmentLayer() {
           <div style="font-size:12px;margin-bottom:4px">${sensorsHtml}</div>
           ${lastUp ? `<div style="font-size:11px;color:#999;margin-bottom:4px">${lastUp}</div>` : ""}
           <div style="font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:4px">
-            <a href="https://opensensemap.org/explore/${escapeHtml(String(p.id))}" target="_blank" style="color:inherit;text-decoration:underline">openSenseMap</a> (ODbL 1.0)
+            <a href="https://opensensemap.org/explore/${escapeHtml(String(p.id))}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">openSenseMap</a> (ODbL 1.0)
           </div>
         </div>`;
 

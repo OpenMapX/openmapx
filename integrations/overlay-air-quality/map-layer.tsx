@@ -234,11 +234,11 @@ export function AirQualityLayer() {
       const attrUrl = sanitizeUrl(String(p.attributionUrl || ""));
       const license = escapeHtml(String(p.license || ""));
       const attrLink = attrUrl
-        ? `<a href="${attrUrl}" target="_blank" style="color:inherit;text-decoration:underline">${attrName}</a>`
+        ? `<a href="${attrUrl}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${attrName}</a>`
         : attrName;
       const attrHtml = attrName
-        ? `${attrLink}${license ? ` (${license})` : ""} via <a href="https://openaq.org" target="_blank" style="color:inherit;text-decoration:underline">OpenAQ</a>`
-        : `<a href="https://openaq.org" target="_blank" style="color:inherit;text-decoration:underline">OpenAQ</a>`;
+        ? `${attrLink}${license ? ` (${license})` : ""} via <a href="https://openaq.org" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">OpenAQ</a>`
+        : `<a href="https://openaq.org" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">OpenAQ</a>`;
 
       const html = `
         <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:200px">
