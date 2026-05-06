@@ -343,7 +343,14 @@ export function listDatexParkingRecords(input: DatexInput): DatexElement[] {
 }
 
 export function listDatexParkingRecordStatuses(input: DatexInput): DatexElement[] {
-  return getXmlChildren(getDatexPayloadPublication(input), "parkingRecordStatus");
+  const publication = getDatexPayloadPublication(input);
+  const directStatuses = getXmlChildren(publication, "parkingRecordStatus");
+  const genericExtension = getXmlChild(publication, "genericPublicationExtension");
+  const statusPublication =
+    getXmlChild(genericExtension, "parkingStatusPublication") ??
+    getXmlChild(publication, "parkingStatusPublication");
+  const nestedStatuses = getXmlChildren(statusPublication, "parkingRecordStatus");
+  return [...directStatuses, ...nestedStatuses];
 }
 
 export function listDatexMultilingualValues(node: unknown): DatexMultilingualValue[] {

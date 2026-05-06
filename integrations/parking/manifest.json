@@ -117,6 +117,16 @@
       "url": "https://data.opentransportdata.swiss/en/dataset/bike-and-car-parking"
     },
     {
+      "name": "CITA Luxembourg (static)",
+      "type": "http",
+      "url": "https://www.cita.lu/info_trafic/datex/parking_static.xml"
+    },
+    {
+      "name": "CITA Luxembourg (dynamic)",
+      "type": "http",
+      "url": "https://www.cita.lu/info_trafic/datex/parking_dynamic.xml"
+    },
+    {
       "name": "Comune di Firenze",
       "type": "http",
       "url": "https://datastore.comune.fi.it/od/ParkFreeSpot.json"
@@ -315,6 +325,20 @@
       "commercialUse": "conditional",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "cita-lu",
+      "name": "CITA Luxembourg parking DATEX II",
+      "url": "https://data.public.lu/en/datasets/cita-donnees-parking-en-datex-ii/",
+      "license": "CC0 1.0 Universal (Public Domain)",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "commercialUse": "yes",
+      "providerCountry": "LU",
+      "providerPrivacyUrl": "https://www.cita.lu/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

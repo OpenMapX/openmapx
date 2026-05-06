@@ -7,38 +7,10 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "../../data-source/types.js";
-import { fetchApagDetail, searchApag } from "./apag.js";
-import { fetchApcoaDetail, searchApcoa } from "./apcoa.js";
-import { fetchAutobahnDeDetail, searchAutobahnDe } from "./autobahn-de.js";
-import { fetchBarcelonaEsDetail, searchBarcelonaEs } from "./barcelona-es.js";
-import { fetchBaselChDetail, searchBaselCh } from "./basel-ch.js";
-import { fetchBnlsFrDetail, searchBnlsFr } from "./bnls-fr.js";
-import { fetchBrusselsBeDetail, searchBrusselsBe } from "./brussels-be.js";
-import { fetchCopenhagenDkDetail, searchCopenhagenDk } from "./copenhagen-dk.js";
-import { fetchDbBahnParkDetail, searchDbBahnPark } from "./db-bahnpark.js";
 import { deduplicateParking, haversineMeters } from "./dedup.js";
-import { fetchFlorenceItDetail, searchFlorenceIt } from "./florence-it.js";
-import { fetchGhentBeDetail, searchGhentBe } from "./ghent-be.js";
-import { fetchGoldbeckDetail, searchGoldbeck } from "./goldbeck.js";
-import { fetchMadridEsDetail, searchMadridEs } from "./madrid-es.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";
-import { fetchNdwTruckNlDetail, searchNdwTruckNl } from "./ndw-truck-nl.js";
-import { fetchNrwMobidromDetail, searchNrwMobidrom } from "./nrw-mobidrom.js";
-import { fetchNrwPrDetail, searchNrwPr } from "./nrw-pr.js";
-import { fetchNswAuDetail, searchNswAu } from "./nsw-au.js";
-import { fetchOdhItDetail, searchOdhIt } from "./opendatahub-it.js";
-import {
-  fetchOpenTransportDataChParkingDetail,
-  searchOpenTransportDataChParking,
-} from "./opentransportdata-ch.js";
-import { fetchOsmParkingElement, searchOsmParking } from "./osm.js";
-import { fetchParkApiV2Detail, searchParkApiV2 } from "./parkapi-v2.js";
-import { fetchParkApiV3Detail, searchParkApiV3 } from "./parkapi-v3.js";
-import { fetchRdwNlDetail, searchRdwNl } from "./rdw-nl.js";
-import { fetchSingaporeDetail, searchSingapore } from "./singapore.js";
+import { PARKING_SOURCE_REGISTRY } from "./registry.js";
 import type { ParkingFacility } from "./types.js";
-import { fetchUtmcNewcastleDetail, searchUtmcNewcastle } from "./utmc-newcastle.js";
-import { fetchViennaAtDetail, searchViennaAt } from "./vienna-at.js";
 
 const META: DataSourceMeta = {
   minZoom: 12,
@@ -129,35 +101,9 @@ class ParkingDataSourceProvider implements DataSourceProvider {
   }
 
   async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
-    // Query all sources in parallel, ordered by priority (DB > v3 > v2 > regional > OSM)
-    const results = await Promise.allSettled([
-      searchDbBahnPark(bbox),
-      searchParkApiV3(bbox),
-      searchNrwMobidrom(bbox),
-      searchNrwPr(bbox),
-      searchApag(bbox),
-      searchParkApiV2(bbox),
-      searchOpenTransportDataChParking(bbox),
-      searchRdwNl(bbox),
-      searchBnlsFr(bbox),
-      searchGhentBe(bbox),
-      searchBrusselsBe(bbox),
-      searchBaselCh(bbox),
-      searchFlorenceIt(bbox),
-      searchBarcelonaEs(bbox),
-      searchViennaAt(bbox),
-      searchCopenhagenDk(bbox),
-      searchSingapore(bbox),
-      searchMadridEs(bbox),
-      searchUtmcNewcastle(bbox),
-      searchNswAu(bbox),
-      searchNdwTruckNl(bbox),
-      searchAutobahnDe(bbox),
-      searchOdhIt(bbox),
-      searchApcoa(bbox),
-      searchGoldbeck(bbox),
-      searchOsmParking(bbox),
-    ]);
+    const results = await Promise.allSettled(
+      PARKING_SOURCE_REGISTRY.map((source) => source.search(bbox)),
+    );
 
     const allFacilities = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
     const deduped = deduplicateParking(allFacilities);
@@ -202,79 +148,11 @@ class ParkingDataSourceProvider implements DataSourceProvider {
   }
 
   private async fetchByPrefix(itemId: string): Promise<ParkingFacility | null> {
-    if (itemId.startsWith("parkapi-v2:")) {
-      const rest = itemId.slice("parkapi-v2:".length);
-      const slashIdx = rest.indexOf("/");
-      if (slashIdx > 0) {
-        const cityName = rest.slice(0, slashIdx);
-        const lotId = rest.slice(slashIdx + 1);
-        return fetchParkApiV2Detail(cityName, lotId);
-      }
+    for (const source of PARKING_SOURCE_REGISTRY) {
+      if (!source.canFetchDetail?.(itemId) || !source.fetchDetail) continue;
+      const facility = await source.fetchDetail(itemId);
+      if (facility) return facility;
     }
-
-    if (itemId.startsWith("parkapi-v3:")) {
-      const siteId = Number.parseInt(itemId.slice("parkapi-v3:".length), 10);
-      if (!Number.isNaN(siteId)) return fetchParkApiV3Detail(siteId);
-    }
-
-    if (itemId.startsWith("db-bahnpark:")) {
-      const facilityId = itemId.slice("db-bahnpark:".length);
-      return fetchDbBahnParkDetail(facilityId);
-    }
-
-    if (itemId.startsWith("rdw:")) {
-      const rest = itemId.slice("rdw:".length);
-      const slashIdx = rest.indexOf("/");
-      if (slashIdx > 0) {
-        const areamanagerid = rest.slice(0, slashIdx);
-        const areaid = rest.slice(slashIdx + 1);
-        return fetchRdwNlDetail(areamanagerid, areaid);
-      }
-    }
-
-    if (itemId.startsWith("otdch-parking:")) {
-      return fetchOpenTransportDataChParkingDetail(itemId.slice("otdch-parking:".length));
-    }
-
-    if (itemId.startsWith("bnls:")) return fetchBnlsFrDetail(itemId.slice("bnls:".length));
-    if (itemId.startsWith("ghent:")) return fetchGhentBeDetail(itemId.slice("ghent:".length));
-    if (itemId.startsWith("brussels:"))
-      return fetchBrusselsBeDetail(itemId.slice("brussels:".length));
-    if (itemId.startsWith("basel:")) return fetchBaselChDetail(itemId.slice("basel:".length));
-    if (itemId.startsWith("florence:"))
-      return fetchFlorenceItDetail(itemId.slice("florence:".length));
-    if (itemId.startsWith("barcelona:"))
-      return fetchBarcelonaEsDetail(itemId.slice("barcelona:".length));
-    if (itemId.startsWith("vienna:")) return fetchViennaAtDetail(itemId.slice("vienna:".length));
-    if (itemId.startsWith("copenhagen:"))
-      return fetchCopenhagenDkDetail(itemId.slice("copenhagen:".length));
-    if (itemId.startsWith("sg:")) return fetchSingaporeDetail(itemId.slice("sg:".length));
-    if (itemId.startsWith("madrid:")) return fetchMadridEsDetail(itemId.slice("madrid:".length));
-    if (itemId.startsWith("utmc:")) return fetchUtmcNewcastleDetail(itemId.slice("utmc:".length));
-    if (itemId.startsWith("nsw:")) return fetchNswAuDetail(itemId.slice("nsw:".length));
-
-    if (itemId.startsWith("ndw-truck:"))
-      return fetchNdwTruckNlDetail(itemId.slice("ndw-truck:".length));
-    if (itemId.startsWith("autobahn:"))
-      return fetchAutobahnDeDetail(itemId.slice("autobahn:".length));
-    if (itemId.startsWith("odh:")) return fetchOdhItDetail(itemId.slice("odh:".length));
-
-    if (itemId.startsWith("nrw-pr:")) return fetchNrwPrDetail(itemId.slice("nrw-pr:".length));
-    if (itemId.startsWith("nrw:")) return fetchNrwMobidromDetail(itemId.slice("nrw:".length));
-    if (itemId.startsWith("apcoa:")) return fetchApcoaDetail(itemId.slice("apcoa:".length));
-    if (itemId.startsWith("apag:")) return fetchApagDetail(itemId.slice("apag:".length));
-    if (itemId.startsWith("goldbeck:"))
-      return fetchGoldbeckDetail(itemId.slice("goldbeck:".length));
-
-    if (itemId.startsWith("osm:")) {
-      const rest = itemId.slice("osm:".length);
-      const [elementType, idStr] = rest.split("/");
-      const elementId = Number.parseInt(idStr, 10);
-      if (elementType && !Number.isNaN(elementId)) {
-        return fetchOsmParkingElement(elementType, elementId);
-      }
-    }
-
     return null;
   }
 
@@ -292,35 +170,9 @@ class ParkingDataSourceProvider implements DataSourceProvider {
       east: lng + margin,
     };
 
-    // Fetch all sources in parallel for the tiny bbox
-    const enrichResults = await Promise.allSettled([
-      searchParkApiV2(bbox),
-      searchParkApiV3(bbox),
-      searchNrwMobidrom(bbox),
-      searchNrwPr(bbox),
-      searchApag(bbox),
-      searchDbBahnPark(bbox),
-      searchOpenTransportDataChParking(bbox),
-      searchRdwNl(bbox),
-      searchBnlsFr(bbox),
-      searchGhentBe(bbox),
-      searchBrusselsBe(bbox),
-      searchBaselCh(bbox),
-      searchFlorenceIt(bbox),
-      searchBarcelonaEs(bbox),
-      searchViennaAt(bbox),
-      searchCopenhagenDk(bbox),
-      searchSingapore(bbox),
-      searchMadridEs(bbox),
-      searchUtmcNewcastle(bbox),
-      searchNswAu(bbox),
-      searchNdwTruckNl(bbox),
-      searchAutobahnDe(bbox),
-      searchOdhIt(bbox),
-      searchApcoa(bbox),
-      searchGoldbeck(bbox),
-      searchOsmParking(bbox),
-    ]);
+    const enrichResults = await Promise.allSettled(
+      PARKING_SOURCE_REGISTRY.map((source) => source.search(bbox)),
+    );
 
     const nearby = enrichResults.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 

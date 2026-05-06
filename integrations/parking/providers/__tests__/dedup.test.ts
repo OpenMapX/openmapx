@@ -508,6 +508,44 @@ describe("deduplicateParking", () => {
       expect(result[0].sources).toEqual(["parkapi-v2/Dresden", "osm"]);
     });
 
+    it("merges provenance, freshness, and quality metadata", () => {
+      const v3 = makeFacility({
+        id: "v3-1",
+        coordinates: [13.377, 52.52],
+        sources: ["parkapi-v3"],
+        dataUpdatedAt: "2026-05-06T10:00:00.000Z",
+        qualityWarnings: ["Realtime availability is older than 30 minutes."],
+        sourceAttribution: { contributor: "MobiData BW", license: "dl-de/by-2-0" },
+        sourceName: "MobiData BW",
+        sourceUid: "bw",
+      });
+      const cita = makeFacility({
+        id: "cita-lu:P1",
+        coordinates: [13.3772, 52.5202],
+        sources: ["cita-lu"],
+        dataUpdatedAt: "2026-05-06T11:00:00.000Z",
+        isStale: true,
+        qualityWarnings: ["Realtime free-space count exceeded capacity and was clamped."],
+        realtimeDataUpdatedAt: "2026-05-06T11:00:00.000Z",
+      });
+
+      const result = deduplicateParking([cita, v3]);
+
+      expect(result[0].id).toBe("v3-1");
+      expect(result[0].dataUpdatedAt).toBe("2026-05-06T11:00:00.000Z");
+      expect(result[0].isStale).toBe(true);
+      expect(result[0].qualityWarnings).toEqual([
+        "Realtime availability is older than 30 minutes.",
+        "Realtime free-space count exceeded capacity and was clamped.",
+      ]);
+      expect(result[0].sourceAttribution).toEqual({
+        contributor: "MobiData BW",
+        license: "dl-de/by-2-0",
+      });
+      expect(result[0].sourceName).toBe("MobiData BW");
+      expect(result[0].sourceUid).toBe("bw");
+    });
+
     it("enriches optional fields from lower-priority members when primary lacks them", () => {
       const db = makeFacility({
         id: "db-1",

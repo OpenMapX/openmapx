@@ -17,6 +17,7 @@ const PARKING_TYPE_LABELS: Record<ParkingType, string> = {
 
 function computeVariant(facility: ParkingFacility): string {
   if (facility.state === "closed") return "closed";
+  if (facility.isStale) return "unknown";
   if (!facility.hasRealtimeData) return "unknown";
   if (facility.freeSpaces === undefined) return "unknown";
   if (facility.freeSpaces === 0) return "full";
@@ -28,6 +29,7 @@ function computeVariant(facility: ParkingFacility): string {
 
 function buildSummary(facility: ParkingFacility): string | undefined {
   if (facility.state === "closed") return "Closed";
+  if (facility.isStale) return "Availability stale";
   if (facility.hasRealtimeData && facility.freeSpaces !== undefined) {
     if (facility.freeSpaces === 0) return "Full";
     if (facility.capacity) return `${facility.freeSpaces}/${facility.capacity} free`;
@@ -62,6 +64,16 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function formatTimestamp(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return value;
+  return new Date(time)
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, " UTC");
+}
+
 export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
@@ -79,6 +91,13 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     }
     if (facility.state && facility.state !== "unknown") {
       rows.push(["Status", capitalize(facility.state)]);
+    }
+    if (facility.isStale) {
+      rows.push(["Data Freshness", "Stale"]);
+    }
+    const updatedAt = formatTimestamp(facility.realtimeDataUpdatedAt ?? facility.dataUpdatedAt);
+    if (updatedAt) {
+      rows.push(["Last Updated", updatedAt]);
     }
     sections.push({ title: "Availability", type: "table", rows, sectionIcon: "info" });
   }
@@ -150,6 +169,37 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
       type: "text",
       content: facility.paymentMethods,
       sectionIcon: "payments",
+      collapsed: true,
+    });
+  }
+
+  if (facility.qualityWarnings && facility.qualityWarnings.length > 0) {
+    sections.push({
+      title: "Data Quality",
+      type: "list",
+      items: facility.qualityWarnings,
+      sectionIcon: "warning",
+      collapsed: true,
+    });
+  }
+
+  const sourceRows: (string | number)[][] = [];
+  const sourceName =
+    facility.sourceAttribution?.contributor ??
+    facility.sourceAttribution?.name ??
+    facility.sourceName;
+  if (sourceName) sourceRows.push(["Source", sourceName]);
+  if (facility.sourceUid) sourceRows.push(["Source ID", facility.sourceUid]);
+  const license = facility.sourceAttribution?.license;
+  if (license) sourceRows.push(["License", license]);
+  const sourceUpdatedAt = formatTimestamp(facility.dataUpdatedAt);
+  if (sourceUpdatedAt) sourceRows.push(["Last Updated", sourceUpdatedAt]);
+  if (sourceRows.length > 0) {
+    sections.push({
+      title: "Source",
+      type: "table",
+      rows: sourceRows,
+      sectionIcon: "info",
       collapsed: true,
     });
   }

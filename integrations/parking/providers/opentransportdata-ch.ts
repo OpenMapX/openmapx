@@ -63,6 +63,11 @@ interface SwissParkingFeatureCollection {
 const DATASET_PAGE_URL = "https://data.opentransportdata.swiss/en/dataset/bike-and-car-parking";
 const FALLBACK_DOWNLOAD_URL =
   "https://data.opentransportdata.swiss/dataset/379e6847-47c0-4dcc-8d8a-f7a6a8bd809a/resource/c7bb80f4-18b1-446a-83eb-aaf4fba87944/download/bike-and-car-parking.json";
+const SOURCE_ATTRIBUTION = {
+  contributor: "OpenTransportData.swiss",
+  license: "O-By 1.0",
+  url: DATASET_PAGE_URL,
+};
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const SWISS_REDIRECT_HOSTS = ["opentransportdata.swiss", "*.opentransportdata.swiss"];
 
@@ -185,6 +190,9 @@ function featureToFacility(feature: SwissParkingFeature): ParkingFacility | null
   const properties = feature.properties;
   const id = feature.id;
   if (!coordinates || !properties || !id) return null;
+  if (properties.parkingFacilityCategory && properties.parkingFacilityCategory !== "CAR") {
+    return null;
+  }
 
   const capacity = totalCapacity(properties);
   const occupancy = properties.currentEstimatedOccupancy;
@@ -219,6 +227,9 @@ function featureToFacility(feature: SwissParkingFeature): ParkingFacility | null
     parkingType: mapParkingType(properties),
     paymentMethods: properties.bookingSystem || undefined,
     sources: ["opentransportdata-ch-parking"],
+    sourceAttribution: SOURCE_ATTRIBUTION,
+    sourceName: "OpenTransportData.swiss",
+    sourceUrl: DATASET_PAGE_URL,
     state: "open",
     tariffRows,
     url: firstActionUrl(properties),

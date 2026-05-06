@@ -77,6 +77,28 @@ describe("DATEX parking adapter", () => {
   </payload>
 </messageContainer>`;
 
+    const genericStatusXml = `<?xml version="1.0" encoding="UTF-8"?>
+<d2LogicalModel modelBaseVersion="2" xmlns="http://datex2.eu/schema/2/2_0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <payloadPublication xsi:type="GenericPublication" lang="en">
+    <publicationTime>2026-04-21T10:30:00Z</publicationTime>
+    <genericPublicationName>ParkingStatusPublication</genericPublicationName>
+    <genericPublicationExtension>
+      <parkingStatusPublication>
+        <parkingRecordStatus xsi:type="ParkingSiteStatus">
+          <parkingRecordReference targetClass="ParkingRecord" id="TRUCK:1" version="1" />
+          <parkingStatusOriginTime>2026-04-21T10:29:00Z</parkingStatusOriginTime>
+          <parkingOccupancy>
+            <parkingNumberOfVacantSpaces>4</parkingNumberOfVacantSpaces>
+            <parkingNumberOfOccupiedSpaces>16</parkingNumberOfOccupiedSpaces>
+            <parkingOccupancy>80</parkingOccupancy>
+          </parkingOccupancy>
+          <parkingSiteStatus>full</parkingSiteStatus>
+        </parkingRecordStatus>
+      </parkingStatusPublication>
+    </genericPublicationExtension>
+  </payloadPublication>
+</d2LogicalModel>`;
+
     expect(parseDatexParkingTable(tableXml)).toEqual([
       {
         equipmentTypes: ["electricChargingStation"],
@@ -95,6 +117,16 @@ describe("DATEX parking adapter", () => {
         originTime: "2026-04-21T10:29:00Z",
         recordId: "TRUCK:1",
         siteStatus: "open",
+        vacantSpaces: 4,
+      },
+    ]);
+    expect(parseDatexParkingStatus(genericStatusXml)).toEqual([
+      {
+        occupancyPercent: 80,
+        occupiedSpaces: 16,
+        originTime: "2026-04-21T10:29:00Z",
+        recordId: "TRUCK:1",
+        siteStatus: "full",
         vacantSpaces: 4,
       },
     ]);

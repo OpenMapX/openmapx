@@ -45,6 +45,19 @@ const SWISS_PARKING_COLLECTION = {
         publicAccess: true,
       },
     },
+    {
+      id: "bern-bike",
+      geometry: {
+        geometries: [{ type: "Point", coordinates: [7.44, 46.95] }],
+      },
+      properties: {
+        capacities: [{ categoryType: "DEFAULT", total: 24 }],
+        displayName: "Bern Bike Parking",
+        parkingFacilityCategory: "BIKE",
+        parkingFacilityType: "BIKE_PARKING",
+        publicAccess: true,
+      },
+    },
   ],
 };
 
@@ -98,6 +111,11 @@ describe("opentransportdata-ch Swiss parking provider", () => {
         openingHours: "24/7",
         operator: "SBB",
         parkAndRide: true,
+        sourceAttribution: expect.objectContaining({
+          contributor: "OpenTransportData.swiss",
+          license: "O-By 1.0",
+        }),
+        sourceName: "OpenTransportData.swiss",
         sources: ["opentransportdata-ch-parking"],
         tariffRows: [
           ["1 hour", "CHF 2.00"],
@@ -107,6 +125,19 @@ describe("opentransportdata-ch Swiss parking provider", () => {
         url: "https://parking.example/bern-pr",
       }),
     ]);
+  });
+
+  it("filters out bike-only facilities from the mixed Swiss parking feed", async () => {
+    const provider = await loadProvider();
+
+    const results = await provider.searchOpenTransportDataChParking({
+      east: 7.5,
+      north: 47.0,
+      south: 46.8,
+      west: 7.3,
+    });
+
+    expect(results.map((facility) => facility.id)).toEqual(["otdch-parking:bern-pr"]);
   });
 
   it("returns a matching parking detail from the cached Swiss feed", async () => {

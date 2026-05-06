@@ -14,6 +14,7 @@ vi.mock("../barcelona-es.js", () => ({
 vi.mock("../basel-ch.js", () => ({ searchBaselCh: vi.fn(), fetchBaselChDetail: vi.fn() }));
 vi.mock("../bnls-fr.js", () => ({ searchBnlsFr: vi.fn(), fetchBnlsFrDetail: vi.fn() }));
 vi.mock("../brussels-be.js", () => ({ searchBrusselsBe: vi.fn(), fetchBrusselsBeDetail: vi.fn() }));
+vi.mock("../cita-lu.js", () => ({ searchCitaLu: vi.fn(), fetchCitaLuDetail: vi.fn() }));
 vi.mock("../copenhagen-dk.js", () => ({
   searchCopenhagenDk: vi.fn(),
   fetchCopenhagenDkDetail: vi.fn(),
@@ -57,6 +58,7 @@ import { searchBarcelonaEs } from "../barcelona-es.js";
 import { searchBaselCh } from "../basel-ch.js";
 import { fetchBnlsFrDetail, searchBnlsFr } from "../bnls-fr.js";
 import { searchBrusselsBe } from "../brussels-be.js";
+import { fetchCitaLuDetail, searchCitaLu } from "../cita-lu.js";
 import { searchCopenhagenDk } from "../copenhagen-dk.js";
 import { fetchDbBahnParkDetail, searchDbBahnPark } from "../db-bahnpark.js";
 import { deduplicateParking } from "../dedup.js";
@@ -132,6 +134,7 @@ function setupEmptySources() {
     searchNdwTruckNl,
     searchAutobahnDe,
     searchOdhIt,
+    searchCitaLu,
     searchNrwMobidrom,
     searchNrwPr,
     searchApag,
@@ -223,7 +226,9 @@ describe("parkingProvider.search", () => {
       searchNdwTruckNl,
       searchAutobahnDe,
       searchOdhIt,
+      searchCitaLu,
       searchNrwMobidrom,
+      searchNrwPr,
       searchApag,
       searchApcoa,
       searchGoldbeck,
@@ -507,6 +512,25 @@ describe("parkingProvider.getDetail", () => {
     const result = await parkingProvider.getDetail("osm:way/999");
     expect(fetchOsmParkingElement).toHaveBeenCalledWith("way", 999);
     expect(result.id).toBe("osm:way/999");
+  });
+
+  it("cache miss with cita-lu: prefix fetches DATEX detail", async () => {
+    const facility = makeFacility({ id: "cita-lu:P1", sources: ["cita-lu"] });
+    vi.mocked(fetchCitaLuDetail).mockResolvedValue(facility);
+
+    setupEmptySources();
+    vi.mocked(deduplicateParking).mockReturnValue([facility]);
+    vi.mocked(mapParkingToDetail).mockReturnValue({
+      id: "cita-lu:P1",
+      sources: ["cita-lu"],
+      name: "P",
+      coordinates: [0, 0],
+      sections: [],
+    });
+
+    const result = await parkingProvider.getDetail("cita-lu:P1");
+    expect(fetchCitaLuDetail).toHaveBeenCalledWith("P1");
+    expect(result.id).toBe("cita-lu:P1");
   });
 
   it("unknown prefix returns fallback detail", async () => {

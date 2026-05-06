@@ -1,16 +1,37 @@
 export type ParkingType = "garage" | "surface" | "underground" | "on-street" | "unknown";
 
+export interface ParkingSourceAttribution {
+  name?: string;
+  url?: string;
+  contributor?: string;
+  license?: string;
+  licenseUrl?: string;
+}
+
 export interface ParkingFacility {
   id: string;
   name: string;
   coordinates: [number, number]; // [lng, lat]
   sources: string[];
+  sourceUid?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  sourceAttribution?: ParkingSourceAttribution;
 
   parkingType: ParkingType;
 
   capacity?: number;
   freeSpaces?: number;
   hasRealtimeData: boolean;
+  /** ISO timestamp of the freshest data used for this facility. */
+  dataUpdatedAt?: string;
+  /** ISO timestamp of the last static import/update when exposed by the source. */
+  staticDataUpdatedAt?: string;
+  /** ISO timestamp of the last realtime update when exposed by the source. */
+  realtimeDataUpdatedAt?: string;
+  /** True when availability exists but is older than the source's freshness window. */
+  isStale?: boolean;
+  qualityWarnings?: string[];
 
   disabledSpaces?: number;
   chargingSpaces?: number;
@@ -83,6 +104,21 @@ export interface ParkApiV3Site {
   capacity_woman?: number | null;
   max_height?: number | null;
   source_uid?: string;
+  static_data_updated_at?: string | null;
+  realtime_data_updated_at?: string | null;
+}
+
+export interface ParkApiV3Source {
+  uid: string;
+  name: string;
+  public_url?: string | null;
+  static_data_updated_at?: string | null;
+  realtime_data_updated_at?: string | null;
+  attribution_license?: string | null;
+  attribution_contributor?: string | null;
+  attribution_url?: string | null;
+  static_status?: string | null;
+  realtime_status?: string | null;
 }
 
 /** Raw record from RDW Socrata GEO parking datasets (t5pc-eb34, 6wzd-evwu, 9c54-cmfx). */

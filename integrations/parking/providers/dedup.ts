@@ -1,47 +1,8 @@
+import { getParkingSourcePrefix, getParkingSourcePriority } from "./source-priority.js";
 import type { ParkingFacility, ParkingType } from "./types.js";
 
-/**
- * Source priority for deduplication (lower = higher priority).
- * Within a cluster, the highest-priority member provides the base identity.
- * Individual fields may be sourced from lower-priority members when that
- * source has richer or more authoritative information (see mergeCluster).
- */
-const SOURCE_PRIORITY: Record<string, number> = {
-  "db-bahnpark": 0,
-  "parkapi-v3": 1,
-  "nrw-mobidrom-parking": 1,
-  "nrw-mobidrom-pr": 2,
-  apag: 2,
-  "parkapi-v2": 2, // prefix match — actual source is "parkapi-v2/CityName"
-  "rdw-nl": 3,
-  "bnls-fr": 4,
-  "ghent-be": 4,
-  "brussels-be": 4,
-  "basel-ch": 4,
-  "florence-it": 4,
-  "barcelona-es": 4,
-  "vienna-at": 4,
-  "copenhagen-dk": 4,
-  singapore: 4,
-  "madrid-es": 4,
-  "utmc-newcastle": 4,
-  "nsw-au": 4,
-  "ndw-truck-nl": 3,
-  "autobahn-de": 3,
-  "opendatahub-it": 4,
-  apcoa: 4,
-  goldbeck: 4,
-  osm: 5,
-};
-
-function getSourcePriority(source: string): number {
-  if (SOURCE_PRIORITY[source] !== undefined) return SOURCE_PRIORITY[source];
-  const prefix = source.split("/")[0];
-  return SOURCE_PRIORITY[prefix] ?? 99;
-}
-
 function facilityPriority(f: ParkingFacility): number {
-  return getSourcePriority(f.sources[0]);
+  return getParkingSourcePriority(f.sources[0]);
 }
 
 // Clustering parameters
@@ -294,12 +255,37 @@ function minDefined(values: Array<number | undefined>): number | undefined {
  */
 function dedupeSources(primary: string, all: string[]): string[] {
   const seen = new Map<string, string>(); // prefix → full label
-  seen.set(primary.split("/")[0], primary);
+  seen.set(getParkingSourcePrefix(primary), primary);
   for (const s of all) {
-    const prefix = s.split("/")[0];
+    const prefix = getParkingSourcePrefix(s);
     if (!seen.has(prefix)) seen.set(prefix, s);
   }
   return Array.from(seen.values());
+}
+
+function newestIsoString(values: Array<string | undefined>): string | undefined {
+  let best: string | undefined;
+  let bestTime = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    if (!value) continue;
+    const time = Date.parse(value);
+    if (!Number.isFinite(time)) continue;
+    if (time > bestTime) {
+      best = value;
+      bestTime = time;
+    }
+  }
+  return best;
+}
+
+function uniqueStrings(values: Array<string[] | undefined>): string[] | undefined {
+  const seen = new Set<string>();
+  for (const arr of values) {
+    for (const value of arr ?? []) {
+      if (value) seen.add(value);
+    }
+  }
+  return seen.size > 0 ? Array.from(seen) : undefined;
 }
 
 // Cluster merge
@@ -328,18 +314,31 @@ function mergeCluster(cluster: ParkingFacility[]): ParkingFacility {
     primary.fee;
 
   const allSources = members.flatMap((m) => m.sources);
+  const dataUpdatedAt = newestIsoString(members.map((m) => m.dataUpdatedAt));
+  const staticDataUpdatedAt = newestIsoString(members.map((m) => m.staticDataUpdatedAt));
+  const realtimeDataUpdatedAt = newestIsoString(members.map((m) => m.realtimeDataUpdatedAt));
+  const qualityWarnings = uniqueStrings(members.map((m) => m.qualityWarnings));
 
   return {
     id: primary.id,
     name: primary.name,
     coordinates: primary.coordinates,
     sources: dedupeSources(primary.sources[0], allSources),
+    sourceUid: pickByPriority(members, (m) => m.sourceUid),
+    sourceName: pickByPriority(members, (m) => m.sourceName),
+    sourceUrl: pickByPriority(members, (m) => m.sourceUrl),
+    sourceAttribution: pickByPriority(members, (m) => m.sourceAttribution),
 
     parkingType,
     hasRealtimeData: realtimeMembers.length > 0,
     freeSpaces,
     capacity: pickByPriority(members, (m) => m.capacity),
     state,
+    dataUpdatedAt,
+    staticDataUpdatedAt,
+    realtimeDataUpdatedAt,
+    isStale: members.some((m) => m.isStale) || undefined,
+    qualityWarnings,
 
     // Richer info wins for accessibility/EV counts — operator-reported counts
     // are generally higher than equipment-tag sentinels (1).
