@@ -105,6 +105,7 @@ const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe
 
 const EXPOSURE_LABELS: Record<string, { en: string; de: string }> = {
   direct: { en: "Direct (browser)", de: "Direkt (Browser)" },
+  mixed: { en: "Mixed", de: "Gemischt" },
   proxied: { en: "Proxied (server)", de: "Über Server (Proxy)" },
   "server-only": { en: "Server-only", de: "Nur Server" },
   "build-time": { en: "Build-time only", de: "Nur zur Build-Zeit" },

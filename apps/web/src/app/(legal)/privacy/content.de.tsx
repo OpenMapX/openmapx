@@ -248,8 +248,10 @@ export default function PrivacyContentDe({
         <Typography sx={{ mt: 1 }}>
           Sie k&ouml;nnen sich auch &uuml;ber OAuth-Drittanbieter anmelden (OpenStreetMap,
           Mapillary). In diesem Fall erhalten wir Ihre &ouml;ffentlichen Profilinformationen (Name,
-          Profilbild-URL) vom jeweiligen Anbieter. Wir erhalten oder speichern Ihr Passwort f&uuml;r
-          diese Anbieter nicht.
+          Profilbild-URL) vom jeweiligen Anbieter. Ihr Browser wird w&auml;hrend der Autorisierung
+          direkt zum ausgew&auml;hlten Anbieter weitergeleitet; dieser Anbieter kann dabei Ihre
+          IP-Adresse und Browser-Anfragedaten erhalten. Wir erhalten oder speichern Ihr Passwort
+          f&uuml;r diese Anbieter nicht.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;b DSGVO (Vertragserf&uuml;llung /
@@ -375,6 +377,24 @@ export default function PrivacyContentDe({
         ))}
 
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
+          Kernkartenanzeige
+        </Typography>
+        <ServiceTable
+          rows={[
+            {
+              service: "MapTiler Cloud",
+              purpose:
+                "Basiskartenstil, Vektorkacheln, Satellitenkacheln und Schrift-Glyphen, wenn MapTiler als Kartenanbieter konfiguriert ist",
+              dataSent:
+                "Karten-Asset-Anfragen und Kachelkoordinaten, die unser Backend-Proxy sendet; kann den sichtbaren Kartenausschnitt widerspiegeln",
+              endUserExposure: "\u00dcber Server (Proxy)",
+              country: "Schweiz",
+              privacy: "https://www.maptiler.com/privacy-policy/",
+            },
+          ]}
+        />
+
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
           Authentifizierungsanbieter
         </Typography>
         <ServiceTable
@@ -382,14 +402,18 @@ export default function PrivacyContentDe({
             {
               service: "OpenStreetMap OAuth 2.0",
               purpose: "Anmeldung \u00fcber OSM-Konto",
-              dataSent: "OAuth-Autorisierungsablauf (kein Passwort wird an uns weitergegeben)",
+              dataSent:
+                "Browser-Weiterleitung zur OSM-Autorisierungsseite; OAuth-Autorisierungsablauf (kein Passwort wird an uns weitergegeben)",
+              endUserExposure: "Direkt (Browser)",
               country: "UK",
               privacy: "https://osmfoundation.org/wiki/Privacy_Policy",
             },
             {
               service: "Mapillary OAuth (Meta Platforms)",
               purpose: "Anmeldung \u00fcber Mapillary-Konto",
-              dataSent: "OAuth-Autorisierungsablauf (kein Passwort wird an uns weitergegeben)",
+              dataSent:
+                "Browser-Weiterleitung zur Mapillary-Autorisierungsseite; OAuth-Autorisierungsablauf (kein Passwort wird an uns weitergegeben)",
+              endUserExposure: "Direkt (Browser)",
               country: "USA",
               privacy: "https://www.mapillary.com/privacy",
             },
@@ -406,6 +430,7 @@ export default function PrivacyContentDe({
               purpose:
                 "Abruf des Nahverkehrs-API-Verzeichnisses und GTFS-Feed-Katalogs aus Open-Source-Repositories (nur serverseitig)",
               dataSent: "Keine Nutzerdaten (serverseitige Repository-Dateiabfragen)",
+              endUserExposure: "Nur Server",
               country: "USA",
               privacy:
                 "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
@@ -419,8 +444,16 @@ export default function PrivacyContentDe({
           (Proxy)&quot; bedeuten, dass Anfragen &uuml;ber unseren Backend-Server geleitet werden
           &mdash; der Drittanbieter sieht nur die IP-Adresse unseres Servers, nicht Ihre.
           &quot;Direkt (Browser)&quot; bedeutet, dass Ihr Browser direkt mit dem Anbieter verbunden
-          wird, wobei Ihre IP-Adresse und Ihr Browser-Fingerabdruck offengelegt werden. Die
-          &uuml;berwiegende Mehrheit der Dienste ist serverseitig oder &uuml;ber Proxy angebunden.
+          wird, wobei Ihre IP-Adresse und Ihr Browser-Fingerabdruck offengelegt werden.
+          &quot;Gemischt&quot; bedeutet, dass Katalog- oder Metadaten-Anfragen serverseitig oder
+          &uuml;ber Proxy laufen, einzelne Medien- oder Player-Assets aber direkt durch Ihren
+          Browser geladen werden k&ouml;nnen, nachdem Sie eine ausdr&uuml;ckliche Aktion
+          ausf&uuml;hren, etwa einen Viewer-Hinweis best&auml;tigen oder &quot;Medien laden&quot;
+          anklicken. Die &uuml;berwiegende Mehrheit der Dienste ist serverseitig oder &uuml;ber
+          Proxy angebunden. MapTiler-Karten-Assets werden standardm&auml;&szlig;ig &uuml;ber unseren
+          API-Proxy geleitet. Wenn ein Betreiber &ouml;ffentliche Karten-, Stil- oder
+          Kachel-URL-Vorlagen auf externe Anbieter konfiguriert, kontaktiert Ihr Browser diese
+          konfigurierten Anbieter direkt f&uuml;r diese Assets.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>
@@ -434,10 +467,22 @@ export default function PrivacyContentDe({
           <li>
             <Typography>
               <strong>Direkte Browser-Verbindungen zu US-Anbietern:</strong> Der
-              MapillaryJS-Stra&szlig;enansicht-Viewer (Meta Platforms, Inc.) stellt eine direkte
-              Verbindung von Ihrem Browser her, wodurch Ihre IP-Adresse und die betrachteten
-              Koordinaten &uuml;bermittelt werden. Meta ist unter dem EU-U.S. Data Privacy Framework
-              (DPF) zertifiziert.
+              MapillaryJS-Stra&szlig;enansicht-Viewer (Meta Platforms, Inc.) wird erst geladen,
+              nachdem Sie einen In-App-Hinweis best&auml;tigt haben. Anschlie&szlig;end stellt er
+              eine direkte Verbindung von Ihrem Browser her, wodurch Ihre IP-Adresse,
+              Browser-/Ger&auml;te-Anfragedaten, die ausgew&auml;hlte Bild-ID und die betrachteten
+              Koordinaten &uuml;bermittelt werden. Einige Webcam-Video- oder Player-Anbieter
+              k&ouml;nnen Ihre IP-Adresse ebenfalls erhalten, wenn Sie &quot;Medien laden&quot;
+              anklicken oder Live-Medien anderweitig &ouml;ffnen. Meta ist unter dem EU-U.S. Data
+              Privacy Framework (DPF) zertifiziert.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Proxy-Anfragen zu Anbietern au&szlig;erhalb des EWR:</strong> MapTiler Cloud
+              erh&auml;lt proxy-weitergeleitete Karten-Asset-Anfragen, wenn es als Kartenanbieter
+              konfiguriert ist. MapTiler AG sitzt in der Schweiz, f&uuml;r die ein
+              EU-Angemessenheitsbeschluss besteht.
             </Typography>
           </li>
           <li>
@@ -469,9 +514,10 @@ export default function PrivacyContentDe({
 
       <Section title="8. Cookies und lokaler Speicher">
         <Typography>
-          OpenMapX verwendet ausschlie&szlig;lich technisch notwendige Speichermechanismen. Jeder
-          nachfolgende Punkt ist f&uuml;r die Bereitstellung des vom Nutzer angeforderten Dienstes
-          erforderlich:
+          OpenMapX verwendet ausschlie&szlig;lich First-Party-Speichermechanismen. Speicher, der
+          f&uuml;r den Dienst erforderlich ist, wird ohne Consent-Banner verwendet. Der optionale
+          Cache f&uuml;r k&uuml;rzliche Kartendaten ist standardm&auml;&szlig;ig deaktiviert und
+          wird nur aktiviert, wenn Sie ihn in den Einstellungen einschalten.
         </Typography>
         <ul>
           <li>
@@ -504,12 +550,14 @@ export default function PrivacyContentDe({
           <li>
             <Typography>
               <strong>Service-Worker-Cache</strong> &mdash; Ein Service Worker speichert statische
-              Ressourcen (HTML, CSS, JavaScript), Kartenkacheln und k&uuml;rzliche API-Antworten
-              (Suchergebnisse, Routen) &uuml;ber die Cache-Storage-API des Browsers zwischen. Dies
+              Ressourcen (HTML, CSS, JavaScript), Kartenkacheln und heruntergeladene
+              Offline-Bereiche &uuml;ber die Cache-Storage-API des Browsers zwischen. Dies
               erm&ouml;glicht Offline-Funktionalit&auml;t und schnelleres Laden.
               Zwischengespeicherte Eintr&auml;ge laufen automatisch ab (statische Ressourcen:
-              30&nbsp;Tage; Kartenkacheln: 3&ndash;7&nbsp;Tage; API-Antworten: Minuten bis
-              1&nbsp;Tag). Es werden keine personenbezogenen Daten gespeichert.
+              30&nbsp;Tage; Kartenkacheln: 3&ndash;7&nbsp;Tage). Laufzeit-Caches f&uuml;r
+              API-Antworten zu Suche, Routen, Orten, Autovervollst&auml;ndigung, Wetter und
+              Foto-Lookups werden nur geschrieben, wenn Sie den Cache f&uuml;r k&uuml;rzliche
+              Kartendaten aktivieren.
             </Typography>
           </li>
           <li>
@@ -519,13 +567,28 @@ export default function PrivacyContentDe({
               zwischengespeichert. Diese Daten werden beim Schlie&szlig;en des Tabs verworfen.
             </Typography>
           </li>
+          <li>
+            <Typography>
+              <strong>Optionaler Cache f&uuml;r k&uuml;rzliche Kartendaten</strong> &mdash; Wenn Sie
+              in den Einstellungen &quot;K&uuml;rzliche Kartendaten auf diesem Ger&auml;t
+              merken&quot; aktivieren, speichert OpenMapX eine kuratierte Auswahl k&uuml;rzlicher
+              kartenbezogener API-Antworten in localStorage und Cache Storage. Dies kann eingegebene
+              Suchtexte, Routen-Wegpunkte, Ortsdetails, Wetter-Lookups, Foto-Lookup-Ergebnisse,
+              Ergebnisse in der N&auml;he und genaue Kartenkoordinaten umfassen. Eintr&auml;ge
+              laufen je nach Cache-Typ automatisch ab (meist innerhalb von Minuten bis
+              24&nbsp;Stunden; Foto-Lookup-Caches k&ouml;nnen bis zu 7&nbsp;Tage gespeichert
+              bleiben). Sie k&ouml;nnen die Einstellung jederzeit deaktivieren oder diese Daten in
+              den Speichereinstellungen l&ouml;schen.
+            </Typography>
+          </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
           Wir verwenden <strong>keine</strong> Tracking-Cookies, Analyse-Cookies oder Werbe-Cookies.
-          Ein Cookie-Consent-Banner ist nicht erforderlich, da alle oben genannten
-          Speichermechanismen f&uuml;r die Bereitstellung des angeforderten Dienstes unbedingt
-          erforderlich sind (&sect;&nbsp;25 Abs.&nbsp;2 TDDDG, Umsetzung von Art.&nbsp;5 Abs.&nbsp;3
-          ePrivacy-Richtlinie).
+          F&uuml;r unbedingt erforderliche Speichermechanismen ist kein Cookie-Consent-Banner
+          erforderlich (&sect;&nbsp;25 Abs.&nbsp;2 TDDDG, Umsetzung von Art.&nbsp;5 Abs.&nbsp;3
+          ePrivacy-Richtlinie). Der optionale Cache f&uuml;r k&uuml;rzliche Kartendaten ist
+          standardm&auml;&szlig;ig deaktiviert und wird &uuml;ber eine ausdr&uuml;ckliche
+          First-Party-Einstellung gesteuert, nicht &uuml;ber ein Tracking-Banner.
         </Typography>
       </Section>
 

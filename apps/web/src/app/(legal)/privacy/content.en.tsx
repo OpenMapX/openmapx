@@ -230,7 +230,9 @@ export default function PrivacyContent({
         <Typography sx={{ mt: 1 }}>
           You may also sign in via third-party OAuth providers (OpenStreetMap, Mapillary). In that
           case, we receive your public profile information (name, profile picture URL) from the
-          respective provider. We do not receive or store your password for these providers.
+          respective provider. Your browser is redirected directly to the selected provider during
+          authorization, so that provider may receive your IP address and browser request metadata.
+          We do not receive or store your password for these providers.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           The legal basis is Art. 6(1)(b) GDPR (performance of a contract / provision of the service
@@ -343,6 +345,24 @@ export default function PrivacyContent({
         ))}
 
         <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
+          Core Map Rendering
+        </Typography>
+        <ServiceTable
+          rows={[
+            {
+              service: "MapTiler Cloud",
+              purpose:
+                "Base map style, vector tiles, satellite tiles, and font glyphs when MapTiler is configured as the map provider",
+              dataSent:
+                "Map asset requests and tile coordinates sent by our backend proxy; may reflect the visible map area",
+              endUserExposure: "Proxied (server)",
+              country: "Switzerland",
+              privacy: "https://www.maptiler.com/privacy-policy/",
+            },
+          ]}
+        />
+
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
           Authentication Providers
         </Typography>
         <ServiceTable
@@ -350,14 +370,18 @@ export default function PrivacyContent({
             {
               service: "OpenStreetMap OAuth 2.0",
               purpose: "User sign-in via OSM account",
-              dataSent: "OAuth authorization flow (no password shared with us)",
+              dataSent:
+                "Browser redirect to OSM authorization page; OAuth authorization flow (no password shared with us)",
+              endUserExposure: "Direct (browser)",
               country: "UK",
               privacy: "https://osmfoundation.org/wiki/Privacy_Policy",
             },
             {
               service: "Mapillary OAuth (Meta Platforms)",
               purpose: "User sign-in via Mapillary account",
-              dataSent: "OAuth authorization flow (no password shared with us)",
+              dataSent:
+                "Browser redirect to Mapillary authorization page; OAuth authorization flow (no password shared with us)",
+              endUserExposure: "Direct (browser)",
               country: "USA",
               privacy: "https://www.mapillary.com/privacy",
             },
@@ -374,6 +398,7 @@ export default function PrivacyContent({
               purpose:
                 "Fetching transit API registry and GTFS feed catalog from open-source repositories (server-side only)",
               dataSent: "No user data (server-side repository file lookups)",
+              endUserExposure: "Server-only",
               country: "USA",
               privacy:
                 "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement",
@@ -387,7 +412,13 @@ export default function PrivacyContent({
           requests are routed through our backend server — the third-party provider only sees our
           server&apos;s IP address, not yours. &quot;Direct (browser)&quot; means your browser
           connects directly to the provider, exposing your IP address and browser fingerprint to
-          them. The vast majority of services are server-only or proxied.
+          them. &quot;Mixed&quot; means catalog or metadata requests are server-side or proxied, but
+          specific media/player assets may be loaded directly by your browser after you take an
+          explicit action, such as confirming a viewer notice or clicking &quot;Load media&quot;.
+          The vast majority of services are server-only or proxied. MapTiler map assets are routed
+          through our API proxy by default. If an operator configures public map, style, or tile URL
+          templates to point at external providers, your browser will contact those configured
+          providers directly for those assets.
         </Typography>
 
         <Typography sx={{ mt: 2 }}>
@@ -400,9 +431,19 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Direct browser connections to US providers:</strong> The MapillaryJS
-              street-view viewer (Meta Platforms, Inc.) connects directly from your browser,
-              exposing your IP address and viewed coordinates. Meta is certified under the EU-U.S.
-              Data Privacy Framework (DPF).
+              street-view viewer (Meta Platforms, Inc.) is loaded only after you confirm an in-app
+              notice. It then connects directly from your browser, exposing your IP address,
+              browser/device request metadata, selected image ID, and viewed coordinates. Some
+              webcam video/player providers may also receive your IP address when you click
+              &quot;Load media&quot; or otherwise open the live media. Meta is certified under the
+              EU-U.S. Data Privacy Framework (DPF).
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Proxied requests to non-EEA providers:</strong> MapTiler Cloud receives
+              proxied map asset requests when it is configured as the map provider. MapTiler AG is
+              based in Switzerland, which has an EU adequacy decision.
             </Typography>
           </li>
           <li>
@@ -431,8 +472,9 @@ export default function PrivacyContent({
 
       <Section title="8. Cookies and Local Storage">
         <Typography>
-          OpenMapX uses only technically necessary storage mechanisms. Each item below is required
-          for the service to function as requested by the user:
+          OpenMapX uses first-party storage mechanisms only. Storage that is necessary for the
+          service is used without a consent banner. The optional recent map-data cache is disabled
+          by default and is only enabled when you switch it on in Settings.
         </Typography>
         <ul>
           <li>
@@ -462,10 +504,11 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Service Worker cache</strong> — A Service Worker caches static assets (HTML,
-              CSS, JavaScript), map tiles, and recent API responses (search results, routes) using
-              the browser&apos;s Cache Storage API. This enables offline functionality and faster
-              loading. Cached entries expire automatically (static assets: 30 days; map tiles:
-              3&ndash;7 days; API responses: minutes to 1 day). No personal data is stored.
+              CSS, JavaScript), map tiles, and downloaded offline areas using the browser&apos;s
+              Cache Storage API. This enables offline functionality and faster loading. Cached
+              entries expire automatically (static assets: 30 days; map tiles: 3&ndash;7 days).
+              Runtime API response caches for search, route, place, autocomplete, weather, and photo
+              lookups are only written when you enable the recent map-data cache.
             </Typography>
           </li>
           <li>
@@ -475,12 +518,25 @@ export default function PrivacyContent({
               discarded when you close the tab.
             </Typography>
           </li>
+          <li>
+            <Typography>
+              <strong>Optional recent map-data cache</strong> — If you enable &quot;Remember recent
+              map data on this device&quot; in Settings, OpenMapX stores a curated set of recent
+              map-related API responses in localStorage and Cache Storage. This can include typed
+              search text, route waypoints, place details, weather lookups, photo lookup results,
+              nearby results, and exact map coordinates. Entries expire automatically according to
+              their cache type (usually within minutes to 24 hours; photo lookup caches can remain
+              for up to 7 days). You can disable the setting or clear this data at any time in the
+              Storage settings.
+            </Typography>
+          </li>
         </ul>
         <Typography sx={{ mt: 1 }}>
           We do <strong>not</strong> use any tracking cookies, analytics cookies, or advertising
-          cookies. No cookie consent banner is required because all of the above storage mechanisms
-          are strictly necessary for providing the service you requested
-          (&sect;&nbsp;25(2)&nbsp;TDDDG, implementing Art.&nbsp;5(3) ePrivacy Directive).
+          cookies. No cookie consent banner is required for strictly necessary storage
+          (&sect;&nbsp;25(2)&nbsp;TDDDG, implementing Art.&nbsp;5(3) ePrivacy Directive). The
+          optional recent map-data cache is off by default and is controlled through an explicit
+          first-party setting rather than a tracking banner.
         </Typography>
       </Section>
 
