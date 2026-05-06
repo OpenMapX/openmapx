@@ -1,3 +1,6 @@
+import { lookupByCoords, lookupByNameAndCoords } from "@integrations/geocoding/place-lookup";
+import { deduplicatePhotos, searchHeroPhotos } from "@integrations/photos/orchestrator";
+import { fetchAggregate } from "@integrations/reviews/orchestrator";
 import type { Place } from "@openmapx/core";
 import {
   CATEGORY_FILTERS,
@@ -11,15 +14,6 @@ import {
   searchByCategory,
 } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-import {
-  lookupByCoords,
-  lookupByNameAndCoords,
-} from "../../../../integrations/geocoding/place-lookup.js";
-import {
-  deduplicatePhotos,
-  searchHeroPhotos,
-} from "../../../../integrations/photos/orchestrator.js";
-import { fetchAggregate } from "../../../../integrations/reviews/orchestrator.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";

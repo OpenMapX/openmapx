@@ -1,6 +1,6 @@
+import { resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
-import { resolveGooglePhotosLink } from "../../../../integrations/photos/orchestrator.js";
 
 /**
  * Allowed upstream hostname patterns for the image proxy.
