@@ -25,6 +25,9 @@ export interface PlaceFact {
 export interface PlaceReviewLink {
   platform: string;
   url: string;
+  kind?: "direct" | "search";
+  source?: "osm" | "wikidata" | "fallback";
+  confidence?: "high" | "low";
 }
 
 /**

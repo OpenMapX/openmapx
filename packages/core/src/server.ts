@@ -25,6 +25,12 @@ export {
 } from "./git-clone";
 export type { IdSchemeView, PlaceResolver, PlaceResolverContext } from "./ids";
 export {
+  buildFacebookUrl,
+  buildFoursquareUrl,
+  buildGoogleMapsUrl,
+  buildInstagramUrl,
+  buildTripadvisorUrl,
+  buildYelpUrl,
   getIdSchemeView,
   getPlaceResolver,
   listIdSchemeViews,

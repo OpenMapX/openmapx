@@ -1,4 +1,24 @@
+import type { DataSourceAttribution } from "@integrations/data-source/types";
 import type { IntegrationDataSource } from "../integration/manifest";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeExternalUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Build an HTML attribution string for a single data source.
@@ -21,6 +41,27 @@ export function buildAttributionHtml(ds: {
   const licenseLink = ds.licenseUrl
     ? `<a href="${ds.licenseUrl}" target="_blank" rel="noopener noreferrer">${ds.license}</a>`
     : ds.license;
+
+  return `© ${nameLink} (${licenseLink})`;
+}
+
+/**
+ * Build safe HTML attribution for per-item attribution received at runtime.
+ */
+export function buildRuntimeAttributionHtml(attribution: DataSourceAttribution): string {
+  const url = safeExternalUrl(attribution.url);
+  const name = escapeHtml(attribution.text);
+  const nameLink = url
+    ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${name}</a>`
+    : name;
+
+  if (!attribution.license) return `© ${nameLink}`;
+
+  const licenseUrl = safeExternalUrl(attribution.licenseUrl);
+  const license = escapeHtml(attribution.license);
+  const licenseLink = licenseUrl
+    ? `<a href="${escapeHtml(licenseUrl)}" target="_blank" rel="noopener noreferrer">${license}</a>`
+    : license;
 
   return `© ${nameLink} (${licenseLink})`;
 }

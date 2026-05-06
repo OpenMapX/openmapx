@@ -303,6 +303,12 @@ export {
 } from "./hooks/useUserKeypair";
 export type { IdSchemeView, PlaceResolver, PlaceResolverContext } from "./ids";
 export {
+  buildFacebookUrl,
+  buildFoursquareUrl,
+  buildGoogleMapsUrl,
+  buildInstagramUrl,
+  buildTripadvisorUrl,
+  buildYelpUrl,
   getIdSchemeView,
   getPlaceResolver,
   listIdSchemeViews,
@@ -472,6 +478,7 @@ export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
 export {
   buildAttributionHtml,
   buildIntegrationAttribution,
+  buildRuntimeAttributionHtml,
   buildSourceAttribution,
   combineAttributions,
   extractSourcePrefix,

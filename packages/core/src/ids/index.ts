@@ -1,5 +1,12 @@
 export { registerBuiltinIdSchemeViews } from "./builtin-views";
 export {
+  buildFacebookUrl,
+  buildFoursquareUrl,
+  buildGoogleMapsUrl,
+  buildInstagramUrl,
+  buildYelpUrl,
+} from "./external-platforms";
+export {
   getIdSchemeView,
   type IdSchemeView,
   listIdSchemeViews,
@@ -12,3 +19,4 @@ export {
   type PlaceResolverContext,
   registerPlaceResolver,
 } from "./resolvers";
+export { buildTripadvisorUrl } from "./tripadvisor";

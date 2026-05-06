@@ -17,7 +17,7 @@ const dataSourceSchema = z.object({
   // Privacy
   providerCountry: z.string(),
   providerPrivacyUrl: z.string(),
-  endUserExposure: z.enum(["direct", "proxied", "server-only", "build-time"]).optional(),
+  endUserExposure: z.enum(["direct", "mixed", "proxied", "server-only", "build-time"]).optional(),
   personalData: z.boolean().optional(),
   cookies: z.boolean().optional(),
   dpaAvailable: z.boolean().optional(),

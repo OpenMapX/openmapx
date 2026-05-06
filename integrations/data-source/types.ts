@@ -87,6 +87,10 @@ export interface DataSourceResult {
   name: string;
   coordinates: LngLat;
   source: string;
+  /** All contributing source ids when a result merges records from multiple providers. */
+  sources?: string[];
+  /** Per-result attribution used by map/source attribution controls when a provider varies by item. */
+  attributions?: DataSourceAttribution[];
   variant: string;
   status?: string;
   summary?: string;
@@ -140,7 +144,7 @@ export interface DataSourceDetailSection {
     | "warning";
   /** Structured pricing plans for type "pricing". */
   pricingPlans?: PricingPlanEntry[];
-  /** When true, the section renders collapsed by default with a toggle to expand. */
+  /** When true, the section renders collapsed by default. Embed sections default collapsed in the web UI. */
   collapsed?: boolean;
 }
 
@@ -157,6 +161,8 @@ export interface DataSourceDetail {
     country?: string;
   };
   operator?: { name: string; url?: string; legalName?: string };
+  /** Per-record attribution that cannot be expressed statically in the integration manifest. */
+  attributions?: DataSourceAttribution[];
   branding?: DataSourceBranding;
   usageInfo?: { type: string; cost?: string; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */

@@ -13,7 +13,15 @@
  * before any UI reads `place.ids`.
  */
 
+import {
+  buildFacebookUrl,
+  buildFoursquareUrl,
+  buildGoogleMapsUrl,
+  buildInstagramUrl,
+  buildYelpUrl,
+} from "./external-platforms";
 import { registerIdSchemeView } from "./presentation";
+import { buildTripadvisorUrl } from "./tripadvisor";
 
 let registered = false;
 
@@ -67,61 +75,42 @@ export function registerBuiltinIdSchemeViews(): void {
     scheme: "googleMaps",
     label: "Google Maps",
     displayOrder: 100,
-    buildUrl(value) {
-      if (/^https?:\/\//i.test(value)) return value;
-      return `https://www.google.com/maps?cid=${encodeURIComponent(value)}`;
-    },
+    buildUrl: buildGoogleMapsUrl,
   });
 
   registerIdSchemeView({
     scheme: "yelp",
     label: "Yelp",
     displayOrder: 110,
-    buildUrl(value) {
-      if (/^https?:\/\//i.test(value)) return value;
-      return `https://www.yelp.com/biz/${encodeURIComponent(value)}`;
-    },
+    buildUrl: buildYelpUrl,
   });
 
   registerIdSchemeView({
     scheme: "tripadvisor",
-    label: "TripAdvisor",
+    label: "Tripadvisor",
     displayOrder: 120,
-    buildUrl(value) {
-      if (/^https?:\/\//i.test(value)) return value;
-      return `https://www.tripadvisor.com/${encodeURIComponent(value)}`;
-    },
+    buildUrl: buildTripadvisorUrl,
   });
 
   registerIdSchemeView({
     scheme: "foursquare",
     label: "Foursquare",
     displayOrder: 130,
-    buildUrl(value) {
-      if (/^https?:\/\//i.test(value)) return value;
-      return `https://foursquare.com/v/${encodeURIComponent(value)}`;
-    },
+    buildUrl: buildFoursquareUrl,
   });
 
   registerIdSchemeView({
     scheme: "instagram",
     label: "Instagram",
     displayOrder: 140,
-    buildUrl(value) {
-      if (/^https?:\/\//i.test(value)) return value;
-      const handle = value.replace(/^@+/, "");
-      return `https://instagram.com/${encodeURIComponent(handle)}`;
-    },
+    buildUrl: buildInstagramUrl,
   });
 
   registerIdSchemeView({
     scheme: "facebook",
     label: "Facebook",
     displayOrder: 150,
-    buildUrl(value) {
-      if (/^https?:\/\//i.test(value)) return value;
-      return `https://facebook.com/${encodeURIComponent(value)}`;
-    },
+    buildUrl: buildFacebookUrl,
   });
 
   // Internal schemes (hidden from user-facing id lists)

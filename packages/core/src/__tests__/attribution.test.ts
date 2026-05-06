@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRuntimeAttributionHtml,
   buildSourceAttribution,
   extractSourcePrefix,
   pickIntegrationForSources,
@@ -82,6 +83,22 @@ describe("buildSourceAttribution", () => {
     ];
     const html = buildSourceAttribution(ds, ["custom"]);
     expect(html).toBe("Custom <b>attribution</b>");
+  });
+});
+
+describe("buildRuntimeAttributionHtml", () => {
+  it("escapes runtime attribution text and rejects non-http URLs", () => {
+    const html = buildRuntimeAttributionHtml({
+      text: "<Provider>",
+      url: "javascript:alert(1)",
+      license: "CC BY <4.0>",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    });
+
+    expect(html).toContain("&lt;Provider&gt;");
+    expect(html).not.toContain("javascript:");
+    expect(html).toContain("https://creativecommons.org/licenses/by/4.0/");
+    expect(html).toContain("CC BY &lt;4.0&gt;");
   });
 });
 
