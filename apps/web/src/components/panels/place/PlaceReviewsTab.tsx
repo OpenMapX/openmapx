@@ -167,11 +167,11 @@ export function PlaceReviewsTab({ place }: Props) {
           <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
             {t("findReviewsOn")}
           </Typography>
-          {links.map(({ platform, url }) => (
+          {links.map((link) => (
             <Box
-              key={platform}
+              key={link.platform}
               component="a"
-              href={url}
+              href={link.url}
               target="_blank"
               rel="noopener noreferrer"
               sx={{
@@ -187,7 +187,9 @@ export function PlaceReviewsTab({ place }: Props) {
               }}
             >
               <Typography variant="body2" sx={{ flex: 1 }}>
-                {platform}
+                {link.kind === "search"
+                  ? t("searchReviewPlatform", { platform: link.platform })
+                  : t("openReviewPlatform", { platform: link.platform })}
               </Typography>
               <OpenInNewIcon sx={{ fontSize: 16, color: "text.disabled", flexShrink: 0 }} />
             </Box>

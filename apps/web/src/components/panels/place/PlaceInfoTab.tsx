@@ -166,6 +166,7 @@ function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
 
 function ExternalRefRow({ ref }: { ref: ExternalRef }) {
   const tc = useTranslations("common");
+  const t = useTranslations("place");
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -195,23 +196,33 @@ function ExternalRefRow({ ref }: { ref: ExternalRef }) {
       </Typography>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         {ref.url ? (
-          <Link
-            href={ref.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            variant="body2"
-            sx={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 0.5,
-              color: "text.primary",
-              wordBreak: "break-all",
-            }}
-          >
-            {ref.value}
-            <OpenInNewIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-          </Link>
+          <Box sx={{ minWidth: 0 }}>
+            <Link
+              href={ref.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="hover"
+              variant="body2"
+              title={ref.value}
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.5,
+                color: "text.primary",
+                wordBreak: "break-word",
+              }}
+            >
+              {t("openExternalReference", { platform: ref.label })}
+              <OpenInNewIcon sx={{ fontSize: 14, color: "text.secondary" }} />
+            </Link>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: "block", wordBreak: "break-all" }}
+            >
+              {ref.value}
+            </Typography>
+          </Box>
         ) : (
           <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
             {ref.value}

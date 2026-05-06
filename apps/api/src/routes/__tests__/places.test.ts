@@ -279,6 +279,62 @@ describe("GET /places/:id", () => {
     expect(res.headers["cache-control"]).toBe("public, max-age=86400");
   });
 
+  it("folds safe OSM Tripadvisor contact tags into external ids", async () => {
+    mockLookupByOsmRef.mockResolvedValue({
+      ...MOCK_PLACE,
+      osmTags: {
+        ...MOCK_PLACE.osmTags,
+        "contact:tripadvisor": "Attraction_Review-g187323-d207840-Reviews.html",
+      },
+    });
+    mockGetPlaceKnowledge.mockResolvedValue({
+      externalIds: { tripadvisor: "https://tripadvisor.com.evil.example/fake" },
+      photos: [],
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ids.tripadvisor).toBe("Attraction_Review-g187323-d207840-Reviews.html");
+  });
+
+  it("folds only safe linkable external ids from knowledge providers", async () => {
+    mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({
+      externalIds: {
+        yelp: "cafe-central-vienna",
+        google_maps: "not-a-cid",
+        foursquare: "4b0588d7f964a52007a722e3",
+        instagram: "@openmapx.project",
+        facebook: "https://facebook.com.evil.example/openmapx",
+      },
+      photos: [],
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ids).toEqual(
+      expect.objectContaining({
+        yelp: "cafe-central-vienna",
+        foursquare: "4b0588d7f964a52007a722e3",
+        instagram: "@openmapx.project",
+      }),
+    );
+    expect(body.ids.googleMaps).toBeUndefined();
+    expect(body.ids.facebook).toBeUndefined();
+  });
+
   it("looks up DB station for eva: scheme", async () => {
     mockLookupDbStation.mockResolvedValue(MOCK_DB_STATION);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });

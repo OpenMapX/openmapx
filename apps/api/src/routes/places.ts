@@ -7,6 +7,12 @@ import {
 import { fetchAggregate, getReviewProviders } from "@integrations/reviews/orchestrator";
 import type { Place, ReviewProvider } from "@openmapx/core";
 import {
+  buildFacebookUrl,
+  buildFoursquareUrl,
+  buildGoogleMapsUrl,
+  buildInstagramUrl,
+  buildTripadvisorUrl,
+  buildYelpUrl,
   CATEGORY_FILTERS,
   categoryPlaceToPlace,
   getPlaceResolver,
@@ -24,10 +30,10 @@ import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
 
 /**
- * Merge Wikidata-sourced external identifiers (Yelp / TripAdvisor / Google
- * Maps / Foursquare / Instagram / Facebook, plus the OSM `wikidata` tag)
- * into `place.ids`. We only overlay — never overwrite — so producer-level
- * ids stay authoritative.
+ * Merge external identifiers (Wikidata-sourced Yelp / Tripadvisor / Google
+ * Maps / Foursquare / Instagram / Facebook, the OSM `wikidata` tag, and safe
+ * OSM Tripadvisor links) into `place.ids`. We only overlay — never overwrite —
+ * so producer-level ids stay authoritative.
  */
 function foldExternalIdsIntoPlace(
   place: Place,
@@ -37,12 +43,32 @@ function foldExternalIdsIntoPlace(
   const wd = place.osmTags?.wikidata;
   if (wd && !ids.wikidata) ids.wikidata = wd;
   if (externalIds) {
-    if (externalIds.yelp && !ids.yelp) ids.yelp = externalIds.yelp;
-    if (externalIds.tripadvisor && !ids.tripadvisor) ids.tripadvisor = externalIds.tripadvisor;
-    if (externalIds.google_maps && !ids.googleMaps) ids.googleMaps = externalIds.google_maps;
-    if (externalIds.foursquare && !ids.foursquare) ids.foursquare = externalIds.foursquare;
-    if (externalIds.instagram && !ids.instagram) ids.instagram = externalIds.instagram;
-    if (externalIds.facebook && !ids.facebook) ids.facebook = externalIds.facebook;
+    if (externalIds.yelp && !ids.yelp && buildYelpUrl(externalIds.yelp)) {
+      ids.yelp = externalIds.yelp;
+    }
+    if (
+      externalIds.tripadvisor &&
+      !ids.tripadvisor &&
+      buildTripadvisorUrl(externalIds.tripadvisor)
+    ) {
+      ids.tripadvisor = externalIds.tripadvisor;
+    }
+    if (externalIds.google_maps && !ids.googleMaps && buildGoogleMapsUrl(externalIds.google_maps)) {
+      ids.googleMaps = externalIds.google_maps;
+    }
+    if (externalIds.foursquare && !ids.foursquare && buildFoursquareUrl(externalIds.foursquare)) {
+      ids.foursquare = externalIds.foursquare;
+    }
+    if (externalIds.instagram && !ids.instagram && buildInstagramUrl(externalIds.instagram)) {
+      ids.instagram = externalIds.instagram;
+    }
+    if (externalIds.facebook && !ids.facebook && buildFacebookUrl(externalIds.facebook)) {
+      ids.facebook = externalIds.facebook;
+    }
+  }
+  const osmTripadvisor = place.osmTags?.["contact:tripadvisor"];
+  if (osmTripadvisor && !ids.tripadvisor && buildTripadvisorUrl(osmTripadvisor)) {
+    ids.tripadvisor = osmTripadvisor;
   }
   return { ...place, ids };
 }

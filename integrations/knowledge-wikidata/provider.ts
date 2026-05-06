@@ -193,7 +193,7 @@ export const wikidataSource: KnowledgeSource = {
     // External platform IDs — used downstream to build direct review links
     const EXTERNAL_ID_PROPS: Record<string, string> = {
       P3108: "yelp", // Yelp business ID
-      P3134: "tripadvisor", // TripAdvisor location ID
+      P3134: "tripadvisor", // Tripadvisor location ID
       P3749: "google_maps", // Google Maps CID
       P2464: "foursquare", // Foursquare venue ID
       P2003: "instagram", // Instagram username
