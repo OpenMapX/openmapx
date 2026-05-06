@@ -56,18 +56,21 @@ const TERRAIN_ATTRIBUTION = buildAttributionHtml({
   licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
 });
 
+function apiRoute(path: string): string {
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+  return apiBase ? `${apiBase}${path}` : path;
+}
+
 function getTerrainTileUrl(): string {
   if (process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE) {
     return process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE;
   }
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-  return apiBase
-    ? `${apiBase}/api/tiles/terrain/{z}/{x}/{y}.png`
-    : "/api/tiles/terrain/{z}/{x}/{y}.png";
+  return apiRoute("/api/tiles/terrain/{z}/{x}/{y}.png");
 }
 
 export default function HomePage() {
   const terrainTileUrl = getTerrainTileUrl();
+  const satelliteTiles = [apiRoute("/api/maptiler/tiles/satellite-v2/{z}/{x}/{y}.jpg")];
   return (
     <MapProvider>
       <GlobalKeybindings />
@@ -78,13 +81,7 @@ export default function HomePage() {
           <RasterBaseLayer
             sourceId="openmapx-satellite-source"
             layerId="openmapx-satellite-layer"
-            tiles={
-              process.env.NEXT_PUBLIC_MAPTILER_KEY
-                ? [
-                    `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`,
-                  ]
-                : []
-            }
+            tiles={satelliteTiles}
             activeWhen="satellite"
             maxzoom={20}
             attribution={SATELLITE_ATTRIBUTION}

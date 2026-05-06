@@ -515,8 +515,8 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
 
     // Mirror MapCanvas: when the operator runs the openmapx-streets style
     // off a self-hosted tileserver, fetch the style as a JSON object and
-    // patch in tiles/sprite/glyphs from env. Otherwise fall back to the
-    // MapTiler Cloud style URL (requires `env.maptilerKey`).
+    // patch in tiles/sprite/glyphs from env. Otherwise use the proxied
+    // MapTiler style URL.
     (async () => {
       const [{ default: maplibregl }, style] = await Promise.all([
         import("maplibre-gl"),
@@ -525,7 +525,6 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
           : Promise.resolve(maptilerStyleUrl("bright-v2", env)),
       ]);
       if (cancelled || !el) return;
-      if (env.styleProvider !== "openmapx" && !env.maptilerKey) return;
 
       const map = new maplibregl.Map({
         container: el,

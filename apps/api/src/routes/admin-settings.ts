@@ -220,7 +220,7 @@ const SETTING_DEFS: SettingDef[] = [
     label: "MapTiler API Key",
     type: "string",
     secret: true,
-    env: "NEXT_PUBLIC_MAPTILER_KEY",
+    env: "MAPTILER_KEY",
     default: "",
     showWhen: { key: "styleProvider", equals: "maptiler" },
   },

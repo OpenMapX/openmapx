@@ -26,6 +26,7 @@
       "TRANSITOUS_URL": "${TRANSITOUS_URL:-https://api.transitous.org}",
       "NOMINATIM_URL": "${NOMINATIM_URL:-https://nominatim.openstreetmap.org}",
       "OVERPASS_URL": "${OVERPASS_URL:-https://overpass-api.de}",
+      "MAPTILER_KEY": "${MAPTILER_KEY:-}",
       "CORS_ORIGIN": "https://${DOMAIN:-localhost},http://localhost:3000",
       "BETTER_AUTH_SECRET": "${BETTER_AUTH_SECRET:-}",
       "BETTER_AUTH_URL": "https://${DOMAIN:-localhost}",

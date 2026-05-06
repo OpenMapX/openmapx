@@ -13,7 +13,6 @@
 
 export interface ClientEnv {
   apiUrl: string;
-  maptilerKey: string;
   mapillaryToken: string;
   mapStyleUrl: string;
   tilesUrl: string;
@@ -37,7 +36,6 @@ export function buildClientEnv(): ClientEnv {
 
   return {
     apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "",
-    maptilerKey: process.env.NEXT_PUBLIC_MAPTILER_KEY ?? "",
     mapillaryToken: process.env.NEXT_PUBLIC_MAPILLARY_TOKEN ?? "",
     mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? "",
     tilesUrl: process.env.NEXT_PUBLIC_TILES_URL ?? "",

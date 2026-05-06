@@ -31,7 +31,7 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 - **75+ built-in integrations** across 12 domains and **20+ built-in services** rendered into a generated `docker-compose.yml`
 - **Self-host everything** — no service is mandatory and every external dependency can be replaced by a self-hosted alternative
 - **Open data** — OpenStreetMap, GTFS via Transitous, Wikidata, Wikipedia, Mapillary, NASA, NOAA, ECCC, DWD, MeteoAlarm, OpenAQ, USGS, NPS, and more
-- **Privacy-first** — no third-party analytics; all upstream calls proxied through your API server so providers see your IP, not the user's
+- **Privacy-first** — no third-party analytics; most upstream calls are proxied through your API server, and unavoidable direct browser asset loads are explicitly documented
 - **First-class admin UI** — service catalog, integration config, capability bindings, audit log, users, jobs, compose preview, data workflows
 - **Modern stack** — Next.js 16, Fastify 5, MapLibre GL JS 5, MUI 7, PostgreSQL + PostGIS, Valkey (Redis), Drizzle ORM, Better Auth, TypeScript end-to-end
 

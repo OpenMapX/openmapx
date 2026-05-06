@@ -2680,10 +2680,10 @@ No external API calls (queries local PostGIS database).
 - Privacy: https://www.maptiler.com/privacy-policy/
 - Country: Switzerland (MapTiler AG, Unterägeri)
 - Privacy other: No end-user tracking; Cloudflare stores IPs max 20 min; DPAs for enterprise; data centers in EU
-- End-user data exposure: Direct — browser/MapLibre loads style JSON directly from api.maptiler.com; end-user IP and viewport are exposed to MapTiler
+- End-user data exposure: Proxied via BFF — browser loads `/api/maptiler/maps/{style}/style.json`; only our server IP is exposed to MapTiler
 - DPA: Available on request — <https://explore.openli.com/privacy/maptiler-cloud/data-processing-agreements>
 - Coverage: Global
-- Env vars: `NEXT_PUBLIC_MAPTILER_KEY` — required; `NEXT_PUBLIC_MAP_STYLE_URL` — optional (override for self-hosted style)
+- Env vars: `MAPTILER_KEY` — required; `NEXT_PUBLIC_MAP_STYLE_URL` — optional (override for self-hosted style)
 - Self-hostable: Yes — OpenMapTiles + TileServer GL or Martin (<https://openmaptiles.org/>); already in project Docker Compose via Martin
 
 ### Vector Tiles — `https://api.maptiler.com/tiles/v3-openmaptiles/tiles.json?key={key}`
@@ -2696,10 +2696,10 @@ No external API calls (queries local PostGIS database).
 - Attribution: Yes — "© MapTiler © OpenStreetMap contributors"
 - Privacy: https://www.maptiler.com/privacy-policy/
 - Country: Switzerland (MapTiler AG)
-- End-user data exposure: Direct — MapLibre loads vector tiles directly from api.maptiler.com
+- End-user data exposure: Proxied via BFF — browser loads `/api/maptiler/tiles/...`; only our server IP is exposed to MapTiler
 - DPA: Available on request (see Map Styles above)
 - Coverage: Global
-- Env vars: `NEXT_PUBLIC_MAPTILER_KEY` — required; `NEXT_PUBLIC_TILES_URL` — optional (self-hosted tiles)
+- Env vars: `MAPTILER_KEY` — required; `NEXT_PUBLIC_TILES_URL` — optional (self-hosted tiles)
 - Self-hostable: Yes — OpenMapTiles + Martin
 
 ### Satellite Tiles — `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key={key}`
@@ -2712,10 +2712,10 @@ No external API calls (queries local PostGIS database).
 - Attribution: Yes — "© MapTiler © OpenStreetMap contributors"
 - Privacy: https://www.maptiler.com/privacy-policy/
 - Country: Switzerland (MapTiler AG)
-- End-user data exposure: Direct — MapLibre loads satellite imagery directly from api.maptiler.com
+- End-user data exposure: Proxied via BFF — browser loads `/api/maptiler/tiles/satellite-v2/...`; only our server IP is exposed to MapTiler
 - DPA: Available on request (see Map Styles above)
 - Coverage: Global
-- Env vars: `NEXT_PUBLIC_MAPTILER_KEY` — required
+- Env vars: `MAPTILER_KEY` — required
 - Self-hostable: No (satellite imagery requires commercial data sources)
 
 ### Font Glyphs — `https://api.maptiler.com/fonts`
@@ -2728,10 +2728,10 @@ No external API calls (queries local PostGIS database).
 - Attribution: Yes — "© MapTiler © OpenStreetMap contributors"
 - Privacy: https://www.maptiler.com/privacy-policy/
 - Country: Switzerland (MapTiler AG)
-- End-user data exposure: Direct — MapLibre loads font PBF files directly from api.maptiler.com
+- End-user data exposure: Proxied via BFF — browser loads `/api/maptiler/fonts/...`; only our server IP is exposed to MapTiler
 - DPA: Available on request (see Map Styles above)
 - Coverage: Global
-- Env vars: `NEXT_PUBLIC_MAPTILER_KEY` — required
+- Env vars: `MAPTILER_KEY` — required
 - Self-hostable: Yes — self-host font PBF files alongside tiles
 
 ## Mapillary (OAuth)
