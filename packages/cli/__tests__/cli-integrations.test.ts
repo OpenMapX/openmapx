@@ -1,6 +1,19 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { packageIntegration } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   formatIntegrationsTable,
@@ -29,6 +42,19 @@ const baseManifest = {
   quality: "community",
   platform: ">=1.0.0",
 };
+
+function writeTarGz(sourceDir: string, artifactPath: string): void {
+  const result = spawnSync("tar", ["-czf", artifactPath, "-C", sourceDir, "."], {
+    stdio: "pipe",
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr.toString() || `tar exited with ${result.status}`);
+  }
+}
+
+function sha256(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
 
 beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-int-"));
@@ -132,6 +158,114 @@ describe("installIntegration (local source)", () => {
     expect(existsSync(join(tmp, "custom_integrations", "ads-b", "index.ts"))).toBe(true);
   });
 
+  it("builds frontend bundles before installing when requested", async () => {
+    const src = join(tmp, "frontend-int");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "frontend-demo",
+        frontend: { mapLayer: true },
+      }),
+      "utf-8",
+    );
+    writeFileSync(
+      join(src, "map-layer.tsx"),
+      [
+        'import { useMemo } from "react";',
+        'import { getCommunityModuleIds } from "@openmapx/core";',
+        "export default function MapLayer() {",
+        "  useMemo(() => getCommunityModuleIds(), []);",
+        "  return null;",
+        "}",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await installIntegration({ source: src, rootDir: tmp, buildFrontend: true });
+    const bundlePath = join(
+      tmp,
+      "custom_integrations",
+      "frontend-demo",
+      "dist",
+      "frontend",
+      "index.js",
+    );
+    const bundle = readFileSync(bundlePath, "utf-8");
+
+    expect(result.build?.skipped).toBe(false);
+    expect(existsSync(bundlePath)).toBe(true);
+    expect(bundle).toContain("__openmapx_integrations");
+    // React and @openmapx/core are bare-spec externals — the host page's
+    // import map resolves them to singleton ESM modules at runtime, so the
+    // bundle keeps the imports rather than inlining the shim.
+    expect(bundle).toMatch(/from"react"|from "react"|import\("react"\)/);
+    expect(bundle).toMatch(/from"@openmapx\/core"|from "@openmapx\/core"/);
+    expect(bundle).not.toContain("__openmapx_runtime");
+  });
+
+  it("reports skipped frontend build when no frontend files are present", async () => {
+    const src = join(tmp, "backend-only");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "backend-only" }),
+      "utf-8",
+    );
+
+    const result = await installIntegration({ source: src, rootDir: tmp, buildFrontend: true });
+
+    expect(result.build).toMatchObject({
+      bundlePath: null,
+      skipped: true,
+      reason: "no frontend components (map-layer/legend/panel)",
+    });
+    expect(existsSync(join(tmp, "custom_integrations", "backend-only", "dist"))).toBe(false);
+  });
+
+  it("builds backend bundles before installing when requested", async () => {
+    const src = join(tmp, "backend-int");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "backend-demo",
+        backend: { routes: true },
+      }),
+      "utf-8",
+    );
+    writeFileSync(
+      join(src, "index.ts"),
+      [
+        'import type { IntegrationContext } from "@openmapx/core";',
+        'import { message } from "./message.js";',
+        "export function setup(ctx: IntegrationContext) {",
+        '  ctx.registerRoute("GET", "/message", (_req, reply) => reply.send({ message }));',
+        "}",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(join(src, "message.ts"), 'export const message = "hello";', "utf-8");
+
+    const result = await installIntegration({ source: src, rootDir: tmp, buildBackend: true });
+    const bundlePath = join(
+      tmp,
+      "custom_integrations",
+      "backend-demo",
+      "dist",
+      "backend",
+      "index.mjs",
+    );
+    const bundle = readFileSync(bundlePath, "utf-8");
+
+    expect(result.backendBuild?.skipped).toBe(false);
+    expect(existsSync(bundlePath)).toBe(true);
+    expect(bundle).toContain("hello");
+    expect(bundle).not.toContain("./message.js");
+  });
+
   it("replaces an existing install", async () => {
     const src = join(tmp, "src-int");
     mkdirSync(src, { recursive: true });
@@ -184,6 +318,285 @@ describe("installIntegration (local source)", () => {
     await expect(
       installIntegration({ source: "/this/path/does/not/exist", rootDir: tmp }),
     ).rejects.toThrow(/not.*existing local directory/);
+  });
+});
+
+describe("installIntegration (artifact source)", () => {
+  it("installs a prebuilt .tar.gz artifact with a frontend bundle", async () => {
+    const src = join(tmp, "artifact-src");
+    mkdirSync(join(src, "dist", "frontend"), { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "artifact-demo",
+        frontend: { legend: true },
+      }),
+      "utf-8",
+    );
+    writeFileSync(
+      join(src, "dist", "frontend", "index.js"),
+      "window.__openmapx_integrations=[];",
+      "utf-8",
+    );
+    const artifact = join(tmp, "artifact-demo.tar.gz");
+    writeTarGz(src, artifact);
+
+    const result = await installIntegration({
+      source: artifact,
+      sourceKind: "artifact",
+      artifactSha256: sha256(artifact),
+      rootDir: tmp,
+    });
+
+    expect(result.id).toBe("artifact-demo");
+    expect(result.artifact?.hasFrontendBundle).toBe(true);
+    expect(
+      existsSync(join(tmp, "custom_integrations", "artifact-demo", "dist", "frontend", "index.js")),
+    ).toBe(true);
+  });
+
+  it("extracts artifact entries that use tar long-path metadata", async () => {
+    const src = join(tmp, "long-path-artifact-src");
+    const longFileName = `${"a".repeat(120)}.txt`;
+    mkdirSync(join(src, "assets"), { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "long-path-artifact" }),
+      "utf-8",
+    );
+    writeFileSync(join(src, "assets", longFileName), "hello");
+    const artifact = join(tmp, "long-path-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await installIntegration({
+      source: artifact,
+      sourceKind: "artifact",
+      rootDir: tmp,
+    });
+
+    expect(
+      existsSync(join(tmp, "custom_integrations", "long-path-artifact", "assets", longFileName)),
+    ).toBe(true);
+  });
+
+  it("extracts safe internal symlinks from artifacts", async () => {
+    const src = join(tmp, "symlink-artifact-src");
+    const targetDir = join(src, "assets", "real");
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "symlink-artifact" }),
+      "utf-8",
+    );
+    writeFileSync(join(targetDir, "data.json"), '{ "ok": true }', "utf-8");
+    symlinkSync("real", join(src, "assets", "linked"), "dir");
+    const artifact = join(tmp, "symlink-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await installIntegration({
+      source: artifact,
+      sourceKind: "artifact",
+      rootDir: tmp,
+    });
+
+    const installedLink = join(tmp, "custom_integrations", "symlink-artifact", "assets", "linked");
+    expect(lstatSync(installedLink).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(installedLink, "data.json"))).toBe(true);
+  });
+
+  it("rejects artifacts that ship a node_modules directory", async () => {
+    const src = join(tmp, "node-modules-artifact-src");
+    mkdirSync(join(src, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "node-modules-artifact" }),
+      "utf-8",
+    );
+    writeFileSync(join(src, "node_modules", "pkg", "index.js"), "module.exports = {};");
+    const artifact = join(tmp, "node-modules-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(/must not ship a node_modules/);
+    expect(existsSync(join(tmp, "custom_integrations", "node-modules-artifact"))).toBe(false);
+  });
+
+  it("rejects artifacts whose extracted tar exceeds the artifact byte limit", async () => {
+    const src = join(tmp, "oversized-artifact-src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "oversized-artifact" }),
+      "utf-8",
+    );
+    writeFileSync(join(src, "payload.txt"), "a".repeat(64 * 1024), "utf-8");
+    const artifact = join(tmp, "oversized-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    expect(statSync(artifact).size).toBeLessThan(4096);
+    await expect(
+      installIntegration({
+        source: artifact,
+        sourceKind: "artifact",
+        rootDir: tmp,
+        maxArtifactBytes: 4096,
+      }),
+    ).rejects.toThrow(/extracted size exceeds max/);
+    expect(existsSync(join(tmp, "custom_integrations", "oversized-artifact"))).toBe(false);
+  });
+
+  it("rejects frontend artifacts that do not contain dist/frontend/index.js", async () => {
+    const src = join(tmp, "broken-artifact-src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "broken-artifact",
+        frontend: { legend: true },
+      }),
+      "utf-8",
+    );
+    const artifact = join(tmp, "broken-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(/prebuilt dist\/frontend\/index\.js/);
+    expect(existsSync(join(tmp, "custom_integrations", "broken-artifact"))).toBe(false);
+  });
+
+  it("rejects backend artifacts that do not contain dist/backend/index.mjs", async () => {
+    const src = join(tmp, "broken-backend-artifact-src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "broken-backend-artifact",
+        backend: { routes: true },
+      }),
+      "utf-8",
+    );
+    writeFileSync(
+      join(src, "index.ts"),
+      "export function setup() { /* intentionally unbundled */ }",
+      "utf-8",
+    );
+    const artifact = join(tmp, "broken-backend-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(/prebuilt dist\/backend\/index\.mjs/);
+    expect(existsSync(join(tmp, "custom_integrations", "broken-backend-artifact"))).toBe(false);
+  });
+
+  it("rejects artifacts with bundle checksums that do not match metadata", async () => {
+    const src = join(tmp, "bad-checksum-artifact-src");
+    mkdirSync(join(src, "dist", "frontend"), { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "bad-checksum-artifact",
+        frontend: { legend: true },
+      }),
+      "utf-8",
+    );
+    writeFileSync(join(src, "dist", "frontend", "index.js"), "window.x = 1;", "utf-8");
+    writeFileSync(
+      join(src, "openmapx-artifact.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "bad-checksum-artifact",
+        platformVersion: "1.0.0",
+        builtAt: new Date().toISOString(),
+        bundles: {
+          frontend: {
+            path: "dist/frontend/index.js",
+            sha256: "0".repeat(64),
+          },
+        },
+      }),
+      "utf-8",
+    );
+    const artifact = join(tmp, "bad-checksum-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(/checksum mismatch/);
+    expect(existsSync(join(tmp, "custom_integrations", "bad-checksum-artifact"))).toBe(false);
+  });
+});
+
+describe("packageIntegration", () => {
+  it("creates an artifact with frontend/backend bundles and metadata", async () => {
+    const src = join(tmp, "package-src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "package-demo",
+        frontend: { legend: true },
+        backend: { routes: true },
+      }),
+      "utf-8",
+    );
+    writeFileSync(
+      join(src, "legend.tsx"),
+      "export default function Legend() { return null; }",
+      "utf-8",
+    );
+    writeFileSync(
+      join(src, "index.ts"),
+      [
+        'import type { IntegrationContext } from "@openmapx/core";',
+        "export function setup(ctx: IntegrationContext) {",
+        '  ctx.registerRoute("GET", "/ping", (_req, reply) => reply.send({ ok: true }));',
+        "}",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const artifact = join(tmp, "package-demo.tar.gz");
+    const result = await packageIntegration({
+      rootDir: tmp,
+      source: src,
+      outFile: artifact,
+      buildFrontend: true,
+      buildBackend: true,
+    });
+
+    const metadata = JSON.parse(readFileSync(join(src, "openmapx-artifact.json"), "utf-8")) as {
+      bundles?: {
+        frontend?: { path: string; sha256: string };
+        backend?: { path: string; sha256: string };
+      };
+    };
+
+    expect(result.validation.hasFrontendBundle).toBe(true);
+    expect(result.validation.hasBackendBundle).toBe(true);
+    expect(metadata.bundles?.frontend?.path).toBe("dist/frontend/index.js");
+    expect(metadata.bundles?.backend?.path).toBe("dist/backend/index.mjs");
+    expect(existsSync(artifact)).toBe(true);
+
+    const installed = await installIntegration({
+      rootDir: tmp,
+      source: artifact,
+      sourceKind: "artifact",
+    });
+    expect(installed.id).toBe("package-demo");
+    expect(
+      existsSync(join(tmp, "custom_integrations", "package-demo", "dist", "frontend", "index.js")),
+    ).toBe(true);
+    expect(
+      existsSync(join(tmp, "custom_integrations", "package-demo", "dist", "backend", "index.mjs")),
+    ).toBe(true);
   });
 });
 

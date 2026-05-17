@@ -20,6 +20,10 @@ export interface StoreCatalogEntry {
   description: string;
   author: string;
   repository: string;
+  artifact?: {
+    url: string;
+    sha256?: string;
+  };
   version: string;
   minPlatform: string;
   domains: string[];

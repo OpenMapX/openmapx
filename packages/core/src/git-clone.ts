@@ -17,6 +17,8 @@ export interface GitShallowCloneOptions {
   url: string;
   /** Branch or tag (--branch). Optional. */
   ref?: string;
+  /** Optional destination directory. Defaults to a fresh directory under OS tmp. */
+  targetDir?: string;
   signal?: AbortSignal;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
 }
@@ -28,7 +30,7 @@ export interface GitShallowCloneOptions {
  * removed so the result is a snapshot, not a working tree.
  */
 export async function gitShallowClone(opts: GitShallowCloneOptions): Promise<string> {
-  const tmp = join(tmpdir(), `openmapx-git-${randomBytes(4).toString("hex")}`);
+  const tmp = opts.targetDir ?? join(tmpdir(), `openmapx-git-${randomBytes(4).toString("hex")}`);
   try {
     const args = ["clone", "--depth", "1"];
     if (opts.ref) args.push("--branch", opts.ref);

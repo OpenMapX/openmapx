@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   type CacheClient,
   type CustomHealthCheckFn,
@@ -18,8 +19,9 @@ import {
   toIntegrationMeta,
   validateManifest,
 } from "@openmapx/core";
+import { integrationBackendBundlePath, integrationFrontendBundlePath } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db, sql as pgClient } from "./db";
 import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
@@ -38,10 +40,26 @@ type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 const eventBus = new IntegrationEventBus();
 const integrations = new Map<string, LoadedIntegration>();
 
+export type IntegrationDirectoryInput = string | { directory: string; isBuiltIn: boolean };
+type NormalizedIntegrationDirectory = { directory: string; isBuiltIn: boolean };
+type RegisteredIntegrationRoute = {
+  integrationId: string;
+  method: string;
+  path: string;
+  handler: RouteHandler;
+  options?: RouteOptions;
+  score: number;
+};
+
+const integrationRoutes: RegisteredIntegrationRoute[] = [];
+const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
+// biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
+let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
+
 // Stored for reload support
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _fastify: FastifyInstance<any, any, any, any> | null = null;
-let _integrationDirs: string[] = [];
+let _integrationDirs: NormalizedIntegrationDirectory[] = [];
 
 function createHttpClient(_log: Logger): HttpClient {
   return {
@@ -286,8 +304,187 @@ async function resolveConfig(
   return config;
 }
 
+function normalizeIntegrationDirs(
+  dirs: IntegrationDirectoryInput[],
+): NormalizedIntegrationDirectory[] {
+  return dirs.map((entry) =>
+    typeof entry === "string"
+      ? { directory: entry, isBuiltIn: !entry.includes("custom_integrations") }
+      : entry,
+  );
+}
+
+// Mini-router for integration-defined paths. Fastify can't re-register routes
+// at runtime (which we need for reload), so a single Fastify route catches
+// `/api/integrations/:id/*` and dispatches here. Supported pattern subset:
+//   - literal segments: `/foo/bar`
+//   - named params: `:name` (one segment)
+//   - trailing wildcard: `*` (matches the rest of the path, exposed as `*`)
+// Not supported: regex constraints, optional segments, multi-segment globs
+// in the middle of a path. Integrations needing more should compose multiple
+// `registerRoute` calls.
+
+function normalizeRoutePath(path: string): string {
+  const withSlash = path.startsWith("/") ? path : `/${path}`;
+  return withSlash.length > 1 && withSlash.endsWith("/") ? withSlash.slice(0, -1) : withSlash;
+}
+
+function routeScore(path: string): number {
+  if (path === "/") return 0;
+  return path
+    .slice(1)
+    .split("/")
+    .reduce((score, segment) => {
+      if (segment === "*") return score;
+      if (!segment.includes(":")) return score + 10;
+      return score + (segment.replace(/:[A-Za-z_$][\w$]*/g, "").length > 0 ? 6 : 4);
+    }, path.length);
+}
+
+function registerIntegrationRoute(
+  integrationId: string,
+  method: string,
+  path: string,
+  handler: RouteHandler,
+  options?: RouteOptions,
+): void {
+  integrationRoutes.push({
+    integrationId,
+    method: method.toUpperCase(),
+    path: normalizeRoutePath(path),
+    handler,
+    options,
+    score: routeScore(path),
+  });
+  integrationRoutes.sort((a, b) => b.score - a.score);
+}
+
+function resetIntegrationRoutes(): void {
+  integrationRoutes.length = 0;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function decodeParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function matchRoutePath(pattern: string, path: string): Record<string, string> | null {
+  const patternSegments = pattern === "/" ? [] : pattern.slice(1).split("/");
+  const pathSegments = path === "/" ? [] : path.slice(1).split("/");
+  const params: Record<string, string> = {};
+
+  for (let i = 0; i < patternSegments.length; i++) {
+    const patternSegment = patternSegments[i];
+    if (patternSegment === "*") {
+      params["*"] = decodeParam(pathSegments.slice(i).join("/"));
+      return params;
+    }
+
+    const pathSegment = pathSegments[i];
+    if (pathSegment === undefined) return null;
+
+    const names: string[] = [];
+    const regexSource = escapeRegex(patternSegment ?? "").replace(
+      /:([A-Za-z_$][\w$]*)/g,
+      (_full, name: string) => {
+        names.push(name);
+        return "([^/]+)";
+      },
+    );
+    const match = pathSegment.match(new RegExp(`^${regexSource}$`));
+    if (!match) return null;
+    for (let j = 0; j < names.length; j++) {
+      const captured = match[j + 1];
+      if (captured !== undefined) params[names[j] as string] = decodeParam(captured);
+    }
+  }
+
+  return patternSegments.length === pathSegments.length ? params : null;
+}
+
+function findIntegrationRoute(
+  integrationId: string,
+  method: string,
+  path: string,
+): { route: RegisteredIntegrationRoute; params: Record<string, string> } | null {
+  const normalizedMethod = method.toUpperCase() === "HEAD" ? "GET" : method.toUpperCase();
+  const normalizedPath = normalizeRoutePath(path);
+  for (const route of integrationRoutes) {
+    if (route.integrationId !== integrationId || route.method !== normalizedMethod) continue;
+    const params = matchRoutePath(route.path, normalizedPath);
+    if (params) return { route, params };
+  }
+  return null;
+}
+
+function registerIntegrationRouteDispatcher(
+  // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
+  fastify: FastifyInstance<any, any, any, any>,
+): void {
+  if (_routeDispatcherFastify === fastify) return;
+  _routeDispatcherFastify = fastify;
+
+  const dispatch = async (request: FastifyRequest, reply: FastifyReply) => {
+    const params = request.params as { id?: string; "*"?: string };
+    const id = params.id;
+    if (!id) return reply.status(404).send({ error: "Not found" });
+    const integration = integrations.get(id);
+    if (!integration?.enabled) return reply.status(404).send({ error: "Not found" });
+
+    const routePath = params["*"] ? `/${params["*"]}` : "/";
+    const matched = findIntegrationRoute(id, request.method, routePath);
+    if (!matched) return reply.status(404).send({ error: "Not found" });
+
+    let userId: string | undefined;
+    if (matched.route.options?.requireAuth === true) {
+      const authed = await requireAuth(request, reply);
+      if (!authed) return;
+      userId = authed;
+    }
+
+    await matched.route.handler(
+      {
+        query: request.query as Record<string, string>,
+        params: matched.params,
+        body: request.body,
+        userId,
+      },
+      {
+        send: (data) => {
+          reply.send(data);
+        },
+        status: (code) => ({
+          send: (data) => {
+            reply.status(code).send(data);
+          },
+        }),
+        header: (name, value) => {
+          reply.header(name, value);
+        },
+        type: (contentType) => {
+          reply.type(contentType);
+        },
+      },
+    );
+  };
+
+  fastify.route({ method: [...ROUTE_METHODS], url: "/api/integrations/:id", handler: dispatch });
+  fastify.route({
+    method: [...ROUTE_METHODS],
+    url: "/api/integrations/:id/*",
+    handler: dispatch,
+  });
+}
+
 async function discoverManifests(
-  dirs: string[],
+  dirs: NormalizedIntegrationDirectory[],
 ): Promise<
   Array<{ manifest: ReturnType<typeof JSON.parse>; directory: string; isBuiltIn: boolean }>
 > {
@@ -297,9 +494,8 @@ async function discoverManifests(
     isBuiltIn: boolean;
   }> = [];
 
-  for (const baseDir of dirs) {
+  for (const { directory: baseDir, isBuiltIn } of dirs) {
     if (!existsSync(baseDir)) continue;
-    const isBuiltIn = !baseDir.includes("custom_integrations");
 
     const entries = readdirSync(baseDir, { withFileTypes: true });
     for (const entry of entries) {
@@ -341,6 +537,34 @@ function loadStrings(directory: string): IntegrationStrings {
     // skip unreadable strings
   }
   return strings;
+}
+
+function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string | null {
+  const bundled = integrationBackendBundlePath(directory);
+  if (!isBuiltIn && existsSync(bundled)) return bundled;
+  const modulePath = join(directory, "index.ts");
+  const jsModulePath = join(directory, "index.js");
+  if (existsSync(modulePath)) return modulePath;
+  return existsSync(jsModulePath) ? jsModulePath : null;
+}
+
+// In dev we mtime-bust so editing `index.ts` and hitting `/api/integrations/reload`
+// picks up the change. In prod we never cache-bust — ESM `import()` is
+// process-lifetime cached, so re-importing the same file URL would return the
+// old module *and* leak nothing. Production updates require restarting app-api
+// to load fresh backend code; the install/update job handlers say so in their
+// logs.
+function backendEntryImportSpecifier(entryPoint: string): string {
+  const url = pathToFileURL(entryPoint);
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const stats = statSync(entryPoint);
+      url.searchParams.set("v", `${stats.mtimeMs}-${stats.size}`);
+    } catch {
+      url.searchParams.set("v", Date.now().toString());
+    }
+  }
+  return url.href;
 }
 
 type DiscoveredEntry = {
@@ -422,12 +646,13 @@ function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
 export async function initIntegrations(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
   fastify: FastifyInstance<any, any, any, any>,
-  integrationDirs: string[],
+  integrationDirs: IntegrationDirectoryInput[],
 ): Promise<void> {
   _fastify = fastify;
-  _integrationDirs = integrationDirs;
+  _integrationDirs = normalizeIntegrationDirs(integrationDirs);
+  resetIntegrationRoutes();
 
-  const discovered = await discoverManifests(integrationDirs);
+  const discovered = await discoverManifests(_integrationDirs);
 
   // Hard-fail at startup when any installed integration declares vault-backed
   // secret fields but OPENMAPX_SECRETS_KEY is missing. The lazy fallback in
@@ -597,37 +822,7 @@ export async function initIntegrations(
         providers.set(domain, existing);
       },
       registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
-        const raw = `/api/integrations/${id}${path.startsWith("/") ? path : `/${path}`}`;
-        const fullPath = raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
-        const needsAuth = options?.requireAuth === true;
-        fastify.route({
-          method: method.toUpperCase() as "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
-          url: fullPath,
-          async handler(request, reply) {
-            let userId: string | undefined;
-            if (needsAuth) {
-              const authed = await requireAuth(request, reply);
-              if (!authed) return; // requireAuth already sent 401
-              userId = authed;
-            }
-            await handler(
-              {
-                query: request.query as Record<string, string>,
-                params: request.params as Record<string, string>,
-                body: request.body,
-                userId,
-              },
-              {
-                send: (data) => reply.send(data),
-                status: (code) => ({
-                  send: (data) => reply.status(code).send(data),
-                }),
-                header: (name, value) => reply.header(name, value),
-                type: (contentType) => reply.type(contentType),
-              },
-            );
-          },
-        });
+        registerIntegrationRoute(id, method, path, handler, options);
       },
       registerHealthCheck(fn: CustomHealthCheckFn) {
         integration.customHealthCheck = fn;
@@ -652,12 +847,12 @@ export async function initIntegrations(
 
     // Try to load the integration's setup function
     try {
-      const modulePath = join(directory, "index.ts");
-      const jsModulePath = join(directory, "index.js");
-      const entryPoint = existsSync(modulePath) ? modulePath : jsModulePath;
+      const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
 
-      if (existsSync(entryPoint)) {
-        const mod = (await import(entryPoint)) as { setup?: SetupFunction };
+      if (entryPoint) {
+        const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
+          setup?: SetupFunction;
+        };
         if (typeof mod.setup === "function") {
           await mod.setup(ctx);
         }
@@ -700,7 +895,10 @@ export async function initIntegrations(
       if (!fileName || fileName.includes("..")) {
         return reply.status(400).send({ error: "Invalid path" });
       }
-      const filePath = join(integration.directory, "dist", fileName);
+      const filePath =
+        fileName === "index.js"
+          ? integrationFrontendBundlePath(integration.directory)
+          : join(integration.directory, "dist", "frontend", fileName);
       if (!existsSync(filePath)) {
         return reply.status(404).send({ error: "Bundle not found" });
       }
@@ -723,6 +921,8 @@ export async function initIntegrations(
     const results = await executeAllIntegrationHealthChecks(all);
     return { timestamp: new Date().toISOString(), services: results };
   });
+
+  registerIntegrationRouteDispatcher(fastify);
 
   // Reload endpoint — re-discovers and re-initializes integrations (dev only)
   if (process.env.NODE_ENV !== "production") {
@@ -804,6 +1004,7 @@ export async function reloadIntegrations(): Promise<{
 
   integrations.clear();
   eventBus.removeAll();
+  resetIntegrationRoutes();
 
   // 2. Re-discover and re-setup (topological sort by dependencies, same as cold start)
   const discovered = await discoverManifests(_integrationDirs);
@@ -941,15 +1142,8 @@ export async function reloadIntegrations(): Promise<{
         existing.push(provider);
         providers.set(domain, existing);
       },
-      registerRoute(
-        _method: string,
-        _path: string,
-        _handler: RouteHandler,
-        _options?: RouteOptions,
-      ) {
-        // Routes cannot be re-registered in Fastify at runtime.
-        // The original routes from initIntegrations still work.
-        log.debug("registerRoute skipped during reload (routes persist from init)");
+      registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
+        registerIntegrationRoute(id, method, path, handler, options);
       },
       registerHealthCheck(fn: CustomHealthCheckFn) {
         integration.customHealthCheck = fn;
@@ -973,12 +1167,12 @@ export async function reloadIntegrations(): Promise<{
     };
 
     try {
-      const modulePath = join(directory, "index.ts");
-      const jsModulePath = join(directory, "index.js");
-      const entryPoint = existsSync(modulePath) ? modulePath : jsModulePath;
+      const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
 
-      if (existsSync(entryPoint)) {
-        const mod = (await import(entryPoint)) as { setup?: SetupFunction };
+      if (entryPoint) {
+        const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
+          setup?: SetupFunction;
+        };
         if (typeof mod.setup === "function") {
           await mod.setup(ctx);
         }
@@ -1020,4 +1214,5 @@ export async function shutdownIntegrations(): Promise<void> {
   }
   integrations.clear();
   eventBus.removeAll();
+  resetIntegrationRoutes();
 }

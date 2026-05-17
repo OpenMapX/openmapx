@@ -4,3 +4,34 @@ packages:
   - "integrations/*"
   - "services/data-manager"
 
+# Hoist packages that integration frontend files import from the web app.
+# Without this, Turbopack can't resolve them when bundling files in integrations/*/.
+publicHoistPattern:
+  - "@mui/*"
+  - "maplibre-gl"
+  - "next-intl"
+  - "@turf/*"
+
+# Supply-chain hardening. Keep these explicit so pnpm upgrades or local
+# defaults cannot silently relax install-time protections.
+strictDepBuilds: true
+dangerouslyAllowAllBuilds: false
+allowBuilds: { '@parcel/watcher': set this to true or false, '@swc/core': set this to true or false, esbuild: set this to true or false, protobufjs: set this to true or false, sharp: set this to true or false }
+blockExoticSubdeps: true
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+
+overrides:
+  "@hey-api/client-fetch": "workspace:*"
+  "react": "19.2.4"
+  "react-dom": "19.2.4"
+  "@tanstack/react-query": "^5.91.3"
+  "protobufjs": ">=7.5.5"
+  "uuid": ">=14.0.0"
+  "vite": "^8.0.5"
+  "vitest>vite": "^8.0.5"
+  "@vitest/mocker>vite": "^8.0.5"
+  "esbuild": ">=0.25.0"
+  "postcss": ">=8.5.10"

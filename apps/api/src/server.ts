@@ -181,21 +181,23 @@ try {
 }
 
 // Integration framework
-// Discover and load integrations from integrations/ directory
-const integrationsDir = join(import.meta.dirname ?? ".", "..", "..", "..", "integrations");
-const customIntegrationsDir = join(
-  import.meta.dirname ?? ".",
-  "..",
-  "..",
-  "..",
-  "custom_integrations",
-);
+// Built-ins are loaded from the immutable app-api image. Community integrations
+// are loaded from a writable, bind-mounted runtime directory so admin/CLI
+// installs survive app-api container replacement.
+const runtimeRootDir = join(import.meta.dirname ?? ".", "..", "..", "..");
+const integrationsDir = join(runtimeRootDir, "integrations");
+const customIntegrationsDir =
+  process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR?.trim() ||
+  join(runtimeRootDir, "custom_integrations");
 // Register core-owned id-scheme views (OSM, Wikidata, social platforms,
 // internal handles). Integrations can re-register their own schemes in
 // their setup functions — registration is idempotent.
 registerBuiltinIdSchemeViews();
 
-await initIntegrations(server, [integrationsDir, customIntegrationsDir]);
+await initIntegrations(server, [
+  { directory: integrationsDir, isBuiltIn: true },
+  { directory: customIntegrationsDir, isBuiltIn: false },
+]);
 
 // Debug endpoint — returns every registered id-scheme view. Replaces the
 // value a static `PLACE_ID_SCHEMES` constant used to carry; reflects what

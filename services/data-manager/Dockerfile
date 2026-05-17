@@ -27,7 +27,7 @@ FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/data-manager/package.json services/data-manager/
 COPY packages/hardlinks/package.json packages/hardlinks/
 
@@ -37,7 +37,7 @@ FROM base AS prod-deps
 WORKDIR /app
 ENV HUSKY=0
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/data-manager/package.json services/data-manager/
 COPY packages/hardlinks/package.json packages/hardlinks/
 

@@ -16,6 +16,7 @@ import { spawn } from "node:child_process";
 
 export interface SpawnWithBufferedLogsOptions {
   cwd?: string;
+  env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
 }
@@ -32,6 +33,7 @@ export function spawnWithBufferedLogs(
     }
     const proc = spawn(cmd, args, {
       cwd: opts.cwd,
+      env: opts.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdoutBuf = { current: "" };

@@ -29,11 +29,18 @@
   "devDependencies": {
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
+    "esbuild": "^0.28.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"
   },
   "peerDependencies": {
+    "esbuild": "^0.28.0",
     "react": ">=19"
+  },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@better-auth/passkey": "^1.6.9",

@@ -38,6 +38,10 @@ export interface CatalogEntry {
   description: string;
   author: string;
   repository: string;
+  artifact?: {
+    url: string;
+    sha256?: string;
+  };
   version: string;
   minPlatform: string;
   domains: string[];
@@ -172,6 +176,23 @@ export interface UpdateInfo {
   hasUpdate: boolean;
 }
 
+/**
+ * An installed integration is only "manageable" through the catalog when it
+ * was first installed from the catalog *and* still resolves to the same
+ * repository. A different repo means the catalog and the installed copy have
+ * drifted and the user would lose customizations on update.
+ */
+export function canUpdateFromCatalog(
+  installed: { sourceType: string; repository: string },
+  catalogEntry: { repository: string } | undefined | null,
+): boolean {
+  return (
+    !!catalogEntry &&
+    installed.sourceType === "registry" &&
+    installed.repository === catalogEntry.repository
+  );
+}
+
 export async function checkForUpdates(): Promise<UpdateInfo[]> {
   const [installed, catalog] = await Promise.all([
     db.select().from(installedIntegration),
@@ -181,11 +202,14 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
   const catalogMap = new Map(catalog.map((e) => [e.id, e]));
   return installed.map((inst) => {
     const entry = catalogMap.get(inst.id);
+    const canUseCatalog = canUpdateFromCatalog(inst, entry);
     return {
       id: inst.id,
       installedVersion: inst.installedVersion,
-      latestVersion: entry?.version ?? inst.installedVersion,
-      hasUpdate: !!entry && entry.version !== inst.installedVersion,
+      latestVersion: canUseCatalog
+        ? (entry?.version ?? inst.installedVersion)
+        : inst.installedVersion,
+      hasUpdate: canUseCatalog && entry !== undefined && entry.version !== inst.installedVersion,
     };
   });
 }
@@ -194,30 +218,36 @@ export async function checkForUpdates(): Promise<UpdateInfo[]> {
 //
 // Install/update/remove all delegate to `@openmapx/core`'s installer (the same
 // code path the `pnpm openmapx integrations` CLI uses). Job-runner wiring
-// (progress, logs, abort signal) lives here; the actual filesystem + git work
+// (progress, logs, abort signal) lives here; the actual filesystem + tar work
 // lives in core.
+//
+// Admin installs only ever take prebuilt artifacts: either a catalog entry
+// (`sourceType: registry`) with an `artifact.url`, or a manually-pasted
+// HTTPS `.tar.gz` URL (`sourceType: artifact`). Git source installs are a
+// CLI-only developer workflow — the api process never builds.
 
-function repoToSource(repository: string): string {
-  if (repository.startsWith("https://github.com/")) {
-    const path = repository.replace("https://github.com/", "").replace(/\.git$/, "");
-    return `github:${path}`;
-  }
-  return repository;
+interface InstallJobPayload {
+  artifactUrl: string;
+  artifactSha256?: string;
+  // Repository field is preserved purely for catalog identification + display.
+  // It is *not* used to install; the artifactUrl is the source of truth.
+  repository: string;
+  installedVersion: string;
+  sourceType: "registry" | "artifact";
+  actorId?: string;
 }
 
-async function runInstall(
+async function runArtifactInstall(
   ctx: JobContext,
-  source: string,
-  ref: string | undefined,
+  artifactUrl: string,
+  artifactSha256: string | undefined,
 ): Promise<{ id: string; directory: string; replaced: boolean }> {
   return coreInstallIntegration({
     rootDir: ROOT_DIR,
-    source,
-    ref,
-    // The admin Store endpoint only ever installs from a vetted catalog
-    // (https Git URLs at allowlisted hosts). Local-path installs are a
-    // CLI-only convenience and shouldn't be reachable through the HTTP API
-    // even with admin credentials.
+    source: artifactUrl,
+    sourceKind: "artifact",
+    artifactSha256,
+    // No local paths from the HTTP surface. CLI-only.
     allowLocalSources: false,
     signal: ctx.signal,
     onLog: (line, stream) => {
@@ -228,22 +258,24 @@ async function runInstall(
 
 const VERSION_REF_REGEX = /^[a-zA-Z0-9._\-/]+$/;
 
-export async function handleInstallJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  const { repository, version, actorId } = ctx.payload as {
-    repository: string;
-    version?: string;
-    actorId?: string;
-  };
-
-  // Validate before logging anything, so a bad request doesn't leave a misleading
-  // "Installing… 5%" line in the audit log.
+function assertValidVersion(version: string | undefined): void {
   if (version && !VERSION_REF_REGEX.test(version)) {
     throw new Error(`Invalid version format: "${version}"`);
   }
+}
 
-  await ctx.log(`Installing integration from ${repository}${version ? ` @ ${version}` : ""}...`);
+export async function handleInstallJob(ctx: JobContext): Promise<Record<string, unknown>> {
+  const payload = ctx.payload as Partial<InstallJobPayload>;
+  if (!payload.artifactUrl) {
+    throw new Error("install job is missing artifactUrl");
+  }
+  const sourceType: "registry" | "artifact" = payload.sourceType ?? "artifact";
+  const installedVersion = payload.installedVersion ?? "unknown";
+  assertValidVersion(installedVersion);
+
+  await ctx.log(`Installing integration artifact from ${payload.artifactUrl}...`);
   await ctx.setProgress(10);
-  const installed = await runInstall(ctx, repoToSource(repository), version);
+  const installed = await runArtifactInstall(ctx, payload.artifactUrl, payload.artifactSha256);
   await ctx.setProgress(70);
 
   await ctx.log("Reloading integrations...");
@@ -277,50 +309,53 @@ export async function handleInstallJob(ctx: JobContext): Promise<Record<string, 
     .insert(installedIntegration)
     .values({
       id: integrationId,
-      repository,
-      installedVersion: version ?? "latest",
-      sourceType: "registry",
+      repository: payload.repository ?? payload.artifactUrl,
+      installedVersion,
+      sourceType,
       installedAt: now,
       updatedAt: now,
-      installedBy: (actorId as string) ?? null,
+      installedBy: payload.actorId ?? null,
     })
     .onConflictDoUpdate({
       target: installedIntegration.id,
       set: {
-        repository,
-        installedVersion: version ?? "latest",
+        repository: payload.repository ?? payload.artifactUrl,
+        installedVersion,
+        sourceType,
         updatedAt: now,
-        installedBy: (actorId as string) ?? null,
+        installedBy: payload.actorId ?? null,
       },
     });
 
   await ctx.setProgress(100);
-  await ctx.log(`Integration ${integrationId} installed successfully.`);
+  await ctx.log(`Integration ${integrationId} installed (restart app-api to load backend code).`);
   return { integrationId };
 }
 
+interface UpdateJobPayload {
+  id: string;
+  artifactUrl: string;
+  artifactSha256?: string;
+  installedVersion: string;
+  actorId?: string;
+}
+
 export async function handleUpdateJob(ctx: JobContext): Promise<Record<string, unknown>> {
-  const { id, version, actorId } = ctx.payload as {
-    id: string;
-    version?: string;
-    actorId?: string;
-  };
+  const payload = ctx.payload as Partial<UpdateJobPayload>;
+  if (!payload.id) throw new Error("update job is missing id");
+  if (!payload.artifactUrl) throw new Error("update job is missing artifactUrl");
 
   const [record] = await db
     .select()
     .from(installedIntegration)
-    .where(eq(installedIntegration.id, id))
+    .where(eq(installedIntegration.id, payload.id))
     .limit(1);
+  if (!record) throw new Error(`Integration ${payload.id} is not installed`);
+  assertValidVersion(payload.installedVersion);
 
-  if (!record) throw new Error(`Integration ${id} is not installed`);
-
-  if (version && !VERSION_REF_REGEX.test(version)) {
-    throw new Error(`Invalid version format: "${version}"`);
-  }
-
-  await ctx.log(`Updating integration ${id}${version ? ` to ${version}` : " to latest"}...`);
+  await ctx.log(`Updating integration ${payload.id} from ${payload.artifactUrl}...`);
   await ctx.setProgress(10);
-  await runInstall(ctx, repoToSource(record.repository), version);
+  await runArtifactInstall(ctx, payload.artifactUrl, payload.artifactSha256);
   await ctx.setProgress(70);
 
   await ctx.log("Reloading integrations...");
@@ -333,15 +368,15 @@ export async function handleUpdateJob(ctx: JobContext): Promise<Record<string, u
   await db
     .update(installedIntegration)
     .set({
-      installedVersion: version ?? "latest",
+      installedVersion: payload.installedVersion ?? "unknown",
       updatedAt: new Date(),
-      installedBy: (actorId as string) ?? null,
+      installedBy: payload.actorId ?? null,
     })
-    .where(eq(installedIntegration.id, id));
+    .where(eq(installedIntegration.id, payload.id));
 
   await ctx.setProgress(100);
-  await ctx.log(`Integration ${id} updated successfully.`);
-  return { integrationId: id, version: version ?? "latest" };
+  await ctx.log(`Integration ${payload.id} updated (restart app-api to load backend code).`);
+  return { integrationId: payload.id, version: payload.installedVersion ?? "unknown" };
 }
 
 export async function handleRemoveJob(ctx: JobContext): Promise<Record<string, unknown>> {

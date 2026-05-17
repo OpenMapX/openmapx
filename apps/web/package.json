@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--max-old-space-size=16384' next dev",
-    "prebuild": "node scripts/copy-preset-icons.mjs",
+    "dev": "NODE_OPTIONS='--max-old-space-size=16384' pnpm build:runtime && next dev",
+    "prebuild": "node scripts/copy-preset-icons.mjs && pnpm build:runtime",
     "build": "next build && pnpm build:sw && pnpm build:copy-assets",
+    "build:runtime": "node scripts/build-runtime-modules.mjs",
     "build:sw": "esbuild src/sw.ts --bundle --outfile=public/sw.js --format=iife --platform=browser --define:process.env.NODE_ENV='\"production\"'",
     "build:copy-assets": "mkdir -p .next/standalone/apps/web/public .next/standalone/apps/web/.next/static && cp -R public/. .next/standalone/apps/web/public/ && cp -R .next/static/. .next/standalone/apps/web/.next/static/",
     "start": "node .next/standalone/apps/web/server.js",

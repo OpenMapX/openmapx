@@ -5,6 +5,7 @@ import { installedIntegration } from "../db/schema";
 import { jobRunner } from "../services/job-runner";
 import {
   addCatalogSource,
+  canUpdateFromCatalog,
   checkForUpdates,
   fetchReadme,
   getCatalog,
@@ -63,13 +64,14 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
     return {
       entries: entries.map((e) => {
         const inst = installedMap.get(e.id);
+        const canUseCatalog = !!inst && canUpdateFromCatalog(inst, e);
         return {
           ...e,
           compatible: isCompatible(e),
           platformVersion: PLATFORM_VERSION,
           installed: !!inst,
           installedVersion: inst?.installedVersion ?? null,
-          hasUpdate: inst ? inst.installedVersion !== e.version : false,
+          hasUpdate: canUseCatalog && inst.installedVersion !== e.version,
         };
       }),
       total: entries.length,
@@ -89,6 +91,7 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
 
     const readme = await fetchReadme(entry.repository);
 
+    const canUseCatalog = !!inst && canUpdateFromCatalog(inst, entry);
     return {
       ...entry,
       compatible: isCompatible(entry),
@@ -96,24 +99,72 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
       installed: !!inst,
       installedVersion: inst?.installedVersion ?? null,
       installedAt: inst?.installedAt?.toISOString() ?? null,
-      hasUpdate: inst ? inst.installedVersion !== entry.version : false,
+      hasUpdate: canUseCatalog && inst.installedVersion !== entry.version,
       readme,
     };
   });
 
   // POST /admin/store/install
-  app.post<{ Body: { repository: string; version?: string } }>(
+  //
+  // Two shapes are supported:
+  //   1. Catalog install: `{ repository }` — the catalog entry's artifact URL
+  //      is required (no plain Git installs from the admin surface).
+  //   2. Manual artifact install: `{ artifactUrl, sha256?, version? }`.
+  app.post<{
+    Body: {
+      repository?: string;
+      artifactUrl?: string;
+      sha256?: string;
+      version?: string;
+    };
+  }>(
     "/admin/store/install",
     { preHandler: [storeInstallLimit.preHandler()] },
     async (request, reply) => {
-      const { repository, version } = request.body ?? {};
-      if (!repository) return reply.status(400).send({ error: "repository is required" });
-
+      const body = request.body ?? {};
       const adminSession = getAdminSession(request);
+
+      let artifactUrl: string;
+      let artifactSha256: string | undefined;
+      let installedVersion: string;
+      let sourceType: "registry" | "artifact";
+      let repository: string;
+
+      if (body.repository) {
+        const catalogEntry = (await getCatalog()).find((e) => e.repository === body.repository);
+        if (!catalogEntry?.artifact?.url) {
+          return reply.status(400).send({
+            error:
+              "Catalog entry is missing an artifact URL. Ask the integration author to publish a prebuilt artifact.",
+          });
+        }
+        artifactUrl = catalogEntry.artifact.url;
+        artifactSha256 = catalogEntry.artifact.sha256;
+        installedVersion = body.version ?? catalogEntry.version;
+        repository = catalogEntry.repository;
+        sourceType = "registry";
+      } else if (body.artifactUrl) {
+        artifactUrl = body.artifactUrl;
+        artifactSha256 = body.sha256;
+        installedVersion = body.version ?? "manual";
+        repository = body.artifactUrl;
+        sourceType = "artifact";
+      } else {
+        return reply
+          .status(400)
+          .send({ error: "Either `repository` or `artifactUrl` is required" });
+      }
 
       const jobId = await jobRunner.enqueue(
         "store.install",
-        { repository, version, actorId: adminSession.user.id },
+        {
+          artifactUrl,
+          artifactSha256,
+          repository,
+          installedVersion,
+          sourceType,
+          actorId: adminSession.user.id,
+        },
         adminSession.user.id,
       );
 
@@ -121,7 +172,7 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
         actorId: adminSession.user.id,
         action: "store.install",
         targetType: "integration",
-        details: { repository, version, jobId },
+        details: { artifactUrl, repository, version: installedVersion, sourceType, jobId },
         request,
       });
 
@@ -131,40 +182,53 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
   );
 
   // POST /admin/store/update/:id
-  app.post<{ Params: { id: string }; Body: { version?: string } }>(
-    "/admin/store/update/:id",
-    async (request, reply) => {
-      const { id } = request.params;
-      const { version } = request.body ?? {};
+  //
+  // Updates require the integration to be catalog-managed — only then can the
+  // backend find a fresh artifact URL. Manual artifact installs can be
+  // re-installed via POST /admin/store/install.
+  app.post<{ Params: { id: string } }>("/admin/store/update/:id", async (request, reply) => {
+    const { id } = request.params;
 
-      const [record] = await db
-        .select()
-        .from(installedIntegration)
-        .where(eq(installedIntegration.id, id))
-        .limit(1);
-      if (!record) return reply.status(404).send({ error: `Integration ${id} is not installed` });
+    const [record] = await db
+      .select()
+      .from(installedIntegration)
+      .where(eq(installedIntegration.id, id))
+      .limit(1);
+    if (!record) return reply.status(404).send({ error: `Integration ${id} is not installed` });
 
-      const adminSession = getAdminSession(request);
-
-      const jobId = await jobRunner.enqueue(
-        "store.update",
-        { id, version, actorId: adminSession.user.id },
-        adminSession.user.id,
-      );
-
-      await writeAuditLog({
-        actorId: adminSession.user.id,
-        action: "store.update",
-        targetType: "integration",
-        targetId: id,
-        details: { version, jobId },
-        request,
+    const adminSession = getAdminSession(request);
+    const catalogEntry = await getCatalogEntry(id);
+    if (!canUpdateFromCatalog(record, catalogEntry) || !catalogEntry?.artifact?.url) {
+      return reply.status(400).send({
+        error:
+          "This integration cannot be updated from the catalog. Re-install from a fresh artifact URL.",
       });
+    }
 
-      reply.status(202);
-      return { jobId };
-    },
-  );
+    const jobId = await jobRunner.enqueue(
+      "store.update",
+      {
+        id,
+        artifactUrl: catalogEntry.artifact.url,
+        artifactSha256: catalogEntry.artifact.sha256,
+        installedVersion: catalogEntry.version,
+        actorId: adminSession.user.id,
+      },
+      adminSession.user.id,
+    );
+
+    await writeAuditLog({
+      actorId: adminSession.user.id,
+      action: "store.update",
+      targetType: "integration",
+      targetId: id,
+      details: { artifactUrl: catalogEntry.artifact.url, version: catalogEntry.version, jobId },
+      request,
+    });
+
+    reply.status(202);
+    return { jobId };
+  });
 
   // DELETE /admin/store/:id
   app.delete<{ Params: { id: string } }>("/admin/store/:id", async (request, reply) => {
@@ -207,6 +271,7 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
     return {
       integrations: installed.map((inst) => {
         const entry = catalogMap.get(inst.id);
+        const canUseCatalog = canUpdateFromCatalog(inst, entry);
         return {
           id: inst.id,
           repository: inst.repository,
@@ -214,8 +279,9 @@ export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
           sourceType: inst.sourceType,
           installedAt: inst.installedAt.toISOString(),
           updatedAt: inst.updatedAt.toISOString(),
-          catalogEntry: entry ?? null,
-          hasUpdate: entry ? entry.version !== inst.installedVersion : false,
+          catalogEntry: canUseCatalog ? entry : null,
+          hasUpdate:
+            canUseCatalog && entry !== undefined && entry.version !== inst.installedVersion,
         };
       }),
     };

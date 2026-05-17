@@ -5,27 +5,50 @@
 // integrations …`) and the admin Store (`apps/api/src/services/store.ts`) both
 // call into this module so they share one source of truth.
 //
-// Subprocess work (git, npx esbuild) goes through the shared
-// `spawnWithBufferedLogs` helper in core. Filesystem ops are inline.
+// Bundling uses esbuild's JS API (`import("esbuild")`). The CLI ships esbuild
+// as a dep and is the only entry point that requests builds — app-api never
+// builds at runtime; it consumes prebuilt artifacts.
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
+  chmodSync,
   cpSync,
   existsSync,
+  linkSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { gunzipSync } from "node:zlib";
 import { gitShallowClone } from "../git-clone";
 import { assertAllowedGitUrl } from "../git-url";
 import { spawnWithBufferedLogs } from "../spawn";
+import { safeDownload } from "../utils/safe-download";
 import { INTEGRATION_ID_REGEX, validateManifest } from "./manifest";
+import { PLATFORM_VERSION } from "./platform";
+
+// Bare specifiers community frontend bundles import as externals; the host
+// page's import map resolves them to singleton ESM modules under
+// `apps/web/public/runtime/`. Adding to this list also requires adding the
+// module to `apps/web/scripts/build-runtime-modules.mjs` and to the import map
+// in `apps/web/src/app/layout.tsx`.
+const FRONTEND_RUNTIME_EXTERNALS = [
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "@openmapx/core",
+] as const;
+
+// Server runtime exposes these as already-loaded modules; integrations must
+// not bundle their own copies (would break IntegrationContext singletons).
+const BACKEND_RUNTIME_EXTERNALS = ["@openmapx/core", "@openmapx/core/server"] as const;
 
 export interface IntegrationSummary {
   id: string;
@@ -38,6 +61,19 @@ export interface IntegrationSummary {
 
 function customDir(rootDir: string): string {
   return join(rootDir, "custom_integrations");
+}
+
+const STAGING_DIR_NAME = ".staging";
+const DEFAULT_MAX_ARTIFACT_BYTES = 200 * 1024 * 1024;
+
+function stagingDir(rootDir: string): string {
+  return join(customDir(rootDir), STAGING_DIR_NAME);
+}
+
+function createStagePath(rootDir: string, prefix: string): string {
+  const parent = stagingDir(rootDir);
+  mkdirSync(parent, { recursive: true });
+  return join(parent, `${prefix}-${randomBytes(4).toString("hex")}`);
 }
 
 function builtInDir(rootDir: string): string {
@@ -89,7 +125,7 @@ function summarise(directory: string): IntegrationSummary | null {
     name: typeof manifest.name === "string" ? manifest.name : manifest.id,
     version: typeof manifest.version === "string" ? manifest.version : "?",
     quality: typeof manifest.quality === "string" ? manifest.quality : "community",
-    hasBundle: existsSync(join(directory, "dist", "index.js")),
+    hasBundle: existsSync(join(directory, ...FRONTEND_BUNDLE_PATH)),
     directory,
   };
 }
@@ -140,13 +176,38 @@ export function validateIntegrationDirectory(directory: string): ValidateResult 
 
 export interface InstallOptions {
   rootDir: string;
-  /** `github:user/repo`, an https Git URL, or an absolute/relative local path. */
-  source: string;
-  ref?: string;
   /**
-   * Whether to allow installing from a local filesystem path. Defaults to
-   * `true`. Set to `false` for admin-facing endpoints (the admin Store), where
-   * arbitrary local paths are out-of-scope.
+   * For `sourceKind: "source"`: `github:user/repo`, an https Git URL, or an
+   * absolute/relative local path. For `sourceKind: "artifact"`: an https URL
+   * to a `.tar.gz` artifact, or a local `.tar.gz` path when local sources are
+   * allowed.
+   */
+  source: string;
+  /**
+   * `source` clones/copies a working directory and (optionally) builds bundles
+   * locally — used by the CLI for dev workflows. `artifact` extracts a
+   * prebuilt OpenMapX community-integration release tarball — used by the
+   * admin Store for production installs.
+   */
+  sourceKind?: "source" | "artifact";
+  ref?: string;
+  artifactSha256?: string;
+  maxArtifactBytes?: number;
+  /**
+   * Build dist/frontend/index.js for declared frontend components before the
+   * atomic swap. CLI-only; only set when installing from source. esbuild is
+   * loaded via the JS API and must be resolvable from this process.
+   */
+  buildFrontend?: boolean;
+  /**
+   * Build dist/backend/index.mjs for backend integration code before the
+   * atomic swap. CLI-only; only set when installing from source.
+   */
+  buildBackend?: boolean;
+  /**
+   * Whether to allow installing from a local filesystem path or local
+   * `.tar.gz`. Defaults to `true`. Set to `false` for admin-facing endpoints
+   * (the admin Store), where arbitrary local paths are out-of-scope.
    */
   allowLocalSources?: boolean;
   /** Stream-style line callback for log output (stdout + stderr). */
@@ -158,6 +219,9 @@ export interface InstallResult {
   id: string;
   directory: string;
   replaced: boolean;
+  build?: BuildResult;
+  backendBuild?: BuildResult;
+  artifact?: ArtifactValidationResult;
 }
 
 // Matches anything that *looks like* a URL scheme (e.g. `https://`, `http://`,
@@ -180,12 +244,24 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
   mkdirSync(customDir(opts.rootDir), { recursive: true });
 
   const allowLocal = opts.allowLocalSources ?? true;
-  const gitUrl = resolveGitUrl(opts.source);
+  const sourceKind = opts.sourceKind ?? "source";
+  const gitUrl = sourceKind === "source" ? resolveGitUrl(opts.source) : null;
 
   // Validate the source before doing any work. assertAllowedGitUrl throws on
   // non-https URLs and off-allowlist hosts; local paths are gated by the
   // caller-supplied flag.
-  if (gitUrl) {
+  if (sourceKind === "artifact") {
+    if (URL_SCHEME_REGEX.test(opts.source)) {
+      const parsed = new URL(opts.source);
+      if (parsed.protocol !== "https:") {
+        throw new Error(`Only https:// artifact URLs are supported (got ${parsed.protocol})`);
+      }
+    } else if (!allowLocal) {
+      throw new Error("Local artifact paths are not allowed in this context.");
+    } else if (!existsSync(opts.source) || !statSync(opts.source).isFile()) {
+      throw new Error(`Artifact '${opts.source}' is not an existing .tar.gz file`);
+    }
+  } else if (gitUrl) {
     assertAllowedGitUrl(gitUrl);
   } else if (!allowLocal) {
     throw new Error(
@@ -193,14 +269,17 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     );
   }
 
-  // Stage by either cloning into a tmp dir (git source) or copying into a tmp
-  // dir (local source). The tmp dir lives long enough to validate the
-  // manifest, then renameSync swaps it into place atomically.
+  // Stage inside custom_integrations so the final rename stays on the same
+  // filesystem as the install target (renameSync is only atomic within a
+  // single filesystem).
   let stage: string;
-  if (gitUrl) {
+  if (sourceKind === "artifact") {
+    stage = await stageArtifactSource(opts);
+  } else if (gitUrl) {
     stage = await gitShallowClone({
       url: gitUrl,
       ref: opts.ref,
+      targetDir: createStagePath(opts.rootDir, "git"),
       signal: opts.signal,
       onLog: opts.onLog,
     });
@@ -210,7 +289,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
         `Source '${opts.source}' is neither a github:<user>/<repo> spec, an https Git URL, nor an existing local directory`,
       );
     }
-    stage = stageLocalSource(opts.source);
+    stage = stageLocalSource(opts.rootDir, opts.source);
   }
 
   try {
@@ -230,22 +309,355 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     const id = manifest.id;
     const target = resolveInstallTarget(opts.rootDir, id);
     const replaced = existsSync(target);
+    const build = opts.buildFrontend
+      ? await buildIntegrationDirectory({
+          rootDir: opts.rootDir,
+          directory: stage,
+          id,
+          onLog: opts.onLog,
+          signal: opts.signal,
+        })
+      : undefined;
+    const backendBuild = opts.buildBackend
+      ? await buildIntegrationBackendDirectory({
+          rootDir: opts.rootDir,
+          directory: stage,
+          id,
+          onLog: opts.onLog,
+          signal: opts.signal,
+        })
+      : undefined;
+    // Artifact installs must arrive fully prebuilt. Source installs that
+    // skipped building (CLI `--no-build`) are accepted; they will run only if
+    // the dist/ outputs are committed in the source tree.
+    const requirePrebuilt = sourceKind === "artifact";
+    const artifact = validateArtifactContract(stage, manifest, {
+      requirePrebuiltFrontend: requirePrebuilt,
+      requirePrebuiltBackend: requirePrebuilt,
+    });
+    if (sourceKind === "artifact") {
+      validateArtifactMetadata(stage, manifest);
+    }
     if (replaced) {
       rmSync(target, { recursive: true, force: true });
     }
     renameSync(stage, target);
-    return { id, directory: target, replaced };
+    return { id, directory: target, replaced, build, backendBuild, artifact };
   } catch (err) {
     rmSync(stage, { recursive: true, force: true });
     throw err;
   }
 }
 
-function stageLocalSource(source: string): string {
-  const stage = join(tmpdir(), `openmapx-integration-${randomBytes(4).toString("hex")}`);
+function stageLocalSource(rootDir: string, source: string): string {
+  const stage = createStagePath(rootDir, "source");
   cpSync(source, stage, { recursive: true });
   rmSync(join(stage, ".git"), { recursive: true, force: true });
   return stage;
+}
+
+async function stageArtifactSource(opts: InstallOptions): Promise<string> {
+  const token = randomBytes(4).toString("hex");
+  const parent = stagingDir(opts.rootDir);
+  const maxArtifactBytes = opts.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES;
+  mkdirSync(parent, { recursive: true });
+  const extractRoot = join(parent, `artifact-${token}`);
+  const archivePath = join(parent, `artifact-${token}.tar.gz`);
+  mkdirSync(extractRoot, { recursive: true });
+
+  try {
+    let sourcePath = opts.source;
+    if (URL_SCHEME_REGEX.test(opts.source)) {
+      await safeDownload(opts.source, {
+        destPath: archivePath,
+        maxBytes: maxArtifactBytes,
+        timeoutMs: 5 * 60_000,
+        headers: { "User-Agent": "OpenMapX integration installer" },
+      });
+      sourcePath = archivePath;
+    }
+
+    assertArtifactFileSize(sourcePath, maxArtifactBytes);
+    verifyArtifactSha256(sourcePath, opts.artifactSha256);
+    extractTarGz(sourcePath, extractRoot, maxArtifactBytes);
+
+    const stage = normalizeExtractedArtifactRoot(extractRoot, join(parent, `source-${token}`));
+    if (sourcePath === archivePath) rmSync(archivePath, { force: true });
+    return stage;
+  } catch (err) {
+    rmSync(extractRoot, { recursive: true, force: true });
+    rmSync(archivePath, { force: true });
+    throw err;
+  }
+}
+
+function verifyArtifactSha256(path: string, expected: string | undefined): void {
+  if (!expected) return;
+  const actual = sha256File(path);
+  if (actual.toLowerCase() !== expected.toLowerCase()) {
+    throw new Error(`Artifact sha256 mismatch: expected ${expected}, got ${actual}`);
+  }
+}
+
+function sha256File(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function assertArtifactFileSize(path: string, maxBytes: number): void {
+  const size = statSync(path).size;
+  if (size > maxBytes) {
+    throw new Error(`Artifact size ${size} exceeds max ${maxBytes} bytes`);
+  }
+}
+
+function normalizeExtractedArtifactRoot(extractRoot: string, promoted: string): string {
+  if (existsSync(join(extractRoot, "manifest.json"))) return extractRoot;
+
+  const entries = readdirSync(extractRoot, { withFileTypes: true }).filter(
+    (entry) => !entry.name.startsWith("."),
+  );
+  const dirs = entries.filter((entry) => entry.isDirectory());
+  if (entries.length === 1 && dirs.length === 1) {
+    const nested = join(extractRoot, dirs[0].name);
+    if (existsSync(join(nested, "manifest.json"))) {
+      renameSync(nested, promoted);
+      rmSync(extractRoot, { recursive: true, force: true });
+      return promoted;
+    }
+  }
+
+  return extractRoot;
+}
+
+function extractTarGz(archivePath: string, destDir: string, maxBytes: number): void {
+  let data: Buffer;
+  try {
+    data = gunzipSync(readFileSync(archivePath), { maxOutputLength: maxBytes });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
+      throw new Error(`Artifact extracted size exceeds max ${maxBytes} bytes`);
+    }
+    throw err;
+  }
+
+  let pendingPath: string | undefined;
+  let pendingLinkPath: string | undefined;
+  const base = resolve(destDir);
+  for (let offset = 0; offset + 512 <= data.length; ) {
+    const header = data.subarray(offset, offset + 512);
+    offset += 512;
+    if (isZeroBlock(header)) break;
+
+    const name = readTarString(header, 0, 100);
+    const prefix = readTarString(header, 345, 155);
+    const headerPath = prefix ? `${prefix}/${name}` : name;
+    const headerLinkPath = readTarString(header, 157, 100);
+    const size = parseTarOctal(header, 124, 12);
+    const mode = parseTarOctal(header, 100, 8);
+    const typeflag = readTarString(header, 156, 1) || "0";
+    const fileData = data.subarray(offset, offset + size);
+    offset += Math.ceil(size / 512) * 512;
+
+    if (typeflag === "x") {
+      const records = parsePaxRecords(fileData);
+      pendingPath = records.path ?? pendingPath;
+      pendingLinkPath = records.linkpath ?? pendingLinkPath;
+      continue;
+    }
+    if (typeflag === "g") continue; // Global PAX metadata does not carry per-entry paths.
+    if (typeflag === "L") {
+      pendingPath = readTarPayloadString(fileData);
+      continue;
+    }
+    if (typeflag === "K") {
+      pendingLinkPath = readTarPayloadString(fileData);
+      continue;
+    }
+
+    const rawPath = pendingPath ?? headerPath;
+    const rawLinkPath = pendingLinkPath ?? headerLinkPath;
+    pendingPath = undefined;
+    pendingLinkPath = undefined;
+    const safePath = safeArchivePath(rawPath);
+    const target = resolve(destDir, safePath);
+    if (target !== base && !target.startsWith(`${base}${sep}`)) {
+      throw new Error(`Artifact entry escapes extraction directory: ${rawPath}`);
+    }
+
+    if (typeflag === "5") {
+      assertPathNotThroughSymlink(base, target);
+      mkdirSync(target, { recursive: true });
+      continue;
+    }
+    if (typeflag === "2") {
+      const linkTarget = resolveSymlinkTarget(base, target, rawLinkPath);
+      assertPathNotThroughSymlink(base, dirname(target));
+      mkdirSync(dirname(target), { recursive: true });
+      if (existsSync(target)) {
+        throw new Error(`Artifact link target already exists: ${rawPath}`);
+      }
+      symlinkSync(linkTarget.raw, target);
+      continue;
+    }
+    if (typeflag === "1") {
+      const linkTarget = resolveHardlinkTarget(base, rawLinkPath);
+      assertPathNotThroughSymlink(base, dirname(target));
+      mkdirSync(dirname(target), { recursive: true });
+      assertPathNotThroughSymlink(base, target);
+      linkSync(linkTarget, target);
+      continue;
+    }
+    if (typeflag !== "0") {
+      throw new Error(`Unsupported artifact entry type '${typeflag}' for ${rawPath}`);
+    }
+
+    assertPathNotThroughSymlink(base, dirname(target));
+    mkdirSync(dirname(target), { recursive: true });
+    assertPathNotThroughSymlink(base, target);
+    writeFileSync(target, fileData);
+    if (mode > 0) {
+      try {
+        chmodSync(target, mode & 0o777);
+      } catch {
+        // Non-fatal on filesystems that do not support chmod.
+      }
+    }
+  }
+}
+
+function isZeroBlock(block: Buffer): boolean {
+  for (const byte of block) {
+    if (byte !== 0) return false;
+  }
+  return true;
+}
+
+function readTarString(block: Buffer, start: number, length: number): string {
+  const slice = block.subarray(start, start + length);
+  const nul = slice.indexOf(0);
+  return slice
+    .subarray(0, nul >= 0 ? nul : undefined)
+    .toString("utf-8")
+    .trim();
+}
+
+function parseTarOctal(block: Buffer, start: number, length: number): number {
+  const raw = readTarString(block, start, length).replace(/\0/g, "").trim();
+  if (!raw) return 0;
+  const value = Number.parseInt(raw, 8);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Invalid tar numeric field: ${raw}`);
+  }
+  return value;
+}
+
+function readTarPayloadString(data: Buffer): string {
+  const nul = data.indexOf(0);
+  return data
+    .subarray(0, nul >= 0 ? nul : undefined)
+    .toString("utf-8")
+    .trimEnd();
+}
+
+function parsePaxRecords(data: Buffer): Record<string, string> {
+  const records: Record<string, string> = {};
+  let offset = 0;
+  while (offset < data.length) {
+    const space = data.indexOf(0x20, offset);
+    if (space < 0) break;
+    const lengthRaw = data.subarray(offset, space).toString("utf-8");
+    const length = Number.parseInt(lengthRaw, 10);
+    if (!Number.isInteger(length) || length <= 0 || offset + length > data.length) {
+      throw new Error(`Invalid PAX record length: ${lengthRaw}`);
+    }
+
+    let record = data.subarray(space + 1, offset + length);
+    if (record.length > 0 && record[record.length - 1] === 10) {
+      record = record.subarray(0, -1);
+    }
+    const equals = record.indexOf(0x3d);
+    if (equals > 0) {
+      const key = record.subarray(0, equals).toString("utf-8");
+      const value = record.subarray(equals + 1).toString("utf-8");
+      records[key] = value;
+    }
+    offset += length;
+  }
+  return records;
+}
+
+function safeArchivePath(path: string): string {
+  const normalized = normalize(path.replace(/\\/g, "/"));
+  if (
+    !normalized ||
+    normalized === "." ||
+    isAbsolute(normalized) ||
+    /^[A-Za-z]:/.test(normalized) ||
+    normalized === ".." ||
+    normalized.startsWith(`..${sep}`) ||
+    normalized.includes(`${sep}..${sep}`)
+  ) {
+    throw new Error(`Unsafe artifact path: ${path}`);
+  }
+  return normalized;
+}
+
+function assertPathNotThroughSymlink(base: string, target: string): void {
+  const resolvedBase = resolve(base);
+  const resolvedTarget = resolve(target);
+  if (resolvedTarget !== resolvedBase && !resolvedTarget.startsWith(`${resolvedBase}${sep}`)) {
+    throw new Error(`Artifact path escapes extraction directory: ${target}`);
+  }
+
+  const rel = relative(resolvedBase, resolvedTarget);
+  if (!rel) return;
+
+  let current = resolvedBase;
+  for (const part of rel.split(sep)) {
+    if (!part) continue;
+    current = join(current, part);
+    if (existsSync(current) && lstatSync(current).isSymbolicLink()) {
+      throw new Error(`Artifact path traverses a symlink: ${relative(resolvedBase, current)}`);
+    }
+  }
+}
+
+function assertSafeLinkText(rawLinkPath: string): string {
+  const linkPath = rawLinkPath.replace(/\\/g, "/");
+  if (!linkPath || linkPath.includes("\0")) {
+    throw new Error("Artifact link has an empty or invalid target");
+  }
+  if (isAbsolute(linkPath) || /^[A-Za-z]:/.test(linkPath)) {
+    throw new Error(`Artifact link target is not relative: ${rawLinkPath}`);
+  }
+  return linkPath;
+}
+
+function resolveSymlinkTarget(
+  base: string,
+  linkPath: string,
+  rawLinkPath: string,
+): { raw: string; resolved: string } {
+  const raw = assertSafeLinkText(rawLinkPath);
+  const resolved = resolve(dirname(linkPath), raw);
+  if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
+    throw new Error(`Artifact symlink target escapes extraction directory: ${rawLinkPath}`);
+  }
+  return { raw, resolved };
+}
+
+function resolveHardlinkTarget(base: string, rawLinkPath: string): string {
+  const linkPath = assertSafeLinkText(rawLinkPath);
+  const safePath = safeArchivePath(linkPath);
+  const resolved = resolve(base, safePath);
+  if (resolved !== base && !resolved.startsWith(`${base}${sep}`)) {
+    throw new Error(`Artifact hardlink target escapes extraction directory: ${rawLinkPath}`);
+  }
+  assertPathNotThroughSymlink(base, resolved);
+  if (!existsSync(resolved)) {
+    throw new Error(`Artifact hardlink target is missing: ${rawLinkPath}`);
+  }
+  return resolved;
 }
 
 export interface RemoveOptions {
@@ -277,8 +689,51 @@ export interface BuildResult {
   reason?: string;
 }
 
+export interface ArtifactValidationResult {
+  hasFrontendBundle: boolean;
+  hasBackendBundle: boolean;
+}
+
+export interface PackageOptions {
+  rootDir: string;
+  /** Installed community integration id. */
+  id?: string;
+  /** Explicit source directory, useful before an integration is installed. */
+  source?: string;
+  outFile: string;
+  buildFrontend?: boolean;
+  buildBackend?: boolean;
+  onLog?: InstallOptions["onLog"];
+  signal?: AbortSignal;
+}
+
+export interface PackageResult {
+  id: string;
+  artifactPath: string;
+  validation: ArtifactValidationResult;
+}
+
+interface ArtifactMetadataBundle {
+  path: string;
+  sha256: string;
+}
+
+interface ArtifactMetadata {
+  schemaVersion: 1;
+  id: string;
+  platformVersion: string;
+  builtAt: string;
+  bundles: {
+    frontend?: ArtifactMetadataBundle;
+    backend?: ArtifactMetadataBundle;
+  };
+}
+
 const FRONTEND_FILES = ["map-layer.tsx", "legend.tsx", "panel.tsx"] as const;
 type FrontendFile = (typeof FRONTEND_FILES)[number];
+const FRONTEND_BUNDLE_PATH = ["dist", "frontend", "index.js"] as const;
+const BACKEND_BUNDLE_PATH = ["dist", "backend", "index.mjs"] as const;
+const ARTIFACT_METADATA_FILE = "openmapx-artifact.json";
 
 const FRONTEND_EXPORT_NAME: Record<FrontendFile, string> = {
   "map-layer.tsx": "mapLayer",
@@ -292,6 +747,181 @@ const FRONTEND_LOCAL_NAME: Record<FrontendFile, string> = {
   "panel.tsx": "Panel",
 };
 
+function manifestDeclaresFrontend(manifest: Record<string, unknown>): boolean {
+  const frontend = manifest.frontend;
+  if (!frontend || typeof frontend !== "object") return false;
+  return Object.values(frontend as Record<string, unknown>).some((value) => value === true);
+}
+
+function manifestDeclaresBackend(manifest: Record<string, unknown>): boolean {
+  const backend = manifest.backend;
+  if (!backend || typeof backend !== "object") return false;
+  return Object.values(backend as Record<string, unknown>).some(
+    (value) => value === true || typeof value === "string",
+  );
+}
+
+function hasFrontendSources(directory: string): boolean {
+  return FRONTEND_FILES.some((file) => existsSync(join(directory, file)));
+}
+
+function hasBackendSource(directory: string): boolean {
+  return existsSync(join(directory, "index.ts")) || existsSync(join(directory, "index.js"));
+}
+
+function frontendBundlePath(directory: string): string {
+  return join(directory, ...FRONTEND_BUNDLE_PATH);
+}
+
+export function integrationFrontendBundlePath(directory: string): string {
+  return frontendBundlePath(directory);
+}
+
+export function integrationBackendBundlePath(directory: string): string {
+  return join(directory, ...BACKEND_BUNDLE_PATH);
+}
+
+function validateArtifactContract(
+  directory: string,
+  manifest: Record<string, unknown>,
+  opts: { requirePrebuiltFrontend: boolean; requirePrebuiltBackend: boolean },
+): ArtifactValidationResult {
+  const hasFrontend = manifestDeclaresFrontend(manifest) || hasFrontendSources(directory);
+  const hasFrontendBundle = existsSync(frontendBundlePath(directory));
+  if (opts.requirePrebuiltFrontend && hasFrontend && !hasFrontendBundle) {
+    throw new Error(
+      "Integration declares frontend components but no prebuilt dist/frontend/index.js was found. " +
+        "Package the integration with `pnpm openmapx integrations package` before installing through the admin API.",
+    );
+  }
+
+  const hasBackend = manifestDeclaresBackend(manifest) || hasBackendSource(directory);
+  const hasBackendBundle = existsSync(integrationBackendBundlePath(directory));
+  if (opts.requirePrebuiltBackend && hasBackend && !hasBackendBundle) {
+    throw new Error(
+      "Integration contains backend code but no prebuilt dist/backend/index.mjs was found. " +
+        "Package the integration with `pnpm openmapx integrations package` before installing through the admin API.",
+    );
+  }
+
+  if (existsSync(join(directory, "node_modules"))) {
+    throw new Error(
+      "Integration artifacts must not ship a node_modules/ directory. Bundle all runtime " +
+        "dependencies into dist/backend/index.mjs via the CLI packager.",
+    );
+  }
+
+  return { hasFrontendBundle, hasBackendBundle };
+}
+
+function relativeArtifactPath(directory: string, path: string): string {
+  return relative(directory, path).split(sep).join("/");
+}
+
+function resolveArtifactRelativePath(directory: string, path: string): string {
+  const safePath = safeArchivePath(path);
+  const target = resolve(directory, safePath);
+  const base = resolve(directory);
+  if (target !== base && !target.startsWith(`${base}${sep}`)) {
+    throw new Error(`Artifact metadata path escapes integration directory: ${path}`);
+  }
+  return target;
+}
+
+function writeArtifactMetadata(
+  directory: string,
+  manifest: Record<string, unknown>,
+  validation: ArtifactValidationResult,
+): void {
+  if (typeof manifest.id !== "string") return;
+
+  const frontendBundle = frontendBundlePath(directory);
+  const backendBundle = integrationBackendBundlePath(directory);
+  const metadata: ArtifactMetadata = {
+    schemaVersion: 1,
+    id: manifest.id,
+    platformVersion: PLATFORM_VERSION,
+    builtAt: new Date().toISOString(),
+    bundles: {},
+  };
+
+  if (validation.hasFrontendBundle && existsSync(frontendBundle)) {
+    metadata.bundles.frontend = {
+      path: relativeArtifactPath(directory, frontendBundle),
+      sha256: sha256File(frontendBundle),
+    };
+  }
+  if (validation.hasBackendBundle && existsSync(backendBundle)) {
+    metadata.bundles.backend = {
+      path: relativeArtifactPath(directory, backendBundle),
+      sha256: sha256File(backendBundle),
+    };
+  }
+
+  writeFileSync(
+    join(directory, ARTIFACT_METADATA_FILE),
+    JSON.stringify(metadata, null, 2),
+    "utf-8",
+  );
+}
+
+function validateArtifactMetadata(directory: string, manifest: Record<string, unknown>): void {
+  const metadataPath = join(directory, ARTIFACT_METADATA_FILE);
+  if (!existsSync(metadataPath)) return;
+
+  let metadata: ArtifactMetadata;
+  try {
+    metadata = JSON.parse(readFileSync(metadataPath, "utf-8")) as ArtifactMetadata;
+  } catch {
+    throw new Error(`${ARTIFACT_METADATA_FILE} is not valid JSON`);
+  }
+
+  if (metadata.schemaVersion !== 1) {
+    throw new Error(
+      `Unsupported ${ARTIFACT_METADATA_FILE} schemaVersion: ${metadata.schemaVersion}`,
+    );
+  }
+  if (typeof manifest.id === "string" && metadata.id !== manifest.id) {
+    throw new Error(
+      `${ARTIFACT_METADATA_FILE} id mismatch: metadata has ${metadata.id}, manifest has ${manifest.id}`,
+    );
+  }
+
+  for (const [name, bundle] of Object.entries(metadata.bundles ?? {})) {
+    if (!bundle) continue;
+    const path = resolveArtifactRelativePath(directory, bundle.path);
+    if (!existsSync(path)) {
+      throw new Error(`${ARTIFACT_METADATA_FILE} ${name} bundle is missing: ${bundle.path}`);
+    }
+    const actual = sha256File(path);
+    if (actual.toLowerCase() !== bundle.sha256.toLowerCase()) {
+      throw new Error(
+        `${ARTIFACT_METADATA_FILE} ${name} bundle checksum mismatch: expected ${bundle.sha256}, got ${actual}`,
+      );
+    }
+  }
+}
+
+// esbuild is loaded lazily through its JS API so the api image never imports
+// it (only the CLI ever requests a build). Resolution flows through normal
+// node module lookup from this package — esbuild is a `@openmapx/cli` runtime
+// dependency. If a non-CLI consumer ever asks for a build, this surfaces a
+// clear error rather than hanging.
+type EsbuildModule = typeof import("esbuild");
+let esbuildModule: EsbuildModule | null = null;
+async function loadEsbuild(): Promise<EsbuildModule> {
+  if (esbuildModule) return esbuildModule;
+  try {
+    esbuildModule = (await import("esbuild")) as EsbuildModule;
+  } catch {
+    throw new Error(
+      "esbuild is not available in this process. Run integration builds through the OpenMapX CLI " +
+        "(`pnpm openmapx integrations build|package`), which ships esbuild as a dependency.",
+    );
+  }
+  return esbuildModule;
+}
+
 export async function buildIntegration(opts: BuildOptions): Promise<BuildResult> {
   const directory = resolveInstallTarget(opts.rootDir, opts.id);
   if (!existsSync(directory)) {
@@ -302,6 +932,121 @@ export async function buildIntegration(opts: BuildOptions): Promise<BuildResult>
     throw new Error(`No manifest.json in ${directory}`);
   }
 
+  return buildIntegrationDirectory({ ...opts, directory });
+}
+
+export async function buildIntegrationBackend(opts: BuildOptions): Promise<BuildResult> {
+  const directory = resolveInstallTarget(opts.rootDir, opts.id);
+  if (!existsSync(directory)) {
+    throw new Error(`Community integration '${opts.id}' is not installed`);
+  }
+  const manifest = readManifest(directory);
+  if (!manifest) {
+    throw new Error(`No manifest.json in ${directory}`);
+  }
+
+  return buildIntegrationBackendDirectory({ ...opts, directory });
+}
+
+export async function packageIntegration(opts: PackageOptions): Promise<PackageResult> {
+  const directory = opts.source
+    ? resolve(opts.source)
+    : opts.id
+      ? resolveInstallTarget(opts.rootDir, opts.id)
+      : "";
+  if (!directory) throw new Error("Either package source or id is required");
+  if (!existsSync(directory) || !statSync(directory).isDirectory()) {
+    throw new Error(`Package source ${directory} is not an existing directory`);
+  }
+
+  const manifest = readManifest(directory);
+  if (!manifest || typeof manifest.id !== "string") {
+    throw new Error(`No manifest.json with a string id in ${directory}`);
+  }
+  const validation = validateManifest(manifest);
+  if (!validation.valid) {
+    throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
+  }
+
+  if (opts.buildFrontend) {
+    await buildIntegrationDirectory({
+      rootDir: opts.rootDir,
+      directory,
+      id: manifest.id,
+      onLog: opts.onLog,
+      signal: opts.signal,
+    });
+  }
+  if (opts.buildBackend ?? opts.buildFrontend) {
+    await buildIntegrationBackendDirectory({
+      rootDir: opts.rootDir,
+      directory,
+      id: manifest.id,
+      onLog: opts.onLog,
+      signal: opts.signal,
+    });
+  }
+
+  const artifactValidation = validateArtifactContract(directory, manifest, {
+    requirePrebuiltFrontend: true,
+    requirePrebuiltBackend: true,
+  });
+  writeArtifactMetadata(directory, manifest, artifactValidation);
+
+  mkdirSync(dirname(resolve(opts.outFile)), { recursive: true });
+  await spawnWithBufferedLogs("tar", ["-czf", resolve(opts.outFile), "-C", directory, "."], {
+    signal: opts.signal,
+    onLog: opts.onLog,
+  });
+
+  return { id: manifest.id, artifactPath: resolve(opts.outFile), validation: artifactValidation };
+}
+
+function backendEntryPath(directory: string): string | null {
+  const ts = join(directory, "index.ts");
+  if (existsSync(ts)) return ts;
+  const js = join(directory, "index.js");
+  return existsSync(js) ? js : null;
+}
+
+async function buildIntegrationBackendDirectory(
+  opts: BuildOptions & { directory: string },
+): Promise<BuildResult> {
+  const entryPath = backendEntryPath(opts.directory);
+  if (!entryPath) {
+    return {
+      bundlePath: null,
+      skipped: true,
+      reason: "no backend entry (index.ts/index.js)",
+    };
+  }
+
+  const esbuild = await loadEsbuild();
+  const bundlePath = integrationBackendBundlePath(opts.directory);
+  mkdirSync(dirname(bundlePath), { recursive: true });
+  opts.signal?.throwIfAborted();
+
+  await esbuild.build({
+    entryPoints: [entryPath],
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    outfile: bundlePath,
+    target: "node24",
+    external: [...BACKEND_RUNTIME_EXTERNALS],
+    minify: true,
+    absWorkingDir: opts.directory,
+    logLevel: "warning",
+  });
+  opts.onLog?.(`backend bundle → ${bundlePath}`, "stdout");
+
+  return { bundlePath, skipped: false };
+}
+
+async function buildIntegrationDirectory(
+  opts: BuildOptions & { directory: string },
+): Promise<BuildResult> {
+  const { directory } = opts;
   const present = FRONTEND_FILES.filter((f) => existsSync(join(directory, f)));
   if (present.length === 0) {
     return {
@@ -311,21 +1056,12 @@ export async function buildIntegration(opts: BuildOptions): Promise<BuildResult>
     };
   }
 
-  // The build resolves `react`, `@openmapx/core`, etc. via the workspace's
-  // hoisted node_modules — `npx esbuild` runs from the integration's directory
-  // and walks up to find them. Surface a clear error rather than letting
-  // esbuild fail mid-bundle.
-  const repoNodeModules = join(opts.rootDir, "node_modules");
-  if (!existsSync(repoNodeModules)) {
-    throw new Error(
-      `Cannot build '${opts.id}': ${repoNodeModules} not found. Run \`pnpm install\` at the repo root first.`,
-    );
-  }
-
-  const distDir = join(directory, "dist");
+  const esbuild = await loadEsbuild();
+  const distDir = dirname(frontendBundlePath(directory));
   mkdirSync(distDir, { recursive: true });
 
-  const entryPath = join(directory, ".build-entry.tsx");
+  const token = randomBytes(4).toString("hex");
+  const entryPath = join(directory, `.openmapx-build-entry-${token}.tsx`);
   // JSON.stringify so the id is properly quoted/escaped — defense in depth on
   // top of the slug regex (which already excludes `"`, `\`, `${`, etc.).
   const idLiteral = JSON.stringify(opts.id);
@@ -350,31 +1086,25 @@ export async function buildIntegration(opts: BuildOptions): Promise<BuildResult>
   );
   writeFileSync(entryPath, lines.join("\n"), "utf-8");
 
-  const bundlePath = join(distDir, "index.js");
+  const bundlePath = frontendBundlePath(directory);
   try {
-    await spawnWithBufferedLogs(
-      "npx",
-      [
-        "esbuild",
-        entryPath,
-        "--bundle",
-        "--format=esm",
-        `--outfile=${bundlePath}`,
-        "--external:react",
-        "--external:react-dom",
-        "--external:@openmapx/core",
-        "--external:maplibre-gl",
-        "--external:@mui/*",
-        "--jsx=automatic",
-        "--target=es2022",
-        "--minify",
-      ],
-      {
-        cwd: directory,
-        signal: opts.signal,
-        onLog: opts.onLog,
-      },
-    );
+    opts.signal?.throwIfAborted();
+    await esbuild.build({
+      entryPoints: [entryPath],
+      bundle: true,
+      format: "esm",
+      outfile: bundlePath,
+      // React and @openmapx/core are exposed as singletons through the host
+      // page's import map (apps/web/src/app/layout.tsx). Any other dep the
+      // integration uses gets bundled in.
+      external: [...FRONTEND_RUNTIME_EXTERNALS],
+      jsx: "automatic",
+      target: "es2022",
+      minify: true,
+      absWorkingDir: directory,
+      logLevel: "warning",
+    });
+    opts.onLog?.(`frontend bundle → ${bundlePath}`, "stdout");
   } finally {
     rmSync(entryPath, { force: true });
   }

@@ -8,7 +8,7 @@
 [![CodeQL](https://github.com/Medformatik/openmapx/actions/workflows/codeql.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/codeql.yml)
 [![Docker](https://github.com/Medformatik/openmapx/actions/workflows/docker.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/docker.yml)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
-[![pnpm](https://img.shields.io/badge/pnpm-10-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
+[![pnpm](https://img.shields.io/badge/pnpm-11-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Fastify](https://img.shields.io/badge/Fastify-5-000?logo=fastify&logoColor=white)](https://fastify.dev)
@@ -120,7 +120,7 @@ pnpm openmapx services enable|disable|list|start|stop|restart|build|status|logs
 pnpm openmapx compose render|up|down
 pnpm openmapx data download|link|status
 pnpm openmapx repos list|add|refresh|remove          # community service repositories
-pnpm openmapx integrations list|install|validate|build
+pnpm openmapx integrations list|install|validate|build|package
 pnpm openmapx users list|create|promote
 pnpm openmapx check                                  # environment + manifest validation
 ```
@@ -151,7 +151,7 @@ See [Admin Panel](https://github.com/Medformatik/openmapx/wiki/Admin-Panel) for 
 | Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner |
 | Geocoding | Photon, Nominatim, Pelias |
 | Tiles | TileServer GL, Martin (PostGIS vector tiles) |
-| Tooling | Turborepo, pnpm 10, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik |
+| Tooling | Turborepo, pnpm 11, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik |
 | Language | TypeScript end-to-end (Node 24+) |
 
 ## Contributing

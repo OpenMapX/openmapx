@@ -106,7 +106,7 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repository: entry?.repository, version: entry?.version }),
+        body: JSON.stringify({ repository: entry?.repository }),
       });
       if (!res.ok) throw new Error("Install failed");
       return res.json();
@@ -125,7 +125,6 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error("Update failed");
       return res.json();

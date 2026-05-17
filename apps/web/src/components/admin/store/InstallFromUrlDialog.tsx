@@ -24,8 +24,9 @@ interface InstallFromUrlDialogProps {
 export function InstallFromUrlDialog({ open, onClose, onSuccess }: InstallFromUrlDialogProps) {
   const { apiUrl } = useEnv();
   const qc = useQueryClient();
-  const [url, setUrl] = useState("");
+  const [artifactUrl, setArtifactUrl] = useState("");
   const [version, setVersion] = useState("");
+  const [sha256, setSha256] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
@@ -35,8 +36,9 @@ export function InstallFromUrlDialog({ open, onClose, onSuccess }: InstallFromUr
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          repository: url.trim(),
+          artifactUrl: artifactUrl.trim(),
           version: version.trim() || undefined,
+          sha256: sha256.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -55,20 +57,29 @@ export function InstallFromUrlDialog({ open, onClose, onSuccess }: InstallFromUr
   });
 
   const handleClose = () => {
-    setUrl("");
+    setArtifactUrl("");
     setVersion("");
+    setSha256("");
     setError(null);
     mutation.reset();
     onClose();
   };
 
-  const valid = url.trim().startsWith("https://github.com/");
+  const trimmed = artifactUrl.trim();
+  const valid = (() => {
+    try {
+      const parsed = new URL(trimmed);
+      return parsed.protocol === "https:" && parsed.pathname.endsWith(".tar.gz");
+    } catch {
+      return false;
+    }
+  })();
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         <Box display="flex" alignItems="center" justifyContent="space-between">
-          Install from URL
+          Install from artifact URL
           <IconButton size="small" onClick={handleClose}>
             <CloseIcon />
           </IconButton>
@@ -77,34 +88,46 @@ export function InstallFromUrlDialog({ open, onClose, onSuccess }: InstallFromUr
 
       <DialogContent>
         <Typography variant="body2" color="text.secondary" mb={2}>
-          Install a community integration directly from a GitHub repository. The quality will be
-          shown as <strong>Community</strong> (unverified).
+          Install a community integration from a prebuilt <code>.tar.gz</code> artifact built with
+          the OpenMapX CLI (<code>pnpm openmapx integrations package</code>). Source installs from
+          Git are a developer workflow — use the CLI on a checked-out repo.
         </Typography>
 
         <Alert severity="warning" sx={{ mb: 2 }} icon={false}>
-          Only install integrations from repositories you trust. Community integrations run
-          server-side code in the API process.
+          Only install integrations from authors you trust. Backend code in the artifact runs
+          in-process inside the API server.
         </Alert>
 
         <TextField
-          label="GitHub URL"
-          placeholder="https://github.com/username/openmapx-my-integration"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          label="Artifact URL"
+          placeholder="https://github.com/username/repo/releases/download/v1.0.0/integration.tar.gz"
+          value={artifactUrl}
+          onChange={(e) => setArtifactUrl(e.target.value)}
           fullWidth
           size="small"
           sx={{ mb: 2 }}
-          helperText="Must be a valid GitHub repository URL"
+          helperText="HTTPS URL to a prebuilt .tar.gz artifact"
         />
 
         <TextField
-          label="Version / tag (optional)"
+          label="Version label (optional)"
           placeholder="v1.0.0"
           value={version}
           onChange={(e) => setVersion(e.target.value)}
           fullWidth
           size="small"
-          helperText="Leave blank to install the latest default branch"
+          sx={{ mb: 2 }}
+          helperText="Recorded as the installed version"
+        />
+
+        <TextField
+          label="SHA-256 (recommended)"
+          placeholder="64-character checksum"
+          value={sha256}
+          onChange={(e) => setSha256(e.target.value)}
+          fullWidth
+          size="small"
+          helperText="Verified before extraction"
         />
 
         {error && (

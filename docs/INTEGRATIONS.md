@@ -1,5 +1,84 @@
 # Integrations
 
+## Community integration artifacts
+
+Production installs are always prebuilt artifacts. The app-api container
+downloads the artifact, validates the checksum, extracts it into
+`custom_integrations/<id>` (a bind-mounted volume that survives container
+replacement), and reloads. Frontend bundles are served from
+`/api/integrations/:id/bundle/index.js`; backend code is dynamically imported
+from `dist/backend/index.mjs`. The api image carries no plugin build tooling
+and no plugin runtime dependencies.
+
+Artifact format:
+
+- gzip-compressed tar archive (`.tar.gz`)
+- `manifest.json` at the archive root (or inside a single top-level directory)
+- `dist/backend/index.mjs` when backend code is present — must be fully
+  bundled (esbuild `--bundle --platform=node`), with `@openmapx/core` and
+  `@openmapx/core/server` as the only externals
+- `dist/frontend/index.js` when `manifest.frontend` declares `mapLayer`,
+  `legend`, or `panel` — fully bundled, with `react`, `react/jsx-runtime`,
+  `react/jsx-dev-runtime`, and `@openmapx/core` as externals
+- `openmapx-artifact.json` metadata with per-bundle sha256 checksums and the
+  platform version the artifact was built against
+- backend source files (`index.ts`) may be included for provenance; they are
+  ignored at install time
+- **no `node_modules/` directory** — runtime deps must be bundled
+
+### Frontend runtime contract
+
+The host page (`apps/web/src/app/layout.tsx`) declares an import map that
+binds the external specifiers to ESM modules under
+`apps/web/public/runtime/`, generated at `apps/web` build time by
+`scripts/build-runtime-modules.mjs`. The browser resolves
+`import React from "react"` inside a community bundle to the same singleton
+React instance used by the host app, keeping hooks, contexts, and Zustand
+stores coherent.
+
+### CLI workflows
+
+```sh
+# local dev install (builds bundles in place)
+pnpm openmapx integrations install ./my-integration
+
+# package a production artifact
+pnpm openmapx integrations package ./my-integration --out ./my-integration.tar.gz
+
+# install a prebuilt artifact (locally)
+pnpm openmapx integrations install ./my-integration.tar.gz --artifact --sha256 <hash>
+```
+
+### Admin Store catalog format
+
+Catalog entries must publish an `artifact` URL; installs from raw git source
+through the admin surface are not supported.
+
+```json
+{
+  "id": "example-overlay",
+  "repository": "https://github.com/example/openmapx-example-overlay",
+  "version": "1.2.3",
+  "artifact": {
+    "url": "https://github.com/example/openmapx-example-overlay/releases/download/v1.2.3/example-overlay.tar.gz",
+    "sha256": "..."
+  }
+}
+```
+
+The admin "Install from URL" dialog also accepts a manual HTTPS `.tar.gz`
+URL (with optional sha256). These installs are recorded with
+`sourceType: artifact` and are not eligible for catalog-driven updates —
+re-install from a fresh URL to upgrade.
+
+### Backend reload
+
+Installing or updating a community integration triggers a re-discovery and
+re-import of backend modules. In dev this works in-process; in production
+the recommended path is to restart app-api after install so the ESM module
+cache is fresh. The admin UI surfaces the restart hint in install/update
+job logs.
+
 ## bike-sharing
 
 ### CityBikes API — `https://api.citybik.es/v2/networks`

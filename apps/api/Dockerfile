@@ -7,7 +7,7 @@ RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/pac
 # Install all dependencies (for building)
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/
 COPY packages/shared-mobility/package.json packages/shared-mobility/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile
 # Install production dependencies only (for runtime)
 FROM base AS prod-deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/
 COPY packages/shared-mobility/package.json packages/shared-mobility/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
@@ -63,6 +63,10 @@ WORKDIR /app
 # `curl -fs http://localhost:3001/health`). Alpine ships wget but not curl,
 # so we install it explicitly. ca-certificates gives node outgoing HTTPS.
 #
+# git is required by admin Store / community-service repository installs:
+# both the community integration installer and service-repo refresh path clone
+# or fetch allowlisted Git URLs from inside the app-api container.
+#
 # docker-cli + docker-cli-compose enable the admin GUI's service-lifecycle
 # and data-maintenance workflows: admin-ops.ts and admin-cli.ts shell out to
 # `docker compose -f <generated>.yml up/stop/restart` and to `openmapx ...`.
@@ -70,7 +74,7 @@ WORKDIR /app
 # `@docker-socket` bindMount. Without the CLI in the image those handlers
 # would fail even when the socket is available. Kept behind the same apk
 # install for a single image layer.
-RUN apk add --no-cache curl ca-certificates docker-cli docker-cli-compose
+RUN apk add --no-cache curl ca-certificates git docker-cli docker-cli-compose
 
 ENV NODE_ENV=production
 ENV PORT=3001

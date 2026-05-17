@@ -7,7 +7,7 @@ RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/pac
 # Install dependencies
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/core/package.json packages/core/
 COPY packages/i18n/package.json packages/i18n/
 COPY apps/web/package.json apps/web/

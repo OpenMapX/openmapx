@@ -122,7 +122,6 @@ export const integrationManifestSchema = z.object({
   domains: z.array(z.string()),
 
   dependencies: z.array(z.string()).optional(),
-  npmDependencies: z.record(z.string(), z.string()).optional(),
   requires: z.array(requireEntrySchema).optional(),
 
   frontend: frontendSchema.optional(),

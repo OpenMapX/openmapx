@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  apiClient,
+  configureApiClient,
   getCommunityModule,
   IntegrationRegistry,
   IntegrationRegistryContext,
@@ -10,12 +10,22 @@ import {
   type LoadedIntegrationMeta,
 } from "@openmapx/core";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 
 export function IntegrationProvider({ children }: { children: React.ReactNode }) {
+  const { apiUrl } = useEnv();
   const initRef = useRef(false);
+  const loadingBundleIdsRef = useRef(new Set<string>());
+  const [, bumpCommunityModuleRevision] = useState(0);
+  const apiBase = apiUrl.replace(/\/$/, "");
 
-  // Initialize community integration push-based registry once
+  configureApiClient({
+    baseUrl:
+      apiBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3001"),
+    credentials: "include",
+  });
+
   useEffect(() => {
     if (!initRef.current) {
       initCommunityIntegrationRegistry();
@@ -24,13 +34,20 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const { data: integrations } = useQuery({
-    queryKey: ["integrations"],
-    queryFn: () =>
-      apiClient.get<(LoadedIntegrationMeta & { isBuiltIn?: boolean })[]>("/api/integrations"),
+    queryKey: ["integrations", apiBase],
+    queryFn: async () => {
+      const res = await fetch(`${apiBase}/api/integrations`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load integrations");
+      return (await res.json()) as (LoadedIntegrationMeta & { isBuiltIn?: boolean })[];
+    },
     staleTime: Infinity,
   });
 
-  // Load community integration frontend bundles
+  // Community integration bundles import `react`, `react/jsx-runtime`, and
+  // `@openmapx/core` as externals. The page's import map (apps/web/src/app/
+  // layout.tsx) resolves those specifiers to the prebuilt singletons under
+  // public/runtime/, so loading a community bundle is just appending a module
+  // <script>.
   useEffect(() => {
     if (!integrations) return;
     for (const integration of integrations) {
@@ -38,17 +55,24 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
       const fe = integration.frontend;
       if (!fe?.mapLayer && !fe?.legend && !fe?.panel) continue;
       if (getCommunityModule(integration.id)) continue;
+      if (loadingBundleIdsRef.current.has(integration.id)) continue;
 
+      loadingBundleIdsRef.current.add(integration.id);
       const script = document.createElement("script");
-      script.src = `/api/integrations/${integration.id}/bundle/index.js`;
+      script.src = `${apiBase}/api/integrations/${integration.id}/bundle/index.js`;
       script.type = "module";
       script.async = true;
+      script.onload = () => {
+        loadingBundleIdsRef.current.delete(integration.id);
+        bumpCommunityModuleRevision((revision) => revision + 1);
+      };
       script.onerror = () => {
+        loadingBundleIdsRef.current.delete(integration.id);
         console.error(`[IntegrationProvider] Failed to load bundle for ${integration.id}`);
       };
       document.head.appendChild(script);
     }
-  }, [integrations]);
+  }, [integrations, apiBase]);
 
   const registry = useMemo(() => new IntegrationRegistry(integrations ?? []), [integrations]);
 
