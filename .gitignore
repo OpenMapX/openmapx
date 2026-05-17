@@ -64,6 +64,9 @@ custom_integrations/
 # Generated runtime modules served to community integrations via import maps
 apps/web/public/runtime/
 
+# Generated open-source license notices (built by apps/web's prebuild step)
+apps/web/src/generated/open-source-licenses.json
+
 # Integration local config (may contain API keys)
 integrations/*/config.json
 

@@ -29,6 +29,7 @@ import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from "no
 import { gunzipSync } from "node:zlib";
 import { gitShallowClone } from "../git-clone";
 import { assertAllowedGitUrl } from "../git-url";
+import { scanLicenses } from "../licenses";
 import { spawnWithBufferedLogs } from "../spawn";
 import { safeDownload } from "../utils/safe-download";
 import { INTEGRATION_ID_REGEX, validateManifest } from "./manifest";
@@ -992,6 +993,10 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
     requirePrebuiltBackend: true,
   });
   writeArtifactMetadata(directory, manifest, artifactValidation);
+  // Ship a license manifest alongside the bundles so OpenMapX's /licenses
+  // page can surface the deps the artifact bundled in. Best-effort — only
+  // emits when the source tree has a package.json with reachable deps.
+  writeArtifactLicenses(directory, manifest, opts.onLog);
 
   mkdirSync(dirname(resolve(opts.outFile)), { recursive: true });
   await spawnWithBufferedLogs("tar", ["-czf", resolve(opts.outFile), "-C", directory, "."], {
@@ -1000,6 +1005,34 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   });
 
   return { id: manifest.id, artifactPath: resolve(opts.outFile), validation: artifactValidation };
+}
+
+function writeArtifactLicenses(
+  directory: string,
+  manifest: Record<string, unknown>,
+  onLog: PackageOptions["onLog"],
+): void {
+  const pkgJsonPath = join(directory, "package.json");
+  if (!existsSync(pkgJsonPath)) return;
+  let notices: ReturnType<typeof scanLicenses> = [];
+  try {
+    notices = scanLicenses({
+      rootPackageJsonPaths: [pkgJsonPath],
+      skipNamePrefixes: ["@openmapx/"],
+    });
+  } catch (err) {
+    onLog?.(`license scan skipped: ${(err as Error).message}`, "stderr");
+    return;
+  }
+  if (notices.length === 0) return;
+  const distDir = join(directory, "dist");
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(
+    join(distDir, "licenses.json"),
+    `${JSON.stringify({ integrationId: manifest.id, notices }, null, 2)}\n`,
+    "utf-8",
+  );
+  onLog?.(`license manifest → dist/licenses.json (${notices.length} entries)`, "stdout");
 }
 
 function backendEntryPath(directory: string): string | null {

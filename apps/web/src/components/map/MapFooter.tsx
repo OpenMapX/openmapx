@@ -50,6 +50,9 @@ export function MapFooter() {
       <Link component={NextLink} href="/terms">
         {t("terms")}
       </Link>
+      <Link component={NextLink} href="/licenses">
+        {t("licenses")}
+      </Link>
     </Box>
   );
 }

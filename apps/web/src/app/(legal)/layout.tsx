@@ -44,6 +44,7 @@ export default async function LegalLayout({ children }: { children: React.ReactN
             { label: t("imprint"), href: "/imprint" },
             { label: t("privacyPolicy"), href: "/privacy" },
             { label: t("termsOfService"), href: "/terms" },
+            { label: t("openSourceLicenses"), href: "/licenses" },
           ]}
         />
       </Box>

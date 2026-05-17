@@ -14,6 +14,10 @@
       "types": "./src/server.ts",
       "default": "./src/server.ts"
     },
+    "./licenses": {
+      "types": "./src/licenses.ts",
+      "default": "./src/licenses.ts"
+    },
     "./place-ids": {
       "types": "./src/types/placeIds.ts",
       "default": "./src/types/placeIds.ts"

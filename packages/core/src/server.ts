@@ -64,6 +64,8 @@ export {
   type ValidateResult as IntegrationValidateResult,
   validateIntegrationDirectory,
 } from "./integration/installer";
+// Open-source license discovery (build-time generator + CLI packager)
+export { type LicenseNotice, type ScanLicensesOptions, scanLicenses } from "./licenses";
 // Repo path resolution (shared by CLI + apps/api runtime code)
 export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
 // Service plugin system (manifest loader, compose renderer — all uses node:fs)

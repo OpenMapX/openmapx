@@ -75,7 +75,8 @@
   "footer": {
     "legalNotice": "Legal Notice",
     "privacy": "Privacy",
-    "terms": "Terms"
+    "terms": "Terms",
+    "licenses": "Licenses"
   },
   "layers": {
     "layers": "Layers",
@@ -917,9 +918,11 @@
     "imprint": "Imprint",
     "privacyPolicy": "Privacy Policy",
     "termsOfService": "Terms of Service",
+    "openSourceLicenses": "Open Source Licenses",
     "imprintDescription": "Legal notice and provider identification for OpenMapX according to German law.",
     "privacyDescription": "Privacy policy for OpenMapX describing how we handle your data in accordance with the GDPR.",
     "termsDescription": "Terms of service and conditions of use for OpenMapX.",
+    "openSourceLicensesDescription": "Open source dependency licenses used by OpenMapX.",
     "account": "Account"
   },
   "settings": {

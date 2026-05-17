@@ -75,7 +75,8 @@
   "footer": {
     "legalNotice": "Impressum",
     "privacy": "Datenschutz",
-    "terms": "Nutzungsbedingungen"
+    "terms": "Nutzungsbedingungen",
+    "licenses": "Lizenzen"
   },
   "layers": {
     "layers": "Ebenen",
@@ -917,9 +918,11 @@
     "imprint": "Impressum",
     "privacyPolicy": "Datenschutzerkl\u00e4rung",
     "termsOfService": "Nutzungsbedingungen",
+    "openSourceLicenses": "Open-Source-Lizenzen",
     "imprintDescription": "Impressum und Anbieterkennzeichnung f\u00fcr OpenMapX nach deutschem Recht.",
     "privacyDescription": "Datenschutzerkl\u00e4rung f\u00fcr OpenMapX \u2014 wie wir Ihre Daten gem\u00e4\u00df der DSGVO verarbeiten.",
     "termsDescription": "Nutzungsbedingungen f\u00fcr OpenMapX.",
+    "openSourceLicensesDescription": "Lizenzen der Open-Source-Abh\u00e4ngigkeiten, die OpenMapX verwendet.",
     "account": "Konto"
   },
   "settings": {
