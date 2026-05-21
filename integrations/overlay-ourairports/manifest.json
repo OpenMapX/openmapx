@@ -1,0 +1,59 @@
+{
+  "id": "overlay-ourairports",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://ourairports.com/data/",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "airports",
+      "icon": "flight",
+      "iconPath": "M2.5 19h19v2h-19zm7.18-1.73L12 18l2.32-.73L21.5 5.5 19 4 12 8 5 4 2.5 5.5z"
+    },
+    "overlay": {
+      "minZoom": 4
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "healthCheck": [
+    {
+      "name": "OurAirports",
+      "type": "http",
+      "url": "https://davidmegginson.github.io/ourairports-data/countries.csv"
+    }
+  ],
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "dataSources": [
+    {
+      "sourceId": "ourairports",
+      "name": "OurAirports",
+      "url": "https://ourairports.com/",
+      "license": "Public Domain",
+      "licenseUrl": "https://unlicense.org/",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://ourairports.com/about/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

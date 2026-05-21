@@ -1011,3 +1011,138 @@ export const weatherAlertsPreview: ReactNode = (
     </g>
   </svg>
 );
+
+export const airportsPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    <rect width="80" height="80" fill="#eaf2f7" />
+    {/* simplified land outline */}
+    <path
+      d="M0 30 Q14 24 28 28 Q42 32 56 24 Q66 18 80 22 L80 64 Q66 70 50 64 Q34 58 20 64 L0 60Z"
+      fill="#d6e3ec"
+      opacity="0.7"
+    />
+    {/* a couple of runway strips behind markers */}
+    <g opacity="0.55">
+      <rect
+        x="30"
+        y="46"
+        width="22"
+        height="3"
+        rx="1"
+        fill="#94a3b8"
+        transform="rotate(-22 41 47.5)"
+      />
+      <rect
+        x="36"
+        y="56"
+        width="14"
+        height="2.4"
+        rx="1"
+        fill="#94a3b8"
+        transform="rotate(40 43 57)"
+      />
+    </g>
+    {/* large airport — big sky-blue marker (e.g. DUS) */}
+    <circle cx="44" cy="40" r="9" fill="#0ea5e9" opacity="0.18" />
+    <circle cx="44" cy="40" r="5.5" fill="#0ea5e9" stroke="#fff" strokeWidth="1.4" />
+    {/* medium airport — blue marker */}
+    <circle cx="22" cy="22" r="3.8" fill="#3b82f6" stroke="#fff" strokeWidth="1.2" />
+    {/* small airport — indigo marker */}
+    <circle cx="62" cy="22" r="2.8" fill="#6366f1" stroke="#fff" strokeWidth="1.1" />
+    {/* heliport — orange marker */}
+    <circle cx="62" cy="60" r="3" fill="#f97316" stroke="#fff" strokeWidth="1.1" />
+    {/* seaplane base — cyan marker */}
+    <circle cx="18" cy="56" r="2.8" fill="#0891b2" stroke="#fff" strokeWidth="1.1" />
+    {/* IATA code chip below the headline marker */}
+    <rect x="34" y="52" width="20" height="9" rx="2" fill="#fff" opacity="0.85" />
+    <text
+      x="44"
+      y="59"
+      fontSize="6.5"
+      fontFamily="ui-monospace, Menlo, monospace"
+      fontWeight="700"
+      fill="#0284c7"
+      textAnchor="middle"
+    >
+      DUS
+    </text>
+  </svg>
+);
+
+export const nauticalPreview: ReactNode = (
+  <svg
+    viewBox="0 0 80 80"
+    xmlns="http://www.w3.org/2000/svg"
+    width="100%"
+    height="100%"
+    role="img"
+    aria-hidden="true"
+  >
+    {/* deep sea — gradient from deep to shallow */}
+    <defs>
+      <linearGradient id="nauticalSea" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#1a4a7a" />
+        <stop offset="55%" stopColor="#3677b0" />
+        <stop offset="100%" stopColor="#9fc6e8" />
+      </linearGradient>
+    </defs>
+    <rect width="80" height="80" fill="url(#nauticalSea)" />
+    {/* depth contour lines */}
+    <path
+      d="M0 18 Q20 14 40 18 Q60 22 80 18"
+      stroke="#dfeefb"
+      strokeWidth="0.6"
+      fill="none"
+      opacity="0.55"
+    />
+    <path
+      d="M0 30 Q20 26 40 30 Q60 34 80 30"
+      stroke="#dfeefb"
+      strokeWidth="0.6"
+      fill="none"
+      opacity="0.55"
+    />
+    <path
+      d="M0 42 Q20 38 40 42 Q60 46 80 42"
+      stroke="#dfeefb"
+      strokeWidth="0.6"
+      fill="none"
+      opacity="0.45"
+    />
+    {/* coastline at bottom-right */}
+    <path d="M52 80 Q56 70 64 66 Q72 62 80 66 L80 80 Z" fill="#e8dcb7" />
+    <path
+      d="M52 80 Q56 70 64 66 Q72 62 80 66"
+      stroke="#a39568"
+      strokeWidth="0.8"
+      fill="none"
+      opacity="0.65"
+    />
+    {/* lateral buoy — red (port hand, IALA region A) */}
+    <circle cx="22" cy="46" r="3.2" fill="#d6336c" stroke="#fff" strokeWidth="0.8" />
+    <line x1="22" y1="42.8" x2="22" y2="38" stroke="#d6336c" strokeWidth="1" />
+    <circle cx="22" cy="37" r="1.4" fill="#d6336c" />
+    {/* lateral buoy — green (starboard hand) */}
+    <circle cx="38" cy="56" r="3.2" fill="#22a564" stroke="#fff" strokeWidth="0.8" />
+    <polygon points="38,52.8 36,49 40,49" fill="#22a564" />
+    {/* cardinal mark (yellow/black, north) */}
+    <line x1="54" y1="56" x2="54" y2="40" stroke="#1f1f1f" strokeWidth="1" />
+    <polygon points="54,38 51,42 57,42" fill="#1f1f1f" />
+    <polygon points="54,38 51,42 57,42" fill="none" stroke="#f6c945" strokeWidth="0.5" />
+    {/* lighthouse on the coast */}
+    <rect x="66" y="56" width="3" height="8" fill="#fff" stroke="#94a3b8" strokeWidth="0.5" />
+    <rect x="66" y="59" width="3" height="2" fill="#d6336c" />
+    <polygon points="64.5,56 70.5,56 67.5,53" fill="#1f1f1f" />
+    <circle cx="67.5" cy="54" r="0.8" fill="#f6c945" />
+    {/* compass rose hint top-right */}
+    <circle cx="68" cy="14" r="4" fill="none" stroke="#fff" strokeWidth="0.5" opacity="0.6" />
+    <polygon points="68,10 66.8,14 68,18 69.2,14" fill="#fff" opacity="0.65" />
+  </svg>
+);

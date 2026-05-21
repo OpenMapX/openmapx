@@ -13,7 +13,7 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import type { AutocompleteResult } from "@openmapx/core";
-import { isTransitName } from "@openmapx/core";
+import { isTransitRawCategory } from "@openmapx/core";
 import { useEffect, useRef } from "react";
 import { TEAL } from "@/lib/theme";
 import { PresetIcon } from "./PresetIcon";
@@ -63,9 +63,11 @@ function getResultIcon(s: AutocompleteResult): React.ReactNode {
 
   if (s.presetIconKey) return <PresetIcon iconKey={s.presetIconKey} size={20} />;
 
-  // Transit stop detection by keywords in label/sublabel
-  const text = `${s.label} ${s.sublabel ?? ""}`.toLowerCase();
-  if (isTransitName(text)) {
+  // Use the authoritative rawCategory from the geocoder to decide whether a
+  // result is transit infrastructure. The old label-keyword heuristic
+  // false-fired on POIs whose names merely contain "Airport", "Bahnhof",
+  // "Station" etc. (e.g. "Frankfurt Airport Center I" is an office building).
+  if (s.type === "transit_stop" || (s.rawCategory && isTransitRawCategory(s.rawCategory))) {
     return <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />;
   }
 

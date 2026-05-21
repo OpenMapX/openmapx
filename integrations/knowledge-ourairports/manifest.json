@@ -1,0 +1,44 @@
+{
+  "id": "knowledge-ourairports",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["knowledge"],
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "healthCheck": [
+    {
+      "name": "OurAirports",
+      "type": "http",
+      "url": "https://davidmegginson.github.io/ourairports-data/countries.csv"
+    }
+  ],
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "ourairports",
+      "name": "OurAirports",
+      "url": "https://ourairports.com/",
+      "license": "Public Domain",
+      "licenseUrl": "https://unlicense.org/",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://ourairports.com/about/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

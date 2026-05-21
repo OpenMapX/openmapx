@@ -13,6 +13,7 @@ import HomeIcon from "@mui/icons-material/Home";
 import LanguageIcon from "@mui/icons-material/Language";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PlaceIcon from "@mui/icons-material/Place";
+import WavesIcon from "@mui/icons-material/Waves";
 import WbSunnyOutlinedIcon from "@mui/icons-material/WbSunnyOutlined";
 import WbTwilightIcon from "@mui/icons-material/WbTwilight";
 import WorkIcon from "@mui/icons-material/Work";
@@ -33,14 +34,15 @@ import Typography from "@mui/material/Typography";
 import type { MergedDeparture, MergedRoute, Place, TransportMode } from "@openmapx/core";
 import {
   computePlusCode,
-  parseOpeningHours,
   plusCodeUrl,
   shortenPlusCode,
   useDeleteLabel,
   useIsSaved,
   useLabeledPlaces,
+  useMarineWeather,
   useSavedLists,
   useSession,
+  useTides,
   useUpdateLabel,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -52,8 +54,12 @@ import { TEAL } from "@/lib/theme";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
+import { PlaceAirportInfo } from "./PlaceAirportInfo";
+import { PlaceHarborFacilities } from "./PlaceHarborFacilities";
+import { PlaceMarineWeatherContent } from "./PlaceMarineWeather";
 import { PlaceSunTimes } from "./PlaceSunTimes";
 import { PlaceTagDetails } from "./PlaceTagDetails";
+import { PlaceTidesContent } from "./PlaceTides";
 import { PlaceWeather } from "./PlaceWeather";
 
 interface Props {
@@ -181,11 +187,9 @@ export function PlaceOverviewTab({
   const tSaved = useTranslations("saved");
   const tWeather = useTranslations("weather");
   const tSun = useTranslations("sunTimes");
-  const hours = parseOpeningHours(place.openingHours, {
-    lat: place.coordinates[1],
-    lon: place.coordinates[0],
-    countryCode: place.countryCode,
-  });
+  const tTides = useTranslations("tides");
+  const tMarine = useTranslations("marineWeather");
+  const hours = place.openingHoursInfo?.status ?? null;
   const plusCode = computePlusCode(place.coordinates);
   const shortCode = shortenPlusCode(plusCode);
   const city = place.city ?? null;
@@ -193,6 +197,15 @@ export function PlaceOverviewTab({
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [weatherExpanded, setWeatherExpanded] = useState(false);
   const [sunTimesExpanded, setSunTimesExpanded] = useState(false);
+  const [tidesExpanded, setTidesExpanded] = useState(false);
+  const [marineExpanded, setMarineExpanded] = useState(false);
+  // Fetch unconditionally — the route 204s for inland users (most users),
+  // which is cheap, and lets us hide the row entirely instead of rendering
+  // a "Tides" row that expands to nothing.
+  const { data: tidesData } = useTides(place.coordinates[1], place.coordinates[0]);
+  // Same shape — Open-Meteo Marine returns 204 for inland points so the row
+  // self-hides for everyone except coastal/at-sea places.
+  const { data: marineData } = useMarineWeather(place.coordinates[1], place.coordinates[0]);
   const [savedExpanded, setSavedExpanded] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelName, setLabelName] = useState("");
@@ -604,6 +617,38 @@ export function PlaceOverviewTab({
               enabled={sunTimesExpanded}
             />
           </ExpandableDetailRow>
+
+          {/* Tides (expandable) — hidden when no NOAA tide station is within range. */}
+          {tidesData && (
+            <ExpandableDetailRow
+              icon={<WavesIcon sx={{ fontSize: 22 }} />}
+              expanded={tidesExpanded}
+              onToggle={() => setTidesExpanded((v) => !v)}
+              label={
+                <Typography variant="body2" color="text.primary">
+                  {tTides("section")}
+                </Typography>
+              }
+            >
+              <PlaceTidesContent data={tidesData} />
+            </ExpandableDetailRow>
+          )}
+
+          {/* Marine weather (expandable) — hidden for inland points (204). */}
+          {marineData && (
+            <ExpandableDetailRow
+              icon={<WavesIcon sx={{ fontSize: 22 }} />}
+              expanded={marineExpanded}
+              onToggle={() => setMarineExpanded((v) => !v)}
+              label={
+                <Typography variant="body2" color="text.primary">
+                  {tMarine("section")}
+                </Typography>
+              }
+            >
+              <PlaceMarineWeatherContent data={marineData} />
+            </ExpandableDetailRow>
+          )}
         </Box>
       </Box>
 
@@ -682,6 +727,17 @@ export function PlaceOverviewTab({
       {/* Data source detail sections (e.g. EV charging connectors) */}
       {place.dataSourceDetail && (
         <DataSourceSections detail={place.dataSourceDetail} domain={place.primaryScheme} />
+      )}
+      {/* Airport detail (runways, frequencies, navaids) — only present on aerodrome/heliport */}
+      {place.airport && <PlaceAirportInfo airport={place.airport} />}
+      {/* Harbor detail — facilities, OSM link. Surfaces for OpenSeaMap harbour click-throughs. */}
+      {place.primaryScheme === "openseamap-harbour" && (
+        <PlaceHarborFacilities
+          harbourId={place.ids["openseamap-harbour"] ?? ""}
+          lat={place.coordinates[1]}
+          lng={place.coordinates[0]}
+          name={place.name}
+        />
       )}
     </>
   );

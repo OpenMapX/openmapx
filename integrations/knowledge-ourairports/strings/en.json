@@ -1,0 +1,11 @@
+{
+  "name": "OurAirports Knowledge",
+  "description": "Runway, frequency, and navaid detail for airports, matched by IATA/ICAO code",
+  "dataSources": [
+    {
+      "purpose": "Match an OSM airport to its OurAirports record and render runway, frequency, and navaid detail",
+      "dataSent": "Nothing per-request — the integration mirrors public CSV dumps at startup and matches in memory by IATA/ICAO code",
+      "dataReceived": "Airport identifiers, runway dimensions/surfaces, ATC frequencies, associated navaids, country/region metadata"
+    }
+  ]
+}

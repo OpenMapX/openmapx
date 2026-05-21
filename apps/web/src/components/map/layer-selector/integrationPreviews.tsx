@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import {
+  airportsPreview,
   airQualityPreview,
   buildingsPreview,
   cyclingMapPreview,
@@ -11,6 +12,7 @@ import {
   liveTransitPreview,
   measurePreview,
   naturalEventsPreview,
+  nauticalPreview,
   satelliteImageryPreview,
   streetViewPreview,
   trafficPreview,
@@ -46,6 +48,8 @@ export const INTEGRATION_PREVIEWS: Record<string, ReactNode> = {
   weather: weatherPreview,
   "weather-alerts": weatherAlertsPreview,
   environment: environmentPreview,
+  ourairports: airportsPreview,
+  nautical: nauticalPreview,
 };
 
 /** Generic fallback preview for integrations without a custom preview. */

@@ -16,6 +16,7 @@ import { useTheme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
+import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
 import type { AutocompleteResult, LngLat, TransitStop } from "@openmapx/core";
 import {
   API_ENDPOINTS,
@@ -27,18 +28,16 @@ import {
   createPlace,
   decodeShortPlusCode,
   detectShortPlusCodeCity,
-  formatShortcut,
-  getPlatform,
   idsFromPrimaryOrCoords,
-  isTransitName,
+  isTransitRawCategory,
   PANEL,
   parseCoordinateInput,
   parseDMSCoordinateInput,
   parsePlusCodeInput,
-  parseShortcut,
   resolveStopAsPlace,
   useActiveSidePanel,
   useAdaptiveDebounce,
+  useAirportSearch,
   useAutocomplete,
   useCapabilities,
   useCategorySearchStore,
@@ -48,7 +47,6 @@ import {
   useDebounce,
   useDirectionsStore,
   useGeocoding,
-  useIntegrationRegistry,
   useLabeledPlaces,
   useMenuStore,
   usePlaceStore,
@@ -58,6 +56,7 @@ import {
   useSidebarStore,
   useStopSearch,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -166,6 +165,7 @@ export function SearchBar() {
   const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
   const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale);
   const { data: presetData } = usePresetSuggest(debouncedQuery, locale);
+  const { data: airportSearchData } = useAirportSearch(debouncedQuery, 5);
   const { data: chipTranslations = {} } = useChipTranslations(locale);
 
   // Stop search — slower debounce to reduce transit API load
@@ -319,6 +319,29 @@ export function SearchBar() {
     }));
   }, [presetData, t]);
 
+  // Airports — match the IATA / ICAO / name index loaded by knowledge-ourairports.
+  // Surfaces results like "DUS — Düsseldorf Airport" alongside the geocoder.
+  // Uses the `oa:` place-resolver scheme so selection drives straight to the
+  // airport's full place panel (runways / frequencies / navaids) instead of a
+  // coordinate-based reverse-geocode that may land on a building inside the
+  // airport polygon.
+  const airportSuggestions = useMemo<AutocompleteResult[]>(() => {
+    return (airportSearchData?.matches ?? []).map((a) => {
+      const codeBadge = a.iata ?? a.icao ?? a.ident;
+      const labelPrefix = codeBadge ? `${codeBadge} — ` : "";
+      const cityCountry = [a.municipality, a.isoCountry].filter(Boolean).join(", ");
+      return {
+        id: `oa:${a.ident}`,
+        label: `${labelPrefix}${a.name}`,
+        sublabel: cityCountry,
+        coordinates: [a.lng, a.lat],
+        type: "poi" as const,
+        rawCategory: "aeroway/aerodrome",
+        presetIconKey: "maki-airport",
+      };
+    });
+  }, [airportSearchData]);
+
   const stopSuggestions = useMemo<AutocompleteResult[]>(
     () =>
       (stopSearchData ?? []).map(
@@ -367,14 +390,17 @@ export function SearchBar() {
   );
 
   const displaySuggestions = useMemo(() => {
-    // Client-side prefix narrowing
+    // Client-side narrowing: keep items where every query token appears
+    // somewhere in label or sublabel. Substring-only matching dropped real
+    // hits like "Frankfurt am Main Airport ..." for the query "Frankfurt
+    // Airport" because the tokens weren't contiguous.
     const narrowResults = (items: AutocompleteResult[]): AutocompleteResult[] => {
       if (q.length < 2 || items.length === 0) return items;
-      const ql = q.toLowerCase();
+      const tokens = q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+      if (tokens.length === 0) return items;
       const filtered = items.filter((s) => {
-        const label = s.label.toLowerCase();
-        const sub = (s.sublabel ?? "").toLowerCase();
-        return label.includes(ql) || sub.includes(ql);
+        const hay = `${s.label} ${s.sublabel ?? ""}`.toLowerCase();
+        return tokens.every((t) => hay.includes(t));
       });
       return filtered.length > 0 ? filtered : items;
     };
@@ -386,6 +412,7 @@ export function SearchBar() {
             ...labeledSuggestions,
             ...categorySuggestions,
             ...presetSuggestions,
+            ...airportSuggestions,
             ...narrowResults(suggestions),
             ...narrowResults(stopSuggestions).slice(0, 3),
           ].sort((a, b) => searchRelevance(b, q) - searchRelevance(a, q))
@@ -405,6 +432,7 @@ export function SearchBar() {
     labeledSuggestions,
     categorySuggestions,
     presetSuggestions,
+    airportSuggestions,
     suggestions,
     stopSuggestions,
   ]);
@@ -422,12 +450,24 @@ export function SearchBar() {
         ne_lat: String(coords[1] + delta),
         ne_lng: String(coords[0] + delta),
       });
-      // Find closest stop with matching name (fuzzy)
-      const match = stops.find(
-        (s) =>
-          s.name.toLowerCase().includes(name.toLowerCase().slice(0, 10)) ||
-          name.toLowerCase().includes(s.name.toLowerCase().slice(0, 10)),
-      );
+      // Require every query token to appear as a token in the stop name and
+      // then pick the closest one. The previous 10-char-prefix substring
+      // match was far too loose — it routed "Frankfurt Airport" to a random
+      // stop containing "Frankfurt " (e.g. "Frankfurt am Main, Tor 31").
+      const queryTokens = name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? ([] as string[]);
+      const match = queryTokens.length
+        ? stops
+            .filter((s) => {
+              const stopTokens = s.name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? ([] as string[]);
+              return queryTokens.every((t) => stopTokens.includes(t));
+            })
+            .sort(
+              (a, b) =>
+                (a.lng - coords[0]) ** 2 +
+                (a.lat - coords[1]) ** 2 -
+                ((b.lng - coords[0]) ** 2 + (b.lat - coords[1]) ** 2),
+            )[0]
+        : undefined;
       if (match) {
         // Reuse the shared synthetic-stop builder so the Place picks up
         // the provider-scoped scheme (tfl, mb, dyn, …) from the stop id.
@@ -483,7 +523,6 @@ export function SearchBar() {
     const first = geocodeData?.[0];
     if (first) {
       flyTo(first.coordinates, 15);
-      const text = first.label.toLowerCase();
       const firstPlace = createPlace({
         ...idsFromPrimaryOrCoords(first.id, first.coordinates),
         name: first.label,
@@ -492,7 +531,7 @@ export function SearchBar() {
         category: first.type,
         rawCategory: first.rawCategory,
       });
-      if (isTransitName(text)) {
+      if (first.rawCategory && isTransitRawCategory(first.rawCategory)) {
         void tryOpenTransitStop(first.coordinates, first.label).then((found) => {
           if (!found) {
             setSelectedPlace(firstPlace);
@@ -557,8 +596,6 @@ export function SearchBar() {
     if (result.coordinates) {
       const coords = result.coordinates;
       flyTo(coords, 15);
-      // Try to open as transit stop
-      const text = `${result.label} ${result.sublabel ?? ""}`.toLowerCase();
       const suggestionPlace = createPlace({
         ...idsFromPrimaryOrCoords(result.id, coords),
         name: result.label,
@@ -567,7 +604,9 @@ export function SearchBar() {
         category: result.type,
         rawCategory: result.rawCategory,
       });
-      if (isTransitName(text)) {
+      // Route to a transit-stop lookup only when the geocoder itself classified
+      // the result as transit infrastructure — never on a label-keyword match.
+      if (result.rawCategory && isTransitRawCategory(result.rawCategory)) {
         void tryOpenTransitStop(coords, result.label).then((found) => {
           if (!found) {
             setSelectedPlace(suggestionPlace);

@@ -26,7 +26,12 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
   const sources = getKnowledgeSources();
 
   const settled = await Promise.allSettled(
-    sources.map((source) => source.lookup(place.osmTags as Record<string, string>, lang)),
+    sources.map((source) =>
+      source.lookup(place.osmTags as Record<string, string>, lang, {
+        coordinates: place.coordinates,
+        name: place.name,
+      }),
+    ),
   );
 
   const merged: KnowledgeResult = {};
@@ -41,6 +46,7 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
       wikipediaUrl,
       facts,
       externalIds,
+      airport,
     } = result.value;
 
     if (description && !merged.description) merged.description = description;
@@ -54,6 +60,7 @@ export async function getPlaceKnowledge(place: Place, lang?: string): Promise<Kn
     if (externalIds) {
       merged.externalIds = { ...externalIds, ...(merged.externalIds ?? {}) };
     }
+    if (airport && !merged.airport) merged.airport = airport;
   }
 
   return merged;
