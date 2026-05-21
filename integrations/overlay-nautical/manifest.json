@@ -1,0 +1,304 @@
+{
+  "id": "overlay-nautical",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://wiki.openstreetmap.org/wiki/OpenSeaMap",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "nautical",
+      "icon": "sailing",
+      "iconPath": "M3 13.5L2.5 22h19l-.5-8.5h-3.5l-1.5-4.5L13.5 5l-2.5 4-1.5 4.5H3.5l-.5 0zM12 6.5l1.5 4.5L13 13H11l-.5-2 1.5-4.5z",
+      "quickSelector": true
+    },
+    "overlay": {
+      "excludes": ["weather", "air-quality"],
+      "minZoom": 2
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "seamarkTileBase": {
+        "type": "string",
+        "default": "https://tiles.openseamap.org/seamark",
+        "title": "OpenSeaMap seamark tile base URL",
+        "description": "Upstream tile server for OpenSeaMap seamark overlay. Override to point at a self-hosted mirror."
+      },
+      "depthWmsUrl": {
+        "type": "string",
+        "default": "https://depth.openseamap.org/geoserver/openseamap/wms",
+        "title": "OpenSeaMap depth WMS URL"
+      },
+      "gebcoWmsUrl": {
+        "type": "string",
+        "default": "https://wms.gebco.net/mapserv",
+        "title": "GEBCO bathymetry WMS URL"
+      },
+      "noaaWmsUrl": {
+        "type": "string",
+        "default": "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer",
+        "title": "NOAA Maritime Chart Service WMS URL"
+      },
+      "kartverketWmsUrl": {
+        "type": "string",
+        "default": "https://wms.geonorge.no/skwms1/wms.sjokartraster2",
+        "title": "Kartverket Sjøkart 2 WMS URL (Norway)"
+      },
+      "kartverketLayer": {
+        "type": "string",
+        "default": "all",
+        "title": "Kartverket Sjøkart layer name"
+      },
+      "harbourApiUrl": {
+        "type": "string",
+        "default": "https://harbour.openseamap.org/getHarbours.php",
+        "title": "OpenSeaMap harbour list API URL"
+      }
+    }
+  },
+  "requires": [
+    {
+      "service": "overpass",
+      "optional": true
+    }
+  ],
+  "healthCheck": [
+    {
+      "name": "OpenSeaMap seamark tiles",
+      "type": "http",
+      "url": "https://tiles.openseamap.org/seamark/0/0/0.png"
+    },
+    {
+      "name": "OpenSeaMap depth WMS",
+      "type": "http",
+      "url": "https://depth.openseamap.org/geoserver/openseamap/wms?service=WMS&request=GetCapabilities"
+    },
+    {
+      "name": "GEBCO bathymetry WMS",
+      "type": "http",
+      "url": "https://wms.gebco.net/mapserv?request=getcapabilities&service=wms&version=1.3.0"
+    },
+    {
+      "name": "NOAA Maritime Chart Service",
+      "type": "http",
+      "url": "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer?f=json"
+    },
+    {
+      "name": "OpenSeaMap harbour API",
+      "type": "http",
+      "url": "https://harbour.openseamap.org/getHarbours.php?b=42&t=43&l=10&r=11&zoom=10"
+    },
+    {
+      "name": "NOAA CO-OPS MDAPI",
+      "type": "http",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&units=english"
+    },
+    {
+      "name": "Kartverket Sjøkart 2",
+      "type": "http",
+      "url": "https://wms.geonorge.no/skwms1/wms.sjokartraster2?service=WMS&request=GetCapabilities"
+    },
+    {
+      "name": "DFO IWLS (Canada) station catalog",
+      "type": "http",
+      "url": "https://api-iwls.dfo-mpo.gc.ca/api/v1/stations?max=1"
+    },
+    {
+      "name": "Kartverket Sehavnivå (Norway) station list",
+      "type": "http",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlist&type=perm&lang=en"
+    },
+    {
+      "name": "WSV Pegelonline (Germany) coastal stations",
+      "type": "http",
+      "url": "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=NORDSEE,OSTSEE&prettyprint=false"
+    },
+    {
+      "name": "IOC Sea Level Monitoring",
+      "type": "http",
+      "url": "http://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
+    },
+    {
+      "name": "EMODnet Physics tide gauges",
+      "type": "http",
+      "url": "https://prod-geoserver.emodnet-physics.eu/geoserver/EMODnet/wfs?service=WFS&version=2.0.0&request=GetCapabilities"
+    }
+  ],
+  "quality": "built-in",
+  "category": "Map Overlays",
+  "dataSources": [
+    {
+      "sourceId": "openseamap",
+      "name": "OpenSeaMap",
+      "url": "https://www.openseamap.org/",
+      "license": "CC-BY-SA 2.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/2.0/",
+      "attribution": "© <a href=\"https://www.openseamap.org/\">OpenSeaMap</a> contributors",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://map.openseamap.org/imprint.php",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "openstreetmap",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL 1.0",
+      "licenseUrl": "https://www.openstreetmap.org/copyright",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+      "commercialUse": "yes",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "gebco",
+      "name": "GEBCO",
+      "url": "https://www.gebco.net/",
+      "license": "Public domain",
+      "licenseUrl": "https://www.gebco.net/data-products/gridded-bathymetry-data",
+      "attribution": "Imagery reproduced from the GEBCO Grid, <a href=\"https://www.gebco.net/\">GEBCO Compilation Group (2024)</a>",
+      "commercialUse": "yes",
+      "providerCountry": "UK",
+      "providerPrivacyUrl": "https://www.gebco.net/about-us/privacy-policy",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "noaa-ncds",
+      "name": "NOAA Maritime Chart Service",
+      "url": "https://nauticalcharts.noaa.gov/",
+      "license": "U.S. Public Domain",
+      "licenseUrl": "https://nauticalcharts.noaa.gov/about/disclaimer.html",
+      "attribution": "<a href=\"https://nauticalcharts.noaa.gov/\">NOAA Office of Coast Survey</a>",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.noaa.gov/protecting-your-privacy",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "noaa-co-ops",
+      "name": "NOAA Tides & Currents (CO-OPS)",
+      "url": "https://tidesandcurrents.noaa.gov/",
+      "license": "U.S. Public Domain",
+      "licenseUrl": "https://tidesandcurrents.noaa.gov/disclaimers.html",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://tidesandcurrents.noaa.gov/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "kartverket-sjokart",
+      "name": "Kartverket Sjøkart",
+      "url": "https://www.kartverket.no/til-sjos/sjokart",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Nautical charts © <a href=\"https://www.kartverket.no/\">Kartverket</a> (NLOD 2.0)",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://www.kartverket.no/om-kartverket/personvern",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "dfo-iwls",
+      "name": "Fisheries and Oceans Canada — CHS/IWLS",
+      "url": "https://www.dfo-mpo.gc.ca/science/data-donnees/iwls-snhe-eng.html",
+      "license": "Open Government Licence — Canada 2.0",
+      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "kartverket-sehavniva",
+      "name": "Kartverket Sehavnivå",
+      "url": "https://www.kartverket.no/til-sjos/se-havniva",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://www.kartverket.no/om-kartverket/personvern",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "wsv-pegelonline",
+      "name": "WSV Pegelonline",
+      "url": "https://www.pegelonline.wsv.de/",
+      "license": "Datenlizenz Deutschland — Zero — Version 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.pegelonline.wsv.de/gast/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "ioc-sealevel",
+      "name": "IOC Sea Level Station Monitoring Facility",
+      "url": "http://www.ioc-sealevelmonitoring.org/",
+      "license": "UNESCO-IOC public data",
+      "licenseUrl": "https://www.unesco.org/en/open-access",
+      "commercialUse": "yes",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://www.unesco.org/en/legal-affairs/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "emodnet-physics",
+      "name": "EMODnet Physics",
+      "url": "https://emodnet.ec.europa.eu/en/physics",
+      "license": "CC-BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Tide gauges from <a href=\"https://emodnet.ec.europa.eu/\">EMODnet Physics</a> (CC-BY 4.0)",
+      "commercialUse": "yes",
+      "providerCountry": "BE",
+      "providerPrivacyUrl": "https://emodnet.ec.europa.eu/en/privacy-statement",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

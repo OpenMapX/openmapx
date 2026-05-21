@@ -1,0 +1,26 @@
+{
+  "name": "Nautical Charts",
+  "description": "Sailor-oriented overlay: OpenSeaMap seamarks (buoys, beacons, lights), depth contours, optional NOAA charts in US waters, and harbours/marinas with facility details. Click a harbour to open its place panel.",
+  "dataSources": [
+    {
+      "purpose": "Render OpenSeaMap seamark tiles as a transparent overlay.",
+      "dataSent": "Tile coordinates (z/x/y).",
+      "dataReceived": "PNG raster tiles showing buoys, beacons, lights, fairways, anchorages, and other IHO S-57 features."
+    },
+    {
+      "purpose": "Render OpenSeaMap depth-contour and GEBCO bathymetry as raster tiles via WMS proxy.",
+      "dataSent": "Tile bbox in EPSG:3857.",
+      "dataReceived": "PNG raster tiles showing isobaths and shaded relief of the seafloor."
+    },
+    {
+      "purpose": "Render NOAA Maritime Chart Service tiles in US waters via WMS proxy.",
+      "dataSent": "Tile bbox in EPSG:3857.",
+      "dataReceived": "PNG raster tiles of the official NOAA paper-chart equivalents."
+    },
+    {
+      "purpose": "List OpenSeaMap harbours and marinas in the viewport, enrich the clicked harbour with seamark facilities via Overpass.",
+      "dataSent": "Viewport bounding box, optionally harbour ID + coordinates for enrichment.",
+      "dataReceived": "Harbour list (id, name, coordinates, category) and nearby seamark facilities (berths, fuel, moorings, …)."
+    }
+  ]
+}

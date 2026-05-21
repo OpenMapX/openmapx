@@ -1,0 +1,26 @@
+{
+  "name": "Seekarten",
+  "description": "Overlay für Seefahrer: OpenSeaMap-Seezeichen (Tonnen, Baken, Leuchtfeuer), Tiefenlinien, optional NOAA-Seekarten in US-Gewässern und Häfen/Marinas mit Einrichtungsdetails. Klick auf einen Hafen öffnet die Detailansicht.",
+  "dataSources": [
+    {
+      "purpose": "OpenSeaMap-Seezeichen-Kacheln als transparentes Overlay rendern.",
+      "dataSent": "Kachelkoordinaten (z/x/y).",
+      "dataReceived": "PNG-Rasterkacheln mit Tonnen, Baken, Leuchtfeuern, Fahrrinnen, Ankerplätzen und weiteren IHO-S-57-Objekten."
+    },
+    {
+      "purpose": "OpenSeaMap-Tiefenlinien und GEBCO-Bathymetrie als Rasterkacheln per WMS-Proxy darstellen.",
+      "dataSent": "Kachel-BBox in EPSG:3857.",
+      "dataReceived": "PNG-Rasterkacheln mit Tiefenlinien und schattiertem Relief des Meeresbodens."
+    },
+    {
+      "purpose": "NOAA-Maritime-Chart-Service-Kacheln in US-Gewässern per WMS-Proxy darstellen.",
+      "dataSent": "Kachel-BBox in EPSG:3857.",
+      "dataReceived": "PNG-Rasterkacheln der offiziellen NOAA-Papierseekarten."
+    },
+    {
+      "purpose": "OpenSeaMap-Häfen und Marinas im sichtbaren Ausschnitt auflisten, beim Klick Einrichtungen per Overpass anreichern.",
+      "dataSent": "Bounding Box des Ausschnitts, optional Hafen-ID + Koordinaten für die Anreicherung.",
+      "dataReceived": "Hafenliste (ID, Name, Koordinaten, Kategorie) und nahegelegene Seezeichen (Liegeplätze, Tankstelle, Mooring, …)."
+    }
+  ]
+}
