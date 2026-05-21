@@ -1,0 +1,80 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    versioning-strategy: increase-if-necessary
+    labels: [dependencies]
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      eslint-and-formatters:
+        patterns:
+          - "@biomejs/*"
+          - "eslint*"
+          - "prettier*"
+      typescript-toolchain:
+        patterns:
+          - "typescript"
+          - "@types/*"
+          - "tsx"
+          - "tsup"
+      next-stack:
+        patterns:
+          - "next"
+          - "next-*"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      mui-stack:
+        patterns:
+          - "@mui/*"
+          - "@emotion/*"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      maplibre-stack:
+        patterns:
+          - "maplibre-*"
+          - "@maplibre/*"
+          - "mapillary-*"
+      better-auth:
+        patterns:
+          - "better-auth"
+          - "@better-auth/*"
+      turbo-changesets:
+        patterns:
+          - "turbo"
+          - "@changesets/*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: docker
+    directory: "/infra/docker"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: chore
+      include: scope
