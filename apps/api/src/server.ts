@@ -3,7 +3,7 @@ import { join } from "node:path";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { registry } from "@integrations/transit-dynamic-registry/registry";
-import { listIdSchemeViews, registerBuiltinIdSchemeViews } from "@openmapx/core/server";
+import { listIdSchemeViews, registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
@@ -51,6 +51,36 @@ import { jobRunner } from "./services/job-runner";
 import { motisManager } from "./services/motis/manager";
 import { initServiceRegistry } from "./services/service-registry";
 import { handleInstallJob, handleRemoveJob, handleUpdateJob } from "./services/store";
+import {
+  authLimit,
+  expensivePublicApiLimit,
+  publicApiLimit,
+  tilePublicApiLimit,
+} from "./utils/rate-limit";
+
+// Trust proxy hops in front of the API. The default deployment terminates TLS
+// at Traefik (one hop) and forwards to this container, so `request.ip` must be
+// derived from the leftmost untrusted X-Forwarded-For entry rather than from
+// the socket peer (which would always be the proxy). Without this, IP-keyed
+// rate limits collapse to a single bucket per upstream proxy.
+//
+// SECURITY: never set this to `true` (trust everyone) on a public deployment
+// — that would let any client spoof their IP via X-Forwarded-For and bypass
+// rate limits, audit attribution, and the loopback admin short-circuit. Set
+// `TRUST_PROXY_HOPS` to the *exact* number of proxies between the public
+// internet and this process (default 1 = one Traefik hop). Set it to `0` for
+// direct exposure (development).
+function trustProxyConfig(): number | boolean {
+  const raw = process.env.TRUST_PROXY_HOPS?.trim();
+  if (raw === undefined || raw === "") return 1; // default: assume one Traefik hop
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(
+      `TRUST_PROXY_HOPS must be a non-negative integer (got "${raw}"). Use 0 for direct exposure, 1 for a single reverse proxy (default).`,
+    );
+  }
+  return n;
+}
 
 const { default: pino } = await import("pino");
 const server = Fastify({
@@ -58,6 +88,7 @@ const server = Fastify({
     { level: process.env.LOG_LEVEL ?? "info" },
     pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),
   ),
+  trustProxy: trustProxyConfig(),
   routerOptions: {
     // DB HAFAS trip IDs can be ~300 chars when URL-encoded (default is 100)
     maxParamLength: 500,
@@ -83,6 +114,73 @@ await server.register(cors, {
   origin: (process.env.CORS_ORIGIN ?? "http://localhost:3000").split(",").map((o) => o.trim()),
   credentials: true,
   exposedHeaders: ["X-Tile-Source"],
+});
+
+// Global rate limiting for the public surface.
+//
+// Skips:
+//   - `/health` — used by Docker/Traefik healthchecks at high frequency.
+//   - Loopback socket peers — the CLI and admin sweeps run locally; admin
+//     endpoints layer their own per-action limiters on top (see `admin.ts`,
+//     `admin-store.ts`, `admin-services.ts`, `admin-settings.ts`). We read
+//     `socket.remoteAddress` here, not `request.ip`, so a public client
+//     cannot forge XFF to bypass the limit (see `require-admin.ts`).
+//
+// Tiers, applied in order:
+//   - `/api/auth/*`              → strict (credential stuffing, email spam)
+//   - tile / map asset routes    → generous (bursty, cacheable, CDN-friendly)
+//   - expensive public routes    → tight (Valhalla, MOTIS, geocoding fan-out)
+//   - everything else            → broad floor
+//
+// Tile-ish routes get their own tier because a single viewport change can
+// fan out 30-60 requests; sharing a bucket with the rest of the API would
+// let map panning starve unrelated traffic (autocomplete, place lookups).
+const TILE_PUBLIC_PATTERNS = [
+  /^\/api\/maptiler\//,
+  /^\/api\/tiles\//,
+  /^\/api\/traffic\//,
+  /^\/api\/mapillary(\/|$)/,
+];
+
+const EXPENSIVE_PUBLIC_PATTERNS = [
+  /^\/api\/isochrone(\/|$|\?)/,
+  /^\/api\/elevation(\/|$|\?)/,
+  /^\/api\/motis(\/|$)/,
+  /^\/api\/places(\/|$|\?)/,
+  /^\/api\/image-proxy(\/|$|\?)/,
+  /^\/api\/winter-sports(\/|$)/,
+];
+
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+const publicLimit = publicApiLimit.preHandler();
+const expensiveLimit = expensivePublicApiLimit.preHandler();
+const tileLimit = tilePublicApiLimit.preHandler();
+const authRateLimit = authLimit.preHandler();
+
+server.addHook("onRequest", async (request, reply) => {
+  const url = request.url;
+  if (url === "/health" || url.startsWith("/health?")) return;
+
+  // Trust only the actual TCP peer here, never XFF.
+  const peer = request.socket?.remoteAddress;
+  if (peer && LOOPBACK.has(peer)) return;
+
+  if (url.startsWith("/api/auth/")) {
+    await authRateLimit(request, reply);
+    return;
+  }
+  if (TILE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
+    await tileLimit(request, reply);
+    return;
+  }
+  if (EXPENSIVE_PUBLIC_PATTERNS.some((p) => p.test(url))) {
+    await expensiveLimit(request, reply);
+    return;
+  }
+  if (url.startsWith("/api/")) {
+    await publicLimit(request, reply);
+  }
 });
 
 // Better Auth handler

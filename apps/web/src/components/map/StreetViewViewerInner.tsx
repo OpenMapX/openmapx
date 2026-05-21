@@ -91,6 +91,11 @@ export default function StreetViewViewerInner() {
     const token = env.mapillaryToken;
     const container = containerRef.current;
     if (!container) return;
+    // No client token configured → Mapillary viewer cannot authenticate.
+    // The Pegman entry point already gates this, but a deep link could still
+    // route here; rather than feeding mapillary-js an empty token (which
+    // produces an unhelpful network-level error), short-circuit cleanly.
+    if (!token) return;
 
     let unmounted = false;
 

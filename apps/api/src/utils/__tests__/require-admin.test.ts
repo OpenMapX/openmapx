@@ -140,4 +140,34 @@ describe("requireAdmin loopback short-circuit", () => {
     await app.close();
     expect(res.statusCode).toBe(401);
   });
+
+  it("rejects a non-loopback request that spoofs X-Forwarded-For=127.0.0.1 under trustProxy", async () => {
+    // Simulate a deployment behind Traefik: the API trusts the immediate proxy
+    // hop and resolves `request.ip` from XFF. A malicious public client sends
+    // `X-Forwarded-For: 127.0.0.1` to try to claim the loopback short-circuit.
+    // The check uses `request.socket.remoteAddress` (the actual TCP peer), so
+    // the forgery must be rejected.
+    process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
+    mockGetSession.mockResolvedValue(null);
+    const app = Fastify({ trustProxy: 1 });
+    app.get("/protected", async (request, reply) => {
+      const session = await requireAdmin(request, reply);
+      if (!session) return;
+      return { ok: true, userId: session.user.id };
+    });
+    const res = await app.inject({
+      method: "GET",
+      url: "/protected",
+      remoteAddress: "203.0.113.7", // public attacker IP (TEST-NET-3)
+      headers: {
+        "x-forwarded-for": "127.0.0.1",
+        "x-openmapx-local-admin": "s3cret",
+      },
+    });
+    await app.close();
+    expect(res.statusCode).toBe(401);
+    // The forged XFF must not even reach the auth lookup as loopback — it
+    // falls through to the regular session check, which finds no session.
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+  });
 });

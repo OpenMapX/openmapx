@@ -25,13 +25,17 @@ export function getAdminSession(request: FastifyRequest): AdminSession {
 // admin token (see `isLocalAdminRequest`). `::ffff:127.0.0.1` is the
 // IPv4-mapped IPv6 form Node uses on dual-stack sockets.
 //
-// SECURITY NOTE: `request.ip` is the *socket peer* address by default. If
-// Fastify is ever started with `trustProxy: true`, `request.ip` will instead
-// reflect the X-Forwarded-For header — meaning any upstream proxy (or anything
-// that can spoof that header) could claim a loopback IP. If you enable
-// `trustProxy`, restrict it to a specific list of trusted proxy IPs that you
-// know strip the header.
+// SECURITY NOTE: we deliberately read `request.socket.remoteAddress` here,
+// NOT `request.ip`. With `trustProxy` enabled (the default for deployments
+// behind Traefik), `request.ip` is derived from the X-Forwarded-For header
+// and is therefore client-controllable. Any client could forge XFF to claim a
+// loopback IP and gain admin access without auth. The socket peer address is
+// always the actual TCP peer and cannot be spoofed by HTTP headers.
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+function socketPeerAddress(request: FastifyRequest): string | undefined {
+  return request.socket?.remoteAddress;
+}
 
 /**
  * Custom header that the CLI sets to prove it is a trusted local caller rather
@@ -56,7 +60,8 @@ function isLocalAdminRequest(request: FastifyRequest): boolean {
   // Operator opt-out for multi-tenant hosts where loopback isn't a trust
   // boundary. Preserved for backwards compatibility.
   if (process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH === "1") return false;
-  if (!LOOPBACK_ADDRESSES.has(request.ip)) return false;
+  const peer = socketPeerAddress(request);
+  if (!peer || !LOOPBACK_ADDRESSES.has(peer)) return false;
 
   const header = request.headers[LOCAL_ADMIN_TOKEN_HEADER];
   const presented = Array.isArray(header) ? header[0] : header;

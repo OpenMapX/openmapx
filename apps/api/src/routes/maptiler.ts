@@ -32,22 +32,38 @@ function isRewritableMaptilerPath(path: string): boolean {
   return isAllowedMaptilerPath(path) || TILE_TEMPLATE_RE.test(path) || FONT_TEMPLATE_RE.test(path);
 }
 
-function firstHeader(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
+/**
+ * Resolve the public base URL of this API used to rewrite upstream MapTiler
+ * URLs into self-hosted proxy URLs.
+ *
+ * SECURITY: we read this from configuration (`PUBLIC_BASE_URL` or `DOMAIN`),
+ * never from request headers. `X-Forwarded-Host` / `X-Forwarded-Proto` are
+ * client-controllable through a reverse proxy unless the proxy is configured
+ * to strip them — and the only way to know that is to not depend on them.
+ * If a downstream CDN ever caches a style.json keyed by upstream host, an
+ * attacker setting `X-Forwarded-Host: evil.com` could poison the cached
+ * response and redirect tile/sprite/font fetches to attacker-controlled
+ * origins for every subsequent user.
+ *
+ * For local development, falls back to the request's Host header — that path
+ * is only reachable when `PUBLIC_BASE_URL` and `DOMAIN` are both unset.
+ */
+function publicBaseUrl(req: FastifyRequest): string {
+  const configured = process.env.PUBLIC_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
 
-function requestOrigin(req: FastifyRequest): string {
-  const proto =
-    firstHeader(req.headers["x-forwarded-proto"])?.split(",")[0]?.trim() || req.protocol || "http";
-  const host =
-    firstHeader(req.headers["x-forwarded-host"])?.split(",")[0]?.trim() ||
-    firstHeader(req.headers.host) ||
-    "localhost:3001";
+  const domain = process.env.DOMAIN?.trim();
+  if (domain && domain !== "localhost") return `https://${domain}`;
+
+  // Dev fallback: use the request's host header. Acceptable because a dev
+  // checkout is not deployed behind a CDN and there is no cache to poison.
+  const host = req.headers.host ?? "localhost:3001";
+  const proto = req.protocol ?? "http";
   return `${proto}://${host}`;
 }
 
 function proxyBase(req: FastifyRequest): string {
-  return `${requestOrigin(req)}/api/maptiler`;
+  return `${publicBaseUrl(req)}/api/maptiler`;
 }
 
 function encodePath(path: string, preservePlaceholders = false): string {

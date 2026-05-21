@@ -12,7 +12,13 @@ const ALLOWED_HOSTS = [
   "commons.wikimedia.org",
   // Mapillary (CDN uses regional subdomains like scontent-fra5-2.xx.fbcdn.net)
   "images.mapillary.com",
-  "fbcdn.net",
+  // Mapillary's image CDN is served from Facebook's `xx.fbcdn.net`
+  // infrastructure. We deliberately do NOT allow `fbcdn.net` wholesale —
+  // that would whitelist arbitrary Facebook-hosted user content. Only
+  // `xx.fbcdn.net` itself and its subdomains are matched here (in
+  // practice Mapillary serves from regional subdomains like
+  // `scontent-fra5-2.xx.fbcdn.net`).
+  "xx.fbcdn.net",
   // Flickr
   "live.staticflickr.com",
   // Panoramax
@@ -77,14 +83,29 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      // Referrer guard: require a Referer or Origin that matches one of our
-      // frontend origins. Browsers send Referer on <img> loads; third-party
-      // sites are rejected. A missing Referer/Origin (non-browser clients,
-      // stripped-referrer policies) is also rejected — the proxy exists for
-      // the web UI, not as a generic open relay.
-      const referer = req.headers.referer ?? req.headers.origin;
+      // Referrer guard: require a Referer or Origin whose *origin* matches one
+      // of our frontend origins exactly. Browsers send Referer on <img>
+      // loads; third-party sites are rejected. A missing Referer/Origin
+      // (non-browser clients, stripped-referrer policies) is also rejected —
+      // the proxy exists for the web UI, not as a generic open relay.
+      //
+      // SECURITY: must compare parsed URL origins. A naive
+      // `referer.startsWith("https://openmapx.example")` accepts
+      // `https://openmapx.example.attacker.com/...` because string prefixes
+      // ignore the origin boundary, letting anyone controlling a subdomain
+      // turn the proxy into an unmetered image-fetch relay for allowlisted
+      // upstreams.
+      const refererHeader = req.headers.referer ?? req.headers.origin;
       const origins = getAllowedOrigins();
-      if (!referer || !origins.some((o) => referer.startsWith(o))) {
+      let refererOrigin: string | null = null;
+      if (refererHeader) {
+        try {
+          refererOrigin = new URL(refererHeader).origin;
+        } catch {
+          // malformed Referer/Origin → treat as missing
+        }
+      }
+      if (!refererOrigin || !origins.includes(refererOrigin)) {
         return reply.status(403).send({ message: "Forbidden" });
       }
 
@@ -159,7 +180,11 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         // nosniff would refuse to render the bytes as an image).
         reply.raw.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
         reply.raw.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-        reply.raw.setHeader("Access-Control-Allow-Origin", origins[0]);
+        reply.raw.setHeader("Access-Control-Allow-Origin", refererOrigin);
+        // ACAO is set per request to the matched frontend origin, so a CDN must
+        // key its cache by Origin to avoid serving an entry stamped for origin-A
+        // to a CORS read from origin-B (which would then fail the browser check).
+        reply.raw.setHeader("Vary", "Origin");
         reply.raw.setHeader("Content-Type", contentType);
         if (contentLength && parseInt(contentLength, 10) <= MAX_SIZE) {
           reply.raw.setHeader("Content-Length", contentLength);

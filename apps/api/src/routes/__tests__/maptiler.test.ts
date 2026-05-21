@@ -22,6 +22,9 @@ afterEach(() => {
 describe("GET /maptiler/*", () => {
   it("rewrites MapTiler style asset URLs to the API proxy", async () => {
     vi.stubEnv("MAPTILER_KEY", "test-key");
+    // The proxy base is taken from configuration (PUBLIC_BASE_URL / DOMAIN),
+    // not from request headers — see `publicBaseUrl()` in maptiler.ts.
+    vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
     const fetchMock = vi.fn(async () =>
       Response.json({
         version: 8,
@@ -43,7 +46,6 @@ describe("GET /maptiler/*", () => {
       url: "/maptiler/maps/bright-v2/style.json",
       headers: {
         host: "api.example.test",
-        "x-forwarded-proto": "https",
       },
     });
 
@@ -109,5 +111,38 @@ describe("GET /maptiler/*", () => {
 
     expect(res.statusCode).toBe(503);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("ignores X-Forwarded-Host when rewriting style URLs (cache-poisoning guard)", async () => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        version: 8,
+        glyphs: "https://api.maptiler.com/fonts/Open Sans Regular/{range}.pbf?key=upstream-key",
+        sprite: "https://api.maptiler.com/maps/bright-v2/sprite?key=upstream-key",
+        sources: {},
+        layers: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/maptiler/maps/bright-v2/style.json",
+      headers: {
+        host: "api.example.test",
+        // Attacker tries to make the rewritten URLs point at their domain.
+        "x-forwarded-host": "evil.attacker.com",
+        "x-forwarded-proto": "https",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { glyphs: string; sprite: string };
+    expect(body.glyphs).toContain("https://api.example.test/");
+    expect(body.sprite).toContain("https://api.example.test/");
+    expect(body.glyphs).not.toContain("attacker");
+    expect(body.sprite).not.toContain("attacker");
   });
 });

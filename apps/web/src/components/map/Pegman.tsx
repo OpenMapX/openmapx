@@ -7,6 +7,7 @@ import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
+import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 
 // Must match the layer IDs defined in StreetViewLayer.tsx
@@ -21,13 +22,20 @@ const PIN_TIP_OFFSET = GHOST_SIZE * (20 / 24);
 
 export function Pegman() {
   const { mapRef, mapReady } = useMap();
+  const env = useEnv();
   const t = useTranslations("streetView");
   const setLayerVisible = useStreetViewStore((s) => s.setLayerVisible);
   const requestImageLoad = useStreetViewStore((s) => s.requestImageLoad);
-
   const [dragging, setDragging] = useState(false);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
   const pegmanRef = useRef<HTMLDivElement>(null);
+
+  // Street View requires a Mapillary client token, which is bundled into the
+  // browser by design (Mapillary's `MLY|<app>|<token>` shape is intended for
+  // client-side use). Operators who don't want to expose any token can leave
+  // `MAPILLARY_VIEWER_TOKEN` unset; the feature then hides entirely instead
+  // of leaking the server-side `MAPILLARY_TOKEN` to the bundle.
+  if (!env.mapillaryToken) return null;
 
   const findNearestDot = (clientX: number, clientY: number) => {
     const map = mapRef.current;
