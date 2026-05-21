@@ -1,0 +1,48 @@
+{
+  "id": "knowledge-tides-pegelonline",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://www.pegelonline.wsv.de/webservice/dokuRestapi",
+  "domains": ["knowledge"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+  "quality": "built-in",
+  "category": "Knowledge",
+  "healthCheck": [
+    {
+      "name": "WSV Pegelonline",
+      "type": "http",
+      "url": "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=NORDSEE,OSTSEE&prettyprint=false"
+    }
+  ],
+  "dataSources": [
+    {
+      "sourceId": "wsv-pegelonline",
+      "name": "WSV Pegelonline",
+      "url": "https://www.pegelonline.wsv.de/",
+      "license": "Datenlizenz Deutschland — Zero — Version 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/zero-2-0",
+      "attribution": "Water-level observations from <a href=\"https://www.pegelonline.wsv.de/\">WSV Pegelonline</a>",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.pegelonline.wsv.de/gast/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

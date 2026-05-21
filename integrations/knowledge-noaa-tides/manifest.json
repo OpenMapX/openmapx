@@ -1,0 +1,46 @@
+{
+  "id": "knowledge-noaa-tides",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://tidesandcurrents.noaa.gov/web_services_info.html",
+  "domains": ["knowledge"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "quality": "built-in",
+  "category": "Knowledge",
+  "healthCheck": [
+    {
+      "name": "NOAA CO-OPS Data API",
+      "type": "http",
+      "url": "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=8518750&product=predictions&interval=hilo&date=today&datum=MLLW&units=english&time_zone=lst_ldt&format=json&application=OpenMapX"
+    },
+    {
+      "name": "NOAA CO-OPS Metadata API",
+      "type": "http",
+      "url": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions&units=english"
+    }
+  ],
+  "dataSources": [
+    {
+      "sourceId": "noaa-co-ops",
+      "name": "NOAA Tides & Currents (CO-OPS)",
+      "url": "https://tidesandcurrents.noaa.gov/",
+      "license": "U.S. Public Domain",
+      "licenseUrl": "https://tidesandcurrents.noaa.gov/disclaimers.html",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://tidesandcurrents.noaa.gov/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Kartverket Sehavnivå (Norway)",
+  "description": "Norwegian tide predictions and water-level observations from Kartverket Sehavnivå. Surfaces in the place panel for coastal Norwegian places and Svalbard.",
+  "dataSources": [
+    {
+      "purpose": "Tide predictions and high/low events for Norwegian places near a Kartverket station.",
+      "dataSent": "Latitude/longitude (rounded) or station code.",
+      "dataReceived": "High/low events for today + tomorrow, 30-min tide curve."
+    }
+  ]
+}

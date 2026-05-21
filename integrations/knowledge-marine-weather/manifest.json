@@ -1,0 +1,48 @@
+{
+  "id": "knowledge-marine-weather",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://open-meteo.com/en/docs/marine-weather-api",
+  "domains": ["knowledge"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+  "quality": "built-in",
+  "category": "Knowledge",
+  "healthCheck": [
+    {
+      "name": "Open-Meteo Marine API",
+      "type": "http",
+      "url": "https://marine-api.open-meteo.com/v1/marine?latitude=48&longitude=-4&hourly=wave_height"
+    }
+  ],
+  "dataSources": [
+    {
+      "sourceId": "open-meteo-marine",
+      "name": "Open-Meteo Marine",
+      "url": "https://open-meteo.com/en/docs/marine-weather-api",
+      "license": "CC BY 4.0 (free tier: non-commercial only)",
+      "licenseUrl": "https://open-meteo.com/en/terms",
+      "attribution": "Wave data from <a href=\"https://open-meteo.com/\">Open-Meteo</a> (ECMWF WAM, DWD)",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://open-meteo.com/en/terms",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

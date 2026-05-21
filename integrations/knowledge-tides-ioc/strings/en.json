@@ -1,0 +1,11 @@
+{
+  "name": "IOC Sea Level (global)",
+  "description": "Real-time water-level observations from ~700 stations worldwide, run by the IOC Sea Level Station Monitoring Facility (UNESCO). Surfaces in the place panel for coastal places where no national prediction network is in range.",
+  "dataSources": [
+    {
+      "purpose": "Observed water level + 24 h curve for global places near an IOC station.",
+      "dataSent": "Latitude/longitude (rounded) or station code.",
+      "dataReceived": "Latest observed water level, 24 h observation curve, and derived high/low events."
+    }
+  ]
+}

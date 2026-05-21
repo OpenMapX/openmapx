@@ -1,0 +1,11 @@
+{
+  "name": "WSV Pegelonline (Deutschland)",
+  "description": "Wasserstands-Beobachtungen für deutsche Küsten- und Tideelbe-Pegel der Wasserstraßen- und Schifffahrtsverwaltung.",
+  "dataSources": [
+    {
+      "purpose": "Beobachteter Wasserstand + 24-Std-Kurve für deutsche Küstenorte in der Nähe einer WSV-Pegelstation.",
+      "dataSent": "Breiten-/Längengrad (gerundet) oder Pegel-UUID.",
+      "dataReceived": "Letzter Wasserstand und 30-Min-Kurve; abgeleitete Hoch-/Niedrigwasser-Ereignisse aus der Kurve."
+    }
+  ]
+}

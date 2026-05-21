@@ -1,0 +1,11 @@
+{
+  "name": "DFO/CHS Canadian Tides",
+  "description": "Tide predictions and water-level observations for Canadian coastal waters and the Great Lakes from the Canadian Hydrographic Service Integrated Water Level System (IWLS). Surfaces in the place panel for coastal Canadian places.",
+  "dataSources": [
+    {
+      "purpose": "Tide predictions and high/low events for Canadian places near a CHS station.",
+      "dataSent": "Latitude/longitude (rounded to 4 decimals) or station ID.",
+      "dataReceived": "High/low tide events for today + tomorrow, 30-min tide curve, and the latest observed water level when available."
+    }
+  ]
+}

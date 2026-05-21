@@ -1,0 +1,48 @@
+{
+  "id": "knowledge-tides-norway",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://api.sehavniva.no/tideapi_protocol.pdf",
+  "domains": ["knowledge"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+  "quality": "built-in",
+  "category": "Knowledge",
+  "healthCheck": [
+    {
+      "name": "Kartverket Sehavnivå station list",
+      "type": "http",
+      "url": "https://vannstand.kartverket.no/tideapi.php?tide_request=stationlist&type=perm&lang=en"
+    }
+  ],
+  "dataSources": [
+    {
+      "sourceId": "kartverket-sehavniva",
+      "name": "Kartverket Sehavnivå",
+      "url": "https://www.kartverket.no/til-sjos/se-havniva",
+      "license": "NLOD 2.0",
+      "licenseUrl": "https://data.norge.no/nlod/en/2.0",
+      "attribution": "Tide data from <a href=\"https://www.kartverket.no/til-sjos/se-havniva\">Kartverket</a> (NLOD 2.0)",
+      "commercialUse": "yes",
+      "providerCountry": "NO",
+      "providerPrivacyUrl": "https://www.kartverket.no/om-kartverket/personvern",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

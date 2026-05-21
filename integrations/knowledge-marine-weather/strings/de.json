@@ -1,0 +1,11 @@
+{
+  "name": "Seewetter (Open-Meteo)",
+  "description": "Wellenhöhe, Dünung, Periode, Richtung und Strömungsprognose für Küstenkoordinaten. Erscheint in der Detailansicht für Orte am Wasser.",
+  "dataSources": [
+    {
+      "purpose": "Wellen-/Dünungs-Vorhersage-Widget auf Küsten-Place-Panels anzeigen.",
+      "dataSent": "Breiten-/Längengrad (auf 2 Nachkommastellen gerundet zur Cache-Nutzung).",
+      "dataReceived": "Stündliche Wellenhöhe/-richtung/-periode, Dünungs-Komponenten, Meeresströmungen."
+    }
+  ]
+}

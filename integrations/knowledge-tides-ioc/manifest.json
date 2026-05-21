@@ -1,0 +1,48 @@
+{
+  "id": "knowledge-tides-ioc",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "http://www.ioc-sealevelmonitoring.org/service.php",
+  "domains": ["knowledge"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+  "quality": "built-in",
+  "category": "Knowledge",
+  "healthCheck": [
+    {
+      "name": "IOC Sea Level Monitoring",
+      "type": "http",
+      "url": "http://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
+    }
+  ],
+  "dataSources": [
+    {
+      "sourceId": "ioc-sealevel",
+      "name": "IOC Sea Level Station Monitoring Facility",
+      "url": "http://www.ioc-sealevelmonitoring.org/",
+      "license": "UNESCO-IOC public data",
+      "licenseUrl": "https://www.unesco.org/en/open-access",
+      "attribution": "Water-level data from the <a href=\"http://www.ioc-sealevelmonitoring.org/\">IOC Sea Level Station Monitoring Facility</a>",
+      "commercialUse": "yes",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://www.unesco.org/en/legal-affairs/privacy-policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

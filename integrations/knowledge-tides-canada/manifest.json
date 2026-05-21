@@ -1,0 +1,48 @@
+{
+  "id": "knowledge-tides-canada",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://api-iwls.dfo-mpo.gc.ca/swagger-ui/index.html",
+  "domains": ["knowledge"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true }
+    }
+  },
+  "quality": "built-in",
+  "category": "Knowledge",
+  "healthCheck": [
+    {
+      "name": "DFO IWLS stations",
+      "type": "http",
+      "url": "https://api-iwls.dfo-mpo.gc.ca/api/v1/stations?max=1"
+    }
+  ],
+  "dataSources": [
+    {
+      "sourceId": "dfo-iwls",
+      "name": "Fisheries and Oceans Canada — CHS/IWLS",
+      "url": "https://www.dfo-mpo.gc.ca/science/data-donnees/iwls-snhe-eng.html",
+      "license": "Open Government Licence — Canada 2.0",
+      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
+      "attribution": "Contains information licensed under the <a href=\"https://open.canada.ca/en/open-government-licence-canada\">Open Government Licence — Canada</a>",
+      "commercialUse": "yes",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

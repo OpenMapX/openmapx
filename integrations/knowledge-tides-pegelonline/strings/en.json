@@ -1,0 +1,11 @@
+{
+  "name": "WSV Pegelonline (Germany)",
+  "description": "Water-level observations for German coastal and estuarine gauges from the Federal Waterways and Shipping Administration (WSV). Surfaces in the place panel for German North Sea and Baltic places.",
+  "dataSources": [
+    {
+      "purpose": "Observed water level + 24 h curve for German coastal places near a WSV station.",
+      "dataSent": "Latitude/longitude (rounded) or station UUID.",
+      "dataReceived": "Latest water-level observation and a 30-min curve; derived high/low events from the curve."
+    }
+  ]
+}
