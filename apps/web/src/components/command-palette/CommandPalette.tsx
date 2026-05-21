@@ -10,9 +10,8 @@ import {
   getPlatform,
   SCORE_CUTOFF,
   scoreCommand,
-  useCommandPaletteStore,
-  useSearchStore,
-} from "@openmapx/core";
+} from "@openmapx/command-palette";
+import { useCommandPaletteStore, useSearchStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommandPaletteFooter } from "./CommandPaletteFooter";

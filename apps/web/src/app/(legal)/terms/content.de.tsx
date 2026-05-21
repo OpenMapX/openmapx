@@ -18,7 +18,7 @@ export default function TermsContentDe({
 }: {
   transitAttribution?: unknown[];
   capabilities?: Record<string, boolean>;
-  integrations?: import("@openmapx/core").LoadedIntegrationMeta[];
+  integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
 }) {
   const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
 

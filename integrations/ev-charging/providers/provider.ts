@@ -6,7 +6,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { DataSourceProvider } from "../../data-source/types.js";
+import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
 import { deduplicateChargingStations, haversineMeters } from "./dedup.js";
 import { getEvChargingFilters } from "./reference.js";
 import { EV_CHARGING_SOURCE_REGISTRY } from "./registry.js";

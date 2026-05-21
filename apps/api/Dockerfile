@@ -7,13 +7,19 @@ RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/pac
 # Install all dependencies (for building)
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
 COPY packages/shared-mobility/package.json packages/shared-mobility/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
+COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/mangrove-client/package.json packages/mangrove-client/
+COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
+COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/presets/package.json packages/presets/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
 RUN pnpm install --frozen-lockfile
@@ -21,13 +27,19 @@ RUN pnpm install --frozen-lockfile
 # Install production dependencies only (for runtime)
 FROM base AS prod-deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
 COPY packages/shared-mobility/package.json packages/shared-mobility/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
+COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/mangrove-client/package.json packages/mangrove-client/
+COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
+COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/presets/package.json packages/presets/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
@@ -48,7 +60,14 @@ COPY packages/core/ packages/core/
 COPY packages/shared-mobility/ packages/shared-mobility/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
+COPY packages/integration-framework/ packages/integration-framework/
+COPY packages/mangrove-client/ packages/mangrove-client/
+COPY packages/noaa-coops-data/ packages/noaa-coops-data/
+COPY packages/ourairports-data/ packages/ourairports-data/
+COPY packages/place-ids/ packages/place-ids/
+COPY packages/presets/ packages/presets/
 COPY apps/api/ apps/api/
+COPY tsconfig.base.json ./
 COPY turbo.json ./
 
 WORKDIR /app/apps/api
@@ -96,9 +115,20 @@ COPY packages/core/ packages/core/
 COPY packages/shared-mobility/ packages/shared-mobility/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
+COPY packages/integration-framework/ packages/integration-framework/
+COPY packages/mangrove-client/ packages/mangrove-client/
+COPY packages/noaa-coops-data/ packages/noaa-coops-data/
+COPY packages/ourairports-data/ packages/ourairports-data/
+COPY packages/place-ids/ packages/place-ids/
+COPY packages/presets/ packages/presets/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=prod-deps /app/packages/shared-mobility/node_modules ./packages/shared-mobility/node_modules
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
+COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
+COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
+COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
+COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
+COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
 
 # packages/cli source + node_modules are needed by admin-cli.ts, which spawns
 # `node --experimental-strip-types packages/cli/src/index.ts <cmd>` for data
@@ -124,11 +154,14 @@ COPY --from=builder /app/apps/api/src/db/migrations ./apps/api/dist/db/migration
 COPY apps/api/package.json ./apps/api/
 
 # tsx resolves tsconfig paths + .js → .ts at runtime. We ship:
-#   - apps/api/tsconfig.json: defines `@integrations/*` → `../../integrations/*`
-#   - packages/core/tsconfig.json: same alias, resolved relative to packages/core
+#   - tsconfig.base.json: root config that apps/api/tsconfig.json and
+#     packages/*/tsconfig.json extend (defines `@integrations/*` path alias)
+#   - apps/api/tsconfig.json: extends the base + adds api-specific options
+#   - packages/core/tsconfig.json: extends the base, resolved from packages/core
 # These are needed because dist/server.js (bundled) dynamically loads:
 #   - /app/integrations/<id>/index.ts — .ts, often imports from ./provider.js
 #   - /app/packages/core/src/index.ts — imports `@integrations/poi-search/types`
+COPY tsconfig.base.json ./
 COPY apps/api/tsconfig.json ./apps/api/
 COPY packages/core/tsconfig.json ./packages/core/
 

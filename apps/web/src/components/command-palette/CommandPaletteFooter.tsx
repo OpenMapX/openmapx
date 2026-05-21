@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { getPlatform } from "@openmapx/core";
+import { getPlatform } from "@openmapx/command-palette";
 import { useTranslations } from "next-intl";
 
 const KBD_SX = {

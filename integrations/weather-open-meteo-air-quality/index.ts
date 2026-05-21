@@ -1,4 +1,5 @@
-import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 
 const OPEN_METEO_AQ_BASE = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const FETCH_TIMEOUT_MS = 10_000;

@@ -1,4 +1,5 @@
-import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { XMLParser } from "fast-xml-parser";
 import { type Capabilities, GIBS_LAYERS, type GibsLayerId } from "./store";
 

@@ -13,7 +13,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { type KeypairEnvelope, useKeypairState, useUnlockKeypair } from "@openmapx/core";
+import { type KeypairEnvelope, useKeypairState, useUnlockKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 

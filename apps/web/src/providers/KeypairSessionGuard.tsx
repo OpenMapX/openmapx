@@ -1,6 +1,7 @@
 "use client";
 
-import { useKeypairStore, useSession } from "@openmapx/core";
+import { useSession } from "@openmapx/core";
+import { useKeypairStore } from "@openmapx/mangrove-react";
 import { useEffect, useRef } from "react";
 
 /**

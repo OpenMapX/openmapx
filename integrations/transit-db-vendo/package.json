@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
     "db-vendo-client": "^6.10.9"
   }
 }

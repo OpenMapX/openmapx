@@ -5,7 +5,7 @@
  */
 
 import type { LngLat } from "@openmapx/core";
-import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
+import type { SharedMobilityStation } from "@openmapx/shared-mobility/types";
 import { createStaticCarSharingClient } from "./static-car-sharing-client.js";
 
 interface WuppertalFeature {

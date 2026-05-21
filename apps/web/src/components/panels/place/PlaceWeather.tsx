@@ -3,12 +3,8 @@
 import Box from "@mui/material/Box";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import {
-  buildSourceAttribution,
-  useCurrentWeather,
-  useIntegrationRegistry,
-  weatherCodeToInfo,
-} from "@openmapx/core";
+import { buildSourceAttribution, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
 import { windDirectionLabel } from "@/components/weather/weatherUtils";

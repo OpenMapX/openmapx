@@ -1,3 +1,9 @@
+import type {
+  Review,
+  ReviewAggregate,
+  ReviewProvider,
+  ReviewSubject,
+} from "@openmapx/integration-reviews/types";
 import {
   buildMangroveQueryUri,
   haversineDistanceMeters,
@@ -6,8 +12,7 @@ import {
   parseMangroveGeoUri,
   REVIEW_MATCH_MAX_DISTANCE_METERS,
   REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS,
-} from "@openmapx/core";
-import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "../reviews/types.js";
+} from "@openmapx/mangrove-client";
 import { mangroveGetReviews, mangroveSubmit, mangroveUploadImage } from "./client.js";
 import type { MangroveWirePayload, MangroveWireReview } from "./types.js";
 

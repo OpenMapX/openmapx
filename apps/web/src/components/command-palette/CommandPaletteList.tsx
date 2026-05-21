@@ -2,7 +2,7 @@
 
 import List from "@mui/material/List";
 import ListSubheader from "@mui/material/ListSubheader";
-import type { Command, CommandGroup } from "@openmapx/core";
+import type { Command, CommandGroup } from "@openmapx/command-palette";
 import { useTranslations } from "next-intl";
 import { CommandPaletteRow } from "./CommandPaletteRow";
 

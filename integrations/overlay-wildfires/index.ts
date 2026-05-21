@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 
 const FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/api/area/csv";
 const FETCH_TIMEOUT_MS = 30_000;

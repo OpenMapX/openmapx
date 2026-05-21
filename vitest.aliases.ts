@@ -23,6 +23,10 @@ export function createRepoVitestAliases(repoRoot: string) {
       replacement: resolve(repoRoot, "packages/mobility-formats/index.ts"),
     },
     {
+      find: /^@openmapx\/integration-framework$/,
+      replacement: resolve(repoRoot, "packages/integration-framework/src/index.ts"),
+    },
+    {
       find: /^@integrations\/(.+)$/,
       replacement: resolve(repoRoot, "integrations/$1"),
     },

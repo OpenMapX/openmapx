@@ -10,9 +10,9 @@ import {
   buildSourceAttribution,
   useCurrentWeather,
   useDebouncedCallback,
-  useIntegrationRegistry,
   weatherCodeToInfo,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useCallback, useEffect, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { WeatherIcon } from "./WeatherIcon";

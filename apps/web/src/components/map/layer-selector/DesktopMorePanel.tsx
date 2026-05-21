@@ -1,7 +1,7 @@
 "use client";
 
-import { useMeasurementStore } from "@integrations/tool-measurement/store";
-import { useTravelTimeStore } from "@integrations/tool-travel-time/store";
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CloseIcon from "@mui/icons-material/Close";

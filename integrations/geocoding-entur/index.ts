@@ -1,6 +1,6 @@
-import type { IntegrationContext } from "@openmapx/core";
-import type { PlaceResolverContext } from "@openmapx/core/server";
-import { registerPlaceResolver } from "@openmapx/core/server";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { PlaceResolverContext } from "@openmapx/place-ids";
+import { registerPlaceResolver } from "@openmapx/place-ids";
 import {
   enturGeocodingService,
   lookupEnturPlaceById,

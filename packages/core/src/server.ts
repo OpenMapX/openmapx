@@ -23,56 +23,14 @@ export {
   gitShallowClone,
   gitShallowCloneAtomic,
 } from "./git-clone";
-export type { IdSchemeView, PlaceResolver, PlaceResolverContext } from "./ids";
-export {
-  buildFacebookUrl,
-  buildFoursquareUrl,
-  buildGoogleMapsUrl,
-  buildInstagramUrl,
-  buildTripadvisorUrl,
-  buildYelpUrl,
-  getIdSchemeView,
-  getPlaceResolver,
-  listIdSchemeViews,
-  listPlaceResolverSchemes,
-  registerBuiltinIdSchemeViews,
-  registerIdSchemeView,
-  registerPlaceResolver,
-} from "./ids";
-// Integration installer (community integration lifecycle). Imported directly
-// from the implementation file — the `./integration` barrel would transitively
-// load its sibling re-exports, some of which are safe to surface from the
-// main core barrel and live there.
-export {
-  type BuildOptions as IntegrationBuildOptions,
-  type BuildResult as IntegrationBuildResult,
-  buildIntegration,
-  buildIntegrationBackend,
-  type InstallOptions as IntegrationInstallOptions,
-  type InstallResult as IntegrationInstallResult,
-  type IntegrationSummary,
-  installIntegration,
-  integrationBackendBundlePath,
-  integrationFrontendBundlePath,
-  type ListOptions as IntegrationListOptions,
-  listIntegrations,
-  type PackageOptions as IntegrationPackageOptions,
-  type PackageResult as IntegrationPackageResult,
-  packageIntegration,
-  type RemoveOptions as IntegrationRemoveOptions,
-  removeIntegration,
-  type ValidateResult as IntegrationValidateResult,
-  validateIntegrationDirectory,
-} from "./integration/installer";
+// Git URL validation (allow-list for community integration / service repo installs)
+export { ALLOWED_GIT_HOSTS, assertAllowedGitUrl, InvalidGitUrlError } from "./git-url";
 // Open-source license discovery (build-time generator + CLI packager)
 export { type LicenseNotice, type ScanLicensesOptions, scanLicenses } from "./licenses";
 // Repo path resolution (shared by CLI + apps/api runtime code)
 export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
 // Service plugin system (manifest loader, compose renderer — all uses node:fs)
 export * as services from "./services";
-export { getChipTranslations, getPresetById, suggestPresets } from "./services/presets";
-export type { ChipTranslation } from "./services/presets/chip-translations";
-export type { PresetMatch } from "./services/presets/types";
 // Subprocess helper used by git-clone and the community-integration build step
 export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
 export type { Identified, Ids } from "./types/identified";
@@ -91,6 +49,15 @@ export {
 } from "./utils/attribution";
 export { applyHoursFilter } from "./utils/categoryFilter";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
+// Server-only opening-hours runtime (imports the LGPL-3 `opening_hours`
+// package). Web code never touches this barrel — see `../utils/openingHours`
+// for details on why this is kept out of the main client-facing index.
+export {
+  buildOpeningHoursInfo,
+  isAlwaysOpen,
+  isOpenAt,
+  parseOpeningHours,
+} from "./utils/openingHours";
 // Safe downloader (DNS-aware SSRF protection for server-side fetches).
 export {
   assertResolvesToPublicIp,

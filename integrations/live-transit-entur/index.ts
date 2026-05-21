@@ -2,13 +2,8 @@ import type {
   LiveTransitProvider,
   LiveTransitVehicle,
 } from "@integrations/overlay-live-transit/types.js";
-import type {
-  AlertSeverity,
-  BBox,
-  IntegrationContext,
-  ServiceAlert,
-  TransportMode,
-} from "@openmapx/core";
+import type { AlertSeverity, BBox, ServiceAlert, TransportMode } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 
 interface GraphQlResponse<T> {
   data?: T;

@@ -1,6 +1,8 @@
 "use client";
 
-import { getCommunityModule, useIntegrationRegistry, useSidebarStore } from "@openmapx/core";
+import { useSidebarStore } from "@openmapx/core";
+import { getCommunityModule } from "@openmapx/integration-framework";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
 import { DetailShell } from "./DetailShell";

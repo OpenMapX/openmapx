@@ -11,35 +11,33 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
+import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import { dedupStations, dedupVehicles } from "@openmapx/shared-mobility/dedup";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
-} from "@openmapx/integration-shared-mobility/entur-mobility";
+} from "@openmapx/shared-mobility/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+} from "@openmapx/shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "@openmapx/integration-shared-mobility/mapper";
-import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
-import type {
-  SharedMobilityStation,
-  SharedMobilityVehicle,
-} from "@openmapx/integration-shared-mobility/types";
-import type { DataSourceProvider } from "../../data-source/types.js";
+} from "@openmapx/shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/shared-mobility/motis-rentals";
+import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/shared-mobility/types";
 import { searchCityBikes } from "./citybikes-client.js";
 import { searchDbBikes } from "./db-bike-client.js";
 import { searchDonkey } from "./donkey-client.js";
 import { searchNextbike } from "./nextbike-client.js";
 
-const BIKE_FORM_FACTORS = new Set<
-  import("@openmapx/integration-shared-mobility/types").VehicleFormFactor
->(["bicycle", "cargo_bicycle"]);
+const BIKE_FORM_FACTORS = new Set<import("@openmapx/shared-mobility/types").VehicleFormFactor>([
+  "bicycle",
+  "cargo_bicycle",
+]);
 
 // In-memory cache for detail lookups (stations + free-floating)
 const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();

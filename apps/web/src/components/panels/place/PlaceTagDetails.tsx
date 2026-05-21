@@ -445,16 +445,24 @@ const URL_RE = /(https?:\/\/[^\s,;)>\]]+)/g;
 
 /** Render text with embedded URLs as clickable links. */
 function Linkified({ text, color = "inherit" }: { text: string; color?: string }) {
-  const parts = text.split(URL_RE);
-  if (parts.length === 1) {
+  // `String.split` with a capturing regex emits empty strings when a match
+  // sits at the start/end of the input (e.g. text === "https://example.com"
+  // → ["", "https://example.com", ""]). Two empty `<span key="">` siblings
+  // tripped React's duplicate-key warning, so drop the empties up front.
+  // Also use index keys + a startsWith check instead of `URL_RE.test(part)`
+  // because the regex carries `g`, and stateful `lastIndex` across `.test()`
+  // calls can misclassify parts.
+  const parts = text.split(URL_RE).filter((p) => p.length > 0);
+  const hasUrl = parts.some(isHttpUrl);
+  if (!hasUrl) {
     return <>{text}</>;
   }
   return (
     <>
-      {parts.map((part) =>
-        URL_RE.test(part) ? (
+      {parts.map((part, i) =>
+        isHttpUrl(part) ? (
           <Link
-            key={part}
+            key={i}
             href={part}
             target="_blank"
             rel="noopener noreferrer"
@@ -464,11 +472,15 @@ function Linkified({ text, color = "inherit" }: { text: string; color?: string }
             {part}
           </Link>
         ) : (
-          <span key={part}>{part}</span>
+          <span key={i}>{part}</span>
         ),
       )}
     </>
   );
+}
+
+function isHttpUrl(s: string): boolean {
+  return s.startsWith("http://") || s.startsWith("https://");
 }
 
 function DetailItem({ icon, children }: { icon: ReactNode; children: ReactNode }) {

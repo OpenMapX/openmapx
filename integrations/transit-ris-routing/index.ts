@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import * as ris from "./provider.js";
 import { setRisCredentials } from "./ris-client.js";
 

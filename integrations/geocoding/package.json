@@ -3,9 +3,35 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./types": {
+      "types": "./types.ts",
+      "default": "./types.ts"
+    },
+    "./format-address": {
+      "types": "./format-address.ts",
+      "default": "./format-address.ts"
+    },
+    "./place-lookup": {
+      "types": "./place-lookup.ts",
+      "default": "./place-lookup.ts"
+    },
+    "./query-expansion": {
+      "types": "./query-expansion.ts",
+      "default": "./query-expansion.ts"
+    }
+  },
   "dependencies": {
     "@fragaria/address-formatter": "^6.7.1",
     "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/place-ids": "workspace:^",
     "@openstreetmap/id-tagging-schema": "^6.16.0"
   }
 }

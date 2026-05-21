@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { DataSourceProvider } from "./types.js";
 
 const DEFAULT_SEARCH_TTL = 21600;

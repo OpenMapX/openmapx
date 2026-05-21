@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyHardlinkPlan, SENTINEL_DIR } from "../src/index.js";
+import { applyHardlinkPlan, DEFAULT_SENTINEL_DIR } from "../src/index.js";
 
 describe("applyHardlinkPlan", () => {
   let root: string;
@@ -32,7 +32,7 @@ describe("applyHardlinkPlan", () => {
     expect(readFileSync(join(root, "tgt", "a.txt"), "utf-8")).toBe("A");
     expect(readFileSync(join(root, "tgt", "b.txt"), "utf-8")).toBe("B");
 
-    const sentinelPath = join(root, SENTINEL_DIR, "svc-data.json");
+    const sentinelPath = join(root, DEFAULT_SENTINEL_DIR, "svc-data.json");
     expect(existsSync(sentinelPath)).toBe(true);
     const sentinel = JSON.parse(readFileSync(sentinelPath, "utf-8"));
     expect(sentinel.linkedPaths).toEqual(expect.arrayContaining(["a.txt", "b.txt"]));
@@ -224,7 +224,7 @@ describe("applyHardlinkPlan", () => {
       { rootDir: root },
     );
 
-    expect(existsSync(join(root, SENTINEL_DIR, "svc-data-europe.json"))).toBe(true);
+    expect(existsSync(join(root, DEFAULT_SENTINEL_DIR, "svc-data-europe.json"))).toBe(true);
   });
 
   it("strips a leading 'data/' segment from plan paths", () => {

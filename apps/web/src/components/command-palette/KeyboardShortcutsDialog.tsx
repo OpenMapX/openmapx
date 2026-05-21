@@ -11,7 +11,12 @@ import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
 import ListSubheader from "@mui/material/ListSubheader";
 import Typography from "@mui/material/Typography";
-import { type Command, formatShortcut, getPlatform, parseShortcut } from "@openmapx/core";
+import {
+  type Command,
+  formatShortcut,
+  getPlatform,
+  parseShortcut,
+} from "@openmapx/command-palette";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 

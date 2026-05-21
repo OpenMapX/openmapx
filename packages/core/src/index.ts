@@ -142,6 +142,7 @@ export {
 // Domains
 export type {
   GeoJsonFeatureCollection,
+  KnowledgeContext,
   KnowledgeProvider,
   KnowledgeResult,
   KnowledgeSource,
@@ -157,26 +158,6 @@ export type {
 
 // `repoPaths`, the `services` namespace, and `spawnWithBufferedLogs` use node:fs
 // / node:child_process — they live in `./server`, not this client-reachable barrel.
-// Command palette
-export type {
-  Command,
-  CommandGroup,
-  KeyChord,
-  KeyEventLike,
-  KeySequence,
-  Platform,
-  SequenceMatchResult,
-} from "./commands";
-export {
-  chordsEqual,
-  formatShortcut,
-  getPlatform,
-  matchChord,
-  matchSequence,
-  parseShortcut,
-  SCORE_CUTOFF,
-  scoreCommand,
-} from "./commands";
 export { ALLOWED_GIT_HOSTS, assertAllowedGitUrl, InvalidGitUrlError } from "./git-url";
 // Hooks — Transit
 export {
@@ -215,6 +196,7 @@ export {
 } from "./hooks/transit/transitEligibility";
 export { useActiveSidePanel } from "./hooks/useActiveSidePanel";
 export { useAdaptiveDebounce } from "./hooks/useAdaptiveDebounce";
+export { type AirportSearchHit, useAirportSearch } from "./hooks/useAirportSearch";
 export { useAutocomplete } from "./hooks/useAutocomplete";
 export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities";
 export { isAreaTooLarge, useCategorySearch } from "./hooks/useCategorySearch";
@@ -242,16 +224,20 @@ export {
   useHikingShelters,
 } from "./hooks/useHikingTrails";
 export { useIntegrationOverlayActive } from "./hooks/useIntegrationOverlay";
-// Integration hooks
-export { IntegrationRegistryContext, useIntegrationRegistry } from "./hooks/useIntegrationRegistry";
 export { useIsochrone } from "./hooks/useIsochrone";
+export {
+  type DouglasSeaState,
+  type MarineCurrent,
+  type MarineHourlyPoint,
+  type MarineWeatherResponse,
+  useMarineWeather,
+} from "./hooks/useMarineWeather";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { usePlacePhotos } from "./hooks/usePlacePhotos";
-export { usePlaceReviews, useReviewAggregate } from "./hooks/usePlaceReviews";
 export { usePresetSuggest } from "./hooks/usePresetSuggest";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export {
@@ -268,150 +254,21 @@ export {
   useUpdateList,
   useUpdatePlace,
 } from "./hooks/useSavedPlaces";
-export { type SubmitReviewInput, useSubmitReview } from "./hooks/useSubmitReview";
 export { type SunTimesResponse, useSunTimes } from "./hooks/useSunTimes";
-export { useUploadReviewImage } from "./hooks/useUploadReviewImage";
 export {
-  type AddPassphraseWrapInput,
-  type AddWebAuthnWrapInput,
-  type AddWrapInput,
-  type EnvelopeState,
-  type KeypairEncryptionMode,
-  type KeypairEnvelope,
-  type KeypairEnvelopeEncrypted,
-  type KeypairEnvelopeUnencrypted,
-  type KeypairWrap,
-  type KeypairWrapType,
-  type SetupInput,
-  type SetupPassphraseAndWebAuthnInput,
-  type SetupPassphraseInput,
-  type SetupUnencryptedInput,
-  type UnlockInput,
-  type UnlockPassphraseInput,
-  type UnlockWebAuthnInput,
-  useAddWrap,
-  useChangePassphrase,
-  useImportMangroveKeypair,
-  useKeypairState,
-  useMangroveKeypairExport,
-  useRefreshKeypair,
-  useRegenerateMangroveKeypair,
-  useRemoveWrap,
-  useSetupKeypair,
-  useUnlockKeypair,
-  useUserKeypair,
-} from "./hooks/useUserKeypair";
-export type { IdSchemeView, PlaceResolver, PlaceResolverContext } from "./ids";
-export {
-  buildFacebookUrl,
-  buildFoursquareUrl,
-  buildGoogleMapsUrl,
-  buildInstagramUrl,
-  buildTripadvisorUrl,
-  buildYelpUrl,
-  getIdSchemeView,
-  getPlaceResolver,
-  listIdSchemeViews,
-  listPlaceResolverSchemes,
-  registerBuiltinIdSchemeViews,
-  registerIdSchemeView,
-  registerPlaceResolver,
-} from "./ids";
-// Integration framework. Installer-family exports (buildIntegration,
-// installIntegration, removeIntegration, validateIntegrationDirectory, plus
-// their InstallOptions/BuildOptions/ValidateResult/IntegrationSummary
-// companions) live in `./server` — they use node:fs and would pull node-only
-// modules into the client bundle if re-exported here.
-export type {
-  CacheClient,
-  CommunityIntegrationModule,
-  CustomHealthCheckFn,
-  DatabaseClient,
-  FallbackChainOptions,
-  HealthCheckResult,
-  HttpClient,
-  HttpClientOptions,
-  IntegrationContext,
-  IntegrationDataSource,
-  IntegrationEvent,
-  IntegrationFrontend,
-  IntegrationHealthCheck,
-  IntegrationLayerSelector,
-  IntegrationManifest,
-  IntegrationOverlay,
-  IntegrationSearchCategory,
-  IntegrationStrings,
-  LoadedIntegration,
-  LoadedIntegrationMeta,
-  Logger,
-  ManifestValidationResult,
-  MergeAllOptions,
-  RouteHandler,
-  RouteOptions,
-} from "./integration";
-export {
-  createFallbackChain,
-  createFirstWins,
-  createMergeAll,
-  getCommunityModule,
-  getCommunityModuleIds,
-  INTEGRATION_ID_REGEX,
-  IntegrationEventBus,
-  IntegrationRegistry,
-  initCommunityIntegrationRegistry,
-  integrationManifestSchema,
-  PLATFORM_VERSION,
-  registerCommunityModule,
-  satisfiesPlatformVersion,
-  toIntegrationMeta,
-  validateManifest,
-} from "./integration";
-// Mangrove (Open Reviews Standard)
-export {
-  base64UrlToBytes,
-  buildMangroveQueryUri,
-  buildMangroveSubjectUri,
-  bytesToBase64Url,
-  createWebAuthnIdentity,
-  DEFAULT_UNCERTAINTY_METERS,
-  decryptWithPassphrase,
-  decryptWithWebAuthn,
-  EXPERIENCE_CONTEXT_GEO,
-  encryptForWebAuthnIdentities,
-  encryptWithPassphrase,
-  fingerprintPem,
-  type GeoExperienceContext,
-  generateKeypair,
-  haversineDistanceMeters,
-  isWebAuthnAvailable,
-  jwkToKeypair,
-  keypairToJwk,
-  MANGROVE_JWK_METADATA,
-  type MangroveExportJwk,
-  type MangroveKeypair,
-  type MangroveReviewPayload,
-  type MangroveSubject,
-  normalizeMangrovePlaceName,
-  normalizeOsmElementRef,
-  type ParsedMangroveGeoUri,
-  parseMangroveGeoUri,
-  publicKeyToPem,
-  QUERY_UNCERTAINTY_METERS,
-  REVIEW_MATCH_MAX_DISTANCE_METERS,
-  REVIEW_NAMELESS_MATCH_MAX_DISTANCE_METERS,
-  type SerializedMangroveKeypair,
-  signMangroveReview,
-  toMangroveExportJwk,
-  WEBAUTHN_CREDENTIAL_KEY_NAME,
-} from "./mangrove";
+  type MetObservation,
+  type TideCurvePoint,
+  type TideEvent,
+  type TidesResponse,
+  useTides,
+  type WaterLevelObservation,
+} from "./hooks/useTides";
 export type { PanelId } from "./panels/ids";
 export { PANEL } from "./panels/ids";
 export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
-export type { ChipTranslation } from "./services/presets/chip-translations";
-export type { PresetMatch } from "./services/presets/types";
 // Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export { useCommandPaletteStore } from "./stores/commandPaletteStore";
@@ -424,7 +281,6 @@ export {
 export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
-export { useKeypairStore } from "./stores/keypairStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
@@ -467,7 +323,24 @@ export type {
 export { SAC_GRADES } from "./types/hiking";
 export type { Identified, Ids } from "./types/identified";
 export { makeId, parseId, withId } from "./types/identified";
-export type { Place, PlaceFact, PlaceIds, PlacePhoto, PlaceReviewLink } from "./types/place";
+export type {
+  DaySchedule,
+  LocationContext,
+  OpeningHoursInfo,
+  OpeningHoursStatus,
+} from "./types/openingHoursInfo";
+export type {
+  AirportFrequencyInfo,
+  AirportInfo,
+  AirportNavaidInfo,
+  AirportRunwayInfo,
+  AirportType,
+  Place,
+  PlaceFact,
+  PlaceIds,
+  PlacePhoto,
+  PlaceReviewLink,
+} from "./types/place";
 export {
   coordinateId,
   createPlace,
@@ -540,12 +413,7 @@ export {
   resolveStopAsPlace,
 } from "./utils/geocodeStopAsPlace";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
-export type {
-  DaySchedule,
-  LocationContext,
-  OpeningHoursStatus,
-} from "./utils/openingHours";
-export { isAlwaysOpen, isOpenAt, parseOpeningHours } from "./utils/openingHours";
+export { isOpenAtBitmap, isOpenAtSlot } from "./utils/openingHoursClient";
 export { otpMode } from "./utils/otp";
 export {
   buildNodeMap,

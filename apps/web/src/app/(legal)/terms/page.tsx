@@ -1,10 +1,10 @@
-import type { LoadedIntegrationMeta } from "@openmapx/core";
 import {
   fetchCapabilities,
   fetchIntegrations,
   sectionSlug,
   serverApiUrl,
 } from "@openmapx/core/server";
+import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";

@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 
 const USGS_FEED_BASE = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary";
 const FETCH_TIMEOUT_MS = 15_000;

@@ -1,0 +1,11 @@
+{
+  "name": "@openmapx/integration-overlay-ourairports",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/ourairports-data": "workspace:^"
+  }
+}

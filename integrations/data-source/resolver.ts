@@ -7,9 +7,12 @@
  * when the provider has no OSM equivalent.
  */
 
-import type { PlaceResolver } from "@openmapx/core";
 import { createPlace } from "@openmapx/core";
-import { lookupAddressByCoords, lookupByOsmFilters } from "../geocoding/place-lookup.js";
+import {
+  lookupAddressByCoords,
+  lookupByOsmFilters,
+} from "@openmapx/integration-geocoding/place-lookup";
+import type { PlaceResolver } from "@openmapx/place-ids";
 import type { DataSourceProvider } from "./types.js";
 
 export function createDataSourceResolver(provider: DataSourceProvider): PlaceResolver {

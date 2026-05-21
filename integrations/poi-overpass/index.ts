@@ -1,11 +1,12 @@
-import type { BoundingBox, IntegrationContext } from "@openmapx/core";
+import type { BoundingBox } from "@openmapx/core";
 import {
   CATEGORY_FILTERS,
   searchByCategory,
   searchByOsmTags,
   setOverpassUrl,
 } from "@openmapx/core";
-import type { PoiSearchProvider, PoiSearchResult } from "../poi-search/types.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/integration-poi-search/types";
 
 const PRESET_SENTINEL = "__preset__";
 

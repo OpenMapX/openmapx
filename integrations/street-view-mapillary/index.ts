@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 
 interface MapillaryImage {
   id: string;

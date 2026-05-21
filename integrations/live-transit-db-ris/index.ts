@@ -7,7 +7,8 @@ import type {
   LiveTransitProvider,
   LiveTransitVehicle,
 } from "@integrations/overlay-live-transit/types.js";
-import type { BBox, IntegrationContext } from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 
 interface RisTransportInfo {
   journeyName?: string;

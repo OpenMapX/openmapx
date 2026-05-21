@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import type { ChipTranslation } from "../services/presets/chip-translations";
+import type { ChipTranslation } from "../types/presetMatch";
 
 interface ChipTranslationsResponse {
   translations: Record<string, ChipTranslation>;

@@ -6,6 +6,8 @@
   "dependencies": {
     "@hey-api/client-fetch": "workspace:*",
     "@motis-project/motis-client": "^2.9.2",
-    "@openmapx/core": "workspace:^"
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/integration-geocoding": "workspace:^"
   }
 }

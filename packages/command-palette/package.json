@@ -1,0 +1,23 @@
+{
+  "name": "@openmapx/command-palette",
+  "version": "1.0.0",
+  "description": "Keyboard shortcut sequence matcher and command palette primitives for OpenMapX",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}

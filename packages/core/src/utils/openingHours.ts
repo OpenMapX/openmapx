@@ -1,36 +1,23 @@
+// SERVER-ONLY. This module imports the LGPL-3 `opening_hours` package and must
+// never be reached by the client bundle. Pure types live in
+// `../types/openingHoursInfo.ts` (re-exported below) so client code can refer
+// to the shapes without pulling in this runtime.
+
 import type { nominatim_object } from "opening_hours";
 import opening_hours from "opening_hours";
+import type {
+  DaySchedule,
+  LocationContext,
+  OpeningHoursInfo,
+  OpeningHoursStatus,
+} from "../types/openingHoursInfo";
 
-export interface DaySchedule {
-  day: string;
-  /** e.g. "09:00–17:00", "Closed", or "Open 24 hours" */
-  hours: string;
-  isToday: boolean;
-}
-
-export interface OpeningHoursStatus {
-  isOpen: boolean;
-  /** Full human-readable label, e.g. "Open now · Closes at 17:00" */
-  label: string;
-  /** The suffix portion only, e.g. "Closes at 17:00" or "Opens Mon at 09:00" */
-  detail: string;
-  todayHours?: string;
-  /** Per-day schedule starting from today, used for the expandable hours row. */
-  weekSchedule?: DaySchedule[];
-  /** Comment from the opening_hours value, e.g. "by appointment" or a holiday name. */
-  comment?: string;
-  /** True if the schedule is the same every week (no seasonal or date-specific rules). */
-  isWeekStable?: boolean;
-  /** True when hours are ambiguous (e.g. "by appointment", cinema showtimes). */
-  isUnknown?: boolean;
-}
-
-export interface LocationContext {
-  lat: number;
-  lon: number;
-  countryCode?: string;
-  state?: string;
-}
+export type {
+  DaySchedule,
+  LocationContext,
+  OpeningHoursInfo,
+  OpeningHoursStatus,
+} from "../types/openingHoursInfo";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAY_NAMES = [
@@ -224,4 +211,74 @@ export function isAlwaysOpen(raw: string | undefined, location?: LocationContext
   } catch {
     return false;
   }
+}
+
+/**
+ * Builds a 168-bit (7×24) hex-encoded bitmap. Each bit `dayIdx * 24 + hour`
+ * is set when the place is open at the NEXT occurrence of (dayIdx, hour)
+ * from `now` — slots earlier this week roll forward to next week. Used to
+ * satisfy the client-side "open at X" filter without shipping the LGPL
+ * `opening_hours` library to the browser.
+ *
+ * Anchoring to "next occurrence" matters for date-dependent rules: with a
+ * Sunday-anchored week, a Friday user filtering for Monday would have read
+ * last Monday's state (e.g. wrong side of a `PH off` boundary or a one-day
+ * exception). Forward-only evaluation matches the prior behavior the
+ * client filter expects.
+ */
+function buildWeekBitmap(oh: opening_hours, now: Date): string {
+  const bits = new Uint8Array(21);
+  const nowDay = now.getDay();
+  const nowHour = now.getHours();
+
+  for (let i = 0; i < 168; i++) {
+    const dayIdx = Math.floor(i / 24);
+    const hour = i % 24;
+    // Roll same-day slots whose hour has already passed forward by a week
+    // so the bit always represents a future state. `hour <= nowHour` covers
+    // the current hour too — "open_now" is its own filter, so an "open_at"
+    // pick of today's current hour is forward-looking by intent.
+    let daysAhead = (dayIdx - nowDay + 7) % 7;
+    if (daysAhead === 0 && hour <= nowHour) daysAhead = 7;
+    const t = new Date(now);
+    t.setDate(t.getDate() + daysAhead);
+    t.setHours(hour, 0, 0, 0);
+    try {
+      if (oh.getState(t) && !oh.getUnknown(t)) {
+        const byteIdx = i >> 3;
+        const bitInByte = 7 - (i & 7); // MSB-first
+        const cur = bits[byteIdx] ?? 0;
+        bits[byteIdx] = cur | (1 << bitInByte);
+      }
+    } catch {
+      // Ignore hour-level evaluation errors; leave bit at 0.
+    }
+  }
+
+  let hex = "";
+  for (const b of bits) hex += b.toString(16).padStart(2, "0");
+  return hex;
+}
+
+/**
+ * Server-side builder for the precomputed `OpeningHoursInfo` attached to API
+ * responses. Always evaluated on the server so the LGPL-3 `opening_hours`
+ * library never ships to the browser.
+ */
+export function buildOpeningHoursInfo(
+  raw: string | undefined,
+  location?: LocationContext,
+): OpeningHoursInfo | undefined {
+  if (!raw) return undefined;
+  const status = parseOpeningHours(raw, location);
+  let always = false;
+  let weekBitmap = "";
+  try {
+    const oh = new opening_hours(raw, buildNominatim(location));
+    always = oh.getState() && oh.getNextChange() === undefined;
+    weekBitmap = buildWeekBitmap(oh, new Date());
+  } catch {
+    // Leave defaults — status already reflects the parse failure.
+  }
+  return { status, isAlwaysOpen: always, weekBitmap };
 }

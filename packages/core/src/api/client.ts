@@ -50,6 +50,31 @@ export class ApiClient {
     return res.json() as Promise<T>;
   }
 
+  /**
+   * Like `get`, but returns `null` when the server responds 204 No Content.
+   * Useful for "found / not found" endpoints where absence is a normal answer
+   * and shouldn't be modeled as an error (e.g. an enrichment endpoint that has
+   * no data for inland places).
+   */
+  async getOptional<T>(path: string, params?: Record<string, string>): Promise<T | null> {
+    const cfg = getConfig();
+    const url = new URL(path, cfg.baseUrl);
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        url.searchParams.set(key, value);
+      }
+    }
+    const res = await fetch(url.toString(), {
+      headers: { Accept: "application/json", ...cfg.headerInterceptor?.() },
+      credentials: cfg.credentials ?? "omit",
+    });
+    if (res.status === 204) return null;
+    if (!res.ok) {
+      throw new Error(`API error ${res.status}: ${await res.text()}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
   async post<T>(path: string, body: unknown): Promise<T> {
     return this.mutate<T>("POST", path, body);
   }

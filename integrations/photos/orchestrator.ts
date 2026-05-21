@@ -1,6 +1,10 @@
-import type { LoadedIntegration, PlacePhoto } from "@openmapx/core";
+import type { PlacePhoto } from "@openmapx/core";
 import { parseId } from "@openmapx/core";
-import { lookupByNameAndCoords, lookupByOsmRef } from "../geocoding/place-lookup.js";
+import type { LoadedIntegration } from "@openmapx/integration-framework";
+import {
+  lookupByNameAndCoords,
+  lookupByOsmRef,
+} from "@openmapx/integration-geocoding/place-lookup";
 import type { PhotoProvider, PhotoQuery } from "./types.js";
 
 // Providers in this list are ordered last (street-level imagery — shown after editorial photos)

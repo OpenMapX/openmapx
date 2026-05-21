@@ -1,20 +1,15 @@
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
-  IntegrationContext,
   LngLat,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
-import type { WeatherProvider } from "../weather/types.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
-const FETCH_TIMEOUT_MS = 10_000;
-
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
 
 const SYMBOL_TO_WMO: Record<string, number> = {
   clearsky: 0,
@@ -99,22 +94,9 @@ function getBestSymbol(entry: MetTimeseriesEntry): string {
   );
 }
 
-async function fetchCompact(coords: LngLat): Promise<MetResponse> {
+function fetchCompact(coords: LngLat): Promise<MetResponse> {
   const url = `${BASE_URL}?lat=${round4(coords[1])}&lon=${round4(coords[0])}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`MET Norway HTTP ${res.status}`);
-    return (await res.json()) as MetResponse;
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+  return fetchJsonWithTimeout<MetResponse>(url, { label: "MET Norway" });
 }
 
 const metNorwayProvider: WeatherProvider = {

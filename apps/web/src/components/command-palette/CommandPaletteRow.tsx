@@ -7,12 +7,8 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
-import {
-  type Command,
-  formatShortcut,
-  getPlatform,
-  useIntegrationOverlayActive,
-} from "@openmapx/core";
+import { type Command, formatShortcut, getPlatform } from "@openmapx/command-palette";
+import { useIntegrationOverlayActive } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { SyntheticEvent } from "react";
 import { commandIcon } from "./commandIcons";

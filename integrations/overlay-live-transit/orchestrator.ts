@@ -1,4 +1,5 @@
-import type { BBox, IntegrationContext, ServiceAlert } from "@openmapx/core";
+import type { BBox, ServiceAlert } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { LiveTransitProvider, LiveTransitSnapshot, LiveTransitVehicle } from "./types.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {

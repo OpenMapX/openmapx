@@ -8,7 +8,8 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
+import { buildIntegrationAttribution } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useWildfireStore } from "./store";
 

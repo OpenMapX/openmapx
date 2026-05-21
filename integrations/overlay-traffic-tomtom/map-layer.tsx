@@ -1,6 +1,7 @@
 "use client";
 
-import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
+import { buildIntegrationAttribution } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useEffect } from "react";
 import {
   getFirstSymbolLayerId,

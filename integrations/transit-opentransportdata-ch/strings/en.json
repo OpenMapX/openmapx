@@ -1,0 +1,11 @@
+{
+  "name": "Open data platform mobility Switzerland",
+  "description": "Swiss national OJP 2.0 journey planning, GTFS static timetable, GTFS Realtime trip updates, and SIRI Situation Exchange feeds for transit alerts across all of Switzerland",
+  "dataSources": [
+    {
+      "purpose": "Swiss-wide transit data — stop search, departure/arrival boards, journey planning with intermediate stops and polylines, live trip updates, service alerts, optional itinerary fares and formation/composition info",
+      "dataSent": "Stop names or coordinates with search radius; origin and destination stops, date and time for journey planning; trip ID for live updates; bounding box for service alerts; itinerary reference for fares; train number and date for formation",
+      "dataReceived": "Swiss stops with coordinates and modes; departures/arrivals with delays, platforms, and cancellations; journeys with leg-level GeoJSON polylines; real-time trip updates; planned and unplanned service alerts; fare summaries; vehicle formations"
+    }
+  ]
+}

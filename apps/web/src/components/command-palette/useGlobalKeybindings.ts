@@ -6,8 +6,10 @@ import {
   type KeySequence,
   matchChord,
   matchSequence,
-  PANEL,
   parseShortcut,
+} from "@openmapx/command-palette";
+import {
+  PANEL,
   useCommandPaletteStore,
   useDirectionsStore,
   useMenuStore,

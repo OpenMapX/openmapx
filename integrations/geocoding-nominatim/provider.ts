@@ -1,4 +1,4 @@
-import { formatAddress } from "../geocoding/format-address.js";
+import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import type { GeocodingProviderImpl } from "./types.js";
 /**
  * Nominatim geocoding client.

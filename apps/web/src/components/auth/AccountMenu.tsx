@@ -12,7 +12,8 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
-import { authClient, getInitials, proxyImageUrl, useKeypairStore } from "@openmapx/core";
+import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
+import { useKeypairStore } from "@openmapx/mangrove-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 

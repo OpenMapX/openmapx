@@ -5,9 +5,9 @@ import {
   escapeHtml,
   relativeTime,
   sanitizeUrl,
-  useIntegrationRegistry,
   useOverlayExclusion,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";

@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { getAdapter } from "./adapters.js";
 import { setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
@@ -23,6 +23,19 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     const adapter = getAdapter(entry.protocol);
     if (!adapter) continue;
 
+    // Capture the real operator attribution from the registry entry so it
+    // wins over the integration-level "JSDelivr CDN" dataSource row in
+    // /providers. The prefix-without-colon (e.g. "oebb") is what
+    // TransitStop.provider carries downstream.
+    const attributionKey = entry.prefix.replace(/:$/, "");
+    const attributionRow = entry.attribution
+      ? {
+          label: entry.attribution.name,
+          url: entry.attribution.homepage ?? "",
+          license: entry.attribution.license,
+        }
+      : null;
+
     ctx.registerProvider("transit", {
       id: `dyn:${entry.id}`,
       prefix: entry.prefix,
@@ -37,6 +50,9 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         : undefined,
       searchByName: adapter.searchByName
         ? (q: string, limit: number) => adapter.searchByName?.(entry as never, q, limit)
+        : undefined,
+      getFeedAttribution: attributionRow
+        ? async () => ({ [attributionKey]: attributionRow })
         : undefined,
     });
   }

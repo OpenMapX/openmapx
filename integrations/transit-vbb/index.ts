@@ -1,5 +1,5 @@
-import type { IntegrationContext } from "@openmapx/core";
-import * as hafas from "../transit-hafas/provider.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import * as hafas from "@openmapx/integration-transit-hafas/provider";
 
 export function setup(ctx: IntegrationContext): void {
   const inst = hafas.HAFAS_INSTANCES.find((i) => i.prefix === "vbb:");

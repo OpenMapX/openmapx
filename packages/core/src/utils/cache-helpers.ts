@@ -1,4 +1,4 @@
-import type { CacheClient } from "../integration/context";
+import type { CacheClient } from "../types/integrationMeta";
 
 /**
  * Cache-or-fetch: returns cached value if present, else calls fn(), caches result, returns it.

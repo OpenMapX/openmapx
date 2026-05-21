@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  buildIntegrationAttribution,
-  useIntegrationRegistry,
-  useOverlayExclusion,
-} from "@openmapx/core";
+import { buildIntegrationAttribution, useOverlayExclusion } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId, setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";

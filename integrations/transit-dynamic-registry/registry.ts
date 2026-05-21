@@ -108,7 +108,7 @@ class RegistryManager {
     return this.byPrefix.get(prefix) ?? null;
   }
 
-  /** Get all loaded entries (for debug endpoint) */
+  /** Get all loaded entries (for debug endpoint and attribution wiring) */
   listEntries(): Array<{
     id: string;
     slug: string;
@@ -116,6 +116,7 @@ class RegistryManager {
     name: string;
     protocol: ProtocolType;
     bbox: BBox;
+    attribution?: RegistryEntry["attribution"];
   }> {
     return this.entries.map((e) => ({
       id: e.id,
@@ -124,6 +125,7 @@ class RegistryManager {
       name: e.name,
       protocol: e.protocol,
       bbox: e.coverage.bbox,
+      attribution: e.attribution,
     }));
   }
 

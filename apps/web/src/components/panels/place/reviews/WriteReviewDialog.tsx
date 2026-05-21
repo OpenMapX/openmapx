@@ -18,17 +18,13 @@ import Rating from "@mui/material/Rating";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { proxyImageUrl, type Review, useSession } from "@openmapx/core";
 import {
   EXPERIENCE_CONTEXT_GEO,
   fingerprintPem,
   type GeoExperienceContext,
-  proxyImageUrl,
-  type Review,
-  useSession,
-  useSubmitReview,
-  useUploadReviewImage,
-  useUserKeypair,
-} from "@openmapx/core";
+} from "@openmapx/mangrove-client";
+import { useSubmitReview, useUploadReviewImage, useUserKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
@@ -311,7 +307,10 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
                       bgcolor: "background.paper",
                       boxShadow: 1,
                       p: 0.25,
-                      "&:hover": { bgcolor: "action.selected" },
+                      // `action.selected` is translucent and would let the
+                      // image thumbnail behind show through. Use the opaque
+                      // theme-aware chip hover.
+                      "&:hover": { bgcolor: "var(--omx-chip-hover)" },
                     }}
                   >
                     <CloseIcon sx={{ fontSize: 14 }} />

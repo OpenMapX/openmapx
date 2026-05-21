@@ -1,4 +1,4 @@
-import type { BoundingBox, LngLat, Place } from "@openmapx/core";
+import type { BoundingBox, LngLat, OpeningHoursInfo, Place } from "@openmapx/core";
 // Import from the dedicated place-ids subpath (pure types + helpers, no hooks)
 // to avoid cycling back into @openmapx/core via the main barrel when this file
 // is consumed by server-only callers like packages/core/src/server.ts.
@@ -464,6 +464,8 @@ export interface CategoryPlace {
   website?: string;
   openingHours?: string;
   isOpen?: boolean;
+  /** Server-precomputed status/bitmap; absent when `openingHours` is missing. */
+  openingHoursInfo?: OpeningHoursInfo;
 }
 
 export interface CategorySearchResponse {
@@ -497,6 +499,7 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
     website: place.website,
     openingHours: place.openingHours,
     isOpen: place.isOpen,
+    openingHoursInfo: place.openingHoursInfo,
   });
 }
 
@@ -511,6 +514,8 @@ export interface PoiSearchResult {
   openingHours?: string;
   isOpen?: boolean;
   osmTags?: Record<string, string>;
+  /** Set by the orchestrator after the provider returns results. */
+  openingHoursInfo?: OpeningHoursInfo;
 }
 
 export interface PoiSearchProvider {

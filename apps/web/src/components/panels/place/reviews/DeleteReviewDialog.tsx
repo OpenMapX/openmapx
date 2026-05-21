@@ -8,7 +8,8 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
-import { type Review, useSubmitReview } from "@openmapx/core";
+import type { Review } from "@openmapx/core";
+import { useSubmitReview } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 
 interface Props {

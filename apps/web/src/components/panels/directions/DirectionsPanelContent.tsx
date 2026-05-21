@@ -23,7 +23,6 @@ import {
   useDebounce,
   useDirections,
   useDirectionsStore,
-  useIntegrationRegistry,
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
@@ -31,6 +30,7 @@ import {
   useSidebarStore,
   useTransitPlan,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import type { ChangeEvent } from "react";

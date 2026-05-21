@@ -1,11 +1,11 @@
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
-  IntegrationContext,
   LngLat,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { WeatherProvider } from "./types.js";
 
 export function createWeatherOrchestrator(ctx: IntegrationContext) {

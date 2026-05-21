@@ -1,4 +1,5 @@
-import { type IntegrationContext, setOverpassUrl } from "@openmapx/core";
+import { setOverpassUrl } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import * as overpass from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {

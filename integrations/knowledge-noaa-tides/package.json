@@ -1,0 +1,12 @@
+{
+  "name": "@openmapx/integration-knowledge-noaa-tides",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/noaa-coops-data": "workspace:^",
+    "@openmapx/place-ids": "workspace:^"
+  }
+}

@@ -5,7 +5,11 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "@openmapx/integration-shared-mobility": "workspace:^",
-    "@openmapx/mobility-formats": "workspace:^"
+    "@openmapx/integration-data-source": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/integration-geocoding": "workspace:^",
+    "@openmapx/shared-mobility": "workspace:^",
+    "@openmapx/mobility-formats": "workspace:^",
+    "@openmapx/place-ids": "workspace:^"
   }
 }

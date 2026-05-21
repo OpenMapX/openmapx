@@ -1,20 +1,15 @@
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
-  IntegrationContext,
   LngLat,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
-import type { WeatherProvider } from "../weather/types.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
-const FETCH_TIMEOUT_MS = 10_000;
 const BASE = "https://api.openweathermap.org/data/2.5";
-
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
 
 /** Map OWM weather condition IDs to WMO codes (approximation). */
 function owmIdToWmo(id: number): number {
@@ -92,21 +87,8 @@ function toDateStr(unix: number): string {
   return new Date(unix * 1000).toISOString().slice(0, 10);
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { "User-Agent": USER_AGENT },
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`OWM HTTP ${res.status}`);
-    return (await res.json()) as T;
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+function fetchJson<T>(url: string): Promise<T> {
+  return fetchJsonWithTimeout<T>(url, { label: "OWM" });
 }
 
 export function setup(ctx: IntegrationContext): void {

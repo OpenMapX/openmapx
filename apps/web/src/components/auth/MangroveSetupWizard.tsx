@@ -23,12 +23,8 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import {
-  fingerprintPem,
-  isWebAuthnAvailable,
-  publicKeyToPem,
-  useSetupKeypair,
-} from "@openmapx/core";
+import { fingerprintPem, isWebAuthnAvailable, publicKeyToPem } from "@openmapx/mangrove-client";
+import { useSetupKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";

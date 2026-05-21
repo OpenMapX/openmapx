@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReviewAggregate } from "@integrations/reviews/types";
 import CloseIcon from "@mui/icons-material/Close";
 import StarIcon from "@mui/icons-material/Star";
 import Box from "@mui/material/Box";
@@ -9,7 +10,8 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { MergedRoute, Place, TransportMode } from "@openmapx/core";
-import { usePlaceStore, useReviewAggregate } from "@openmapx/core";
+import { usePlaceStore } from "@openmapx/core";
+import { useReviewAggregate } from "@openmapx/mangrove-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { TEAL } from "@/lib/theme";
@@ -76,9 +78,16 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   // tagged it as such — makeSyntheticStopPlace + geocodeStopAsPlace always
   // set rawCategory = "transit_stop". Stop mode never renders the photo
   // hero, so suppress floating-handle mode there too.
-  const isStopMode = place.rawCategory === "transit_stop";
+  //
+  // Exception: when the resolved entity is itself a substantial place that
+  // *also* doubles as a transit stop (e.g. an airport that's reachable by
+  // bus, where the autocomplete originally came from Entur), we want the
+  // full place panel so airport / Wikipedia / OSM-tag sections all render.
+  // The transit section still shows up as part of the overview tab.
+  const isAirportEntity = place.airport !== undefined || place.osmTags?.aeroway === "aerodrome";
+  const isStopMode = place.rawCategory === "transit_stop" && !isAirportEntity;
   const [lng, lat] = place.coordinates;
-  const headerAggregateQuery = useReviewAggregate(lat, lng, place.name, {
+  const headerAggregateQuery = useReviewAggregate<ReviewAggregate>(lat, lng, place.name, {
     osmId: place.ids?.osm,
     enabled: !isStopMode,
   });
@@ -239,7 +248,9 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
               borderRadius: "50%",
               boxShadow: 2,
               p: 0.75,
-              "&:hover": { bgcolor: "action.hover" },
+              // `action.hover` is translucent and would let the photo hero
+              // behind show through. Use the opaque theme-aware chip hover.
+              "&:hover": { bgcolor: "var(--omx-chip-hover)" },
             }}
           >
             <CloseIcon sx={{ fontSize: 24, color: "text.primary" }} />

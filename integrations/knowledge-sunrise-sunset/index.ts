@@ -1,4 +1,5 @@
-import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { find as findTimezone } from "geo-tz";
 
 const API_BASE = "https://api.sunrise-sunset.org/json";

@@ -86,7 +86,21 @@ export interface GtfsDeps {
     getSchemaForStopId(stopId: string): string | null;
     getOriginalStopId(stopId: string): string | null;
     getSlugFromStopId(stopId: string): string | null;
-    getFeeds(): Array<{ status: string; schemaName: string; slug: string }>;
+    /**
+     * Returns the full ImportedFeed shape. The extra optional fields
+     * (`name`, `url`, `license`, `licenseUrl`) feed the per-feed
+     * attribution surface in `getFeedAttribution()`; the manager
+     * persists them from the catalog row at import time.
+     */
+    getFeeds(): Array<{
+      status: string;
+      schemaName: string;
+      slug: string;
+      name?: string;
+      url?: string;
+      license?: string | null;
+      licenseUrl?: string | null;
+    }>;
   };
   queries: {
     routeTypeToMode(routeType: number): string;
@@ -545,4 +559,33 @@ export function hasCoverage(bbox: BBox): boolean {
 /** Check if a stop ID belongs to a local GTFS feed. */
 export function isGtfsLocalId(stopId: string): boolean {
   return stopId.startsWith("g-");
+}
+
+/**
+ * Per-feed attribution map. Keys match `TransitStop.provider`
+ * (`gtfs-<slug>`) so the frontend's `resolveProvider(providers, stop.provider)`
+ * call resolves the imported feed's `name` + `license` directly instead of
+ * falling back to the synthesized "GTFS (<slug>)" label.
+ *
+ * Only active feeds are surfaced — inactive/failed feeds shouldn't
+ * advertise license claims they aren't actually serving data under.
+ */
+export function getFeedAttributions(): Record<
+  string,
+  { label: string; url: string; license?: string; licenseUrl?: string }
+> {
+  const { manager } = deps();
+  if (!manager.initialized) return {};
+  const feeds = manager.getFeeds().filter((f) => f.status === "active");
+  const map: Record<string, { label: string; url: string; license?: string; licenseUrl?: string }> =
+    {};
+  for (const feed of feeds) {
+    map[`gtfs-${feed.slug}`] = {
+      label: feed.name ?? feed.slug,
+      url: feed.url ?? "",
+      license: feed.license ?? undefined,
+      licenseUrl: feed.licenseUrl ?? undefined,
+    };
+  }
+  return map;
 }

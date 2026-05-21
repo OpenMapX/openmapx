@@ -10,11 +10,11 @@ import {
   useDataSourceStore,
   useDataSources,
   useDirectionsStore,
-  useIntegrationRegistry,
   useMapStore,
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TEAL } from "@/lib/theme";
 

@@ -10,7 +10,6 @@ import {
   formatDistance,
   haversineDistance,
   PANEL,
-  parseOpeningHours,
   useNearbyPlaces,
   useNearbyPlacesStore,
   usePlaceStore,
@@ -95,10 +94,7 @@ function NearbyPlaceCard({
       </Box>
 
       {(() => {
-        const hours = parseOpeningHours(place.openingHours, {
-          lat: place.coordinates[1],
-          lon: place.coordinates[0],
-        });
+        const hours = place.openingHoursInfo?.status ?? null;
         if (hours) {
           let color = "text.secondary";
           let content = hours.detail;

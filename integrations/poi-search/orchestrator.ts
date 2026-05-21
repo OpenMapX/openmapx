@@ -1,6 +1,8 @@
-import type { BoundingBox, IntegrationContext } from "@openmapx/core";
+import type { BoundingBox } from "@openmapx/core";
 import { OverpassTimeoutError } from "@openmapx/core";
-import { getPresetById } from "@openmapx/core/server";
+import { buildOpeningHoursInfo } from "@openmapx/core/server";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { getPresetById } from "@openmapx/presets";
 import type { PoiSearchProvider, PoiSearchResult } from "./types.js";
 
 const MAX_SHRINK_RETRIES = 3;
@@ -68,6 +70,14 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
           lang: options?.lang,
           osmTags,
         });
+        for (const r of results) {
+          if (r.openingHours && !r.openingHoursInfo) {
+            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
+              lat: r.coordinates[1],
+              lon: r.coordinates[0],
+            });
+          }
+        }
         return { results, partial: attempt > 0 };
       } catch (err) {
         if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {

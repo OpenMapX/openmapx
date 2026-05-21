@@ -1,5 +1,5 @@
-import type { LoadedIntegration } from "@openmapx/core";
-import { normalizeOsmElementRef } from "@openmapx/core";
+import type { LoadedIntegration } from "@openmapx/integration-framework";
+import { normalizeOsmElementRef } from "@openmapx/mangrove-client";
 import type { Review, ReviewAggregate, ReviewProvider, ReviewSubject } from "./types.js";
 
 export function getReviewProviders(integrations: LoadedIntegration[]): ReviewProvider[] {

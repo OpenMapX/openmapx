@@ -134,14 +134,16 @@ export function normalizeConnectorType(value: string | undefined): string | unde
   const cleaned = cleanString(value);
   if (!cleaned) return undefined;
   const lower = cleaned.toLowerCase();
-  if (lower.includes("combo") || lower.includes("ccs")) return "CCS";
+  if (lower.includes("combo") || lower.includes("ccs") || lower === "j1772combo") return "CCS";
   if (lower.includes("chademo")) return "CHAdeMO";
   if (lower.includes("typ 2") || lower.includes("type 2") || lower.includes("iec 62196-2")) {
     return "Type 2";
   }
-  if (lower.includes("typ 1") || lower.includes("type 1")) return "Type 1";
-  if (lower.includes("tesla")) return "Tesla";
-  if (lower.includes("schuko") || lower.includes("cee 7")) return "Schuko";
+  if (lower.includes("typ 1") || lower.includes("type 1") || lower === "j1772") return "Type 1";
+  if (lower.includes("tesla") || lower === "j3271" || lower === "nacs") return "Tesla";
+  if (lower.includes("schuko") || lower.includes("cee 7") || lower.startsWith("nema")) {
+    return "Schuko";
+  }
   return cleaned;
 }
 

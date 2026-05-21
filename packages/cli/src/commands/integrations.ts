@@ -9,7 +9,7 @@ import {
   packageIntegration,
   removeIntegration,
   validateIntegrationDirectory,
-} from "@openmapx/core/server";
+} from "@openmapx/integration-framework/installer";
 import type { Command } from "commander";
 import kleur from "kleur";
 import { log, table } from "../lib/output";

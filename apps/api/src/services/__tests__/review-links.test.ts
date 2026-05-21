@@ -1,4 +1,5 @@
-import { type Place, registerBuiltinIdSchemeViews } from "@openmapx/core";
+import type { Place } from "@openmapx/core";
+import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildReviewLinks } from "../review-links";
 

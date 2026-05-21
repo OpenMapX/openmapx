@@ -5,9 +5,9 @@
  */
 
 import type { LngLat } from "@openmapx/core";
-import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
+import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import { parseCsvRecords } from "@openmapx/mobility-formats";
-import { formatAddress } from "../../geocoding/format-address.js";
+import type { SharedMobilityStation } from "@openmapx/shared-mobility/types";
 import { createStaticCarSharingClient } from "./static-car-sharing-client.js";
 
 const WFS_URL =

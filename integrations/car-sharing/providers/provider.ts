@@ -11,27 +11,24 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import { dedupStations, dedupVehicles } from "@openmapx/integration-shared-mobility/dedup";
+import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import { dedupStations, dedupVehicles } from "@openmapx/shared-mobility/dedup";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
-} from "@openmapx/integration-shared-mobility/entur-mobility";
+} from "@openmapx/shared-mobility/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+} from "@openmapx/shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "@openmapx/integration-shared-mobility/mapper";
-import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
-import type {
-  SharedMobilityStation,
-  SharedMobilityVehicle,
-} from "@openmapx/integration-shared-mobility/types";
-import type { DataSourceProvider } from "../../data-source/types.js";
+} from "@openmapx/shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/shared-mobility/motis-rentals";
+import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/shared-mobility/types";
 import { mergeRegionalStations } from "./merge-stations.js";
 import { searchRegionalClients } from "./registry.js";
 

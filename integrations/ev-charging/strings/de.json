@@ -8,7 +8,7 @@
       "dataReceived": "Ladestationen mit Steckertypen, Leistungsstufen, Betreiberinfo, Preisen, Verfügbarkeitsstatus, zusammengeführten Quell-IDs und, sofern verfügbar, Datenanbieter-/Lizenzmetadaten pro Datensatz"
     },
     {
-      "purpose": "Amtliche und nationale Ladestationsdatensätze für die USA, Deutschland, Frankreich, die Schweiz, Norwegen und Schweden",
+      "purpose": "Amtliche und nationale Ladestationsdatensätze für die USA und Kanada (AFDC/NREL), Deutschland, Frankreich, die Schweiz, Norwegen und Schweden",
       "dataSent": "Begrenzungsrahmen-Koordinaten (Süd, West, Nord, Ost); konfigurierte AFDC- und NOBIL-API-Schlüssel werden nur serverseitig an diese Quellen gesendet",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckern, Zugang, Zahlungsmethoden, Öffnungszeiten, Quelle und Lizenzmetadaten"
     },

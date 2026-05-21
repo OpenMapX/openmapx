@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReviewAggregate as ReviewAggregateType } from "@integrations/reviews/types";
 import EditIcon from "@mui/icons-material/Edit";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RateReviewIcon from "@mui/icons-material/RateReview";
@@ -7,16 +8,9 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
-import {
-  buildSourceAttribution,
-  type Place,
-  type Review,
-  useIntegrationRegistry,
-  usePlaceReviews,
-  useReviewAggregate,
-  useSession,
-  useUserKeypair,
-} from "@openmapx/core";
+import { buildSourceAttribution, type Place, type Review, useSession } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { usePlaceReviews, useReviewAggregate, useUserKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
@@ -50,8 +44,10 @@ export function PlaceReviewsTab({ place }: Props) {
   // Mangrove's metadata.osm_id is reserved for `node|way|relation/ID[/VERSION]`.
   const subject = { lat, lng, name: place.name, osmId: place.ids?.osm };
 
-  const aggregateQuery = useReviewAggregate(lat, lng, place.name, { osmId: place.ids?.osm });
-  const reviewsQuery = usePlaceReviews(lat, lng, place.name, { osmId: place.ids?.osm });
+  const aggregateQuery = useReviewAggregate<ReviewAggregateType>(lat, lng, place.name, {
+    osmId: place.ids?.osm,
+  });
+  const reviewsQuery = usePlaceReviews<Review>(lat, lng, place.name, { osmId: place.ids?.osm });
 
   // Attribution pulled from each review provider's manifest `dataSources`
   // (same pattern as PlaceWeather, DataSourceSections, etc.). Today we show

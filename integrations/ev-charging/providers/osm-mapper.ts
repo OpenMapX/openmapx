@@ -1,5 +1,5 @@
 import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
-import { formatAddress } from "../../geocoding/format-address.js";
+import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import type { OsmChargingStation } from "./osm.js";
 import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
 import type { EvChargingConnector, EvChargingStation } from "./types.js";

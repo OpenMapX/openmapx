@@ -2,9 +2,10 @@
 
 // Build the browser-side ESM modules that the page exposes to community
 // integration bundles via an import map. Integrations declare `react`,
-// `react/jsx-runtime`, `react/jsx-dev-runtime`, and `@openmapx/core` as
-// external; the page's import map points those bare imports at the files
-// emitted here so React + the platform store/context registry stay singletons.
+// `react/jsx-runtime`, `react/jsx-dev-runtime`, `@openmapx/core`, and
+// `@openmapx/integration-framework` (+ its `/react` subpath) as external;
+// the page's import map points those bare imports at the files emitted here
+// so React + the platform store/context registry stay singletons.
 //
 // Runs in `prebuild` (and `predev`) so the files exist before Next serves
 // `apps/web/public/`. Re-runs are cheap thanks to esbuild's metafile-less
@@ -26,6 +27,19 @@ const MODULES = [
   { id: "react/jsx-runtime", outfile: "react-jsx-runtime.js" },
   { id: "react/jsx-dev-runtime", outfile: "react-jsx-dev-runtime.js" },
   { id: "@openmapx/core", outfile: "openmapx-core.js" },
+  {
+    id: "@openmapx/integration-framework",
+    outfile: "openmapx-integration-framework.js",
+  },
+  {
+    id: "@openmapx/integration-framework/react",
+    outfile: "openmapx-integration-framework-react.js",
+    // The `/react` bundle owns IntegrationRegistryContext — the singleton that
+    // gates `useIntegrationRegistry()`. Externalize the main barrel so this
+    // bundle doesn't inline its own IntegrationRegistry class instance, which
+    // would diverge from the one community plugins import via the main spec.
+    external: ["@openmapx/integration-framework"],
+  },
 ];
 
 for (const mod of MODULES) {
@@ -42,6 +56,7 @@ for (const mod of MODULES) {
     legalComments: "none",
     logLevel: "warning",
     define: { "process.env.NODE_ENV": '"production"' },
+    external: mod.external ?? [],
   });
 }
 

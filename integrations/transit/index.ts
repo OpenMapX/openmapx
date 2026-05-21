@@ -1,4 +1,5 @@
-import type { BBox, IntegrationContext } from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { createTransitOrchestrator, getTransitProviderAttribution } from "./orchestrator.js";
 import { createPlaceTransit } from "./place-transit.js";
 import type { GeoJSONLineString } from "./types.js";
@@ -545,7 +546,7 @@ export function setup(ctx: IntegrationContext): void {
   // GET /providers
   ctx.registerRoute("GET", "/providers", async (_req, reply) => {
     reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
-    const attribution = getTransitProviderAttribution(ctx);
+    const attribution = await getTransitProviderAttribution(ctx);
     reply.send(attribution);
   });
 

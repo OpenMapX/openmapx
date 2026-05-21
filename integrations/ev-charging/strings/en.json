@@ -8,7 +8,7 @@
       "dataReceived": "Charging stations with connector types, power levels, operator info, pricing, availability status, merged source ids, and per-record data-provider/license metadata when available"
     },
     {
-      "purpose": "Official and national EV charging station datasets for the United States, Germany, France, Switzerland, Norway, and Sweden",
+      "purpose": "Official and national EV charging station datasets for the United States and Canada (AFDC/NREL), Germany, France, Switzerland, Norway, and Sweden",
       "dataSent": "Bounding box coordinates (south, west, north, east); configured AFDC and NOBIL API keys are sent only server-side when those sources are enabled",
       "dataReceived": "Charging station records with location, operator, connector, access, payment, opening-hours, source, and license metadata"
     },

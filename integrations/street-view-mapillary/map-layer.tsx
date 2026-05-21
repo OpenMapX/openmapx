@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  buildIntegrationAttribution,
-  useIntegrationRegistry,
-  useOverlayExclusion,
-} from "@openmapx/core";
+import { buildIntegrationAttribution, useOverlayExclusion } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";

@@ -1,20 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024", "DOM"],
-    "strict": true,
-    "esModuleInterop": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist",
-    "paths": {
-      "@integrations/*": ["../../integrations/*"],
-      "@openmapx/integration-shared-mobility/*": ["../../packages/shared-mobility/*"]
-    }
+    "outDir": "./dist"
   },
   "include": ["src", "../../integrations/*/index.ts"]
 }

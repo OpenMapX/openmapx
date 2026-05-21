@@ -1,7 +1,6 @@
 import type {
   BBox,
   Departure,
-  IntegrationContext,
   ServiceAlert,
   TransitRoute,
   TransitStop,
@@ -9,9 +8,10 @@ import type {
   TripPlan,
   VehiclePosition,
 } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { providerHealth } from "./health.js";
-import type { GeoJSONLineString, TransitProvider } from "./types.js";
+import type { GeoJSONLineString, ProviderAttribution, TransitProvider } from "./types.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -581,34 +581,75 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 export type TransitOrchestrator = ReturnType<typeof createTransitOrchestrator>;
 
 /**
- * Build a provider attribution map from transit integration manifests.
- * Keys are the provider prefixes (e.g. "db", "tfl") extracted from the
- * registered TransitProvider instances; values are attribution data
- * from the integration manifest.
+ * Build a provider attribution map for transit-related integrations.
+ *
+ * Keys come from three sources:
+ *  - For `transit` domain integrations: the provider prefix (`db`, `tfl`,
+ *    …) — this is what stop/route ID consumers look up.
+ *  - For `gtfs-catalog` domain integrations (e.g. Mobility Database): the
+ *    integration id (`transit-mobility-database`). These don't carry an
+ *    ID prefix; consumers attributing imported feeds match against
+ *    `ImportedFeed.source` instead.
+ *  - For providers that expose `getFeedAttribution()`: one row per
+ *    runtime feed/instance keyed by what consumers actually carry on
+ *    `TransitStop.provider` (e.g. `gtfs-de_vbb`). Lets `transit-gtfs-local`
+ *    surface per-feed license without bloating every stop response.
+ *
+ * Per-feed rows take precedence over the integration-level row because
+ * the integration row is the fallback when no instance-level data exists.
  */
-export function getTransitProviderAttribution(
+export async function getTransitProviderAttribution(
   ctx: IntegrationContext,
-): Record<string, { label: string; url: string; license?: string; licenseUrl?: string }> {
-  const result: Record<
-    string,
-    { label: string; url: string; license?: string; licenseUrl?: string }
-  > = {};
+): Promise<Record<string, ProviderAttribution>> {
+  const result: Record<string, ProviderAttribution> = {};
 
-  const integrations = ctx.getIntegrationsByDomain("transit");
-  for (const integration of integrations) {
+  const transitIntegrations = ctx.getIntegrationsByDomain("transit");
+  const perFeedTasks: Array<Promise<Record<string, ProviderAttribution>>> = [];
+  for (const integration of transitIntegrations) {
     const domainProviders = (integration.providers.get("transit") ?? []) as TransitProvider[];
     for (const provider of domainProviders) {
       const prefix = provider.prefix.replace(/:$/, "");
-      if (result[prefix]) continue;
-      const ds = integration.manifest.dataSources?.[0];
-      if (ds) {
-        result[prefix] = {
-          label: ds.name,
-          url: ds.url,
-          license: ds.license,
-          licenseUrl: ds.licenseUrl,
-        };
+      if (!result[prefix]) {
+        const ds = integration.manifest.dataSources?.[0];
+        if (ds) {
+          result[prefix] = {
+            label: ds.name,
+            url: ds.url,
+            license: ds.license,
+            licenseUrl: ds.licenseUrl,
+          };
+        }
       }
+      if (provider.getFeedAttribution) {
+        perFeedTasks.push(
+          provider.getFeedAttribution().catch((err) => {
+            ctx.log.warn(`[transit] getFeedAttribution failed for ${provider.id}:`, err);
+            return {};
+          }),
+        );
+      }
+    }
+  }
+
+  const catalogIntegrations = ctx.getIntegrationsByDomain("gtfs-catalog");
+  for (const integration of catalogIntegrations) {
+    const ds = integration.manifest.dataSources?.[0];
+    if (!ds) continue;
+    if (result[integration.id]) continue;
+    result[integration.id] = {
+      label: ds.name,
+      url: ds.url,
+      license: ds.license,
+      licenseUrl: ds.licenseUrl,
+    };
+  }
+
+  const perFeedResults = await Promise.all(perFeedTasks);
+  for (const map of perFeedResults) {
+    for (const [key, value] of Object.entries(map)) {
+      // Per-feed rows are instance-specific and always win over
+      // integration-level fallbacks keyed by the same string.
+      result[key] = value;
     }
   }
 

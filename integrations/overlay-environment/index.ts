@@ -1,4 +1,5 @@
-import { type IntegrationContext, type Logger, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { IntegrationContext, Logger } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const STATION_CACHE_TTL = 600;

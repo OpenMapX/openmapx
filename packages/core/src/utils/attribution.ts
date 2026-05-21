@@ -1,5 +1,5 @@
 import type { DataSourceAttribution } from "@integrations/data-source/types";
-import type { IntegrationDataSource } from "../integration/manifest";
+import type { IntegrationDataSource } from "../types/integrationMeta";
 
 function escapeHtml(value: string): string {
   return value

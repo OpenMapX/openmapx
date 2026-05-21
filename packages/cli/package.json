@@ -13,6 +13,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:*",
     "@openmapx/hardlinks": "workspace:*",
+    "@openmapx/integration-framework": "workspace:^",
     "commander": "^14.0.3",
     "execa": "^9.6.1",
     "kleur": "^4.1.5",

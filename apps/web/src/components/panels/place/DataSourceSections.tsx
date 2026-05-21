@@ -21,8 +21,8 @@ import {
   type DataSourceDetail,
   type DataSourceDetailSection,
   pickIntegrationForSources,
-  useIntegrationRegistry,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
 import { TEAL } from "@/lib/theme";

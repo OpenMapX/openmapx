@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { GtfsDeps } from "./gtfs-local.js";
 import * as gtfsLocal from "./gtfs-local.js";
 
@@ -48,6 +48,7 @@ export function setup(ctx: IntegrationContext): void {
     getRoutesForStop: (stopId: string) => gtfsLocal.getRoutesForStop(stopId),
     getLegGeometry: (tripId: string, fromStopId?: string, toStopId?: string) =>
       gtfsLocal.getLegGeometry(tripId, fromStopId, toStopId),
+    getFeedAttribution: async () => gtfsLocal.getFeedAttributions(),
   });
 }
 

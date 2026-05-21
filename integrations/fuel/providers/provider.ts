@@ -6,7 +6,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
-import type { DataSourceProvider } from "../../data-source/types.js";
+import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
 import { getTankerkoenigApiKey, searchFuelStations } from "./factory.js";
 import {
   buildTankerkoenigDetail,

@@ -1,0 +1,35 @@
+{
+  "name": "@openmapx/mangrove-react",
+  "version": "1.0.0",
+  "description": "React hooks for the Mangrove Open Reviews Standard — keypair lifecycle, review submission, image upload, and place review queries. Transport-agnostic via dependency injection.",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openmapx/mangrove-client": "workspace:^",
+    "zustand": "^5.0.12"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5",
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.100.7",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "react": "^19.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}

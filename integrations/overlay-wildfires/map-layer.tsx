@@ -1,11 +1,7 @@
 "use client";
 
-import {
-  buildIntegrationAttribution,
-  relativeTime,
-  useIntegrationRegistry,
-  useOverlayExclusion,
-} from "@openmapx/core";
+import { buildIntegrationAttribution, relativeTime, useOverlayExclusion } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";

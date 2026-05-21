@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openmapx/core": "workspace:^"
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-data-source": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/place-ids": "workspace:^"
   }
 }

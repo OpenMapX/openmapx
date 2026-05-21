@@ -1,12 +1,55 @@
 {
-  "name": "@openmapx/integration-shared-mobility",
+  "name": "@openmapx/shared-mobility",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./cache": {
+      "types": "./cache.ts",
+      "default": "./cache.ts"
+    },
+    "./dedup": {
+      "types": "./dedup.ts",
+      "default": "./dedup.ts"
+    },
+    "./entur-mobility": {
+      "types": "./entur-mobility.ts",
+      "default": "./entur-mobility.ts"
+    },
+    "./gbfs-catalog": {
+      "types": "./gbfs-catalog.ts",
+      "default": "./gbfs-catalog.ts"
+    },
+    "./gbfs-client": {
+      "types": "./gbfs-client.ts",
+      "default": "./gbfs-client.ts"
+    },
+    "./gbfs-provider-base": {
+      "types": "./gbfs-provider-base.ts",
+      "default": "./gbfs-provider-base.ts"
+    },
+    "./mapper": {
+      "types": "./mapper.ts",
+      "default": "./mapper.ts"
+    },
+    "./motis-rentals": {
+      "types": "./motis-rentals.ts",
+      "default": "./motis-rentals.ts"
+    },
+    "./nominatim": {
+      "types": "./nominatim.ts",
+      "default": "./nominatim.ts"
+    },
+    "./types": {
+      "types": "./types.ts",
+      "default": "./types.ts"
+    }
+  },
   "dependencies": {
     "@hey-api/client-fetch": "workspace:*",
     "@motis-project/motis-client": "^2.9.2",
     "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^"
   }
 }

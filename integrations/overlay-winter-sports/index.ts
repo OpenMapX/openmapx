@@ -1,4 +1,5 @@
-import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 
 export function setup(ctx: IntegrationContext): void {
   const tileUrl =

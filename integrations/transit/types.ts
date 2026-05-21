@@ -516,6 +516,18 @@ export interface TransitProviderCapabilities {
   stopInfrastructure: boolean;
 }
 
+/**
+ * Attribution payload returned by `/providers` and looked up in the frontend
+ * via `resolveProvider(providers, stop.provider)`. Structurally compatible
+ * with `packages/core/src/constants/transit.ts#ProviderAttribution`.
+ */
+export interface ProviderAttribution {
+  label: string;
+  url: string;
+  license?: string;
+  licenseUrl?: string;
+}
+
 export interface TripPlanParams {
   from: { lat: number; lng: number };
   to: { lat: number; lng: number };
@@ -567,4 +579,18 @@ export interface TransitProvider {
     maxMinutes: number,
     modes?: string[],
   ): Promise<TransitStop[]>;
+  /**
+   * Optional per-instance attribution. Returned alongside the manifest-level
+   * `dataSources[0]` attribution. Useful when one integration fronts many
+   * distinct feeds or runtime instances each carrying its own license —
+   * `transit-gtfs-local` (one row per imported GTFS feed), `transit-dynamic-
+   * registry` (one row per `transport-apis` instance), etc.
+   *
+   * Keys MUST match what consumers look up: `TransitStop.provider`,
+   * `VehicleJourney.provider`, `ServiceAlert.providers[]`. The orchestrator
+   * merges results into the `/providers` response and the frontend
+   * `resolveProvider(providers, stop.provider)` then renders the license
+   * chip automatically.
+   */
+  getFeedAttribution?(): Promise<Record<string, ProviderAttribution>>;
 }

@@ -1,4 +1,5 @@
-import type { BBox, IntegrationContext } from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { createLiveTransitOrchestrator } from "./orchestrator.js";
 
 function parseBbox(query: Record<string, string>): BBox | null {

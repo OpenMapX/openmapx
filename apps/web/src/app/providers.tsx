@@ -2,7 +2,8 @@
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { configureStorage, registerBuiltinIdSchemeViews } from "@openmapx/core";
+import { configureStorage } from "@openmapx/core";
+import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -17,6 +18,7 @@ import {
 import { localStorageAdapter } from "../lib/storage";
 import { IntegrationProvider } from "../providers/IntegrationProvider";
 import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
+import { MangroveTransportProvider } from "../providers/MangroveTransportProvider";
 
 configureStorage(localStorageAdapter);
 registerBuiltinIdSchemeViews();
@@ -123,8 +125,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ImpersonationBanner />
-      <KeypairSessionGuard />
-      <IntegrationProvider>{children}</IntegrationProvider>
+      <MangroveTransportProvider>
+        <KeypairSessionGuard />
+        <IntegrationProvider>{children}</IntegrationProvider>
+      </MangroveTransportProvider>
     </ThemeProvider>
   );
 

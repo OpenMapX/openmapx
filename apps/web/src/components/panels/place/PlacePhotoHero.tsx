@@ -121,7 +121,9 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos }: Pro
             borderRadius: "50%",
             boxShadow: 2,
             p: 0.75,
-            "&:hover": { bgcolor: "action.hover" },
+            // `action.hover` is translucent and would let the photo behind
+            // show through. Use the opaque theme-aware chip hover.
+            "&:hover": { bgcolor: "var(--omx-chip-hover)" },
           }}
         >
           <CloseIcon sx={{ fontSize: 24, color: "text.primary" }} />

@@ -7,9 +7,17 @@ RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/pac
 # Install dependencies
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
 COPY packages/i18n/package.json packages/i18n/
+COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/mangrove-client/package.json packages/mangrove-client/
+COPY packages/mangrove-react/package.json packages/mangrove-react/
+COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
+COPY packages/ourairports-data/package.json packages/ourairports-data/
+COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/presets/package.json packages/presets/
 COPY apps/web/package.json apps/web/
 COPY integrations/ integrations/
 RUN pnpm install --frozen-lockfile
@@ -20,10 +28,19 @@ WORKDIR /app
 
 COPY --from=deps /app ./
 
+COPY packages/command-palette/ packages/command-palette/
 COPY packages/core/ packages/core/
 COPY packages/i18n/ packages/i18n/
+COPY packages/integration-framework/ packages/integration-framework/
+COPY packages/mangrove-client/ packages/mangrove-client/
+COPY packages/mangrove-react/ packages/mangrove-react/
+COPY packages/noaa-coops-data/ packages/noaa-coops-data/
+COPY packages/ourairports-data/ packages/ourairports-data/
+COPY packages/place-ids/ packages/place-ids/
+COPY packages/presets/ packages/presets/
 COPY integrations/ integrations/
 COPY apps/web/ apps/web/
+COPY tsconfig.base.json ./
 COPY turbo.json ./
 
 # Placeholder for packages/core which reads process.env.NEXT_PUBLIC_API_URL

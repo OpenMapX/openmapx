@@ -1,6 +1,6 @@
-import type { IntegrationContext } from "@openmapx/core";
 import { OverpassTimeoutError } from "@openmapx/core";
-import { getChipTranslations, suggestPresets } from "@openmapx/core/server";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { getChipTranslations, suggestPresets } from "@openmapx/presets";
 import { createPoiSearchOrchestrator } from "./orchestrator.js";
 
 function round(value: number, decimals: number): number {

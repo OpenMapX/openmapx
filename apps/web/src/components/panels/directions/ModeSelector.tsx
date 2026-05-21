@@ -72,7 +72,10 @@ function ModeButton({
             height: 32,
             borderRadius: 99,
             bgcolor: active ? "var(--omx-teal-light)" : "background.paper",
-            "&:hover": active ? {} : { bgcolor: "action.hover" },
+            // `action.hover` is translucent — using it as the full bgcolor
+            // would let the panel background show through and make the pill
+            // disappear. Use the opaque theme-aware chip hover.
+            "&:hover": active ? {} : { bgcolor: "var(--omx-chip-hover)" },
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

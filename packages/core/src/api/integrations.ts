@@ -1,4 +1,4 @@
-import type { LoadedIntegrationMeta } from "../integration/loader";
+import type { LoadedIntegrationMeta } from "../types/integrationMeta";
 import { serverApiUrl } from "./server-url";
 
 export async function fetchIntegrations(): Promise<LoadedIntegrationMeta[]> {

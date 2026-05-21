@@ -14,6 +14,9 @@ import {
 } from "@integrations/overlay-natural-events/store";
 import type { GibsLayerId } from "@integrations/overlay-satellite/store";
 import { GIBS_LAYERS, useSatelliteStore } from "@integrations/overlay-satellite/store";
+import type { MeasurementMode } from "@integrations/overlay-tool-measurement/store";
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import { useTrafficStore } from "@integrations/overlay-traffic-tomtom/store";
 import { useTransitStore } from "@integrations/overlay-transit/store";
 import { useWeatherStore } from "@integrations/overlay-weather/store";
@@ -24,9 +27,6 @@ import {
 import { useWildfireStore } from "@integrations/overlay-wildfires/store";
 import { useWinterSportsStore } from "@integrations/overlay-winter-sports/store";
 import { useStreetViewStore } from "@integrations/street-view-mapillary/store";
-import type { MeasurementMode } from "@integrations/tool-measurement/store";
-import { useMeasurementStore } from "@integrations/tool-measurement/store";
-import { useTravelTimeStore } from "@integrations/tool-travel-time/store";
 import type { WeatherSubLayer } from "@openmapx/core";
 import {
   type BoundingBox,

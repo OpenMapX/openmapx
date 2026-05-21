@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { type AutocompleteResult, type IntegrationContext, setOverpassUrl } from "@openmapx/core";
-import { registerPlaceResolver } from "@openmapx/core/server";
+import { type AutocompleteResult, setOverpassUrl } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { registerPlaceResolver } from "@openmapx/place-ids";
 import { MemCache } from "./mem-cache.js";
 import { getGeocodingProvider, setConfiguredProviderList } from "./orchestrator.js";
 import { lookupByOsmRef, setPlaceLookupNominatimUrl } from "./place-lookup.js";

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMeasurementStore } from "@integrations/tool-measurement/store";
-import { useTravelTimeStore } from "@integrations/tool-travel-time/store";
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import {
   PANEL,
   useDirectionsStore,

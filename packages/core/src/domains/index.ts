@@ -1,4 +1,9 @@
-export type { KnowledgeProvider, KnowledgeResult, KnowledgeSource } from "./knowledge";
+export type {
+  KnowledgeContext,
+  KnowledgeProvider,
+  KnowledgeResult,
+  KnowledgeSource,
+} from "./knowledge";
 export type {
   GeoJsonFeatureCollection,
   MapOverlayData,

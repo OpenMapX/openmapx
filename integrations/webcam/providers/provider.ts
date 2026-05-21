@@ -5,7 +5,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import type { DataSourceProvider } from "../../data-source/types.js";
+import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
 import {
   getCaltransDetail,
   mapCaltransToDetail,

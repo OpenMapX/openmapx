@@ -6,7 +6,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { DataSourceProvider } from "../../data-source/types.js";
+import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
 import { deduplicateParking, haversineMeters } from "./dedup.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";
 import { PARKING_SOURCE_REGISTRY } from "./registry.js";

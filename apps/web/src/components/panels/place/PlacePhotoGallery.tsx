@@ -15,12 +15,12 @@ import Typography from "@mui/material/Typography";
 import {
   type PlacePhoto,
   proxyImageUrl,
-  useIntegrationRegistry,
   useMapClickStore,
   usePlacePhotos,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";

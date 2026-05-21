@@ -1,4 +1,5 @@
-import type { IntegrationContext, TravelMode } from "@openmapx/core";
+import type { TravelMode } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { RoutingProvider } from "./types.js";
 
 export interface ResolvedProvider {

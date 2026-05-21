@@ -1,20 +1,15 @@
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
-  IntegrationContext,
   LngLat,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
-import type { WeatherProvider } from "../weather/types.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE_URL = "https://api.brightsky.dev";
-const FETCH_TIMEOUT_MS = 10_000;
-
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
 
 const ICON_TO_WMO: Record<string, number> = {
   "clear-day": 0,
@@ -71,21 +66,8 @@ interface BrightSkyHourly {
   wind_speed: number | null;
 }
 
-async function fetchBrightSky<T>(url: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`Bright Sky HTTP ${res.status}`);
-    return (await res.json()) as T;
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+function fetchBrightSky<T>(url: string): Promise<T> {
+  return fetchJsonWithTimeout<T>(url, { label: "Bright Sky" });
 }
 
 const brightSkyProvider: WeatherProvider = {

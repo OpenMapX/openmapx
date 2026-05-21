@@ -13,7 +13,7 @@ import type {
   MatchTracePoint,
   RoutingOptions,
   RoutingProvider,
-} from "../routing/types.js";
+} from "@openmapx/integration-routing/types";
 
 // Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
 // already folds in `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` + legacy

@@ -17,13 +17,13 @@ import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openma
 import {
   normalizeFormFactor,
   normalizeGbfsPropulsion,
-} from "@openmapx/integration-shared-mobility/gbfs-catalog";
-import { fetchGbfsSystem } from "@openmapx/integration-shared-mobility/gbfs-client";
+} from "@openmapx/shared-mobility/gbfs-catalog";
+import { fetchGbfsSystem } from "@openmapx/shared-mobility/gbfs-client";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
   VehicleFormFactor,
-} from "@openmapx/integration-shared-mobility/types";
+} from "@openmapx/shared-mobility/types";
 
 const TOKEN_URL =
   "https://www.mobilitaetsdaten.nrw/keycloak/realms/mobidrom/protocol/openid-connect/token";

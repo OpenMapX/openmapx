@@ -1,4 +1,5 @@
-import { type IntegrationContext, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { XMLParser } from "fast-xml-parser";
 
 const NOAA_URL = "https://api.weather.gov/alerts/active?status=actual&message_type=alert";

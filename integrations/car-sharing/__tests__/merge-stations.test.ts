@@ -1,4 +1,4 @@
-import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
+import type { SharedMobilityStation } from "@openmapx/shared-mobility/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
 

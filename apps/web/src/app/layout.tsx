@@ -25,6 +25,8 @@ const RUNTIME_IMPORTMAP = JSON.stringify({
     "react/jsx-runtime": "/runtime/react-jsx-runtime.js",
     "react/jsx-dev-runtime": "/runtime/react-jsx-dev-runtime.js",
     "@openmapx/core": "/runtime/openmapx-core.js",
+    "@openmapx/integration-framework": "/runtime/openmapx-integration-framework.js",
+    "@openmapx/integration-framework/react": "/runtime/openmapx-integration-framework-react.js",
   },
 });
 

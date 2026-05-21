@@ -7,12 +7,8 @@ import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import type { TransportMode } from "@openmapx/core";
-import {
-  buildIntegrationAttribution,
-  combineAttributions,
-  relativeTime,
-  useIntegrationRegistry,
-} from "@openmapx/core";
+import { buildIntegrationAttribution, combineAttributions, relativeTime } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { modeColor } from "@/lib/transitMarkers";

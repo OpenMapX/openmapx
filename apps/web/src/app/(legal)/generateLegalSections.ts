@@ -1,4 +1,4 @@
-import type { LoadedIntegrationMeta } from "@openmapx/core";
+import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
 
 export interface PrivacyServiceRow {
   service: string;

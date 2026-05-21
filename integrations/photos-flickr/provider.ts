@@ -1,5 +1,5 @@
 import type { PlacePhoto } from "@openmapx/core";
-import type { PhotoProvider, PhotoQuery } from "../photos/types.js";
+import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
 
 /**
  * Flickr license IDs that allow commercial use:

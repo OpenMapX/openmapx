@@ -1,0 +1,50 @@
+{
+  "name": "@openmapx/integration-framework",
+  "version": "1.0.0",
+  "description": "Manifest validation, registry, installer, and runtime context for OpenMapX integrations",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./react": {
+      "types": "./src/react.ts",
+      "default": "./src/react.ts"
+    },
+    "./installer": {
+      "types": "./src/installer.ts",
+      "default": "./src/installer.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "js-yaml": "^4.1.1",
+    "zod": "^4.4.1"
+  },
+  "peerDependencies": {
+    "esbuild": "^0.28.0",
+    "react": ">=19"
+  },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "esbuild": "^0.28.0",
+    "react": "^19.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}

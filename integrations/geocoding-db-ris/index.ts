@@ -1,5 +1,6 @@
-import type { IntegrationContext, Place } from "@openmapx/core";
-import { registerPlaceResolver } from "@openmapx/core/server";
+import type { Place } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { registerPlaceResolver } from "@openmapx/place-ids";
 import { dbRisGeocodingService, lookupDbStation } from "./provider.js";
 import { setRisCredentials } from "./ris-client.js";
 

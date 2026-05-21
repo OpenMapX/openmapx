@@ -20,11 +20,11 @@ import {
   useDataSourceSearch,
   useDataSourceStore,
   useDataSources,
-  useIntegrationRegistry,
   useOpeningHoursStore,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useTranslations } from "next-intl";

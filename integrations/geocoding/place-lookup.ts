@@ -67,11 +67,35 @@ interface NominatimDetailResult {
   lat: string;
   lon: string;
   display_name: string;
-  class: string;
+  /** jsonv2 calls this `category`; older Nominatim builds returned `class`. */
+  category?: string;
+  class?: string;
   type: string;
+  /** Single-name field returned when `addressdetails=1` is requested. */
+  name?: string;
   address: NominatimAddress;
   extratags?: Record<string, string | undefined>;
+  /** Returned when `namedetails=1` — contains `iata`, `icao`, `ref`, `name:*` localisations. */
+  namedetails?: Record<string, string | undefined>;
 }
+
+/**
+ * Keys from Nominatim's `namedetails` block that knowledge / matching layers
+ * downstream may want as raw OSM tags. We deliberately exclude `name` and
+ * `name:*` localisation variants — those are display-only and would clutter
+ * the OSM-tag panel without adding matching value.
+ */
+const NAMEDETAILS_TAG_ALLOWLIST = new Set([
+  "iata",
+  "icao",
+  "ref",
+  "ref:iata",
+  "ref:icao",
+  "ref:faa",
+  "faa",
+  "gps_code",
+  "local_code",
+]);
 
 function toPlace(r: NominatimDetailResult, id: string): Place {
   const {
@@ -88,8 +112,26 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
     if (v !== undefined) osmTags[k] = v;
   }
 
+  // The primary classification tag (e.g. `aeroway=aerodrome`, `amenity=restaurant`)
+  // is not in Nominatim's `extratags` — it lives in `category`/`class` + `type`.
+  // Without this, downstream knowledge providers can't gate on OSM tags.
+  const osmClass = r.category ?? r.class;
+  if (osmClass && r.type && !osmTags[osmClass]) {
+    osmTags[osmClass] = r.type;
+  }
+
+  // Merge curated keys from `namedetails` — gives us IATA/ICAO/ref codes that
+  // OSM stores under `name*` tags rather than `extratags`.
+  if (r.namedetails) {
+    for (const [k, v] of Object.entries(r.namedetails)) {
+      if (v !== undefined && NAMEDETAILS_TAG_ALLOWLIST.has(k) && !osmTags[k]) {
+        osmTags[k] = v;
+      }
+    }
+  }
+
   const address = formatAddress(r.address) || r.display_name;
-  const name = r.display_name.split(",")[0].trim();
+  const name = r.name?.trim() || r.display_name.split(",")[0].trim();
   const city = r.address.city ?? r.address.town ?? r.address.village ?? r.address.county;
 
   return createPlace({
@@ -100,7 +142,7 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
     city,
     countryCode: r.address.country_code ?? undefined,
     coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
-    category: resolveOsmLabel(r.class, r.type),
+    category: osmClass ? resolveOsmLabel(osmClass, r.type) : r.type,
     phone: phone ?? contactPhone,
     website: website ?? contactWebsite,
     openingHours: opening_hours,
@@ -138,6 +180,7 @@ export async function lookupByOsmRef(
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("extratags", "1");
+  url.searchParams.set("namedetails", "1");
 
   // /lookup returns an array; we asked for exactly one ID
   const data = await fetchNominatim<NominatimDetailResult[]>(url, lang);
@@ -175,6 +218,7 @@ export async function lookupByCoords(
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("extratags", "1");
+  url.searchParams.set("namedetails", "1");
   url.searchParams.set("zoom", "18"); // Building-level precision
 
   try {
@@ -203,6 +247,12 @@ const MAX_DISTANCE_M = 500;
 // Cache city names by rounded coordinates (~11km grid)
 const cityNameCache = new Map<string, { city: string | null; expiresAt: number }>();
 const CITY_NAME_TTL_MS = 3_600_000; // 1h
+
+// Country only changes at borders, so a coarse 1° grid (~111 km cell) and a
+// 24h TTL are sufficient. Shared with the nearby-places route so opening-hours
+// public-holiday rules can be evaluated against the right country.
+const countryCodeCache = new Map<string, { countryCode: string | null; expiresAt: number }>();
+const COUNTRY_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Reverse-geocode coordinates to a city name (city-level zoom).
@@ -236,6 +286,38 @@ export async function reverseGeocodeCity(
   }
 }
 
+/**
+ * Reverse-geocode coordinates to a lowercase ISO 3166-1 alpha-2 country code.
+ * Country-level zoom + 1° grid cache: cheap and rarely missed (only when the
+ * lookup straddles a small border country boundary). Returns null on
+ * unreachable upstream so callers can fall back gracefully.
+ */
+export async function reverseGeocodeCountry(lat: number, lng: number): Promise<string | null> {
+  const key = `${Math.round(lat)},${Math.round(lng)}`;
+  const cached = countryCodeCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.countryCode;
+
+  try {
+    const url = new URL(`${NOMINATIM_URL}/reverse`);
+    url.searchParams.set("lat", String(lat));
+    url.searchParams.set("lon", String(lng));
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("addressdetails", "1");
+    url.searchParams.set("zoom", "3");
+
+    const result = await fetchNominatim<NominatimDetailResult>(url);
+    const countryCode = result?.address?.country_code?.toLowerCase() ?? null;
+
+    countryCodeCache.set(key, {
+      countryCode,
+      expiresAt: Date.now() + COUNTRY_CODE_TTL_MS,
+    });
+    return countryCode;
+  } catch {
+    return null;
+  }
+}
+
 export async function lookupByNameAndCoords(
   name: string,
   lat: number,
@@ -258,6 +340,7 @@ export async function lookupByNameAndCoords(
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("extratags", "1");
+  url.searchParams.set("namedetails", "1");
   url.searchParams.set("limit", "5");
 
   const results = await fetchNominatim<NominatimDetailResult[]>(url, lang);

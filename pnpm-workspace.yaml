@@ -16,7 +16,12 @@ publicHoistPattern:
 # defaults cannot silently relax install-time protections.
 strictDepBuilds: true
 dangerouslyAllowAllBuilds: false
-allowBuilds: { '@parcel/watcher': set this to true or false, '@swc/core': set this to true or false, esbuild: set this to true or false, protobufjs: set this to true or false, sharp: set this to true or false }
+allowBuilds:
+  "@parcel/watcher": true
+  "@swc/core": true
+  esbuild: true
+  protobufjs: false
+  sharp: true
 blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
@@ -35,3 +40,13 @@ overrides:
   "@vitest/mocker>vite": "^8.0.5"
   "esbuild": ">=0.25.0"
   "postcss": ">=8.5.10"
+  "next": ">=16.2.6"
+  "fast-uri": ">=3.1.2"
+  "kysely": ">=0.28.17"
+  "fast-xml-builder": ">=1.1.7"
+  # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
+  # even though earlier and later versions have it; pin to the latest provenance-
+  # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install
+  # complete. recharts@3.8.1 (the only consumer in apps/web) accepts both ranges.
+  "react-redux": "9.3.0"
+  "reselect": "5.2.0"

@@ -1,0 +1,11 @@
+{
+  "name": "Open-Data-Plattform Mobilität Schweiz",
+  "description": "Schweizweite OJP-2.0-Reiseplanung, GTFS-Fahrplandaten, GTFS-Realtime-Verkehrsmeldungen und SIRI-Situation-Exchange-Feeds für Störungsmeldungen aus der ganzen Schweiz",
+  "dataSources": [
+    {
+      "purpose": "Schweizweite Transitdaten — Haltestellensuche, Abfahrts-/Ankunftstafeln, Reiseplanung mit Zwischenhalten und Polylinien, Echtzeit-Trip-Updates, Verkehrsmeldungen, optionale Tarifabfrage und Formationsinformationen",
+      "dataSent": "Haltestellennamen oder Koordinaten mit Suchradius; Start- und Zielhaltestelle, Datum und Uhrzeit für Reiseplanung; Trip-ID für Echtzeit-Updates; Bounding-Box für Verkehrsmeldungen; Itinerar-Referenz für Tarife; Zugnummer und Datum für Formationen",
+      "dataReceived": "Schweizer Haltestellen mit Koordinaten und Verkehrsmitteln; Abfahrten/Ankünfte mit Verspätungen, Gleisen und Ausfällen; Reiseverbindungen mit Polylinien je Teilstrecke; Echtzeit-Trip-Updates; geplante und ungeplante Störungsmeldungen; Tarifübersichten; Fahrzeugformationen"
+    }
+  ]
+}

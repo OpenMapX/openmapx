@@ -1,7 +1,7 @@
 "use client";
 
 import Icon from "@mui/material/Icon";
-import { useIntegrationRegistry } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { createElement, type ReactNode, useMemo } from "react";
 import { genericPreview, INTEGRATION_PREVIEWS } from "./integrationPreviews";
 

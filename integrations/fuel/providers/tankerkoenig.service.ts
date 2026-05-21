@@ -1,5 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
-import { formatAddress } from "../../geocoding/format-address.js";
+import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import type { FuelPriceProvider } from "./price-provider";
 import type { FuelStation } from "./types";
 

@@ -2,7 +2,7 @@
 
 import Link from "@mui/material/Link";
 import type { PlacePhoto } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 
 interface Props {
   photo: PlacePhoto;

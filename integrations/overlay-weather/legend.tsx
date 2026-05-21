@@ -12,10 +12,10 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   buildIntegrationAttribution,
-  useIntegrationRegistry,
   type WeatherSubLayer,
   weatherCodeToInfo,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
 import { useWeatherStore } from "./store";

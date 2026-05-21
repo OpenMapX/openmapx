@@ -14,7 +14,6 @@ import {
   categoryPlaceToPlace,
   isAreaTooLarge,
   PANEL,
-  parseOpeningHours,
   resolveProvider,
   resolveStopAsPlace,
   useCategorySearchStore,
@@ -172,10 +171,7 @@ function CategoryPlaceCard({
       </Box>
 
       {(() => {
-        const hours = parseOpeningHours(place.openingHours, {
-          lat: place.coordinates[1],
-          lon: place.coordinates[0],
-        });
+        const hours = place.openingHoursInfo?.status ?? null;
         if (hours) {
           if (hours.isUnknown) {
             return (

@@ -5,7 +5,7 @@ import {
   parseCommonsPage,
   USER_AGENT,
 } from "@openmapx/core";
-import type { PhotoProvider, PhotoQuery } from "../photos/types.js";
+import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
 
 const HEADERS = {
   "User-Agent": USER_AGENT,

@@ -1,6 +1,7 @@
-import { type IntegrationContext, setOverpassUrl } from "@openmapx/core";
-import { registerPlaceResolver } from "@openmapx/core/server";
-import { createDataSourceResolver } from "../data-source/resolver.js";
+import { setOverpassUrl } from "@openmapx/core";
+import { createDataSourceResolver } from "@openmapx/integration-data-source/resolver";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { registerPlaceResolver } from "@openmapx/place-ids";
 import { initCache } from "./cache.js";
 import { setNpsApiKey } from "./providers/nps.js";
 import { webcamProvider } from "./providers/provider.js";

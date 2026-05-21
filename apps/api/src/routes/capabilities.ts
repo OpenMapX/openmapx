@@ -1,4 +1,4 @@
-import { toIntegrationMeta } from "@openmapx/core";
+import { toIntegrationMeta } from "@openmapx/integration-framework";
 import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations } from "../integration-host.js";
 import { isIntegrationHealthy } from "../services/integration-health.js";

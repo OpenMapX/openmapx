@@ -107,10 +107,11 @@ export function SearchInAreaChip() {
           ml: "10px",
           mr: "-4px",
         },
-        // `grey.100` is fixed-light; use the theme-aware hover token so
-        // the chip stays legible in dark mode.
+        // `action.hover` is a translucent MUI overlay; using it as the full
+        // bgcolor lets the map show through since this chip floats over the
+        // map. `--omx-chip-hover` is opaque and theme-aware.
         "&&:hover": {
-          bgcolor: "action.hover",
+          bgcolor: "var(--omx-chip-hover)",
         },
       }}
     />

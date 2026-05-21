@@ -1,5 +1,5 @@
 import type * as Core from "@openmapx/core";
-import { registerPlaceResolver } from "@openmapx/core";
+import { registerPlaceResolver } from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 

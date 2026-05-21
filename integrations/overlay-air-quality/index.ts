@@ -1,4 +1,5 @@
-import { type CacheClient, type IntegrationContext, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import type { CacheClient, IntegrationContext } from "@openmapx/integration-framework";
 
 const OPENAQ_BASE = "https://api.openaq.org/v3";
 const PM25_PARAM_ID = 2;

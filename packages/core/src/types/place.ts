@@ -1,6 +1,7 @@
 import type { DataSourceDetail } from "@integrations/data-source/types";
 import type { LngLat } from "./geometry";
 import type { Identified, Ids } from "./identified";
+import type { OpeningHoursInfo } from "./openingHoursInfo";
 
 export interface PlacePhoto {
   url: string;
@@ -20,6 +21,65 @@ export interface PlacePhoto {
 export interface PlaceFact {
   label: string;
   value: string;
+}
+
+export type AirportType =
+  | "large_airport"
+  | "medium_airport"
+  | "small_airport"
+  | "heliport"
+  | "seaplane_base"
+  | "balloonport"
+  | "closed_airport";
+
+export interface AirportRunwayInfo {
+  /** Designator e.g. "10/28" or "10L/28R" (concatenated low/high ends). */
+  ident: string;
+  lengthFt?: number;
+  widthFt?: number;
+  /** Raw surface code from OurAirports (e.g. ASP, CON, TURF, GRS, WATER). */
+  surface?: string;
+  closed: boolean;
+  lighted: boolean;
+  /** Primary (low end) heading in degrees true. */
+  headingDegT?: number;
+}
+
+export interface AirportFrequencyInfo {
+  /** Service type: TWR, GND, CTAF, ATIS, UNICOM, etc. */
+  type: string;
+  description?: string;
+  frequencyMhz: number;
+}
+
+export interface AirportNavaidInfo {
+  ident: string;
+  name?: string;
+  /** VOR, VOR-DME, DME, NDB, NDB-DME, TACAN, VORTAC, etc. */
+  type: string;
+  frequencyKhz?: number;
+}
+
+export interface AirportInfo {
+  /** OurAirports primary key. */
+  id: number;
+  /** OurAirports stable identifier (usually ICAO when present, else a synthesized code). */
+  ident: string;
+  type: AirportType;
+  iata?: string;
+  icao?: string;
+  gpsCode?: string;
+  localCode?: string;
+  elevationFt?: number;
+  scheduledService: boolean;
+  municipality?: string;
+  isoCountry?: string;
+  isoRegion?: string;
+  homeLink?: string;
+  wikipediaLink?: string;
+  runways?: AirportRunwayInfo[];
+  frequencies?: AirportFrequencyInfo[];
+  navaids?: AirportNavaidInfo[];
 }
 
 export interface PlaceReviewLink {
@@ -68,5 +128,9 @@ export interface Place extends Identified {
   facts?: PlaceFact[];
   reviewLinks?: PlaceReviewLink[];
   isOpen?: boolean;
+  /** Server-precomputed opening-hours status + weekly bitmap. */
+  openingHoursInfo?: OpeningHoursInfo;
   dataSourceDetail?: DataSourceDetail;
+  /** OurAirports-derived structured airport detail (matched by IATA/ICAO from osmTags). */
+  airport?: AirportInfo;
 }

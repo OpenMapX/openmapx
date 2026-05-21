@@ -1,4 +1,5 @@
-import { ConfigurationError, type IntegrationContext } from "@openmapx/core";
+import { ConfigurationError } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { createDataSourceOrchestrator } from "./orchestrator.js";
 
 export function setup(ctx: IntegrationContext): void {

@@ -18,8 +18,11 @@ import {
   satisfiesPlatformVersion,
   toIntegrationMeta,
   validateManifest,
-} from "@openmapx/core";
-import { integrationBackendBundlePath, integrationFrontendBundlePath } from "@openmapx/core/server";
+} from "@openmapx/integration-framework";
+import {
+  integrationBackendBundlePath,
+  integrationFrontendBundlePath,
+} from "@openmapx/integration-framework/installer";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db, sql as pgClient } from "./db";

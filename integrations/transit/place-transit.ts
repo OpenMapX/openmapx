@@ -2,14 +2,17 @@ import type {
   BBox,
   Departure,
   Facility,
-  IntegrationContext,
   MergedDeparture,
   MergedRoute,
   ServiceAlert,
   TransitStop,
 } from "@openmapx/core";
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
-import { expandSearchQuery, getQueryVariants } from "../geocoding/query-expansion.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  expandSearchQuery,
+  getQueryVariants,
+} from "@openmapx/integration-geocoding/query-expansion";
 import { bucketTimestamps, isTripNumber, normalizeHeadsign, normalizeShortName } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 

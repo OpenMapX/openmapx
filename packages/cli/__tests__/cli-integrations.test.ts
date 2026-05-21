@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { packageIntegration } from "@openmapx/core/server";
+import { packageIntegration } from "@openmapx/integration-framework/installer";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   formatIntegrationsTable,

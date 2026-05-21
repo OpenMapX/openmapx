@@ -1,4 +1,5 @@
-import type { BBox, CacheClient } from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
+import type { CacheClient } from "@openmapx/integration-framework";
 import { COUNTRY_BBOXES } from "./country-bboxes";
 import type { CoverageTier, ProtocolType, RegistryEntry } from "./registry-types";
 

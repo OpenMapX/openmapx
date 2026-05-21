@@ -48,6 +48,13 @@ export interface ApplyHardlinkOptions {
    * debugging.
    */
   prune?: boolean;
+  /**
+   * Name of the sentinel directory created under `rootDir` to track which
+   * paths this planner linked (for safe prune). Override if you want multiple
+   * planners sharing a `rootDir` without colliding, or to match an existing
+   * deployment. Defaults to `{@link DEFAULT_SENTINEL_DIR}`.
+   */
+  sentinelDir?: string;
 }
 
 export interface ApplyHardlinkResult {
@@ -103,7 +110,11 @@ function assertSourceTargetDisjoint(source: string, target: string): void {
   }
 }
 
-const SENTINEL_DIR = ".openmapx-hardlinks";
+/**
+ * Default name of the sentinel directory created under the apply's `rootDir`.
+ * Hosts can override this per call via {@link ApplyHardlinkOptions.sentinelDir}.
+ */
+export const DEFAULT_SENTINEL_DIR = ".hardlinks-sentinel";
 
 interface Sentinel {
   /** Relative paths (POSIX separators) under target that we have linked in. */
@@ -112,10 +123,10 @@ interface Sentinel {
   targetFilename?: string;
 }
 
-function sentinelPathFor(rootDir: string, entry: HardlinkEntry): string {
+function sentinelPathFor(rootDir: string, sentinelDir: string, entry: HardlinkEntry): string {
   const suffix = entry.instance ? `-${entry.instance}` : "";
   const name = `${entry.consumerService}-${entry.dataType}${suffix}.json`;
-  return join(rootDir, SENTINEL_DIR, name);
+  return join(rootDir, sentinelDir, name);
 }
 
 function readSentinel(sentinelPath: string): Sentinel | null {
@@ -310,6 +321,7 @@ export function applyHardlinkPlan(
   opts: ApplyHardlinkOptions,
 ): ApplyHardlinkResult {
   const prune = opts.prune !== false;
+  const sentinelDir = opts.sentinelDir ?? DEFAULT_SENTINEL_DIR;
   const rootAbs = resolve(opts.rootDir);
   const result: ApplyHardlinkResult = { linked: 0, skipped: 0, pruned: 0 };
 
@@ -323,7 +335,7 @@ export function applyHardlinkPlan(
     assertWithinRoot("target", target, rootAbs);
     assertSourceTargetDisjoint(source, target);
 
-    const sentinelPath = sentinelPathFor(rootAbs, entry);
+    const sentinelPath = sentinelPathFor(rootAbs, sentinelDir, entry);
 
     if (!existsSync(source) || !statSync(source).isDirectory()) {
       // Producer disappeared — drop everything we previously linked, but leave
@@ -358,5 +370,3 @@ export function applyHardlinkPlan(
 
   return result;
 }
-
-export { SENTINEL_DIR };

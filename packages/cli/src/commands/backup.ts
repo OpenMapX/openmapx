@@ -11,8 +11,8 @@ import {
 import { join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
-import { PLATFORM_VERSION } from "@openmapx/core";
 import { services as coreServices } from "@openmapx/core/server";
+import { PLATFORM_VERSION } from "@openmapx/integration-framework";
 import type { Command } from "commander";
 import { execa } from "execa";
 import kleur from "kleur";

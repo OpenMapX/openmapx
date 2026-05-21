@@ -1,14 +1,13 @@
 "use client";
 
+import { configureApiClient, initOverlayRegistry } from "@openmapx/core";
 import {
-  configureApiClient,
   getCommunityModule,
   IntegrationRegistry,
-  IntegrationRegistryContext,
   initCommunityIntegrationRegistry,
-  initOverlayRegistry,
   type LoadedIntegrationMeta,
-} from "@openmapx/core";
+} from "@openmapx/integration-framework";
+import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";

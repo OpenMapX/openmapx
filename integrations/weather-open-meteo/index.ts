@@ -1,16 +1,15 @@
 import type {
   DailyForecastPoint,
   HourlyForecastPoint,
-  IntegrationContext,
   LngLat,
   WeatherOptions,
   WeatherResponse,
 } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
-import type { WeatherProvider } from "../weather/types.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
+import type { WeatherProvider } from "@openmapx/integration-weather/types";
 
 const BASE = "https://api.open-meteo.com/v1/forecast";
-const FETCH_TIMEOUT_MS = 10_000;
 
 interface OpenMeteoResponse {
   current: {
@@ -54,10 +53,6 @@ interface OpenMeteoResponse {
   };
 }
 
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
-
 function buildUrl(lat: number, lng: number, options?: WeatherOptions, extra?: string): string {
   const tempUnit = options?.units === "imperial" ? "&temperature_unit=fahrenheit" : "";
   const windUnit = options?.units === "imperial" ? "&wind_speed_unit=mph" : "&wind_speed_unit=kmh";
@@ -77,21 +72,8 @@ function buildUrl(lat: number, lng: number, options?: WeatherOptions, extra?: st
   );
 }
 
-async function fetchOpenMeteo(url: string): Promise<OpenMeteoResponse> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
-    return (await res.json()) as OpenMeteoResponse;
-  } catch (err) {
-    clearTimeout(timer);
-    throw err;
-  }
+function fetchOpenMeteo(url: string): Promise<OpenMeteoResponse> {
+  return fetchJsonWithTimeout<OpenMeteoResponse>(url, { label: "Open-Meteo" });
 }
 
 function parseCurrentWeather(data: OpenMeteoResponse, coords: LngLat): WeatherResponse {

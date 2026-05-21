@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",
     "fflate": "^0.8.2"
   }

@@ -5,7 +5,8 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { buildIntegrationAttribution, useIntegrationRegistry } from "@openmapx/core";
+import { buildIntegrationAttribution } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useWinterSportsStore } from "./store";
 

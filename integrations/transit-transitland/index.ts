@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import * as transitland from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {

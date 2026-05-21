@@ -1,4 +1,4 @@
-import type { CacheClient } from "@openmapx/core";
+import type { CacheClient } from "@openmapx/integration-framework";
 
 let _cache: CacheClient | null = null;
 

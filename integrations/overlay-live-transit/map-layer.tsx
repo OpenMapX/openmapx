@@ -6,9 +6,9 @@ import {
   escapeHtml,
   sanitizeUrl,
   useDebouncedCallback,
-  useIntegrationRegistry,
   useOverlayExclusion,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type {
   GeoJSONFeatureDiff,
   GeoJSONSource,

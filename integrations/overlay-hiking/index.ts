@@ -1,4 +1,5 @@
-import { type IntegrationContext, OverpassRateLimitError, USER_AGENT } from "@openmapx/core";
+import { OverpassRateLimitError, USER_AGENT } from "@openmapx/core";
+import type { IntegrationContext } from "@openmapx/integration-framework";
 import { fetchRouteGeometry } from "./overpass-geometry.js";
 import { searchTrails, trailDetail, trailsByArea } from "./waymarked-trails.js";
 

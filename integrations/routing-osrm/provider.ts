@@ -5,7 +5,7 @@
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 import { USER_AGENT } from "@openmapx/core";
-import type { RoutingOptions, RoutingProvider } from "../routing/types.js";
+import type { RoutingOptions, RoutingProvider } from "@openmapx/integration-routing/types";
 
 // Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
 // already folds in `INTEGRATION_ROUTING_OSRM_ENDPOINT` + legacy `OSRM_URL`

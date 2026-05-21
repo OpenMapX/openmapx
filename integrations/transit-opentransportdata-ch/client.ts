@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
-import {
-  type CacheClient,
-  fetchWithRedirects,
-  type Logger,
-  USER_AGENT_TRANSIT,
-} from "@openmapx/core";
+import { fetchWithRedirects, USER_AGENT_TRANSIT } from "@openmapx/core";
+import type { CacheClient, Logger } from "@openmapx/integration-framework";
 import {
   buildOjpLocationInformationRequestXml,
   decodeGtfsRtFeedToObject,

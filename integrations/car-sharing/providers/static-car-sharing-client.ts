@@ -4,8 +4,8 @@
  */
 
 import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
-import { cacheGet, cacheSet, TTL } from "@openmapx/integration-shared-mobility/cache";
-import type { SharedMobilityStation } from "@openmapx/integration-shared-mobility/types";
+import { cacheGet, cacheSet, TTL } from "@openmapx/shared-mobility/cache";
+import type { SharedMobilityStation } from "@openmapx/shared-mobility/types";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
 const FETCH_TIMEOUT_MS = 10_000;

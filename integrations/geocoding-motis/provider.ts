@@ -5,8 +5,8 @@ import {
   reverseGeocode as motisReverseGeocode,
 } from "@motis-project/motis-client";
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
-import { formatAddress } from "../geocoding/format-address.js";
-import type { GeocodingProvider as GeocodingProviderImpl } from "../geocoding/types.js";
+import { formatAddress } from "@openmapx/integration-geocoding/format-address";
+import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 import { uniqueModes } from "./mode-map.js";
 
 interface MotisInstance {

@@ -4,9 +4,9 @@ import {
   buildIntegrationAttribution,
   escapeHtml,
   useDebouncedCallback,
-  useIntegrationRegistry,
   useOverlayExclusion,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";

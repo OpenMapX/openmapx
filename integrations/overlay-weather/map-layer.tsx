@@ -4,10 +4,10 @@ import {
   buildIntegrationAttribution,
   type RadarMeta,
   useDebouncedCallback,
-  useIntegrationRegistry,
   useOverlayExclusion,
   type WeatherSubLayer,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";

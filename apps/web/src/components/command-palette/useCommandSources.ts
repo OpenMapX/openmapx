@@ -1,19 +1,18 @@
 "use client";
 
 import { useColorScheme } from "@mui/material/styles";
-import type { Command } from "@openmapx/core";
+import type { Command } from "@openmapx/command-palette";
+import { parseShortcut } from "@openmapx/command-palette";
 import {
   CATEGORY_DEFINITIONS,
   coordinateId,
   createPlace,
   isOverlayActive,
   PANEL,
-  parseShortcut,
   toggleOverlay,
   useCategorySearchStore,
   useDataSourceStore,
   useDirectionsStore,
-  useIntegrationRegistry,
   useLayerStore,
   useMapStore,
   useMenuStore,
@@ -23,6 +22,7 @@ import {
   useSession,
   useSidebarStore,
 } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { localeNames, locales } from "@/i18n/config";

@@ -13,7 +13,8 @@
  * so there's a single owner for e.g. "given a Yelp id, build the link".
  */
 
-import { getIdSchemeView, type Place, type PlaceReviewLink } from "@openmapx/core";
+import type { Place, PlaceReviewLink } from "@openmapx/core";
+import { getIdSchemeView } from "@openmapx/place-ids";
 import { shouldBuildReviewFallbackSearch } from "./review-link-fallback-policy";
 
 type ReviewLinkSource = NonNullable<PlaceReviewLink["source"]>;

@@ -1,0 +1,11 @@
+{
+  "name": "@openmapx/integration-knowledge-tides-canada",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/place-ids": "workspace:^"
+  }
+}

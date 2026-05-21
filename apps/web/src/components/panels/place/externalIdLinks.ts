@@ -1,4 +1,5 @@
-import { getIdSchemeView, type PlaceIds } from "@openmapx/core";
+import type { PlaceIds } from "@openmapx/core";
+import { getIdSchemeView } from "@openmapx/place-ids";
 
 export interface ExternalRef {
   /** Canonical scheme key (e.g. "osm", "wikidata"). */

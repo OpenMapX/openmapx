@@ -10,26 +10,26 @@ vi.mock("../providers/registry.js", () => ({
   searchRegionalClients: vi.fn(),
 }));
 
-vi.mock("@openmapx/integration-shared-mobility/gbfs-provider-base", () => ({
+vi.mock("@openmapx/shared-mobility/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
   fetchSwissSharedMobilityDataForBbox: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
 }));
 
-vi.mock("@openmapx/integration-shared-mobility/entur-mobility", () => ({
+vi.mock("@openmapx/shared-mobility/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
   buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@openmapx/integration-shared-mobility/motis-rentals", () => ({
+vi.mock("@openmapx/shared-mobility/motis-rentals", () => ({
   fetchMotisRentals: vi.fn(),
 }));
 
-vi.mock("@openmapx/integration-shared-mobility/dedup", () => ({
+vi.mock("@openmapx/shared-mobility/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
   dedupVehicles: vi.fn((items: unknown[]) => items),
 }));
 
-vi.mock("@openmapx/integration-shared-mobility/mapper", () => ({
+vi.mock("@openmapx/shared-mobility/mapper", () => ({
   mapStationToResult: vi.fn(),
   mapStationToDetail: vi.fn(),
   mapVehicleToResult: vi.fn(),
@@ -40,22 +40,22 @@ vi.mock("../providers/merge-stations.js", () => ({
   mergeRegionalStations: vi.fn((items: unknown[]) => items),
 }));
 
-import { dedupStations } from "@openmapx/integration-shared-mobility/dedup";
+import { dedupStations } from "@openmapx/shared-mobility/dedup";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
-} from "@openmapx/integration-shared-mobility/entur-mobility";
+} from "@openmapx/shared-mobility/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/integration-shared-mobility/gbfs-provider-base";
+} from "@openmapx/shared-mobility/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "@openmapx/integration-shared-mobility/mapper";
-import { fetchMotisRentals } from "@openmapx/integration-shared-mobility/motis-rentals";
+} from "@openmapx/shared-mobility/mapper";
+import { fetchMotisRentals } from "@openmapx/shared-mobility/motis-rentals";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
 import { carSharingProvider } from "../providers/provider.js";
 import { searchRegionalClients } from "../providers/registry.js";

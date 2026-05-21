@@ -1,5 +1,6 @@
 import { createConnection } from "node:net";
-import { type LoadedIntegration, toIntegrationMeta, USER_AGENT } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
 import { recordHealthResult } from "./health-history";
 
 const TIMEOUT = 5_000;
