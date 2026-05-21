@@ -7,13 +7,13 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
 import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import { getTankerkoenigApiKey, searchFuelStations } from "./factory.js";
 import {
   buildTankerkoenigDetail,
   mapFuelStationToDetail,
   mapFuelStationToResult,
 } from "./mapper.js";
-import type { FuelStation } from "./types.js";
 
 const TANKERKOENIG_DETAIL_URL = "https://creativecommons.tankerkoenig.de/json/detail.php";
 

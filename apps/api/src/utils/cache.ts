@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { TTL as TTL_POLICY } from "@openmapx/mobility-core/policy";
 import { redis } from "../redis.js";
 
 // Types
@@ -173,25 +174,26 @@ export class MemCache<T> {
 
 export const TTL = {
   transit: {
-    stops: 3600,
-    stop: 3600,
-    stopSearch: 3600,
-    departures: 60,
-    arrivals: 60,
-    routes: 3600,
-    routeStops: 3600,
-    routeGeometry: 86400,
-    tripPlan: 300,
-    placeStops: 86400,
-    placeRoutes: 300,
-    placeAlerts: 60,
-    placeFacilities: 86400,
-    vehicles: 15,
-    vehicleJourney: 30,
-    radar: 15,
-    facilities: 300,
-    alerts: 60,
-    registry: 172800,
+    stops: TTL_POLICY.SCHEDULE,
+    stop: TTL_POLICY.SCHEDULE,
+    stopSearch: TTL_POLICY.SCHEDULE,
+    departures: TTL_POLICY.REALTIME_WARM,
+    arrivals: TTL_POLICY.REALTIME_WARM,
+    routes: TTL_POLICY.SCHEDULE,
+    routeStops: TTL_POLICY.SCHEDULE,
+    routeGeometry: TTL_POLICY.STATIC_ARCHIVE,
+    tripPlan: 300, // no policy class for 5-min
+    placeStops: TTL_POLICY.PLACE_LINK,
+    placeRoutes: 300, // no policy class for 5-min
+    placeAlerts: TTL_POLICY.REALTIME_WARM,
+    placeFacilities: TTL_POLICY.STATIC_ARCHIVE,
+    // vehicles/radar: behavior change 15 → 30s (REALTIME_HOT). Authorized by A4 plan.
+    vehicles: TTL_POLICY.REALTIME_HOT,
+    vehicleJourney: TTL_POLICY.REALTIME_HOT,
+    radar: TTL_POLICY.REALTIME_HOT,
+    facilities: 300, // no policy class for 5-min
+    alerts: TTL_POLICY.REALTIME_WARM,
+    registry: 172800, // special: 48h registry refresh, no policy class
   },
   geocoding: {
     forward: 86400,
@@ -237,9 +239,9 @@ export const TTL = {
   },
   photos: 3600,
   sharedMobility: {
-    catalog: 86400,
-    networks: 3600,
-    stations: 120,
+    catalog: TTL_POLICY.STATIC_ARCHIVE,
+    networks: TTL_POLICY.SCHEDULE,
+    stations: TTL_POLICY.VEHICLE_STATUS,
   },
   weather: {
     current: 900,

@@ -22,48 +22,48 @@ vi.mock("../providers/nrw-mobidrom-client.js", () => ({
   searchNrwMobidrom: vi.fn(),
 }));
 
-vi.mock("@openmapx/shared-mobility/gbfs-provider-base", () => ({
+vi.mock("@openmapx/mobility-core/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
   fetchSwissSharedMobilityDataForBbox: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
 }));
 
-vi.mock("@openmapx/shared-mobility/entur-mobility", () => ({
+vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
   buildEnturGeofencingMapContext: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@openmapx/shared-mobility/motis-rentals", () => ({
+vi.mock("@openmapx/mobility-core/motis-rentals", () => ({
   fetchMotisRentals: vi.fn(),
 }));
 
-vi.mock("@openmapx/shared-mobility/dedup", () => ({
+vi.mock("@openmapx/mobility-core/dedup", () => ({
   dedupStations: vi.fn((items: unknown[]) => items),
   dedupVehicles: vi.fn((items: unknown[]) => items),
 }));
 
-vi.mock("@openmapx/shared-mobility/mapper", () => ({
+vi.mock("@openmapx/mobility-core/mapper", () => ({
   mapStationToResult: vi.fn(),
   mapStationToDetail: vi.fn(),
   mapVehicleToResult: vi.fn(),
   mapVehicleToDetail: vi.fn(),
 }));
 
-import { dedupStations } from "@openmapx/shared-mobility/dedup";
+import { dedupStations } from "@openmapx/mobility-core/dedup";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
-} from "@openmapx/shared-mobility/entur-mobility";
+} from "@openmapx/mobility-core/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/shared-mobility/gbfs-provider-base";
+} from "@openmapx/mobility-core/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "@openmapx/shared-mobility/mapper";
-import { fetchMotisRentals } from "@openmapx/shared-mobility/motis-rentals";
+} from "@openmapx/mobility-core/mapper";
+import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { searchFelyx } from "../providers/felyx-client.js";
 import { searchGoSharing } from "../providers/gosharing-client.js";
 import { searchLink } from "../providers/link-client.js";

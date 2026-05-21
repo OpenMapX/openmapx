@@ -1,11 +1,11 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import {
   bboxOverlaps,
   fetchMobidromSites,
   filterByBbox,
   mapMobidromSite,
 } from "./mobidrom-common.js";
-import type { ParkingFacility } from "./types.js";
 
 /**
  * APAG - Aachener Parkhaus GmbH feed via NRW Mobidrom.

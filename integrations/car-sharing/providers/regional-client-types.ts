@@ -1,5 +1,5 @@
 import type { BoundingBox, LngLat } from "@openmapx/core";
-import type { SharedMobilityStation } from "@openmapx/shared-mobility/types";
+import type { SharedMobilityStation } from "@openmapx/mobility-core/types";
 
 /**
  * Interface for regional car-sharing operator clients.

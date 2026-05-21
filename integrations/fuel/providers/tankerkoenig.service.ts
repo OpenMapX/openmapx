@@ -1,7 +1,7 @@
 import type { BoundingBox } from "@openmapx/core";
 import { formatAddress } from "@openmapx/integration-geocoding/format-address";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
-import type { FuelStation } from "./types";
 
 // Germany bounding box (with a small margin)
 const GERMANY = { minLat: 47.0, maxLat: 55.5, minLng: 5.5, maxLng: 15.5 };

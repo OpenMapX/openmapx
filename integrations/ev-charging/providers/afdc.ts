@@ -1,6 +1,10 @@
 import { type BoundingBox, USER_AGENT } from "@openmapx/core";
+import type {
+  EvChargingSource,
+  EvChargingStation,
+  EvChargingStatus,
+} from "@openmapx/mobility-core/ev-charging";
 import { getEvChargingSourcePriority } from "./source-priority.js";
-import type { EvChargingSource, EvChargingStation, EvChargingStatus } from "./types.js";
 import {
   bboxCenter,
   bboxContainsCoordinates,

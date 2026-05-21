@@ -7,10 +7,10 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { deduplicateParking, haversineMeters } from "./dedup.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";
 import { PARKING_SOURCE_REGISTRY } from "./registry.js";
-import type { ParkingFacility } from "./types.js";
 
 const META: DataSourceMeta = {
   minZoom: 12,

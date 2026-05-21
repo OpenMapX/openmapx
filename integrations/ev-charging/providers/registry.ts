@@ -1,3 +1,4 @@
+import type { EvChargingSource, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { fetchAfdcChargingDetail, searchAfdcCharging } from "./afdc.js";
 import { fetchBnetzaChargingDetail, searchBnetzaCharging } from "./bnetza.js";
 import { fetchFranceIrveChargingDetail, searchFranceIrveCharging } from "./france.js";
@@ -8,7 +9,6 @@ import { getOsmChargingNode, searchOsmCharging } from "./osm.js";
 import { mapOsmToStation } from "./osm-mapper.js";
 import { getEvChargingSourcePriority } from "./source-priority.js";
 import { fetchSwissSfoeChargingDetail, searchSwissSfoeCharging } from "./switzerland.js";
-import type { EvChargingSource, EvChargingStation } from "./types.js";
 
 function source(
   id: string,

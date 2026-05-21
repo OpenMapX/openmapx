@@ -1,7 +1,11 @@
 import { type BoundingBox, fetchWithRedirects, USER_AGENT } from "@openmapx/core";
+import type {
+  EvChargingConnector,
+  EvChargingSource,
+  EvChargingStation,
+} from "@openmapx/mobility-core/ev-charging";
 import { deduplicateChargingStations } from "./dedup.js";
 import { getEvChargingSourcePriority } from "./source-priority.js";
-import type { EvChargingConnector, EvChargingSource, EvChargingStation } from "./types.js";
 import {
   bboxContainsCoordinates,
   bboxOverlaps,

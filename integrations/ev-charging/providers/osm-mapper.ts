@@ -1,8 +1,8 @@
 import type { DataSourceDetail, DataSourceResult } from "@openmapx/core";
 import { formatAddress } from "@openmapx/integration-geocoding/format-address";
+import type { EvChargingConnector, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import type { OsmChargingStation } from "./osm.js";
 import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
-import type { EvChargingConnector, EvChargingStation } from "./types.js";
 import { connector, parseLocalizedNumber } from "./utils.js";
 
 /** Maps OSM socket:* tags to human-readable connector labels. */

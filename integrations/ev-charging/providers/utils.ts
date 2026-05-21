@@ -1,5 +1,5 @@
 import type { BoundingBox, DataSourceAttribution } from "@openmapx/core";
-import type { EvChargingConnector } from "./types.js";
+import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
 
 export function cleanString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;

@@ -1,7 +1,7 @@
 import type { DataSourceResult } from "@openmapx/core";
+import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { describe, expect, it } from "vitest";
 import { deduplicateByCoordinates, deduplicateChargingStations } from "../dedup.js";
-import type { EvChargingStation } from "../types.js";
 
 function makeResult(
   overrides: Partial<DataSourceResult> & Pick<DataSourceResult, "id" | "coordinates">,

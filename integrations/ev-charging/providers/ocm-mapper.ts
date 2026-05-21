@@ -1,7 +1,7 @@
 import type { DataSourceAttribution, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type { EvChargingStation, EvChargingStatus } from "@openmapx/mobility-core/ev-charging";
 import type { OcmDataProvider, OcmPoi } from "./ocm-types.js";
 import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
-import type { EvChargingStation, EvChargingStatus } from "./types.js";
 import { connector } from "./utils.js";
 
 const OCM_ABOUT_URL = "https://openchargemap.org/about";

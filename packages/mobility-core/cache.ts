@@ -1,4 +1,5 @@
 import type { CacheClient } from "@openmapx/integration-framework";
+import { TTL as TTL_POLICY } from "./policy.js";
 
 let _cache: CacheClient | null = null;
 
@@ -30,7 +31,11 @@ export async function withCache<T>(
 
 export const TTL = {
   sharedMobility: {
-    catalog: 86_400,
+    catalog: TTL_POLICY.STATIC_ARCHIVE,
+    // Policy says VEHICLE_STATUS (120s) for GBFS station_status, but the
+    // integration layer caches at 5 minutes to amortise upstream load on
+    // catalog probes. Revisit when the orchestrator drives polling cadence
+    // independently of cache TTL.
     stations: 300,
     networks: 300,
     citybikes: 300,

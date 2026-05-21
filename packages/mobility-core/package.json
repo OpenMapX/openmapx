@@ -1,9 +1,13 @@
 {
-  "name": "@openmapx/shared-mobility",
+  "name": "@openmapx/mobility-core",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "exports": {
+    "./attribution": {
+      "types": "./attribution.ts",
+      "default": "./attribution.ts"
+    },
     "./cache": {
       "types": "./cache.ts",
       "default": "./cache.ts"
@@ -15,6 +19,18 @@
     "./entur-mobility": {
       "types": "./entur-mobility.ts",
       "default": "./entur-mobility.ts"
+    },
+    "./ev-charging": {
+      "types": "./ev-charging.ts",
+      "default": "./ev-charging.ts"
+    },
+    "./freshness": {
+      "types": "./freshness.ts",
+      "default": "./freshness.ts"
+    },
+    "./fuel": {
+      "types": "./fuel.ts",
+      "default": "./fuel.ts"
     },
     "./gbfs-catalog": {
       "types": "./gbfs-catalog.ts",
@@ -39,6 +55,18 @@
     "./nominatim": {
       "types": "./nominatim.ts",
       "default": "./nominatim.ts"
+    },
+    "./parking": {
+      "types": "./parking.ts",
+      "default": "./parking.ts"
+    },
+    "./policy": {
+      "types": "./policy.ts",
+      "default": "./policy.ts"
+    },
+    "./result": {
+      "types": "./result.ts",
+      "default": "./result.ts"
     },
     "./types": {
       "types": "./types.ts",

@@ -1,10 +1,10 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import { AustriaService } from "./austria.service";
 import { FranceService } from "./france.service";
 import type { FuelPriceProvider } from "./price-provider";
 import { SpainService } from "./spain.service";
 import { TankerkoenigService } from "./tankerkoenig.service";
-import type { FuelStation } from "./types";
 
 const ALL_PROVIDERS: FuelPriceProvider[] = [
   new FranceService(),

@@ -1,5 +1,10 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { ParkApiV2City, ParkApiV2Lot, ParkingFacility, ParkingType } from "./types.js";
+import type {
+  ParkApiV2City,
+  ParkApiV2Lot,
+  ParkingFacility,
+  ParkingType,
+} from "@openmapx/mobility-core/parking";
 
 const API_BASE = "https://api.parkendd.de";
 const CITY_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h

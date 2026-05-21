@@ -1,4 +1,5 @@
-import type { BoundingBox, DataSourceResult, ParkingFacility } from "@openmapx/core";
+import type { BoundingBox, DataSourceResult } from "@openmapx/core";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../apag.js", () => ({ searchApag: vi.fn(), fetchApagDetail: vi.fn() }));

@@ -1,9 +1,9 @@
 import { createDataSourceResolver } from "@openmapx/integration-data-source/resolver";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { initCache } from "@openmapx/mobility-core/cache";
+import { setSharedMobilityMotisUrl } from "@openmapx/mobility-core/motis-rentals";
+import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { initCache } from "@openmapx/shared-mobility/cache";
-import { setSharedMobilityMotisUrl } from "@openmapx/shared-mobility/motis-rentals";
-import { setSharedMobilityNominatimUrl } from "@openmapx/shared-mobility/nominatim";
 import { bielefeldClient } from "./providers/bielefeld-client.js";
 import { cambioClient } from "./providers/cambio-client.js";
 import { carSharingProvider } from "./providers/provider.js";

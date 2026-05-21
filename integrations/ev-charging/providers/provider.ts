@@ -7,11 +7,11 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { deduplicateChargingStations, haversineMeters } from "./dedup.js";
 import { getEvChargingFilters } from "./reference.js";
 import { EV_CHARGING_SOURCE_REGISTRY } from "./registry.js";
 import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
-import type { EvChargingStation } from "./types.js";
 
 const META: DataSourceMeta = {
   minZoom: 8,

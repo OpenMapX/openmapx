@@ -9,7 +9,7 @@
  */
 
 import type { BoundingBox } from "@openmapx/core";
-import type { AutobahnParkingLorry, ParkingFacility } from "./types.js";
+import type { AutobahnParkingLorry, ParkingFacility } from "@openmapx/mobility-core/parking";
 
 const BASE_URL = "https://verkehr.autobahn.de/o/autobahn";
 const CACHE_TTL = 30 * 60 * 1000; // 30 min — data is essentially static

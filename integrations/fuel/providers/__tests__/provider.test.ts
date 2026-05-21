@@ -1,4 +1,5 @@
-import type { BoundingBox, DataSourceResult, FuelStation } from "@openmapx/core";
+import type { BoundingBox, DataSourceResult } from "@openmapx/core";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockTankerkoenigKey: string | undefined;

@@ -1,5 +1,5 @@
 import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
-import type { ParkingFacility, ParkingType } from "./types.js";
+import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 
 /**
  * All string values emitted here must either:

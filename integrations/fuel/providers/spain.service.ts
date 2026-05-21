@@ -1,6 +1,6 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
-import type { FuelStation } from "./types";
 
 // Spain mainland + Balearics + Canary Islands bounding box
 const SPAIN = { minLat: 27.6, maxLat: 43.8, minLng: -18.2, maxLng: 4.4 };

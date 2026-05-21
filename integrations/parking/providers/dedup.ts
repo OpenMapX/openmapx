@@ -1,12 +1,17 @@
+import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import { getParkingSourcePrefix, getParkingSourcePriority } from "./source-priority.js";
-import type { ParkingFacility, ParkingType } from "./types.js";
 
 function facilityPriority(f: ParkingFacility): number {
   return getParkingSourcePriority(f.sources[0]);
 }
 
 // Clustering parameters
-
+//
+// TODO(policy): mobility-core's DEDUP.PARKING_RADIUS_M is 25m and
+// DEDUP.NAME_SIMILARITY_MIN is 0.6. Parking clustering uses a wider
+// two-tier window (40m always, 150m with names) tuned for real-world
+// sites that span >25m. Reconciling with policy would change behavior;
+// kept raw until we revisit thresholds across providers.
 /** Distance below which two facilities are considered the same regardless of name. */
 const ALWAYS_MERGE_M = 40;
 /** Distance above which two facilities are never merged. */

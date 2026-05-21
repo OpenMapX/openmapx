@@ -1,6 +1,6 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
-import type { FuelStation } from "./types";
 
 // France mainland + Corsica bounding box
 const FRANCE = { minLat: 41.3, maxLat: 51.1, minLng: -5.2, maxLng: 9.6 };

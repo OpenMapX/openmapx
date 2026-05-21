@@ -1,6 +1,6 @@
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { describe, expect, it } from "vitest";
 import { mapParkingToDetail, mapParkingToResult } from "../mapper.js";
-import type { ParkingFacility } from "../types.js";
 
 function makeFacility(overrides: Partial<ParkingFacility> = {}): ParkingFacility {
   return {

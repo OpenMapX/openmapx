@@ -4,4 +4,4 @@ export {
   initCache,
   TTL,
   withCache,
-} from "@openmapx/shared-mobility/cache";
+} from "@openmapx/mobility-core/cache";

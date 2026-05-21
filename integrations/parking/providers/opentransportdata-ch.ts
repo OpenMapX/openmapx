@@ -1,5 +1,5 @@
 import { type BoundingBox, fetchWithRedirects, USER_AGENT } from "@openmapx/core";
-import type { ParkingFacility, ParkingType } from "./types.js";
+import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 
 interface SwissParkingCapacity {
   categoryType?: string;

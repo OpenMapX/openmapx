@@ -1,7 +1,11 @@
 import type { BoundingBox } from "@openmapx/core";
+import type {
+  ParkingFacility,
+  ParkingSourceAttribution,
+  ParkingType,
+} from "@openmapx/mobility-core/parking";
 import type { DatexParkingRecord, DatexParkingStatus } from "@openmapx/mobility-formats";
 import { parseDatexParkingStatus, parseDatexParkingTable } from "@openmapx/mobility-formats";
-import type { ParkingFacility, ParkingSourceAttribution, ParkingType } from "./types.js";
 
 interface DatexParkingProviderConfig {
   sourceId: string;

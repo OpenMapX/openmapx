@@ -1,9 +1,9 @@
 import { createDataSourceResolver } from "@openmapx/integration-data-source/resolver";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { initCache } from "@openmapx/mobility-core/cache";
+import { setSharedMobilityMotisUrl } from "@openmapx/mobility-core/motis-rentals";
+import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { initCache } from "@openmapx/shared-mobility/cache";
-import { setSharedMobilityMotisUrl } from "@openmapx/shared-mobility/motis-rentals";
-import { setSharedMobilityNominatimUrl } from "@openmapx/shared-mobility/nominatim";
 import { setDbBikeCredentials } from "./providers/db-bike-client.js";
 import { bikeSharingProvider } from "./providers/provider.js";
 

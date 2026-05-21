@@ -11,12 +11,12 @@ export function createRepoVitestAliases(repoRoot: string) {
       replacement: resolve(repoRoot, "packages/core/src/index.ts"),
     },
     {
-      find: /^@openmapx\/integration-shared-mobility\/(.+)$/,
-      replacement: resolve(repoRoot, "packages/shared-mobility/$1"),
+      find: /^@openmapx\/mobility-core\/(.+)$/,
+      replacement: resolve(repoRoot, "packages/mobility-core/$1"),
     },
     {
-      find: /^@openmapx\/integration-shared-mobility$/,
-      replacement: resolve(repoRoot, "packages/shared-mobility"),
+      find: /^@openmapx\/mobility-core$/,
+      replacement: resolve(repoRoot, "packages/mobility-core"),
     },
     {
       find: /^@openmapx\/mobility-formats$/,

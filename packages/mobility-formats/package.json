@@ -11,13 +11,10 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@hey-api/openapi-ts": "^0.96.1",
-    "@scalar/openapi-parser": "^0.25.12",
     "csv-parse": "^6.2.1",
     "fast-xml-parser": "^5.7.2",
     "gbfs-typescript-types": "^1.0.14",
-    "gtfs-realtime-bindings-transit": "^1.8.10",
-    "yaml": "^2.8.3"
+    "gtfs-realtime-bindings-transit": "^1.8.10"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

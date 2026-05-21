@@ -5,6 +5,7 @@
  */
 
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
+import { DEDUP } from "./policy.js";
 import type {
   PricingDetail,
   SharedMobilityStation,
@@ -12,7 +13,10 @@ import type {
   VehicleTypeDetail,
 } from "./types.js";
 
-/** Round to 4 decimal places (~11m precision). */
+/**
+ * Round to 4 decimal places (~11m precision). Matches
+ * `DEDUP.STATION_RADIUS_M` (the canonical station-match radius).
+ */
 function coordKey(lng: number, lat: number): string {
   return `${lng.toFixed(4)},${lat.toFixed(4)}`;
 }
@@ -162,10 +166,10 @@ export function dedupStations(stations: SharedMobilityStation[]): SharedMobility
         existing.coordinates[1],
         existing.coordinates[0],
       );
-      if (dist > 50) return false;
+      if (dist > DEDUP.STOP_RADIUS_M) return false;
       const nameA = s.name.toLowerCase().trim();
       const nameB = existing.name.toLowerCase().trim();
-      return diceSimilarity(nameA, nameB) > 0.6;
+      return diceSimilarity(nameA, nameB) > DEDUP.NAME_SIMILARITY_MIN;
     });
 
     if (fuzzyMatch) {

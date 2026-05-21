@@ -1,5 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { FuelStation } from "./types";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 
 export interface FuelPriceProvider {
   readonly name: string;

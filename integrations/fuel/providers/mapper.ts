@@ -1,6 +1,6 @@
 import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import opening_hours from "opening_hours";
-import type { FuelStation } from "./types.js";
 
 interface OpeningTime {
   text: string;

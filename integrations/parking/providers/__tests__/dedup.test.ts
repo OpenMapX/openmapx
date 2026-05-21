@@ -1,6 +1,6 @@
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { deduplicateParking, haversineMeters } from "../dedup.js";
-import type { ParkingFacility } from "../types.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

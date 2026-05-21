@@ -136,12 +136,12 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
-      '@openmapx/shared-mobility':
-        specifier: workspace:^
-        version: link:../../packages/shared-mobility
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -341,15 +341,15 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
-      '@openmapx/shared-mobility':
-        specifier: workspace:^
-        version: link:../../packages/shared-mobility
 
   integrations/car-sharing:
     dependencies:
@@ -365,15 +365,15 @@ importers:
       '@openmapx/integration-geocoding':
         specifier: workspace:^
         version: link:../geocoding
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
-      '@openmapx/shared-mobility':
-        specifier: workspace:^
-        version: link:../../packages/shared-mobility
 
   integrations/data-source:
     dependencies:
@@ -404,6 +404,9 @@ importers:
       '@openmapx/integration-geocoding':
         specifier: workspace:^
         version: link:../geocoding
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -422,6 +425,9 @@ importers:
       '@openmapx/integration-geocoding':
         specifier: workspace:^
         version: link:../geocoding
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -866,6 +872,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
@@ -1028,12 +1037,12 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
-      '@openmapx/shared-mobility':
-        specifier: workspace:^
-        version: link:../../packages/shared-mobility
 
   integrations/street-view-mapillary:
     dependencies:
@@ -1055,6 +1064,9 @@ importers:
       '@openmapx/integration-geocoding':
         specifier: workspace:^
         version: link:../geocoding
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-bvg:
     dependencies:
@@ -1520,14 +1532,26 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
 
+  packages/mobility-core:
+    dependencies:
+      '@hey-api/client-fetch':
+        specifier: workspace:*
+        version: link:../hey-api-client-fetch
+      '@motis-project/motis-client':
+        specifier: ^2.9.2
+        version: 2.9.2
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../integration-framework
+      '@openmapx/mobility-formats':
+        specifier: workspace:^
+        version: link:../mobility-formats
+
   packages/mobility-formats:
     dependencies:
-      '@hey-api/openapi-ts':
-        specifier: ^0.96.1
-        version: 0.96.1(magicast@0.5.2)(typescript@5.9.3)
-      '@scalar/openapi-parser':
-        specifier: ^0.25.12
-        version: 0.25.12
       csv-parse:
         specifier: ^6.2.1
         version: 6.2.1
@@ -1540,6 +1564,25 @@ importers:
       gtfs-realtime-bindings-transit:
         specifier: ^1.8.10
         version: 1.8.10
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  packages/mobility-formats-tomp:
+    dependencies:
+      '@hey-api/openapi-ts':
+        specifier: ^0.96.1
+        version: 0.96.1(magicast@0.5.2)(typescript@5.9.3)
+      '@scalar/openapi-parser':
+        specifier: ^0.25.12
+        version: 0.25.12
       yaml:
         specifier: ^2.8.3
         version: 2.8.3
@@ -1616,24 +1659,6 @@ importers:
       vitest:
         specifier: ^4.1.5
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-v8@4.1.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
-
-  packages/shared-mobility:
-    dependencies:
-      '@hey-api/client-fetch':
-        specifier: workspace:*
-        version: link:../hey-api-client-fetch
-      '@motis-project/motis-client':
-        specifier: ^2.9.2
-        version: 2.9.2
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../core
-      '@openmapx/integration-framework':
-        specifier: workspace:^
-        version: link:../integration-framework
-      '@openmapx/mobility-formats':
-        specifier: workspace:^
-        version: link:../mobility-formats
 
   services/data-manager:
     dependencies:

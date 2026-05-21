@@ -1,5 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { ParkingFacility, ParkingType } from "./types.js";
+import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 
 /**
  * Brussels (Belgium) public parking client.

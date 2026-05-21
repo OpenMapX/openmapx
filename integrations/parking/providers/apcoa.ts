@@ -1,6 +1,6 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { fetchMobidromSites, filterByBbox, mapMobidromSite } from "./mobidrom-common.js";
-import type { ParkingFacility } from "./types.js";
 
 /**
  * APCOA Deutschland GmbH parking facilities via NRW Mobidrom.

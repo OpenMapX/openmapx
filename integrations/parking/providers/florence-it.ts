@@ -1,5 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { ParkingFacility } from "./types.js";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 
 /**
  * Florence (Firenze) real-time parking availability client.

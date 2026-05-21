@@ -1,6 +1,6 @@
 import type { BoundingBox } from "@openmapx/core";
 import { overpassQuerySafe } from "@openmapx/core";
-import type { ParkingFacility, ParkingType } from "./types.js";
+import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 
 const PARKING_TAG_MAP: Record<string, ParkingType> = {
   "multi-storey": "garage",

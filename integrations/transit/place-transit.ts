@@ -13,6 +13,7 @@ import {
   expandSearchQuery,
   getQueryVariants,
 } from "@openmapx/integration-geocoding/query-expansion";
+import { TTL as TTL_POLICY } from "@openmapx/mobility-core/policy";
 import { bucketTimestamps, isTripNumber, normalizeHeadsign, normalizeShortName } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 
@@ -22,14 +23,21 @@ interface DepartureWithFeed extends Departure {
 }
 
 const LINK_RADIUS_M = 1000; // 1 km
+// TODO(policy): mobility-core's DEDUP.NAME_SIMILARITY_MIN is 0.6 (stricter).
+// Place→stop linking uses a permissive 0.4 floor because we match place
+// names against transit-stop names that often differ stylistically (e.g.
+// "Köln Hbf" vs "Köln Hauptbahnhof"). Tightening would drop legitimate
+// links; kept raw until policy is reconciled or the place-linking pass
+// is rewritten.
 const MIN_NAME_DICE = 0.4;
 const MIN_INFORMATIVE_TOKEN_LEN = 4;
 
 const TTL = {
-  placeStops: 86400,
+  placeStops: TTL_POLICY.PLACE_LINK,
+  // no policy class for 5-min
   placeRoutes: 300,
-  placeAlerts: 60,
-  placeFacilities: 86400,
+  placeAlerts: TTL_POLICY.REALTIME_WARM,
+  placeFacilities: TTL_POLICY.STATIC_ARCHIVE,
 };
 
 export interface PlaceTransit {

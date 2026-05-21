@@ -1,5 +1,10 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { ParkingFacility, ParkingType, RdwGeoRecord, RdwSpecsRecord } from "./types.js";
+import type {
+  ParkingFacility,
+  ParkingType,
+  RdwGeoRecord,
+  RdwSpecsRecord,
+} from "@openmapx/mobility-core/parking";
 
 /**
  * Netherlands RDW Open Data parking client.

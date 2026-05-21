@@ -15,7 +15,7 @@ import type {
   OdhParkingStation,
   ParkingFacility,
   ParkingType,
-} from "./types.js";
+} from "@openmapx/mobility-core/parking";
 
 const BASE_URL = "https://mobility.api.opendatahub.com/v2/flat/ParkingStation";
 const STATIONS_TTL = 60 * 60 * 1000; // 1h — metadata changes rarely

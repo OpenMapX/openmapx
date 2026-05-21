@@ -12,29 +12,29 @@ import type {
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
 import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
-import { dedupStations, dedupVehicles } from "@openmapx/shared-mobility/dedup";
+import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
-} from "@openmapx/shared-mobility/entur-mobility";
+} from "@openmapx/mobility-core/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/shared-mobility/gbfs-provider-base";
+} from "@openmapx/mobility-core/gbfs-provider-base";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "@openmapx/shared-mobility/mapper";
-import { fetchMotisRentals } from "@openmapx/shared-mobility/motis-rentals";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/shared-mobility/types";
+} from "@openmapx/mobility-core/mapper";
+import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
+import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/mobility-core/types";
 import { searchCityBikes } from "./citybikes-client.js";
 import { searchDbBikes } from "./db-bike-client.js";
 import { searchDonkey } from "./donkey-client.js";
 import { searchNextbike } from "./nextbike-client.js";
 
-const BIKE_FORM_FACTORS = new Set<import("@openmapx/shared-mobility/types").VehicleFormFactor>([
+const BIKE_FORM_FACTORS = new Set<import("@openmapx/mobility-core/types").VehicleFormFactor>([
   "bicycle",
   "cargo_bicycle",
 ]);

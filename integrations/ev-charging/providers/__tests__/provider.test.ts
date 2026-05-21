@@ -1,6 +1,6 @@
 import type { BoundingBox, DataSourceDetail } from "@openmapx/core";
+import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EvChargingStation } from "../types.js";
 
 const mocks = vi.hoisted(() => {
   const sourceA = {

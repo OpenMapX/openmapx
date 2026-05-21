@@ -1,5 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { BnlsFrRecord, ParkingFacility, ParkingType } from "./types.js";
+import type { BnlsFrRecord, ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 
 /**
  * France BNLS (Base Nationale des Lieux de Stationnement) parking client.

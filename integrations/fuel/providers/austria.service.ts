@@ -1,6 +1,6 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
-import type { FuelStation } from "./types";
 
 // Austria bounding box
 const AUSTRIA = { minLat: 46.4, maxLat: 49.0, minLng: 9.5, maxLng: 17.2 };

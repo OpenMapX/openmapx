@@ -1,5 +1,10 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { ParkApiV3Site, ParkApiV3Source, ParkingFacility, ParkingType } from "./types.js";
+import type {
+  ParkApiV3Site,
+  ParkApiV3Source,
+  ParkingFacility,
+  ParkingType,
+} from "@openmapx/mobility-core/parking";
 
 const API_BASE = "https://api.mobidata-bw.de/park-api/api/public/v3/parking-sites";
 const SOURCES_API = "https://api.mobidata-bw.de/park-api/api/public/v3/sources";

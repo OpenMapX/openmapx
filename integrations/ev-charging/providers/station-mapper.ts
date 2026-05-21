@@ -1,5 +1,5 @@
 import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
-import type { EvChargingConnector, EvChargingStation } from "./types.js";
+import type { EvChargingConnector, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 
 function getMaxPower(station: EvChargingStation): number {
   return station.connectors.reduce((max, connector) => {

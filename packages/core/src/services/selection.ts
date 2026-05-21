@@ -114,9 +114,9 @@ export function formatServiceIdList(ids: Iterable<string>): string {
  *
  * - `overpass`: `packages/core/src/utils/overpass/client.ts` reads
  *   `process.env.OVERPASS_URL` directly (module-level initialisation).
- * - `nominatim`: `packages/shared-mobility/nominatim.ts` reads
+ * - `nominatim`: `packages/mobility-core/nominatim.ts` reads
  *   `process.env.NOMINATIM_URL` at module load time.
- * - `motis`: `packages/shared-mobility/motis-rentals.ts` reads
+ * - `motis`: `packages/mobility-core/motis-rentals.ts` reads
  *   `process.env.MOTIS_URL` at module load time for the local-MOTIS rentals
  *   instance. (The `apps/api` motis manager additionally consults
  *   `serviceUrl("motis")` at runtime, so this entry mainly fixes the rentals

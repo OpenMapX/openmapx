@@ -1,4 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { fetchApagDetail, searchApag } from "./apag.js";
 import { fetchApcoaDetail, searchApcoa } from "./apcoa.js";
 import { fetchAutobahnDeDetail, searchAutobahnDe } from "./autobahn-de.js";
@@ -28,7 +29,6 @@ import { fetchParkApiV3Detail, searchParkApiV3 } from "./parkapi-v3.js";
 import { fetchRdwNlDetail, searchRdwNl } from "./rdw-nl.js";
 import { fetchSingaporeDetail, searchSingapore } from "./singapore.js";
 import { getParkingSourcePriority } from "./source-priority.js";
-import type { ParkingFacility } from "./types.js";
 import { fetchUtmcNewcastleDetail, searchUtmcNewcastle } from "./utmc-newcastle.js";
 import { fetchViennaAtDetail, searchViennaAt } from "./vienna-at.js";
 

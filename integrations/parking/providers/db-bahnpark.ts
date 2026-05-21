@@ -1,5 +1,9 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { DbBahnParkFacility, ParkingFacility, ParkingType } from "./types.js";
+import type {
+  DbBahnParkFacility,
+  ParkingFacility,
+  ParkingType,
+} from "@openmapx/mobility-core/parking";
 
 /**
  * DB BahnPark Parking Information API client.
