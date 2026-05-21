@@ -83,8 +83,10 @@ describe("service selection helpers", () => {
       // substitution placeholders so the actual secret/config value is
       // resolved from infra/docker/.env at compose-up time and never
       // baked into the rendered YAML.
+      // biome-ignore-start lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
       INTEGRATION_PHOTOS_FLICKR_APIKEY: "${INTEGRATION_PHOTOS_FLICKR_APIKEY:-}",
       SERVICE_VALHALLA_BUILD_ELEVATION: "${SERVICE_VALHALLA_BUILD_ELEVATION:-}",
+      // biome-ignore-end lint/suspicious/noTemplateCurlyInString: Docker Compose substitution syntax in literal strings
     });
   });
 

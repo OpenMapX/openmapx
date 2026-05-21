@@ -3,6 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const GITHUB_TREE_URL =
   "https://api.github.com/repos/public-transport/transitous/git/trees/main?recursive=1";
 
+// Stub out integration-host so importing ./catalog doesn't transitively pull in
+// auth.ts (which requires BETTER_AUTH_SECRET). The catalog merger only uses
+// integration-host to discover gtfs-catalog domain providers (e.g. the MDB
+// integration); returning an empty list keeps the Transitous + Swiss-only path
+// of this test intact.
+vi.mock("../../integration-host.js", () => ({
+  getIntegrationsByDomain: vi.fn().mockReturnValue([]),
+}));
+
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {

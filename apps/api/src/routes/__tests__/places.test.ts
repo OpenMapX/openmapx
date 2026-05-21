@@ -55,6 +55,11 @@ vi.mock("../../../../../integrations/geocoding/place-lookup.js", () => ({
   lookupByNameAndCoords: mockLookupByNameAndCoords,
   lookupByOsmFilters: mockLookupByOsmFilters,
   lookupAddressByCoords: mockLookupAddressByCoords,
+  // /api/places/nearby calls reverseGeocodeCountry to enrich each result's
+  // openingHoursInfo with the correct PH (public holiday) context. Tests
+  // don't exercise PH logic, so return null and the nearby handler treats
+  // country as unknown.
+  reverseGeocodeCountry: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock knowledge service

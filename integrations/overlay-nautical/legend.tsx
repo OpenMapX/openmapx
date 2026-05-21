@@ -283,7 +283,6 @@ export function NauticalLegend() {
           variant="caption"
           color="text.secondary"
           sx={{ mt: 1, display: "block", fontSize: 10, lineHeight: 1.4 }}
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted manifest-derived attribution
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
         />
       )}

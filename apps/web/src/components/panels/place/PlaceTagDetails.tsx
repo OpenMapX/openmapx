@@ -459,10 +459,13 @@ function Linkified({ text, color = "inherit" }: { text: string; color?: string }
   }
   return (
     <>
-      {parts.map((part, i) =>
-        isHttpUrl(part) ? (
+      {parts.map((part, i) => {
+        // parts is derived deterministically from `text` via String.prototype.split,
+        // never mutated and never reordered, so `${i}-${part}` is a stable key.
+        const key = `${i}-${part}`;
+        return isHttpUrl(part) ? (
           <Link
-            key={i}
+            key={key}
             href={part}
             target="_blank"
             rel="noopener noreferrer"
@@ -472,9 +475,9 @@ function Linkified({ text, color = "inherit" }: { text: string; color?: string }
             {part}
           </Link>
         ) : (
-          <span key={i}>{part}</span>
-        ),
-      )}
+          <span key={key}>{part}</span>
+        );
+      })}
     </>
   );
 }
