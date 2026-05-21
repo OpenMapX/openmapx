@@ -1,4 +1,8 @@
-import { lookupByCoords, lookupByNameAndCoords } from "@integrations/geocoding/place-lookup";
+import {
+  lookupByCoords,
+  lookupByNameAndCoords,
+  reverseGeocodeCountry,
+} from "@integrations/geocoding/place-lookup";
 import {
   deduplicatePhotos,
   getPhotoProviders,
@@ -7,22 +11,25 @@ import {
 import { fetchAggregate, getReviewProviders } from "@integrations/reviews/orchestrator";
 import type { Place, ReviewProvider } from "@openmapx/core";
 import {
+  CATEGORY_FILTERS,
+  categoryPlaceToPlace,
+  haversineDistance,
+  type OsmFilter,
+  type PlaceIds,
+  parseId,
+  searchByCategory,
+} from "@openmapx/core";
+import { buildOpeningHoursInfo } from "@openmapx/core/server";
+import {
   buildFacebookUrl,
   buildFoursquareUrl,
   buildGoogleMapsUrl,
   buildInstagramUrl,
   buildTripadvisorUrl,
   buildYelpUrl,
-  CATEGORY_FILTERS,
-  categoryPlaceToPlace,
   getPlaceResolver,
-  haversineDistance,
-  type OsmFilter,
-  type PlaceIds,
   type PlaceResolverContext,
-  parseId,
-  searchByCategory,
-} from "@openmapx/core";
+} from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
@@ -111,6 +118,13 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     ...knowledge
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
+  if (enriched.openingHours && !enriched.openingHoursInfo) {
+    enriched.openingHoursInfo = buildOpeningHoursInfo(enriched.openingHours, {
+      lat: enriched.coordinates[1],
+      lon: enriched.coordinates[0],
+      countryCode: enriched.countryCode,
+    });
+  }
   const allIntegrations = getAllIntegrations();
   const photoProviders = getPhotoProviders(allIntegrations);
   const reviewProviders = getReviewProviders(allIntegrations);
@@ -271,14 +285,33 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
       try {
         const places = await withCache(cacheKey, NEARBY_CACHE_TTL_SECONDS, async () => {
           const bbox = bboxFromRadius(lat, lng, radiusMetres);
-          const candidates = await searchByCategory(nearbyFilters(), bbox);
+          // `buildOpeningHoursInfo` needs `countryCode` to evaluate public-
+          // holiday rules (`PH off` etc.) — without it places in DE/FR/… that
+          // close on public holidays would show as open. Overpass results
+          // don't carry country, so resolve the request center once and reuse
+          // for every result. The reverse-geocode helper caches aggressively
+          // (1° grid, 24 h TTL) so this is cheap.
+          const [candidates, countryCode] = await Promise.all([
+            searchByCategory(nearbyFilters(), bbox),
+            reverseGeocodeCountry(lat, lng),
+          ]);
 
           return candidates
             .filter((place) => place.id !== excludeId)
-            .map((place) => ({
-              place: categoryPlaceToPlace(place),
-              distance: haversineDistance(center, place.coordinates),
-            }))
+            .map((place) => {
+              const built = categoryPlaceToPlace(place);
+              if (built.openingHours && !built.openingHoursInfo) {
+                built.openingHoursInfo = buildOpeningHoursInfo(built.openingHours, {
+                  lat: built.coordinates[1],
+                  lon: built.coordinates[0],
+                  countryCode: countryCode ?? undefined,
+                });
+              }
+              return {
+                place: built,
+                distance: haversineDistance(center, place.coordinates),
+              };
+            })
             .filter(({ distance }) => distance <= radiusMetres)
             .sort((a, b) => a.distance - b.distance)
             .slice(0, NEARBY_LIMIT)
@@ -339,7 +372,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           // `integrations/geocoding-db-ris`, and the per-provider data-source
           // resolvers registered via `createDataSourceResolver`).
           if (parsedId) {
-            const resolver = getPlaceResolver(parsedId.scheme);
+            const resolver = getPlaceResolver<Place>(parsedId.scheme);
             if (resolver) {
               const resolved = await resolver(parsedId.value, resolverCtx);
               if (!resolved) {
