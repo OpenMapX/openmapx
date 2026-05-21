@@ -19,7 +19,7 @@
     "@biomejs/biome": "^2.4.13",
     "@changesets/cli": "^2.31.0",
     "@commitlint/cli": "^20.5.3",
-    "@commitlint/config-conventional": "^20.5.3",
+    "@commitlint/config-conventional": "^21.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "turbo": "^2.9.7",
