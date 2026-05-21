@@ -47,3 +47,12 @@ jobs:
       - run: pnpm check-types
 
       - run: pnpm test
+
+      - name: Require changeset for publishable-package changes (PR only)
+        if: github.event_name == 'pull_request'
+        # Exits non-zero if a publishable package changed since main without
+        # an accompanying changeset. The baseBranch is "main" per
+        # .changeset/config.json — keep these in sync. For PRs that
+        # intentionally need no release entry (test-only, infra, internal
+        # apps), add an empty changeset: `pnpm exec changeset --empty`.
+        run: pnpm exec changeset status --since=origin/main
