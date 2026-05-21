@@ -43,6 +43,14 @@ const METADATA_TABLE_DDL = `
   );
 `;
 
+// Additive columns. Run as separate IDEMPOTENT statements so older DBs that
+// already have the table from the original DDL pick them up on next boot.
+const METADATA_TABLE_ALTERS: string[] = [
+  "ALTER TABLE public.gtfs_feeds ADD COLUMN IF NOT EXISTS license TEXT",
+  "ALTER TABLE public.gtfs_feeds ADD COLUMN IF NOT EXISTS license_url TEXT",
+  "ALTER TABLE public.gtfs_feeds ADD COLUMN IF NOT EXISTS mdb_id TEXT",
+];
+
 function bboxOverlaps(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
 }
@@ -75,6 +83,9 @@ class GtfsManager {
   async initialize(): Promise<void> {
     try {
       await sql.unsafe(METADATA_TABLE_DDL);
+      for (const stmt of METADATA_TABLE_ALTERS) {
+        await sql.unsafe(stmt);
+      }
 
       // Load existing feeds
       const rows = await sql.unsafe("SELECT * FROM public.gtfs_feeds ORDER BY slug");
@@ -108,6 +119,9 @@ class GtfsManager {
           tripCount: row.trip_count as number | null,
           serviceEndDate: row.service_end_date ? formatDateOnly(row.service_end_date) : null,
           currentStage: null,
+          license: (row.license as string | null) ?? null,
+          licenseUrl: (row.license_url as string | null) ?? null,
+          mdbId: (row.mdb_id as string | null) ?? null,
         };
         this.feeds.set(feed.slug, feed);
       }
@@ -223,6 +237,13 @@ class GtfsManager {
 
     const localPath = "localPath" in feed ? feed.localPath : undefined;
     const originUrl = "originUrl" in feed ? (feed.originUrl ?? null) : null;
+    // CatalogFeed carries optional license metadata (set by MDB, sometimes by
+    // Transitous). Persist it so the per-feed attribution surface and admin UI
+    // can render the upstream license without a separate lookup.
+    const licenseSpdx = "license" in feed ? ((feed.license as string | undefined) ?? null) : null;
+    const licenseUrl =
+      "licenseUrl" in feed ? ((feed.licenseUrl as string | undefined) ?? null) : null;
+    const mdbId = "mdbId" in feed ? ((feed.mdbId as string | undefined) ?? null) : null;
 
     // Create or update metadata. Preserve any prior `currentStage` only
     // until the import actually starts emitting fresh stage updates.
@@ -249,17 +270,23 @@ class GtfsManager {
       tripCount: previous?.tripCount ?? null,
       serviceEndDate: previous?.serviceEndDate ?? null,
       currentStage: null,
+      license: licenseSpdx ?? previous?.license ?? null,
+      licenseUrl: licenseUrl ?? previous?.licenseUrl ?? null,
+      mdbId: mdbId ?? previous?.mdbId ?? null,
     };
     this.feeds.set(feedSlug, importedFeed);
 
     await sql.unsafe(
-      `INSERT INTO public.gtfs_feeds (slug, name, url, origin_url, source, country_code, schema_name, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+      `INSERT INTO public.gtfs_feeds (slug, name, url, origin_url, source, country_code, schema_name, status, license, license_url, mdb_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10)
        ON CONFLICT (slug) DO UPDATE SET
          url = $3,
          origin_url = COALESCE($4, public.gtfs_feeds.origin_url),
          status = 'pending',
          error_message = NULL,
+         license = COALESCE($8, public.gtfs_feeds.license),
+         license_url = COALESCE($9, public.gtfs_feeds.license_url),
+         mdb_id = COALESCE($10, public.gtfs_feeds.mdb_id),
          updated_at = NOW()`,
       [
         feedSlug,
@@ -269,6 +296,9 @@ class GtfsManager {
         feed.source,
         feed.countryCode ?? "",
         schemaName,
+        licenseSpdx,
+        licenseUrl,
+        mdbId,
       ],
     );
 

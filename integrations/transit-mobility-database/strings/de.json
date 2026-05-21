@@ -1,0 +1,11 @@
+{
+  "name": "Mobility Database",
+  "description": "Maßgeblicher globaler Katalog für GTFS-Fahrplan-, GTFS-Realtime- und GBFS-Feeds (~6.000) mit täglich aktualisierten Snapshots und stabilen mdb-*-IDs, betrieben von MobilityData (den Hütern der GTFS-/GBFS-Spezifikationen).",
+  "dataSources": [
+    {
+      "purpose": "Erkennen und Laden von GTFS-Fahrplan-Feeds zum Import in den lokalen GTFS-Katalog. Lizenz-Metadaten pro Feed fließen in den Import.",
+      "dataSent": "Keine Nutzerdaten (serverseitige Katalogabfrage)",
+      "dataReceived": "Anbietername, Land, mdb-*-ID, Produzenten-URL, neueste Snapshot-URL und Hash, Lizenz-URL"
+    }
+  ]
+}

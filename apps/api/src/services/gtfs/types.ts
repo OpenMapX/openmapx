@@ -8,6 +8,20 @@ export interface CatalogFeed {
   url: string;
   license?: string;
   bbox?: BBox;
+
+  // MDB-only metadata, populated when source === "mobilitydb"
+  /** Stable `mdb-XXXX` foreign key for re-fetching by id. */
+  mdbId?: string;
+  /** Producer's published license URL when MDB knows it. */
+  licenseUrl?: string;
+  /** Snapshot URL on files.mobilitydatabase.org. Rotates per snapshot — never persist. */
+  latestDatasetUrl?: string;
+  latestDatasetHash?: string;
+  latestDatasetDownloadedAt?: string;
+  /** Producer-confirmed feed flag. */
+  isOfficial?: boolean;
+  /** "gtfs" | "gtfs_rt" | "gbfs" — distinguishes MDB sub-types in the unified catalog. */
+  dataType?: string;
 }
 
 export type FeedStatus = "pending" | "downloading" | "importing" | "active" | "failed" | "stale";
@@ -51,6 +65,12 @@ export interface ImportedFeed {
    * not persisted in `gtfs_feeds` — the admin UI polls it.
    */
   currentStage: string | null;
+  /** SPDX-shaped license string when the catalog row supplied one. */
+  license: string | null;
+  /** Producer's published license URL when available. */
+  licenseUrl: string | null;
+  /** `mdb-XXXX` stable id when this feed originated from Mobility Database. */
+  mdbId: string | null;
 }
 
 /** Row from a GTFS stops query */

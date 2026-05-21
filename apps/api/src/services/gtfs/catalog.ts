@@ -1,6 +1,38 @@
+import { normalizeProducerUrl } from "@integrations/transit-mobility-database";
 import type { BBox } from "@openmapx/core";
 import { USER_AGENT_TRANSIT } from "@openmapx/core";
+import { getIntegrationsByDomain } from "../../integration-host.js";
 import type { CatalogFeed } from "./types";
+
+/**
+ * Provider shape registered by the `transit-mobility-database` integration
+ * under the `gtfs-catalog` domain (see its `setup()`). We have to go through
+ * the registry because in development the integration host imports built-in
+ * modules with an mtime query string for HMR — a direct
+ * `import { getMdbCatalogFeeds } from "@integrations/transit-mobility-database"`
+ * pulls a separate module instance whose `state.client` is never initialized,
+ * so the call would always return `[]`.
+ */
+interface MdbCatalogProvider {
+  id: string;
+  listFeeds: () => Promise<CatalogFeed[]>;
+}
+
+async function getMdbCatalogFeeds(): Promise<CatalogFeed[]> {
+  const out: CatalogFeed[] = [];
+  for (const integration of getIntegrationsByDomain("gtfs-catalog")) {
+    const providers = (integration.providers.get("gtfs-catalog") ?? []) as MdbCatalogProvider[];
+    for (const provider of providers) {
+      try {
+        const feeds = await provider.listFeeds();
+        out.push(...feeds);
+      } catch (err) {
+        console.warn(`[gtfs-catalog] provider "${provider.id}" listFeeds failed:`, err);
+      }
+    }
+  }
+  return out;
+}
 
 const GITHUB_API = "https://api.github.com";
 const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transitous/main";
@@ -139,10 +171,39 @@ function buildSwissOfficialFeeds(now = new Date()): CatalogFeed[] {
 }
 
 function mergeCatalogFeeds(feeds: CatalogFeed[]): CatalogFeed[] {
+  // The static GTFS importer expects schedule GTFS zips. MDB also surfaces
+  // GTFS-RT (protobuf streams) and GBFS (live bike/scooter JSON) rows under
+  // the same `MdbCatalogFeed` shape — selecting one of those would make
+  // the importer download the wrong payload. Drop them here; the integration
+  // keeps them around for future non-static consumers.
+  const scheduleFeeds = feeds.filter(
+    (f) => f.source !== "mobilitydb" || f.dataType === undefined || f.dataType === "gtfs",
+  );
+
+  // MDB is the authoritative metadata source for any feed it lists. When the
+  // same producer URL also shows up via Transitous, prefer the MDB entry so
+  // license_url / mdbId / snapshot metadata flow through to import time.
+  const mdbProducerUrls = new Set<string>();
+  for (const feed of scheduleFeeds) {
+    if (feed.source !== "mobilitydb") continue;
+    const normalized = normalizeProducerUrl(feed.url);
+    if (normalized) mdbProducerUrls.add(normalized);
+  }
+
   const byId = new Map<string, CatalogFeed>();
-  for (const feed of feeds) {
+  for (const feed of scheduleFeeds) {
+    if (feed.source !== "mobilitydb") {
+      const normalized = normalizeProducerUrl(feed.url);
+      if (normalized && mdbProducerUrls.has(normalized)) continue;
+    }
+    // Attach a country bbox when we can; MDB feeds otherwise arrive without one.
+    if (!feed.bbox && feed.countryCode) {
+      const bbox = COUNTRY_BBOXES[feed.countryCode];
+      if (bbox) feed.bbox = bbox;
+    }
     byId.set(feed.id, feed);
   }
+
   return [...byId.values()].sort((left, right) => {
     if (left.source === "opentransportdata-swiss" && right.source !== "opentransportdata-swiss") {
       return -1;
@@ -227,14 +288,23 @@ export async function getCatalogFeeds(): Promise<CatalogFeed[]> {
   }
 
   try {
-    cachedFeeds = mergeCatalogFeeds([
-      ...buildSwissOfficialFeeds(),
-      ...(await fetchTransitousCatalog()),
+    const [transitous, mdb] = await Promise.all([
+      fetchTransitousCatalog().catch((err) => {
+        console.warn("[gtfs-catalog] Transitous fetch failed:", err);
+        return [];
+      }),
+      getMdbCatalogFeeds().catch((err) => {
+        console.warn("[gtfs-catalog] Mobility Database fetch failed:", err);
+        return [];
+      }),
     ]);
+    cachedFeeds = mergeCatalogFeeds([...buildSwissOfficialFeeds(), ...transitous, ...mdb]);
     lastFetchedAt = now;
-    console.log(
-      `[gtfs-catalog] Loaded ${cachedFeeds.length} feeds from official Swiss + Transitous catalogs`,
-    );
+    const bySource = cachedFeeds.reduce<Record<string, number>>((acc, f) => {
+      acc[f.source] = (acc[f.source] ?? 0) + 1;
+      return acc;
+    }, {});
+    console.log(`[gtfs-catalog] Loaded ${cachedFeeds.length} feeds (${JSON.stringify(bySource)})`);
   } catch (err) {
     console.warn("[gtfs-catalog] Failed to fetch catalog:", err);
     if (!cachedFeeds) cachedFeeds = buildSwissOfficialFeeds();

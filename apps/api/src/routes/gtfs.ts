@@ -42,6 +42,19 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
       if (!slug || !isValidFeedSlug(slug)) {
         return reply.status(400).send({ error: new InvalidFeedSlugError(String(slug)).message });
       }
+      // License gate (MDB only): MDB feeds with no published license_url cannot
+      // be assumed safe to redistribute. Block by default; an admin can override
+      // with `acceptUnknownLicense: true` after reviewing the feed manually.
+      if (feed.source === "mobilitydb" && !feed.license && !feed.licenseUrl) {
+        if (!(body as { acceptUnknownLicense?: boolean }).acceptUnknownLicense) {
+          return reply.status(409).send({
+            error: "license-unknown",
+            message:
+              "This Mobility Database feed has no published license. Re-submit with acceptUnknownLicense:true to import anyway.",
+            mdbId: feed.mdbId,
+          });
+        }
+      }
       if (gtfsManager.isImporting(slug)) {
         return reply.status(409).send({ error: `Feed "${slug}" is already being imported` });
       }
