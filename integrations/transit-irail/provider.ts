@@ -6,7 +6,7 @@ import type {
   TripPlan,
   VehicleJourney,
   VehicleJourneyStop,
-} from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 
 const BASE_URL = "https://api.irail.be";
 const STATIONS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours

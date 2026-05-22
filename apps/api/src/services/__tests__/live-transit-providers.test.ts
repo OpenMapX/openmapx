@@ -16,6 +16,12 @@ async function loadEnturProviderModule() {
   return import("@integrations/live-transit-entur/index.js");
 }
 
+interface MobilityResultLike<T> {
+  data: T;
+  attributions: Array<{ sourceId: string }>;
+  freshness: { fetchedAt: string; hasRealtimeData: boolean; isStale: boolean };
+}
+
 function createCtx(config: Record<string, unknown> = {}) {
   let provider: unknown;
   let healthCheck: (() => Promise<unknown>) | undefined;
@@ -23,7 +29,7 @@ function createCtx(config: Record<string, unknown> = {}) {
   return {
     ctx: {
       config,
-      registerProvider: (_domain: string, nextProvider: unknown) => {
+      registerRealtimeProvider: (nextProvider: unknown) => {
         provider = nextProvider;
       },
       registerHealthCheck: (fn: () => Promise<unknown>) => {
@@ -32,8 +38,12 @@ function createCtx(config: Record<string, unknown> = {}) {
     },
     getProvider: () =>
       provider as {
-        getVehicles: (bbox: [number, number, number, number]) => Promise<unknown>;
-        getAlerts?: (bbox: [number, number, number, number]) => Promise<unknown>;
+        getVehiclePositions: (
+          bbox: [number, number, number, number],
+        ) => Promise<MobilityResultLike<unknown[]>>;
+        getAlertsForBbox?: (
+          bbox: [number, number, number, number],
+        ) => Promise<MobilityResultLike<unknown[]>>;
       },
     getHealthCheck: () => healthCheck,
   };
@@ -97,9 +107,8 @@ describe("live-transit-db-ris provider", () => {
 
     mod.setup(ctx as never);
     const provider = getProvider();
-    const vehicles = (await provider.getVehicles([8.5, 49.9, 8.9, 50.2])) as Array<
-      Record<string, unknown>
-    >;
+    const result = await provider.getVehiclePositions([8.5, 49.9, 8.9, 50.2]);
+    const vehicles = result.data as Array<Record<string, unknown>>;
 
     expect(vehicles).toEqual([
       expect.objectContaining({
@@ -112,6 +121,8 @@ describe("live-transit-db-ris provider", () => {
         speed: 40,
       }),
     ]);
+    expect(result.attributions.map((a) => a.sourceId)).toContain("db-ris-maps");
+    expect(result.freshness.hasRealtimeData).toBe(true);
   });
 
   it("falls back to the journey id when RIS transport metadata is empty", async () => {
@@ -143,9 +154,8 @@ describe("live-transit-db-ris provider", () => {
 
     mod.setup(ctx as never);
     const provider = getProvider();
-    const vehicles = (await provider.getVehicles([8.5, 49.9, 8.9, 50.2])) as Array<
-      Record<string, unknown>
-    >;
+    const result = await provider.getVehiclePositions([8.5, 49.9, 8.9, 50.2]);
+    const vehicles = result.data as Array<Record<string, unknown>>;
 
     expect(vehicles).toEqual([
       expect.objectContaining({
@@ -247,12 +257,10 @@ describe("live-transit-entur provider", () => {
 
     mod.setup(ctx as never);
     const provider = getProvider();
-    const vehicles = (await provider.getVehicles([10.6, 59.8, 10.8, 60.0])) as Array<
-      Record<string, unknown>
-    >;
-    const alerts = (await provider.getAlerts?.([10.7, 59.9, 10.8, 59.95])) as Array<
-      Record<string, unknown>
-    >;
+    const vehiclesResult = await provider.getVehiclePositions([10.6, 59.8, 10.8, 60.0]);
+    const vehicles = vehiclesResult.data as Array<Record<string, unknown>>;
+    const alertsResult = await provider.getAlertsForBbox?.([10.7, 59.9, 10.8, 59.95]);
+    const alerts = (alertsResult?.data ?? []) as Array<Record<string, unknown>>;
 
     expect(vehicles).toEqual([
       expect.objectContaining({
@@ -267,6 +275,8 @@ describe("live-transit-entur provider", () => {
         tripId: "entur:2026-04-21|VYG:ServiceJourney:1035_442947-R",
       }),
     ]);
+    expect(vehiclesResult.attributions.map((a) => a.sourceId)).toContain("entur-live-vehicles");
+    expect(vehiclesResult.freshness.hasRealtimeData).toBe(true);
 
     expect(alerts).toEqual([
       expect.objectContaining({
@@ -277,5 +287,6 @@ describe("live-transit-entur provider", () => {
         affectedStopIds: ["entur:NSR:StopPlace:337"],
       }),
     ]);
+    expect(alertsResult?.attributions.map((a) => a.sourceId)).toContain("entur-live-situations");
   });
 });

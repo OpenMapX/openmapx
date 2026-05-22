@@ -1,6 +1,20 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
 import type { GtfsDeps } from "./gtfs-local.js";
 import * as gtfsLocal from "./gtfs-local.js";
+
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "transit-gtfs-local",
+    name: "Local GTFS Feeds",
+    notes:
+      "Aggregated set of imported GTFS schedules; per-feed attribution surfaced via getFeedAttribution().",
+  },
+];
+
+const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
 
 export function setup(ctx: IntegrationContext): void {
   // Inject GTFS manager and queries from app config
@@ -25,29 +39,71 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
-  ctx.registerProvider("transit", {
+  ctx.registerTransitProvider({
     id: "transit-gtfs-local",
     prefix: "g-",
-    coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
+    coverage: { all: true },
     priority: 3,
-    getStopsNearby: (lat: number, lng: number, radiusMeters: number) => {
+    attribution: ATTRIBUTION,
+    capabilities: {
+      stops: {
+        lookup: true,
+        nearby: true,
+        bbox: false,
+        search: true,
+        infrastructure: false,
+        platforms: true,
+        timetable: true,
+      },
+      departures: true,
+      arrivals: true,
+      routes: { lookup: true, forStop: true, stops: true, geometry: true },
+      planning: false,
+      vehiclePositions: false,
+      vehicleJourney: true,
+      alerts: { byStop: false, byRoute: false, byBbox: false },
+      facilities: false,
+    },
+    async getStopsNearby(lat, lng, radiusMeters) {
       const deg = radiusMeters / 111_320;
       const bbox: [number, number, number, number] = [lng - deg, lat - deg, lng + deg, lat + deg];
-      return gtfsLocal.hasCoverage(bbox) ? gtfsLocal.getStops(bbox) : Promise.resolve([]);
+      const stops = gtfsLocal.hasCoverage(bbox) ? await gtfsLocal.getStops(bbox) : [];
+      return wrap(stops);
     },
-    getStop: (id: string) => gtfsLocal.getStopById(id),
-    getDepartures: (id: string, min: number) => gtfsLocal.getDepartures(id, min),
-    getArrivals: (id: string, min: number) => gtfsLocal.getArrivals(id, min),
-    searchByName: (q: string, limit: number) => gtfsLocal.searchByName(q, limit),
-    getStopPlatforms: (id: string) => gtfsLocal.getPlatformStops(id),
-    getStopTimetable: (id: string, date: string) => gtfsLocal.getTimetable(id, date),
-    getVehicleJourney: (tripId: string) => gtfsLocal.getVehicleJourney(tripId),
-    getRoute: (routeId: string) => gtfsLocal.getRoute(routeId),
-    getRouteStops: (routeId: string, hintStopId?: string) =>
-      gtfsLocal.getRouteStops(routeId, hintStopId),
-    getRoutesForStop: (stopId: string) => gtfsLocal.getRoutesForStop(stopId),
-    getLegGeometry: (tripId: string, fromStopId?: string, toStopId?: string) =>
-      gtfsLocal.getLegGeometry(tripId, fromStopId, toStopId),
+    async getStop(id) {
+      return wrap(await gtfsLocal.getStopById(id));
+    },
+    async getDepartures(id, min) {
+      // Static GTFS schedule (no realtime) — not flagged as realtime.
+      return wrap(await gtfsLocal.getDepartures(id, min));
+    },
+    async getArrivals(id, min) {
+      return wrap(await gtfsLocal.getArrivals(id, min));
+    },
+    async searchStopsByName(q, limit) {
+      return wrap(await gtfsLocal.searchByName(q, limit ?? 10));
+    },
+    async getStopPlatforms(id) {
+      return wrap(await gtfsLocal.getPlatformStops(id));
+    },
+    async getStopTimetable(id, date) {
+      return wrap(await gtfsLocal.getTimetable(id, date));
+    },
+    async getVehicleJourney(tripId) {
+      return wrap(await gtfsLocal.getVehicleJourney(tripId));
+    },
+    async getRoute(routeId) {
+      return wrap(await gtfsLocal.getRoute(routeId));
+    },
+    async getRouteStops(routeId, hintStopId) {
+      return wrap(await gtfsLocal.getRouteStops(routeId, hintStopId));
+    },
+    async getRoutesForStop(stopId) {
+      return wrap(await gtfsLocal.getRoutesForStop(stopId));
+    },
+    async getLegGeometry(tripId, fromStopId, toStopId) {
+      return wrap(await gtfsLocal.getLegGeometry(tripId, fromStopId, toStopId));
+    },
     getFeedAttribution: async () => gtfsLocal.getFeedAttributions(),
   });
 }

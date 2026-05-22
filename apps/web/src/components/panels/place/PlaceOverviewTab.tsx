@@ -31,7 +31,7 @@ import Skeleton from "@mui/material/Skeleton";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { MergedDeparture, MergedRoute, Place, TransportMode } from "@openmapx/core";
+import type { Place } from "@openmapx/core";
 import {
   computePlusCode,
   plusCodeUrl,
@@ -45,6 +45,7 @@ import {
   useTides,
   useUpdateLabel,
 } from "@openmapx/core";
+import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";

@@ -1,4 +1,10 @@
-import type { BBox, Departure, TransitRoute, TransitStop, TransportMode } from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
+import type {
+  Departure,
+  TransitRoute,
+  TransitStop,
+  TransportMode,
+} from "@openmapx/mobility-core/transit";
 import { GTFS_ROUTE_TYPE_MODE, mapGtfsRouteTypeToMode } from "@openmapx/mobility-formats";
 
 const BASE_URL = "https://transit.land/api/v2/rest";

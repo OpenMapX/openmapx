@@ -1,4 +1,4 @@
-import type { RouteStop } from "@integrations/transit/types";
+import type { RouteStop } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 

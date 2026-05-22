@@ -674,6 +674,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/live-transit-entur:
     dependencies:
@@ -683,6 +686,42 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+
+  integrations/live-transit-motis:
+    dependencies:
+      '@hey-api/client-fetch':
+        specifier: workspace:*
+        version: link:../../packages/hey-api-client-fetch
+      '@motis-project/motis-client':
+        specifier: ^2.9.2
+        version: 2.9.2
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+
+  integrations/live-transit-siri-sx-ch:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/integration-transit-opentransportdata-ch':
+        specifier: workspace:^
+        version: link:../transit-opentransportdata-ch
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/overlay-3d-buildings:
     dependencies:
@@ -1079,6 +1118,9 @@ importers:
       '@openmapx/integration-transit-hafas':
         specifier: workspace:^
         version: link:../transit-hafas
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-db-vendo:
     dependencies:
@@ -1088,6 +1130,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       db-vendo-client:
         specifier: ^6.10.9
         version: 6.10.9
@@ -1100,6 +1145,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       cached-hafas-client:
         specifier: ^5.1.9
         version: 5.1.9(hafas-client@6.3.6)(prom-client@15.1.3)
@@ -1115,6 +1163,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-gtfs-local:
     dependencies:
@@ -1124,6 +1175,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-hafas:
     dependencies:
@@ -1133,6 +1187,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-irail:
     dependencies:
@@ -1142,6 +1199,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-mbta:
     dependencies:
@@ -1151,6 +1211,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-mobility-database:
     dependencies:
@@ -1175,6 +1238,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-opentransportdata-ch:
     dependencies:
@@ -1184,6 +1250,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
@@ -1199,6 +1268,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-overpass:
     dependencies:
@@ -1208,6 +1280,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-ris-routing:
     dependencies:
@@ -1217,6 +1292,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-tfl:
     dependencies:
@@ -1226,6 +1304,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/transit-transitland:
     dependencies:
@@ -1235,6 +1316,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
@@ -1250,6 +1334,9 @@ importers:
       '@openmapx/integration-transit-hafas':
         specifier: workspace:^
         version: link:../transit-hafas
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
 
   integrations/weather:
     dependencies:
@@ -1328,6 +1415,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -1459,6 +1549,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../core
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../mobility-core
       js-yaml:
         specifier: ^4.1.1
         version: 4.1.1
@@ -1466,6 +1559,9 @@ importers:
         specifier: ^4.4.1
         version: 4.4.1
     devDependencies:
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -1543,9 +1639,6 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../core
-      '@openmapx/integration-framework':
-        specifier: workspace:^
-        version: link:../integration-framework
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../mobility-formats
@@ -1603,6 +1696,9 @@ importers:
         specifier: workspace:^
         version: link:../integration-framework
     devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
       typescript:
         specifier: ^5.9.2
         version: 5.9.3

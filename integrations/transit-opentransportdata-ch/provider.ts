@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
+import type { BBox } from "@openmapx/core";
 import type {
-  BBox,
   Departure,
   FareProduct,
   GeoJSONLineString,
@@ -25,7 +25,7 @@ import type {
   TripLeg,
   TripPlan,
   VehicleJourney,
-} from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 import {
   buildOjpFareRequestXml,
   buildOjpLocationInformationRequestXml,

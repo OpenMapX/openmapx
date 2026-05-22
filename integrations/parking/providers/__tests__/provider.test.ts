@@ -175,7 +175,8 @@ describe("parkingProvider.search", () => {
     vi.mocked(searchDbBahnPark).mockResolvedValue(db);
     vi.mocked(searchOsmParking).mockResolvedValue(osm);
 
-    const results = await parkingProvider.search(makeBbox());
+    const envelope = await parkingProvider.search(makeBbox());
+    const results = envelope.data;
 
     // DB appears before v3, both before OSM (last source)
     const dedupCall = vi.mocked(deduplicateParking).mock.calls[0][0];
@@ -183,6 +184,9 @@ describe("parkingProvider.search", () => {
     expect(ids.indexOf("db-bahnpark:1")).toBeLessThan(ids.indexOf("parkapi-v3:2"));
     expect(ids.indexOf("parkapi-v3:2")).toBeLessThan(ids.indexOf("osm:node/4"));
     expect(results).toHaveLength(3);
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("parkapi-v2");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("individual source failures handled gracefully", async () => {
@@ -200,7 +204,7 @@ describe("parkingProvider.search", () => {
     }
     vi.mocked(searchDbBahnPark).mockResolvedValue([makeFacility({ id: "db:1" })]);
 
-    const results = await parkingProvider.search(makeBbox());
+    const results = (await parkingProvider.search(makeBbox())).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("db:1");
@@ -239,7 +243,7 @@ describe("parkingProvider.search", () => {
     }
     vi.mocked(deduplicateParking).mockReturnValue([]);
 
-    const results = await parkingProvider.search(makeBbox());
+    const results = (await parkingProvider.search(makeBbox())).data;
     expect(results).toEqual([]);
   });
 });
@@ -262,9 +266,11 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), {
-      parkingType: ["garage", "underground"],
-    });
+    const results = (
+      await parkingProvider.search(makeBbox(), {
+        parkingType: ["garage", "underground"],
+      })
+    ).data;
 
     expect(results).toHaveLength(2);
     expect(results.map((r) => r.id)).toEqual(["pt-a", "pt-c"]);
@@ -278,7 +284,7 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), { fee: "free" });
+    const results = (await parkingProvider.search(makeBbox(), { fee: "free" })).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("fee-a");
@@ -292,7 +298,7 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), { availability: "available" });
+    const results = (await parkingProvider.search(makeBbox(), { availability: "available" })).data;
 
     expect(results).toHaveLength(2);
     expect(results.map((r) => r.id)).toEqual(["av-a", "av-c"]);
@@ -305,9 +311,11 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), {
-      availability: ["available", "full"],
-    });
+    const results = (
+      await parkingProvider.search(makeBbox(), {
+        availability: ["available", "full"],
+      })
+    ).data;
 
     expect(results).toHaveLength(2);
   });
@@ -320,7 +328,7 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), { features: "disabled" });
+    const results = (await parkingProvider.search(makeBbox(), { features: "disabled" })).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("fd-a");
@@ -334,7 +342,7 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), { features: "ev-charging" });
+    const results = (await parkingProvider.search(makeBbox(), { features: "ev-charging" })).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("fe-a");
@@ -348,7 +356,7 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), { features: "park-and-ride" });
+    const results = (await parkingProvider.search(makeBbox(), { features: "park-and-ride" })).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("fp-a");
@@ -362,9 +370,11 @@ describe("parkingProvider.search filters", () => {
     ];
     setupSources(facilities);
 
-    const results = await parkingProvider.search(makeBbox(), {
-      features: ["disabled", "ev-charging"],
-    });
+    const results = (
+      await parkingProvider.search(makeBbox(), {
+        features: ["disabled", "ev-charging"],
+      })
+    ).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("fm-a");
@@ -393,9 +403,12 @@ describe("parkingProvider.getDetail", () => {
     };
     vi.mocked(mapParkingToDetail).mockReturnValue(detail);
 
-    const result = await parkingProvider.getDetail("pk-cached-1");
+    const envelope = await parkingProvider.getDetail("pk-cached-1");
     expect(mapParkingToDetail).toHaveBeenCalledWith(facility);
-    expect(result).toBe(detail);
+    expect(envelope.data).toBe(detail);
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("parkapi-v2");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("cache miss with parkapi-v2: prefix fetches detail", async () => {
@@ -415,7 +428,7 @@ describe("parkingProvider.getDetail", () => {
     };
     vi.mocked(mapParkingToDetail).mockReturnValue(detail);
 
-    const result = await parkingProvider.getDetail("parkapi-v2:berlin/lot42");
+    const result = (await parkingProvider.getDetail("parkapi-v2:berlin/lot42")).data;
     expect(fetchParkApiV2Detail).toHaveBeenCalledWith("berlin", "lot42");
     expect(result).toBe(detail);
   });
@@ -434,9 +447,9 @@ describe("parkingProvider.getDetail", () => {
       sections: [],
     });
 
-    const result = await parkingProvider.getDetail("parkapi-v3:123");
+    const result = (await parkingProvider.getDetail("parkapi-v3:123")).data;
     expect(fetchParkApiV3Detail).toHaveBeenCalledWith(123);
-    expect(result.id).toBe("parkapi-v3:123");
+    expect(result?.id).toBe("parkapi-v3:123");
   });
 
   it("cache miss with db-bahnpark: prefix fetches detail", async () => {
@@ -453,9 +466,9 @@ describe("parkingProvider.getDetail", () => {
       sections: [],
     });
 
-    const result = await parkingProvider.getDetail("db-bahnpark:ABC");
+    const result = (await parkingProvider.getDetail("db-bahnpark:ABC")).data;
     expect(fetchDbBahnParkDetail).toHaveBeenCalledWith("ABC");
-    expect(result.id).toBe("db-bahnpark:ABC");
+    expect(result?.id).toBe("db-bahnpark:ABC");
   });
 
   it("cache miss with rdw: prefix fetches detail", async () => {
@@ -472,9 +485,9 @@ describe("parkingProvider.getDetail", () => {
       sections: [],
     });
 
-    const result = await parkingProvider.getDetail("rdw:2459/P1_FLOW");
+    const result = (await parkingProvider.getDetail("rdw:2459/P1_FLOW")).data;
     expect(fetchRdwNlDetail).toHaveBeenCalledWith("2459", "P1_FLOW");
-    expect(result.id).toBe("rdw:2459/P1_FLOW");
+    expect(result?.id).toBe("rdw:2459/P1_FLOW");
   });
 
   it("cache miss with bnls: prefix fetches detail", async () => {
@@ -491,9 +504,9 @@ describe("parkingProvider.getDetail", () => {
       sections: [],
     });
 
-    const result = await parkingProvider.getDetail("bnls:FR-75056-P-001");
+    const result = (await parkingProvider.getDetail("bnls:FR-75056-P-001")).data;
     expect(fetchBnlsFrDetail).toHaveBeenCalledWith("FR-75056-P-001");
-    expect(result.id).toBe("bnls:FR-75056-P-001");
+    expect(result?.id).toBe("bnls:FR-75056-P-001");
   });
 
   it("cache miss with osm: prefix fetches element", async () => {
@@ -510,9 +523,9 @@ describe("parkingProvider.getDetail", () => {
       sections: [],
     });
 
-    const result = await parkingProvider.getDetail("osm:way/999");
+    const result = (await parkingProvider.getDetail("osm:way/999")).data;
     expect(fetchOsmParkingElement).toHaveBeenCalledWith("way", 999);
-    expect(result.id).toBe("osm:way/999");
+    expect(result?.id).toBe("osm:way/999");
   });
 
   it("cache miss with cita-lu: prefix fetches DATEX detail", async () => {
@@ -529,17 +542,17 @@ describe("parkingProvider.getDetail", () => {
       sections: [],
     });
 
-    const result = await parkingProvider.getDetail("cita-lu:P1");
+    const result = (await parkingProvider.getDetail("cita-lu:P1")).data;
     expect(fetchCitaLuDetail).toHaveBeenCalledWith("P1");
-    expect(result.id).toBe("cita-lu:P1");
+    expect(result?.id).toBe("cita-lu:P1");
   });
 
   it("unknown prefix returns fallback detail", async () => {
-    const result = await parkingProvider.getDetail("xyz:totally-unknown-parking");
-    expect(result.id).toBe("xyz:totally-unknown-parking");
-    expect(result.sources).toEqual(["unknown"]);
-    expect(result.name).toBe("Parking");
-    expect(result.coordinates).toEqual([0, 0]);
-    expect(result.sections).toEqual([]);
+    const result = (await parkingProvider.getDetail("xyz:totally-unknown-parking")).data;
+    expect(result?.id).toBe("xyz:totally-unknown-parking");
+    expect(result?.sources).toEqual(["unknown"]);
+    expect(result?.name).toBe("Parking");
+    expect(result?.coordinates).toEqual([0, 0]);
+    expect(result?.sections).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import { decodePolyline } from "@openmapx/core";
 import type {
   Departure,
   Facility,
@@ -9,8 +10,7 @@ import type {
   TransitStop,
   TransportMode,
   VehiclePosition,
-} from "@openmapx/core";
-import { decodePolyline } from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 
 const BASE_URL = "https://api-v3.mbta.com";
 

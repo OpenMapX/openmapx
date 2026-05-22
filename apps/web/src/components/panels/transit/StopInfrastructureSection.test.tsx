@@ -1,4 +1,4 @@
-import type { TransitStopInfrastructure } from "@openmapx/core";
+import type { TransitStopInfrastructure } from "@openmapx/mobility-core/transit";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { StopInfrastructureSection } from "./StopInfrastructureSection";

@@ -824,6 +824,15 @@ export async function initIntegrations(
         existing.push(provider);
         providers.set(domain, existing);
       },
+      registerTransitProvider(provider) {
+        this.registerProvider("transit", provider);
+      },
+      registerRealtimeProvider(provider) {
+        this.registerProvider("live-transit", provider);
+      },
+      registerMobilityDataSource(provider) {
+        this.registerProvider("data-source", provider);
+      },
       registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
         registerIntegrationRoute(id, method, path, handler, options);
       },
@@ -1144,6 +1153,15 @@ export async function reloadIntegrations(): Promise<{
         const existing = providers.get(domain) ?? [];
         existing.push(provider);
         providers.set(domain, existing);
+      },
+      registerTransitProvider(provider) {
+        this.registerProvider("transit", provider);
+      },
+      registerRealtimeProvider(provider) {
+        this.registerProvider("live-transit", provider);
+      },
+      registerMobilityDataSource(provider) {
+        this.registerProvider("data-source", provider);
       },
       registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
         registerIntegrationRoute(id, method, path, handler, options);

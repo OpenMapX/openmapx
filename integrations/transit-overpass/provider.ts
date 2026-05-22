@@ -1,5 +1,6 @@
-import type { BBox, OverpassNode, TransitStop, TransportMode } from "@openmapx/core";
+import type { BBox, OverpassNode } from "@openmapx/core";
 import { overpassQuerySafe } from "@openmapx/core";
+import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 
 function tagsToModes(tags: Record<string, string>): TransportMode[] {
   const modes: TransportMode[] = [];

@@ -9,6 +9,6 @@ export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
   setTankerkoenigApiKey(ctx.config.apiKey as string | undefined);
-  ctx.registerProvider("data-source", fuelProvider);
+  ctx.registerMobilityDataSource(fuelProvider);
   registerPlaceResolver(fuelProvider.id, createDataSourceResolver(fuelProvider));
 }

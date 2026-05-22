@@ -1,5 +1,5 @@
-import type { TransitStop } from "@openmapx/core";
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
+import type { TransitStop } from "@openmapx/mobility-core/transit";
 
 export { diceSimilarity, haversineMeters };
 

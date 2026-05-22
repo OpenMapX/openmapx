@@ -8,14 +8,14 @@
  */
 
 import { createPlace } from "@openmapx/core";
+import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
 import {
   lookupAddressByCoords,
   lookupByOsmFilters,
 } from "@openmapx/integration-geocoding/place-lookup";
 import type { PlaceResolver } from "@openmapx/place-ids";
-import type { DataSourceProvider } from "./types.js";
 
-export function createDataSourceResolver(provider: DataSourceProvider): PlaceResolver {
+export function createDataSourceResolver(provider: MobilityDataSourceProvider): PlaceResolver {
   const scheme = provider.id;
   const osmFilters = provider.meta.osmFilters;
 

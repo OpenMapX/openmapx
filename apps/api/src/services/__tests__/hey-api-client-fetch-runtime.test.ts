@@ -300,7 +300,7 @@ describe("@hey-api/client-fetch runtime integrations", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { fetchMotisRentals, setSharedMobilityMotisUrl, setSharedMobilityTransitousUrl } =
-      await import("../../../../../packages/mobility-core/motis-rentals.js");
+      await import("../../../../../packages/mobility-core/src/motis-rentals.js");
 
     setSharedMobilityMotisUrl("http://local.example");
     setSharedMobilityTransitousUrl("https://cloud.example");

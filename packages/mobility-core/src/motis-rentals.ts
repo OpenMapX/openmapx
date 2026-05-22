@@ -62,7 +62,7 @@ import type {
   SharedMobilityVehicle,
   VehicleFormFactor,
   VehiclePropulsion,
-} from "./types.js";
+} from "./types/shared-mobility.js";
 
 const SOURCE = "transitous";
 

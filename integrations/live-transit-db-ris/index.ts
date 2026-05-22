@@ -3,12 +3,12 @@ import {
   risPost,
   setRisCredentials,
 } from "@integrations/geocoding-db-ris/ris-client.js";
-import type {
-  LiveTransitProvider,
-  LiveTransitVehicle,
-} from "@integrations/overlay-live-transit/types.js";
+import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
 
 interface RisTransportInfo {
   journeyName?: string;
@@ -128,6 +128,17 @@ async function getDbLiveTransitVehicles(
   return [...byJourneyId.values()];
 }
 
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "db-ris-maps",
+    name: "Deutsche Bahn RIS Maps",
+    url: "https://apis.deutschebahn.com/",
+    licenseUrl: "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
+    attributionText: "Deutsche Bahn RIS Maps (bilateral license)",
+    publisher: { name: "Deutsche Bahn AG", url: "https://www.deutschebahn.com/" },
+  },
+];
+
 export function setup(ctx: IntegrationContext): void {
   setRisCredentials({
     clientId: ctx.config.clientId as string | undefined,
@@ -136,12 +147,27 @@ export function setup(ctx: IntegrationContext): void {
 
   const administrationIds = parseAdministrationIds(ctx.config.administrationIds);
 
-  const provider: LiveTransitProvider = {
+  const provider: RealtimeProvider = {
     id: "live-transit-db-ris",
-    priority: 20,
     coverage: { bbox: GERMANY_BBOX },
-    getVehicles: (bbox: BBox) => getDbLiveTransitVehicles(bbox, administrationIds),
+    priority: 20,
+    attribution: ATTRIBUTION,
+    capabilities: {
+      vehiclePositions: true,
+      alerts: { byStop: false, byRoute: false, byBbox: false },
+      tripUpdates: false,
+    },
+    /**
+     * Returns DB RIS Maps realtime journey positions. The runtime payload
+     * elements are `LiveTransitVehicle` (a structural superset of the
+     * framework's `VehiclePosition`); structural typing preserves the richer
+     * integration-side fields (`sourceId`, `displayLabel`, etc.).
+     */
+    async getVehiclePositions(bbox: BBox) {
+      const data = await getDbLiveTransitVehicles(bbox, administrationIds);
+      return withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+    },
   };
 
-  ctx.registerProvider("live-transit", provider);
+  ctx.registerRealtimeProvider(provider);
 }

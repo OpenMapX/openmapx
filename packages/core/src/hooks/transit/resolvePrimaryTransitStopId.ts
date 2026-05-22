@@ -1,4 +1,4 @@
-import type { TransitStop } from "@integrations/transit/types";
+import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { parseId } from "../../types/identified";
 import type { Place } from "../../types/place";
 

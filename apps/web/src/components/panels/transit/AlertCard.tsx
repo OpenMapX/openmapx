@@ -6,8 +6,8 @@ import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import type { AlertSeverity, ServiceAlert } from "@openmapx/core";
 import { resolveProvider, useProviders } from "@openmapx/core";
+import type { AlertSeverity, ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 

@@ -10,10 +10,6 @@
       "types": "./index.ts",
       "default": "./index.ts"
     },
-    "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
-    },
     "./resolver": {
       "types": "./resolver.ts",
       "default": "./resolver.ts"

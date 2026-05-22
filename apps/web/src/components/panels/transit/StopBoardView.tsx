@@ -8,7 +8,6 @@ import Skeleton from "@mui/material/Skeleton";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import type { Departure, MergedDeparture } from "@openmapx/core";
 import {
   resolveProvider,
   useArrivals,
@@ -16,6 +15,7 @@ import {
   useProviders,
   useStopAlerts,
 } from "@openmapx/core";
+import type { Departure, MergedDeparture } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AlertsBanner } from "./AlertsBanner";

@@ -5,79 +5,82 @@
   "type": "module",
   "exports": {
     "./attribution": {
-      "types": "./attribution.ts",
-      "default": "./attribution.ts"
+      "types": "./src/types/attribution.ts",
+      "default": "./src/types/attribution.ts"
     },
     "./cache": {
-      "types": "./cache.ts",
-      "default": "./cache.ts"
+      "types": "./src/cache.ts",
+      "default": "./src/cache.ts"
     },
     "./dedup": {
-      "types": "./dedup.ts",
-      "default": "./dedup.ts"
+      "types": "./src/dedup.ts",
+      "default": "./src/dedup.ts"
     },
     "./entur-mobility": {
-      "types": "./entur-mobility.ts",
-      "default": "./entur-mobility.ts"
+      "types": "./src/entur-mobility.ts",
+      "default": "./src/entur-mobility.ts"
     },
     "./ev-charging": {
-      "types": "./ev-charging.ts",
-      "default": "./ev-charging.ts"
+      "types": "./src/types/ev-charging.ts",
+      "default": "./src/types/ev-charging.ts"
     },
     "./freshness": {
-      "types": "./freshness.ts",
-      "default": "./freshness.ts"
+      "types": "./src/types/freshness.ts",
+      "default": "./src/types/freshness.ts"
     },
     "./fuel": {
-      "types": "./fuel.ts",
-      "default": "./fuel.ts"
+      "types": "./src/types/fuel.ts",
+      "default": "./src/types/fuel.ts"
     },
     "./gbfs-catalog": {
-      "types": "./gbfs-catalog.ts",
-      "default": "./gbfs-catalog.ts"
+      "types": "./src/gbfs-catalog.ts",
+      "default": "./src/gbfs-catalog.ts"
     },
     "./gbfs-client": {
-      "types": "./gbfs-client.ts",
-      "default": "./gbfs-client.ts"
+      "types": "./src/gbfs-client.ts",
+      "default": "./src/gbfs-client.ts"
     },
     "./gbfs-provider-base": {
-      "types": "./gbfs-provider-base.ts",
-      "default": "./gbfs-provider-base.ts"
+      "types": "./src/gbfs-provider-base.ts",
+      "default": "./src/gbfs-provider-base.ts"
     },
     "./mapper": {
-      "types": "./mapper.ts",
-      "default": "./mapper.ts"
+      "types": "./src/mapper.ts",
+      "default": "./src/mapper.ts"
     },
     "./motis-rentals": {
-      "types": "./motis-rentals.ts",
-      "default": "./motis-rentals.ts"
+      "types": "./src/motis-rentals.ts",
+      "default": "./src/motis-rentals.ts"
     },
     "./nominatim": {
-      "types": "./nominatim.ts",
-      "default": "./nominatim.ts"
+      "types": "./src/nominatim.ts",
+      "default": "./src/nominatim.ts"
     },
     "./parking": {
-      "types": "./parking.ts",
-      "default": "./parking.ts"
+      "types": "./src/types/parking.ts",
+      "default": "./src/types/parking.ts"
     },
     "./policy": {
-      "types": "./policy.ts",
-      "default": "./policy.ts"
+      "types": "./src/policy.ts",
+      "default": "./src/policy.ts"
     },
     "./result": {
-      "types": "./result.ts",
-      "default": "./result.ts"
+      "types": "./src/types/result.ts",
+      "default": "./src/types/result.ts"
+    },
+    "./transit": {
+      "types": "./src/types/transit.ts",
+      "default": "./src/types/transit.ts"
     },
     "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
+      "types": "./src/types/shared-mobility.ts",
+      "default": "./src/types/shared-mobility.ts"
     }
   },
   "dependencies": {
     "@hey-api/client-fetch": "workspace:*",
     "@motis-project/motis-client": "^2.9.2",
     "@openmapx/core": "workspace:^",
-    "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^"
   }
 }

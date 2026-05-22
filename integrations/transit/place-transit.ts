@@ -1,19 +1,22 @@
-import type {
-  BBox,
-  Departure,
-  Facility,
-  MergedDeparture,
-  MergedRoute,
-  ServiceAlert,
-  TransitStop,
-} from "@openmapx/core";
+import type { BBox } from "@openmapx/core";
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import {
   expandSearchQuery,
   getQueryVariants,
 } from "@openmapx/integration-geocoding/query-expansion";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { Freshness } from "@openmapx/mobility-core/freshness";
 import { TTL as TTL_POLICY } from "@openmapx/mobility-core/policy";
+import type { MobilityResult } from "@openmapx/mobility-core/result";
+import type {
+  Departure,
+  Facility,
+  MergedDeparture,
+  MergedRoute,
+  ServiceAlert,
+  TransitStop,
+} from "@openmapx/mobility-core/transit";
 import { bucketTimestamps, isTripNumber, normalizeHeadsign, normalizeShortName } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
 
@@ -34,41 +37,90 @@ const MIN_INFORMATIVE_TOKEN_LEN = 4;
 
 const TTL = {
   placeStops: TTL_POLICY.PLACE_LINK,
-  // no policy class for 5-min
-  placeRoutes: 300,
+  placeRoutes: TTL_POLICY.SHORT_LIVED,
   placeAlerts: TTL_POLICY.REALTIME_WARM,
   placeFacilities: TTL_POLICY.STATIC_ARCHIVE,
 };
 
+function freshnessNow(opts?: { hasRealtimeData?: boolean }): Freshness {
+  return {
+    fetchedAt: new Date().toISOString(),
+    hasRealtimeData: opts?.hasRealtimeData ?? false,
+    isStale: false,
+  };
+}
+
+function emptyResult<T>(data: T, opts?: { hasRealtimeData?: boolean }): MobilityResult<T> {
+  return { data, attributions: [], freshness: freshnessNow(opts) };
+}
+
+function mergeAttributions(...lists: Attribution[][]): Attribution[] {
+  const seen = new Set<string>();
+  const out: Attribution[] = [];
+  for (const list of lists) {
+    for (const a of list) {
+      if (seen.has(a.sourceId)) continue;
+      seen.add(a.sourceId);
+      out.push(a);
+    }
+  }
+  return out;
+}
+
+function mergeFreshness(...lists: Freshness[]): Freshness {
+  if (lists.length === 0) return freshnessNow();
+  let fetchedAt = lists[0].fetchedAt;
+  let hasRealtimeData = false;
+  let isStale = false;
+  let dataAsOf: string | undefined;
+  for (const f of lists) {
+    if (f.fetchedAt < fetchedAt) fetchedAt = f.fetchedAt;
+    if (f.hasRealtimeData) hasRealtimeData = true;
+    if (f.isStale) isStale = true;
+    if (f.dataAsOf && (!dataAsOf || f.dataAsOf < dataAsOf)) dataAsOf = f.dataAsOf;
+  }
+  return { fetchedAt, hasRealtimeData, isStale, ...(dataAsOf ? { dataAsOf } : {}) };
+}
+
 export interface PlaceTransit {
-  getLinkedStops(lat: number, lng: number, name: string, placeId?: string): Promise<TransitStop[]>;
-  getMergedRoutes(lat: number, lng: number, name: string, placeId?: string): Promise<MergedRoute[]>;
+  getLinkedStops(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<MobilityResult<TransitStop[]>>;
+  getMergedRoutes(
+    lat: number,
+    lng: number,
+    name: string,
+    placeId?: string,
+  ): Promise<MobilityResult<MergedRoute[]>>;
   getMergedDepartures(
     lat: number,
     lng: number,
     name: string,
     minutes: number,
     placeId?: string,
-  ): Promise<MergedDeparture[]>;
+  ): Promise<MobilityResult<MergedDeparture[]>>;
   getMergedArrivals(
     lat: number,
     lng: number,
     name: string,
     minutes: number,
     placeId?: string,
-  ): Promise<MergedDeparture[]>;
+  ): Promise<MobilityResult<MergedDeparture[]>>;
   getMergedAlerts(
     lat: number,
     lng: number,
     name: string,
     placeId?: string,
-  ): Promise<ServiceAlert[]>;
+  ): Promise<MobilityResult<ServiceAlert[]>>;
   getMergedFacilities(
     lat: number,
     lng: number,
     name: string,
     placeId?: string,
-  ): Promise<Facility[]>;
+  ): Promise<MobilityResult<Facility[]>>;
 }
 
 /** Build a deterministic cache key from prefix + data. */
@@ -105,6 +157,12 @@ function placeCacheId(lat: number, lng: number, name: string, placeId?: string):
   return `${lat.toFixed(5)}_${lng.toFixed(5)}_${canonicalName}`;
 }
 
+interface CachedStopsEnvelope {
+  stops: TransitStop[];
+  attributions: Attribution[];
+  freshness: Freshness;
+}
+
 // Linked stops
 
 export function createPlaceTransit(
@@ -124,10 +182,12 @@ export function createPlaceTransit(
     lng: number,
     name: string,
     placeId?: string,
-  ): Promise<TransitStop[]> {
+  ): Promise<MobilityResult<TransitStop[]>> {
     const key = hashKey("transit:place-stops", { id: placeCacheId(lat, lng, name, placeId) });
-    const cached = await cache.get<TransitStop[]>(key);
-    if (cached) return cached;
+    const cached = await cache.get<CachedStopsEnvelope>(key);
+    if (cached) {
+      return { data: cached.stops, attributions: cached.attributions, freshness: cached.freshness };
+    }
 
     // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
     // providers from distant regions don't contribute stops that share stop-database
@@ -140,12 +200,16 @@ export function createPlaceTransit(
     const variantResults = await Promise.all(
       variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
     );
+    const attributions = mergeAttributions(...variantResults.map((r) => r.attributions));
+    const freshness = mergeFreshness(...variantResults.map((r) => r.freshness));
     const seen = new Set<string>();
-    const raw = variantResults.flat().filter((s) => {
-      if (seen.has(s.id)) return false;
-      seen.add(s.id);
-      return true;
-    });
+    const raw = variantResults
+      .flatMap((r) => r.data)
+      .filter((s) => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      });
     const normVariants = variants
       .map((v) => normalizeLinkName(v))
       .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
@@ -164,8 +228,9 @@ export function createPlaceTransit(
     });
 
     if (prelim.length === 0) {
-      await cache.set(key, [], TTL.placeStops);
-      return [];
+      const envelope: CachedStopsEnvelope = { stops: [], attributions, freshness };
+      await cache.set(key, envelope, TTL.placeStops);
+      return { data: [], attributions, freshness };
     }
 
     // Second-pass pruning: avoid linking by city token only.
@@ -198,8 +263,9 @@ export function createPlaceTransit(
         ? prelim
         : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
 
-    await cache.set(key, linked, TTL.placeStops);
-    return linked;
+    const envelope: CachedStopsEnvelope = { stops: linked, attributions, freshness };
+    await cache.set(key, envelope, TTL.placeStops);
+    return { data: linked, attributions, freshness };
   }
 
   // Route merging
@@ -216,16 +282,33 @@ export function createPlaceTransit(
     lng: number,
     name: string,
     placeId?: string,
-  ): Promise<MergedRoute[]> {
+  ): Promise<MobilityResult<MergedRoute[]>> {
     const cacheId = placeCacheId(lat, lng, name, placeId);
     const key = hashKey("transit:place-routes", { id: cacheId });
-    const cached = await cache.get<MergedRoute[]>(key);
-    if (cached) return cached;
+    interface CachedRoutes {
+      routes: MergedRoute[];
+      attributions: Attribution[];
+      freshness: Freshness;
+    }
+    const cached = await cache.get<CachedRoutes>(key);
+    if (cached) {
+      return {
+        data: cached.routes,
+        attributions: cached.attributions,
+        freshness: cached.freshness,
+      };
+    }
 
-    const stops = await getLinkedStops(lat, lng, name, placeId);
+    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const stops = stopsRes.data;
     if (stops.length === 0) {
-      await cache.set(key, [], TTL.placeRoutes);
-      return [];
+      const envelope: CachedRoutes = {
+        routes: [],
+        attributions: stopsRes.attributions,
+        freshness: stopsRes.freshness,
+      };
+      await cache.set(key, envelope, TTL.placeRoutes);
+      return { data: [], attributions: stopsRes.attributions, freshness: stopsRes.freshness };
     }
 
     // Fetch routes for all stops in parallel
@@ -235,13 +318,17 @@ export function createPlaceTransit(
 
     // Map: "(mode):(shortName)" -> best MergedRoute candidate
     const byKey = new Map<string, MergedRoute>();
+    const allAttribs: Attribution[][] = [stopsRes.attributions];
+    const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (let i = 0; i < stops.length; i++) {
       const result = routeResults[i];
       if (result.status !== "fulfilled") continue;
       const providerName = stops[i].provider;
+      allAttribs.push(result.value.attributions);
+      allFresh.push(result.value.freshness);
 
-      for (const route of result.value) {
+      for (const route of result.value.data) {
         if (isTripNumber(route.shortName)) continue;
         const k = `${route.mode}:${normalizeShortName(route.shortName)}`;
         const existing = byKey.get(k);
@@ -277,8 +364,11 @@ export function createPlaceTransit(
       return a.shortName.localeCompare(b.shortName);
     });
 
-    await cache.set(key, merged, TTL.placeRoutes);
-    return merged;
+    const attributions = mergeAttributions(...allAttribs);
+    const freshness = mergeFreshness(...allFresh);
+    const envelope: CachedRoutes = { routes: merged, attributions, freshness };
+    await cache.set(key, envelope, TTL.placeRoutes);
+    return { data: merged, attributions, freshness };
   }
 
   // Timetable merging (shared by departures & arrivals)
@@ -295,13 +385,15 @@ export function createPlaceTransit(
    */
   async function buildMergedTimetable(
     stops: TransitStop[],
-    fetchFn: (stopId: string, minutes: number) => Promise<Departure[]>,
+    fetchFn: (stopId: string, minutes: number) => Promise<MobilityResult<Departure[]>>,
     minutes: number,
-  ): Promise<MergedDeparture[]> {
-    if (stops.length === 0) return [];
+  ): Promise<MobilityResult<MergedDeparture[]>> {
+    if (stops.length === 0) return emptyResult<MergedDeparture[]>([], { hasRealtimeData: true });
 
     const results = await Promise.allSettled(stops.map((s) => fetchFn(s.id, minutes)));
     const byKey = new Map<string, MergedDeparture>();
+    const allAttribs: Attribution[][] = [];
+    const allFresh: Freshness[] = [];
 
     function mergeInto(
       existing: MergedDeparture,
@@ -343,8 +435,10 @@ export function createPlaceTransit(
       const result = results[i];
       if (result.status !== "fulfilled") continue;
       const stopProvider = stops[i].provider;
+      allAttribs.push(result.value.attributions);
+      allFresh.push(result.value.freshness);
 
-      for (const dep of result.value as DepartureWithFeed[]) {
+      for (const dep of result.value.data as DepartureWithFeed[]) {
         // Include both feed-level tag (e.g. "de_DELFI") and instance provider (e.g. "mo")
         const feedProviders: string[] = [];
         if (dep.feedTag) feedProviders.push(dep.feedTag);
@@ -397,10 +491,14 @@ export function createPlaceTransit(
       }
     }
 
-    const unique = new Set(byKey.values());
-    return Array.from(unique).sort(
+    const unique = Array.from(new Set(byKey.values())).sort(
       (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
     );
+    return {
+      data: unique,
+      attributions: mergeAttributions(...allAttribs),
+      freshness: mergeFreshness(...allFresh),
+    };
   }
 
   async function getMergedDepartures(
@@ -409,9 +507,18 @@ export function createPlaceTransit(
     name: string,
     minutes: number,
     placeId?: string,
-  ): Promise<MergedDeparture[]> {
-    const stops = await getLinkedStops(lat, lng, name, placeId);
-    return buildMergedTimetable(stops, (id, min) => orchestrator.getDepartures(id, min), minutes);
+  ): Promise<MobilityResult<MergedDeparture[]>> {
+    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const merged = await buildMergedTimetable(
+      stopsRes.data,
+      (id, min) => orchestrator.getDepartures(id, min),
+      minutes,
+    );
+    return {
+      data: merged.data,
+      attributions: mergeAttributions(stopsRes.attributions, merged.attributions),
+      freshness: mergeFreshness(stopsRes.freshness, merged.freshness),
+    };
   }
 
   async function getMergedArrivals(
@@ -420,9 +527,18 @@ export function createPlaceTransit(
     name: string,
     minutes: number,
     placeId?: string,
-  ): Promise<MergedDeparture[]> {
-    const stops = await getLinkedStops(lat, lng, name, placeId);
-    return buildMergedTimetable(stops, (id, min) => orchestrator.getArrivals(id, min), minutes);
+  ): Promise<MobilityResult<MergedDeparture[]>> {
+    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const merged = await buildMergedTimetable(
+      stopsRes.data,
+      (id, min) => orchestrator.getArrivals(id, min),
+      minutes,
+    );
+    return {
+      data: merged.data,
+      attributions: mergeAttributions(stopsRes.attributions, merged.attributions),
+      freshness: mergeFreshness(stopsRes.freshness, merged.freshness),
+    };
   }
 
   // Alert merging
@@ -436,26 +552,47 @@ export function createPlaceTransit(
     lng: number,
     name: string,
     placeId?: string,
-  ): Promise<ServiceAlert[]> {
+  ): Promise<MobilityResult<ServiceAlert[]>> {
+    interface CachedAlerts {
+      alerts: ServiceAlert[];
+      attributions: Attribution[];
+      freshness: Freshness;
+    }
     const cacheId = placeCacheId(lat, lng, name, placeId);
     const key = hashKey("transit:place-alerts", { id: cacheId });
-    const cached = await cache.get<ServiceAlert[]>(key);
-    if (cached) return cached;
+    const cached = await cache.get<CachedAlerts>(key);
+    if (cached) {
+      return {
+        data: cached.alerts,
+        attributions: cached.attributions,
+        freshness: cached.freshness,
+      };
+    }
 
-    const stops = await getLinkedStops(lat, lng, name, placeId);
+    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const stops = stopsRes.data;
     if (stops.length === 0) {
-      await cache.set(key, [], TTL.placeAlerts);
-      return [];
+      const envelope: CachedAlerts = {
+        alerts: [],
+        attributions: stopsRes.attributions,
+        freshness: stopsRes.freshness,
+      };
+      await cache.set(key, envelope, TTL.placeAlerts);
+      return { data: [], attributions: stopsRes.attributions, freshness: stopsRes.freshness };
     }
 
     const alertResults = await Promise.allSettled(
       stops.map((s) => orchestrator.getStopAlerts(s.id)),
     );
     const byId = new Map<string, ServiceAlert>();
+    const allAttribs: Attribution[][] = [stopsRes.attributions];
+    const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (const result of alertResults) {
       if (result.status !== "fulfilled") continue;
-      for (const alert of result.value) {
+      allAttribs.push(result.value.attributions);
+      allFresh.push(result.value.freshness);
+      for (const alert of result.value.data) {
         const existing = byId.get(alert.id);
         if (!existing) {
           byId.set(alert.id, alert);
@@ -469,8 +606,11 @@ export function createPlaceTransit(
     }
 
     const merged = Array.from(byId.values());
-    await cache.set(key, merged, TTL.placeAlerts);
-    return merged;
+    const attributions = mergeAttributions(...allAttribs);
+    const freshness = mergeFreshness(...allFresh);
+    const envelope: CachedAlerts = { alerts: merged, attributions, freshness };
+    await cache.set(key, envelope, TTL.placeAlerts);
+    return { data: merged, attributions, freshness };
   }
 
   // Facility merging
@@ -484,33 +624,55 @@ export function createPlaceTransit(
     lng: number,
     name: string,
     placeId?: string,
-  ): Promise<Facility[]> {
+  ): Promise<MobilityResult<Facility[]>> {
+    interface CachedFacilities {
+      facilities: Facility[];
+      attributions: Attribution[];
+      freshness: Freshness;
+    }
     const cacheId = placeCacheId(lat, lng, name, placeId);
     const key = hashKey("transit:place-facilities", { id: cacheId });
-    const cached = await cache.get<Facility[]>(key);
-    if (cached) return cached;
-
-    const stops = await getLinkedStops(lat, lng, name, placeId);
-    if (stops.length === 0) {
-      await cache.set(key, [], TTL.placeFacilities);
-      return [];
+    const cached = await cache.get<CachedFacilities>(key);
+    if (cached) {
+      return {
+        data: cached.facilities,
+        attributions: cached.attributions,
+        freshness: cached.freshness,
+      };
     }
 
-    const facResults = await Promise.allSettled(
-      stops.map((s) => orchestrator.getFacilities(s.id) as Promise<Facility[]>),
-    );
+    const stopsRes = await getLinkedStops(lat, lng, name, placeId);
+    const stops = stopsRes.data;
+    if (stops.length === 0) {
+      const envelope: CachedFacilities = {
+        facilities: [],
+        attributions: stopsRes.attributions,
+        freshness: stopsRes.freshness,
+      };
+      await cache.set(key, envelope, TTL.placeFacilities);
+      return { data: [], attributions: stopsRes.attributions, freshness: stopsRes.freshness };
+    }
+
+    const facResults = await Promise.allSettled(stops.map((s) => orchestrator.getFacilities(s.id)));
     const byId = new Map<string, Facility>();
+    const allAttribs: Attribution[][] = [stopsRes.attributions];
+    const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (const result of facResults) {
-      if (result.status !== "fulfilled" || !Array.isArray(result.value)) continue;
-      for (const fac of result.value) {
+      if (result.status !== "fulfilled") continue;
+      allAttribs.push(result.value.attributions);
+      allFresh.push(result.value.freshness);
+      for (const fac of result.value.data) {
         if (!byId.has(fac.id)) byId.set(fac.id, fac);
       }
     }
 
     const merged = Array.from(byId.values());
-    await cache.set(key, merged, TTL.placeFacilities);
-    return merged;
+    const attributions = mergeAttributions(...allAttribs);
+    const freshness = mergeFreshness(...allFresh);
+    const envelope: CachedFacilities = { facilities: merged, attributions, freshness };
+    await cache.set(key, envelope, TTL.placeFacilities);
+    return { data: merged, attributions, freshness };
   }
 
   return {

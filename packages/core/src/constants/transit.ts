@@ -1,4 +1,4 @@
-import type { TransportMode } from "@integrations/transit/types";
+import type { TransportMode } from "@openmapx/mobility-core/transit";
 
 export const MODE_COLORS: Record<TransportMode, string> = {
   rail: "#1A73E8",
@@ -15,7 +15,7 @@ export const MODE_COLORS: Record<TransportMode, string> = {
 
 export interface ProviderAttribution {
   label: string;
-  url: string;
+  url?: string;
   license?: string;
   licenseUrl?: string;
 }

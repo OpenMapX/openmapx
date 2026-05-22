@@ -6,7 +6,7 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { Departure, TripRemark } from "@openmapx/core";
+import type { Departure, TripRemark } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { formatTime } from "@/lib/formatTime";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";

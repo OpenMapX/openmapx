@@ -6,6 +6,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^",
     "cached-hafas-client": "^5.1.9",
     "hafas-client": "^6.3.6"
   }

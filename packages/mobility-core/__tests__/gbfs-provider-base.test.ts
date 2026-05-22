@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../nominatim.js", () => ({
+vi.mock("../src/nominatim.js", () => ({
   reverseGeocodeCity: vi.fn(),
 }));
 
-vi.mock("../gbfs-client.js", () => ({
+vi.mock("../src/gbfs-client.js", () => ({
   fetchGbfsSystem: vi.fn(),
 }));
 
-vi.mock("../gbfs-catalog.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../gbfs-catalog.js")>();
+vi.mock("../src/gbfs-catalog.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/gbfs-catalog.js")>();
   return {
     ...actual,
     loadCatalog: vi.fn(),
@@ -18,15 +18,15 @@ vi.mock("../gbfs-catalog.js", async (importOriginal) => {
   };
 });
 
-import { loadCatalog } from "../gbfs-catalog.js";
-import { fetchGbfsSystem } from "../gbfs-client.js";
+import { loadCatalog } from "../src/gbfs-catalog.js";
+import { fetchGbfsSystem } from "../src/gbfs-client.js";
 import {
   bboxOverlapsSwitzerland,
   fetchGbfsData,
   fetchSwissSharedMobilityData,
   fetchSwissSharedMobilityDataForBbox,
-} from "../gbfs-provider-base.js";
-import { reverseGeocodeCity } from "../nominatim.js";
+} from "../src/gbfs-provider-base.js";
+import { reverseGeocodeCity } from "../src/nominatim.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

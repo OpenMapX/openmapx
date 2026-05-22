@@ -94,13 +94,17 @@ describe("evChargingProvider.search", () => {
     vi.mocked(mocks.sourceB.search).mockResolvedValue([b]);
     vi.mocked(deduplicateChargingStations).mockReturnValue([a, b]);
 
-    const results = await evChargingProvider.search(makeBbox(), { speed: "fast" });
+    const envelope = await evChargingProvider.search(makeBbox(), { speed: "fast" });
+    const results = envelope.data;
 
     expect(mocks.sourceA.search).toHaveBeenCalledWith(makeBbox(), { speed: "fast" });
     expect(mocks.sourceB.search).toHaveBeenCalledWith(makeBbox(), { speed: "fast" });
     expect(deduplicateChargingStations).toHaveBeenCalledWith([a, b]);
     expect(mapStationToResult).toHaveBeenCalledTimes(2);
     expect(results.map((result) => result.id)).toEqual(["a", "b"]);
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("ocm");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("keeps fulfilled source results when another source fails", async () => {
@@ -109,7 +113,7 @@ describe("evChargingProvider.search", () => {
     vi.mocked(mocks.sourceB.search).mockRejectedValue(new Error("source down"));
     vi.mocked(deduplicateChargingStations).mockReturnValue([a]);
 
-    const results = await evChargingProvider.search(makeBbox());
+    const results = (await evChargingProvider.search(makeBbox())).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("source-fallback");
@@ -120,7 +124,8 @@ describe("evChargingProvider.search", () => {
     vi.mocked(mocks.sourceB.search).mockRejectedValue(new Error("down"));
     vi.mocked(deduplicateChargingStations).mockReturnValue([]);
 
-    await expect(evChargingProvider.search(makeBbox())).resolves.toEqual([]);
+    const results = (await evChargingProvider.search(makeBbox())).data;
+    expect(results).toEqual([]);
   });
 });
 
@@ -141,9 +146,12 @@ describe("evChargingProvider.getDetail", () => {
     vi.mocked(mapStationToDetail).mockReturnValue(detail);
 
     await evChargingProvider.search(makeBbox());
-    const result = await evChargingProvider.getDetail("cached-detail");
+    const envelope = await evChargingProvider.getDetail("cached-detail");
 
-    expect(result).toBe(detail);
+    expect(envelope.data).toBe(detail);
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("ocm");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
     expect(mocks.sourceA.fetchDetail).not.toHaveBeenCalled();
   });
 
@@ -157,7 +165,7 @@ describe("evChargingProvider.getDetail", () => {
     vi.mocked(mocks.sourceB.search).mockResolvedValue([nearby]);
     vi.mocked(deduplicateChargingStations).mockReturnValue([merged]);
 
-    const result = await evChargingProvider.getDetail("source-a:123");
+    const result = (await evChargingProvider.getDetail("source-a:123")).data;
 
     expect(mocks.sourceA.fetchDetail).toHaveBeenCalledWith("source-a:123");
     expect(mocks.sourceA.search).toHaveBeenCalledOnce();
@@ -170,6 +178,7 @@ describe("evChargingProvider.getDetail", () => {
     vi.mocked(mocks.sourceA.canFetchDetail).mockReturnValue(false);
     vi.mocked(mocks.sourceB.canFetchDetail).mockReturnValue(false);
 
-    await expect(evChargingProvider.getDetail("unknown:100")).resolves.toBeNull();
+    const result = (await evChargingProvider.getDetail("unknown:100")).data;
+    expect(result).toBeNull();
   });
 });

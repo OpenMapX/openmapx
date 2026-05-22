@@ -143,7 +143,7 @@ describe("bikeSharingProvider.search", () => {
       vehicles: [],
     });
 
-    const results = await bikeSharingProvider.search(makeBbox());
+    const results = (await bikeSharingProvider.search(makeBbox())).data;
 
     expect(searchNextbike).toHaveBeenCalledOnce();
     expect(searchCityBikes).toHaveBeenCalledOnce();
@@ -168,12 +168,14 @@ describe("bikeSharingProvider.search", () => {
     vi.mocked(searchDbBikes).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
 
-    const results = await bikeSharingProvider.search({
-      south: 46.9,
-      west: 7.3,
-      north: 47.0,
-      east: 7.5,
-    });
+    const results = (
+      await bikeSharingProvider.search({
+        south: 46.9,
+        west: 7.3,
+        north: 47.0,
+        east: 7.5,
+      })
+    ).data;
 
     expect(fetchSwissSharedMobilityDataForBbox).toHaveBeenCalledOnce();
     expect(results).toEqual([makeResult("ch-station-1")]);
@@ -220,7 +222,7 @@ describe("bikeSharingProvider.search", () => {
     vi.mocked(searchDbBikes).mockRejectedValue(new Error("down"));
     vi.mocked(fetchMotisRentals).mockRejectedValue(new Error("down"));
 
-    const results = await bikeSharingProvider.search(makeBbox());
+    const results = (await bikeSharingProvider.search(makeBbox())).data;
 
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("gbfs1");
@@ -235,7 +237,7 @@ describe("bikeSharingProvider.search", () => {
     vi.mocked(fetchMotisRentals).mockRejectedValue(new Error("down"));
     vi.mocked(dedupStations).mockReturnValue([]);
 
-    const results = await bikeSharingProvider.search(makeBbox());
+    const results = (await bikeSharingProvider.search(makeBbox())).data;
     expect(results).toEqual([]);
   });
 
@@ -259,7 +261,7 @@ describe("bikeSharingProvider.search", () => {
     });
     vi.mocked(dedupStations).mockReturnValue([makeStation("db-s1", "db")]);
 
-    const results = await bikeSharingProvider.search(makeBbox());
+    const results = (await bikeSharingProvider.search(makeBbox())).data;
 
     expect(mapVehicleToResult).toHaveBeenCalledWith(dbVehicle);
     expect(mapVehicleToResult).toHaveBeenCalledWith(motisVehicle);
@@ -311,7 +313,7 @@ describe("bikeSharingProvider.getDetail", () => {
     };
     vi.mocked(mapStationToDetail).mockReturnValue(detail);
 
-    const result = await bikeSharingProvider.getDetail("bs-cached-station");
+    const result = (await bikeSharingProvider.getDetail("bs-cached-station")).data;
     expect(mapStationToDetail).toHaveBeenCalledWith(station);
     expect(result).toBe(detail);
   });
@@ -337,13 +339,13 @@ describe("bikeSharingProvider.getDetail", () => {
     };
     vi.mocked(mapVehicleToDetail).mockReturnValue(detail);
 
-    const result = await bikeSharingProvider.getDetail("bs-db-vehicle-1");
+    const result = (await bikeSharingProvider.getDetail("bs-db-vehicle-1")).data;
     expect(mapVehicleToDetail).toHaveBeenCalledWith(vehicle);
     expect(result).toBe(detail);
   });
 
   it("cache miss returns null", async () => {
-    const result = await bikeSharingProvider.getDetail("totally-unknown-id-xyz");
+    const result = (await bikeSharingProvider.getDetail("totally-unknown-id-xyz")).data;
     expect(result).toBeNull();
   });
 

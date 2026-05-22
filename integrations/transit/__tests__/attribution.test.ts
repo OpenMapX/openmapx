@@ -1,7 +1,30 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type {
+  IntegrationContext,
+  ProviderAttribution,
+  TransitProvider,
+} from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { getTransitProviderAttribution } from "../orchestrator.js";
-import type { ProviderAttribution, TransitProvider } from "../types.js";
+
+const ALL_FALSE_CAPABILITIES = {
+  stops: {
+    lookup: false,
+    nearby: false,
+    bbox: false,
+    search: false,
+    infrastructure: false,
+    platforms: false,
+    timetable: false,
+  },
+  departures: false,
+  arrivals: false,
+  routes: { lookup: false, forStop: false, stops: false, geometry: false },
+  planning: false,
+  vehiclePositions: false,
+  vehicleJourney: false,
+  alerts: { byStop: false, byRoute: false, byBbox: false },
+  facilities: false,
+} as const;
 
 function makeProvider(overrides: Partial<TransitProvider> & { prefix: string }): TransitProvider {
   return {
@@ -9,16 +32,8 @@ function makeProvider(overrides: Partial<TransitProvider> & { prefix: string }):
     prefix: overrides.prefix,
     coverage: { bbox: [-180, -90, 180, 90] },
     priority: 5,
-    capabilities: {
-      stops: false,
-      departures: false,
-      arrivals: false,
-      search: false,
-      tripPlanning: false,
-      alerts: false,
-      vehicles: false,
-      stopInfrastructure: false,
-    },
+    capabilities: ALL_FALSE_CAPABILITIES,
+    attribution: [],
     ...overrides,
   };
 }

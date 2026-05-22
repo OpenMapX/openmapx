@@ -1,4 +1,4 @@
-import type { Departure } from "@integrations/transit/types";
+import type { Departure } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";

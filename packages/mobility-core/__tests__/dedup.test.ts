@@ -7,8 +7,8 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 
 import type { SharedMobilityStation } from "@openmapx/core";
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
-import { dedupStations, dedupVehicles } from "../dedup.js";
-import type { SharedMobilityVehicle } from "../types.js";
+import { dedupStations, dedupVehicles } from "../src/dedup.js";
+import type { SharedMobilityVehicle } from "../src/types/shared-mobility.js";
 
 const mockHaversine = vi.mocked(haversineMeters);
 const mockDice = vi.mocked(diceSimilarity);

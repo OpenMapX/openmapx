@@ -1,13 +1,12 @@
-import {
-  type Departure,
-  decodePolyline,
-  type GeoJSONLineString,
-  otpMode,
-  type TransitStop,
-  type TripItinerary,
-  type TripLeg,
-  type TripPlan,
-} from "@openmapx/core";
+import { decodePolyline, otpMode } from "@openmapx/core";
+import type {
+  Departure,
+  GeoJSONLineString,
+  TransitStop,
+  TripItinerary,
+  TripLeg,
+  TripPlan,
+} from "@openmapx/mobility-core/transit";
 import type { ProtocolAdapter } from "./adapter-types";
 import type { RegistryEntry } from "./registry-types";
 

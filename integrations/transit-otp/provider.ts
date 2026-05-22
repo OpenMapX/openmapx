@@ -1,11 +1,11 @@
+import { decodePolyline, otpMode } from "@openmapx/core";
 import type {
   GeoJSONLineString,
   TransportMode,
   TripItinerary,
   TripLeg,
   TripPlan,
-} from "@openmapx/core";
-import { decodePolyline, otpMode } from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 
 interface TripPlanParams {
   fromLat: number;

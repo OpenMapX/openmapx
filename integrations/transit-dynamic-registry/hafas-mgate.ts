@@ -1,20 +1,17 @@
-import {
-  type BBox,
-  type Departure,
-  type GeoJSONLineString,
-  mapProducts,
-  normalizeFptfDeparture,
-  productToMode,
-  type ServiceAlert,
-  type TransitStop,
-  type TransportMode,
-  type TripItinerary,
-  type TripLeg,
-  type TripRemark,
-  type VehicleJourney,
-  type VehicleJourneyStop,
-  type VehiclePosition,
-} from "@openmapx/core";
+import { type BBox, mapProducts, normalizeFptfDeparture, productToMode } from "@openmapx/core";
+import type {
+  Departure,
+  GeoJSONLineString,
+  ServiceAlert,
+  TransitStop,
+  TransportMode,
+  TripItinerary,
+  TripLeg,
+  TripRemark,
+  VehicleJourney,
+  VehicleJourneyStop,
+  VehiclePosition,
+} from "@openmapx/mobility-core/transit";
 import { createCachedHafasClient } from "cached-hafas-client";
 import { createRedisStore } from "cached-hafas-client/stores/redis.js";
 import { createClient } from "hafas-client";

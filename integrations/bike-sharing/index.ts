@@ -17,6 +17,6 @@ export function setup(ctx: IntegrationContext): void {
     clientId: ctx.config.clientId as string | undefined,
     apiKey: ctx.config.apiKey as string | undefined,
   });
-  ctx.registerProvider("data-source", bikeSharingProvider);
+  ctx.registerMobilityDataSource(bikeSharingProvider);
   registerPlaceResolver(bikeSharingProvider.id, createDataSourceResolver(bikeSharingProvider));
 }

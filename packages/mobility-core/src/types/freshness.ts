@@ -13,3 +13,16 @@ export interface Freshness {
   /** True when realtime data is stale beyond a per-class threshold. */
   isStale: boolean;
 }
+
+/**
+ * Convenience factory: builds a `Freshness` with `fetchedAt = now()`,
+ * `isStale = false`, and the requested realtime flag. Use this in
+ * provider method wrappers so the per-integration boilerplate is gone.
+ */
+export function freshnessNow(opts?: { hasRealtimeData?: boolean }): Freshness {
+  return {
+    fetchedAt: new Date().toISOString(),
+    hasRealtimeData: opts?.hasRealtimeData ?? false,
+    isStale: false,
+  };
+}

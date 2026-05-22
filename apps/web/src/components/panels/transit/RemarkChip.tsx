@@ -5,7 +5,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import type { TripRemark } from "@openmapx/core";
+import type { TripRemark } from "@openmapx/mobility-core/transit";
 
 const REMARK_CONFIG: Record<
   TripRemark["type"],

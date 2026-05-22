@@ -8,9 +8,8 @@ import {
   createPlace,
   type Place,
   type SearchResult,
-  type TransitStop,
-  type TransportMode,
 } from "@openmapx/core";
+import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type {
   RisConnectingTime,
   RisLocalService,

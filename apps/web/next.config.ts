@@ -31,6 +31,7 @@ const nextConfig: NextConfig = {
     "@openmapx/integration-framework",
     "@openmapx/mangrove-client",
     "@openmapx/mangrove-react",
+    "@openmapx/mobility-core",
     "@openmapx/noaa-coops-data",
     "@openmapx/ourairports-data",
     "@openmapx/place-ids",

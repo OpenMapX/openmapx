@@ -1,4 +1,4 @@
-import type { BBox, ServiceAlert, TransportMode, VehiclePosition } from "@openmapx/core";
+import type { ServiceAlert, TransportMode, VehiclePosition } from "@openmapx/mobility-core/transit";
 
 export interface LiveTransitVehicle extends VehiclePosition {
   sourceId: string;
@@ -11,12 +11,4 @@ export interface LiveTransitVehicle extends VehiclePosition {
 export interface LiveTransitSnapshot {
   vehicles: LiveTransitVehicle[];
   alerts: ServiceAlert[];
-}
-
-export interface LiveTransitProvider {
-  readonly id: string;
-  readonly priority: number;
-  readonly coverage?: { bbox: BBox };
-  getVehicles(bbox: BBox): Promise<LiveTransitVehicle[]>;
-  getAlerts?(bbox: BBox): Promise<ServiceAlert[]>;
 }

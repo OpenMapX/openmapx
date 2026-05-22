@@ -1,8 +1,40 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
 import { getAdapter } from "./adapters.js";
 import { setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
 import { registry } from "./registry.js";
+
+const BASE_ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "jsdelivr",
+    name: "JSDelivr CDN (transport-apis catalog)",
+    url: "https://cdn.jsdelivr.net/",
+    spdxLicense: "MIT",
+    licenseUrl: "https://www.jsdelivr.com/terms/terms-of-use",
+  },
+];
+
+function buildAttributionFor(
+  entryId: string,
+  entryAttribution: {
+    name: string;
+    homepage?: string;
+    license?: string;
+  },
+): Attribution[] {
+  return [
+    ...BASE_ATTRIBUTION,
+    {
+      sourceId: `dyn:${entryId}`,
+      name: entryAttribution.name,
+      url: entryAttribution.homepage,
+      spdxLicense: entryAttribution.license,
+    },
+  ];
+}
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
   // Inject the cache client so the fetcher can persist registry data
@@ -31,25 +63,64 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     const attributionRow = entry.attribution
       ? {
           label: entry.attribution.name,
-          url: entry.attribution.homepage ?? "",
+          url: entry.attribution.homepage,
           license: entry.attribution.license,
         }
       : null;
 
-    ctx.registerProvider("transit", {
+    const attribution = entry.attribution
+      ? buildAttributionFor(entry.id, entry.attribution)
+      : BASE_ATTRIBUTION;
+
+    const wrap = <T>(data: T) => withAttribution(data, attribution, freshnessNow());
+    const wrapRT = <T>(data: T) =>
+      withAttribution(data, attribution, freshnessNow({ hasRealtimeData: true }));
+
+    ctx.registerTransitProvider({
       id: `dyn:${entry.id}`,
       prefix: entry.prefix,
       coverage: { bbox: entry.bbox },
       priority: 5,
+      attribution,
+      capabilities: {
+        stops: {
+          lookup: false,
+          nearby: !!adapter.getStopsNearby,
+          bbox: false,
+          search: !!adapter.searchByName,
+          infrastructure: false,
+          platforms: false,
+          timetable: false,
+        },
+        departures: !!adapter.getDepartures,
+        arrivals: false,
+        routes: { lookup: false, forStop: false, stops: false, geometry: false },
+        planning: false,
+        vehiclePositions: false,
+        vehicleJourney: false,
+        alerts: { byStop: false, byRoute: false, byBbox: false },
+        facilities: false,
+      },
       getStopsNearby: adapter.getStopsNearby
-        ? (lat: number, lng: number, r: number) =>
-            adapter.getStopsNearby?.(entry as never, lat, lng, r)
+        ? async (lat, lng, r) => {
+            const fn = adapter.getStopsNearby;
+            if (!fn) return wrap([]);
+            return wrap(await fn(entry as never, lat, lng, r));
+          }
         : undefined,
       getDepartures: adapter.getDepartures
-        ? (id: string, min: number) => adapter.getDepartures?.(entry as never, id, min)
+        ? async (id, min) => {
+            const fn = adapter.getDepartures;
+            if (!fn) return wrapRT([]);
+            return wrapRT(await fn(entry as never, id, min));
+          }
         : undefined,
-      searchByName: adapter.searchByName
-        ? (q: string, limit: number) => adapter.searchByName?.(entry as never, q, limit)
+      searchStopsByName: adapter.searchByName
+        ? async (q, limit) => {
+            const fn = adapter.searchByName;
+            if (!fn) return wrap([]);
+            return wrap(await fn(entry as never, q, limit ?? 10));
+          }
         : undefined,
       getFeedAttribution: attributionRow
         ? async () => ({ [attributionKey]: attributionRow })

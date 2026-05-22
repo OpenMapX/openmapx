@@ -1,6 +1,7 @@
+import type { BBox } from "@openmapx/core";
+import { decodePolyline } from "@openmapx/core";
 import type {
   AlertSeverity,
-  BBox,
   Departure,
   Facility,
   GeoJSONLineString,
@@ -30,8 +31,7 @@ import type {
   VehicleJourney,
   VehicleJourneyStop,
   VehiclePosition,
-} from "@openmapx/core";
-import { decodePolyline } from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 
 type EnturMultiModal = "parent" | "child" | "all";
 type BoardMode = "departures" | "arrivals" | "both";

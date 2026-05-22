@@ -1,7 +1,7 @@
 import type { SharedMobilityStation } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../cache.js", () => ({
+vi.mock("../src/cache.js", () => ({
   TTL: {
     sharedMobility: {
       stations: 300,
@@ -10,7 +10,7 @@ vi.mock("../cache.js", () => ({
   withCache: vi.fn(async (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn()),
 }));
 
-vi.mock("../gbfs-catalog.js", () => ({
+vi.mock("../src/gbfs-catalog.js", () => ({
   filterCatalogByBbox: vi.fn((entries: unknown[]) => entries),
   loadCatalog: vi.fn(),
   normalizeFormFactor: vi.fn((value: string | undefined) => {
@@ -28,8 +28,8 @@ vi.mock("../gbfs-catalog.js", () => ({
   }),
 }));
 
-import { buildEnturGeofencingMapContext, enrichEnturMobilityItems } from "../entur-mobility.js";
-import { filterCatalogByBbox, loadCatalog } from "../gbfs-catalog.js";
+import { buildEnturGeofencingMapContext, enrichEnturMobilityItems } from "../src/entur-mobility.js";
+import { filterCatalogByBbox, loadCatalog } from "../src/gbfs-catalog.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

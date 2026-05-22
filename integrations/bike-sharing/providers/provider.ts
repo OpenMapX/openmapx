@@ -11,12 +11,14 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
 } from "@openmapx/mobility-core/entur-mobility";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
@@ -28,6 +30,7 @@ import {
   mapVehicleToResult,
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
+import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/mobility-core/types";
 import { searchCityBikes } from "./citybikes-client.js";
 import { searchDbBikes } from "./db-bike-client.js";
@@ -38,6 +41,20 @@ const BIKE_FORM_FACTORS = new Set<import("@openmapx/mobility-core/types").Vehicl
   "bicycle",
   "cargo_bicycle",
 ]);
+
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "citybikes",
+    name: "CityBikes",
+    url: "https://citybik.es/",
+    licenseUrl: "https://api.citybik.es/v2/",
+  },
+];
+
+const wrapRT = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+const wrapStatic = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
 
 // In-memory cache for detail lookups (stations + free-floating)
 const itemCache = new Map<string, SharedMobilityStation | SharedMobilityVehicle>();
@@ -72,18 +89,19 @@ const META: DataSourceMeta = {
   osmFilters: CATEGORY_FILTERS.bicycle_rental,
 };
 
-class BikeSharingProvider implements DataSourceProvider {
+class BikeSharingProvider implements MobilityDataSourceProvider {
   readonly id = "bike-sharing";
   readonly meta = META;
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
   readonly mapContextCacheTtl = 300;
+  readonly attribution = ATTRIBUTION;
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return [];
   }
 
-  async search(bbox: BoundingBox): Promise<DataSourceResult[]> {
+  async search(bbox: BoundingBox): Promise<MobilityResult<DataSourceResult[]>> {
     const bboxArray: [number, number, number, number] = [
       bbox.west,
       bbox.south,
@@ -174,17 +192,17 @@ class BikeSharingProvider implements DataSourceProvider {
       results.push(mapVehicleToResult(v));
     }
 
-    return results;
+    return wrapRT(results);
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
+  async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = itemCache.get(itemId);
     if (cached) {
-      if ("availableVehicles" in cached) return mapStationToDetail(cached);
-      return mapVehicleToDetail(cached);
+      if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached));
+      return wrapRT(mapVehicleToDetail(cached));
     }
 
-    return null;
+    return wrapRT(null);
   }
 
   async getMapContext(
@@ -192,7 +210,7 @@ class BikeSharingProvider implements DataSourceProvider {
     _filters?: Record<string, unknown>,
     options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
   ) {
-    return buildEnturGeofencingMapContext(bbox, options);
+    return wrapStatic(await buildEnturGeofencingMapContext(bbox, options));
   }
 }
 

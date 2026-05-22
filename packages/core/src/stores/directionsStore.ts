@@ -1,5 +1,5 @@
 import type { TravelMode, Waypoint } from "@integrations/routing/types";
-import type { TripItinerary } from "@integrations/transit/types";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
 import type { LngLat } from "../types/geometry";
 

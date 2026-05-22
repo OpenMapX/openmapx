@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Attribution } from "../attribution.js";
-import type { Freshness } from "../freshness.js";
-import { type MobilityResult, withAttribution } from "../result.js";
+import type { Attribution } from "../src/types/attribution.js";
+import type { Freshness } from "../src/types/freshness.js";
+import { type MobilityResult, withAttribution } from "../src/types/result.js";
 
 describe("withAttribution", () => {
   const attributions: Attribution[] = [

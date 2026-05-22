@@ -1,5 +1,5 @@
 import type { SearchResult } from "@integrations/geocoding/types";
-import type { TransitStop } from "@integrations/transit/types";
+import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { isTransitRawCategory } from "../hooks/transit/transitEligibility";

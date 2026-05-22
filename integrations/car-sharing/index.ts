@@ -23,6 +23,6 @@ export function setup(ctx: IntegrationContext): void {
   registerCarSharingClient(wuppertalClient);
   registerCarSharingClient(bielefeldClient);
 
-  ctx.registerProvider("data-source", carSharingProvider);
+  ctx.registerMobilityDataSource(carSharingProvider);
   registerPlaceResolver(carSharingProvider.id, createDataSourceResolver(carSharingProvider));
 }

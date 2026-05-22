@@ -8,7 +8,7 @@ import Skeleton from "@mui/material/Skeleton";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import type { MergedDeparture, Place, TransportMode } from "@openmapx/core";
+import type { Place } from "@openmapx/core";
 import {
   resolveProvider,
   useLinkedTransitAlerts,
@@ -16,6 +16,7 @@ import {
   useLinkedTransitDepartures,
   useProviders,
 } from "@openmapx/core";
+import type { MergedDeparture, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { DepartureRow } from "./DepartureRow";

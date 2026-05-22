@@ -1,5 +1,5 @@
 import type { Mode } from "@motis-project/motis-client";
-import type { TransportMode } from "@openmapx/core";
+import type { TransportMode } from "@openmapx/mobility-core/transit";
 
 const MOTIS_MODE_MAP: Partial<Record<Mode | "MONORAIL", TransportMode>> = {
   WALK: "walking",

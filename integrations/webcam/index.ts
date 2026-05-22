@@ -13,6 +13,6 @@ export function setup(ctx: IntegrationContext): void {
   if (resolved?.url) setOverpassUrl(resolved.url);
   setWindyApiKey(ctx.config.apiKey as string | undefined);
   setNpsApiKey(ctx.config.npsApiKey as string | undefined);
-  ctx.registerProvider("data-source", webcamProvider);
+  ctx.registerMobilityDataSource(webcamProvider);
   registerPlaceResolver(webcamProvider.id, createDataSourceResolver(webcamProvider));
 }

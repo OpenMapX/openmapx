@@ -9,7 +9,7 @@ import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
+import type { CategoryPlace } from "@openmapx/core";
 import {
   categoryPlaceToPlace,
   isAreaTooLarge,
@@ -23,6 +23,7 @@ import {
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
+import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -40,7 +41,7 @@ function TransitStopCard({
 }: {
   stop: TransitStop;
   onSelect: (stop: TransitStop) => void;
-  providers: Record<string, { label: string; url: string }> | undefined;
+  providers: Record<string, { label: string; url?: string }> | undefined;
 }) {
   return (
     <Box

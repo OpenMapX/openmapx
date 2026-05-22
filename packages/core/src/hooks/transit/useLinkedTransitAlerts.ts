@@ -1,4 +1,4 @@
-import type { ServiceAlert } from "@integrations/transit/types";
+import type { ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";

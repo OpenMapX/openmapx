@@ -1,4 +1,4 @@
-import type { TransitStop } from "@integrations/transit/types";
+import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";

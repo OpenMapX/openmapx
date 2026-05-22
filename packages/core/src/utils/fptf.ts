@@ -4,7 +4,7 @@
  * Used by hafas-mgate adapter, hafas provider, and db-vendo provider to avoid
  * duplicating departure/remark normalization logic.
  */
-import type { Departure, TransportMode, TripRemark } from "@integrations/transit/types";
+import type { Departure, TransportMode, TripRemark } from "@openmapx/mobility-core/transit";
 
 /**
  * Maps FPTF product strings to internal TransportMode values.

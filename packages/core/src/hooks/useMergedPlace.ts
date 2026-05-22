@@ -1,5 +1,5 @@
-import type { DataSourceDetail } from "@integrations/data-source/types";
 import type { ReverseGeocodingResult } from "@integrations/geocoding/types";
+import type { DataSourceDetail } from "@openmapx/integration-framework";
 import { useDataSourceStore } from "../stores/dataSourceStore";
 import type { Place } from "../types/place";
 import { useDataSourceMatch } from "./useDataSourceMatch";

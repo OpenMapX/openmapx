@@ -1,4 +1,4 @@
-import type { DataSourceDetail, DataSourceResult } from "@integrations/data-source/types";
+import type { DataSourceDetail, DataSourceResult } from "@openmapx/integration-framework";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";

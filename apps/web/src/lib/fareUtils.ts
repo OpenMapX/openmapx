@@ -1,4 +1,4 @@
-import type { FareProduct, TripFare } from "@openmapx/core";
+import type { FareProduct, TripFare } from "@openmapx/mobility-core/transit";
 
 export interface FareSummary {
   amount: number;

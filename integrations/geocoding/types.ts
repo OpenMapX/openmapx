@@ -1,4 +1,5 @@
-import type { LngLat, TransitStop } from "@openmapx/core";
+import type { LngLat } from "@openmapx/core";
+import type { TransitStop } from "@openmapx/mobility-core/transit";
 
 export interface SearchResult {
   id: string;

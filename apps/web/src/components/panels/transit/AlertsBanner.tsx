@@ -4,7 +4,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import type { ServiceAlert } from "@openmapx/core";
+import type { ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AlertCard, SEVERITY_PRIORITY } from "./AlertCard";

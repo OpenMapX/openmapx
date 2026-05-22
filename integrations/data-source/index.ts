@@ -43,11 +43,11 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = orchestrator.searchCacheKey(req.params.id, bbox, filters);
 
     try {
-      const results = await ctx.cache.withCache(cacheKey, searchTtl, () =>
+      const envelope = await ctx.cache.withCache(cacheKey, searchTtl, () =>
         provider.search(bbox, filters),
       );
       reply.header("Cache-Control", `public, max-age=${Math.min(searchTtl, 300)}`);
-      reply.send(results);
+      reply.send(envelope.data);
     } catch (err) {
       if (err instanceof ConfigurationError) {
         reply.status(503).send({ error: err.message });
@@ -74,15 +74,15 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = orchestrator.detailCacheKey(req.params.id, itemId);
 
     try {
-      const detail = await ctx.cache.withCache(cacheKey, detailTtl, () =>
+      const envelope = await ctx.cache.withCache(cacheKey, detailTtl, () =>
         provider.getDetail(itemId),
       );
-      if (!detail) {
+      if (!envelope.data) {
         reply.status(404).send({ error: "Item not found" });
         return;
       }
       reply.header("Cache-Control", `public, max-age=${Math.min(detailTtl, 300)}`);
-      reply.send(detail);
+      reply.send(envelope.data);
     } catch (err) {
       if (err instanceof ConfigurationError) {
         reply.status(503).send({ error: err.message });
@@ -141,11 +141,11 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = orchestrator.mapContextCacheKey(req.params.id, bbox, filters, options);
 
     try {
-      const context = await ctx.cache.withCache(cacheKey, ttl, () =>
+      const envelope = await ctx.cache.withCache(cacheKey, ttl, () =>
         getMapContext(bbox, filters, options),
       );
       reply.header("Cache-Control", `public, max-age=${Math.min(ttl, 300)}`);
-      reply.send(context ?? null);
+      reply.send(envelope.data ?? null);
     } catch (err) {
       if (err instanceof ConfigurationError) {
         reply.status(503).send({ error: err.message });

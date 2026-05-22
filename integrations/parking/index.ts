@@ -19,6 +19,6 @@ export function setup(ctx: IntegrationContext): void {
     password: ctx.config.utmcPassword as string | undefined,
   });
   setNswTransportApiKey(ctx.config.nswTransportApiKey as string | undefined);
-  ctx.registerProvider("data-source", parkingProvider);
+  ctx.registerMobilityDataSource(parkingProvider);
   registerPlaceResolver(parkingProvider.id, createDataSourceResolver(parkingProvider));
 }

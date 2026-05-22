@@ -1,8 +1,8 @@
 "use client";
 
 import Chip from "@mui/material/Chip";
-import type { TransportMode } from "@openmapx/core";
 import { MODE_COLORS } from "@openmapx/core";
+import type { TransportMode } from "@openmapx/mobility-core/transit";
 
 function expandHex(hex: string): string {
   // Expand 3-digit hex (#abc) to 6-digit (#aabbcc)

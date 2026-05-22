@@ -1,5 +1,5 @@
+import type { BBox } from "@openmapx/core";
 import type {
-  BBox,
   Departure,
   GeoJSONLineString,
   TransitRoute,
@@ -7,7 +7,7 @@ import type {
   TransportMode,
   VehicleJourney,
   VehicleJourneyStop,
-} from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 
 /**
  * Transit provider backed by locally-imported GTFS feeds in PostGIS.

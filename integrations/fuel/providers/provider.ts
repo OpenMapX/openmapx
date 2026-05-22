@@ -6,8 +6,11 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS, searchByCategory } from "@openmapx/core";
-import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
+import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import { getTankerkoenigApiKey, searchFuelStations } from "./factory.js";
 import {
   buildTankerkoenigDetail,
@@ -54,12 +57,26 @@ const META: DataSourceMeta = {
 
 const MAX_CACHE_SIZE = 2000;
 
-class FuelDataSourceProvider implements DataSourceProvider {
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "tankerkoenig",
+    name: "Tankerkoenig (MTS-K)",
+    url: "https://creativecommons.tankerkoenig.de/",
+    spdxLicense: "CC-BY-4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+  },
+];
+
+const wrapStatic = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
+
+class FuelDataSourceProvider implements MobilityDataSourceProvider {
   readonly id = "fuel";
   readonly meta = META;
   readonly serviceIds = [];
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
+  readonly attribution = ATTRIBUTION;
 
   /** In-memory cache of stations seen during search, for detail lookups. */
   private stationCache = new Map<string, FuelStation>();
@@ -93,7 +110,10 @@ class FuelDataSourceProvider implements DataSourceProvider {
     ];
   }
 
-  async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
+  async search(
+    bbox: BoundingBox,
+    filters?: Record<string, unknown>,
+  ): Promise<MobilityResult<DataSourceResult[]>> {
     let results: DataSourceResult[];
 
     const fuelStations = await searchFuelStations(bbox);
@@ -107,7 +127,7 @@ class FuelDataSourceProvider implements DataSourceProvider {
     } else {
       // Fallback to Overpass for areas without dedicated fuel price providers
       const osmFilters = CATEGORY_FILTERS.fuel;
-      if (!osmFilters) return [];
+      if (!osmFilters) return wrapStatic([]);
       const osmResults = await searchByCategory(osmFilters, bbox);
       results = osmResults.map((r) => ({
         id: r.id,
@@ -136,10 +156,14 @@ class FuelDataSourceProvider implements DataSourceProvider {
       }
     }
 
-    return results;
+    return wrapStatic(results);
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
+  async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
+    return wrapStatic(await this.fetchDetail(itemId));
+  }
+
+  private async fetchDetail(itemId: string): Promise<DataSourceDetail | null> {
     // Tankerkoenig stations: fetch enriched detail from their API
     if (itemId.startsWith("tankerkoenig/")) {
       const uuid = itemId.replace(/^tankerkoenig\//, "");

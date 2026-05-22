@@ -5,7 +5,7 @@ import type {
   ServiceAlert,
   TransitStop,
   TransportMode,
-} from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 
 const BASE_URL = "https://api.tfl.gov.uk";
 const MAX_RADIUS = 1000;

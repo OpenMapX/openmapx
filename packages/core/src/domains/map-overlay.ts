@@ -1,4 +1,4 @@
-import type { DataSourceDetailSection } from "@integrations/data-source/types";
+import type { DataSourceDetailSection } from "@openmapx/integration-framework";
 import type { BoundingBox, LngLat } from "../types/geometry";
 
 export interface GeoJsonFeatureCollection {

@@ -16,7 +16,7 @@ import Divider from "@mui/material/Divider";
 import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { MergedDeparture, MergedRoute, Place, TransportMode } from "@openmapx/core";
+import type { Place } from "@openmapx/core";
 import {
   resolveProvider,
   useLinkedTransitAlerts,
@@ -25,6 +25,7 @@ import {
   useLinkedTransitRoutes,
   useProviders,
 } from "@openmapx/core";
+import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { KeyboardEvent } from "react";
 import { useMemo } from "react";

@@ -1,7 +1,7 @@
 "use client";
 
-import type { GeoJSONLineString } from "@integrations/transit/types";
 import { API_ENDPOINTS, apiClient, MODE_COLORS, useDirectionsStore } from "@openmapx/core";
+import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";

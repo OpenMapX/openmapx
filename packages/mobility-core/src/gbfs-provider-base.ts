@@ -22,7 +22,7 @@ import type {
   SharedMobilityVehicle,
   VehicleFormFactor,
   VehicleTypeDetail,
-} from "./types.js";
+} from "./types/shared-mobility.js";
 
 const SYSTEM_PROBE_CONCURRENCY = 8;
 const MAX_SYSTEMS_PER_SEARCH = 64;

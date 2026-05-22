@@ -1,3 +1,6 @@
+import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
+import type { RealtimeProvider } from "./contracts/realtime-provider.js";
+import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { LoadedIntegration } from "./loader";
 import type { IntegrationManifest } from "./manifest";
 
@@ -80,7 +83,35 @@ export interface IntegrationContext {
   readonly log: Logger;
   readonly secrets: SecretsClient;
 
+  /**
+   * Untyped registrar for domains that don't yet have a canonical contract.
+   * Currently used by: `geocoding`, `routing`, `weather`, `knowledge`,
+   * `photos`, `reviews`, `poi-search`, `gtfs-catalog`. Each of these passes
+   * a domain-specific provider shape; the host stores them by domain key
+   * and exposes them via `getIntegrationsByDomain(domain)`. The mobility
+   * data domains have typed registrars (see below) — do NOT register
+   * a transit / live-transit / data-source provider via this method.
+   */
   registerProvider(domain: string, provider: unknown): void;
+  /**
+   * Typed registrar for transit providers. Stores the provider in the same
+   * slot as the legacy `registerProvider("transit", p)` for orchestrator
+   * compatibility, but enforces the canonical `TransitProvider` shape at
+   * compile time.
+   */
+  registerTransitProvider(provider: TransitProvider): void;
+  /**
+   * Typed registrar for realtime (live-transit) providers — vehicle
+   * positions, alerts, trip updates. Stores in the same slot as the legacy
+   * `registerProvider("live-transit", p)`.
+   */
+  registerRealtimeProvider(provider: RealtimeProvider): void;
+  /**
+   * Typed registrar for mobility data-source providers (bike-sharing,
+   * car-sharing, scooter-sharing, parking, fuel, EV charging, webcams).
+   * Stores in the same slot as the legacy `registerProvider("data-source", p)`.
+   */
+  registerMobilityDataSource(provider: MobilityDataSourceProvider): void;
   registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
 

@@ -7,7 +7,7 @@
  * Icon paths are Material Design Icons (24x24 viewbox), scaled to fit.
  */
 
-import type { TransportMode } from "@openmapx/core";
+import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { createMarkerSvg } from "./markerSvg";
 

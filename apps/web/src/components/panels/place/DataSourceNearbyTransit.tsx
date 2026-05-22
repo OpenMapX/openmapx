@@ -13,7 +13,7 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Divider from "@mui/material/Divider";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import type { LngLat, TransitStop, TransportMode } from "@openmapx/core";
+import type { LngLat } from "@openmapx/core";
 import {
   haversineMeters,
   PANEL,
@@ -22,6 +22,7 @@ import {
   useSidebarStore,
   useStopsNearby,
 } from "@openmapx/core";
+import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { useMap } from "@/lib/MapContext";

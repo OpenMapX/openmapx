@@ -16,7 +16,7 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { MergedDeparture, Place, TripItinerary, TripLeg } from "@openmapx/core";
+import type { Place } from "@openmapx/core";
 import {
   formatDistance,
   formatDuration,
@@ -27,6 +27,7 @@ import {
   useProviders,
   useSidebarStore,
 } from "@openmapx/core";
+import type { MergedDeparture, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import {

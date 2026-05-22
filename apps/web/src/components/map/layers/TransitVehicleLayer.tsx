@@ -1,7 +1,7 @@
 "use client";
 
-import type { TripLeg, VehicleJourneyStop } from "@openmapx/core";
 import { useDirectionsStore, useVehicleJourney } from "@openmapx/core";
+import type { TripLeg, VehicleJourneyStop } from "@openmapx/mobility-core/transit";
 import type { GeoJSONSource } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/lib/MapContext";

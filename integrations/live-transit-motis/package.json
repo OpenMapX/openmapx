@@ -1,0 +1,21 @@
+{
+  "name": "@openmapx/integration-live-transit-motis",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    }
+  },
+  "dependencies": {
+    "@hey-api/client-fetch": "workspace:*",
+    "@motis-project/motis-client": "^2.9.2",
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^"
+  }
+}

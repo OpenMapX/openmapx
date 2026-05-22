@@ -11,7 +11,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
   VehicleTypeDetail,
-} from "./types.js";
+} from "./types/shared-mobility.js";
 
 /**
  * Round to 4 decimal places (~11m precision). Matches

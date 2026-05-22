@@ -13,7 +13,10 @@
     "jsx": "react-jsx",
     "noEmit": true,
     "paths": {
-      "@integrations/*": ["../../integrations/*"]
+      "@integrations/*": ["../../integrations/*"],
+      "@openmapx/integration-framework": ["../integration-framework/src/index.ts"],
+      "@openmapx/mobility-core/*": ["../mobility-core/src/*.ts", "../mobility-core/src/types/*.ts"],
+      "@openmapx/mobility-core/types": ["../mobility-core/src/types/shared-mobility.ts"]
     }
   },
   "include": ["src", "../../integrations/*/types.ts"]

@@ -5,7 +5,7 @@ import {
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "../mapper.js";
+} from "../src/mapper.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

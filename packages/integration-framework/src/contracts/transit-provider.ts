@@ -1,0 +1,153 @@
+import type { BBox } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { MobilityResult } from "@openmapx/mobility-core/result";
+import type {
+  Departure,
+  Facility,
+  ServiceAlert,
+  TransitRoute,
+  TransitStop,
+  TransitStopInfrastructure,
+  TripPlan,
+  VehicleJourney,
+  VehiclePosition,
+} from "@openmapx/mobility-core/transit";
+import type { LineString } from "geojson";
+import type { HealthCheckResult } from "../context.js";
+
+/**
+ * Per-runtime-feed attribution map returned by `getFeedAttribution`. Keys
+ * MUST match what downstream consumers carry on `TransitStop.provider`,
+ * `VehicleJourney.provider`, and `ServiceAlert.providers[]` so the
+ * frontend can render the correct license chip via the `/providers`
+ * endpoint.
+ */
+export interface ProviderAttribution {
+  label: string;
+  url?: string;
+  license?: string;
+  licenseUrl?: string;
+}
+
+export interface TransitCapabilities {
+  stops: {
+    lookup: boolean;
+    nearby: boolean;
+    bbox: boolean;
+    search: boolean;
+    infrastructure: boolean;
+    platforms: boolean;
+    timetable: boolean;
+  };
+  departures: boolean;
+  arrivals: boolean;
+  routes: {
+    lookup: boolean;
+    forStop: boolean;
+    stops: boolean;
+    geometry: boolean;
+  };
+  planning: boolean;
+  vehiclePositions: boolean;
+  vehicleJourney: boolean;
+  alerts: {
+    byStop: boolean;
+    byRoute: boolean;
+    byBbox: boolean;
+  };
+  facilities: boolean;
+}
+
+export interface TripPlanRequest {
+  from: { lat: number; lng: number };
+  to: { lat: number; lng: number };
+  departureTime?: string;
+  arrivalTime?: string;
+  modes?: string[];
+}
+
+// Re-exported so consumers of the framework barrel don't need a separate
+// @openmapx/core import just for this one return type.
+export type { VehicleJourney };
+
+// TODO(types): tighten in B2 once a concrete timetable consumer exists.
+export type TimetableEntry = unknown;
+
+export interface TransitProvider {
+  readonly id: string;
+  readonly prefix: string;
+  readonly coverage: { bbox: BBox } | { all: true };
+  readonly priority: number;
+  readonly capabilities: TransitCapabilities;
+  readonly attribution: Attribution[];
+
+  getStop?(id: string): Promise<MobilityResult<TransitStop | null>>;
+  getStopsNearby?(
+    lat: number,
+    lng: number,
+    radiusMeters: number,
+  ): Promise<MobilityResult<TransitStop[]>>;
+  getStopsInBbox?(bbox: BBox): Promise<MobilityResult<TransitStop[]>>;
+  searchStopsByName?(q: string, limit?: number): Promise<MobilityResult<TransitStop[]>>;
+  getStopInfrastructure?(stopId: string): Promise<MobilityResult<TransitStopInfrastructure | null>>;
+  getStopPlatforms?(stopId: string): Promise<MobilityResult<TransitStop[]>>;
+  getStopTimetable?(stopId: string, date: string): Promise<MobilityResult<TimetableEntry[]>>;
+
+  getDepartures?(stopId: string, minutes: number): Promise<MobilityResult<Departure[]>>;
+  /** Arrivals reuse the {@link Departure} shape; the `direction` field
+   *  distinguishes inbound from outbound. Providers populate it with arriving
+   *  trips at the given stop within `minutes`. */
+  getArrivals?(stopId: string, minutes: number): Promise<MobilityResult<Departure[]>>;
+
+  getRoute?(routeId: string): Promise<MobilityResult<TransitRoute | null>>;
+  getRouteStops?(routeId: string, hintStopId?: string): Promise<MobilityResult<TransitStop[]>>;
+  getRoutesForStop?(stopId: string): Promise<MobilityResult<TransitRoute[]>>;
+  getLegGeometry?(
+    tripId: string,
+    fromStopId?: string,
+    toStopId?: string,
+  ): Promise<MobilityResult<LineString | null>>;
+
+  planTrip?(opts: TripPlanRequest): Promise<MobilityResult<TripPlan[]>>;
+  getVehicleJourney?(
+    tripId: string,
+    fallbackIds?: string[],
+  ): Promise<MobilityResult<VehicleJourney | null>>;
+  getVehiclePositions?(routeId: string): Promise<MobilityResult<VehiclePosition[]>>;
+  getVehicleRadar?(bbox: BBox): Promise<MobilityResult<VehiclePosition[]>>;
+
+  getAlertsForStop?(stopId: string): Promise<MobilityResult<ServiceAlert[]>>;
+  getAlertsForRoute?(routeId: string): Promise<MobilityResult<ServiceAlert[]>>;
+  getAlertsForBbox?(bbox: BBox): Promise<MobilityResult<ServiceAlert[]>>;
+  getFacilities?(stopId: string): Promise<MobilityResult<Facility[]>>;
+
+  /**
+   * Optional bbox-scoped lookups. Not part of the declared capability set
+   * because no consumer drives them today; kept on the interface so providers
+   * (e.g. transit-overpass for route geometry) can opt in incrementally.
+   */
+  getRoutesInBbox?(bbox: BBox): Promise<MobilityResult<TransitRoute[]>>;
+  getReachableStops?(
+    lat: number,
+    lng: number,
+    maxMinutes: number,
+    modes?: string[],
+  ): Promise<MobilityResult<TransitStop[]>>;
+
+  /**
+   * Optional per-instance attribution. Returned alongside the manifest-level
+   * `dataSources[0]` attribution. Useful when one integration fronts many
+   * distinct feeds or runtime instances each carrying its own license:
+   * `transit-gtfs-local` (one row per imported GTFS feed),
+   * `transit-dynamic-registry` (one row per `transport-apis` instance), etc.
+   *
+   * Keys MUST match what consumers look up: `TransitStop.provider`,
+   * `VehicleJourney.provider`, `ServiceAlert.providers[]`.
+   */
+  getFeedAttribution?(): Promise<Record<string, ProviderAttribution>>;
+
+  /** Optional. Providers that have no meaningful self-check (e.g. thin
+   *  pass-throughs) may omit this and rely on `ctx.registerHealthCheck()`
+   *  declared at integration setup instead. */
+  healthCheck?(): Promise<HealthCheckResult>;
+}

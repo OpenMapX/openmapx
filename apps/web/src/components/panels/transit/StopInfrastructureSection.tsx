@@ -15,16 +15,7 @@ import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import type {
-  Place,
-  TransitFareZoneSummary,
-  TransitInterchangeComplexity,
-  TransitPlatformDetail,
-  TransitStopAreaSummary,
-  TransitStopInfrastructure,
-  TransitStopParking,
-  TransportMode,
-} from "@openmapx/core";
+import type { Place } from "@openmapx/core";
 import {
   PANEL,
   usePlaceStopInfrastructure,
@@ -32,6 +23,15 @@ import {
   useSidebarStore,
   withId,
 } from "@openmapx/core";
+import type {
+  TransitFareZoneSummary,
+  TransitInterchangeComplexity,
+  TransitPlatformDetail,
+  TransitStopAreaSummary,
+  TransitStopInfrastructure,
+  TransitStopParking,
+  TransportMode,
+} from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useMap } from "@/lib/MapContext";

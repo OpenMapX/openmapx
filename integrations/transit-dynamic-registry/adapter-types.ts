@@ -1,12 +1,12 @@
+import type { BBox } from "@openmapx/core";
 import type {
-  BBox,
   Departure,
   ServiceAlert,
   TransitStop,
   TripPlan,
   VehicleJourney,
   VehiclePosition,
-} from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 import type { RegistryEntry } from "./registry-types";
 
 export interface ProtocolAdapter {

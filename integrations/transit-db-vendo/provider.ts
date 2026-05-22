@@ -1,3 +1,10 @@
+import {
+  mapProducts,
+  normalizeFptfDeparture,
+  normalizeRemarks,
+  productToMode,
+  USER_AGENT_TRANSIT,
+} from "@openmapx/core";
 import type {
   Departure,
   GeoJSONLineString,
@@ -9,14 +16,7 @@ import type {
   TripPlan,
   VehicleJourney,
   VehicleJourneyStop,
-} from "@openmapx/core";
-import {
-  mapProducts,
-  normalizeFptfDeparture,
-  normalizeRemarks,
-  productToMode,
-  USER_AGENT_TRANSIT,
-} from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 import { createClient } from "db-vendo-client";
 // dbnav uses app.services-bahn.de — documented as more stable than the db
 // profile (app.vendo.noncd.db.de, "possibly shut off soon" per readme).

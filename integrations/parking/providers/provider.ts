@@ -6,8 +6,11 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
+import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import { deduplicateParking, haversineMeters } from "./dedup.js";
 import { mapParkingToDetail, mapParkingToResult } from "./mapper.js";
 import { PARKING_SOURCE_REGISTRY } from "./registry.js";
@@ -79,12 +82,24 @@ const PARKING_FILTERS: DataSourceFilterDef[] = [
 
 const MAX_CACHE_SIZE = 3000;
 
-class ParkingDataSourceProvider implements DataSourceProvider {
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "parkapi-v2",
+    name: "ParkenDD",
+    url: "https://github.com/ParkenDD/park-api-v2",
+  },
+];
+
+const wrapStatic = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
+
+class ParkingDataSourceProvider implements MobilityDataSourceProvider {
   readonly id = "parking";
   readonly meta = META;
   readonly serviceIds = [];
   readonly searchCacheTtl = 60;
   readonly detailCacheTtl = 60;
+  readonly attribution = ATTRIBUTION;
 
   private facilityCache = new Map<string, ParkingFacility>();
 
@@ -100,7 +115,10 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     return PARKING_FILTERS;
   }
 
-  async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
+  async search(
+    bbox: BoundingBox,
+    filters?: Record<string, unknown>,
+  ): Promise<MobilityResult<DataSourceResult[]>> {
     const results = await Promise.allSettled(
       PARKING_SOURCE_REGISTRY.map((source) => source.search(bbox)),
     );
@@ -120,31 +138,31 @@ class ParkingDataSourceProvider implements DataSourceProvider {
     filtered = this.applyAvailabilityFilter(filtered, filters);
     filtered = this.applyFeaturesFilter(filtered, filters);
 
-    return filtered.map(mapParkingToResult);
+    return wrapStatic(filtered.map(mapParkingToResult));
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
+  async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     // Try in-memory cache first — contains merged data from search
     const cached = this.facilityCache.get(itemId);
-    if (cached) return mapParkingToDetail(cached);
+    if (cached) return wrapStatic(mapParkingToDetail(cached));
 
     // Cache miss: fetch the primary source, then try to enrich with
     // data from other sources so detail always has merged information.
     const primary = await this.fetchByPrefix(itemId);
     if (!primary) {
-      return {
+      return wrapStatic({
         id: itemId,
         sources: ["unknown"],
         name: "Parking",
         coordinates: [0, 0],
         sections: [],
-      };
+      });
     }
 
     // Enrich: fetch nearby data from other sources and merge
     const enriched = await this.enrichFacility(primary);
     this.cacheFacility(enriched);
-    return mapParkingToDetail(enriched);
+    return wrapStatic(mapParkingToDetail(enriched));
   }
 
   private async fetchByPrefix(itemId: string): Promise<ParkingFacility | null> {

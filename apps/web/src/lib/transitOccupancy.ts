@@ -1,4 +1,4 @@
-import type { OccupancyLevel } from "@openmapx/core";
+import type { OccupancyLevel } from "@openmapx/mobility-core/transit";
 
 export const OCCUPANCY_COLOR: Record<OccupancyLevel, string> = {
   low: "#2e7d32",

@@ -1,0 +1,54 @@
+{
+  "id": "live-transit-motis",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://motis-project.de/",
+  "domains": ["live-transit"],
+  "dependencies": ["overlay-live-transit"],
+  "requires": [{ "service": "motis", "optional": false }],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "endpoint": {
+        "type": "string",
+        "title": "MOTIS endpoint",
+        "description": "Base URL of the MOTIS instance. Falls back to the service registry's resolved URL.",
+        "format": "url"
+      }
+    }
+  },
+  "healthCheck": [
+    {
+      "name": "MOTIS endpoint",
+      "type": "ping",
+      "url": "http://localhost:8081",
+      "urlTemplate": "${endpoint}"
+    }
+  ],
+  "quality": "built-in",
+  "category": "Transit",
+  "dataSources": [
+    {
+      "sourceId": "motis-rt",
+      "name": "MOTIS GTFS-RT Pass-through",
+      "url": "https://motis-project.de/",
+      "license": "Mixed (depends on upstream GTFS-RT feed)",
+      "attribution": "Alerts and trip updates passed through from MOTIS",
+      "commercialUse": "conditional",
+      "providerCountry": "—",
+      "providerPrivacyUrl": "https://motis-project.de/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

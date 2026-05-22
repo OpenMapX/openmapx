@@ -1,4 +1,4 @@
-import type { TransportMode } from "@integrations/transit/types";
+import type { TransportMode } from "@openmapx/mobility-core/transit";
 
 const OTP_MODE_MAP: Record<string, TransportMode> = {
   BUS: "bus",

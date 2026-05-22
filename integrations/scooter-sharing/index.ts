@@ -17,7 +17,7 @@ export function setup(ctx: IntegrationContext): void {
     clientId: ctx.config.nrwMobidromClientId as string | undefined,
     clientSecret: ctx.config.nrwMobidromClientSecret as string | undefined,
   });
-  ctx.registerProvider("data-source", scooterSharingProvider);
+  ctx.registerMobilityDataSource(scooterSharingProvider);
   registerPlaceResolver(
     scooterSharingProvider.id,
     createDataSourceResolver(scooterSharingProvider),

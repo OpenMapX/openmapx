@@ -1,11 +1,11 @@
 "use client";
 
+import { usePlaceStopInfrastructure, usePlaceStore } from "@openmapx/core";
 import type {
   TransitGeoJsonMultiPolygon,
   TransitGeoJsonPolygon,
   TransitStopInfrastructure,
-} from "@openmapx/core";
-import { usePlaceStopInfrastructure, usePlaceStore } from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { useMap } from "@/lib/MapContext";

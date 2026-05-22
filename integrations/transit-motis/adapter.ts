@@ -20,22 +20,21 @@ import {
   stoptimes,
   trips,
 } from "@motis-project/motis-client";
-import {
-  type BBox,
-  type Departure,
-  decodePolyline,
-  type FareProduct,
-  type GeoJSONLineString,
-  type TransitRoute,
-  type TransitStop,
-  type TripFare,
-  type TripItinerary,
-  type TripLeg,
-  type TripPlan,
-  type VehicleJourney,
-  type VehicleJourneyStop,
-  type VehiclePosition,
-} from "@openmapx/core";
+import { type BBox, decodePolyline } from "@openmapx/core";
+import type {
+  Departure,
+  FareProduct,
+  GeoJSONLineString,
+  TransitRoute,
+  TransitStop,
+  TripFare,
+  TripItinerary,
+  TripLeg,
+  TripPlan,
+  VehicleJourney,
+  VehicleJourneyStop,
+  VehiclePosition,
+} from "@openmapx/mobility-core/transit";
 import type { MotisInstance } from "./instances.js";
 import { motisMode, uniqueModes } from "./mode-map.js";
 

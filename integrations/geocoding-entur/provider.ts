@@ -5,9 +5,8 @@ import {
   type ReverseGeocodingResult,
   resolvePoiIconPath,
   type SearchResult,
-  type TransitStop,
-  type TransportMode,
 } from "@openmapx/core";
+import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type { GeocodingProviderImpl } from "./types.js";
 
 type EnturMultiModal = "parent" | "child" | "all";

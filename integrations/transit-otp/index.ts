@@ -1,5 +1,21 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
 import { isOtpAvailable, plan, setOtpUrl } from "./provider.js";
+
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "otp",
+    name: "OpenTripPlanner (self-hosted)",
+    url: "http://localhost:8090/",
+    spdxLicense: "LGPL-3.0-or-later",
+    licenseUrl: "https://github.com/opentripplanner/OpenTripPlanner/blob/dev-2.x/LICENSE",
+  },
+];
+
+const wrapRT = <T>(data: T) =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
   // Resolve OTP URL from the service registry if available.
@@ -11,18 +27,34 @@ export function setup(ctx: IntegrationContext): void {
   // Only register if OTP is available
   isOtpAvailable().then((available) => {
     if (!available) return;
-    ctx.registerProvider("transit", {
+    ctx.registerTransitProvider({
       id: "transit-otp",
       prefix: "otp:",
-      coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
+      coverage: { all: true },
       priority: 6,
-      async planTrip(params: {
-        from: { lat: number; lng: number };
-        to: { lat: number; lng: number };
-        departureTime?: string;
-      }) {
+      attribution: ATTRIBUTION,
+      capabilities: {
+        stops: {
+          lookup: false,
+          nearby: false,
+          bbox: false,
+          search: false,
+          infrastructure: false,
+          platforms: false,
+          timetable: false,
+        },
+        departures: false,
+        arrivals: false,
+        routes: { lookup: false, forStop: false, stops: false, geometry: false },
+        planning: true,
+        vehiclePositions: false,
+        vehicleJourney: false,
+        alerts: { byStop: false, byRoute: false, byBbox: false },
+        facilities: false,
+      },
+      async planTrip(params) {
         const now = new Date();
-        return plan({
+        const result = await plan({
           fromLat: params.from.lat,
           fromLng: params.from.lng,
           toLat: params.to.lat,
@@ -30,6 +62,7 @@ export function setup(ctx: IntegrationContext): void {
           time: params.departureTime?.slice(11, 19) ?? now.toISOString().slice(11, 19),
           date: params.departureTime?.slice(0, 10) ?? now.toISOString().slice(0, 10),
         });
+        return wrapRT(result ? [result] : []);
       },
     });
   });

@@ -1,9 +1,10 @@
-import type {
-  LiveTransitProvider,
-  LiveTransitVehicle,
-} from "@integrations/overlay-live-transit/types.js";
-import type { AlertSeverity, BBox, ServiceAlert, TransportMode } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
+import type { BBox } from "@openmapx/core";
+import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
+import type { AlertSeverity, ServiceAlert, TransportMode } from "@openmapx/mobility-core/transit";
 
 interface GraphQlResponse<T> {
   data?: T;
@@ -401,6 +402,32 @@ async function isEnturLiveTransitAvailable(): Promise<boolean> {
   }
 }
 
+const VEHICLES_ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "entur-live-vehicles",
+    name: "Entur Vehicle Positions v2",
+    url: "https://developer.entur.org/pages-real-time-vehicle/",
+    spdxLicense: "NLOD-2.0",
+    licenseUrl: "https://data.norge.no/nlod/en/2.0",
+    attributionText: "Data made available by Entur",
+    publisher: { name: "Entur AS", url: "https://entur.no/" },
+  },
+];
+
+const SITUATIONS_ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "entur-live-situations",
+    name: "Entur Journey Planner Situations",
+    url: "https://developer.entur.org/pages-journeyplanner-journeyplanner/",
+    spdxLicense: "NLOD-2.0",
+    licenseUrl: "https://data.norge.no/nlod/en/2.0",
+    attributionText: "Data made available by Entur",
+    publisher: { name: "Entur AS", url: "https://entur.no/" },
+  },
+];
+
+const PROVIDER_ATTRIBUTION: Attribution[] = [...VEHICLES_ATTRIBUTION, ...SITUATIONS_ATTRIBUTION];
+
 export function setup(ctx: IntegrationContext): void {
   clientName =
     ctx.config.clientName && String(ctx.config.clientName).trim().length > 0
@@ -422,13 +449,31 @@ export function setup(ctx: IntegrationContext): void {
       : { status: "down" as const, error: "Entur realtime vehicle probe failed" };
   });
 
-  const provider: LiveTransitProvider = {
+  const provider: RealtimeProvider = {
     id: "live-transit-entur",
-    priority: 10,
     coverage: { bbox: NORWAY_BBOX },
-    getVehicles: (bbox: BBox) => getEnturVehicles(bbox),
-    getAlerts: (bbox: BBox) => getEnturAlerts(bbox),
+    priority: 10,
+    attribution: PROVIDER_ATTRIBUTION,
+    capabilities: {
+      vehiclePositions: true,
+      alerts: { byStop: false, byRoute: false, byBbox: true },
+      tripUpdates: false,
+    },
+    /**
+     * Returns Entur realtime vehicles. The runtime payload elements are
+     * `LiveTransitVehicle` (a structural superset of the framework's
+     * `VehiclePosition`); structural typing keeps the richer integration-side
+     * fields (`sourceId`, `displayLabel`, etc.) intact through the contract.
+     */
+    async getVehiclePositions(bbox: BBox) {
+      const data = await getEnturVehicles(bbox);
+      return withAttribution(data, VEHICLES_ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+    },
+    async getAlertsForBbox(bbox: BBox) {
+      const data = await getEnturAlerts(bbox);
+      return withAttribution(data, SITUATIONS_ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+    },
   };
 
-  ctx.registerProvider("live-transit", provider);
+  ctx.registerRealtimeProvider(provider);
 }

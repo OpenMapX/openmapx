@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEDUP, type DedupKey, TTL, type TTLClass } from "../policy.js";
+import { DEDUP, type DedupKey, TTL, type TTLClass } from "../src/policy.js";
 
 describe("policy TTL", () => {
   it("every TTL is a positive integer number of seconds", () => {
@@ -9,16 +9,25 @@ describe("policy TTL", () => {
     }
   });
 
-  it("REALTIME_HOT <= REALTIME_WARM <= VEHICLE_STATUS <= SCHEDULE <= STATIC_ARCHIVE", () => {
+  it("REALTIME_HOT <= REALTIME_WARM <= VEHICLE_STATUS <= SHORT_LIVED <= SCHEDULE <= REFERENCE_DATA <= STATIC_ARCHIVE <= PLACE_LINK <= CATALOG_REFRESH", () => {
     expect(TTL.REALTIME_HOT).toBeLessThanOrEqual(TTL.REALTIME_WARM);
     expect(TTL.REALTIME_WARM).toBeLessThanOrEqual(TTL.VEHICLE_STATUS);
-    expect(TTL.VEHICLE_STATUS).toBeLessThanOrEqual(TTL.SCHEDULE);
-    expect(TTL.SCHEDULE).toBeLessThanOrEqual(TTL.STATIC_ARCHIVE);
+    expect(TTL.VEHICLE_STATUS).toBeLessThanOrEqual(TTL.SHORT_LIVED);
+    expect(TTL.SHORT_LIVED).toBeLessThanOrEqual(TTL.SCHEDULE);
+    expect(TTL.SCHEDULE).toBeLessThanOrEqual(TTL.REFERENCE_DATA);
+    expect(TTL.REFERENCE_DATA).toBeLessThanOrEqual(TTL.STATIC_ARCHIVE);
+    expect(TTL.STATIC_ARCHIVE).toBeLessThanOrEqual(TTL.PLACE_LINK);
+    expect(TTL.PLACE_LINK).toBeLessThanOrEqual(TTL.CATALOG_REFRESH);
   });
 
-  it("SCHEDULE <= PLACE_LINK <= STATIC_ARCHIVE", () => {
+  it("CATEGORY_SEARCH sits between SHORT_LIVED and SCHEDULE", () => {
+    expect(TTL.CATEGORY_SEARCH).toBeGreaterThanOrEqual(TTL.SHORT_LIVED);
+    expect(TTL.CATEGORY_SEARCH).toBeLessThanOrEqual(TTL.SCHEDULE);
+  });
+
+  it("SCHEDULE <= PLACE_LINK <= CATALOG_REFRESH", () => {
     expect(TTL.PLACE_LINK).toBeGreaterThanOrEqual(TTL.SCHEDULE);
-    expect(TTL.PLACE_LINK).toBeLessThanOrEqual(TTL.STATIC_ARCHIVE);
+    expect(TTL.PLACE_LINK).toBeLessThanOrEqual(TTL.CATALOG_REFRESH);
   });
 
   it("TTLClass type compiles for every key", () => {

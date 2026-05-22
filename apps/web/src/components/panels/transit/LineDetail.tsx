@@ -6,7 +6,7 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import type { MergedRoute, Place, TransitRoute, TransitStop } from "@openmapx/core";
+import type { Place } from "@openmapx/core";
 import {
   MODE_COLORS,
   resolveProvider,
@@ -16,6 +16,7 @@ import {
   useRouteStops,
   useTransitRoute,
 } from "@openmapx/core";
+import type { MergedRoute, TransitRoute, TransitStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { PRIMARY_BLUE } from "@/lib/theme";

@@ -9,7 +9,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
   VehicleTypeDetail,
-} from "./types.js";
+} from "./types/shared-mobility.js";
 
 const ENTUR_CLIENT_NAME = "openmapx-server";
 const ENTUR_GRAPHQL_URL = "https://api.entur.io/mobility/v2/graphql";

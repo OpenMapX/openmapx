@@ -1,7 +1,24 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
 import * as swiss from "./provider.js";
 
 const SWITZERLAND_BBOX: [number, number, number, number] = [5.96, 45.82, 10.49, 47.81];
+
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "opentransportdata-ch-ojp",
+    name: "Open data platform mobility Switzerland – Open Journey Planner",
+    url: "https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/",
+    licenseUrl: "https://opentransportdata.swiss/en/terms-of-use/",
+    attributionText: "Source: opentransportdata.swiss",
+  },
+];
+
+const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const wrapRT = <T>(data: T) =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
   swiss.setOpenTransportDataChConfig({
@@ -35,46 +52,79 @@ export function setup(ctx: IntegrationContext): void {
       : { status: "down" as const, error: "Swiss OJP probe failed" };
   });
 
-  ctx.registerProvider("transit", {
-    capabilities: {
-      alerts: true,
-      arrivals: true,
-      departures: true,
-      search: true,
-      stopInfrastructure: true,
-      stops: true,
-      tripPlanning: true,
-      vehicles: false,
-    },
-    coverage: { bbox: SWITZERLAND_BBOX },
-    getAlerts: (bbox: [number, number, number, number]) => swiss.getAlerts(bbox),
-    getArrivals: (stopId: string, minutes: number) => swiss.getArrivals(stopId, minutes),
-    getDepartures: (stopId: string, minutes: number) => swiss.getDepartures(stopId, minutes),
-    getLegGeometry: (tripId: string, fromStopId?: string, toStopId?: string) =>
-      swiss.getLegGeometry(tripId, fromStopId, toStopId),
-    getRoute: (routeId: string) => swiss.getRoute(routeId),
-    getRoutesForStop: (stopId: string) => swiss.getRoutesForStop(stopId),
-    getRouteStops: (routeId: string, hintStopId?: string) =>
-      swiss.getRouteStops(routeId, hintStopId),
-    getStop: (stopId: string) => swiss.getStop(stopId),
-    getStopAlerts: (stopId: string) => swiss.getStopAlerts(stopId),
-    getStopInfrastructure: (stopId: string) => swiss.getStopInfrastructure(stopId),
-    getStopPlatforms: (stopId: string) => swiss.getStopPlatforms(stopId),
-    getStopsNearby: (lat: number, lng: number, radiusMeters: number) =>
-      swiss.getStopsNearby(lat, lng, radiusMeters),
-    getVehicleJourney: (tripId: string, fallbackIds?: string[]) =>
-      swiss.getVehicleJourney(tripId, fallbackIds),
-    getRouteAlerts: (routeId: string) => swiss.getRouteAlerts(routeId),
+  ctx.registerTransitProvider({
     id: "transit-opentransportdata-ch",
-    planTrip: (params: {
-      from: { lat: number; lng: number };
-      to: { lat: number; lng: number };
-      departureTime?: string;
-      arrivalTime?: string;
-      modes?: string[];
-    }) => swiss.planTrip(params),
     prefix: "otdch:",
     priority: 1,
-    searchByName: (query: string, limit: number) => swiss.searchByName(query, limit),
+    coverage: { bbox: SWITZERLAND_BBOX },
+    attribution: ATTRIBUTION,
+    capabilities: {
+      stops: {
+        lookup: true,
+        nearby: true,
+        bbox: false,
+        search: true,
+        infrastructure: true,
+        platforms: true,
+        timetable: false,
+      },
+      departures: true,
+      arrivals: true,
+      routes: { lookup: true, forStop: true, stops: true, geometry: true },
+      planning: true,
+      vehiclePositions: false,
+      vehicleJourney: true,
+      alerts: { byStop: true, byRoute: true, byBbox: true },
+      facilities: false,
+    },
+    async getAlertsForBbox(bbox) {
+      return wrapRT(await swiss.getAlerts(bbox));
+    },
+    async getArrivals(stopId, minutes) {
+      return wrapRT(await swiss.getArrivals(stopId, minutes));
+    },
+    async getDepartures(stopId, minutes) {
+      return wrapRT(await swiss.getDepartures(stopId, minutes));
+    },
+    async getLegGeometry(tripId, fromStopId, toStopId) {
+      return wrap(await swiss.getLegGeometry(tripId, fromStopId, toStopId));
+    },
+    async getRoute(routeId) {
+      return wrap(await swiss.getRoute(routeId));
+    },
+    async getRoutesForStop(stopId) {
+      return wrap(await swiss.getRoutesForStop(stopId));
+    },
+    async getRouteStops(routeId, hintStopId) {
+      return wrap(await swiss.getRouteStops(routeId, hintStopId));
+    },
+    async getStop(stopId) {
+      return wrap(await swiss.getStop(stopId));
+    },
+    async getAlertsForStop(stopId) {
+      return wrapRT(await swiss.getStopAlerts(stopId));
+    },
+    async getStopInfrastructure(stopId) {
+      return wrap(await swiss.getStopInfrastructure(stopId));
+    },
+    async getStopPlatforms(stopId) {
+      return wrap(await swiss.getStopPlatforms(stopId));
+    },
+    async getStopsNearby(lat, lng, radiusMeters) {
+      return wrap(await swiss.getStopsNearby(lat, lng, radiusMeters));
+    },
+    async getVehicleJourney(tripId, fallbackIds) {
+      return wrapRT(await swiss.getVehicleJourney(tripId, fallbackIds));
+    },
+    async getAlertsForRoute(routeId) {
+      return wrapRT(await swiss.getRouteAlerts(routeId));
+    },
+    async planTrip(params) {
+      const plan = await swiss.planTrip(params);
+      return wrapRT(plan ? [plan] : []);
+    },
+    async searchStopsByName(query, limit) {
+      return wrap(await swiss.searchByName(query, limit ?? 10));
+    },
   });
 }

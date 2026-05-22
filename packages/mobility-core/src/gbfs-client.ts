@@ -29,7 +29,7 @@ import type {
   GbfsSystemInfo,
   GbfsVehicleStatus,
   GbfsVehicleType,
-} from "./types.js";
+} from "./types/shared-mobility.js";
 
 const FETCH_TIMEOUT_MS = 8_000;
 const BASE_HEADERS: Record<string, string> = {

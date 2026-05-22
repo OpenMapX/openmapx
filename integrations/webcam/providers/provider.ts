@@ -5,7 +5,10 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import {
   getCaltransDetail,
   mapCaltransToDetail,
@@ -25,6 +28,20 @@ import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } fr
 import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "./tfl.js";
 import type { RawWebcam } from "./types.js";
 import { getWindyDetail, mapWindyToDetail, mapWindyToResult, searchWindy } from "./windy.js";
+
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "windy",
+    name: "Windy Webcams",
+    url: "https://www.windy.com/webcams",
+    licenseUrl: "https://api.windy.com/webcams/terms",
+    attributionText:
+      'Webcams provided by <a href="https://www.windy.com/">windy.com</a> — <a href="https://www.windy.com/webcams/add">add a webcam</a>',
+  },
+];
+
+const wrapStatic = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
 
 const META: DataSourceMeta = {
   minZoom: 8,
@@ -84,18 +101,22 @@ function buildFilters(): DataSourceFilterDef[] {
 
 type MapToResult = (raw: RawWebcam) => DataSourceResult;
 
-class WebcamProvider implements DataSourceProvider {
+class WebcamProvider implements MobilityDataSourceProvider {
   readonly id = "webcam";
   readonly meta = META;
   readonly serviceIds = [];
   readonly searchCacheTtl = 3600;
   readonly detailCacheTtl = 300;
+  readonly attribution = ATTRIBUTION;
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return buildFilters();
   }
 
-  async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
+  async search(
+    bbox: BoundingBox,
+    filters?: Record<string, unknown>,
+  ): Promise<MobilityResult<DataSourceResult[]>> {
     const [windyResult, osmResult, caltransResult, tflResult, npsResult, dotResult] =
       await Promise.allSettled([
         searchWindy(bbox),
@@ -134,10 +155,14 @@ class WebcamProvider implements DataSourceProvider {
       }
     }
 
-    return results;
+    return wrapStatic(results);
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
+  async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
+    return wrapStatic(await this.fetchDetail(itemId));
+  }
+
+  private async fetchDetail(itemId: string): Promise<DataSourceDetail | null> {
     if (itemId.startsWith("windy:")) {
       const webcamId = itemId.slice("windy:".length);
       const raw = await getWindyDetail(webcamId);

@@ -2,6 +2,9 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { withAttribution } from "@openmapx/mobility-core/result";
 import * as motis from "./adapter.js";
 import {
   configureTransitous,
@@ -20,6 +23,41 @@ let cachedLocalReachable = false;
 let cachedLocalReachableAt = 0;
 
 const LOCAL_REACHABILITY_TTL_MS = 15_000;
+
+// Manifest declares a single dataSource (`transitous`); both runtime providers
+// (local-first and Transitous-cloud) share that source id per #5 alignment.
+const ATTRIBUTION_LOCAL: Attribution[] = [
+  {
+    sourceId: "transitous",
+    name: "MOTIS (self-hosted)",
+    url: "https://github.com/motis-project/motis",
+    spdxLicense: "MIT",
+    licenseUrl: "https://github.com/motis-project/motis",
+  },
+];
+
+const ATTRIBUTION_TRANSITOUS: Attribution[] = [
+  {
+    sourceId: "transitous",
+    name: "Transitous",
+    url: "https://api.transitous.org/",
+    spdxLicense: "AGPL-3.0-or-later",
+    licenseUrl: "https://transitous.org/api/",
+  },
+];
+
+function wrapLocal<T>(data: T) {
+  return withAttribution(data, ATTRIBUTION_LOCAL, freshnessNow());
+}
+function wrapLocalRT<T>(data: T) {
+  return withAttribution(data, ATTRIBUTION_LOCAL, freshnessNow({ hasRealtimeData: true }));
+}
+function wrapTransitous<T>(data: T) {
+  return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow());
+}
+function wrapTransitousRT<T>(data: T) {
+  return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow({ hasRealtimeData: true }));
+}
 
 function loadAttribution(): unknown[] {
   if (!existsSync(LICENSE_FILE)) return [];
@@ -147,12 +185,32 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   // Register local-first MOTIS provider.
   // For bbox/search/plan we only expose this provider to avoid fan-out to both local + cloud.
-  ctx.registerProvider("transit", {
+  ctx.registerTransitProvider({
     id: "transit-motis-local",
     prefix: "ms:",
-    coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
+    coverage: { all: true },
     priority: 2,
-    async getStopsNearby(lat: number, lng: number, radiusMeters: number) {
+    attribution: ATTRIBUTION_LOCAL,
+    capabilities: {
+      stops: {
+        lookup: true,
+        nearby: true,
+        bbox: false,
+        search: true,
+        infrastructure: false,
+        platforms: false,
+        timetable: false,
+      },
+      departures: true,
+      arrivals: true,
+      routes: { lookup: false, forStop: false, stops: false, geometry: false },
+      planning: true,
+      vehiclePositions: false,
+      vehicleJourney: true,
+      alerts: { byStop: false, byRoute: false, byBbox: false },
+      facilities: false,
+    },
+    async getStopsNearby(lat, lng, radiusMeters) {
       const deg = radiusMeters / 111_320;
       if (await isMotisReachableCached()) {
         const local = await motis.getStops(motisLocalInstance, [
@@ -161,64 +219,63 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
           lng + deg,
           lat + deg,
         ]);
-        if (local.length > 0) return local;
+        if (local.length > 0) return wrapLocal(local);
       }
-      return motis.getStops(transitousInstance, [lng - deg, lat - deg, lng + deg, lat + deg]);
+      return wrapTransitous(
+        await motis.getStops(transitousInstance, [lng - deg, lat - deg, lng + deg, lat + deg]),
+      );
     },
-    async getStop(id: string) {
+    async getStop(id) {
       const localId = withPrefix(id, "ms:");
       const cloudId = withPrefix(id, "mo:");
       if (await isMotisReachableCached()) {
         const local = await motis.getStopById(motisLocalInstance, localId);
-        if (local) return local;
+        if (local) return wrapLocal(local);
       }
-      return motis.getStopById(transitousInstance, cloudId);
+      return wrapTransitous(await motis.getStopById(transitousInstance, cloudId));
     },
-    async getDepartures(id: string, min: number) {
+    async getDepartures(id, min) {
       const localId = withPrefix(id, "ms:");
       const cloudId = withPrefix(id, "mo:");
       if (await isMotisReachableCached()) {
         const local = await motis.getDepartures(motisLocalInstance, localId, min);
-        if (local.length > 0) return local;
+        if (local.length > 0) return wrapLocalRT(local);
       }
-      return motis.getDepartures(transitousInstance, cloudId, min);
+      return wrapTransitousRT(await motis.getDepartures(transitousInstance, cloudId, min));
     },
-    async getArrivals(id: string, min: number) {
+    async getArrivals(id, min) {
       const localId = withPrefix(id, "ms:");
       const cloudId = withPrefix(id, "mo:");
       if (await isMotisReachableCached()) {
         const local = await motis.getArrivals(motisLocalInstance, localId, min);
-        if (local.length > 0) return local;
+        if (local.length > 0) return wrapLocalRT(local);
       }
-      return motis.getArrivals(transitousInstance, cloudId, min);
+      return wrapTransitousRT(await motis.getArrivals(transitousInstance, cloudId, min));
     },
-    async searchByName(q: string, limit: number) {
+    async searchStopsByName(q, limit) {
+      const lim = limit ?? 10;
       if (await isMotisReachableCached()) {
-        const local = await motis.searchByName(motisLocalInstance, q, limit);
-        if (local.length > 0) return local;
+        const local = await motis.searchByName(motisLocalInstance, q, lim);
+        if (local.length > 0) return wrapLocal(local);
       }
-      return motis.searchByName(transitousInstance, q, limit);
+      return wrapTransitous(await motis.searchByName(transitousInstance, q, lim));
     },
-    async planTrip(params: {
-      from: { lat: number; lng: number };
-      to: { lat: number; lng: number };
-      departureTime?: string;
-    }) {
+    async planTrip(params) {
       if (await isMotisReachableCached()) {
         const local = await planWithInstance(motisLocalInstance, params);
-        if (local?.itineraries?.length) return local;
+        if (local?.itineraries?.length) return wrapLocalRT([local]);
       }
       const cloudPlan = await planWithInstance(transitousInstance, params);
-      return cloudPlan ? { ...cloudPlan, provider: "mo" } : null;
+      return wrapTransitousRT(cloudPlan ? [{ ...cloudPlan, provider: "mo" }] : []);
     },
-    async getVehicleJourney(tripId: string) {
+    async getVehicleJourney(tripId) {
       const localId = withPrefix(tripId, "ms:");
       const cloudId = withPrefix(tripId, "mo:");
       if (await isMotisReachableCached()) {
         const local = await motis.getTrip(motisLocalInstance, localId);
-        if (local) return local;
+        if (local) return wrapLocalRT(local);
       }
-      return motis.getTrip(transitousInstance, cloudId);
+      return wrapTransitousRT(await motis.getTrip(transitousInstance, cloudId));
     },
   });
 
@@ -229,17 +286,46 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
 
   // Keep a Transitous provider for attribution + follow-up lookups of `mo:` IDs.
   // Intentionally do not expose nearby/search/plan here to avoid orchestrator fan-out.
-  ctx.registerProvider("transit", {
+  ctx.registerTransitProvider({
     id: "transit-motis-transitous",
     prefix: "mo:",
-    coverage: { bbox: [-180, -90, 180, 90] as [number, number, number, number] },
+    coverage: { all: true },
     priority: 3,
-    getStop: (id: string) => motis.getStopById(transitousInstance, withPrefix(id, "mo:")),
-    getDepartures: (id: string, min: number) =>
-      motis.getDepartures(transitousInstance, withPrefix(id, "mo:"), min),
-    getArrivals: (id: string, min: number) =>
-      motis.getArrivals(transitousInstance, withPrefix(id, "mo:"), min),
-    getVehicleJourney: (tripId: string) =>
-      motis.getTrip(transitousInstance, withPrefix(tripId, "mo:")),
+    attribution: ATTRIBUTION_TRANSITOUS,
+    capabilities: {
+      stops: {
+        lookup: true,
+        nearby: false,
+        bbox: false,
+        search: false,
+        infrastructure: false,
+        platforms: false,
+        timetable: false,
+      },
+      departures: true,
+      arrivals: true,
+      routes: { lookup: false, forStop: false, stops: false, geometry: false },
+      planning: false,
+      vehiclePositions: false,
+      vehicleJourney: true,
+      alerts: { byStop: false, byRoute: false, byBbox: false },
+      facilities: false,
+    },
+    async getStop(id) {
+      return wrapTransitous(await motis.getStopById(transitousInstance, withPrefix(id, "mo:")));
+    },
+    async getDepartures(id, min) {
+      return wrapTransitousRT(
+        await motis.getDepartures(transitousInstance, withPrefix(id, "mo:"), min),
+      );
+    },
+    async getArrivals(id, min) {
+      return wrapTransitousRT(
+        await motis.getArrivals(transitousInstance, withPrefix(id, "mo:"), min),
+      );
+    },
+    async getVehicleJourney(tripId) {
+      return wrapTransitousRT(await motis.getTrip(transitousInstance, withPrefix(tripId, "mo:")));
+    },
   });
 }

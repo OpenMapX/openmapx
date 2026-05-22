@@ -166,7 +166,7 @@ describe("scooterSharingProvider.search", () => {
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [motisVehicle] });
     vi.mocked(dedupStations).mockReturnValue([]);
 
-    const results = await scooterSharingProvider.search(makeBbox());
+    const results = (await scooterSharingProvider.search(makeBbox())).data;
 
     expect(mapVehicleToResult).toHaveBeenCalledTimes(6);
     expect(mapVehicleToResult).toHaveBeenCalledWith(gbfsVehicle);
@@ -192,7 +192,7 @@ describe("scooterSharingProvider.search", () => {
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(dedupStations).mockReturnValue([gbfsStation]);
 
-    const results = await scooterSharingProvider.search(makeBbox());
+    const results = (await scooterSharingProvider.search(makeBbox())).data;
 
     // 1 station + 1 vehicle
     expect(results).toHaveLength(2);
@@ -208,7 +208,7 @@ describe("scooterSharingProvider.search", () => {
     vi.mocked(fetchMotisRentals).mockRejectedValue(new Error("down"));
     vi.mocked(dedupStations).mockReturnValue([]);
 
-    const results = await scooterSharingProvider.search(makeBbox());
+    const results = (await scooterSharingProvider.search(makeBbox())).data;
 
     // Only GO Sharing vehicle survives
     expect(results).toHaveLength(1);
@@ -224,7 +224,7 @@ describe("scooterSharingProvider.search", () => {
     vi.mocked(fetchMotisRentals).mockRejectedValue(new Error("down"));
     vi.mocked(dedupStations).mockReturnValue([]);
 
-    const results = await scooterSharingProvider.search(makeBbox());
+    const results = (await scooterSharingProvider.search(makeBbox())).data;
     expect(results).toEqual([]);
   });
 
@@ -324,7 +324,7 @@ describe("scooterSharingProvider.getDetail", () => {
     };
     vi.mocked(mapStationToDetail).mockReturnValue(detail);
 
-    const result = await scooterSharingProvider.getDetail("sc-cached-s1");
+    const result = (await scooterSharingProvider.getDetail("sc-cached-s1")).data;
     expect(mapStationToDetail).toHaveBeenCalledWith(station);
     expect(result).toBe(detail);
   });
@@ -351,13 +351,13 @@ describe("scooterSharingProvider.getDetail", () => {
     };
     vi.mocked(mapVehicleToDetail).mockReturnValue(detail);
 
-    const result = await scooterSharingProvider.getDetail("sc-felyx-v1");
+    const result = (await scooterSharingProvider.getDetail("sc-felyx-v1")).data;
     expect(mapVehicleToDetail).toHaveBeenCalledWith(vehicle);
     expect(result).toBe(detail);
   });
 
   it("cache miss returns null", async () => {
-    const result = await scooterSharingProvider.getDetail("totally-unknown-sc-id");
+    const result = (await scooterSharingProvider.getDetail("totally-unknown-sc-id")).data;
     expect(result).toBeNull();
   });
 

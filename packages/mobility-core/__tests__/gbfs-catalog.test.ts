@@ -61,7 +61,7 @@ describe("loadCatalog", () => {
     });
 
     vi.stubGlobal("fetch", fetchMock);
-    const { loadCatalog } = await import("../gbfs-catalog.js");
+    const { loadCatalog } = await import("../src/gbfs-catalog.js");
 
     const entries = await loadCatalog();
 

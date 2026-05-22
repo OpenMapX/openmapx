@@ -11,12 +11,14 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
 } from "@openmapx/mobility-core/entur-mobility";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
@@ -28,6 +30,7 @@ import {
   mapVehicleToResult,
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
+import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/mobility-core/types";
 import { searchFelyx } from "./felyx-client.js";
 import { searchGoSharing } from "./gosharing-client.js";
@@ -69,18 +72,32 @@ const SCOOTER_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>([
   "moped",
 ]);
 
-class ScooterSharingProvider implements DataSourceProvider {
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "gbfs",
+    name: "GBFS Catalog (MobilityData)",
+    url: "https://github.com/MobilityData/mobility-feeds-api",
+  },
+];
+
+const wrapRT = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+const wrapStatic = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
+
+class ScooterSharingProvider implements MobilityDataSourceProvider {
   readonly id = "scooter-sharing";
   readonly meta = META;
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
   readonly mapContextCacheTtl = 300;
+  readonly attribution = ATTRIBUTION;
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return [];
   }
 
-  async search(bbox: BoundingBox): Promise<DataSourceResult[]> {
+  async search(bbox: BoundingBox): Promise<MobilityResult<DataSourceResult[]>> {
     const bboxArray: [number, number, number, number] = [
       bbox.west,
       bbox.south,
@@ -156,17 +173,17 @@ class ScooterSharingProvider implements DataSourceProvider {
       results.push(mapVehicleToResult(vehicle));
     }
 
-    return results;
+    return wrapRT(results);
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
+  async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = itemCache.get(itemId);
     if (cached) {
-      if ("availableVehicles" in cached) return mapStationToDetail(cached);
-      return mapVehicleToDetail(cached);
+      if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached));
+      return wrapRT(mapVehicleToDetail(cached));
     }
 
-    return null;
+    return wrapRT(null);
   }
 
   async getMapContext(
@@ -174,7 +191,7 @@ class ScooterSharingProvider implements DataSourceProvider {
     _filters?: Record<string, unknown>,
     options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
   ) {
-    return buildEnturGeofencingMapContext(bbox, options);
+    return wrapStatic(await buildEnturGeofencingMapContext(bbox, options));
   }
 }
 

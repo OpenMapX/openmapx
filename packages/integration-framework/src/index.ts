@@ -18,6 +18,32 @@ export type {
   RouteOptions,
   SecretsClient,
 } from "./context";
+export type {
+  DataSourceAttribution,
+  DataSourceBranding,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceFilterDef,
+  DataSourceGeoJsonFeature,
+  DataSourceGeoJsonFeatureCollection,
+  DataSourceGeoJsonGeometry,
+  DataSourceMapContext,
+  DataSourceMapContextSelection,
+  DataSourceMarkerStyle,
+  DataSourceMeta,
+  DataSourceResult,
+  MobilityDataSourceProvider,
+  PricingPlanEntry,
+  ProviderAttribution,
+  RealtimeCapabilities,
+  RealtimeProvider,
+  TimetableEntry,
+  TransitCapabilities,
+  TransitProvider,
+  TripPlanRequest,
+  TripUpdate,
+  VehicleJourney,
+} from "./contracts/index.js";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
 // Installer exports (`buildIntegration` / `installIntegration` / `listIntegrations`

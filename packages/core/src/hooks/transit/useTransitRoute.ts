@@ -1,4 +1,4 @@
-import type { TransitRoute } from "@integrations/transit/types";
+import type { TransitRoute } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 

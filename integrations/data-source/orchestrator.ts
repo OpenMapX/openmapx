@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { DataSourceProvider } from "./types.js";
+import type {
+  IntegrationContext,
+  MobilityDataSourceProvider,
+} from "@openmapx/integration-framework";
 
 const DEFAULT_SEARCH_TTL = 21600;
 const DEFAULT_DETAIL_TTL = 21600;
@@ -18,18 +20,18 @@ function hashKey(prefix: string, data: unknown): string {
 }
 
 export function createDataSourceOrchestrator(ctx: IntegrationContext) {
-  function getAllProviders(): DataSourceProvider[] {
+  function getAllProviders(): MobilityDataSourceProvider[] {
     const integrations = ctx.getIntegrationsByDomain("data-source");
-    const providers: DataSourceProvider[] = [];
+    const providers: MobilityDataSourceProvider[] = [];
     for (const integration of integrations) {
       const domainProviders = (integration.providers.get("data-source") ??
-        []) as DataSourceProvider[];
+        []) as MobilityDataSourceProvider[];
       providers.push(...domainProviders);
     }
     return providers;
   }
 
-  function getProvider(id: string): DataSourceProvider | undefined {
+  function getProvider(id: string): MobilityDataSourceProvider | undefined {
     return getAllProviders().find((p) => p.id === id);
   }
 
@@ -44,7 +46,7 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
 
     for (const integration of integrations) {
       const domainProviders = (integration.providers.get("data-source") ??
-        []) as DataSourceProvider[];
+        []) as MobilityDataSourceProvider[];
       const id = integration.manifest.id;
       const name = integration.manifest.frontend?.searchCategory?.label ?? id;
 
@@ -59,15 +61,15 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
     return results;
   }
 
-  function getSearchTtl(provider: DataSourceProvider): number {
+  function getSearchTtl(provider: MobilityDataSourceProvider): number {
     return provider.searchCacheTtl ?? DEFAULT_SEARCH_TTL;
   }
 
-  function getDetailTtl(provider: DataSourceProvider): number {
+  function getDetailTtl(provider: MobilityDataSourceProvider): number {
     return provider.detailCacheTtl ?? DEFAULT_DETAIL_TTL;
   }
 
-  function getMapContextTtl(provider: DataSourceProvider): number {
+  function getMapContextTtl(provider: MobilityDataSourceProvider): number {
     return provider.mapContextCacheTtl ?? DEFAULT_MAP_CONTEXT_TTL;
   }
 

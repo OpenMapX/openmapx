@@ -76,12 +76,16 @@ describe("fuelProvider.search", () => {
     vi.mocked(searchFuelStations).mockResolvedValue(stations);
     vi.mocked(mapFuelStationToResult).mockImplementation((s: FuelStation) => makeResult(s.id));
 
-    const results = await fuelProvider.search(makeBbox());
+    const envelope = await fuelProvider.search(makeBbox());
+    const results = envelope.data;
 
     expect(searchFuelStations).toHaveBeenCalledWith(makeBbox());
     expect(mapFuelStationToResult).toHaveBeenCalledTimes(2);
     expect(results).toHaveLength(2);
     expect(results[0].id).toBe("s1");
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("tankerkoenig");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("null result falls back to Overpass", async () => {
@@ -90,7 +94,7 @@ describe("fuelProvider.search", () => {
       { id: "osm:node/100", name: "Shell", coordinates: [11.5, 48.5] as [number, number] },
     ] as never);
 
-    const results = await fuelProvider.search(makeBbox());
+    const results = (await fuelProvider.search(makeBbox())).data;
 
     expect(searchByCategory).toHaveBeenCalled();
     expect(results).toHaveLength(1);
@@ -106,7 +110,7 @@ describe("fuelProvider.search", () => {
     vi.mocked(searchFuelStations).mockResolvedValue(stations);
     vi.mocked(mapFuelStationToResult).mockImplementation((s: FuelStation) => makeResult(s.id));
 
-    const results = await fuelProvider.search(makeBbox(), { fuelType: "diesel" });
+    const results = (await fuelProvider.search(makeBbox(), { fuelType: "diesel" })).data;
 
     expect(results.map((r) => r.id)).toEqual(["fa", "fc"]);
   });
@@ -120,7 +124,7 @@ describe("fuelProvider.search", () => {
     vi.mocked(searchFuelStations).mockResolvedValue(stations);
     vi.mocked(mapFuelStationToResult).mockImplementation((s: FuelStation) => makeResult(s.id));
 
-    const results = await fuelProvider.search(makeBbox(), { fuelType: ["e5", "lpg"] });
+    const results = (await fuelProvider.search(makeBbox(), { fuelType: ["e5", "lpg"] })).data;
 
     expect(results.map((r) => r.id)).toEqual(["fy", "fz"]);
   });
@@ -131,7 +135,7 @@ describe("fuelProvider.search", () => {
       { id: "osm:node/200", name: "OSM Station", coordinates: [11.5, 48.5] as [number, number] },
     ] as never);
 
-    const results = await fuelProvider.search(makeBbox(), { fuelType: "diesel" });
+    const results = (await fuelProvider.search(makeBbox(), { fuelType: "diesel" })).data;
 
     // OSM results have no cache entry, so they should be kept (return true)
     expect(results).toHaveLength(1);
@@ -179,14 +183,17 @@ describe("fuelProvider.getDetail", () => {
     };
     vi.mocked(buildTankerkoenigDetail).mockReturnValue(enrichedDetail);
 
-    const result = await fuelProvider.getDetail(itemId);
+    const envelope = await fuelProvider.getDetail(itemId);
 
     expect(mockFetch).toHaveBeenCalledOnce();
     const fetchUrl = mockFetch.mock.calls[0][0] as string;
     expect(fetchUrl).toContain("detail.php");
     expect(fetchUrl).toContain(uuid);
     expect(buildTankerkoenigDetail).toHaveBeenCalled();
-    expect(result).toBe(enrichedDetail);
+    expect(envelope.data).toBe(enrichedDetail);
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("tankerkoenig");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("tankerkoenig/ with invalid UUID skips API call and returns null", async () => {
@@ -194,7 +201,7 @@ describe("fuelProvider.getDetail", () => {
 
     const itemId = "tankerkoenig/not-a-uuid";
 
-    const result = await fuelProvider.getDetail(itemId);
+    const result = (await fuelProvider.getDetail(itemId)).data;
 
     expect(mockFetch).not.toHaveBeenCalled();
     expect(result).toBeNull();
@@ -204,7 +211,7 @@ describe("fuelProvider.getDetail", () => {
     mockTankerkoenigKey = undefined;
 
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
-    const result = await fuelProvider.getDetail(`tankerkoenig/${uuid}`);
+    const result = (await fuelProvider.getDetail(`tankerkoenig/${uuid}`)).data;
 
     expect(mockFetch).not.toHaveBeenCalled();
     expect(result).toBeNull();
@@ -226,13 +233,13 @@ describe("fuelProvider.getDetail", () => {
     };
     vi.mocked(mapFuelStationToDetail).mockReturnValue(detail);
 
-    const result = await fuelProvider.getDetail("fuel-cached-id");
+    const result = (await fuelProvider.getDetail("fuel-cached-id")).data;
     expect(mapFuelStationToDetail).toHaveBeenCalledWith(station);
     expect(result).toBe(detail);
   });
 
   it("returns null for unknown item with no cache entry", async () => {
-    const result = await fuelProvider.getDetail("totally-unknown-fuel-999");
+    const result = (await fuelProvider.getDetail("totally-unknown-fuel-999")).data;
     expect(result).toBeNull();
   });
 
@@ -242,7 +249,7 @@ describe("fuelProvider.getDetail", () => {
     const uuid = "51d4b477-a095-1aa0-e100-80009459e03a";
     mockFetch.mockRejectedValue(new Error("Network error"));
 
-    const result = await fuelProvider.getDetail(`tankerkoenig/${uuid}`);
+    const result = (await fuelProvider.getDetail(`tankerkoenig/${uuid}`)).data;
     expect(result).toBeNull();
   });
 });

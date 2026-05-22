@@ -1,4 +1,4 @@
-import type { Facility } from "@integrations/transit/types";
+import type { Facility } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 

@@ -1,8 +1,8 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
 import { createTransitOrchestrator, getTransitProviderAttribution } from "./orchestrator.js";
 import { createPlaceTransit } from "./place-transit.js";
-import type { GeoJSONLineString } from "./types.js";
 
 function parseBBox(q: Record<string, string>): BBox | null {
   const sw_lat = Number(q.sw_lat);
@@ -62,7 +62,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     const result = await orchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /stops/nearby
@@ -79,7 +79,7 @@ export function setup(ctx: IntegrationContext): void {
     const bbox: BBox = [lng - lngDelta, lat - latDelta, lng + lngDelta, lat + latDelta];
     reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
     const result = await orchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /stops/search
@@ -92,7 +92,7 @@ export function setup(ctx: IntegrationContext): void {
     const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
     reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
     const stops = await orchestrator.searchByName(query, limit);
-    reply.send(stops);
+    reply.send(stops.data);
   });
 
   // GET /stops/near-place
@@ -109,17 +109,17 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /stops/:id
   ctx.registerRoute("GET", "/stops/:id", async (req, reply) => {
-    const stop = await orchestrator.getStop(decodeURIComponent(req.params.id));
-    if (!stop) {
+    const res = await orchestrator.getStop(decodeURIComponent(req.params.id));
+    if (!res.data) {
       reply.status(404).send({ error: "Stop not found" });
       return;
     }
-    reply.send(stop);
+    reply.send(res.data);
   });
 
   // GET /stops/:id/infrastructure
@@ -129,9 +129,9 @@ export function setup(ctx: IntegrationContext): void {
     let infrastructure = null;
     try {
       infrastructure = await ctx.cache.withCache(cacheKey, 86400, async () => {
-        const data = await orchestrator.getStopInfrastructure(stopId);
-        if (!data) throw new Error("infrastructure unavailable");
-        return data;
+        const res = await orchestrator.getStopInfrastructure(stopId);
+        if (!res.data) throw new Error("infrastructure unavailable");
+        return res.data;
       });
     } catch {
       infrastructure = null;
@@ -148,7 +148,7 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/stops/:id/platform-stops", async (req, reply) => {
     reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
     const result = await orchestrator.getStopPlatforms(decodeURIComponent(req.params.id));
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /stops/:id/timetable
@@ -164,7 +164,7 @@ export function setup(ctx: IntegrationContext): void {
       isPast ? "public, max-age=86400, s-maxage=86400" : "public, max-age=300, s-maxage=300",
     );
     const result = await orchestrator.getStopTimetable(decodeURIComponent(req.params.id), date);
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /stops/:id/departures
@@ -177,9 +177,10 @@ export function setup(ctx: IntegrationContext): void {
     reply.header("Cache-Control", "public, max-age=30, s-maxage=30");
     const stopId = decodeURIComponent(req.params.id);
     const cacheKey = `transit:departures:${stopId}:${minutes}`;
-    const result = await ctx.cache.withCache(cacheKey, 30, () =>
-      orchestrator.getDepartures(stopId, minutes),
-    );
+    const result = await ctx.cache.withCache(cacheKey, 30, async () => {
+      const res = await orchestrator.getDepartures(stopId, minutes);
+      return res.data;
+    });
     reply.send(result);
   });
 
@@ -193,9 +194,10 @@ export function setup(ctx: IntegrationContext): void {
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     const stopId = decodeURIComponent(req.params.id);
     const cacheKey = `transit:arrivals:${stopId}:${minutes}`;
-    const result = await ctx.cache.withCache(cacheKey, 60, () =>
-      orchestrator.getArrivals(stopId, minutes),
-    );
+    const result = await ctx.cache.withCache(cacheKey, 60, async () => {
+      const res = await orchestrator.getArrivals(stopId, minutes);
+      return res.data;
+    });
     reply.send(result);
   });
 
@@ -204,16 +206,17 @@ export function setup(ctx: IntegrationContext): void {
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     const stopId = decodeURIComponent(req.params.id);
     const cacheKey = `transit:stop-alerts:${stopId}`;
-    const alerts = await ctx.cache.withCache(cacheKey, 60, () =>
-      orchestrator.getStopAlerts(stopId),
-    );
+    const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
+      const res = await orchestrator.getStopAlerts(stopId);
+      return res.data;
+    });
     reply.send(alerts);
   });
 
   // GET /stops/:id/facilities
   ctx.registerRoute("GET", "/stops/:id/facilities", async (req, reply) => {
-    const facilities = await orchestrator.getFacilities(decodeURIComponent(req.params.id));
-    reply.send(facilities);
+    const result = await orchestrator.getFacilities(decodeURIComponent(req.params.id));
+    reply.send(result.data);
   });
 
   // GET /routes
@@ -221,9 +224,10 @@ export function setup(ctx: IntegrationContext): void {
     if (req.query.stop_id) {
       const stopId = decodeURIComponent(req.query.stop_id);
       const cacheKey = `transit:routes-for-stop:${stopId}`;
-      const routes = await ctx.cache.withCache(cacheKey, 300, () =>
-        orchestrator.getRoutesForStop(stopId),
-      );
+      const routes = await ctx.cache.withCache(cacheKey, 300, async () => {
+        const res = await orchestrator.getRoutesForStop(stopId);
+        return res.data;
+      });
       reply.send(routes);
       return;
     }
@@ -233,7 +237,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     const routes = await orchestrator.getRoutesInBbox(bbox);
-    reply.send(routes);
+    reply.send(routes.data);
   });
 
   // GET /routes/for-place
@@ -250,7 +254,7 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /routes/:id
@@ -259,7 +263,8 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:route:${routeId}`;
     let route = await ctx.cache.get(cacheKey);
     if (!route) {
-      route = await orchestrator.getRoute(routeId);
+      const res = await orchestrator.getRoute(routeId);
+      route = res.data;
       if (route) {
         await ctx.cache.set(cacheKey, route, 3600);
       }
@@ -280,7 +285,8 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:route-stops:${routeId}:${hintStopId ?? ""}`;
     let stops = await ctx.cache.get(cacheKey);
     if (!stops) {
-      stops = await orchestrator.getRouteStops(routeId, hintStopId);
+      const res = await orchestrator.getRouteStops(routeId, hintStopId);
+      stops = res.data;
       if (Array.isArray(stops) && stops.length > 0) {
         await ctx.cache.set(cacheKey, stops, 3600);
       }
@@ -293,9 +299,10 @@ export function setup(ctx: IntegrationContext): void {
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     const routeId = decodeURIComponent(req.params.id);
     const cacheKey = `transit:route-alerts:${routeId}`;
-    const alerts = await ctx.cache.withCache(cacheKey, 60, () =>
-      orchestrator.getRouteAlerts(routeId),
-    );
+    const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
+      const res = await orchestrator.getRouteAlerts(routeId);
+      return res.data;
+    });
     reply.send(alerts);
   });
 
@@ -307,7 +314,7 @@ export function setup(ctx: IntegrationContext): void {
       orchestrator.getVehiclePositions(routeId),
       orchestrator.getRouteAlerts(routeId),
     ]);
-    reply.send({ vehicles, alerts });
+    reply.send({ vehicles: vehicles.data, alerts: alerts.data });
   });
 
   // GET /leg-geometry
@@ -328,9 +335,9 @@ export function setup(ctx: IntegrationContext): void {
     let geometry: GeoJSONLineString | null = null;
     try {
       geometry = await ctx.cache.withCache(cacheKey, 86400, async () => {
-        const geo = await orchestrator.getLegGeometry(tripId, fromStopId, toStopId);
-        if (!geo) throw new Error("geometry unavailable");
-        return geo;
+        const res = await orchestrator.getLegGeometry(tripId, fromStopId, toStopId);
+        if (!res.data) throw new Error("geometry unavailable");
+        return res.data;
       });
     } catch {
       // geometry remains null — transient failure, not cached
@@ -372,19 +379,19 @@ export function setup(ctx: IntegrationContext): void {
       date = q.date ?? utcDate();
       time = q.time ? (q.time.split(":").length >= 3 ? q.time : `${q.time}:00`) : utcTime();
     }
-    const plan = await orchestrator.planTrip({
+    const planRes = await orchestrator.planTrip({
       from: { lat: fromLat, lng: fromLng },
       to: { lat: toLat, lng: toLng },
       departureTime: `${date}T${time}Z`,
       modes: (q.modes ?? "TRANSIT").split(",").map((m) => m.trim()),
     });
-    if (!plan) {
+    if (!planRes.data) {
       reply.status(503).send({
         error: "Trip planning unavailable — no transit provider could serve this route",
       });
       return;
     }
-    reply.send(plan);
+    reply.send(planRes.data);
   });
 
   // GET /reachable
@@ -398,14 +405,15 @@ export function setup(ctx: IntegrationContext): void {
     const maxTravelTime = Math.min(Number(req.query.maxTravelTime ?? 30), 120);
 
     const cacheKey = `reachable:${lat.toFixed(3)}:${lng.toFixed(3)}:${maxTravelTime}:${req.query.modes ?? ""}`;
-    const results = await ctx.cache.withCache(cacheKey, 300, () =>
-      orchestrator.getReachableStops(
+    const results = await ctx.cache.withCache(cacheKey, 300, async () => {
+      const res = await orchestrator.getReachableStops(
         lat,
         lng,
         maxTravelTime,
         req.query.modes?.split(",").map((m) => m.trim()),
-      ),
-    );
+      );
+      return res.data;
+    });
     reply.header("Cache-Control", "public, max-age=300");
     reply.send(results);
   });
@@ -419,7 +427,10 @@ export function setup(ctx: IntegrationContext): void {
     }
     reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
     const cacheKey = `transit:alerts:${bbox.join(",")}`;
-    const alerts = await ctx.cache.withCache(cacheKey, 60, () => orchestrator.getAlerts(bbox));
+    const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
+      const res = await orchestrator.getAlerts(bbox);
+      return res.data;
+    });
     reply.send(alerts);
   });
 
@@ -428,13 +439,13 @@ export function setup(ctx: IntegrationContext): void {
     reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
     if (req.query.route_id) {
       const vehicles = await orchestrator.getVehiclePositions(req.query.route_id);
-      reply.send(vehicles);
+      reply.send(vehicles.data);
       return;
     }
     const bbox = parseBBox(req.query);
     if (bbox) {
       const vehicles = await orchestrator.getVehicleRadar(bbox);
-      reply.send(vehicles);
+      reply.send(vehicles.data);
       return;
     }
     reply.status(400).send({
@@ -451,7 +462,8 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:vehicle-journey:${tripId}:${(fallbackIds ?? []).join(",")}`;
     let journey = await ctx.cache.get(cacheKey);
     if (!journey) {
-      journey = await orchestrator.getVehicleJourney(tripId, fallbackIds);
+      const res = await orchestrator.getVehicleJourney(tripId, fallbackIds);
+      journey = res.data;
       if (journey) {
         await ctx.cache.set(cacheKey, journey, 30);
       }
@@ -483,7 +495,7 @@ export function setup(ctx: IntegrationContext): void {
       minutes,
       req.query.place_id,
     );
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /arrivals/for-place
@@ -506,7 +518,7 @@ export function setup(ctx: IntegrationContext): void {
       minutes,
       req.query.place_id,
     );
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /alerts/for-place
@@ -523,7 +535,7 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /facilities/for-place
@@ -540,7 +552,7 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result);
+    reply.send(result.data);
   });
 
   // GET /providers

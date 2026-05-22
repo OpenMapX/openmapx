@@ -1,5 +1,5 @@
-import type { TransportMode } from "@openmapx/core";
 import { createOverlayStore } from "@openmapx/core";
+import type { TransportMode } from "@openmapx/mobility-core/transit";
 
 const LIVE_TRANSIT_MODE_ORDER: TransportMode[] = [
   "rail",

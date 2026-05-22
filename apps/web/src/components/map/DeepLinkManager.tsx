@@ -44,7 +44,6 @@ import {
   OVERLAY_REGISTRY,
   PANEL,
   type Place,
-  type TransportMode,
   type TravelMode,
   type UnitSystem,
   useCategorySearchStore,
@@ -58,6 +57,7 @@ import {
   useSearchStore,
   useSidebarStore,
 } from "@openmapx/core";
+import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import {

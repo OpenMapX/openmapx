@@ -6,14 +6,14 @@
  * Uses the shared DB RIS client for authentication.
  */
 
+import { decodePolyline } from "@openmapx/core";
 import type {
   GeoJSONLineString,
   TransportMode,
   TripItinerary,
   TripLeg,
   TripPlan,
-} from "@openmapx/core";
-import { decodePolyline } from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 import { isRisConfigured, risPost } from "./ris-client.js";
 
 const PREFIX = "ris:";

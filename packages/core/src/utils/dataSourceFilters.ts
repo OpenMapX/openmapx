@@ -1,4 +1,4 @@
-import type { DataSourceFilterDef, DataSourceResult } from "@integrations/data-source/types";
+import type { DataSourceFilterDef, DataSourceResult } from "@openmapx/integration-framework";
 
 /**
  * Separate filter values into server-side and client-side groups based on

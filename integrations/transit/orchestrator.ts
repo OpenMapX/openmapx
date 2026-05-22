@@ -1,17 +1,26 @@
+import type { BBox } from "@openmapx/core";
 import type {
-  BBox,
+  IntegrationContext,
+  ProviderAttribution,
+  TransitProvider,
+} from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { Freshness } from "@openmapx/mobility-core/freshness";
+import type { MobilityResult } from "@openmapx/mobility-core/result";
+import type {
   Departure,
+  Facility,
+  GeoJSONLineString,
   ServiceAlert,
   TransitRoute,
   TransitStop,
   TransitStopInfrastructure,
   TripPlan,
+  VehicleJourney,
   VehiclePosition,
-} from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+} from "@openmapx/mobility-core/transit";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { providerHealth } from "./health.js";
-import type { GeoJSONLineString, ProviderAttribution, TransitProvider } from "./types.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -29,6 +38,60 @@ export function bboxToCenter(bbox: BBox): { lat: number; lng: number; radiusMete
   const lngMeters = (lngDiff * Math.PI * EARTH_RADIUS * Math.cos((lat * Math.PI) / 180)) / 180;
   const halfDiag = Math.sqrt(latMeters * latMeters + lngMeters * lngMeters) / 2;
   return { lat, lng, radiusMeters: halfDiag * 1.1 };
+}
+
+function freshnessNow(opts?: { hasRealtimeData?: boolean }): Freshness {
+  return {
+    fetchedAt: new Date().toISOString(),
+    hasRealtimeData: opts?.hasRealtimeData ?? false,
+    isStale: false,
+  };
+}
+
+function emptyResult<T>(data: T, opts?: { hasRealtimeData?: boolean }): MobilityResult<T> {
+  return { data, attributions: [], freshness: freshnessNow(opts) };
+}
+
+/** Returns provider coverage bbox or null when the provider declares global `all:true` coverage. */
+function getProviderBbox(p: TransitProvider): BBox | null {
+  if ("bbox" in p.coverage) return p.coverage.bbox;
+  return null;
+}
+
+function providerOverlapsBbox(p: TransitProvider, bbox: BBox): boolean {
+  const pBbox = getProviderBbox(p);
+  if (!pBbox) return true; // `{ all: true }` matches everywhere
+  return bboxesOverlap(bbox, pBbox);
+}
+
+/** Merge multiple Attribution[] arrays, deduped by `sourceId`. */
+function mergeAttributions(...lists: Attribution[][]): Attribution[] {
+  const seen = new Set<string>();
+  const out: Attribution[] = [];
+  for (const list of lists) {
+    for (const a of list) {
+      if (seen.has(a.sourceId)) continue;
+      seen.add(a.sourceId);
+      out.push(a);
+    }
+  }
+  return out;
+}
+
+/** Pick the earliest fetchedAt and the strongest realtime/stale signal. */
+function mergeFreshness(...lists: Freshness[]): Freshness {
+  if (lists.length === 0) return freshnessNow();
+  let fetchedAt = lists[0].fetchedAt;
+  let hasRealtimeData = false;
+  let isStale = false;
+  let dataAsOf: string | undefined;
+  for (const f of lists) {
+    if (f.fetchedAt < fetchedAt) fetchedAt = f.fetchedAt;
+    if (f.hasRealtimeData) hasRealtimeData = true;
+    if (f.isStale) isStale = true;
+    if (f.dataAsOf && (!dataAsOf || f.dataAsOf < dataAsOf)) dataAsOf = f.dataAsOf;
+  }
+  return { fetchedAt, hasRealtimeData, isStale, ...(dataAsOf ? { dataAsOf } : {}) };
 }
 
 export function createTransitOrchestrator(ctx: IntegrationContext) {
@@ -67,82 +130,109 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
   function getProvidersForBbox(bbox: BBox): TransitProvider[] {
     return collectProviders()
-      .filter((p) => bboxesOverlap(bbox, p.coverage.bbox))
+      .filter((p) => providerOverlapsBbox(p, bbox))
       .filter((p) => providerHealth.isHealthy(p.id))
       .sort((a, b) => a.priority - b.priority);
   }
 
-  async function getStopsInBbox(bbox: BBox, modes?: string[]): Promise<TransitStop[]> {
+  async function getStopsInBbox(
+    bbox: BBox,
+    modes?: string[],
+  ): Promise<MobilityResult<TransitStop[]>> {
     const matching = getProvidersForBbox(bbox).filter((p) => p.getStopsNearby);
     const { lat, lng, radiusMeters } = bboxToCenter(bbox);
 
     const results = await Promise.allSettled(
       matching.map(async (p) => {
         try {
-          if (!p.getStopsNearby) return [];
-          const stops = await p.getStopsNearby(lat, lng, radiusMeters);
+          if (!p.getStopsNearby) return null;
+          const res = await p.getStopsNearby(lat, lng, radiusMeters);
           providerHealth.recordSuccess(p.id);
-          return stops;
+          return res;
         } catch {
           providerHealth.recordFailure(p.id);
-          return [];
+          return null;
         }
       }),
     );
 
-    const allStops = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const ok = results
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((v): v is MobilityResult<TransitStop[]> => v != null);
+    const allStops = ok.flatMap((r) => r.data);
 
     const deduped = deduplicateStops(allStops, (provider) => getProviderPriority(provider));
 
-    if (modes && modes.length > 0) {
-      const modeSet = new Set(modes);
-      return deduped.filter((s) => s.modes.some((m) => modeSet.has(m)));
-    }
-    return deduped;
+    const filtered =
+      modes && modes.length > 0
+        ? (() => {
+            const modeSet = new Set(modes);
+            return deduped.filter((s) => s.modes.some((m) => modeSet.has(m)));
+          })()
+        : deduped;
+
+    return {
+      data: filtered,
+      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
+    };
   }
 
-  async function getDepartures(stopId: string, minutes: number): Promise<Departure[]> {
+  async function getDepartures(
+    stopId: string,
+    minutes: number,
+  ): Promise<MobilityResult<Departure[]>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getDepartures) return [];
+    if (!provider?.getDepartures) return emptyResult<Departure[]>([], { hasRealtimeData: true });
     try {
       const result = await provider.getDepartures(stopId, minutes);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<Departure[]>([], { hasRealtimeData: true });
     }
   }
 
-  async function getArrivals(stopId: string, minutes: number): Promise<Departure[]> {
+  async function getArrivals(
+    stopId: string,
+    minutes: number,
+  ): Promise<MobilityResult<Departure[]>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getArrivals) return [];
+    if (!provider?.getArrivals) return emptyResult<Departure[]>([], { hasRealtimeData: true });
     try {
       const result = await provider.getArrivals(stopId, minutes);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<Departure[]>([], { hasRealtimeData: true });
     }
   }
 
-  async function getStop(stopId: string): Promise<TransitStop | null> {
+  async function getStop(stopId: string): Promise<MobilityResult<TransitStop | null>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getStop) return null;
+    if (!provider?.getStop) return emptyResult<TransitStop | null>(null);
     try {
       const result = await provider.getStop(stopId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return null;
+      return emptyResult<TransitStop | null>(null);
     }
   }
 
-  async function searchByName(query: string, limit: number): Promise<TransitStop[]> {
-    const allStops = await searchByNameRaw(query, limit);
-    return deduplicateStops(allStops, (provider) => getProviderPriority(provider)).slice(0, limit);
+  async function searchByName(
+    query: string,
+    limit: number,
+  ): Promise<MobilityResult<TransitStop[]>> {
+    const raw = await searchByNameRaw(query, limit);
+    const deduped = deduplicateStops(raw.data, (provider) => getProviderPriority(provider)).slice(
+      0,
+      limit,
+    );
+    return { data: deduped, attributions: raw.attributions, freshness: raw.freshness };
   }
 
   /**
@@ -154,30 +244,38 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     query: string,
     limit: number,
     bbox?: BBox,
-  ): Promise<TransitStop[]> {
+  ): Promise<MobilityResult<TransitStop[]>> {
     const withSearch = (
       bbox
         ? getProvidersForBbox(bbox)
         : collectProviders()
             .filter((p) => providerHealth.isHealthy(p.id))
             .sort((a, b) => a.priority - b.priority)
-    ).filter((p) => p.searchByName);
+    ).filter((p) => p.searchStopsByName);
 
     const results = await Promise.allSettled(
       withSearch.map(async (p) => {
         try {
-          if (!p.searchByName) return [];
-          const stops = await p.searchByName(query, limit);
+          if (!p.searchStopsByName) return null;
+          const res = await p.searchStopsByName(query, limit);
           providerHealth.recordSuccess(p.id);
-          return stops;
+          return res;
         } catch {
           providerHealth.recordFailure(p.id);
-          return [];
+          return null;
         }
       }),
     );
 
-    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const ok = results
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((v): v is MobilityResult<TransitStop[]> => v != null);
+
+    return {
+      data: ok.flatMap((r) => r.data),
+      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
+    };
   }
 
   async function planTrip(params: {
@@ -186,7 +284,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     departureTime?: string;
     arrivalTime?: string;
     modes?: string[];
-  }): Promise<TripPlan | null> {
+  }): Promise<MobilityResult<TripPlan | null>> {
     const tripBbox: BBox = [
       Math.min(params.from.lng, params.to.lng) - 0.5,
       Math.min(params.from.lat, params.to.lat) - 0.5,
@@ -199,100 +297,129 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     // Waterfall: try each in priority order, return first success
     for (const provider of matching) {
       try {
-        const plan = await provider.planTrip?.(params);
-        if (plan?.itineraries?.length) {
+        const res = await provider.planTrip?.(params);
+        const first = res?.data?.[0];
+        if (first?.itineraries?.length) {
           providerHealth.recordSuccess(provider.id);
-          return { ...plan, provider: plan.provider ?? provider.prefix.replace(/:$/, "") };
+          return {
+            data: { ...first, provider: first.provider ?? provider.prefix.replace(/:$/, "") },
+            attributions: res?.attributions ?? [],
+            freshness: res?.freshness ?? freshnessNow(),
+          };
         }
       } catch {
         providerHealth.recordFailure(provider.id);
       }
     }
-    return null;
+    return emptyResult<TripPlan | null>(null);
   }
 
-  async function getVehicleRadar(bbox: BBox): Promise<VehiclePosition[]> {
+  async function getVehicleRadar(bbox: BBox): Promise<MobilityResult<VehiclePosition[]>> {
     const matching = getProvidersForBbox(bbox).filter((p) => p.getVehicleRadar);
 
     const results = await Promise.allSettled(
       matching.map(async (p) => {
         try {
-          if (!p.getVehicleRadar) return [];
-          const vehicles = await p.getVehicleRadar(bbox);
+          if (!p.getVehicleRadar) return null;
+          const res = await p.getVehicleRadar(bbox);
           providerHealth.recordSuccess(p.id);
-          return vehicles;
+          return res;
         } catch {
           providerHealth.recordFailure(p.id);
-          return [];
+          return null;
         }
       }),
     );
 
-    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const ok = results
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((v): v is MobilityResult<VehiclePosition[]> => v != null);
+
+    return {
+      data: ok.flatMap((r) => r.data),
+      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
+    };
   }
 
-  async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {
-    const matching = getProvidersForBbox(bbox).filter((p) => p.getAlerts);
+  async function getAlerts(bbox: BBox): Promise<MobilityResult<ServiceAlert[]>> {
+    const matching = getProvidersForBbox(bbox).filter((p) => p.getAlertsForBbox);
 
     const results = await Promise.allSettled(
       matching.map(async (p) => {
         try {
-          if (!p.getAlerts) return [];
-          const alerts = await p.getAlerts(bbox);
+          if (!p.getAlertsForBbox) return null;
+          const res = await p.getAlertsForBbox(bbox);
           providerHealth.recordSuccess(p.id);
-          return alerts;
+          return res;
         } catch {
           providerHealth.recordFailure(p.id);
-          return [];
+          return null;
         }
       }),
     );
 
-    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const ok = results
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((v): v is MobilityResult<ServiceAlert[]> => v != null);
+
+    return {
+      data: ok.flatMap((r) => r.data),
+      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
+    };
   }
 
-  async function getStopPlatforms(stopId: string): Promise<TransitStop[]> {
+  async function getStopPlatforms(stopId: string): Promise<MobilityResult<TransitStop[]>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getStopPlatforms) return [];
+    if (!provider?.getStopPlatforms) return emptyResult<TransitStop[]>([]);
     try {
       const result = await provider.getStopPlatforms(stopId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<TransitStop[]>([]);
     }
   }
 
-  async function getStopInfrastructure(stopId: string): Promise<TransitStopInfrastructure | null> {
+  async function getStopInfrastructure(
+    stopId: string,
+  ): Promise<MobilityResult<TransitStopInfrastructure | null>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getStopInfrastructure) return null;
+    if (!provider?.getStopInfrastructure)
+      return emptyResult<TransitStopInfrastructure | null>(null);
     try {
       const result = await provider.getStopInfrastructure(stopId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return null;
+      return emptyResult<TransitStopInfrastructure | null>(null);
     }
   }
 
-  async function getStopTimetable(stopId: string, date: string): Promise<Departure[]> {
+  async function getStopTimetable(
+    stopId: string,
+    date: string,
+  ): Promise<MobilityResult<Departure[]>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getStopTimetable) return [];
+    if (!provider?.getStopTimetable) return emptyResult<Departure[]>([]);
     try {
       const result = await provider.getStopTimetable(stopId, date);
       providerHealth.recordSuccess(provider.id);
-      return result;
+      // Provider may return TimetableEntry[]; we expose them as Departure[]
+      // because every current implementer happens to emit Departure shapes.
+      return result as MobilityResult<Departure[]>;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<Departure[]>([]);
     }
   }
 
-  async function getRoutesForStop(stopId: string): Promise<TransitRoute[]> {
+  async function getRoutesForStop(stopId: string): Promise<MobilityResult<TransitRoute[]>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider) return [];
+    if (!provider) return emptyResult<TransitRoute[]>([]);
 
     // Prefer provider-native route lookup when available.
     if (provider.getRoutesForStop) {
@@ -301,20 +428,21 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         providerHealth.recordSuccess(provider.id);
         // Keep old behavior: if provider route lookup returns nothing, derive
         // routes from departures as a fallback.
-        if (result.length > 0 || !provider.getDepartures) return result;
+        if (result.data.length > 0 || !provider.getDepartures) return result;
       } catch {
         providerHealth.recordFailure(provider.id);
-        if (!provider.getDepartures) return [];
+        if (!provider.getDepartures) return emptyResult<TransitRoute[]>([]);
       }
     } else if (!provider.getDepartures) {
-      return [];
+      return emptyResult<TransitRoute[]>([]);
     }
 
     // Compatibility fallback: derive routes from a 12-hour departures window.
     // Several providers expose departures but no route-by-stop endpoint.
     try {
-      const departures = await provider.getDepartures?.(stopId, 720);
-      if (!departures) return [];
+      const depRes = await provider.getDepartures?.(stopId, 720);
+      const departures = depRes?.data;
+      if (!departures) return emptyResult<TransitRoute[]>([]);
       providerHealth.recordSuccess(provider.id);
       const byRouteId = new Map<string, TransitRoute>();
       for (const dep of departures) {
@@ -329,54 +457,68 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
           operatorName: "",
         });
       }
-      return Array.from(byRouteId.values());
+      return {
+        data: Array.from(byRouteId.values()),
+        attributions: depRes?.attributions ?? [],
+        freshness: depRes?.freshness ?? freshnessNow(),
+      };
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<TransitRoute[]>([]);
     }
   }
 
-  async function getRoutesInBbox(bbox: BBox): Promise<TransitRoute[]> {
+  async function getRoutesInBbox(bbox: BBox): Promise<MobilityResult<TransitRoute[]>> {
     const matching = getProvidersForBbox(bbox).filter((p) => p.getRoutesInBbox);
     const results = await Promise.allSettled(
       matching.map(async (p) => {
         try {
-          if (!p.getRoutesInBbox) return [];
-          const routes = await p.getRoutesInBbox(bbox);
+          if (!p.getRoutesInBbox) return null;
+          const res = await p.getRoutesInBbox(bbox);
           providerHealth.recordSuccess(p.id);
-          return routes;
+          return res;
         } catch {
           providerHealth.recordFailure(p.id);
-          return [];
+          return null;
         }
       }),
     );
-    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const ok = results
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((v): v is MobilityResult<TransitRoute[]> => v != null);
+    return {
+      data: ok.flatMap((r) => r.data),
+      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
+    };
   }
 
-  async function getRoute(routeId: string): Promise<TransitRoute | null> {
+  async function getRoute(routeId: string): Promise<MobilityResult<TransitRoute | null>> {
     const provider = resolveByPrefix(routeId);
-    if (!provider?.getRoute) return null;
+    if (!provider?.getRoute) return emptyResult<TransitRoute | null>(null);
     try {
       const result = await provider.getRoute(routeId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return null;
+      return emptyResult<TransitRoute | null>(null);
     }
   }
 
-  async function getRouteStops(routeId: string, hintStopId?: string): Promise<TransitStop[]> {
+  async function getRouteStops(
+    routeId: string,
+    hintStopId?: string,
+  ): Promise<MobilityResult<TransitStop[]>> {
     const provider = resolveByPrefix(routeId);
-    if (!provider) return [];
+    if (!provider) return emptyResult<TransitStop[]>([]);
 
     if (provider.getRouteStops) {
       try {
         const result = await provider.getRouteStops(routeId, hintStopId);
         providerHealth.recordSuccess(provider.id);
         if (
-          result.length > 0 ||
+          result.data.length > 0 ||
           !hintStopId ||
           !provider.getDepartures ||
           !provider.getVehicleJourney
@@ -385,29 +527,32 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         }
       } catch {
         providerHealth.recordFailure(provider.id);
-        if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) return [];
+        if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney)
+          return emptyResult<TransitStop[]>([]);
       }
     } else if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) {
-      return [];
+      return emptyResult<TransitStop[]>([]);
     }
 
     // Compatibility fallback (pre-refactor behavior):
     // derive route stop sequence via a departure trip detail.
     try {
-      const departures = await provider.getDepartures?.(hintStopId, 720);
-      if (!departures) return [];
+      const depRes = await provider.getDepartures?.(hintStopId as string, 720);
+      const departures = depRes?.data;
+      if (!departures) return emptyResult<TransitStop[]>([]);
       const dep = departures.find((d) => d.route.id === routeId && !!d.tripId);
-      if (!dep?.tripId) return [];
-      const journey = await provider.getVehicleJourney?.(dep.tripId);
+      if (!dep?.tripId) return emptyResult<TransitStop[]>([]);
+      const journeyRes = await provider.getVehicleJourney?.(dep.tripId);
+      const journey = journeyRes?.data ?? null;
       if (
         !journey ||
         typeof journey !== "object" ||
         !Array.isArray((journey as { stops?: unknown[] }).stops)
       ) {
-        return [];
+        return emptyResult<TransitStop[]>([]);
       }
 
-      return (
+      const stops = (
         journey as {
           stops: Array<{
             stopId: string;
@@ -427,48 +572,59 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         provider: provider.id,
         sequence: i + 1,
       }));
+      return {
+        data: stops,
+        attributions: mergeAttributions(depRes?.attributions ?? [], journeyRes?.attributions ?? []),
+        freshness: mergeFreshness(
+          depRes?.freshness ?? freshnessNow(),
+          journeyRes?.freshness ?? freshnessNow(),
+        ),
+      };
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<TransitStop[]>([]);
     }
   }
 
-  async function getStopAlerts(stopId: string): Promise<ServiceAlert[]> {
+  async function getStopAlerts(stopId: string): Promise<MobilityResult<ServiceAlert[]>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getStopAlerts) return [];
+    if (!provider?.getAlertsForStop)
+      return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
     try {
-      const result = await provider.getStopAlerts(stopId);
+      const result = await provider.getAlertsForStop(stopId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
     }
   }
 
-  async function getRouteAlerts(routeId: string): Promise<ServiceAlert[]> {
+  async function getRouteAlerts(routeId: string): Promise<MobilityResult<ServiceAlert[]>> {
     const provider = resolveByPrefix(routeId);
-    if (!provider?.getRouteAlerts) return [];
+    if (!provider?.getAlertsForRoute)
+      return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
     try {
-      const result = await provider.getRouteAlerts(routeId);
+      const result = await provider.getAlertsForRoute(routeId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
     }
   }
 
-  async function getVehiclePositions(routeId: string): Promise<VehiclePosition[]> {
+  async function getVehiclePositions(routeId: string): Promise<MobilityResult<VehiclePosition[]>> {
     const provider = resolveByPrefix(routeId);
-    if (!provider?.getVehiclePositions) return [];
+    if (!provider?.getVehiclePositions)
+      return emptyResult<VehiclePosition[]>([], { hasRealtimeData: true });
     try {
       const result = await provider.getVehiclePositions(routeId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return [];
+      return emptyResult<VehiclePosition[]>([], { hasRealtimeData: true });
     }
   }
 
@@ -476,42 +632,49 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     tripId: string,
     fromStopId?: string,
     toStopId?: string,
-  ): Promise<GeoJSONLineString | null> {
+  ): Promise<MobilityResult<GeoJSONLineString | null>> {
     const provider = resolveByPrefix(tripId);
-    if (!provider?.getLegGeometry) return null;
+    if (!provider?.getLegGeometry) return emptyResult<GeoJSONLineString | null>(null);
     try {
       const result = await provider.getLegGeometry(tripId, fromStopId, toStopId);
       providerHealth.recordSuccess(provider.id);
-      return result;
+      // GeoJSON LineString from the framework's LineString type matches our local
+      // GeoJSONLineString shape closely enough (we widen coordinates to
+      // [number, number][] at the boundary).
+      return result as unknown as MobilityResult<GeoJSONLineString | null>;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return null;
+      return emptyResult<GeoJSONLineString | null>(null);
     }
   }
 
-  async function getVehicleJourney(vehicleId: string, fallbackIds?: string[]): Promise<unknown> {
+  async function getVehicleJourney(
+    vehicleId: string,
+    fallbackIds?: string[],
+  ): Promise<MobilityResult<VehicleJourney | null>> {
     const provider = resolveByPrefix(vehicleId);
-    if (!provider?.getVehicleJourney) return null;
+    if (!provider?.getVehicleJourney)
+      return emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
     try {
       const result = await provider.getVehicleJourney(vehicleId, fallbackIds);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return null;
+      return emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
     }
   }
 
-  async function getFacilities(stopId: string): Promise<unknown> {
+  async function getFacilities(stopId: string): Promise<MobilityResult<Facility[]>> {
     const provider = resolveByPrefix(stopId);
-    if (!provider?.getFacilities) return null;
+    if (!provider?.getFacilities) return emptyResult<Facility[]>([]);
     try {
       const result = await provider.getFacilities(stopId);
       providerHealth.recordSuccess(provider.id);
       return result;
     } catch {
       providerHealth.recordFailure(provider.id);
-      return null;
+      return emptyResult<Facility[]>([]);
     }
   }
 
@@ -520,7 +683,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     lng: number,
     maxMinutes: number,
     modes?: string[],
-  ): Promise<TransitStop[]> {
+  ): Promise<MobilityResult<TransitStop[]>> {
     // Use all healthy providers and merge results
     const allProviders = collectProviders().filter(
       (p) => p.getReachableStops && providerHealth.isHealthy(p.id),
@@ -529,17 +692,24 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     const results = await Promise.allSettled(
       allProviders.map(async (p) => {
         try {
-          if (!p.getReachableStops) return [];
-          const stops = await p.getReachableStops(lat, lng, maxMinutes, modes);
+          if (!p.getReachableStops) return null;
+          const res = await p.getReachableStops(lat, lng, maxMinutes, modes);
           providerHealth.recordSuccess(p.id);
-          return stops;
+          return res;
         } catch {
           providerHealth.recordFailure(p.id);
-          return [];
+          return null;
         }
       }),
     );
-    return results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+    const ok = results
+      .map((r) => (r.status === "fulfilled" ? r.value : null))
+      .filter((v): v is MobilityResult<TransitStop[]> => v != null);
+    return {
+      data: ok.flatMap((r) => r.data),
+      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
+    };
   }
 
   function getHealthStatus(): Record<string, { healthy: boolean; failures: number }> {

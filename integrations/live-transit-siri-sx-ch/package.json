@@ -1,0 +1,20 @@
+{
+  "name": "@openmapx/integration-live-transit-siri-sx-ch",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    }
+  },
+  "dependencies": {
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/integration-transit-opentransportdata-ch": "workspace:^",
+    "@openmapx/mobility-core": "workspace:^"
+  }
+}

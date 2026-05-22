@@ -182,18 +182,18 @@ export const TTL = {
     routes: TTL_POLICY.SCHEDULE,
     routeStops: TTL_POLICY.SCHEDULE,
     routeGeometry: TTL_POLICY.STATIC_ARCHIVE,
-    tripPlan: 300, // no policy class for 5-min
+    tripPlan: TTL_POLICY.SHORT_LIVED,
     placeStops: TTL_POLICY.PLACE_LINK,
-    placeRoutes: 300, // no policy class for 5-min
+    placeRoutes: TTL_POLICY.SHORT_LIVED,
     placeAlerts: TTL_POLICY.REALTIME_WARM,
     placeFacilities: TTL_POLICY.STATIC_ARCHIVE,
     // vehicles/radar: behavior change 15 → 30s (REALTIME_HOT). Authorized by A4 plan.
     vehicles: TTL_POLICY.REALTIME_HOT,
     vehicleJourney: TTL_POLICY.REALTIME_HOT,
     radar: TTL_POLICY.REALTIME_HOT,
-    facilities: 300, // no policy class for 5-min
+    facilities: TTL_POLICY.SHORT_LIVED,
     alerts: TTL_POLICY.REALTIME_WARM,
-    registry: 172800, // special: 48h registry refresh, no policy class
+    registry: TTL_POLICY.CATALOG_REFRESH,
   },
   geocoding: {
     forward: 86400,
@@ -206,12 +206,12 @@ export const TTL = {
   },
   directions: 3600,
   isochrone: 3600,
-  category: 1800,
+  category: TTL_POLICY.CATEGORY_SEARCH,
   dataSources: {
-    filters: 172800,
-    search: 21600,
-    detail: 21600,
-    evReference: 172800,
+    filters: TTL_POLICY.CATALOG_REFRESH,
+    search: TTL_POLICY.REFERENCE_DATA,
+    detail: TTL_POLICY.REFERENCE_DATA,
+    evReference: TTL_POLICY.CATALOG_REFRESH,
   },
   airQuality: {
     station: 3600,
@@ -228,14 +228,14 @@ export const TTL = {
     2: 600,
     3: 900,
   },
-  winterSports: 21600,
+  winterSports: TTL_POLICY.REFERENCE_DATA,
   elevation: 86400,
   hiking: {
     search: 1800,
     area: 1800,
     detail: 86400,
     geometry: 86400,
-    shelters: 21600,
+    shelters: TTL_POLICY.REFERENCE_DATA,
   },
   photos: 3600,
   sharedMobility: {

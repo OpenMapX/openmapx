@@ -8,7 +8,7 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
-import type { Facility } from "@openmapx/core";
+import type { Facility } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 
 const FACILITY_ICONS: Record<Facility["type"], typeof ElevatorIcon> = {

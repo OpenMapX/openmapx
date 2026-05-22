@@ -1,5 +1,11 @@
+import type { BBox } from "@openmapx/core";
+import {
+  mapProducts,
+  normalizeFptfDeparture,
+  normalizeRemarks,
+  productToMode,
+} from "@openmapx/core";
 import type {
-  BBox,
   Departure,
   GeoJSONLineString,
   ServiceAlert,
@@ -11,13 +17,7 @@ import type {
   VehicleJourney,
   VehicleJourneyStop,
   VehiclePosition,
-} from "@openmapx/core";
-import {
-  mapProducts,
-  normalizeFptfDeparture,
-  normalizeRemarks,
-  productToMode,
-} from "@openmapx/core";
+} from "@openmapx/mobility-core/transit";
 
 export interface HafasInstance {
   id: string;

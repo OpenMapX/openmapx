@@ -6,12 +6,28 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { DataSourceProvider } from "@openmapx/integration-data-source/types";
+import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import { deduplicateChargingStations, haversineMeters } from "./dedup.js";
 import { getEvChargingFilters } from "./reference.js";
 import { EV_CHARGING_SOURCE_REGISTRY } from "./registry.js";
 import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
+
+const ATTRIBUTION: Attribution[] = [
+  {
+    sourceId: "ocm",
+    name: "OpenChargeMap",
+    url: "https://openchargemap.org/",
+    spdxLicense: "CC-BY-SA-4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+  },
+];
+
+const wrapStatic = <T>(data: T): MobilityResult<T> =>
+  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
 
 const META: DataSourceMeta = {
   minZoom: 8,
@@ -31,12 +47,13 @@ const META: DataSourceMeta = {
   },
 };
 
-class EvChargingProvider implements DataSourceProvider {
+class EvChargingProvider implements MobilityDataSourceProvider {
   readonly id = "ev-charging";
   readonly meta = META;
   readonly serviceIds = [];
   readonly searchCacheTtl = 60;
   readonly detailCacheTtl = 60;
+  readonly attribution = ATTRIBUTION;
 
   private stationCache = new Map<string, EvChargingStation>();
 
@@ -55,7 +72,10 @@ class EvChargingProvider implements DataSourceProvider {
     return getEvChargingFilters();
   }
 
-  async search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceResult[]> {
+  async search(
+    bbox: BoundingBox,
+    filters?: Record<string, unknown>,
+  ): Promise<MobilityResult<DataSourceResult[]>> {
     const results = await Promise.allSettled(
       EV_CHARGING_SOURCE_REGISTRY.map((source) => source.search(bbox, filters)),
     );
@@ -65,19 +85,19 @@ class EvChargingProvider implements DataSourceProvider {
     );
     const merged = deduplicateChargingStations(allStations);
     for (const station of merged) this.cacheStation(station);
-    return merged.map(mapStationToResult);
+    return wrapStatic(merged.map(mapStationToResult));
   }
 
-  async getDetail(itemId: string): Promise<DataSourceDetail | null> {
+  async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = this.stationCache.get(itemId);
-    if (cached) return mapStationToDetail(cached);
+    if (cached) return wrapStatic(mapStationToDetail(cached));
 
     const primary = await this.fetchByPrefix(itemId);
-    if (!primary) return null;
+    if (!primary) return wrapStatic(null);
 
     const enriched = await this.enrichStation(primary);
     this.cacheStation(enriched);
-    return mapStationToDetail(enriched);
+    return wrapStatic(mapStationToDetail(enriched));
   }
 
   private async fetchByPrefix(itemId: string): Promise<EvChargingStation | null> {

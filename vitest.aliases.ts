@@ -1,6 +1,26 @@
 import { resolve } from "node:path";
 
+/**
+ * Subpaths whose source files live under `packages/mobility-core/src/types/`.
+ * Everything else (cache, policy, dedup, gbfs-*, mapper, motis-rentals,
+ * nominatim, entur-mobility) lives at `packages/mobility-core/src/`.
+ */
+const MOBILITY_CORE_TYPE_SUBPATHS = [
+  "attribution",
+  "freshness",
+  "result",
+  "parking",
+  "fuel",
+  "ev-charging",
+  "transit",
+];
+
 export function createRepoVitestAliases(repoRoot: string) {
+  const mobilityCoreTypeAliases = MOBILITY_CORE_TYPE_SUBPATHS.map((sub) => ({
+    find: new RegExp(`^@openmapx/mobility-core/${sub}(?:\\.js)?$`),
+    replacement: resolve(repoRoot, `packages/mobility-core/src/types/${sub}.ts`),
+  }));
+
   return [
     {
       find: /^@openmapx\/core\/server$/,
@@ -10,13 +30,21 @@ export function createRepoVitestAliases(repoRoot: string) {
       find: /^@openmapx\/core$/,
       replacement: resolve(repoRoot, "packages/core/src/index.ts"),
     },
+    // The `./types` subpath is the SharedMobility* type bundle (renamed from
+    // the old root `types.ts` to `src/types/shared-mobility.ts`).
     {
-      find: /^@openmapx\/mobility-core\/(.+)$/,
-      replacement: resolve(repoRoot, "packages/mobility-core/$1"),
+      find: /^@openmapx\/mobility-core\/types$/,
+      replacement: resolve(repoRoot, "packages/mobility-core/src/types/shared-mobility.ts"),
+    },
+    ...mobilityCoreTypeAliases,
+    // Everything else under the package resolves to `src/<sub>.ts`.
+    {
+      find: /^@openmapx\/mobility-core\/(.+?)(?:\.js)?$/,
+      replacement: resolve(repoRoot, "packages/mobility-core/src/$1.ts"),
     },
     {
       find: /^@openmapx\/mobility-core$/,
-      replacement: resolve(repoRoot, "packages/mobility-core"),
+      replacement: resolve(repoRoot, "packages/mobility-core/src"),
     },
     {
       find: /^@openmapx\/mobility-formats$/,

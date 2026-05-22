@@ -9,7 +9,7 @@ import type {
   DataSourceResult,
   PricingPlanEntry,
 } from "@openmapx/core";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
+import type { SharedMobilityStation, SharedMobilityVehicle } from "./types/shared-mobility.js";
 
 /** Detects raw slugs like "berlin-scooter-system-pricing-plan" (no spaces, all lowercase). */
 const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;

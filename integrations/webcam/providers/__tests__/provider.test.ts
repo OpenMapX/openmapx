@@ -124,7 +124,8 @@ describe("webcamProvider.search", () => {
     vi.mocked(mapNpsToResult).mockReturnValue(makeResult("nps:1", "nps", "landscape"));
     vi.mocked(mapDotToResult).mockReturnValue(makeResult("dot-ny:1", "dot-ny", "traffic"));
 
-    const results = await webcamProvider.search(makeBbox());
+    const envelope = await webcamProvider.search(makeBbox());
+    const results = envelope.data;
 
     expect(searchWindy).toHaveBeenCalledOnce();
     expect(searchOsmWebcams).toHaveBeenCalledOnce();
@@ -133,6 +134,9 @@ describe("webcamProvider.search", () => {
     expect(searchNps).toHaveBeenCalledOnce();
     expect(searchDot).toHaveBeenCalledOnce();
     expect(results).toHaveLength(6);
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("windy");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("Windy is first in dedup order (highest priority), OSM is last", async () => {
@@ -166,7 +170,7 @@ describe("webcamProvider.search", () => {
     );
     vi.mocked(mapTflToResult).mockReturnValue(makeResult("tfl:1", "tfl", "traffic"));
 
-    const results = await webcamProvider.search(makeBbox());
+    const results = (await webcamProvider.search(makeBbox())).data;
     expect(results).toHaveLength(2);
   });
 
@@ -179,7 +183,7 @@ describe("webcamProvider.search", () => {
     vi.mocked(searchDot).mockRejectedValue(new Error("down"));
     vi.mocked(deduplicateByCoordinates).mockReturnValue([]);
 
-    const results = await webcamProvider.search(makeBbox());
+    const results = (await webcamProvider.search(makeBbox())).data;
     expect(results).toEqual([]);
   });
 
@@ -198,7 +202,7 @@ describe("webcamProvider.search", () => {
     ];
     vi.mocked(deduplicateByCoordinates).mockReturnValue(items);
 
-    const results = await webcamProvider.search(makeBbox(), { category: ["traffic"] });
+    const results = (await webcamProvider.search(makeBbox(), { category: ["traffic"] })).data;
     expect(results).toHaveLength(1);
     expect(results[0].variant).toBe("traffic");
   });
@@ -217,9 +221,12 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getWindyDetail).mockResolvedValue(raw as never);
     vi.mocked(mapWindyToDetail).mockReturnValue(detail);
 
-    const result = await webcamProvider.getDetail("windy:123");
+    const envelope = await webcamProvider.getDetail("windy:123");
     expect(getWindyDetail).toHaveBeenCalledWith("123");
-    expect(result).toBe(detail);
+    expect(envelope.data).toBe(detail);
+    expect(envelope.attributions.length).toBeGreaterThan(0);
+    expect(envelope.attributions[0].sourceId).toBe("windy");
+    expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("osm-webcam prefix calls getOsmWebcamNode", async () => {
@@ -234,7 +241,7 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getOsmWebcamNode).mockResolvedValue(raw as never);
     vi.mocked(mapOsmToDetail).mockReturnValue(detail);
 
-    const result = await webcamProvider.getDetail("osm-webcam:456");
+    const result = (await webcamProvider.getDetail("osm-webcam:456")).data;
     expect(getOsmWebcamNode).toHaveBeenCalledWith(456);
     expect(result).toBe(detail);
   });
@@ -251,7 +258,7 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getCaltransDetail).mockResolvedValue(raw as never);
     vi.mocked(mapCaltransToDetail).mockReturnValue(detail);
 
-    const result = await webcamProvider.getDetail("caltrans:7:42");
+    const result = (await webcamProvider.getDetail("caltrans:7:42")).data;
     expect(getCaltransDetail).toHaveBeenCalledWith("7", "42");
     expect(result).toBe(detail);
   });
@@ -268,7 +275,7 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getTflDetail).mockResolvedValue(raw as never);
     vi.mocked(mapTflToDetail).mockReturnValue(detail);
 
-    const result = await webcamProvider.getDetail("tfl:JamCams_00001");
+    const result = (await webcamProvider.getDetail("tfl:JamCams_00001")).data;
     expect(getTflDetail).toHaveBeenCalledWith("JamCams_00001");
     expect(result).toBe(detail);
   });
@@ -285,7 +292,7 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getNpsDetail).mockResolvedValue(raw as never);
     vi.mocked(mapNpsToDetail).mockReturnValue(detail);
 
-    const result = await webcamProvider.getDetail("nps:ABC-123");
+    const result = (await webcamProvider.getDetail("nps:ABC-123")).data;
     expect(getNpsDetail).toHaveBeenCalledWith("ABC-123");
     expect(result).toBe(detail);
   });
@@ -302,13 +309,13 @@ describe("webcamProvider.getDetail", () => {
     vi.mocked(getDotDetail).mockResolvedValue(raw as never);
     vi.mocked(mapDotToDetail).mockReturnValue(detail);
 
-    const result = await webcamProvider.getDetail("dot-ny:Skyline-123");
+    const result = (await webcamProvider.getDetail("dot-ny:Skyline-123")).data;
     expect(getDotDetail).toHaveBeenCalledWith("dot-ny:Skyline-123");
     expect(result).toBe(detail);
   });
 
   it("unknown prefix returns null", async () => {
-    const result = await webcamProvider.getDetail("unknown:123");
+    const result = (await webcamProvider.getDetail("unknown:123")).data;
     expect(result).toBeNull();
   });
 });

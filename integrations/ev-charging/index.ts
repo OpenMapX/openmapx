@@ -15,6 +15,6 @@ export function setup(ctx: IntegrationContext): void {
   setOcmApiKey(ctx.config.apiKey as string | undefined);
   setAfdcApiKey(ctx.config.afdcApiKey as string | undefined);
   setNobilApiKey(ctx.config.nobilApiKey as string | undefined);
-  ctx.registerProvider("data-source", evChargingProvider);
+  ctx.registerMobilityDataSource(evChargingProvider);
   registerPlaceResolver(evChargingProvider.id, createDataSourceResolver(evChargingProvider));
 }

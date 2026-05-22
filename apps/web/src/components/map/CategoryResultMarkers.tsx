@@ -1,6 +1,6 @@
 "use client";
 
-import type { CategoryPlace, TransitStop, TransportMode } from "@openmapx/core";
+import type { CategoryPlace } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
   createPlace,
@@ -13,6 +13,7 @@ import {
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
+import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";

@@ -1,4 +1,4 @@
-import type { DataSourceDetail } from "@integrations/data-source/types";
+import type { DataSourceDetail } from "@openmapx/integration-framework";
 import type { LngLat } from "./geometry";
 import type { Identified, Ids } from "./identified";
 import type { OpeningHoursInfo } from "./openingHoursInfo";

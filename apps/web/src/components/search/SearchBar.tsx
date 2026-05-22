@@ -17,7 +17,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
-import type { AutocompleteResult, LngLat, TransitStop } from "@openmapx/core";
+import type { AutocompleteResult, LngLat } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
@@ -57,6 +57,7 @@ import {
   useStopSearch,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

@@ -1,0 +1,40 @@
+{
+  "id": "live-transit-siri-sx-ch",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "documentation": "https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/",
+  "domains": ["live-transit"],
+  "dependencies": ["overlay-live-transit", "transit-opentransportdata-ch"],
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Transit",
+  "dataSources": [
+    {
+      "sourceId": "opentransportdata-ch-siri-sx",
+      "name": "Open data platform mobility Switzerland – SIRI Situation Exchange",
+      "url": "https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/",
+      "license": "Open data platform mobility Switzerland terms of use",
+      "licenseUrl": "https://opentransportdata.swiss/en/terms-of-use/",
+      "attribution": "Source: opentransportdata.swiss",
+      "commercialUse": "conditional",
+      "providerCountry": "CH",
+      "providerPrivacyUrl": "https://opentransportdata.swiss/en/privacy-notice/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

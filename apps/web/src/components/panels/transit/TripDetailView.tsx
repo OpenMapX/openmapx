@@ -10,7 +10,6 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { MergedDeparture, TripRemark } from "@openmapx/core";
 import {
   MODE_COLORS,
   resolveProvider,
@@ -18,6 +17,7 @@ import {
   useRouteAlerts,
   useVehicleJourney,
 } from "@openmapx/core";
+import type { MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { formatTime } from "@/lib/formatTime";
 import { TEAL } from "@/lib/theme";

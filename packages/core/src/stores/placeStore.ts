@@ -1,4 +1,4 @@
-import type { MergedDeparture } from "@integrations/transit/types";
+import type { MergedDeparture } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
 import type { Place } from "../types/place";
 
