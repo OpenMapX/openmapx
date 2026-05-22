@@ -2018,9 +2018,13 @@ No external API calls (queries local PostGIS database).
 
 The MOTIS integration registers two transit providers from one directory. The orchestration is split across two files for clarity:
 
-- `local.ts` — `setupLocal(ctx)` registers the local-first `transit-motis-local` provider at orchestrator **priority 1**. This is the MOTIS-first transit backbone; when the local instance is unreachable, the provider transparently falls back to the Transitous cloud for that single call so coverage stays intact during restarts. `local.ts` also owns license-file loading, the `getFeedProviders()` helper, and the `GET /attribution` route.
+- `local.ts` — `setupLocal(ctx)` registers the local-first `transit-motis-local` provider at orchestrator **priority 1**. This is the MOTIS-first transit backbone; when the local instance is unreachable, the provider transparently falls back to the Transitous cloud for that single call so coverage stays intact during restarts. `local.ts` also owns license-file loading, the `getFeedProviders()` helper, the feed-tag aware response wrappers (per-feed `Attribution` rows pulled from `license.json`), and the `GET /attribution` route.
 - `cloud.ts` — `setupCloud(ctx)` registers the `transit-motis-transitous` cloud provider at orchestrator **priority 7**. Always on — no env flag, no reachability gate — as a soft resilience layer for cold-start, dev, and post-restart windows. Only exposes `getStop`, `getDepartures`, `getArrivals`, `getVehicleJourney` to avoid orchestrator fan-out for nearby/search/plan; those flows go through the local provider's own fallback.
 - `index.ts` — thin orchestrator that calls `setupLocal(ctx)` then `setupCloud(ctx)`.
+
+### MOTIS client
+
+The transit-motis, live-transit-motis, geocoding-motis, motis-rentals integrations and the `apps/api/src/services/motis/manager.ts` admin layer consume the upstream **`@motis-project/motis-client` package** (npm v2.9.2) rather than a locally-generated client. That package is itself produced by `@hey-api/openapi-ts` from the MOTIS OpenAPI spec on every upstream release, so the generated surface and lockfile pinning required by the architecture plan are inherited from the upstream project. There is no need for a sibling `packages/motis-client` and no separate `pnpm motis-client:gen` step in this repo.
 
 ### Transitous (Cloud MOTIS) — `https://api.transitous.org`
 - Data sent: Stop ID, time window, search text, origin and destination coordinates, departure/arrival time, bounding box (for vehicle positions), trip ID

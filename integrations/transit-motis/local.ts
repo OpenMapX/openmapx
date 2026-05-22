@@ -19,6 +19,8 @@ let LICENSE_FILE = join(process.cwd(), "../../infra/docker/data/motis-data", "li
 
 let cachedData: unknown[] | null = null;
 let cachedMtime = 0;
+let cachedFeedAttributionIndex: Map<string, Attribution> | null = null;
+let cachedFeedTagsByLength: string[] | null = null;
 let cachedLocalReachable = false;
 let cachedLocalReachableAt = 0;
 
@@ -34,12 +36,6 @@ const ATTRIBUTION_LOCAL: Attribution[] = [
   },
 ];
 
-function wrapLocal<T>(data: T) {
-  return withAttribution(data, ATTRIBUTION_LOCAL, freshnessNow());
-}
-function wrapLocalRT<T>(data: T) {
-  return withAttribution(data, ATTRIBUTION_LOCAL, freshnessNow({ hasRealtimeData: true }));
-}
 function wrapTransitous<T>(data: T) {
   return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow());
 }
@@ -54,10 +50,140 @@ function loadAttribution(): unknown[] {
   try {
     cachedData = JSON.parse(readFileSync(LICENSE_FILE, "utf-8"));
     cachedMtime = mtime;
+    // license.json contents changed — invalidate derived feed indexes too.
+    cachedFeedAttributionIndex = null;
+    cachedFeedTagsByLength = null;
     return cachedData ?? [];
   } catch {
     return [];
   }
+}
+
+/**
+ * Lazily build a `feedTag → Attribution` index from license.json.
+ * Reuses `loadAttribution()`'s mtime cache; the derived map is rebuilt whenever
+ * the underlying license file changes.
+ */
+function getFeedAttributionIndex(): Map<string, Attribution> {
+  const feeds = loadAttribution() as FeedEntry[];
+  if (cachedFeedAttributionIndex) return cachedFeedAttributionIndex;
+  const map = new Map<string, Attribution>();
+  for (const feed of feeds) {
+    if (!feed.filename) continue;
+    const tag = feed.filename.replace(/\.(gtfs|netex)\.zip$/, "");
+    if (!tag) continue;
+    const attribution: Attribution = {
+      sourceId: tag,
+      name: feed.human_name ?? tag,
+      url: feed.publisher?.url ?? feed.source,
+      spdxLicense: feed.spdx_license_identifier,
+      licenseUrl: feed.license_url,
+      attributionText: feed.attribution_text,
+      publisher: feed.publisher
+        ? { name: feed.publisher.name ?? tag, url: feed.publisher.url }
+        : undefined,
+    };
+    map.set(tag, attribution);
+  }
+  cachedFeedAttributionIndex = map;
+  cachedFeedTagsByLength = Array.from(map.keys()).sort((a, b) => b.length - a.length);
+  return map;
+}
+
+/**
+ * Strip the MOTIS instance prefix (`ms:` or `mo:`) from an id and find the longest
+ * matching feed tag in the index where the remainder starts with `<tag>_`.
+ * MOTIS feed tags can themselves contain underscores
+ * (e.g. `au-nsw_Transport-for-New-South-Wales-...`), so we cannot just split on
+ * the first underscore — we must match against known tags, longest first.
+ */
+function feedTagFromId(id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  // Build/refresh the feed index so cachedFeedTagsByLength is populated.
+  getFeedAttributionIndex();
+  const tags = cachedFeedTagsByLength;
+  if (!tags || tags.length === 0) return undefined;
+  const rest = id.replace(/^(ms:|mo:|mr:)/, "");
+  for (const tag of tags) {
+    if (rest === tag) return tag;
+    if (rest.startsWith(`${tag}_`)) return tag;
+  }
+  return undefined;
+}
+
+interface MaybeStopShape {
+  id?: unknown;
+  stopId?: unknown;
+  tripId?: unknown;
+  legs?: unknown;
+  itineraries?: unknown;
+  stops?: unknown;
+  from?: unknown;
+  to?: unknown;
+  intermediateStops?: unknown;
+}
+
+/**
+ * Walk an arbitrary MOTIS-derived response shape and collect every feedTag
+ * embedded in stop/trip ids it carries. Deduplicated, insertion-ordered.
+ *
+ * Supports: TransitStop, Departure, VehicleJourney, TripPlan, TripItinerary,
+ * TripLeg, VehicleJourneyStop, VehiclePosition, and plain arrays of the above.
+ * Anything it does not understand contributes zero tags (caller will fall
+ * back to `ATTRIBUTION_LOCAL`).
+ */
+export function extractFeedTags(data: unknown): string[] {
+  const tags = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (node === null || node === undefined) return;
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (typeof node !== "object") return;
+    const obj = node as MaybeStopShape & Record<string, unknown>;
+    const candidateIds = [obj.id, obj.stopId, obj.tripId];
+    for (const candidate of candidateIds) {
+      if (typeof candidate !== "string") continue;
+      const tag = feedTagFromId(candidate);
+      if (tag) tags.add(tag);
+    }
+    // Recurse into nested transit shapes.
+    if (Array.isArray(obj.legs)) visit(obj.legs);
+    if (Array.isArray(obj.itineraries)) visit(obj.itineraries);
+    if (Array.isArray(obj.stops)) visit(obj.stops);
+    if (obj.from) visit(obj.from);
+    if (obj.to) visit(obj.to);
+    if (Array.isArray(obj.intermediateStops)) visit(obj.intermediateStops);
+  };
+  visit(data);
+  return Array.from(tags);
+}
+
+function wrapLocalWithFeedAttribution<T>(
+  data: T,
+  isRealtime = false,
+): {
+  data: T;
+  attributions: Attribution[];
+  freshness: ReturnType<typeof freshnessNow>;
+} {
+  const tags = extractFeedTags(data);
+  const index = getFeedAttributionIndex();
+  const matched: Attribution[] = [];
+  for (const tag of tags) {
+    const attr = index.get(tag);
+    if (attr) matched.push(attr);
+  }
+  const attributions = matched.length > 0 ? matched : ATTRIBUTION_LOCAL;
+  return withAttribution(data, attributions, freshnessNow({ hasRealtimeData: isRealtime }));
+}
+
+function wrapLocal<T>(data: T) {
+  return wrapLocalWithFeedAttribution(data, false);
+}
+function wrapLocalRT<T>(data: T) {
+  return wrapLocalWithFeedAttribution(data, true);
 }
 
 /** Check if the local MOTIS instance is reachable. */
@@ -120,6 +246,7 @@ interface FeedEntry {
   source?: string;
   spdx_license_identifier?: string;
   license_url?: string;
+  attribution_text?: string;
   publisher?: { name?: string; url?: string };
 }
 
@@ -165,6 +292,8 @@ export function setupLocal(ctx: IntegrationContext): void {
   LICENSE_FILE = join(dataDir, "license.json");
   cachedData = null;
   cachedMtime = 0;
+  cachedFeedAttributionIndex = null;
+  cachedFeedTagsByLength = null;
 
   // Register local-first MOTIS provider.
   // For bbox/search/plan we only expose this provider to avoid fan-out to both local + cloud.
@@ -267,3 +396,17 @@ export function setupLocal(ctx: IntegrationContext): void {
     res.send(loadAttribution());
   });
 }
+
+export const __testing = {
+  wrapLocal: <T>(data: T) => wrapLocal(data),
+  wrapLocalRT: <T>(data: T) => wrapLocalRT(data),
+  getFeedAttributionIndex,
+  setLicenseFile(path: string): void {
+    LICENSE_FILE = path;
+    cachedData = null;
+    cachedMtime = 0;
+    cachedFeedAttributionIndex = null;
+    cachedFeedTagsByLength = null;
+  },
+  ATTRIBUTION_LOCAL,
+};
