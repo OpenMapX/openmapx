@@ -1,4 +1,5 @@
 import type { Ids } from "@openmapx/core";
+import type { Attribution } from "./attribution.js";
 
 export type TransportMode =
   | "bus"
@@ -262,6 +263,13 @@ export interface TripLeg {
   formation?: TransitFormationReference[];
   boardNameSuffix?: string;
   alightNameSuffix?: string;
+  /**
+   * Per-leg attribution: which upstream feeds contributed this specific leg.
+   * Typically a subset of the envelope-level attributions; the orchestrator
+   * fans it out so the UI can render per-leg credits inline. Optional —
+   * providers that cannot compute it (single-feed planners) emit nothing.
+   */
+  attributions?: Attribution[];
 }
 
 export interface TripItinerary {

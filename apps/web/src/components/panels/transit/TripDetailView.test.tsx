@@ -10,6 +10,7 @@ vi.mock("next-intl", () => ({
         {
           back: "Back",
           data: "Data",
+          dataSources: "Data sources",
           retry: "Retry",
         }[key] ?? key
       );
@@ -42,26 +43,16 @@ vi.mock("next-intl", () => ({
 
 vi.mock("@openmapx/core", () => ({
   MODE_COLORS: { rail: "#0055aa" },
-  resolveProvider: (
-    providers: Array<{ id: string; label: string; url?: string; license?: string }>,
-    providerId: string,
-  ) =>
-    providers.find((provider) => provider.id === providerId) ?? {
-      id: providerId,
-      label: providerId,
-    },
-  useProviders: () => ({
-    data: [
+  useRouteAlerts: () => ({ data: [], attributions: [] }),
+  useVehicleJourney: () => ({
+    attributions: [
       {
-        id: "otdch",
-        label: "OpenTransportData Switzerland",
+        sourceId: "otdch",
+        name: "OpenTransportData Switzerland",
         url: "https://opentransportdata.swiss",
-        license: "Terms",
+        spdxLicense: "Terms",
       },
     ],
-  }),
-  useRouteAlerts: () => ({ data: [] }),
-  useVehicleJourney: () => ({
     data: {
       serviceInfo: {
         operatorName: "Swiss Federal Railways SBB",
@@ -98,6 +89,23 @@ vi.mock("@openmapx/core", () => ({
     isLoading: false,
     refetch: vi.fn(),
   }),
+}));
+
+vi.mock("@/components/ui/AttributionStrip", () => ({
+  AttributionStrip: ({ attributions }: { attributions: Array<{ name: string }> }) => (
+    <div data-testid="attribution-strip">{attributions.map((a) => a.name).join(" · ")}</div>
+  ),
+}));
+
+vi.mock("@/lib/useAttributionFromHooks", () => ({
+  useAttributionFromHooks: () => [
+    {
+      sourceId: "otdch",
+      name: "OpenTransportData Switzerland",
+      url: "https://opentransportdata.swiss",
+      spdxLicense: "Terms",
+    },
+  ],
 }));
 
 vi.mock("@/lib/formatTime", () => ({

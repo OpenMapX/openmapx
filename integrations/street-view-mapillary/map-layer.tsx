@@ -1,13 +1,13 @@
 "use client";
 
-import { buildIntegrationAttribution, useOverlayExclusion } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { useOverlayExclusion } from "@openmapx/core";
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useStreetViewStore } from "./store";
 
 const MLY_SOURCE_ID = "mly1_public";
@@ -21,11 +21,9 @@ const MLY_INTERACTIVE_LAYERS = [MLY_PHOTO_LAYER, MLY_PANO_LAYER] as const;
 export function StreetViewLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("street-view-mapillary");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useStreetViewStore((s) => s.layerVisible);
   const requestImageLoad = useStreetViewStore((s) => s.requestImageLoad);
+  useIntegrationAttribution("street-view-mapillary", layerVisible);
   useOverlayExclusion("street-view", layerVisible);
   useLayerReanchor(MLY_LAYERS, layerVisible);
 
@@ -61,7 +59,6 @@ export function StreetViewLayer() {
           tiles: [`${apiUrl}/api/mapillary/tiles/{z}/{x}/{y}`],
           minzoom: 6,
           maxzoom: 14,
-          attribution: attributionHtml,
         });
       }
 

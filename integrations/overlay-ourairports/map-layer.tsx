@@ -1,14 +1,12 @@
 "use client";
 
 import {
-  buildIntegrationAttribution,
   createPlace,
   PANEL,
   useOverlayExclusion,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
@@ -16,6 +14,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { type AirportTypeFilter, useAirportsOverlayStore } from "./store";
 
 const SOURCE_ID = "openmapx-airports-source";
@@ -85,10 +84,8 @@ import type maplibregl from "maplibre-gl";
 export function AirportsOverlay() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-ourairports");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useAirportsOverlayStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-ourairports", layerVisible);
   const filter = useAirportsOverlayStore((s) => s.filter);
   const setLoading = useAirportsOverlayStore((s) => s.setLoading);
   const setLastUpdated = useAirportsOverlayStore((s) => s.setLastUpdated);
@@ -159,7 +156,6 @@ export function AirportsOverlay() {
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution: attributionHtml,
           });
         }
         const beforeLayer = getFirstSymbolLayerId(map);
@@ -225,7 +221,7 @@ export function AirportsOverlay() {
     return () => {
       map.off("styledata", syncLayers);
     };
-  }, [mapReady, mapRef, styleVersion, layerVisible, attributionHtml, fetchAirports]);
+  }, [mapReady, mapRef, styleVersion, layerVisible, fetchAirports]);
 
   // Refetch on viewport change (debounced via moveend)
   useEffect(() => {

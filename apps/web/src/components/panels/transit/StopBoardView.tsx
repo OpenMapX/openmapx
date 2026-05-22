@@ -3,21 +3,16 @@
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import {
-  resolveProvider,
-  useArrivals,
-  useDepartures,
-  useProviders,
-  useStopAlerts,
-} from "@openmapx/core";
+import { useArrivals, useDepartures, useStopAlerts } from "@openmapx/core";
 import type { Departure, MergedDeparture } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
 
@@ -47,10 +42,13 @@ export function StopBoardView({
   const t = useTranslations("transit");
   const tc = useTranslations("common");
   const [tab, setTab] = useState<"departures" | "arrivals">("departures");
-  const { data: departures, isLoading: departuresLoading } = useDepartures(stopId);
-  const { data: arrivals, isLoading: arrivalsLoading } = useArrivals(stopId);
-  const { data: alerts } = useStopAlerts(stopId);
-  const { data: providers } = useProviders();
+  const departuresQuery = useDepartures(stopId);
+  const { data: departures, isLoading: departuresLoading } = departuresQuery;
+  const arrivalsQuery = useArrivals(stopId);
+  const { data: arrivals, isLoading: arrivalsLoading } = arrivalsQuery;
+  const alertsQuery = useStopAlerts(stopId);
+  const { data: alerts } = alertsQuery;
+  const mergedAttributions = useAttributionFromHooks(departuresQuery, arrivalsQuery, alertsQuery);
 
   const alertRouteIds = useMemo(
     () =>
@@ -123,6 +121,12 @@ export function StopBoardView({
         </Box>
       )}
 
+      <AttributionStrip
+        attributions={mergedAttributions}
+        variant="panel-header"
+        label={tc("dataSources")}
+      />
+
       <Box sx={{ flex: 1, overflowY: { xs: "visible", sm: "auto" } }}>
         {alerts && alerts.length > 0 && (
           <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
@@ -146,58 +150,16 @@ export function StopBoardView({
           </Box>
         ) : items && items.length > 0 ? (
           <Box>
-            {items.map((departure) => {
-              const providerId = departure.route.id.split(":")[0] || "entur";
-              const provider = resolveProvider(providers, providerId);
-
-              return (
-                <Box key={`${departure.tripId}-${departure.scheduledAt}-${departure.route.id}`}>
-                  <DepartureRow
-                    departure={departure}
-                    showPlatform
-                    onClick={(item) => onDepartureClick(toMergedDeparture(item))}
-                    hasAlert={alertRouteIds.has(departure.route.id)}
-                  />
-                  <Typography
-                    variant="caption"
-                    color="text.disabled"
-                    sx={{ px: 1.5, pb: 0.5, display: "block", fontSize: "0.65rem" }}
-                  >
-                    {provider.url ? (
-                      <Link
-                        href={provider.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        color="inherit"
-                        underline="hover"
-                      >
-                        {provider.label}
-                      </Link>
-                    ) : (
-                      provider.label
-                    )}
-                    {provider.license &&
-                      (provider.licenseUrl ? (
-                        <>
-                          {" ("}
-                          <Link
-                            href={provider.licenseUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            color="inherit"
-                            underline="hover"
-                          >
-                            {provider.license}
-                          </Link>
-                          {")"}
-                        </>
-                      ) : (
-                        ` (${provider.license})`
-                      ))}
-                  </Typography>
-                </Box>
-              );
-            })}
+            {items.map((departure) => (
+              <Box key={`${departure.tripId}-${departure.scheduledAt}-${departure.route.id}`}>
+                <DepartureRow
+                  departure={departure}
+                  showPlatform
+                  onClick={(item) => onDepartureClick(toMergedDeparture(item))}
+                  hasAlert={alertRouteIds.has(departure.route.id)}
+                />
+              </Box>
+            ))}
           </Box>
         ) : (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>

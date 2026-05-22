@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  buildIntegrationAttribution,
-  escapeHtml,
-  sanitizeUrl,
-  useDebouncedCallback,
-  useOverlayExclusion,
-} from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { escapeHtml, sanitizeUrl, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -16,6 +9,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useAirQualityStore } from "./store";
 
 const AQ_SOURCE_ID = "openaq-air-quality";
@@ -91,11 +85,9 @@ function buildGeoJson(stations: AQStation[]) {
 export function AirQualityLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-air-quality");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useAirQualityStore((s) => s.layerVisible);
   const setLoading = useAirQualityStore((s) => s.setLoading);
+  useIntegrationAttribution("overlay-air-quality", layerVisible);
   useOverlayExclusion("air-quality", layerVisible);
   useLayerReanchor(AQ_LAYER_ID, layerVisible);
   const fetchedRef = useRef(false);
@@ -154,7 +146,6 @@ export function AirQualityLayer() {
         map.addSource(AQ_SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution: attributionHtml,
         });
       }
 

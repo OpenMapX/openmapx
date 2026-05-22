@@ -64,8 +64,31 @@ function providerOverlapsBbox(p: TransitProvider, bbox: BBox): boolean {
   return bboxesOverlap(bbox, pBbox);
 }
 
-/** Merge multiple Attribution[] arrays, deduped by `sourceId`. */
-function mergeAttributions(...lists: Attribution[][]): Attribution[] {
+/**
+ * Merge multiple Attribution[] arrays, deduped by `sourceId`.
+ *
+ * When the host has provided an AttributionIndex on the IntegrationContext, we
+ * delegate the merge to `ctx.attributionIndex.dedupAndOrder`, which:
+ *
+ *   - resolves each sourceId against MOTIS license.json + integration manifest
+ *     dataSources (so the curated row replaces the caller-supplied stub);
+ *   - groups integration-manifest entries before motis-license entries;
+ *   - sorts alphabetically within each group for stable output.
+ *
+ * Without an index, this falls back to the original dedup-only behaviour so
+ * orchestrators wired up before F1+F2 keep working unchanged.
+ */
+function mergeAttributions(
+  index: { dedupAndOrder(attrs: Attribution[]): Attribution[] } | undefined,
+  ...lists: Attribution[][]
+): Attribution[] {
+  if (index) {
+    const all: Attribution[] = [];
+    for (const list of lists) {
+      for (const a of list) all.push(a);
+    }
+    return index.dedupAndOrder(all);
+  }
   const seen = new Set<string>();
   const out: Attribution[] = [];
   for (const list of lists) {
@@ -173,7 +196,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: filtered,
-      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -273,7 +296,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -337,7 +360,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -365,7 +388,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -488,7 +511,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       .filter((v): v is MobilityResult<TransitRoute[]> => v != null);
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -574,7 +597,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       }));
       return {
         data: stops,
-        attributions: mergeAttributions(depRes?.attributions ?? [], journeyRes?.attributions ?? []),
+        attributions: mergeAttributions(
+          ctx.attributionIndex,
+          depRes?.attributions ?? [],
+          journeyRes?.attributions ?? [],
+        ),
         freshness: mergeFreshness(
           depRes?.freshness ?? freshnessNow(),
           journeyRes?.freshness ?? freshnessNow(),
@@ -707,7 +734,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       .filter((v): v is MobilityResult<TransitStop[]> => v != null);
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }

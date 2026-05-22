@@ -1,7 +1,6 @@
 "use client";
 
-import { buildIntegrationAttribution, relativeTime, useOverlayExclusion } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { relativeTime, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -11,6 +10,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useWildfireStore } from "./store";
 
 const SOURCE_ID = "openmapx-wildfires-source";
@@ -81,10 +81,8 @@ function confidenceLabel(conf: string): string {
 export function WildfireLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-wildfires");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useWildfireStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-wildfires", layerVisible);
   const dayRange = useWildfireStore((s) => s.dayRange);
   const source = useWildfireStore((s) => s.source);
   const showHeatmap = useWildfireStore((s) => s.showHeatmap);
@@ -146,7 +144,6 @@ export function WildfireLayer() {
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution: attributionHtml,
           });
         }
 

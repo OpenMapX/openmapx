@@ -1,12 +1,12 @@
 "use client";
 
-import { buildIntegrationAttribution, useOverlayExclusion } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { useOverlayExclusion } from "@openmapx/core";
 import { useCallback, useEffect, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { type Capabilities, GIBS_LAYERS, useSatelliteStore } from "./store";
 
 const SOURCE_ID = "openmapx-satellite-gibs-source";
@@ -19,10 +19,8 @@ function getLayerDef(id: string) {
 export function SatelliteLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-satellite");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useSatelliteStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-satellite", layerVisible);
   const activeLayer = useSatelliteStore((s) => s.activeLayer);
   const date = useSatelliteStore((s) => s.date);
   const opacity = useSatelliteStore((s) => s.opacity);
@@ -143,7 +141,6 @@ export function SatelliteLayer() {
           tiles: [tileUrl],
           tileSize: 256,
           maxzoom: def.maxZoom,
-          attribution: attributionHtml,
         });
       }
 

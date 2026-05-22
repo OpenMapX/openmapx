@@ -9,10 +9,8 @@ import type {
 } from "@openmapx/core";
 import {
   applyClientSideFilters,
-  buildRuntimeAttributionHtml,
-  buildSourceAttribution,
-  combineAttributions,
   createPlace,
+  extractSourcePrefix,
   isPointInBBox,
   PANEL,
   splitFilters,
@@ -24,7 +22,9 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import type { DataSourceAttribution, IntegrationDataSource } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -33,6 +33,7 @@ import { usePinMarker } from "@/hooks/usePinMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useRegisterMapAttribution } from "@/lib/mapAttributionStore";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
@@ -64,7 +65,6 @@ function mapContextOutlineLayerId(dsId: string) {
 
 function buildGeoJson(
   results: DataSourceResult[],
-  attributionHtml: string,
   translateSummary: (summary: string | undefined) => string | undefined,
   imageId?: string,
 ) {
@@ -87,7 +87,27 @@ function buildGeoJson(
         ...(imageId ? { imageId } : {}),
       },
     })),
-    attribution: attributionHtml,
+  };
+}
+
+function manifestSourceToAttribution(ds: IntegrationDataSource): Attribution {
+  return {
+    sourceId: ds.sourceId,
+    name: ds.name,
+    url: ds.url,
+    spdxLicense: ds.license || undefined,
+    licenseUrl: ds.licenseUrl,
+    attributionText: ds.attribution,
+  };
+}
+
+function runtimeAttributionToAttribution(attr: DataSourceAttribution): Attribution {
+  return {
+    sourceId: attr.text || attr.url,
+    name: attr.text,
+    url: attr.url,
+    spdxLicense: attr.license,
+    licenseUrl: attr.licenseUrl,
   };
 }
 
@@ -205,7 +225,6 @@ export function DataSourceLayer() {
 
   const { data: sourcesData } = useDataSources();
   const prevSourceRef = useRef<string | null>(null);
-  const prevAttrRef = useRef<string>("");
 
   // Find meta for the active source
   const activeMeta = useMemo(() => {
@@ -262,19 +281,33 @@ export function DataSourceLayer() {
     mapContextSelection,
   );
 
-  // Build map attribution from only the sources present in visible results
-  const mapAttribution = useMemo(() => {
-    if (!activeSource || visibleResults.length === 0) return "";
+  // Build the Attribution[] contribution for the React-driven attribution
+  // strip from the sources actually present in visible results. The strip
+  // dedupes by `sourceId`, so order matters: manifest-curated entries first,
+  // then runtime/per-result attributions.
+  const layerAttributions = useMemo<Attribution[]>(() => {
+    if (!activeSource || visibleResults.length === 0) return [];
     const meta = registry.get(activeSource);
-    if (!meta?.dataSources) return "";
-    const visibleSources = [
-      ...new Set(visibleResults.flatMap((result) => result.sources ?? [result.source])),
-    ];
-    const manifestAttribution = buildSourceAttribution(meta.dataSources, visibleSources);
-    const perResultAttributions = visibleResults.flatMap((result) => result.attributions ?? []);
-    const runtimeAttributions = perResultAttributions.map(buildRuntimeAttributionHtml);
-    return combineAttributions([manifestAttribution, ...runtimeAttributions]);
+    const dataSources = meta?.dataSources ?? [];
+    const visiblePrefixes = new Set(
+      visibleResults
+        .flatMap((result) => result.sources ?? [result.source])
+        .map((s) => extractSourcePrefix(s)),
+    );
+    const manifest = dataSources
+      .filter((ds) => !ds.dynamic && visiblePrefixes.has(ds.sourceId))
+      .map(manifestSourceToAttribution);
+    const fallback =
+      manifest.length === 0
+        ? dataSources.filter((ds) => !ds.dynamic).map(manifestSourceToAttribution)
+        : [];
+    const runtime = visibleResults
+      .flatMap((result) => result.attributions ?? [])
+      .map(runtimeAttributionToAttribution);
+    return [...manifest, ...fallback, ...runtime];
   }, [activeSource, registry, visibleResults]);
+
+  useRegisterMapAttribution(activeSource ? `data-source:${activeSource}` : null, layerAttributions);
 
   // Show pin marker for hovered item
   const hoveredResult = filteredResults.find((r) => r.id === hoveredItemId) ?? null;
@@ -370,17 +403,9 @@ export function DataSourceLayer() {
       const imageId = useIconMarkers ? `ds-marker-${activeSource}` : undefined;
       const geojson = buildGeoJson(
         filteredResults,
-        mapAttribution,
         (summary) => translateDataSourceSummary(summary, t),
         imageId,
       );
-
-      // MapLibre doesn't support updating source attribution after creation,
-      // so recreate the source when attribution changes.
-      if (map.getSource(sid) && prevAttrRef.current !== geojson.attribution) {
-        removeLayers(map, activeSource);
-      }
-      prevAttrRef.current = geojson.attribution;
 
       if (map.getSource(sid)) {
         (map.getSource(sid) as GeoJSONSource).setData(geojson);
@@ -388,7 +413,6 @@ export function DataSourceLayer() {
         map.addSource(sid, {
           type: "geojson",
           data: geojson,
-          attribution: geojson.attribution,
         });
       }
 
@@ -603,7 +627,6 @@ export function DataSourceLayer() {
     mapReady,
     styleVersion,
     mapRef,
-    mapAttribution,
     mapContext,
     t,
   ]);

@@ -6,10 +6,15 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/integration-framework";
+import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { BoundingBox } from "../types/geometry";
+import {
+  type MobilityEnvelopeQueryResult,
+  wrapMobilityEnvelope,
+} from "./transit/useMobilityEnvelope";
 
 interface DataSourcesResponse {
   sources: (DataSourceMeta & {
@@ -32,8 +37,8 @@ export function useDataSourceSearch(
   sourceId: string | null,
   bbox: BoundingBox | null,
   filters: Record<string, unknown>,
-) {
-  return useQuery({
+): MobilityEnvelopeQueryResult<DataSourceResult[]> {
+  const query = useQuery({
     queryKey: ["data-source-search", sourceId, bbox, filters],
     queryFn: () => {
       if (!bbox) throw new Error("bbox is required");
@@ -52,7 +57,7 @@ export function useDataSourceSearch(
       if (Object.keys(activeFilters).length > 0) {
         params.filters = JSON.stringify(activeFilters);
       }
-      return apiClient.get<DataSourceResult[]>(
+      return apiClient.get<MobilityEnvelope<DataSourceResult[]>>(
         `${API_ENDPOINTS.dataSourceSearch}/${sourceId}/search`,
         params,
       );
@@ -60,18 +65,23 @@ export function useDataSourceSearch(
     enabled: sourceId !== null && bbox !== null,
     staleTime: 30_000,
   });
+  return wrapMobilityEnvelope(query);
 }
 
-export function useDataSourceDetail(sourceId: string | null, itemId: string | null) {
-  return useQuery({
+export function useDataSourceDetail(
+  sourceId: string | null,
+  itemId: string | null,
+): MobilityEnvelopeQueryResult<DataSourceDetail> {
+  const query = useQuery({
     queryKey: ["data-source-detail", sourceId, itemId],
     queryFn: () =>
-      apiClient.get<DataSourceDetail>(
+      apiClient.get<MobilityEnvelope<DataSourceDetail>>(
         `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${itemId}`,
       ),
     enabled: sourceId !== null && itemId !== null,
     staleTime: 5 * 60 * 1000,
   });
+  return wrapMobilityEnvelope(query);
 }
 
 export function useDataSourceMapContext(
@@ -79,8 +89,8 @@ export function useDataSourceMapContext(
   bbox: BoundingBox | null,
   filters: Record<string, unknown>,
   options: DataSourceMapContextSelection,
-) {
-  return useQuery({
+): MobilityEnvelopeQueryResult<DataSourceMapContext | null> {
+  const query = useQuery({
     queryKey: ["data-source-map-context", sourceId, bbox, filters, options],
     queryFn: () => {
       if (!bbox) throw new Error("bbox is required");
@@ -108,7 +118,7 @@ export function useDataSourceMapContext(
       if (Object.keys(activeOptions).length > 0) {
         params.options = JSON.stringify(activeOptions);
       }
-      return apiClient.get<DataSourceMapContext | null>(
+      return apiClient.get<MobilityEnvelope<DataSourceMapContext | null>>(
         `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/map-context`,
         params,
       );
@@ -116,4 +126,5 @@ export function useDataSourceMapContext(
     enabled: sourceId !== null && bbox !== null,
     staleTime: 30_000,
   });
+  return wrapMobilityEnvelope(query);
 }

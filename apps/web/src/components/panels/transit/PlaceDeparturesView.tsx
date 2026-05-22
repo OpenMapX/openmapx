@@ -3,22 +3,21 @@
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
-  resolveProvider,
   useLinkedTransitAlerts,
   useLinkedTransitArrivals,
   useLinkedTransitDepartures,
-  useProviders,
 } from "@openmapx/core";
 import type { MergedDeparture, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { DepartureRow } from "./DepartureRow";
 
 const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {
@@ -50,12 +49,15 @@ export function PlaceDeparturesView({
 }: PlaceDeparturesViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
-  const { data: departures, isLoading: depsLoading } = useLinkedTransitDepartures(place);
-  const { data: providers } = useProviders();
+  const departuresQuery = useLinkedTransitDepartures(place);
+  const { data: departures, isLoading: depsLoading } = departuresQuery;
   const [tab, setTab] = useState<"departures" | "arrivals">("departures");
-  const { data: arrivals, isLoading: arrivalsLoading } = useLinkedTransitArrivals(place);
+  const arrivalsQuery = useLinkedTransitArrivals(place);
+  const { data: arrivals, isLoading: arrivalsLoading } = arrivalsQuery;
 
-  const { data: alerts } = useLinkedTransitAlerts(place);
+  const alertsQuery = useLinkedTransitAlerts(place);
+  const { data: alerts } = alertsQuery;
+  const mergedAttributions = useAttributionFromHooks(departuresQuery, arrivalsQuery, alertsQuery);
 
   const alertRouteIds = useMemo(
     () =>
@@ -132,6 +134,11 @@ export function PlaceDeparturesView({
           </ToggleButtonGroup>
         </Box>
       )}
+      <AttributionStrip
+        attributions={mergedAttributions}
+        variant="panel-header"
+        label={tc("dataSources")}
+      />
 
       {/* Scrollable list area — on desktop this is the only thing that scrolls */}
       <Box sx={{ flex: 1, overflowY: { xs: "visible", sm: "auto" } }}>
@@ -162,53 +169,6 @@ export function PlaceDeparturesView({
                   onClick={(dep) => onDepartureClick(dep as MergedDeparture)}
                   hasAlert={alertRouteIds.has(dep.route.id)}
                 />
-                {dep.providers.length > 0 && (
-                  <Typography
-                    variant="caption"
-                    color="text.disabled"
-                    sx={{ px: 1.5, pb: 0.5, display: "block", fontSize: "0.65rem" }}
-                  >
-                    {dep.providers.map((p, i) => {
-                      const attr = resolveProvider(providers, p);
-                      return (
-                        <span key={p}>
-                          {i > 0 && " · "}
-                          {attr.url ? (
-                            <Link
-                              href={attr.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              color="inherit"
-                              underline="hover"
-                            >
-                              {attr.label}
-                            </Link>
-                          ) : (
-                            attr.label
-                          )}
-                          {attr.license &&
-                            (attr.licenseUrl ? (
-                              <>
-                                {" ("}
-                                <Link
-                                  href={attr.licenseUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  color="inherit"
-                                  underline="hover"
-                                >
-                                  {attr.license}
-                                </Link>
-                                {")"}
-                              </>
-                            ) : (
-                              ` (${attr.license})`
-                            ))}
-                        </span>
-                      );
-                    })}
-                  </Typography>
-                )}
               </Box>
             ))}
           </Box>

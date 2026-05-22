@@ -1,7 +1,5 @@
 "use client";
 
-import { buildIntegrationAttribution } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useEffect } from "react";
 import {
   getFirstSymbolLayerId,
@@ -11,6 +9,7 @@ import {
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useTrafficStore } from "./store";
 
 const TRAFFIC_SOURCE_ID = "openmapx-traffic-source";
@@ -19,10 +18,8 @@ const TRAFFIC_LAYER_ID = "openmapx-traffic-layer";
 export function TrafficLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-traffic-tomtom");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const showTraffic = useTrafficStore((s) => s.panelOpen && s.layerVisible);
+  useIntegrationAttribution("overlay-traffic-tomtom", showTraffic);
   useLayerReanchor(TRAFFIC_LAYER_ID, showTraffic);
 
   useEffect(() => {
@@ -41,7 +38,6 @@ export function TrafficLayer() {
           type: "raster",
           tiles: [env.trafficTileUrlTemplate],
           tileSize: 256,
-          attribution: attributionHtml,
         });
       }
 

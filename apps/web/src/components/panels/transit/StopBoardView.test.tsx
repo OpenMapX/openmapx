@@ -30,9 +30,14 @@ const alerts = [
   },
 ];
 
+const sharedAttributions = [
+  { sourceId: "entur", name: "Entur", url: "https://entur.no", spdxLicense: "CC-BY-4.0" },
+];
+
 vi.mock("next-intl", () => ({
   useTranslations: (namespace: string) => (key: string, values?: Record<string, unknown>) => {
     if (namespace === "common" && key === "back") return "Back";
+    if (namespace === "common" && key === "dataSources") return "Data sources";
     if (key === "noDeparturesGeneric") return `No ${String(values?.tab ?? "departures")} found.`;
     return (
       {
@@ -44,17 +49,23 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@openmapx/core", () => ({
-  useDepartures: () => ({ data: departures, isLoading: false }),
-  useArrivals: () => ({ data: [], isLoading: false }),
-  useStopAlerts: () => ({ data: alerts }),
-  useProviders: () => ({
-    data: [{ id: "entur", label: "Entur", url: "https://entur.no", license: "CC-BY 4.0" }],
+  useDepartures: () => ({
+    data: departures,
+    isLoading: false,
+    attributions: sharedAttributions,
   }),
-  resolveProvider: (providers: Array<{ id: string; label: string }>, providerId: string) =>
-    providers.find((provider) => provider.id === providerId) ?? {
-      id: providerId,
-      label: providerId,
-    },
+  useArrivals: () => ({ data: [], isLoading: false, attributions: [] }),
+  useStopAlerts: () => ({ data: alerts, attributions: [] }),
+}));
+
+vi.mock("@/components/ui/AttributionStrip", () => ({
+  AttributionStrip: ({ attributions }: { attributions: Array<{ name: string }> }) => (
+    <div data-testid="attribution-strip">{attributions.map((a) => a.name).join(" · ")}</div>
+  ),
+}));
+
+vi.mock("@/lib/useAttributionFromHooks", () => ({
+  useAttributionFromHooks: () => sharedAttributions,
 }));
 
 vi.mock("./DepartureRow", () => ({
@@ -86,6 +97,7 @@ describe("StopBoardView", () => {
 
     expect(markup).toContain("Platform change");
     expect(markup).toContain("Kongsvinger:alert");
+    // AttributionStrip mock renders source names — confirms strip is wired.
     expect(markup).toContain("Entur");
   });
 });

@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  buildIntegrationAttribution,
-  escapeHtml,
-  relativeTime,
-  sanitizeUrl,
-  useOverlayExclusion,
-} from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { escapeHtml, relativeTime, sanitizeUrl, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -17,6 +10,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useEarthquakeStore } from "./store";
 
 const SOURCE_ID = "openmapx-earthquakes-source";
@@ -142,10 +136,8 @@ function depthLabel(depth: number): string {
 export function EarthquakeLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-earthquakes");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useEarthquakeStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-earthquakes", layerVisible);
   const timeRange = useEarthquakeStore((s) => s.timeRange);
   const minMagnitude = useEarthquakeStore((s) => s.minMagnitude);
   const colorMode = useEarthquakeStore((s) => s.colorMode);
@@ -214,7 +206,6 @@ export function EarthquakeLayer() {
           map.addSource(SOURCE_ID, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution: attributionHtml,
           });
         }
 

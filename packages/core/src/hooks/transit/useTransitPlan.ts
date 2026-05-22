@@ -1,8 +1,10 @@
+import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TripPlan } from "@openmapx/mobility-core/transit";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import type { LngLat } from "../../types/geometry";
+import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
 
 interface UseTransitPlanParams {
   origin: LngLat | null;
@@ -29,13 +31,13 @@ export function useTransitPlan({
   arriveBy,
   numItineraries,
   lang,
-}: UseTransitPlanParams) {
+}: UseTransitPlanParams): MobilityEnvelopeQueryResult<TripPlan> {
   // When no explicit time is set, floor "now" to the current minute so that
   // React Query can serve cached results for up to staleTime (2 min) instead
   // of treating every refetch as a new query due to a fresh timestamp.
   const effectiveTime = arriveBy ?? departAt ?? floorToMinute(new Date().toISOString());
 
-  return useQuery({
+  const query = useQuery({
     queryKey: [
       "transit-plan",
       origin,
@@ -63,10 +65,11 @@ export function useTransitPlan({
       if (lang) {
         params.lang = lang;
       }
-      return apiClient.get<TripPlan>(API_ENDPOINTS.transitPlan, params);
+      return apiClient.get<MobilityEnvelope<TripPlan>>(API_ENDPOINTS.transitPlan, params);
     },
     enabled: origin !== null && destination !== null,
     staleTime: 120_000,
     gcTime: 600_000,
   });
+  return wrapMobilityEnvelope(query);
 }

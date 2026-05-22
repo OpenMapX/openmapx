@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  buildIntegrationAttribution,
-  escapeHtml,
-  useDebouncedCallback,
-  useOverlayExclusion,
-} from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -15,6 +9,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
 
 const ENV_SOURCE_ID = "opensensemap-env";
@@ -147,10 +142,8 @@ function buildColorExpr(scale: ColorScale): unknown[] {
 export function EnvironmentLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-environment");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useEnvironmentStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-environment", layerVisible);
   const sensorType = useEnvironmentStore((s) => s.sensorType);
   const setLoading = useEnvironmentStore((s) => s.setLoading);
   const setStationCount = useEnvironmentStore((s) => s.setStationCount);
@@ -231,7 +224,6 @@ export function EnvironmentLayer() {
         map.addSource(ENV_SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution: attributionHtml,
         });
       }
 

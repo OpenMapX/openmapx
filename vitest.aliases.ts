@@ -58,5 +58,11 @@ export function createRepoVitestAliases(repoRoot: string) {
       find: /^@integrations\/(.+)$/,
       replacement: resolve(repoRoot, "integrations/$1"),
     },
+    // `@/*` resolves to `apps/web/src/*` to match the Next.js path alias so
+    // tests can import the web app's source modules.
+    {
+      find: /^@\/(.+)$/,
+      replacement: resolve(repoRoot, "apps/web/src/$1"),
+    },
   ];
 }

@@ -13,7 +13,6 @@ import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
@@ -22,11 +21,10 @@ import {
   formatDuration,
   geocodeStopAsPlace,
   PANEL,
-  resolveProvider,
   usePlaceStore,
-  useProviders,
   useSidebarStore,
 } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MergedDeparture, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -41,11 +39,28 @@ import { LegAlerts } from "@/components/panels/transit/LegAlerts";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+
+/**
+ * A leg's per-leg attribution set is redundant when it carries no entries or
+ * exactly mirrors the trip-level union; in either case we suppress the inline
+ * strip so the panel-level credits remain the single source of truth.
+ */
+function isPerLegRedundant(
+  legAttrs: Attribution[] | undefined,
+  tripAttrs: Attribution[] | undefined,
+): boolean {
+  if (!legAttrs || legAttrs.length === 0) return true;
+  const trip = tripAttrs ?? [];
+  if (legAttrs.length !== trip.length) return false;
+  const legIds = new Set(legAttrs.map((a) => a.sourceId));
+  return trip.every((a) => legIds.has(a.sourceId));
+}
 
 function legToMergedDeparture(leg: TripLeg, provider?: string): MergedDeparture {
   return {
@@ -69,20 +84,23 @@ export function TransitDetailsView({
   originLabel,
   destinationLabel,
   provider,
+  attributions,
   onBack,
 }: {
   itinerary: TripItinerary;
   isLowestCo2?: boolean;
   originLabel: string;
   destinationLabel: string;
+  /** Provider id (e.g. "motis", "otp") — kept for legToMergedDeparture context. */
   provider?: string;
+  /** Trip-plan envelope attributions, rendered at the bottom of the details. */
+  attributions?: Attribution[];
   onBack: () => void;
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tt = useTranslations("transit");
   const locale = useLocale();
-  const { data: providers } = useProviders();
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo } = useMap();
@@ -349,6 +367,11 @@ export function TransitDetailsView({
                       />
                       <LegAlerts routeId={leg.routeId} />
                       {leg.tripId && <LegRemarks tripId={leg.tripId} />}
+                      {!isPerLegRedundant(leg.attributions, attributions) && (
+                        <Box sx={{ mt: 0.5 }}>
+                          <AttributionStrip attributions={leg.attributions} variant="inline" />
+                        </Box>
+                      )}
                     </Box>
                   )}
                 </Box>
@@ -449,48 +472,11 @@ export function TransitDetailsView({
       })()}
 
       {/* Data source attribution */}
-      {provider &&
-        (() => {
-          const attr = resolveProvider(providers, provider);
-          return (
-            <Box sx={{ px: 2, py: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
-              <Typography variant="caption" color="text.disabled">
-                {tc("data")}:{" "}
-                {attr.url ? (
-                  <Link
-                    href={attr.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    color="inherit"
-                    underline="hover"
-                  >
-                    {attr.label}
-                  </Link>
-                ) : (
-                  attr.label
-                )}
-                {attr.license &&
-                  (attr.licenseUrl ? (
-                    <>
-                      {" ("}
-                      <Link
-                        href={attr.licenseUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        color="inherit"
-                        underline="hover"
-                      >
-                        {attr.license}
-                      </Link>
-                      {")"}
-                    </>
-                  ) : (
-                    ` (${attr.license})`
-                  ))}
-              </Typography>
-            </Box>
-          );
-        })()}
+      <AttributionStrip
+        attributions={attributions ?? []}
+        variant="panel-header"
+        label={tc("dataSources")}
+      />
     </Box>
   );
 }

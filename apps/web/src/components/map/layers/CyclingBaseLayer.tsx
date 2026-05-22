@@ -1,44 +1,43 @@
 "use client";
 
-import { buildAttributionHtml, useLayerStore } from "@openmapx/core";
-import { useEffect, useRef, useState } from "react";
+import { useLayerStore } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { RasterBaseLayer } from "./RasterBaseLayer";
 
-const OSM_ATTRIBUTION = buildAttributionHtml({
-  name: "OpenStreetMap",
+const OSM_ATTRIBUTION: Attribution = {
+  sourceId: "openstreetmap",
+  name: "© OpenStreetMap contributors",
   url: "https://www.openstreetmap.org/copyright",
-  license: "CC-BY-SA",
-  licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
-  attribution:
-    '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a> (<a href="https://creativecommons.org/licenses/by-sa/2.0/" target="_blank" rel="noopener noreferrer">CC-BY-SA</a>)',
-});
+  spdxLicense: "ODbL-1.0",
+  licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+};
 
-const CYCLOSM_ATTRIBUTION = [
-  buildAttributionHtml({
-    name: "CyclOSM",
+const CYCLOSM_ATTRIBUTIONS: Attribution[] = [
+  {
+    sourceId: "cyclosm",
+    name: "© CyclOSM",
     url: "https://www.cyclosm.org/",
-    license: "",
-    attribution:
-      '© <a href="https://www.cyclosm.org/" target="_blank" rel="noopener noreferrer">CyclOSM</a> hosted by <a href="https://openstreetmap.fr/" target="_blank" rel="noopener noreferrer">OpenStreetMap France</a>',
-  }),
+    publisher: { name: "OpenStreetMap France", url: "https://openstreetmap.fr/" },
+  },
   OSM_ATTRIBUTION,
-].join(" · ");
+];
 
-const THUNDERFOREST_ATTRIBUTION = [
-  buildAttributionHtml({
-    name: "Thunderforest OpenCycleMap",
+const THUNDERFOREST_ATTRIBUTIONS: Attribution[] = [
+  {
+    sourceId: "thunderforest",
+    name: "© Thunderforest OpenCycleMap",
     url: "https://www.thunderforest.com/maps/opencyclemap/",
-    license: "",
-  }),
+  },
   OSM_ATTRIBUTION,
-].join(" · ");
+];
 
 export function CyclingBaseLayer() {
   const env = useEnv();
   const tileUrl = env.cyclOsmTileUrlTemplate;
   const activeLayer = useLayerStore((s) => s.activeLayer);
-  const [attribution, setAttribution] = useState(CYCLOSM_ATTRIBUTION);
+  const [provider, setProvider] = useState<"cyclosm" | "thunderforest">("cyclosm");
   const probed = useRef(false);
 
   useEffect(() => {
@@ -51,11 +50,16 @@ export function CyclingBaseLayer() {
       .then((res) => {
         const source = res.headers.get("X-Tile-Source");
         if (source === "thunderforest") {
-          setAttribution(THUNDERFOREST_ATTRIBUTION);
+          setProvider("thunderforest");
         }
       })
       .catch(() => {});
   }, [activeLayer, tileUrl]);
+
+  const attributions = useMemo(
+    () => (provider === "thunderforest" ? THUNDERFOREST_ATTRIBUTIONS : CYCLOSM_ATTRIBUTIONS),
+    [provider],
+  );
 
   return (
     <RasterBaseLayer
@@ -64,7 +68,7 @@ export function CyclingBaseLayer() {
       tiles={[tileUrl]}
       activeWhen="cycling"
       maxzoom={20}
-      attribution={attribution}
+      attributions={attributions}
       paint={{ "raster-opacity": 0.95 }}
     />
   );

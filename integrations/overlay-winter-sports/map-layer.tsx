@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  buildIntegrationAttribution,
-  escapeHtml,
-  useDebouncedCallback,
-  useOverlayExclusion,
-} from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -14,6 +8,7 @@ import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useWinterSportsStore } from "./store";
 
 const RASTER_SOURCE_ID = "openmapx-opensnowmap-source";
@@ -117,10 +112,8 @@ function liftPopupHtml(props: Record<string, string | number | boolean>): string
 export function WinterSportsLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-winter-sports");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useWinterSportsStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-winter-sports", layerVisible);
   const setLoading = useWinterSportsStore((s) => s.setLoading);
   const selectFeature = useWinterSportsStore((s) => s.selectFeature);
   useOverlayExclusion("winter-sports", layerVisible);
@@ -257,7 +250,6 @@ export function WinterSportsLayer() {
           tiles: [`${env.apiUrl}/api/integrations/overlay-winter-sports/tiles/{z}/{x}/{y}.png`],
           tileSize: 256,
           maxzoom: 16,
-          attribution: attributionHtml,
         });
       }
 

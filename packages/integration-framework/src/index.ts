@@ -6,6 +6,7 @@ export {
   registerCommunityModule,
 } from "./community";
 export type {
+  AttributionIndexHandle,
   CacheClient,
   CustomHealthCheckFn,
   DatabaseClient,

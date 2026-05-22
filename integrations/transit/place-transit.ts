@@ -54,7 +54,23 @@ function emptyResult<T>(data: T, opts?: { hasRealtimeData?: boolean }): Mobility
   return { data, attributions: [], freshness: freshnessNow(opts) };
 }
 
-function mergeAttributions(...lists: Attribution[][]): Attribution[] {
+/**
+ * Merge multiple Attribution[] arrays. When the host provides an
+ * AttributionIndex on the IntegrationContext, delegate dedup + ordering to it
+ * (so MOTIS license.json and manifest dataSources stay the single source of
+ * truth). Otherwise fall back to simple dedup-by-sourceId.
+ */
+function mergeAttributions(
+  index: { dedupAndOrder(attrs: Attribution[]): Attribution[] } | undefined,
+  ...lists: Attribution[][]
+): Attribution[] {
+  if (index) {
+    const all: Attribution[] = [];
+    for (const list of lists) {
+      for (const a of list) all.push(a);
+    }
+    return index.dedupAndOrder(all);
+  }
   const seen = new Set<string>();
   const out: Attribution[] = [];
   for (const list of lists) {
@@ -200,7 +216,10 @@ export function createPlaceTransit(
     const variantResults = await Promise.all(
       variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
     );
-    const attributions = mergeAttributions(...variantResults.map((r) => r.attributions));
+    const attributions = mergeAttributions(
+      ctx.attributionIndex,
+      ...variantResults.map((r) => r.attributions),
+    );
     const freshness = mergeFreshness(...variantResults.map((r) => r.freshness));
     const seen = new Set<string>();
     const raw = variantResults
@@ -364,7 +383,7 @@ export function createPlaceTransit(
       return a.shortName.localeCompare(b.shortName);
     });
 
-    const attributions = mergeAttributions(...allAttribs);
+    const attributions = mergeAttributions(ctx.attributionIndex, ...allAttribs);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedRoutes = { routes: merged, attributions, freshness };
     await cache.set(key, envelope, TTL.placeRoutes);
@@ -496,7 +515,7 @@ export function createPlaceTransit(
     );
     return {
       data: unique,
-      attributions: mergeAttributions(...allAttribs),
+      attributions: mergeAttributions(ctx.attributionIndex, ...allAttribs),
       freshness: mergeFreshness(...allFresh),
     };
   }
@@ -516,7 +535,11 @@ export function createPlaceTransit(
     );
     return {
       data: merged.data,
-      attributions: mergeAttributions(stopsRes.attributions, merged.attributions),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        stopsRes.attributions,
+        merged.attributions,
+      ),
       freshness: mergeFreshness(stopsRes.freshness, merged.freshness),
     };
   }
@@ -536,7 +559,11 @@ export function createPlaceTransit(
     );
     return {
       data: merged.data,
-      attributions: mergeAttributions(stopsRes.attributions, merged.attributions),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        stopsRes.attributions,
+        merged.attributions,
+      ),
       freshness: mergeFreshness(stopsRes.freshness, merged.freshness),
     };
   }
@@ -606,7 +633,7 @@ export function createPlaceTransit(
     }
 
     const merged = Array.from(byId.values());
-    const attributions = mergeAttributions(...allAttribs);
+    const attributions = mergeAttributions(ctx.attributionIndex, ...allAttribs);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedAlerts = { alerts: merged, attributions, freshness };
     await cache.set(key, envelope, TTL.placeAlerts);
@@ -668,7 +695,7 @@ export function createPlaceTransit(
     }
 
     const merged = Array.from(byId.values());
-    const attributions = mergeAttributions(...allAttribs);
+    const attributions = mergeAttributions(ctx.attributionIndex, ...allAttribs);
     const freshness = mergeFreshness(...allFresh);
     const envelope: CachedFacilities = { facilities: merged, attributions, freshness };
     await cache.set(key, envelope, TTL.placeFacilities);

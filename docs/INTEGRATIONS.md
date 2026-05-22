@@ -36,6 +36,30 @@ binds the external specifiers to ESM modules under
 React instance used by the host app, keeping hooks, contexts, and Zustand
 stores coherent.
 
+### Map attribution rendering
+
+The map's bottom-right attribution strip is driven by React, not by
+MapLibre's built-in `AttributionControl`. There is a single rendering path:
+`<AttributionStrip variant="footer">` mounted via
+`apps/web/src/components/map/MapAttributionStrip.tsx`, fed by the
+`useMapAttributionStore` Zustand store
+(`apps/web/src/lib/mapAttributionStore.ts`).
+
+Layer authors that previously set MapLibre's per-source
+`attribution: "..."` string must instead register an `Attribution[]` while
+their layer is active:
+
+- Integration map layers (one entry in `manifest.dataSources`): call
+  `useIntegrationAttribution(integrationId, layerVisible)` from
+  `@/lib/useIntegrationAttribution`.
+- Custom layers (no integration manifest, or multi-integration
+  aggregations): call `useRegisterMapAttribution(layerKey, attributions)`
+  directly from `@/lib/mapAttributionStore`.
+
+Do not pass `attribution` on `map.addSource(...)` — MapLibre's own
+`AttributionControl` is disabled (`attributionControl: false` at
+`MapCanvas`), so any source-side string is dropped on the floor.
+
 ### CLI workflows
 
 ```sh

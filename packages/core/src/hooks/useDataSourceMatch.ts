@@ -1,4 +1,5 @@
 import type { DataSourceDetail, DataSourceResult } from "@openmapx/integration-framework";
+import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
@@ -76,7 +77,7 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
   const lng = place?.coordinates[0] ?? 0;
 
   // Search for nearby data source items
-  const { data: nearbyResults } = useQuery({
+  const { data: nearbyEnvelope } = useQuery({
     queryKey: ["ds-match-search", sourceId, lat, lng],
     queryFn: () => {
       const params: Record<string, string> = {
@@ -85,7 +86,7 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
         north: String(lat + SEARCH_DELTA),
         east: String(lng + SEARCH_DELTA),
       };
-      return apiClient.get<DataSourceResult[]>(
+      return apiClient.get<MobilityEnvelope<DataSourceResult[]>>(
         `${API_ENDPOINTS.dataSourceSearch}/${sourceId}/search`,
         params,
       );
@@ -93,6 +94,7 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
     enabled: sourceId !== null && place !== null,
     staleTime: 5 * 60 * 1000,
   });
+  const nearbyResults = nearbyEnvelope?.data;
 
   // Find the closest match by coordinate proximity
   let bestMatch: DataSourceResult | null = null;
@@ -112,15 +114,16 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
   }
 
   // Fetch detail for the closest match
-  const { data: detail } = useQuery({
+  const { data: detailEnvelope } = useQuery({
     queryKey: ["ds-match-detail", sourceId, bestMatch?.id],
     queryFn: () =>
-      apiClient.get<DataSourceDetail>(
+      apiClient.get<MobilityEnvelope<DataSourceDetail>>(
         `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${bestMatch?.id}`,
       ),
     enabled: sourceId !== null && bestMatch !== null,
     staleTime: 5 * 60 * 1000,
   });
+  const detail = detailEnvelope?.data;
 
   // Filter out minimal fallback details that have no useful data (e.g. when
   // the upstream provider is unavailable and only an Overpass stub is returned).

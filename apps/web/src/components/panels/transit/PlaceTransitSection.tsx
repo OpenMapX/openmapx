@@ -18,18 +18,18 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
-  resolveProvider,
   useLinkedTransitAlerts,
   useLinkedTransitDepartures,
   useLinkedTransitFacilities,
   useLinkedTransitRoutes,
-  useProviders,
 } from "@openmapx/core";
 import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { KeyboardEvent } from "react";
 import { useMemo } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { TEAL } from "@/lib/theme";
+import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
 import { FacilitiesSection } from "./FacilitiesSection";
@@ -77,11 +77,21 @@ export function PlaceTransitSection({
   onOpenTripDetail,
 }: PlaceTransitSectionProps) {
   const t = useTranslations("transit");
-  const { data: routes, isLoading } = useLinkedTransitRoutes(place);
-  const { data: providers } = useProviders();
-  const { data: alerts } = useLinkedTransitAlerts(place);
-  const { data: departures, isLoading: depsLoading } = useLinkedTransitDepartures(place);
-  const { data: facilities } = useLinkedTransitFacilities(place);
+  const tc = useTranslations("common");
+  const routesQuery = useLinkedTransitRoutes(place);
+  const { data: routes, isLoading } = routesQuery;
+  const alertsQuery = useLinkedTransitAlerts(place);
+  const { data: alerts } = alertsQuery;
+  const departuresQuery = useLinkedTransitDepartures(place);
+  const { data: departures, isLoading: depsLoading } = departuresQuery;
+  const facilitiesQuery = useLinkedTransitFacilities(place);
+  const { data: facilities } = facilitiesQuery;
+  const mergedAttributions = useAttributionFromHooks(
+    routesQuery,
+    alertsQuery,
+    departuresQuery,
+    facilitiesQuery,
+  );
 
   const alertRouteIds = useMemo(
     () =>
@@ -167,29 +177,27 @@ export function PlaceTransitSection({
               <ChevronRightIcon sx={{ fontSize: 14, color: "text.disabled" }} />
             </ButtonBase>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
-              {modeRoutes.slice(0, MAX_BADGES_PER_MODE).map((route) => (
-                <Tooltip
-                  key={route.id}
-                  title={route.providers
-                    .map((p) => {
-                      const attr = resolveProvider(providers, p);
-                      return attr.license ? `${attr.label} (${attr.license})` : attr.label;
-                    })
-                    .join(" · ")}
-                  placement="top"
-                  arrow
-                >
-                  <span>
-                    <RouteBadge
-                      shortName={route.shortName}
-                      color={route.color}
-                      textColor={route.textColor}
-                      mode={route.mode}
-                      onClick={onOpenLineDetail ? () => onOpenLineDetail(route) : undefined}
-                    />
-                  </span>
-                </Tooltip>
-              ))}
+              {modeRoutes.slice(0, MAX_BADGES_PER_MODE).map((route) => {
+                const tooltipTitle = route.providers
+                  .map((p) => {
+                    const matched = mergedAttributions.find((a) => a.sourceId === p);
+                    return matched?.name ?? p;
+                  })
+                  .join(" · ");
+                return (
+                  <Tooltip key={route.id} title={tooltipTitle} placement="top" arrow>
+                    <span>
+                      <RouteBadge
+                        shortName={route.shortName}
+                        color={route.color}
+                        textColor={route.textColor}
+                        mode={route.mode}
+                        onClick={onOpenLineDetail ? () => onOpenLineDetail(route) : undefined}
+                      />
+                    </span>
+                  </Tooltip>
+                );
+              })}
               {modeRoutes.length > MAX_BADGES_PER_MODE && (
                 <Typography
                   component="span"
@@ -273,6 +281,11 @@ export function PlaceTransitSection({
       >
         {t("viewDeparturesArrivals")}
       </Button>
+      <AttributionStrip
+        attributions={mergedAttributions}
+        variant="inline"
+        label={tc("dataSources")}
+      />
     </Box>
   );
 }

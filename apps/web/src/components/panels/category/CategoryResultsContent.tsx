@@ -6,7 +6,6 @@ import TramIcon from "@mui/icons-material/Tram";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
-import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { CategoryPlace } from "@openmapx/core";
@@ -14,19 +13,19 @@ import {
   categoryPlaceToPlace,
   isAreaTooLarge,
   PANEL,
-  resolveProvider,
   resolveStopAsPlace,
   useCategorySearchStore,
   useFilteredCategoryResults,
   usePlaceStore,
-  useProviders,
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/lib/MapContext";
+import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   rail: TrainIcon,
@@ -37,11 +36,9 @@ const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
 function TransitStopCard({
   stop,
   onSelect,
-  providers,
 }: {
   stop: TransitStop;
   onSelect: (stop: TransitStop) => void;
-  providers: Record<string, { label: string; url?: string }> | undefined;
 }) {
   return (
     <Box
@@ -67,45 +64,6 @@ function TransitStopCard({
           const Icon = TRANSIT_MODE_ICONS[m] ?? DirectionsBusIcon;
           return <Icon key={m} sx={{ fontSize: 16, color: "text.secondary" }} />;
         })}
-        {(() => {
-          const attr = resolveProvider(providers ?? {}, stop.provider);
-          return (
-            <Typography variant="caption" color="text.secondary">
-              {attr.url ? (
-                <Link
-                  href={attr.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  color="inherit"
-                  underline="hover"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {attr.label}
-                </Link>
-              ) : (
-                attr.label
-              )}
-              {attr.license &&
-                (attr.licenseUrl ? (
-                  <>
-                    {" ("}
-                    <Link
-                      href={attr.licenseUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      color="inherit"
-                      underline="hover"
-                    >
-                      {attr.license}
-                    </Link>
-                    {")"}
-                  </>
-                ) : (
-                  ` (${attr.license})`
-                ))}
-            </Typography>
-          );
-        })()}
       </Box>
     </Box>
   );
@@ -218,10 +176,9 @@ export function CategoryResultsContent() {
 
   const { filtered, isLoading, isError, error, partial, isTransitCategory } =
     useFilteredCategoryResults();
-  const { data: transitStops, isPending: transitPending } = useTransitStops(
-    isTransitCategory ? searchBbox : null,
-  );
-  const { data: providers } = useProviders();
+  const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
+  const { data: transitStops, isPending: transitPending } = transitStopsQuery;
+  const transitAttributions = useAttributionFromHooks(transitStopsQuery);
   const transitLoading = isTransitCategory && transitPending;
 
   const prevCategoryRef = useRef<string | null>(null);
@@ -323,10 +280,15 @@ export function CategoryResultsContent() {
               {tc("stopsCount", { count: transitStops.length })}
             </Typography>
           </Box>
+          <AttributionStrip
+            attributions={transitAttributions}
+            variant="inline"
+            label={tc("dataSources")}
+          />
           {transitStops.map((stop, i) => (
             <Box key={stop.id}>
               {i > 0 && <Divider sx={{ mx: 2 }} />}
-              <TransitStopCard stop={stop} onSelect={handleSelectStop} providers={providers} />
+              <TransitStopCard stop={stop} onSelect={handleSelectStop} />
             </Box>
           ))}
         </>

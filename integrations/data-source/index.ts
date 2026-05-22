@@ -47,7 +47,11 @@ export function setup(ctx: IntegrationContext): void {
         provider.search(bbox, filters),
       );
       reply.header("Cache-Control", `public, max-age=${Math.min(searchTtl, 300)}`);
-      reply.send(envelope.data);
+      reply.send({
+        data: envelope.data,
+        attributions: envelope.attributions,
+        freshness: envelope.freshness,
+      });
     } catch (err) {
       if (err instanceof ConfigurationError) {
         reply.status(503).send({ error: err.message });
@@ -82,7 +86,11 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       reply.header("Cache-Control", `public, max-age=${Math.min(detailTtl, 300)}`);
-      reply.send(envelope.data);
+      reply.send({
+        data: envelope.data,
+        attributions: envelope.attributions,
+        freshness: envelope.freshness,
+      });
     } catch (err) {
       if (err instanceof ConfigurationError) {
         reply.status(503).send({ error: err.message });
@@ -101,7 +109,15 @@ export function setup(ctx: IntegrationContext): void {
 
     const getMapContext = provider.getMapContext;
     if (!getMapContext) {
-      reply.send(null);
+      reply.send({
+        data: null,
+        attributions: [],
+        freshness: {
+          fetchedAt: new Date().toISOString(),
+          hasRealtimeData: false,
+          isStale: false,
+        },
+      });
       return;
     }
 
@@ -145,7 +161,11 @@ export function setup(ctx: IntegrationContext): void {
         getMapContext(bbox, filters, options),
       );
       reply.header("Cache-Control", `public, max-age=${Math.min(ttl, 300)}`);
-      reply.send(envelope.data ?? null);
+      reply.send({
+        data: envelope.data ?? null,
+        attributions: envelope.attributions,
+        freshness: envelope.freshness,
+      });
     } catch (err) {
       if (err instanceof ConfigurationError) {
         reply.status(503).send({ error: err.message });

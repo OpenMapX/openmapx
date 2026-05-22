@@ -10,6 +10,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useWeatherAlertStore } from "./store";
 
 const SOURCE_ID = "openmapx-weather-alerts-source";
@@ -83,6 +84,7 @@ export function WeatherAlertLayer() {
   const setAlertCount = useWeatherAlertStore((s) => s.setAlertCount);
   const setLastUpdated = useWeatherAlertStore((s) => s.setLastUpdated);
 
+  useIntegrationAttribution("overlay-weather-alerts", layerVisible);
   useOverlayExclusion("weather-alerts", layerVisible);
   useLayerReanchor(ALL_LAYER_IDS, layerVisible);
 
@@ -145,8 +147,6 @@ export function WeatherAlertLayer() {
         map.addSource(SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution:
-            '© <a href="https://www.weather.gov/" target="_blank" rel="noreferrer">NOAA</a> · <a href="https://weather.gc.ca/" target="_blank" rel="noreferrer">ECCC</a> · <a href="https://www.dwd.de/" target="_blank" rel="noreferrer">DWD</a> · <a href="https://www.meteoalarm.org/" target="_blank" rel="noreferrer">MeteoAlarm</a>',
         });
       }
 

@@ -3,15 +3,12 @@
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
   MODE_COLORS,
-  resolveProvider,
   useLinkedTransitStops,
-  useProviders,
   useRouteAlerts,
   useRouteStops,
   useTransitRoute,
@@ -19,7 +16,9 @@ import {
 import type { MergedRoute, TransitRoute, TransitStop } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { PRIMARY_BLUE } from "@/lib/theme";
+import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { AlertsBanner } from "./AlertsBanner";
 import { RouteBadge } from "./RouteBadge";
 
@@ -48,7 +47,8 @@ export function LineDetail({
 }: LineDetailProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
-  const { data: routeData, isLoading: routeLoading } = useTransitRoute(routeId);
+  const routeQuery = useTransitRoute(routeId);
+  const { data: routeData, isLoading: routeLoading } = routeQuery;
   // Fall back to the already-fetched hint so the header is never empty.
   // routeData is TransitRoute (no providers), routeHint is MergedRoute (has providers).
   const route: (TransitRoute & { providers?: string[] }) | null = routeData ?? routeHint ?? null;
@@ -57,7 +57,8 @@ export function LineDetail({
   // Derive a hint stop for providers without a route-stops endpoint.
   // Prefer route-specific hint from backend, otherwise pick a stop from the
   // same provider as the route.
-  const { data: linkedStops } = useLinkedTransitStops(place ?? null);
+  const linkedStopsQuery = useLinkedTransitStops(place ?? null);
+  const { data: linkedStops } = linkedStopsQuery;
   const hintStopId = useMemo(() => {
     if (routeHint?.hintStopId) return routeHint.hintStopId;
     if (!linkedStops?.length) return undefined;
@@ -69,9 +70,16 @@ export function LineDetail({
     return linkedStops[0].id;
   }, [linkedStops, providersList, routeHint?.hintStopId]);
 
-  const { data: stops, isLoading: stopsLoading } = useRouteStops(routeId, hintStopId);
-  const { data: alerts } = useRouteAlerts(routeId);
-  const { data: providers } = useProviders();
+  const stopsQuery = useRouteStops(routeId, hintStopId);
+  const { data: stops, isLoading: stopsLoading } = stopsQuery;
+  const alertsQuery = useRouteAlerts(routeId);
+  const { data: alerts } = alertsQuery;
+  const mergedAttributions = useAttributionFromHooks(
+    routeQuery,
+    stopsQuery,
+    alertsQuery,
+    linkedStopsQuery,
+  );
 
   const lineColor = route?.color
     ? `#${route.color.replace("#", "")}`
@@ -222,52 +230,11 @@ export function LineDetail({
       </Box>
 
       {/* Attribution */}
-      {route && providersList.length > 0 && (
-        <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-          <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.65rem" }}>
-            {tc("data")}:{" "}
-            {providersList.map((p, i) => {
-              const attr = resolveProvider(providers, p);
-              return (
-                <span key={p}>
-                  {i > 0 && " · "}
-                  {attr.url ? (
-                    <Link
-                      href={attr.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      color="inherit"
-                      underline="hover"
-                    >
-                      {attr.label}
-                    </Link>
-                  ) : (
-                    attr.label
-                  )}
-                  {attr.license &&
-                    (attr.licenseUrl ? (
-                      <>
-                        {" ("}
-                        <Link
-                          href={attr.licenseUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          color="inherit"
-                          underline="hover"
-                        >
-                          {attr.license}
-                        </Link>
-                        {")"}
-                      </>
-                    ) : (
-                      ` (${attr.license})`
-                    ))}
-                </span>
-              );
-            })}
-          </Typography>
-        </Box>
-      )}
+      <AttributionStrip
+        attributions={mergedAttributions}
+        variant="panel-header"
+        label={tc("dataSources")}
+      />
     </Box>
   );
 }

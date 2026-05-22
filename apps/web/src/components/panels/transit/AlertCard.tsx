@@ -4,9 +4,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import Box from "@mui/material/Box";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import { resolveProvider, useProviders } from "@openmapx/core";
 import type { AlertSeverity, ServiceAlert } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -71,7 +69,6 @@ interface AlertCardProps {
 export function AlertCard({ alert, compact = false, expandable = true }: AlertCardProps) {
   const _t = useTranslations("transit");
   const [descExpanded, setDescExpanded] = useState(false);
-  const { data: providers } = useProviders();
   const config = SEVERITY_CONFIG[alert.severity];
   const Icon = config.icon;
 
@@ -123,53 +120,6 @@ export function AlertCard({ alert, compact = false, expandable = true }: AlertCa
             }}
           >
             {alert.description}
-          </Typography>
-        )}
-        {!compact && alert.providers.length > 0 && (
-          <Typography
-            variant="caption"
-            color="text.disabled"
-            sx={{ display: "block", mt: 0.5, fontSize: "0.65rem" }}
-          >
-            {alert.providers.map((p, i) => {
-              const attr = resolveProvider(providers, p);
-              return (
-                <span key={p}>
-                  {i > 0 && " · "}
-                  {attr.url ? (
-                    <Link
-                      href={attr.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      color="inherit"
-                      underline="hover"
-                    >
-                      {attr.label}
-                    </Link>
-                  ) : (
-                    attr.label
-                  )}
-                  {attr.license &&
-                    (attr.licenseUrl ? (
-                      <>
-                        {" ("}
-                        <Link
-                          href={attr.licenseUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          color="inherit"
-                          underline="hover"
-                        >
-                          {attr.license}
-                        </Link>
-                        {")"}
-                      </>
-                    ) : (
-                      ` (${attr.license})`
-                    ))}
-                </span>
-              );
-            })}
           </Typography>
         )}
       </Box>

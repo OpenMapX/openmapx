@@ -7,21 +7,16 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import {
-  MODE_COLORS,
-  resolveProvider,
-  useProviders,
-  useRouteAlerts,
-  useVehicleJourney,
-} from "@openmapx/core";
+import { MODE_COLORS, useRouteAlerts, useVehicleJourney } from "@openmapx/core";
 import type { MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { formatTime } from "@/lib/formatTime";
 import { TEAL } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { AlertsBanner } from "./AlertsBanner";
 import { RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
@@ -36,14 +31,11 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
   const t = useTranslations("transit");
   const tc = useTranslations("common");
   const locale = useLocale();
-  const {
-    data: journey,
-    isLoading,
-    isError,
-    refetch,
-  } = useVehicleJourney(departure.tripId || null, departure.tripIds);
-  const { data: alerts } = useRouteAlerts(departure.route.id);
-  const { data: providers } = useProviders();
+  const journeyQuery = useVehicleJourney(departure.tripId || null, departure.tripIds);
+  const { data: journey, isLoading, isError, refetch } = journeyQuery;
+  const alertsQuery = useRouteAlerts(departure.route.id);
+  const { data: alerts } = alertsQuery;
+  const mergedAttributions = useAttributionFromHooks(journeyQuery, alertsQuery);
 
   const isDelayed = (departure.delaySeconds ?? 0) > 60;
   const isCanceled = departure.canceled === true;
@@ -435,52 +427,11 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
       </Box>
 
       {/* Attribution */}
-      {departure.providers.length > 0 && (
-        <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-          <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.65rem" }}>
-            {tc("data")}:{" "}
-            {departure.providers.map((p, i) => {
-              const attr = resolveProvider(providers, p);
-              return (
-                <span key={p}>
-                  {i > 0 && " · "}
-                  {attr.url ? (
-                    <Link
-                      href={attr.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      color="inherit"
-                      underline="hover"
-                    >
-                      {attr.label}
-                    </Link>
-                  ) : (
-                    attr.label
-                  )}
-                  {attr.license &&
-                    (attr.licenseUrl ? (
-                      <>
-                        {" ("}
-                        <Link
-                          href={attr.licenseUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          color="inherit"
-                          underline="hover"
-                        >
-                          {attr.license}
-                        </Link>
-                        {")"}
-                      </>
-                    ) : (
-                      ` (${attr.license})`
-                    ))}
-                </span>
-              );
-            })}
-          </Typography>
-        </Box>
-      )}
+      <AttributionStrip
+        attributions={mergedAttributions}
+        variant="panel-header"
+        label={tc("dataSources")}
+      />
     </Box>
   );
 }

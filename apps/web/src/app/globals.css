@@ -57,11 +57,6 @@ main {
   height: 100%;
 }
 
-/* Override MapLibre's default attribution style to be more subtle */
-.maplibregl-ctrl-attrib {
-  font-size: 10px;
-}
-
 /* Shared MapLibre popup styling */
 @layer base {
   .omx-popup.maplibregl-popup .maplibregl-popup-content {

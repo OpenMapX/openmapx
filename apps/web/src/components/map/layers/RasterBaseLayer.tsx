@@ -2,9 +2,11 @@
 
 import type { MapLayer } from "@openmapx/core";
 import { useLayerStore } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { LayerSpecification } from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
+import { useRegisterMapAttribution } from "@/lib/mapAttributionStore";
 import { getFirstSymbolLayerId, setLayerVisibility } from "./layerStyleUtils";
 
 type RasterPaint = Extract<LayerSpecification, { type: "raster" }>["paint"];
@@ -16,7 +18,12 @@ interface RasterBaseLayerProps {
   activeWhen: MapLayer;
   tileSize?: number;
   maxzoom?: number;
-  attribution: string;
+  /**
+   * Attributions to register with the map's React-driven attribution strip
+   * while this layer is the active base. No source-side `attribution` string
+   * is set on MapLibre — the strip is the single rendering path.
+   */
+  attributions: Attribution[];
   paint?: RasterPaint;
 }
 
@@ -27,11 +34,16 @@ export function RasterBaseLayer({
   activeWhen,
   tileSize = 256,
   maxzoom = 20,
-  attribution,
+  attributions,
   paint,
 }: RasterBaseLayerProps) {
   const { mapRef, mapReady, styleVersion } = useMap();
   const activeLayer = useLayerStore((s) => s.activeLayer);
+  const shouldShow = activeLayer === activeWhen;
+
+  // Only contribute to the attribution strip while this raster layer is the
+  // active base. When inactive, an empty list effectively unregisters.
+  useRegisterMapAttribution(`raster:${sourceId}`, shouldShow ? attributions : []);
 
   useEffect(() => {
     void styleVersion;
@@ -46,18 +58,8 @@ export function RasterBaseLayer({
         map.once("idle", syncLayer);
         return;
       }
-      const shouldShow = activeLayer === activeWhen;
 
       if (tiles.length === 0) return;
-
-      const existingSource = map.getSource(sourceId);
-      if (shouldShow && existingSource) {
-        const current = (existingSource as { attribution?: string }).attribution;
-        if (current !== attribution) {
-          if (map.getLayer(layerId)) map.removeLayer(layerId);
-          map.removeSource(sourceId);
-        }
-      }
 
       if (shouldShow && !map.getSource(sourceId)) {
         map.addSource(sourceId, {
@@ -65,7 +67,6 @@ export function RasterBaseLayer({
           tiles,
           tileSize,
           maxzoom,
-          attribution,
         });
       }
 
@@ -91,8 +92,7 @@ export function RasterBaseLayer({
       map.off("styledata", syncLayer);
     };
   }, [
-    activeLayer,
-    activeWhen,
+    shouldShow,
     mapReady,
     styleVersion,
     mapRef,
@@ -101,7 +101,6 @@ export function RasterBaseLayer({
     tiles,
     tileSize,
     maxzoom,
-    attribution,
     paint,
   ]);
 

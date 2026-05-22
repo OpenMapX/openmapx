@@ -9,15 +9,12 @@ import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import Link from "@mui/material/Link";
 import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
 import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
 import {
-  buildIntegrationAttribution,
   formatDistance,
   formatDuration,
-  resolveProvider,
   useAutocomplete,
   useCapabilities,
   useDebounce,
@@ -26,11 +23,11 @@ import {
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
-  useProviders,
   useSidebarStore,
   useTransitPlan,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import type { ChangeEvent } from "react";
@@ -43,7 +40,9 @@ import { TransitDetailsView } from "@/components/panels/directions/TransitDetail
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
 import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { TEAL } from "@/lib/theme";
+import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 
 function toDateTimeLocalString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -85,7 +84,6 @@ export function DirectionsPanelContent() {
   } = useDirectionsStore();
 
   const { userLocation } = useMapStore();
-  const { data: providers } = useProviders();
   const registry = useIntegrationRegistry();
   const { services: caps } = useCapabilities();
   const queryClient = useQueryClient();
@@ -142,17 +140,19 @@ export function DirectionsPanelContent() {
       ? debouncedArrivalTime.toISOString()
       : undefined;
 
-  const {
-    data: transitPlanData,
-    isLoading: transitLoading,
-    isError: transitError,
-  } = useTransitPlan({
+  const transitPlanQuery = useTransitPlan({
     origin: isTransitMode ? origin : null,
     destination: isTransitMode ? destination : null,
     departAt: transitDepartAtStr,
     arriveBy: transitArriveByStr,
     numItineraries,
   });
+  const {
+    data: transitPlanData,
+    isLoading: transitLoading,
+    isError: transitError,
+  } = transitPlanQuery;
+  const transitPlanAttributions = useAttributionFromHooks(transitPlanQuery);
 
   useEffect(() => {
     if (transitPlanData?.itineraries) {
@@ -174,17 +174,39 @@ export function DirectionsPanelContent() {
   const detailsRoute =
     detailsRouteIndex !== null ? (data?.routes[detailsRouteIndex] ?? null) : null;
 
-  const routingAttribution = useMemo(() => {
+  const routingAttributions = useMemo<Attribution[]>(() => {
+    function toAttributions(
+      sources:
+        | Array<{
+            sourceId: string;
+            name: string;
+            url?: string;
+            license?: string;
+            licenseUrl?: string;
+            attribution?: string;
+          }>
+        | undefined,
+    ): Attribution[] {
+      if (!sources) return [];
+      return sources.map((s) => ({
+        sourceId: s.sourceId,
+        name: s.name,
+        url: s.url,
+        spdxLicense: s.license,
+        licenseUrl: s.licenseUrl,
+        attributionText: s.attribution,
+      }));
+    }
     if (data?.provider) {
       const meta = registry.get(data.provider);
-      if (meta) return buildIntegrationAttribution(meta.dataSources);
+      if (meta) return toAttributions(meta.dataSources);
     }
     const routingIntegrations = registry.getByDomain("routing").filter((r) => {
       const cap = caps[r.id];
       return cap ? cap.available && cap.healthy : false;
     });
-    if (!routingIntegrations.length) return "";
-    return buildIntegrationAttribution(routingIntegrations[0].dataSources);
+    if (!routingIntegrations.length) return [];
+    return toAttributions(routingIntegrations[0].dataSources);
   }, [registry, caps, data?.provider]);
 
   const getCachedTime = (m: TravelMode): string | undefined => {
@@ -330,6 +352,7 @@ export function DirectionsPanelContent() {
         originLabel={originLabel}
         destinationLabel={destinationLabel}
         provider={transitPlanData?.provider}
+        attributions={transitPlanAttributions}
         onBack={() => setTransitDetailsIndex(null)}
       />
     );
@@ -692,48 +715,11 @@ export function DirectionsPanelContent() {
                   </Typography>
                 </Box>
               )}
-              {transitPlanData?.provider &&
-                (() => {
-                  const attr = resolveProvider(providers, transitPlanData.provider ?? "");
-                  return (
-                    <Box sx={{ px: 2, py: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
-                      <Typography variant="caption" color="text.disabled">
-                        {tc("data")}:{" "}
-                        {attr.url ? (
-                          <Link
-                            href={attr.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            color="inherit"
-                            underline="hover"
-                          >
-                            {attr.label}
-                          </Link>
-                        ) : (
-                          attr.label
-                        )}
-                        {attr.license &&
-                          (attr.licenseUrl ? (
-                            <>
-                              {" ("}
-                              <Link
-                                href={attr.licenseUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                color="inherit"
-                                underline="hover"
-                              >
-                                {attr.license}
-                              </Link>
-                              {")"}
-                            </>
-                          ) : (
-                            ` (${attr.license})`
-                          ))}
-                      </Typography>
-                    </Box>
-                  );
-                })()}
+              <AttributionStrip
+                attributions={transitPlanAttributions}
+                variant="panel-header"
+                label={tc("dataSources")}
+              />
             </>
           )
         ) : isLoading ? (
@@ -823,17 +809,11 @@ export function DirectionsPanelContent() {
                 </Box>
               </Box>
             </Box>
-            {routingAttribution && (
-              <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-                <Typography
-                  variant="caption"
-                  color="text.disabled"
-                  sx={{ "& a": { color: "inherit", textDecoration: "underline" } }}
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
-                  dangerouslySetInnerHTML={{ __html: routingAttribution }}
-                />
-              </Box>
-            )}
+            <AttributionStrip
+              attributions={routingAttributions}
+              variant="panel-header"
+              label={tc("dataSources")}
+            />
           </>
         ) : data?.routes.length ? (
           <>
@@ -851,17 +831,11 @@ export function DirectionsPanelContent() {
                 {i < data.routes.length - 1 && <Divider />}
               </Box>
             ))}
-            {routingAttribution && (
-              <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
-                <Typography
-                  variant="caption"
-                  color="text.disabled"
-                  sx={{ "& a": { color: "inherit", textDecoration: "underline" } }}
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
-                  dangerouslySetInnerHTML={{ __html: routingAttribution }}
-                />
-              </Box>
-            )}
+            <AttributionStrip
+              attributions={routingAttributions}
+              variant="panel-header"
+              label={tc("dataSources")}
+            />
           </>
         ) : null}
 

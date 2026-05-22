@@ -9,7 +9,6 @@ import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
-import { useMapAttributionExpandedObserver } from "@/lib/mapAttributionExpanded";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -20,7 +19,6 @@ export function MapCanvas() {
   const resolvedMode = mode === "system" ? systemMode : mode;
   const mapStyle = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
-  useMapAttributionExpandedObserver();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: mapStyle intentionally excluded — style changes handled by the style-swap effect below
   useEffect(() => {
@@ -46,6 +44,9 @@ export function MapCanvas() {
 
       if (destroyed || !containerRef.current) return;
 
+      // Attribution is rendered exclusively by the React `<MapAttributionStrip>`
+      // host (driven by `useMapAttributionStore`). MapLibre's built-in
+      // AttributionControl is disabled so there's a single rendering path.
       const map = new maplibregl.Map({
         container: containerRef.current,
         style: style as string | maplibregl.StyleSpecification,
@@ -55,40 +56,6 @@ export function MapCanvas() {
         pitch,
         attributionControl: false,
         canvasContextAttributes: { antialias: true },
-      });
-
-      // MapLibre's built-in auto-compact uses the *map element* width, which
-      // drops below 640px on desktop whenever a side panel is open and
-      // incorrectly collapses the attribution into an "i" button. Drive the
-      // compact flag from the *viewport* width instead, and only let MapLibre's
-      // auto-mode (compact: undefined) decide on mobile, where the attribution
-      // would otherwise wrap across the footer/legal links.
-      const mobileViewport = window.matchMedia("(max-width: 640px)");
-      let attribControl = new maplibregl.AttributionControl({
-        compact: mobileViewport.matches ? undefined : false,
-      });
-      map.addControl(attribControl, "bottom-right");
-      const closeDetails = () => {
-        const attrib = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-        if (attrib instanceof HTMLDetailsElement) attrib.open = false;
-        attrib?.classList.remove("maplibregl-compact-show");
-      };
-      closeDetails();
-
-      // Re-create the control when the viewport crosses the mobile breakpoint
-      // (e.g. window resize on a laptop, device rotation). MapLibre exposes no
-      // runtime setter for `compact`, so swap the control instance.
-      const handleViewportChange = () => {
-        map.removeControl(attribControl);
-        attribControl = new maplibregl.AttributionControl({
-          compact: mobileViewport.matches ? undefined : false,
-        });
-        map.addControl(attribControl, "bottom-right");
-        closeDetails();
-      };
-      mobileViewport.addEventListener("change", handleViewportChange);
-      map.once("remove", () => {
-        mobileViewport.removeEventListener("change", handleViewportChange);
       });
 
       map.on("moveend", () => {

@@ -47,3 +47,14 @@ export function withAttribution<T>(
 ): MobilityResult<T> {
   return { data, attributions, freshness };
 }
+
+/**
+ * Wire-format envelope returned by `/api/integrations/transit/*` and
+ * `/api/integrations/data-source/*` routes that resolve to a MobilityResult.
+ * Identical to MobilityResult<T> minus `trace`, which is server-side only.
+ */
+export interface MobilityEnvelope<T> {
+  data: T;
+  attributions: Attribution[];
+  freshness: Freshness;
+}

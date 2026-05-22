@@ -1,7 +1,6 @@
 "use client";
 
-import { buildIntegrationAttribution, escapeHtml, useOverlayExclusion } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { escapeHtml, useOverlayExclusion } from "@openmapx/core";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -11,6 +10,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useNaturalEventStore } from "./store";
 
 const SOURCE_ID = "openmapx-natural-events-source";
@@ -98,11 +98,9 @@ function buildFilterExpr(active: Set<string>): maplibregl.ExpressionSpecificatio
 export function NaturalEventLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-natural-events");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const t = useTranslations("naturalEvents");
   const layerVisible = useNaturalEventStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-natural-events", layerVisible);
   const days = useNaturalEventStore((s) => s.days);
   const activeCategories = useNaturalEventStore((s) => s.activeCategories);
   const setLoading = useNaturalEventStore((s) => s.setLoading);
@@ -181,7 +179,6 @@ export function NaturalEventLayer() {
         map.addSource(SOURCE_ID, {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
-          attribution: attributionHtml,
         });
       }
 

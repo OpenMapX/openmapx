@@ -1,8 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { setupCloud } from "./cloud.js";
-import { getFeedProviders, setupLocal } from "./local.js";
-
-export { getFeedProviders };
+import { setupLocal } from "./local.js";
 
 export function setup(ctx: IntegrationContext): void {
   setupLocal(ctx);

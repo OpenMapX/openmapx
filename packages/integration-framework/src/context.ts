@@ -72,6 +72,24 @@ export interface SecretsClient {
   get(key: string): Promise<string | null>;
 }
 
+/**
+ * Minimal AttributionIndex shape — the actual implementation lives in
+ * `apps/api/src/services/attribution/`. Declared here as a structural
+ * interface so the integration framework doesn't depend on apps/api at
+ * compile time.
+ */
+export interface AttributionIndexHandle {
+  getById(sourceId: string): import("@openmapx/mobility-core/attribution").Attribution | undefined;
+  getForMotisFile(
+    filename: string,
+  ): import("@openmapx/mobility-core/attribution").Attribution | undefined;
+  dedupAndOrder(
+    attrs: import("@openmapx/mobility-core/attribution").Attribution[],
+  ): import("@openmapx/mobility-core/attribution").Attribution[];
+  /** Enumerate every loaded MOTIS feed tag. */
+  listMotisFeedTags(): string[];
+}
+
 export interface IntegrationContext {
   readonly id: string;
   readonly manifest: IntegrationManifest;
@@ -82,6 +100,15 @@ export interface IntegrationContext {
   readonly db?: DatabaseClient;
   readonly log: Logger;
   readonly secrets: SecretsClient;
+
+  /**
+   * Optional handle to the host's AttributionIndex. When present, providers
+   * and orchestrators can resolve sourceIds against the MOTIS license.json +
+   * integration-manifest dataSources without re-reading those sources.
+   * Undefined when the host has not initialised an index (e.g. tests, dev
+   * scripts).
+   */
+  readonly attributionIndex?: AttributionIndexHandle;
 
   /**
    * Untyped registrar for domains that don't yet have a canonical contract.

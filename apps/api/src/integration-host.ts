@@ -28,6 +28,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db, sql as pgClient } from "./db";
 import { integrationConfig } from "./db/schema";
 import { redis } from "./redis";
+import {
+  AttributionIndex,
+  defaultMotisLicenseFile,
+  getAttributionIndex,
+  setAttributionIndex,
+} from "./services/attribution";
+import type { ManifestDataSource } from "./services/attribution/types";
 import { loadAllBindingsByIntegration } from "./services/capability-bindings";
 import { searchCatalog } from "./services/gtfs/catalog";
 import { gtfsManager } from "./services/gtfs/index";
@@ -630,6 +637,44 @@ function topologicalSort(entries: DiscoveredEntry[]): DiscoveredEntry[] {
   return result;
 }
 
+function collectManifestDataSources(
+  entries: Array<{ manifest: Record<string, unknown> }>,
+): ManifestDataSource[] {
+  const out: ManifestDataSource[] = [];
+  for (const { manifest } of entries) {
+    const dataSources = manifest.dataSources;
+    if (!Array.isArray(dataSources)) continue;
+    for (const ds of dataSources) {
+      if (!ds || typeof ds !== "object") continue;
+      const row = ds as Record<string, unknown>;
+      if (typeof row.sourceId !== "string" || typeof row.name !== "string") continue;
+      out.push({
+        sourceId: row.sourceId,
+        name: row.name,
+        url: typeof row.url === "string" ? row.url : undefined,
+        license: typeof row.license === "string" ? row.license : undefined,
+        licenseUrl: typeof row.licenseUrl === "string" ? row.licenseUrl : undefined,
+        attribution: typeof row.attribution === "string" ? row.attribution : undefined,
+        commercialUse:
+          typeof row.commercialUse === "string"
+            ? (row.commercialUse as ManifestDataSource["commercialUse"])
+            : undefined,
+        providerCountry: typeof row.providerCountry === "string" ? row.providerCountry : undefined,
+        providerPrivacyUrl:
+          typeof row.providerPrivacyUrl === "string" ? row.providerPrivacyUrl : undefined,
+        endUserExposure:
+          typeof row.endUserExposure === "string"
+            ? (row.endUserExposure as ManifestDataSource["endUserExposure"])
+            : undefined,
+        personalData: typeof row.personalData === "boolean" ? row.personalData : undefined,
+        cookies: typeof row.cookies === "boolean" ? row.cookies : undefined,
+        dpaAvailable: typeof row.dpaAvailable === "boolean" ? row.dpaAvailable : undefined,
+      });
+    }
+  }
+  return out;
+}
+
 function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
   const schema = manifest.configSchema as { properties?: Record<string, unknown> } | undefined;
   const props = schema?.properties;
@@ -699,6 +744,29 @@ export async function initIntegrations(
     loadedServices = registryInstance.list();
   } catch {
     fastify.log.debug("Service registry unavailable — requires: resolution skipped");
+  }
+
+  // Initialise the AttributionIndex once per host boot. Pre-loads MOTIS
+  // license.json + every integration manifest's dataSources[] so providers
+  // can resolve attribution rows via ctx.attributionIndex without each one
+  // re-reading the underlying sources.
+  try {
+    const manifestDataSources = collectManifestDataSources(sorted);
+    const attributionLog = {
+      info: (m: string) => fastify.log.info(m),
+      warn: (m: string) => fastify.log.warn(m),
+      error: (m: string) => fastify.log.error(m),
+      debug: (m: string) => fastify.log.debug(m),
+    };
+    const idx = await AttributionIndex.init({
+      redis,
+      log: attributionLog,
+      motisLicenseFile: defaultMotisLicenseFile(),
+      integrationManifests: manifestDataSources,
+    });
+    setAttributionIndex(idx);
+  } catch (err) {
+    fastify.log.warn(err, "AttributionIndex initialization failed (continuing without it)");
   }
 
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
@@ -816,6 +884,7 @@ export async function initIntegrations(
       db: integrationDb,
       log,
       secrets: { get: (key: string) => getSecret(id, key) },
+      attributionIndex: getAttributionIndex() ?? undefined,
       getRequiredService(key: string) {
         return requiresMap.get(key) ?? null;
       },
@@ -1039,6 +1108,19 @@ export async function reloadIntegrations(): Promise<{
     _fastify.log.debug("Service registry unavailable during reload");
   }
 
+  // Refresh the AttributionIndex with the freshly discovered manifests so
+  // any added/removed integrations' dataSources are reflected in resolver
+  // lookups.
+  const existingIndex = getAttributionIndex();
+  if (existingIndex) {
+    existingIndex.setIntegrationManifests(collectManifestDataSources(sorted));
+    try {
+      await existingIndex.reload();
+    } catch (err) {
+      _fastify.log.warn(err, "AttributionIndex reload failed");
+    }
+  }
+
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
     const validation = validateManifest(raw);
     if (!validation.valid) {
@@ -1146,6 +1228,7 @@ export async function reloadIntegrations(): Promise<{
       db: integrationDb,
       log,
       secrets: { get: (key: string) => getSecret(id, key) },
+      attributionIndex: getAttributionIndex() ?? undefined,
       getRequiredService(key: string) {
         return reloadRequiresMap.get(key) ?? null;
       },
@@ -1236,4 +1319,10 @@ export async function shutdownIntegrations(): Promise<void> {
   integrations.clear();
   eventBus.removeAll();
   resetIntegrationRoutes();
+
+  const idx = getAttributionIndex();
+  if (idx) {
+    idx.close();
+    setAttributionIndex(null);
+  }
 }

@@ -1,14 +1,12 @@
 "use client";
 
 import {
-  buildIntegrationAttribution,
   createPlace,
   PANEL,
   useOverlayExclusion,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapLayerMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -17,6 +15,7 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { type HarborFeatureCollection, useNauticalStore } from "./store";
 
 const SEAMARK_SOURCE = "openmapx-nautical-seamark-source";
@@ -260,11 +259,9 @@ function makeKartverketTileUrl(apiUrl: string): string {
 export function NauticalLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-nautical");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
 
   const layerVisible = useNauticalStore((s) => s.panelOpen && s.layerVisible);
+  useIntegrationAttribution("overlay-nautical", layerVisible);
   const showSeamarks = useNauticalStore((s) => s.showSeamarks);
   const showDepth = useNauticalStore((s) => s.showDepth);
   const showNoaaCharts = useNauticalStore((s) => s.showNoaaCharts);
@@ -362,7 +359,6 @@ export function NauticalLayer() {
             tileSize: 256,
             minzoom: 0,
             maxzoom: 8,
-            attribution: attributionHtml,
           });
         }
         if (!map.getLayer(DEPTH_RELIEF_LAYER)) {
@@ -390,7 +386,6 @@ export function NauticalLayer() {
             tiles: [makeDepthContourTileUrl(env.apiUrl)],
             tileSize: 256,
             minzoom: 6,
-            attribution: attributionHtml,
           });
         }
         if (!map.getLayer(DEPTH_CONTOUR_LAYER)) {
@@ -422,7 +417,6 @@ export function NauticalLayer() {
             tileSize: 256,
             minzoom: 3,
             maxzoom: 18,
-            attribution: attributionHtml,
           });
         }
         if (!map.getLayer(NOAA_LAYER)) {
@@ -450,7 +444,6 @@ export function NauticalLayer() {
             tileSize: 256,
             minzoom: 3,
             maxzoom: 18,
-            attribution: attributionHtml,
           });
         }
         if (!map.getLayer(KARTVERKET_LAYER)) {
@@ -477,7 +470,6 @@ export function NauticalLayer() {
             tiles: [makeSeamarkTileUrl(env.apiUrl)],
             tileSize: 256,
             maxzoom: 18,
-            attribution: attributionHtml,
           });
         }
         if (!map.getLayer(SEAMARK_LAYER)) {
@@ -502,7 +494,6 @@ export function NauticalLayer() {
           map.addSource(HARBOR_SOURCE, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution: attributionHtml,
           });
         }
         // Symbol layer needs the per-type marker images. Loading is async; the
@@ -561,7 +552,6 @@ export function NauticalLayer() {
           map.addSource(STATION_SOURCE, {
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
-            attribution: attributionHtml,
           });
         }
         if (!map.getLayer(STATION_CIRCLE_LAYER)) {
@@ -625,7 +615,6 @@ export function NauticalLayer() {
     showHarbors,
     showTideStations,
     env.apiUrl,
-    attributionHtml,
   ]);
 
   // Refetch harbors on viewport change

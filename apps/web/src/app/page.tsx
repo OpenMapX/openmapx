@@ -1,7 +1,8 @@
-import { buildAttributionHtml } from "@openmapx/core/server";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { Suspense } from "react";
 import { GlobalKeybindings } from "@/components/command-palette/GlobalKeybindings";
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
+import { BasemapAttribution } from "@/components/map/BasemapAttribution";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
@@ -19,6 +20,7 @@ import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryL
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
+import { MapAttributionStrip } from "@/components/map/MapAttributionStrip";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
 import { MapControls } from "@/components/map/MapControls";
@@ -42,19 +44,38 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/lib/MapContext";
 
-const SATELLITE_ATTRIBUTION = buildAttributionHtml({
-  name: "MapTiler",
-  url: "https://www.maptiler.com/copyright/",
-  license: "Proprietary",
-  licenseUrl: "https://www.maptiler.com/copyright/",
-});
+const SATELLITE_ATTRIBUTIONS: Attribution[] = [
+  {
+    sourceId: "maptiler",
+    name: "© MapTiler",
+    url: "https://www.maptiler.com/copyright/",
+    licenseUrl: "https://www.maptiler.com/copyright/",
+  },
+  {
+    sourceId: "openstreetmap",
+    name: "© OpenStreetMap contributors",
+    url: "https://www.openstreetmap.org/copyright",
+    spdxLicense: "ODbL-1.0",
+    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+  },
+];
 
-const TERRAIN_ATTRIBUTION = buildAttributionHtml({
-  name: "OpenTopoMap",
-  url: "https://opentopomap.org/about",
-  license: "CC-BY-SA",
-  licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
-});
+const TERRAIN_ATTRIBUTIONS: Attribution[] = [
+  {
+    sourceId: "opentopomap",
+    name: "© OpenTopoMap",
+    url: "https://opentopomap.org/about",
+    spdxLicense: "CC-BY-SA-4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+  },
+  {
+    sourceId: "openstreetmap",
+    name: "© OpenStreetMap contributors",
+    url: "https://www.openstreetmap.org/copyright",
+    spdxLicense: "ODbL-1.0",
+    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
+  },
+];
 
 function apiRoute(path: string): string {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
@@ -78,13 +99,14 @@ export default function HomePage() {
         <div className="relative w-full h-dvh overflow-hidden">
           <MapCanvas />
           <GlobeProjection />
+          <BasemapAttribution />
           <RasterBaseLayer
             sourceId="openmapx-satellite-source"
             layerId="openmapx-satellite-layer"
             tiles={satelliteTiles}
             activeWhen="satellite"
             maxzoom={20}
-            attribution={SATELLITE_ATTRIBUTION}
+            attributions={SATELLITE_ATTRIBUTIONS}
           />
           <RasterBaseLayer
             sourceId="openmapx-terrain-source"
@@ -92,7 +114,7 @@ export default function HomePage() {
             tiles={[terrainTileUrl]}
             activeWhen="terrain"
             maxzoom={17}
-            attribution={TERRAIN_ATTRIBUTION}
+            attributions={TERRAIN_ATTRIBUTIONS}
             paint={{ "raster-opacity": 0.95, "raster-saturation": -0.15 }}
           />
           <CyclingBaseLayer />
@@ -133,6 +155,7 @@ export default function HomePage() {
           <LayerSelector />
           <MapControls />
           <MapFooter />
+          <MapAttributionStrip />
           <Suspense>
             <DeepLinkManager />
           </Suspense>

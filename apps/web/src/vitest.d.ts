@@ -21,9 +21,12 @@ declare module "vitest" {
   export const describe: (name: string, callback: VitestTestCallback) => void;
   export const expect: (actual: unknown) => VitestExpectation;
   export const it: (name: string, callback: VitestTestCallback) => void;
+  export const beforeEach: (callback: VitestTestCallback) => void;
+  export const afterEach: (callback: VitestTestCallback) => void;
   export const vi: {
     fn(implementation?: VitestMockImplementation): VitestMockFunction;
     mock(id: string, factory: () => unknown): void;
     mocked<T>(item: T): T;
+    importActual<T = unknown>(id: string): Promise<T>;
   };
 }

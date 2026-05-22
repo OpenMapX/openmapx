@@ -10,6 +10,8 @@ export { useLinkedTransitDepartures } from "./useLinkedTransitDepartures";
 export { useLinkedTransitFacilities } from "./useLinkedTransitFacilities";
 export { useLinkedTransitRoutes } from "./useLinkedTransitRoutes";
 export { useLinkedTransitStops } from "./useLinkedTransitStops";
+export type { MobilityEnvelopeQueryResult } from "./useMobilityEnvelope";
+export { wrapMobilityEnvelope } from "./useMobilityEnvelope";
 export { usePlaceStopInfrastructure } from "./usePlaceStopInfrastructure";
 export { useProviders } from "./useProviders";
 export { useRouteAlerts } from "./useRouteAlerts";

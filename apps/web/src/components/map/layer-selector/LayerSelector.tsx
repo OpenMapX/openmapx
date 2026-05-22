@@ -22,7 +22,6 @@ import { useEffect, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { useMapAttributionExpanded } from "@/lib/mapAttributionExpanded";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -45,7 +44,6 @@ export function LayerSelector() {
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const activeLayer = useLayerStore((s) => s.activeLayer);
-  const attributionExpanded = useMapAttributionExpanded();
 
   const hiddenByFloatingCard =
     (activeCategory !== null && selectedPlace !== null) || (hasSidePanel && selectedPlace !== null);
@@ -156,12 +154,6 @@ export function LayerSelector() {
                 height: 1,
                 opacity: 0,
                 pointerEvents: "none",
-              }
-            : null),
-          ...(attributionExpanded
-            ? {
-                opacity: { xs: 0, sm: 1 },
-                pointerEvents: { xs: "none", sm: "auto" },
               }
             : null),
         }}

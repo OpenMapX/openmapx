@@ -1,8 +1,32 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { Freshness } from "@openmapx/mobility-core/freshness";
+import type { MobilityEnvelope, MobilityResult } from "@openmapx/mobility-core/result";
 import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
 import { createTransitOrchestrator, getTransitProviderAttribution } from "./orchestrator.js";
 import { createPlaceTransit } from "./place-transit.js";
+
+/**
+ * Strip the server-only `trace` field from a MobilityResult and return the
+ * `{ data, attributions, freshness }` envelope sent on the wire (plan §F4/§B5).
+ */
+function toEnvelope<T>(result: MobilityResult<T>): MobilityEnvelope<T> {
+  return {
+    data: result.data,
+    attributions: result.attributions,
+    freshness: result.freshness,
+  };
+}
+
+/** Build an envelope from raw data + a fresh attribution/freshness pair. */
+function envelope<T>(
+  data: T,
+  attributions: Attribution[],
+  freshness: Freshness,
+): MobilityEnvelope<T> {
+  return { data, attributions, freshness };
+}
 
 function parseBBox(q: Record<string, string>): BBox | null {
   const sw_lat = Number(q.sw_lat);
@@ -62,7 +86,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     const result = await orchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /stops/nearby
@@ -79,7 +103,7 @@ export function setup(ctx: IntegrationContext): void {
     const bbox: BBox = [lng - lngDelta, lat - latDelta, lng + lngDelta, lat + latDelta];
     reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
     const result = await orchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /stops/search
@@ -92,7 +116,7 @@ export function setup(ctx: IntegrationContext): void {
     const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
     reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
     const stops = await orchestrator.searchByName(query, limit);
-    reply.send(stops.data);
+    reply.send(toEnvelope(stops));
   });
 
   // GET /stops/near-place
@@ -109,7 +133,7 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /stops/:id
@@ -119,36 +143,36 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Stop not found" });
       return;
     }
-    reply.send(res.data);
+    reply.send(toEnvelope(res));
   });
 
   // GET /stops/:id/infrastructure
   ctx.registerRoute("GET", "/stops/:id/infrastructure", async (req, reply) => {
     const stopId = decodeURIComponent(req.params.id);
     const cacheKey = `stop-infra:${stopId}`;
-    let infrastructure = null;
+    let env: MobilityEnvelope<unknown> | null = null;
     try {
-      infrastructure = await ctx.cache.withCache(cacheKey, 86400, async () => {
+      env = await ctx.cache.withCache(cacheKey, 86400, async () => {
         const res = await orchestrator.getStopInfrastructure(stopId);
         if (!res.data) throw new Error("infrastructure unavailable");
-        return res.data;
+        return toEnvelope(res);
       });
     } catch {
-      infrastructure = null;
+      env = null;
     }
-    if (!infrastructure) {
+    if (!env?.data) {
       reply.status(404).send({ error: "Stop infrastructure not found" });
       return;
     }
     reply.header("Cache-Control", "public, max-age=3600, s-maxage=86400");
-    reply.send(infrastructure);
+    reply.send(env);
   });
 
   // GET /stops/:id/platform-stops
   ctx.registerRoute("GET", "/stops/:id/platform-stops", async (req, reply) => {
     reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
     const result = await orchestrator.getStopPlatforms(decodeURIComponent(req.params.id));
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /stops/:id/timetable
@@ -164,7 +188,7 @@ export function setup(ctx: IntegrationContext): void {
       isPast ? "public, max-age=86400, s-maxage=86400" : "public, max-age=300, s-maxage=300",
     );
     const result = await orchestrator.getStopTimetable(decodeURIComponent(req.params.id), date);
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /stops/:id/departures
@@ -179,7 +203,7 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:departures:${stopId}:${minutes}`;
     const result = await ctx.cache.withCache(cacheKey, 30, async () => {
       const res = await orchestrator.getDepartures(stopId, minutes);
-      return res.data;
+      return toEnvelope(res);
     });
     reply.send(result);
   });
@@ -196,7 +220,7 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:arrivals:${stopId}:${minutes}`;
     const result = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getArrivals(stopId, minutes);
-      return res.data;
+      return toEnvelope(res);
     });
     reply.send(result);
   });
@@ -208,7 +232,7 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:stop-alerts:${stopId}`;
     const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getStopAlerts(stopId);
-      return res.data;
+      return toEnvelope(res);
     });
     reply.send(alerts);
   });
@@ -216,7 +240,7 @@ export function setup(ctx: IntegrationContext): void {
   // GET /stops/:id/facilities
   ctx.registerRoute("GET", "/stops/:id/facilities", async (req, reply) => {
     const result = await orchestrator.getFacilities(decodeURIComponent(req.params.id));
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /routes
@@ -226,7 +250,7 @@ export function setup(ctx: IntegrationContext): void {
       const cacheKey = `transit:routes-for-stop:${stopId}`;
       const routes = await ctx.cache.withCache(cacheKey, 300, async () => {
         const res = await orchestrator.getRoutesForStop(stopId);
-        return res.data;
+        return toEnvelope(res);
       });
       reply.send(routes);
       return;
@@ -237,7 +261,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
     const routes = await orchestrator.getRoutesInBbox(bbox);
-    reply.send(routes.data);
+    reply.send(toEnvelope(routes));
   });
 
   // GET /routes/for-place
@@ -254,26 +278,26 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /routes/:id
   ctx.registerRoute("GET", "/routes/:id", async (req, reply) => {
     const routeId = decodeURIComponent(req.params.id);
     const cacheKey = `transit:route:${routeId}`;
-    let route = await ctx.cache.get(cacheKey);
-    if (!route) {
+    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
+    if (!env) {
       const res = await orchestrator.getRoute(routeId);
-      route = res.data;
-      if (route) {
-        await ctx.cache.set(cacheKey, route, 3600);
+      if (res.data) {
+        env = toEnvelope(res);
+        await ctx.cache.set(cacheKey, env, 3600);
       }
     }
-    if (!route) {
+    if (!env?.data) {
       reply.status(404).send({ error: "Route not found" });
       return;
     }
-    reply.send(route);
+    reply.send(env);
   });
 
   // GET /routes/:id/stops
@@ -283,15 +307,15 @@ export function setup(ctx: IntegrationContext): void {
       ? decodeURIComponent(req.query.hint_stop_id)
       : undefined;
     const cacheKey = `transit:route-stops:${routeId}:${hintStopId ?? ""}`;
-    let stops = await ctx.cache.get(cacheKey);
-    if (!stops) {
+    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown[]> | null;
+    if (!env) {
       const res = await orchestrator.getRouteStops(routeId, hintStopId);
-      stops = res.data;
-      if (Array.isArray(stops) && stops.length > 0) {
-        await ctx.cache.set(cacheKey, stops, 3600);
+      env = toEnvelope(res) as MobilityEnvelope<unknown[]>;
+      if (Array.isArray(env.data) && env.data.length > 0) {
+        await ctx.cache.set(cacheKey, env, 3600);
       }
     }
-    reply.send(stops);
+    reply.send(env);
   });
 
   // GET /routes/:id/alerts
@@ -301,7 +325,7 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:route-alerts:${routeId}`;
     const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getRouteAlerts(routeId);
-      return res.data;
+      return toEnvelope(res);
     });
     reply.send(alerts);
   });
@@ -314,7 +338,24 @@ export function setup(ctx: IntegrationContext): void {
       orchestrator.getVehiclePositions(routeId),
       orchestrator.getRouteAlerts(routeId),
     ]);
-    reply.send({ vehicles: vehicles.data, alerts: alerts.data });
+    const seen = new Set<string>();
+    const mergedAttrs: Attribution[] = [];
+    for (const a of [...vehicles.attributions, ...alerts.attributions]) {
+      if (seen.has(a.sourceId)) continue;
+      seen.add(a.sourceId);
+      mergedAttrs.push(a);
+    }
+    const mergedFreshness: Freshness = {
+      fetchedAt:
+        vehicles.freshness.fetchedAt < alerts.freshness.fetchedAt
+          ? vehicles.freshness.fetchedAt
+          : alerts.freshness.fetchedAt,
+      hasRealtimeData: vehicles.freshness.hasRealtimeData || alerts.freshness.hasRealtimeData,
+      isStale: vehicles.freshness.isStale || alerts.freshness.isStale,
+    };
+    reply.send(
+      envelope({ vehicles: vehicles.data, alerts: alerts.data }, mergedAttrs, mergedFreshness),
+    );
   });
 
   // GET /leg-geometry
@@ -332,17 +373,17 @@ export function setup(ctx: IntegrationContext): void {
     // persist the failure — a transient dbweb timeout would otherwise lock the
     // trip into a 24h 404.
     const cacheKey = `leg-geo:${tripId}:${fromStopId ?? ""}:${toStopId ?? ""}`;
-    let geometry: GeoJSONLineString | null = null;
+    let geometry: MobilityEnvelope<GeoJSONLineString> | null = null;
     try {
       geometry = await ctx.cache.withCache(cacheKey, 86400, async () => {
         const res = await orchestrator.getLegGeometry(tripId, fromStopId, toStopId);
         if (!res.data) throw new Error("geometry unavailable");
-        return res.data;
+        return toEnvelope(res as MobilityResult<GeoJSONLineString>);
       });
     } catch {
       // geometry remains null — transient failure, not cached
     }
-    if (!geometry) {
+    if (!geometry?.data) {
       reply.status(404).send({ error: "Geometry not available for this trip" });
       return;
     }
@@ -391,7 +432,7 @@ export function setup(ctx: IntegrationContext): void {
       });
       return;
     }
-    reply.send(planRes.data);
+    reply.send(toEnvelope(planRes));
   });
 
   // GET /reachable
@@ -412,7 +453,7 @@ export function setup(ctx: IntegrationContext): void {
         maxTravelTime,
         req.query.modes?.split(",").map((m) => m.trim()),
       );
-      return res.data;
+      return toEnvelope(res);
     });
     reply.header("Cache-Control", "public, max-age=300");
     reply.send(results);
@@ -429,7 +470,7 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = `transit:alerts:${bbox.join(",")}`;
     const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
       const res = await orchestrator.getAlerts(bbox);
-      return res.data;
+      return toEnvelope(res);
     });
     reply.send(alerts);
   });
@@ -439,13 +480,13 @@ export function setup(ctx: IntegrationContext): void {
     reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
     if (req.query.route_id) {
       const vehicles = await orchestrator.getVehiclePositions(req.query.route_id);
-      reply.send(vehicles.data);
+      reply.send(toEnvelope(vehicles));
       return;
     }
     const bbox = parseBBox(req.query);
     if (bbox) {
       const vehicles = await orchestrator.getVehicleRadar(bbox);
-      reply.send(vehicles.data);
+      reply.send(toEnvelope(vehicles));
       return;
     }
     reply.status(400).send({
@@ -460,19 +501,19 @@ export function setup(ctx: IntegrationContext): void {
       ? req.query.fallback_ids.split(",").map((s) => decodeURIComponent(s.trim()))
       : undefined;
     const cacheKey = `transit:vehicle-journey:${tripId}:${(fallbackIds ?? []).join(",")}`;
-    let journey = await ctx.cache.get(cacheKey);
-    if (!journey) {
+    let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
+    if (!env) {
       const res = await orchestrator.getVehicleJourney(tripId, fallbackIds);
-      journey = res.data;
-      if (journey) {
-        await ctx.cache.set(cacheKey, journey, 30);
+      if (res.data) {
+        env = toEnvelope(res);
+        await ctx.cache.set(cacheKey, env, 30);
       }
     }
-    if (!journey) {
+    if (!env?.data) {
       reply.status(404).send({ error: "Vehicle journey not found" });
       return;
     }
-    reply.send(journey);
+    reply.send(env);
   });
 
   // GET /departures/for-place
@@ -495,7 +536,7 @@ export function setup(ctx: IntegrationContext): void {
       minutes,
       req.query.place_id,
     );
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /arrivals/for-place
@@ -518,7 +559,7 @@ export function setup(ctx: IntegrationContext): void {
       minutes,
       req.query.place_id,
     );
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /alerts/for-place
@@ -535,7 +576,7 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /facilities/for-place
@@ -552,7 +593,7 @@ export function setup(ctx: IntegrationContext): void {
       place.name,
       req.query.place_id,
     );
-    reply.send(result.data);
+    reply.send(toEnvelope(result));
   });
 
   // GET /providers

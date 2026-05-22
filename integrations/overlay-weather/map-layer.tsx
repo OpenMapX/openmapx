@@ -1,18 +1,17 @@
 "use client";
 
 import {
-  buildIntegrationAttribution,
   type RadarMeta,
   useDebouncedCallback,
   useOverlayExclusion,
   type WeatherSubLayer,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getFirstSymbolLayerId } from "@/components/map/layers/layerStyleUtils";
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { useWeatherStore } from "./store";
 
 const RADAR_SOURCE_PREFIX = "weather-radar-";
@@ -33,10 +32,8 @@ const OWM_LAYER_MAP: Record<WeatherSubLayer, string | null> = {
 export function WeatherLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
-  const registry = useIntegrationRegistry();
-  const meta = registry.get("overlay-weather");
-  const attributionHtml = buildIntegrationAttribution(meta?.dataSources);
   const layerVisible = useWeatherStore((s) => s.layerVisible);
+  useIntegrationAttribution("overlay-weather", layerVisible);
   const activeSubLayer = useWeatherStore((s) => s.activeSubLayer);
   const radarHost = useWeatherStore((s) => s.radarHost);
   const radarPastFrames = useWeatherStore((s) => s.radarPastFrames);
@@ -163,7 +160,6 @@ export function WeatherLayer() {
             tiles: [proxyTileUrl],
             tileSize: 256,
             maxzoom: 7,
-            attribution: attributionHtml,
           });
         }
 
@@ -251,7 +247,6 @@ export function WeatherLayer() {
         type: "raster",
         tiles: [tileUrl],
         tileSize: 256,
-        attribution: attributionHtml,
       });
 
       map.addLayer(

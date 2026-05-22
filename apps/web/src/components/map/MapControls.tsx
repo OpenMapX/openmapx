@@ -14,7 +14,6 @@ import { useEffect, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { MOBILE_SHEET_FOLLOW_CAP_FRACTION } from "@/components/panels/MobileBottomSheet";
 import { useMap } from "@/lib/MapContext";
-import { useMapAttributionExpanded } from "@/lib/mapAttributionExpanded";
 import { useMobilePanelMaxHeight } from "@/lib/mobilePanelHeight";
 import { Pegman } from "./Pegman";
 
@@ -28,7 +27,6 @@ export function MapControls() {
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
   const mobilePanelHeight = useMobilePanelMaxHeight();
-  const attributionExpanded = useMapAttributionExpanded();
   const [vh, setVh] = useState(0);
   useEffect(() => {
     const update = () => setVh(window.innerHeight);
@@ -60,9 +58,7 @@ export function MapControls() {
         alignItems: "center",
         gap: 1,
         zIndex: 10,
-        opacity: { xs: attributionExpanded ? 0 : 1, sm: 1 },
-        pointerEvents: { xs: attributionExpanded ? "none" : "auto", sm: "auto" },
-        transition: "bottom 0.25s ease, opacity 0.18s ease",
+        transition: "bottom 0.25s ease",
       }}
     >
       {/* My location */}

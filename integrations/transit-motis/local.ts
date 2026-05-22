@@ -1,10 +1,9 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { stops } from "@motis-project/motis-client";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { AttributionIndexHandle, IntegrationContext } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
+import type { TripItinerary, TripLeg, TripPlan } from "@openmapx/mobility-core/transit";
 import * as motis from "./adapter.js";
 import { ATTRIBUTION_TRANSITOUS } from "./attributions.js";
 import {
@@ -14,13 +13,6 @@ import {
   transitousInstance,
 } from "./instances.js";
 
-// Populated by setupLocal(ctx); default matches pre-config-cascade behaviour.
-let LICENSE_FILE = join(process.cwd(), "../../infra/docker/data/motis-data", "license.json");
-
-let cachedData: unknown[] | null = null;
-let cachedMtime = 0;
-let cachedFeedAttributionIndex: Map<string, Attribution> | null = null;
-let cachedFeedTagsByLength: string[] | null = null;
 let cachedLocalReachable = false;
 let cachedLocalReachableAt = 0;
 
@@ -43,74 +35,6 @@ function wrapTransitousRT<T>(data: T) {
   return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow({ hasRealtimeData: true }));
 }
 
-function loadAttribution(): unknown[] {
-  if (!existsSync(LICENSE_FILE)) return [];
-  const mtime = statSync(LICENSE_FILE).mtimeMs;
-  if (cachedData && mtime === cachedMtime) return cachedData;
-  try {
-    cachedData = JSON.parse(readFileSync(LICENSE_FILE, "utf-8"));
-    cachedMtime = mtime;
-    // license.json contents changed — invalidate derived feed indexes too.
-    cachedFeedAttributionIndex = null;
-    cachedFeedTagsByLength = null;
-    return cachedData ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Lazily build a `feedTag → Attribution` index from license.json.
- * Reuses `loadAttribution()`'s mtime cache; the derived map is rebuilt whenever
- * the underlying license file changes.
- */
-function getFeedAttributionIndex(): Map<string, Attribution> {
-  const feeds = loadAttribution() as FeedEntry[];
-  if (cachedFeedAttributionIndex) return cachedFeedAttributionIndex;
-  const map = new Map<string, Attribution>();
-  for (const feed of feeds) {
-    if (!feed.filename) continue;
-    const tag = feed.filename.replace(/\.(gtfs|netex)\.zip$/, "");
-    if (!tag) continue;
-    const attribution: Attribution = {
-      sourceId: tag,
-      name: feed.human_name ?? tag,
-      url: feed.publisher?.url ?? feed.source,
-      spdxLicense: feed.spdx_license_identifier,
-      licenseUrl: feed.license_url,
-      attributionText: feed.attribution_text,
-      publisher: feed.publisher
-        ? { name: feed.publisher.name ?? tag, url: feed.publisher.url }
-        : undefined,
-    };
-    map.set(tag, attribution);
-  }
-  cachedFeedAttributionIndex = map;
-  cachedFeedTagsByLength = Array.from(map.keys()).sort((a, b) => b.length - a.length);
-  return map;
-}
-
-/**
- * Strip the MOTIS instance prefix (`ms:` or `mo:`) from an id and find the longest
- * matching feed tag in the index where the remainder starts with `<tag>_`.
- * MOTIS feed tags can themselves contain underscores
- * (e.g. `au-nsw_Transport-for-New-South-Wales-...`), so we cannot just split on
- * the first underscore — we must match against known tags, longest first.
- */
-function feedTagFromId(id: string | undefined): string | undefined {
-  if (!id) return undefined;
-  // Build/refresh the feed index so cachedFeedTagsByLength is populated.
-  getFeedAttributionIndex();
-  const tags = cachedFeedTagsByLength;
-  if (!tags || tags.length === 0) return undefined;
-  const rest = id.replace(/^(ms:|mo:|mr:)/, "");
-  for (const tag of tags) {
-    if (rest === tag) return tag;
-    if (rest.startsWith(`${tag}_`)) return tag;
-  }
-  return undefined;
-}
-
 interface MaybeStopShape {
   id?: unknown;
   stopId?: unknown;
@@ -124,15 +48,38 @@ interface MaybeStopShape {
 }
 
 /**
- * Walk an arbitrary MOTIS-derived response shape and collect every feedTag
+ * Strip the MOTIS instance prefix (`ms:` or `mo:`) from an id and find the
+ * longest matching feed tag in `feedTagsByLength` where the remainder either
+ * equals the tag or starts with `<tag>_`.
+ *
+ * MOTIS feed tags can themselves contain underscores (e.g.
+ * `au-nsw_Transport-for-New-South-Wales-...`), so we cannot just split on the
+ * first underscore — we must match against known tags, longest first.
+ */
+function feedTagFromId(id: string | undefined, feedTagsByLength: string[]): string | undefined {
+  if (!id) return undefined;
+  if (feedTagsByLength.length === 0) return undefined;
+  const rest = id.replace(/^(ms:|mo:|mr:)/, "");
+  for (const tag of feedTagsByLength) {
+    if (rest === tag) return tag;
+    if (rest.startsWith(`${tag}_`)) return tag;
+  }
+  return undefined;
+}
+
+/**
+ * Walk an arbitrary MOTIS-derived response shape and collect every feed tag
  * embedded in stop/trip ids it carries. Deduplicated, insertion-ordered.
+ *
+ * `feedTagsByLength` should be the AttributionIndex's MOTIS feed-tag set
+ * sorted longest-first so prefix matching is unambiguous. If empty, returns
+ * an empty array (the caller will fall back to ATTRIBUTION_LOCAL).
  *
  * Supports: TransitStop, Departure, VehicleJourney, TripPlan, TripItinerary,
  * TripLeg, VehicleJourneyStop, VehiclePosition, and plain arrays of the above.
- * Anything it does not understand contributes zero tags (caller will fall
- * back to `ATTRIBUTION_LOCAL`).
+ * Anything it does not understand contributes zero tags.
  */
-export function extractFeedTags(data: unknown): string[] {
+export function extractFeedTags(data: unknown, feedTagsByLength: string[]): string[] {
   const tags = new Set<string>();
   const visit = (node: unknown): void => {
     if (node === null || node === undefined) return;
@@ -145,10 +92,9 @@ export function extractFeedTags(data: unknown): string[] {
     const candidateIds = [obj.id, obj.stopId, obj.tripId];
     for (const candidate of candidateIds) {
       if (typeof candidate !== "string") continue;
-      const tag = feedTagFromId(candidate);
+      const tag = feedTagFromId(candidate, feedTagsByLength);
       if (tag) tags.add(tag);
     }
-    // Recurse into nested transit shapes.
     if (Array.isArray(obj.legs)) visit(obj.legs);
     if (Array.isArray(obj.itineraries)) visit(obj.itineraries);
     if (Array.isArray(obj.stops)) visit(obj.stops);
@@ -160,30 +106,60 @@ export function extractFeedTags(data: unknown): string[] {
   return Array.from(tags);
 }
 
+/**
+ * Walk each itinerary leg and populate `leg.attributions` based on the feed
+ * tags embedded in the leg's stop/trip ids. Leaves legs with no recognisable
+ * feed tags unchanged (the trip-level envelope still credits the union).
+ *
+ * When `index` is missing or returns no feed tags, all legs pass through
+ * untouched so single-feed planners and offline tests are behaviour-preserving.
+ */
+export function annotateLegsWithAttribution(
+  itineraries: TripItinerary[],
+  index: AttributionIndexHandle | undefined,
+): TripItinerary[] {
+  if (!index) return itineraries;
+  const tagsByLength = index.listMotisFeedTags().sort((a, b) => b.length - a.length);
+  if (tagsByLength.length === 0) return itineraries;
+  return itineraries.map((itin) => ({
+    ...itin,
+    legs: itin.legs.map((leg) => {
+      const legTags = extractFeedTags(leg, tagsByLength);
+      if (legTags.length === 0) return leg;
+      const attributions: Attribution[] = [];
+      for (const tag of legTags) {
+        const attr = index.getById(tag);
+        if (attr) attributions.push(attr);
+      }
+      if (attributions.length === 0) return leg;
+      const next: TripLeg = { ...leg, attributions };
+      return next;
+    }),
+  }));
+}
+
+/**
+ * Wrap a MOTIS-derived value with attributions resolved against the host's
+ * AttributionIndex. Falls back to `ATTRIBUTION_LOCAL` when the index is
+ * absent or when no feed tag in the value matches an indexed entry.
+ */
 function wrapLocalWithFeedAttribution<T>(
   data: T,
+  index: AttributionIndexHandle | undefined,
   isRealtime = false,
-): {
-  data: T;
-  attributions: Attribution[];
-  freshness: ReturnType<typeof freshnessNow>;
-} {
-  const tags = extractFeedTags(data);
-  const index = getFeedAttributionIndex();
+) {
+  if (!index) {
+    return withAttribution(data, ATTRIBUTION_LOCAL, freshnessNow({ hasRealtimeData: isRealtime }));
+  }
+  const tagsByLength = index.listMotisFeedTags().sort((a, b) => b.length - a.length);
+  const tags = extractFeedTags(data, tagsByLength);
   const matched: Attribution[] = [];
   for (const tag of tags) {
-    const attr = index.get(tag);
+    const attr = index.getById(tag);
     if (attr) matched.push(attr);
   }
   const attributions = matched.length > 0 ? matched : ATTRIBUTION_LOCAL;
   return withAttribution(data, attributions, freshnessNow({ hasRealtimeData: isRealtime }));
-}
-
-function wrapLocal<T>(data: T) {
-  return wrapLocalWithFeedAttribution(data, false);
-}
-function wrapLocalRT<T>(data: T) {
-  return wrapLocalWithFeedAttribution(data, true);
 }
 
 /** Check if the local MOTIS instance is reachable. */
@@ -240,43 +216,6 @@ async function planWithInstance(
   );
 }
 
-interface FeedEntry {
-  filename?: string;
-  human_name?: string;
-  source?: string;
-  spdx_license_identifier?: string;
-  license_url?: string;
-  attribution_text?: string;
-  publisher?: { name?: string; url?: string };
-}
-
-/**
- * Build a provider attribution map from MOTIS license.json keyed by feed tag.
- * Feed tags match the format MOTIS uses in its `source` field (e.g. "de_DELFI").
- */
-export function getFeedProviders(): Record<
-  string,
-  { label: string; url: string; license?: string; licenseUrl?: string }
-> {
-  const feeds = loadAttribution() as FeedEntry[];
-  const result: Record<
-    string,
-    { label: string; url: string; license?: string; licenseUrl?: string }
-  > = {};
-  for (const feed of feeds) {
-    if (!feed.filename) continue;
-    const tag = feed.filename.replace(/\.(gtfs|netex)\.zip$/, "");
-    if (!tag) continue;
-    result[tag] = {
-      label: feed.human_name ?? tag,
-      url: feed.publisher?.url ?? feed.source ?? "",
-      license: feed.spdx_license_identifier,
-      licenseUrl: feed.license_url,
-    };
-  }
-  return result;
-}
-
 export function setupLocal(ctx: IntegrationContext): void {
   // Resolve local MOTIS URL from the service registry if available.
   const resolved = ctx.getRequiredService("motis");
@@ -286,14 +225,13 @@ export function setupLocal(ctx: IntegrationContext): void {
   cachedLocalReachable = false;
   cachedLocalReachableAt = 0;
 
-  const dataDir =
-    (ctx.config.dataDir as string | undefined) ??
-    join(process.cwd(), "../../infra/docker/data/motis-data");
-  LICENSE_FILE = join(dataDir, "license.json");
-  cachedData = null;
-  cachedMtime = 0;
-  cachedFeedAttributionIndex = null;
-  cachedFeedTagsByLength = null;
+  // Capture the host's AttributionIndex (when present). All MOTIS-derived
+  // responses resolve feed-level attribution by looking up extracted feed
+  // tags against it; without an index they fall back to ATTRIBUTION_LOCAL.
+  const attributionIndex = ctx.attributionIndex;
+
+  const wrapLocal = <T>(data: T) => wrapLocalWithFeedAttribution(data, attributionIndex, false);
+  const wrapLocalRT = <T>(data: T) => wrapLocalWithFeedAttribution(data, attributionIndex, true);
 
   // Register local-first MOTIS provider.
   // For bbox/search/plan we only expose this provider to avoid fan-out to both local + cloud.
@@ -375,10 +313,22 @@ export function setupLocal(ctx: IntegrationContext): void {
     async planTrip(params) {
       if (await isMotisReachableCached()) {
         const local = await planWithInstance(motisLocalInstance, params);
-        if (local?.itineraries?.length) return wrapLocalRT([local]);
+        if (local?.itineraries?.length) {
+          const annotated: TripPlan = {
+            ...local,
+            itineraries: annotateLegsWithAttribution(local.itineraries, attributionIndex),
+          };
+          return wrapLocalRT([annotated]);
+        }
       }
       const cloudPlan = await planWithInstance(transitousInstance, params);
-      return wrapTransitousRT(cloudPlan ? [{ ...cloudPlan, provider: "mo" }] : []);
+      if (!cloudPlan) return wrapTransitousRT([]);
+      const annotated: TripPlan = {
+        ...cloudPlan,
+        provider: "mo",
+        itineraries: annotateLegsWithAttribution(cloudPlan.itineraries, attributionIndex),
+      };
+      return wrapTransitousRT([annotated]);
     },
     async getVehicleJourney(tripId) {
       const localId = withPrefix(tripId, "ms:");
@@ -390,23 +340,12 @@ export function setupLocal(ctx: IntegrationContext): void {
       return wrapTransitousRT(await motis.getTrip(transitousInstance, cloudId));
     },
   });
-
-  // Register dynamic attribution endpoint
-  ctx.registerRoute("GET", "/attribution", async (_req, res) => {
-    res.send(loadAttribution());
-  });
 }
 
 export const __testing = {
-  wrapLocal: <T>(data: T) => wrapLocal(data),
-  wrapLocalRT: <T>(data: T) => wrapLocalRT(data),
-  getFeedAttributionIndex,
-  setLicenseFile(path: string): void {
-    LICENSE_FILE = path;
-    cachedData = null;
-    cachedMtime = 0;
-    cachedFeedAttributionIndex = null;
-    cachedFeedTagsByLength = null;
-  },
+  wrapLocal: <T>(data: T, index: AttributionIndexHandle | undefined) =>
+    wrapLocalWithFeedAttribution(data, index, false),
+  wrapLocalRT: <T>(data: T, index: AttributionIndexHandle | undefined) =>
+    wrapLocalWithFeedAttribution(data, index, true),
   ATTRIBUTION_LOCAL,
 };
