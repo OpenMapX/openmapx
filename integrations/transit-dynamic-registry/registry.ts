@@ -5,8 +5,6 @@ import type { ProtocolType, RegistryEntry } from "./registry-types";
 /** Hand-crafted provider equivalents — suppress these dynamic entries */
 const SUPPRESSED_IDS = new Set([
   "de/db-hafas-mgate",
-  "de/vbb-hafas-mgate",
-  "de/bvg-hafas-mgate",
   "be/nmbs-sncb-hafas-mgate",
   "ch/sbb-cff-ffs-hafas-mgate",
   "ch/bls-hafas-mgate",

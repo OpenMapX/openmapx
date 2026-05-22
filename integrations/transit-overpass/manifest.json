@@ -4,6 +4,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "quality": "built-in",
+  "description": "OSM Overpass transit provider. Disabled by default; opt-in fallback for areas not covered by MOTIS or the dynamic registry. Enable by setting environment variable OPENMAPX_OVERPASS_TRANSIT_FALLBACK=true.",
   "domains": ["transit"],
   "infrastructure": {
     "dataRequirements": ["osm-pbf"]
@@ -11,13 +12,7 @@
   "category": "Transit",
   "configSchema": {
     "type": "object",
-    "properties": {
-      "enabled": {
-        "type": "boolean",
-        "default": true,
-        "description": "Enable OSM Overpass transit integration"
-      }
-    }
+    "properties": {}
   },
   "backend": {
     "routes": false

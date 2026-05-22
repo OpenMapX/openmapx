@@ -21,6 +21,15 @@ const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
 export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
+
+  const overpassFallbackEnabled = process.env.OPENMAPX_OVERPASS_TRANSIT_FALLBACK === "true";
+  if (!overpassFallbackEnabled) {
+    ctx.log.info(
+      "transit-overpass disabled (set OPENMAPX_OVERPASS_TRANSIT_FALLBACK=true to enable)",
+    );
+    return;
+  }
+
   ctx.registerTransitProvider({
     id: "transit-overpass",
     prefix: "osm:",

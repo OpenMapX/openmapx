@@ -23,7 +23,7 @@ export function setup(ctx: IntegrationContext): void {
     id: "transit-transitland",
     prefix: "tl:",
     coverage: { all: true },
-    priority: 8,
+    priority: 9,
     attribution: ATTRIBUTION,
     capabilities: {
       stops: {

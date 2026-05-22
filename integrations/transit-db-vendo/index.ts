@@ -23,7 +23,7 @@ export function setup(ctx: IntegrationContext): void {
     id: "transit-db-vendo",
     prefix: "db:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
-    priority: 4,
+    priority: 6,
     attribution: ATTRIBUTION,
     capabilities: {
       stops: {

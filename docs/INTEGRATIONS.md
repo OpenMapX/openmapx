@@ -972,6 +972,38 @@ No external API calls.
 - Env vars: None required; optional integration config overrides: `clientName`, `journeyPlannerEndpoint`, `vehiclesEndpoint`
 - Self-hostable: No
 
+### MOTIS GTFS-RT Pass-through — via `live-transit-motis`
+- Data sent: Trip ID, bounding box, optional service date — relayed to the configured MOTIS instance
+- Data received: GTFS-RT trip updates and service alerts surfaced through the MOTIS HTTP API; coverage matches whatever the connected MOTIS instance has been seeded with
+- Purpose: Add realtime alerts and trip updates to the live-transit overlay using the same MOTIS instance that backs `transit-motis-local`
+- License: Mixed (each upstream GTFS-RT feed has its own license; the pass-through is MIT)
+- URL: https://motis-project.de/
+- Commercial use: Conditional (per upstream feed)
+- Attribution: Inherited from each upstream feed via MOTIS `license.json`
+- Privacy: -
+- Country: -
+- End-user data exposure: Server-only
+- DPA: Per upstream feed
+- Coverage: Wherever the connected MOTIS instance has data
+- Env vars: None required (uses the shared `motis` service URL); optional integration config override: `endpoint`
+- Self-hostable: Yes — same MOTIS instance used by `transit-motis-local`
+
+### Swiss SIRI Situation Exchange — via `live-transit-siri-sx-ch`
+- Data sent: API key header; no end-user identifiers
+- Data received: Switzerland-wide SIRI-SX situation messages — affected lines, stops, validity periods, severity, summary, description
+- Purpose: Add Swiss public-transit alerts and disruption badges to the live-transit overlay
+- License: Open data platform mobility Switzerland terms of use
+- URL: https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/
+- Commercial use: Conditional — official terms permit use by companies; grant is platform-specific rather than a standard OSS/open-data license
+- Attribution: Yes — "Source: opentransportdata.swiss"
+- Privacy: https://opentransportdata.swiss/en/privacy-notice/
+- Country: Switzerland (Open Data Mobilität Schweiz / SKI on behalf of the Swiss Federal Office of Transport)
+- End-user data exposure: Server-only
+- DPA: Not available
+- Coverage: Switzerland
+- Env vars: Shared OpenTransportData API key from `transit-opentransportdata-ch`
+- Self-hostable: No
+
 ## overlay-natural-events
 
 ### NASA EONET API — `https://eonet.gsfc.nasa.gov/api/v3/events/geojson`
@@ -1649,23 +1681,7 @@ No external API calls.
 
 ## transit-bvg
 
-### BVG HAFAS REST API — `https://v6.bvg.transport.rest`
-- Data sent: Coordinates (latitude, longitude), search radius, stop ID, search query, origin and destination coordinates, departure/arrival time, bounding box (for vehicle radar)
-- Data received: FPTF stops/departures/arrivals/journeys/trips/radar data for Berlin BVG network
-- Purpose: Public transit data for Berlin (BVG) — stops, departures, journey planning, live vehicle positions
-- License: ISC (software); no open license for data (unofficial HAFAS scraping)
-- URL: https://github.com/public-transport/hafas-rest-api
-- Commercial use: Yes (ISC software); data licensing is a gray area — HAFAS APIs are scraped without official approval
-- Usage limits: None imposed by the library; upstream HAFAS endpoints may enforce their own
-- Attribution: ISC copyright notice in distributed copies
-- Privacy: -
-- Country: Germany (Jannis Redmann, individual developer, Berlin)
-- Privacy other: No privacy policy or impressum published for transport.rest endpoints; legally required under German TMG/TTDSG
-- End-user data exposure: Server-only
-- DPA: Not available (individual developer project, no legal entity)
-- Coverage: Berlin, Germany (bbox 13.08-13.77E, 52.33-52.68N)
-- Env vars: None
-- Self-hostable: Partially — hafas-rest-api is self-hostable, but depends on upstream HAFAS backends
+Removed. BVG/Berlin coverage is now provided automatically by the `transit-dynamic-registry` integration, which fetches its definition from `public-transport/transport-apis` (entry `de/bvg-hafas-mgate`). See the `transit-dynamic-registry` section below.
 
 ## transit-db-vendo
 
@@ -1685,6 +1701,7 @@ No external API calls.
 - Coverage: Germany (bbox 5.87-15.04E, 47.27-55.06N)
 - Env vars: `DB_USER_AGENT` — optional
 - Self-hostable: Partially — db-vendo-client is open-source, but depends on upstream DB API
+- Orchestrator priority: 6. The DB chain now sits behind MOTIS-first (priorities 1/7); priority 6 means this is a fallback for niche DB-specific features (deeper journey details, per-stop platform/cancellation data) not covered by MOTIS.
 
 ## transit-dynamic-registry
 
@@ -1999,6 +2016,12 @@ No external API calls (queries local PostGIS database).
 
 ## transit-motis
 
+The MOTIS integration registers two transit providers from one directory. The orchestration is split across two files for clarity:
+
+- `local.ts` — `setupLocal(ctx)` registers the local-first `transit-motis-local` provider at orchestrator **priority 1**. This is the MOTIS-first transit backbone; when the local instance is unreachable, the provider transparently falls back to the Transitous cloud for that single call so coverage stays intact during restarts. `local.ts` also owns license-file loading, the `getFeedProviders()` helper, and the `GET /attribution` route.
+- `cloud.ts` — `setupCloud(ctx)` registers the `transit-motis-transitous` cloud provider at orchestrator **priority 7**. Always on — no env flag, no reachability gate — as a soft resilience layer for cold-start, dev, and post-restart windows. Only exposes `getStop`, `getDepartures`, `getArrivals`, `getVehicleJourney` to avoid orchestrator fan-out for nearby/search/plan; those flows go through the local provider's own fallback.
+- `index.ts` — thin orchestrator that calls `setupLocal(ctx)` then `setupCloud(ctx)`.
+
 ### Transitous (Cloud MOTIS) — `https://api.transitous.org`
 - Data sent: Stop ID, time window, search text, origin and destination coordinates, departure/arrival time, bounding box (for vehicle positions), trip ID
 - Data received: Stops with modes, departures/arrivals with real-time delays/cancellations/tracks, multi-modal itineraries with fares and leg geometry, vehicle positions, trip stop sequences
@@ -2257,7 +2280,8 @@ No external API calls (queries local PostGIS database).
 - End-user data exposure: Server-only
 - DPA: Not available
 - Coverage: Global (fallback when no other transit provider covers the area)
-- Env vars: None
+- Env vars: `OPENMAPX_OVERPASS_TRANSIT_FALLBACK` — required. Set to `true` to enable this fallback; when unset the integration logs a notice and registers no transit provider. Overpass is heavy-handed for transit lookups (no schedule, no realtime, just OSM node data), so it ships disabled by default.
+- Orchestrator priority: 10 (lowest). Only consulted when no other provider — MOTIS, regional HAFAS, dynamic-registry, Transitland — covers the area.
 - Self-hostable: Yes — self-hosted Overpass
 
 ## transit-ris-routing
@@ -2412,27 +2436,11 @@ No external API calls (queries local PostGIS database).
 - Coverage: Global
 - Env vars: `TRANSIT_LAND_API_KEY` — optional
 - Self-hostable: Partially
+- Orchestrator priority: 9. Transitland sits behind MOTIS-first (priorities 1/7) and the regional providers; priority 9 makes it a global aggregator fallback for stops/routes/departures where no higher-priority provider matched.
 
 ## transit-vbb
 
-### VBB HAFAS REST API — `https://v6.vbb.transport.rest`
-
-- License: ISC (software); no open license for data (unofficial HAFAS scraping)
-- URL: https://github.com/public-transport/hafas-rest-api
-- Commercial use: Yes (ISC software); data licensing is a gray area — HAFAS APIs are scraped without official approval
-- Usage limits: None imposed by the library; upstream HAFAS endpoints may enforce their own
-- Attribution: ISC copyright notice in distributed copies
-- Privacy: -
-- Country: Germany (Jannis Redmann, individual developer, Berlin)
-- Privacy other: No privacy policy or impressum published for transport.rest endpoints; legally required under German TMG/TTDSG
-- Data sent: Coordinates (latitude, longitude), search radius, stop ID, search query, origin and destination coordinates, departure/arrival time, trip ID, bounding box (for vehicle radar)
-- Data received: FPTF stops, departures/arrivals with delays/remarks, journeys with GeoJSON polylines and stopovers, live vehicle positions (movements with tripId, coordinates, bearing, speed, line name)
-- Purpose: Berlin-Brandenburg (VBB) transit data — stops, departures, journey planning, live vehicle radar
-- End-user data exposure: Server-only
-- DPA: Not available (individual developer project, no legal entity)
-- Coverage: Berlin-Brandenburg, Germany (bbox 11.26-14.77E, 51.36-53.56N)
-- Env vars: None
-- Self-hostable: Partially — hafas-rest-api is self-hostable, but depends on upstream HAFAS backends
+Removed. VBB/Berlin-Brandenburg coverage is now provided automatically by the `transit-dynamic-registry` integration, which fetches its definition from `public-transport/transport-apis` (entry `de/vbb-hafas-mgate`). See the `transit-dynamic-registry` section above.
 
 ## weather-bright-sky
 

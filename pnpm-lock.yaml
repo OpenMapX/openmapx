@@ -1107,21 +1107,6 @@ importers:
         specifier: workspace:^
         version: link:../../packages/mobility-core
 
-  integrations/transit-bvg:
-    dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
-      '@openmapx/integration-framework':
-        specifier: workspace:^
-        version: link:../../packages/integration-framework
-      '@openmapx/integration-transit-hafas':
-        specifier: workspace:^
-        version: link:../transit-hafas
-      '@openmapx/mobility-core':
-        specifier: workspace:^
-        version: link:../../packages/mobility-core
-
   integrations/transit-db-vendo:
     dependencies:
       '@openmapx/core':
@@ -1322,21 +1307,6 @@ importers:
       '@openmapx/mobility-formats':
         specifier: workspace:^
         version: link:../../packages/mobility-formats
-
-  integrations/transit-vbb:
-    dependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
-      '@openmapx/integration-framework':
-        specifier: workspace:^
-        version: link:../../packages/integration-framework
-      '@openmapx/integration-transit-hafas':
-        specifier: workspace:^
-        version: link:../transit-hafas
-      '@openmapx/mobility-core':
-        specifier: workspace:^
-        version: link:../../packages/mobility-core
 
   integrations/weather:
     dependencies:
