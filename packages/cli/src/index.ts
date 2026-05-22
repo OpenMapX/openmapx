@@ -7,6 +7,7 @@ import { registerDataCommands } from "./commands/data";
 import { registerIntegrationsCommands } from "./commands/integrations";
 import { registerReposCommands } from "./commands/repos";
 import { registerServicesCommands } from "./commands/services";
+import { registerTransitousCommands } from "./commands/transitous-bump";
 import { registerUsersCommands } from "./commands/users";
 import { loadInfraEnv } from "./lib/infra-env";
 
@@ -32,5 +33,6 @@ registerReposCommands(program);
 registerBackupCommands(program);
 registerUsersCommands(program);
 registerCheckCommand(program);
+registerTransitousCommands(program);
 
 await program.parseAsync(process.argv);

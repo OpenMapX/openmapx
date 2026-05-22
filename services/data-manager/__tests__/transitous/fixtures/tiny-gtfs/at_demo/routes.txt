@@ -1,0 +1,2 @@
+route_id,agency_id,route_short_name,route_long_name,route_type
+AT_DEMO_R1,AT_DEMO,R1,Demo Vienna Line 1,2

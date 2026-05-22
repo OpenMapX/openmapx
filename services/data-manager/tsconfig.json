@@ -7,11 +7,11 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "rootDir": ".",
+    "rootDir": "..",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["src/**/*", "__tests__/**/*"]
+  "include": ["src/**/*", "__tests__/**/*", "../motis-feed-proxy/lib/**/*.ts"]
 }

@@ -29,6 +29,7 @@
     "@fastify/helmet": "^13.0.2",
     "@hey-api/client-fetch": "workspace:*",
     "@motis-project/motis-client": "^2.9.2",
+    "@openmapx/db-schema": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "better-auth": "^1.6.9",

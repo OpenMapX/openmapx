@@ -1,5 +1,12 @@
 // Capability bindings — explicit (integration, capability) → service mappings
 
+// data-manager pipeline observability (Postgres schema "data_manager")
+export {
+  dataManager,
+  feedState as dataManagerFeedState,
+  jobStages as dataManagerJobStages,
+  jobs as dataManagerJobs,
+} from "@openmapx/db-schema";
 // Admin audit log
 export { adminAuditLog } from "./admin-audit-schema";
 // Admin jobs

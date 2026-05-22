@@ -1,0 +1,4 @@
+stop_id,stop_name,stop_lat,stop_lon,location_type
+at_demo_hbf,Wien Hauptbahnhof,48.185,16.376,0
+at_demo_meidling,Wien Meidling,48.174,16.334,0
+at_demo_praterstern,Wien Praterstern,48.219,16.392,0

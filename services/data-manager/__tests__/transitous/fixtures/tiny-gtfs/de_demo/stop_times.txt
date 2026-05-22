@@ -1,0 +1,9 @@
+trip_id,arrival_time,departure_time,stop_id,stop_sequence
+DE_DEMO_TRIP_1,08:00:00,08:00:00,de_demo_zoo,1
+DE_DEMO_TRIP_1,08:05:00,08:06:00,de_demo_hbf,2
+DE_DEMO_TRIP_1,08:11:00,08:12:00,de_demo_alex,3
+DE_DEMO_TRIP_1,08:16:00,08:16:00,de_demo_ost,4
+DE_DEMO_TRIP_2,08:30:00,08:30:00,de_demo_ost,1
+DE_DEMO_TRIP_2,08:35:00,08:36:00,de_demo_alex,2
+DE_DEMO_TRIP_2,08:41:00,08:42:00,de_demo_hbf,3
+DE_DEMO_TRIP_2,08:46:00,08:46:00,de_demo_zoo,4

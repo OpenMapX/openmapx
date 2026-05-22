@@ -1,22 +1,45 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { execa } from "execa";
 import type { FastifyInstance } from "fastify";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadGtfs, type FeedDescriptor } from "./jobs/download-gtfs.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { downloadStyle } from "./jobs/download-style.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
-import { downloadGtfsViaTransitous } from "./jobs/transitous-pipeline.js";
+import {
+  buildJobContext,
+  runTransitousPipeline,
+  toDownloadGtfsResult,
+} from "./jobs/transitous/index.js";
+import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
+import { getSingleFlightController } from "./jobs/transitous/runtime.js";
+import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import { StateStore } from "./state.js";
+import {
+  parseRefShaPair,
+  readTransitousLock,
+  type TransitousLock,
+  writeTransitousLock,
+} from "./transitous-lock.js";
 
 export interface ApiOptions {
   dataDir?: string;
+  /** Repo root used by `/transit/bump` to locate `infra/docker/transitous.lock.json`. */
+  repoRoot?: string;
+  /**
+   * Single-flight controller. Defaults to the process-wide singleton so the
+   * cron + `/transit/sync` share state; tests inject an isolated controller.
+   */
+  singleFlight?: SingleFlightController;
 }
 
 const startedAt = Date.now();
 
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
+  const repoRoot = opts.repoRoot ?? process.env.OPENMAPX_ROOT_DIR ?? "";
+  const singleFlight = opts.singleFlight ?? getSingleFlightController();
   const store = new StateStore(dataDir);
 
   app.get("/status", async () => ({
@@ -90,18 +113,24 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
     const useTransitousPipeline = source === "transitous" || feeds === undefined;
     try {
-      const result = useTransitousPipeline
-        ? await downloadGtfsViaTransitous({
-            countries,
-            dataDir,
-            store,
-          })
-        : await downloadGtfs({
-            feeds,
-            countries,
-            dataDir,
-            store,
-          });
+      let result: Awaited<ReturnType<typeof downloadGtfs>>;
+      if (useTransitousPipeline) {
+        const ctx = buildJobContext({
+          dataDir,
+          store,
+          countries,
+          repoRoot: process.env.OPENMAPX_ROOT_DIR,
+        });
+        await runTransitousPipeline(ctx);
+        result = toDownloadGtfsResult(ctx, []);
+      } else {
+        result = await downloadGtfs({
+          feeds,
+          countries,
+          dataDir,
+          store,
+        });
+      }
       reply.raw.end(
         JSON.stringify({
           ok: result.failures.length === 0,
@@ -213,4 +242,190 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       }
     },
   );
+
+  // POST /transit/sync — fire-and-forget Transitous pipeline trigger. Honours
+  // the single-flight lock + idempotency key. apps/api proxies user-facing
+  // sync requests here.
+  app.post<{
+    Body?: {
+      idempotencyKey?: string;
+      triggeredBy?: string;
+      countries?: string[];
+    };
+  }>("/transit/sync", async (req, reply) => {
+    const body = req.body ?? {};
+    const start = await singleFlight.tryStartSync({
+      trigger: "api",
+      triggeredBy: body.triggeredBy ?? "api",
+      idempotencyKey: body.idempotencyKey,
+      kind: "transitous-sync",
+      metadata: {
+        source: "api",
+        countries: body.countries ?? [],
+      },
+    });
+
+    if (!start.ok) {
+      // 409 Conflict captures both "in-flight" and "duplicate-idempotency-key".
+      // The caller distinguishes via the `reason` payload.
+      return reply.code(409).send({
+        ok: false,
+        reason: start.reason,
+        existingJobId: start.existingJobId,
+      });
+    }
+
+    // Kick off the pipeline async — the route returns 202 immediately.
+    const jobId = start.jobId;
+    const persistingHook = makePersistingOnStageComplete(jobId, {
+      info: (m) => app.log.info(m),
+      warn: (m) => app.log.warn(m),
+      error: (m) => app.log.error(m),
+    });
+
+    void (async () => {
+      try {
+        const ctx = buildJobContext({
+          dataDir,
+          store,
+          countries: body.countries ?? [],
+          repoRoot,
+          jobId,
+          onStageComplete: persistingHook,
+        });
+        const result = await runTransitousPipeline(ctx);
+        await finalizeJobRow(jobId, result.finalStatus);
+        app.log.info({ jobId, finalStatus: result.finalStatus }, "transitous-api: sync finished");
+      } catch (err) {
+        app.log.error({ jobId, err }, "transitous-api: sync threw");
+        try {
+          await finalizeJobRow(jobId, "error");
+        } catch {
+          // Swallow — the row will look stuck at "running" until the next
+          // restart-time janitor pass.
+        }
+      } finally {
+        singleFlight.markSyncFinished();
+      }
+    })();
+
+    reply.code(202);
+    return { ok: true, jobId, status: "started" };
+  });
+
+  // POST /transit/restart-motis — bounce the primary MOTIS container. Used
+  // when a config change requires a full restart rather than the partial
+  // reloads the pipeline already performs.
+  app.post("/transit/restart-motis", async (_req, reply) => {
+    try {
+      await execa("docker", ["restart", "motis"], { stdio: "pipe", timeout: 60_000 });
+      return { ok: true, status: "restart-initiated" };
+    } catch (err) {
+      // The most common failure mode is "data-manager container has no
+      // docker socket mounted" (Batch C concern). Surface a 503 so the
+      // operator sees an actionable error.
+      app.log.warn({ err }, "transitous-api: docker restart motis failed");
+      reply.code(503);
+      return {
+        ok: false,
+        error: "docker-unavailable",
+        message: (err as Error).message,
+      };
+    }
+  });
+
+  // POST /transit/bump — fetch upstream Transitous catalog ref and write a
+  // new lockfile. This is admin-only at the apps/api layer (token clients
+  // are rejected upstream) so the data-manager just performs the mechanical
+  // git work without re-checking auth.
+  app.post<{
+    Body?: { branch?: string; force?: boolean; lockedBy?: string };
+  }>("/transit/bump", async (req, reply) => {
+    if (!repoRoot) {
+      reply.code(503);
+      return {
+        ok: false,
+        error: "repo-root-not-configured",
+        message: "OPENMAPX_ROOT_DIR is not set; data-manager cannot locate the lockfile",
+      };
+    }
+
+    const branch = req.body?.branch?.trim() || "main";
+    const force = req.body?.force === true;
+    const lockedBy = req.body?.lockedBy?.trim() || "api";
+
+    const catalogDir = join(dataDir, ".transitous-catalog");
+    if (!existsSync(join(catalogDir, ".git"))) {
+      reply.code(409);
+      return {
+        ok: false,
+        error: "catalog-not-cloned",
+        message: `Transitous catalog not found at ${catalogDir}; run a sync first to clone it.`,
+      };
+    }
+
+    try {
+      await execa("git", ["-C", catalogDir, "fetch", "origin", branch], { stdio: "pipe" });
+    } catch (err) {
+      reply.code(502);
+      return {
+        ok: false,
+        error: "git-fetch-failed",
+        message: (err as Error).message,
+      };
+    }
+
+    const fetchSha = (
+      await execa("git", ["-C", catalogDir, "rev-parse", `origin/${branch}`], { stdio: "pipe" })
+    ).stdout.trim();
+
+    // `git ls-tree <ref> <path>` returns "<mode> commit <sha>\t<path>" for a
+    // submodule entry; rev-parse on the same ref:path would resolve a tree.
+    const submoduleEntry = (
+      await execa("git", ["-C", catalogDir, "ls-tree", `origin/${branch}`, "transitland-atlas"], {
+        stdio: "pipe",
+      })
+    ).stdout;
+    const submoduleMatch = submoduleEntry.match(/^\d+\s+commit\s+([0-9a-f]{40})\s/i);
+    if (!submoduleMatch) {
+      reply.code(500);
+      return {
+        ok: false,
+        error: "submodule-resolution-failed",
+        message: "Could not resolve transitland-atlas submodule SHA",
+      };
+    }
+    const submoduleSha = submoduleMatch[1];
+
+    const existing = readTransitousLock(repoRoot);
+    const previousSha = existing ? parseRefShaPair(existing.ref).sha : null;
+    if (previousSha === fetchSha && !force) {
+      return {
+        ok: true,
+        unchanged: true,
+        ref: `${branch}@${fetchSha}`,
+        previousRef: existing?.ref ?? null,
+      };
+    }
+
+    const lock: TransitousLock = {
+      ref: `${branch}@${fetchSha}`,
+      submodules: { "transitland-atlas": submoduleSha },
+      lockedAt: new Date().toISOString(),
+      lockedBy,
+      comment:
+        "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
+    };
+    writeTransitousLock(repoRoot, lock);
+
+    return {
+      ok: true,
+      unchanged: false,
+      ref: lock.ref,
+      previousRef: existing?.ref ?? null,
+      submoduleSha,
+      lockedAt: lock.lockedAt,
+      lockedBy: lock.lockedBy,
+    };
+  });
 }

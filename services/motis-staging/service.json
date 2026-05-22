@@ -1,0 +1,32 @@
+{
+  "id": "motis-staging",
+  "name": "MOTIS (staging)",
+  "version": "1.0.0",
+  "description": "Staging MOTIS instance — rebuild target for the data-manager's Transitous atomic-swap pipeline. Not query-facing; only the primary `motis` service receives application traffic. Opt-in: start with `--services motis-staging` (or add to the persisted selection) when running the data-manager promotion flow.",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://github.com/motis-project/motis",
+  "container": {
+    "image": "ghcr.io/motis-project/motis",
+    "tag": "latest",
+    "expose": [8080],
+    "user": "${UID:-1000}:${GID:-1000}",
+    "workingDir": "/motis-data",
+    "entrypoint": ["/bin/sh", "-c"],
+    "command": ["/motis import && /motis server"],
+    "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
+    "memory": "16g",
+    "restart": "unless-stopped",
+    "logging": {
+      "driver": "json-file",
+      "options": { "max-size": "50m", "max-file": "3" }
+    }
+  },
+  "provides": ["transit-engine-staging"],
+  "produces": [{ "type": "motis-staging-data", "sourceDir": "data/motis-staging-data" }],
+  "consumes": [{ "type": "motis-staging-data", "mountAt": "/motis-data", "required": true }],
+  "exposure": {
+    "hostPorts": [{ "container": 8080, "host": 8082, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "transit" }
+}

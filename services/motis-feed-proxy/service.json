@@ -10,6 +10,7 @@
     "image": "nginx",
     "tag": "1.27-alpine",
     "expose": [80],
+    "networkAliases": ["rt.openmapx.local"],
     "memory": "256m",
     "restart": "unless-stopped",
     "healthcheck": {

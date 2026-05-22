@@ -289,6 +289,38 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(false);
   });
 
+  it("accepts bindMounts marked optional with an @infra: source", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      bindMounts: [
+        {
+          source: "@infra:secrets/transitous-feed-proxy.age",
+          target: "/secrets/transitous-feed-proxy.age",
+          readOnly: true,
+          optional: true,
+        },
+      ],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
+  it("rejects optional: true on a ${VAR}-prefixed bindMount source (host path unknown at render time)", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      bindMounts: [
+        {
+          source: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+          target: "${OPENMAPX_HOST_DIR:-/tmp/openmapx-host-not-configured}",
+          optional: true,
+        },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/optional/);
+  });
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
+
   it("accepts exposure.proxy.additionalRoutes with path or pathPrefix", () => {
     const r1 = validateServiceManifest({
       ...validMinimal,

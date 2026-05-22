@@ -138,12 +138,33 @@ export interface ServiceBindMount {
   source: string;
   target: string;
   readOnly?: boolean;
+  /**
+   * When true, the renderer omits the mount from the generated compose if the
+   * resolved host source does not exist at render time. Used for
+   * operator-supplied secrets (e.g. an age private key) declared once in the
+   * manifest but materialised only when the operator drops the file at the
+   * documented host path. Without this flag, docker-compose would create the
+   * missing source as an empty host directory and shadow the container target.
+   *
+   * Not supported with Compose-variable (`${VAR}`) sources — the host path is
+   * unknown until stack-up time. Rejected by the manifest schema.
+   */
+  optional?: boolean;
 }
 
 export interface ServiceContainer {
   image: string;
   tag: string;
   expose?: number[];
+  /**
+   * Additional DNS aliases on the project's `openmapx` Docker network. Compose
+   * sees these as `networks.openmapx.aliases:` and other containers on the same
+   * network can reach the service via any alias. Used by `motis-feed-proxy` to
+   * expose itself as `rt.openmapx.local` so the MOTIS config can reference a
+   * stable hostname independent of the service id. Ignored when `network_mode`
+   * is `host`.
+   */
+  networkAliases?: string[];
   command?: string[] | string;
   entrypoint?: string[] | string;
   environment?: Record<string, string>;
@@ -294,6 +315,7 @@ export type DatasetType =
   | "osrm-graph"
   | "otp-graph"
   | "motis-data"
+  | "motis-staging-data"
   | "motis-feed-proxy-config"
   | "gtfs"
   | "tile-mbtiles"
@@ -327,4 +349,10 @@ export interface HardlinkEntry {
 export interface RenderResult {
   composeYaml: string;
   hardlinkPlan: HardlinkEntry[];
+  /**
+   * Non-fatal render-time advisories surfaced for the operator (CLI prints
+   * them; admin API forwards them). Today this is populated when an optional
+   * bind-mount's host source is missing and the mount is therefore skipped.
+   */
+  warnings?: string[];
 }

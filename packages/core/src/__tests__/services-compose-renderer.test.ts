@@ -214,6 +214,84 @@ describe("renderServiceSnippet", () => {
     );
     expect(snippet.volumes).toEqual(["/repo/services/svc/config/file.json:/etc/file.json:ro"]);
   });
+
+  describe("optional bindMounts", () => {
+    it("emits an optional bindMount when its host source exists", () => {
+      const warnings: string[] = [];
+      const snippet = renderServiceSnippet(
+        svc("data-manager", {
+          bindMounts: [
+            {
+              source: "@infra:secrets/transitous-feed-proxy.age",
+              target: "/secrets/transitous-feed-proxy.age",
+              readOnly: true,
+              optional: true,
+            },
+          ],
+        }),
+        {
+          composeOutDir: "/repo/infra/docker",
+          existsSync: (p) => p === "/repo/infra/docker/secrets/transitous-feed-proxy.age",
+          warnings,
+        },
+      );
+      expect(snippet.volumes).toEqual([
+        "./secrets/transitous-feed-proxy.age:/secrets/transitous-feed-proxy.age:ro",
+      ]);
+      expect(warnings).toEqual([]);
+    });
+
+    it("skips an optional bindMount and emits an advisory when its host source is missing", () => {
+      const warnings: string[] = [];
+      const snippet = renderServiceSnippet(
+        svc("data-manager", {
+          bindMounts: [
+            {
+              source: "@infra:secrets/transitous-feed-proxy.age",
+              target: "/secrets/transitous-feed-proxy.age",
+              readOnly: true,
+              optional: true,
+            },
+          ],
+        }),
+        {
+          composeOutDir: "/repo/infra/docker",
+          existsSync: () => false,
+          warnings,
+        },
+      );
+      // The optional mount was skipped → no volumes for this service.
+      expect(snippet.volumes).toBeUndefined();
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("skipping optional bind-mount");
+      expect(warnings[0]).toContain("@infra:secrets/transitous-feed-proxy.age");
+      expect(warnings[0]).toContain("/repo/infra/docker/secrets/transitous-feed-proxy.age");
+    });
+
+    it("preserves existing behaviour for non-optional mounts whose source does not exist", () => {
+      const warnings: string[] = [];
+      const snippet = renderServiceSnippet(
+        svc("svc", {
+          bindMounts: [
+            {
+              source: "config/missing.json",
+              target: "/etc/missing.json",
+            },
+          ],
+        }),
+        {
+          composeOutDir: "/repo/infra/docker",
+          existsSync: () => false,
+          warnings,
+        },
+      );
+      // No `optional` flag → emit the mount unchanged, no advisory.
+      expect(snippet.volumes).toEqual([
+        "../../services/svc/config/missing.json:/etc/missing.json:ro",
+      ]);
+      expect(warnings).toEqual([]);
+    });
+  });
 });
 
 describe("renderCompose", () => {
@@ -547,6 +625,37 @@ describe("renderCompose", () => {
       expect(() => renderCompose([a, b], { domain: "example.com" })).toThrow(
         /Multiple producers for/,
       );
+    });
+
+    it("surfaces optional-bindMount skip advisories on RenderResult.warnings", () => {
+      const services = [
+        svc("data-manager", {
+          bindMounts: [
+            {
+              source: "@infra:secrets/transitous-feed-proxy.age",
+              target: "/secrets/transitous-feed-proxy.age",
+              readOnly: true,
+              optional: true,
+            },
+          ],
+        }),
+      ];
+      const result = renderCompose(services, {
+        domain: "example.com",
+        composeOutDir: "/repo/infra/docker",
+        existsSync: () => false,
+      });
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings?.[0]).toContain("skipping optional bind-mount");
+      // The skipped mount must not appear in the compose YAML.
+      expect(result.composeYaml).not.toContain("/secrets/transitous-feed-proxy.age");
+    });
+
+    it("omits the warnings field on RenderResult when nothing was skipped", () => {
+      const services = [svc("alpha")];
+      const result = renderCompose(services, { domain: "example.com" });
+      expect(result.warnings).toBeUndefined();
     });
 
     it("silently skips a missing producer when consumer is required: false", () => {

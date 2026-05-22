@@ -2060,6 +2060,63 @@ The transit-motis, live-transit-motis, geocoding-motis, motis-rentals integratio
 - Env vars: `MOTIS_URL` — optional (default: `http://localhost:8081`)
 - Self-hostable: Yes — already self-hosted
 
+### Self-hosted MOTIS staging — `http://127.0.0.1:8082` (opt-in)
+
+`services/motis-staging/service.json` declares a second MOTIS instance used exclusively as the rebuild target for the `services/data-manager` Transitous atomic-swap pipeline. The container is not query-facing — the application only ever talks to the primary `motis` service. Add `motis-staging` to your service selection (`pnpm openmapx services enable motis-staging` or `--services motis-staging`) when running a promote cycle; the rendered compose file will then expose `127.0.0.1:8082` and bind-mount `data/motis-staging-data/`.
+
+- Same image / tag as primary MOTIS to keep import semantics identical.
+- Host port: `127.0.0.1:8082` (loopback only — there is no public route).
+- Data volume: `data/motis-staging-data/` (separate from `data/motis-data/`).
+- Memory limit: `16g` (same import cost as primary).
+- Opt-in: not part of `DEFAULT_SELECTED_SERVICE_IDS`; the operator must enable it explicitly. `pnpm openmapx compose up` without `--services motis-staging` leaves it off.
+- Pipeline stages that use it:
+  - `motis-import` runs `docker exec motis-staging /motis import -c /motis-data/config.yml`.
+  - `motis-health` issues `/api/v1/initial`, `/api/v1/stops`, `/api/v1/plan` probes against `http://localhost:8082`.
+  - `promote` rotates `data/motis-data/` ↔ `data/motis-data.previous/` ↔ `data/motis-staging-data/` via `fs.renameSync` (POSIX-atomic on same-volume), then `docker restart motis`. On smoke / restart failure the rename is reverted; if even the rollback restart fails, the broken state is left in `data/motis-data.previous-broken/` for manual recovery.
+- Env vars:
+  - `MOTIS_STAGING_URL` — override the staging URL (default `http://localhost:8082`).
+  - `MOTIS_IMPORT_TIMEOUT_MS` — override the per-import timeout (default 60 minutes).
+  - `MOTIS_HEALTH_BBOX_*` / `MOTIS_HEALTH_PLAN_*` — override the probe coordinates for non-DE deployments.
+- Feed-proxy DNS alias: `services/motis-feed-proxy/service.json` declares `networkAliases: ["rt.openmapx.local"]` so the MOTIS config can reference a stable internal hostname matching Transitous's `rt.triptix.tech`. The compose renderer emits this as `networks.openmapx.aliases:`.
+- Data-manager → docker socket: `services/data-manager/service.json:bindMounts` declares `@docker-socket` so the container can issue `docker exec`/`docker restart` against the host daemon. This is what lets the `motis-import` stage drive `motis-staging`, the `promote` stage restart the primary `motis` container, and `gen-full-config` reload the `motis-feed-proxy` nginx after writing a new feed list. Without this bind-mount the stages still succeed when run from the host CLI (dev path), but in-container cron runs would fall back to "config written, container not signalled" warnings.
+- Data-manager → host repo root: `services/data-manager/service.json` also bind-mounts `${OPENMAPX_HOST_DIR}` at the same path inside the container and sets `OPENMAPX_ROOT_DIR=${OPENMAPX_HOST_DIR}` so `POST /transit/bump` can persist `infra/docker/transitous.lock.json` on the host. The bump endpoint refuses to run when `OPENMAPX_ROOT_DIR` is not set, so this is required for in-container lockfile changes to outlive the container.
+- Security trade-off: bind-mounting `/var/run/docker.sock` gives the data-manager container effective root on the host (any container that can talk to the daemon can spawn privileged containers). This is acceptable in single-tenant / operator-controlled deployments — the data-manager image is built from this repo and the cron stages only invoke a fixed set of `docker exec`/`docker restart` commands. In multi-tenant deployments where the data-manager image or its inputs are not under your control, run the atomic-swap promotion and cron-driven syncs from a privileged host-side process instead, and remove the `@docker-socket` bindMount.
+- Operator runtime setup: the runtime image ships a static `docker` CLI binary at `/usr/local/bin/docker` so `docker exec` is on PATH. The data-manager runs as a non-root user (`datamgr`, UID/GID 1001); to talk to the host's docker daemon through the bind-mounted socket, the host's docker group GID must match (`--group-add <docker-gid>` on `docker run`, or `group_add:` in compose). If the host docker group has a different GID, either add a matching supplementary group via `group_add` or remap the container user with `user:` in the compose service. The default rendered compose pulls UID/GID from `${UID:-1000}:${GID:-1000}`; override these to match an operator that's in the host docker group.
+
+### Phase E9 live-MOTIS end-to-end test
+
+The data-manager package ships an opt-in integration test that drives the full 11-stage Transitous pipeline against a real `motis-staging` Docker container, seeded with three tiny GTFS fixtures (DE/CH/AT). It is the only test that exercises `motis-import` / `motis-health` / `promote` against actual MOTIS — the rest of the suite mocks these stages with the stub-runner path.
+
+- Test file: `services/data-manager/__tests__/transitous/pipeline-live-motis.test.ts`.
+- Fixtures: `services/data-manager/__tests__/transitous/fixtures/tiny-gtfs/{de,ch,at}_demo/*.txt` (one agency + one route + a handful of stops/trips per region; calendar window is rewritten to `today ± 30 days` at build time) and `fixtures/stub-catalog-scripts/*.py` (10-30 lines each, no upstream dependencies — `fetch.py` copies the per-feed `.gtfs.zip` into `out/`, `generate-motis-config.py` emits a minimal `config.yml` and mirrors feeds + config into the staging data dir).
+- Default behaviour: silently skipped. The suite is gated on `OPENMAPX_E9_LIVE_MOTIS=true`. The default `pnpm test` (used in `.github/workflows/ci.yml`) does not bring up Docker.
+- To run locally:
+  - `docker pull ghcr.io/motis-project/motis:latest` (~1 GB, one-time).
+  - `OPENMAPX_E9_LIVE_MOTIS=true pnpm -C services/data-manager test pipeline-live-motis`.
+  - When the daemon is unreachable or the image is missing the spec logs a clear reason and exits early instead of failing.
+- Container lifecycle is owned by the test: it generates a tmp `docker-compose.yml` that only declares `motis-staging`, brings the container up via `docker compose -p openmapx-e9-<pid> ... up -d motis-staging`, runs the pipeline, then tears the stack down in `afterAll`. No reliance on the operator's `infra/docker/data` tree.
+- Budget: 90 s end-to-end (more generous than the §E9 plan's 60 s budget to absorb cold-start of the MOTIS container in CI). Tighten if you observe consistent headroom on `actions/runner` after a few scheduled runs.
+- Scheduled CI: `.github/workflows/e9-live-motis.yml` runs weekly (Mondays 04:17 UTC) and on `workflow_dispatch`. The workflow pre-pulls the MOTIS image, sets `OPENMAPX_E9_LIVE_MOTIS=true`, and uploads `/tmp/openmapx-e9-live-*/` on failure for post-mortem.
+
+### Transitous lockfile
+
+The self-hosted Transitous pipeline (`services/data-manager`) consumes `public-transport/transitous` at a pinned commit recorded in `infra/docker/transitous.lock.json`. Pinning prevents an unrelated upstream `feeds/*.json` schema change from silently breaking a deployment between scheduled GTFS refreshes.
+
+- Why we pin: the upstream catalog evolves daily, and the data-manager's `git pull` on every fetch run can pick up structural changes the rest of our pipeline isn't ready for (new `type:` values, removed fields, atlas-id rewrites, etc.).
+- How to bump: run `pnpm openmapx transitous bump`. The command fetches `origin/main` of the catalog (already cloned into `infra/docker/data/.transitous-catalog/`), summarises the `feeds/*.json` diff against the current pin (added/modified/removed regions + sources), and prompts before rewriting the lockfile. Add `--yes` to skip the prompt in CI; `--branch <name>` to track a non-`main` branch.
+- After bumping, restart `data-manager` (or wait for the next cron sync) so it picks up the new ref.
+- Cadence: bump on demand. There is no fixed schedule — review when upstream announces a breaking change or when you need a newly-added region. The data-manager will refuse to silently follow `HEAD`; it hard-resets the catalog to the pinned SHA at the top of every fetch run.
+- Inspect the current pin with `pnpm openmapx transitous show`.
+
+### Transitous secrets — `TRANSITOUS_FEED_PROXY_KEY_FILE`
+
+Some feeds in `public-transport/transitous` store API keys as `AGE-ENCRYPTED:`-prefixed values. Transitous's `src/utils.py` decrypts them at fetch time using an `age` v1 private key. To consume those feeds from a self-hosted deployment:
+
+- `TRANSITOUS_FEED_PROXY_KEY_FILE` — the data-manager service declares this env var as `/secrets/transitous-feed-proxy.age` in its manifest, and an optional bind-mount automatically maps `infra/docker/secrets/transitous-feed-proxy.age` (on the host) to that path (inside the container) whenever the host file exists. Drop your age v1 identity at that host path (`chmod 0600`) and re-run `pnpm openmapx compose render` — the mount appears in the generated compose. When the host file is absent the renderer omits the mount and logs an advisory; `fetch.py` then skips encrypted feed values with a warning and the rest of the pipeline still runs.
+- Generation steps and the upstream policy are documented in [`infra/docker/secrets/README.md`](../infra/docker/secrets/README.md). The directory itself is checked in (so the path is stable), but its contents are gitignored.
+- The data-manager validates the path at startup: if the env-var is set but the file is missing or unreadable inside the container (e.g. the operator only just added it and hasn't re-rendered yet), it logs an error and continues — the misconfiguration only takes effect during the next GTFS fetch, so an immediate crash isn't useful.
+- Operator-local overrides live in `infra/docker/data/overrides/feeds-overlay.json` (mounted into the data-manager at `/data/overrides/feeds-overlay.json` by default). Each entry is matched against `(region, sources[*].name)` and shallow-merged into the catalog before `fetch.py` runs, so you can swap in a private URL or fill in an API key without forking Transitous upstream. Patches with no matching source are silently no-oped and logged at warn level.
+
 ## transit-opentransportdata-ch
 
 ### Swiss Open Journey Planner (OJP) — `https://api.opentransportdata.swiss/ojp20`

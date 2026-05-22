@@ -1,0 +1,4 @@
+trip_id,arrival_time,departure_time,stop_id,stop_sequence
+CH_DEMO_TRIP_1,09:00:00,09:00:00,ch_demo_oerlikon,1
+CH_DEMO_TRIP_1,09:06:00,09:07:00,ch_demo_hb,2
+CH_DEMO_TRIP_1,09:13:00,09:13:00,ch_demo_enge,3

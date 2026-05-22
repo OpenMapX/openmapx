@@ -48,6 +48,11 @@ WORKDIR /app
 
 COPY packages/hardlinks/ packages/hardlinks/
 COPY services/data-manager/ services/data-manager/
+# `gen-full-config.ts` imports the feed-proxy nginx renderer via a relative
+# path (`../../../../motis-feed-proxy/lib/build.js`). The tsconfig's rootDir
+# is `services/`, so the file must be present in the build context for `tsc`
+# to type-check and emit it under `dist/motis-feed-proxy/lib/`.
+COPY services/motis-feed-proxy/lib/ services/motis-feed-proxy/lib/
 
 WORKDIR /app/services/data-manager
 RUN pnpm build
@@ -60,6 +65,28 @@ RUN apt-get update \
       osmium-tool curl unzip bzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
     && rm -rf /var/lib/apt/lists/*
+
+# Static Docker CLI so the data-manager can invoke `docker exec` (feed-proxy
+# nginx reload, motis-staging import) and `docker restart` (atomic-swap promote)
+# against the host daemon via the bind-mounted socket. We pull the static
+# binary tarball instead of `docker.io`/`docker-ce-cli` to avoid dragging in
+# the daemon, systemd units, or third-party apt repos. Pin to a recent stable
+# release; the CLI is forward/backward-compatible with daemons within a few
+# minor versions.
+ARG DOCKER_CLI_VERSION=27.5.1
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64) docker_arch=x86_64 ;; \
+      aarch64|arm64) docker_arch=aarch64 ;; \
+      *) echo "Unsupported arch $arch for Docker CLI install" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz; \
+    tar -xzf /tmp/docker.tgz -C /tmp; \
+    mv /tmp/docker/docker /usr/local/bin/docker; \
+    chmod +x /usr/local/bin/docker; \
+    rm -rf /tmp/docker /tmp/docker.tgz; \
+    docker --version
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/transitous-requirements.txt
@@ -92,6 +119,9 @@ USER datamgr:datamgr
 WORKDIR /app/services/data-manager
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fs http://localhost:4000/status || exit 1
-# `--import tsx/esm` lets the compiled dist/index.js reach back into
+# `--import tsx/esm` lets the compiled dist entry reach back into
 # @openmapx/hardlinks's .ts source without a separate build step.
-CMD ["node", "--import", "tsx/esm", "dist/index.js"]
+# Entry path mirrors the `tsconfig.build.json` rootDir (..) which preserves
+# the `data-manager/src/...` and `motis-feed-proxy/lib/...` tree under dist
+# so the gen-full-config -> feed-proxy build helper relative import resolves.
+CMD ["node", "--import", "tsx/esm", "dist/data-manager/src/index.js"]

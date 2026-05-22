@@ -2,7 +2,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { downloadGtfsViaTransitous } from "../src/jobs/transitous-pipeline.js";
+import {
+  buildJobContext,
+  runTransitousPipeline,
+  toDownloadGtfsResult,
+} from "../src/jobs/transitous/index.js";
 import { StateStore } from "../src/state.js";
 
 let tmp: string | undefined;
@@ -14,7 +18,13 @@ afterEach(() => {
   }
 });
 
-describe("downloadGtfsViaTransitous", () => {
+/**
+ * These integration tests pin the behavior of the staged Transitous pipeline
+ * end-to-end. They were originally written against the monolithic
+ * `downloadGtfsViaTransitous` helper; preserving them here keeps E2's
+ * decomposition behavior-equivalent for the non-stub stages.
+ */
+describe("runTransitousPipeline (integration)", () => {
   it("runs the Transitous fetch pipeline, applies API keys, and prunes stale country data", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-transitous-pipeline-"));
     const dataDir = tmp;
@@ -78,7 +88,7 @@ describe("downloadGtfsViaTransitous", () => {
       }
     };
 
-    const result = await downloadGtfsViaTransitous({
+    const ctx = buildJobContext({
       countries: ["de"],
       dataDir,
       store: new StateStore(dataDir),
@@ -86,6 +96,8 @@ describe("downloadGtfsViaTransitous", () => {
       runner,
       now: () => "2026-04-20T12:00:00.000Z",
     });
+    await runTransitousPipeline(ctx);
+    const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.requestedCount).toBe(3);
     expect(result.selectedCount).toBe(2);
@@ -148,7 +160,7 @@ describe("downloadGtfsViaTransitous", () => {
       }
     };
 
-    const result = await downloadGtfsViaTransitous({
+    const ctx = buildJobContext({
       countries: ["de"],
       dataDir,
       store: new StateStore(dataDir),
@@ -156,6 +168,8 @@ describe("downloadGtfsViaTransitous", () => {
       runner,
       now: () => "2026-04-20T12:00:00.000Z",
     });
+    await runTransitousPipeline(ctx);
+    const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.downloaded.map((dataset) => dataset.id)).toEqual(["de_demo"]);
     expect(existsSync(join(dataDir, "gtfs", "de_demo.gtfs.zip"))).toBe(true);
@@ -178,7 +192,7 @@ describe("downloadGtfsViaTransitous", () => {
       ),
     );
 
-    const result = await downloadGtfsViaTransitous({
+    const ctx = buildJobContext({
       countries: ["no"],
       dataDir,
       store: new StateStore(dataDir),
@@ -189,6 +203,8 @@ describe("downloadGtfsViaTransitous", () => {
       },
       now: () => "2026-04-20T12:00:00.000Z",
     });
+    await runTransitousPipeline(ctx);
+    const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.requestedCount).toBe(1);
     expect(result.selectedCount).toBe(1);
@@ -222,15 +238,16 @@ describe("downloadGtfsViaTransitous", () => {
       path: existingArchive,
     });
 
-    await expect(
-      downloadGtfsViaTransitous({
-        countries: ["zz"],
-        dataDir,
-        store,
-        runner: async () => {},
-        now: () => "2026-04-20T12:00:00.000Z",
-      }),
-    ).rejects.toThrow(/does not contain any feed files for countries: zz/);
+    const ctx = buildJobContext({
+      countries: ["zz"],
+      dataDir,
+      store,
+      runner: async () => {},
+      now: () => "2026-04-20T12:00:00.000Z",
+    });
+    await expect(runTransitousPipeline(ctx)).rejects.toThrow(
+      /does not contain any feed files for countries: zz/,
+    );
 
     expect(existsSync(existingArchive)).toBe(true);
     const state = JSON.parse(readFileSync(join(dataDir, ".data-manager-state.json"), "utf-8")) as {
@@ -251,7 +268,7 @@ describe("downloadGtfsViaTransitous", () => {
       JSON.stringify({ sources: [{ name: "MBTA" }] }, null, 2),
     );
 
-    const result = await downloadGtfsViaTransitous({
+    const ctx = buildJobContext({
       countries: [],
       dataDir,
       store: new StateStore(dataDir),
@@ -262,6 +279,8 @@ describe("downloadGtfsViaTransitous", () => {
       },
       now: () => "2026-04-20T12:00:00.000Z",
     });
+    await runTransitousPipeline(ctx);
+    const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.requestedCount).toBe(2);
     expect(result.selectedCount).toBe(2);
@@ -314,13 +333,15 @@ describe("downloadGtfsViaTransitous", () => {
       }
     };
 
-    const result = await downloadGtfsViaTransitous({
+    const ctx = buildJobContext({
       countries: ["de"],
       dataDir,
       store,
       runner,
       now: () => "2026-04-20T12:00:00.000Z",
     });
+    await runTransitousPipeline(ctx);
+    const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.downloaded).toEqual([]);
     expect(result.failures).toEqual([
@@ -337,8 +358,6 @@ describe("downloadGtfsViaTransitous", () => {
     expect(existsSync(staleArchive)).toBe(true);
     expect(readFileSync(staleArchive, "utf-8")).toBe("STALE");
 
-    // …and the store keeps the prior downloadedAt, not today's date — the
-    // unchanged archive is not counted as a fresh download.
     const state = JSON.parse(readFileSync(join(dataDir, ".data-manager-state.json"), "utf-8")) as {
       datasets: Array<{ id: string; downloadedAt: string }>;
     };
@@ -397,7 +416,7 @@ describe("downloadGtfsViaTransitous", () => {
       ),
     );
 
-    const result = await downloadGtfsViaTransitous({
+    const ctx = buildJobContext({
       countries: ["de"],
       dataDir,
       store: new StateStore(dataDir),
@@ -409,6 +428,8 @@ describe("downloadGtfsViaTransitous", () => {
       },
       now: () => "2026-04-20T12:00:00.000Z",
     });
+    await runTransitousPipeline(ctx);
+    const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.requestedCount).toBe(2);
     expect(result.selectedCount).toBe(2);
@@ -438,7 +459,7 @@ describe("downloadGtfsViaTransitous", () => {
       ),
     );
 
-    const result = await downloadGtfsViaTransitous({
+    const ctx = buildJobContext({
       countries: ["de"],
       dataDir,
       store: new StateStore(dataDir),
@@ -455,6 +476,8 @@ describe("downloadGtfsViaTransitous", () => {
       },
       now: () => "2026-04-20T12:00:00.000Z",
     });
+    await runTransitousPipeline(ctx);
+    const result = toDownloadGtfsResult(ctx, []);
 
     expect(result.selectedCount).toBe(3);
     expect(result.downloaded).toEqual([]);

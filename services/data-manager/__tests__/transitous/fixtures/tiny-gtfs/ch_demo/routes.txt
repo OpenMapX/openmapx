@@ -1,0 +1,2 @@
+route_id,agency_id,route_short_name,route_long_name,route_type
+CH_DEMO_L1,CH_DEMO,L1,Demo Zurich Line 1,2

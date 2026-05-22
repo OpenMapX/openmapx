@@ -1,0 +1,2 @@
+service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date
+AT_DEMO_WEEKLY,1,1,1,1,1,1,1,__START_DATE__,__END_DATE__

@@ -13,6 +13,7 @@ export default {
       "integrations/**/*.test.ts",
       "packages/*/**/*.test.ts",
       "services/data-manager/**/*.test.ts",
+      "services/motis-feed-proxy/**/*.test.ts",
     ],
   },
 };

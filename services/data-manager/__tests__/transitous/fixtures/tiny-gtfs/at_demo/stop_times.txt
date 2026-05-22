@@ -1,0 +1,4 @@
+trip_id,arrival_time,departure_time,stop_id,stop_sequence
+AT_DEMO_TRIP_1,10:00:00,10:00:00,at_demo_meidling,1
+AT_DEMO_TRIP_1,10:08:00,10:09:00,at_demo_hbf,2
+AT_DEMO_TRIP_1,10:18:00,10:18:00,at_demo_praterstern,3

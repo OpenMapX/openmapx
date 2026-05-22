@@ -1,0 +1,2 @@
+route_id,agency_id,route_short_name,route_long_name,route_type
+DE_DEMO_S1,DE_DEMO,S1,Demo S-Bahn Line 1,2

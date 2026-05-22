@@ -1,0 +1,55 @@
+name: E9 live MOTIS pipeline
+
+on:
+  schedule:
+    # Weekly on Mondays at 04:17 UTC. Off-hours so a slow Docker pull
+    # doesn't compete with the regular CI run.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: e9-live-motis-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e9-live-motis:
+    name: data-manager transitous pipeline against motis-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+      OPENMAPX_E9_LIVE_MOTIS: "true"
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Pre-pull motis image
+        # Pulling here (rather than letting the test do it) gives us a
+        # clean error if the registry is unreachable, separate from a
+        # legitimate pipeline failure.
+        run: docker pull ghcr.io/motis-project/motis:latest
+
+      - name: Run live MOTIS pipeline test
+        run: pnpm -C services/data-manager test pipeline-live-motis
+
+      - name: Upload data-manager logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e9-live-motis-logs
+          path: |
+            services/data-manager/__tests__/transitous/**/*.log
+            /tmp/openmapx-e9-live-*/
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,0 +1,2 @@
+feed_publisher_name,feed_publisher_url,feed_lang,feed_version
+OpenMapX E9 Test (AT),https://example.org/at_demo,de,e9-test

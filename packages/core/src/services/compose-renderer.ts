@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
 import { detectConsumesCycle } from "./resolver";
@@ -147,6 +148,19 @@ export interface RenderContext {
    * merge time (docker-compose env values are strings).
    */
   resolvedServiceConfigs?: Map<string, Record<string, unknown>>;
+  /**
+   * Optional override for the host-path existence check used by
+   * `bindMounts[].optional`. Defaults to `node:fs`'s `existsSync`. Tests
+   * inject a fake here to avoid touching the real filesystem; production
+   * callers should leave it unset.
+   */
+  existsSync?: (path: string) => boolean;
+  /**
+   * Per-render advisory sink. The renderer appends one entry per skipped
+   * optional bind mount (host source missing). When omitted, advisories are
+   * still emitted on the `RenderResult.warnings` field.
+   */
+  warnings?: string[];
 }
 
 // Maps `@`-prefixed special bind sources (literals only) to concrete host
@@ -168,12 +182,24 @@ function toComposePath(absolute: string, composeOutDir: string | undefined): str
   return rel;
 }
 
+/**
+ * Resolved bind-mount source. `src` is the string written into compose
+ * (compose-relative path or pass-through `$VAR`); `absoluteHostPath` is the
+ * concrete host path when known, used to back the `optional` existence check.
+ * `null` for `$VAR` sources because the path is resolved by docker-compose at
+ * stack-up time and is therefore unknown to the renderer.
+ */
+interface ResolvedBindSource {
+  src: string;
+  absoluteHostPath: string | null;
+}
+
 function resolveBindSource(
   bm: ServiceBindMount,
   service: LoadedService,
   allServices: LoadedService[],
   composeOutDir: string | undefined,
-): string {
+): ResolvedBindSource {
   // Compose-variable pass-through. Sources that start with `$` — including
   // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
   // Docker Compose parser does the substitution at stack-up time. This is
@@ -181,11 +207,12 @@ function resolveBindSource(
   // Docker-outside-of-Docker admin control without having to bake the
   // operator's host path into the manifest.
   if (bm.source.startsWith("$")) {
-    return bm.source;
+    return { src: bm.source, absoluteHostPath: null };
   }
   // Literal special sources (e.g. @docker-socket) — emit the concrete path.
   if (SPECIAL_BIND_SOURCE_PATHS[bm.source]) {
-    return SPECIAL_BIND_SOURCE_PATHS[bm.source];
+    const concrete = SPECIAL_BIND_SOURCE_PATHS[bm.source];
+    return { src: concrete, absoluteHostPath: concrete };
   }
 
   // @infra:<rel-path> — mount from the compose-file directory (infra/docker/).
@@ -196,9 +223,10 @@ function resolveBindSource(
     if (!composeOutDir) {
       // No compose dir known — emit the relative path unchanged so downstream
       // callers can still introspect the source.
-      return `./${relPath}`;
+      return { src: `./${relPath}`, absoluteHostPath: null };
     }
-    return toComposePath(resolve(composeOutDir, relPath), composeOutDir);
+    const absolute = resolve(composeOutDir, relPath);
+    return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
   }
 
   // @service:<slug>:<rel-path> — mount from another built-in service's directory.
@@ -224,12 +252,12 @@ function resolveBindSource(
       );
     }
     const absolute = resolve(target.directory, relPath);
-    return toComposePath(absolute, composeOutDir);
+    return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
   }
 
   // Plain relative path — resolved against the consuming service's own dir.
   const absolute = resolve(service.directory, bm.source);
-  return toComposePath(absolute, composeOutDir);
+  return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
 }
 
 export interface ComposeServiceSnippet {
@@ -248,7 +276,7 @@ export interface ComposeServiceSnippet {
   devices?: string[];
   privileged?: boolean;
   network_mode?: string;
-  networks?: string[];
+  networks?: string[] | Record<string, { aliases?: string[] }>;
   volumes?: string[];
   labels?: Record<string, string>;
   restart?: string;
@@ -305,6 +333,11 @@ export function renderServiceSnippet(
 
   if (c.networkMode === "host") {
     snippet.network_mode = "host";
+  } else if (c.networkAliases?.length) {
+    // Docker Compose long-form: `networks: { openmapx: { aliases: [...] } }`.
+    // Other containers on the openmapx network can address this service via
+    // any listed alias in addition to the service id.
+    snippet.networks = { openmapx: { aliases: [...c.networkAliases] } };
   } else {
     snippet.networks = ["openmapx"];
   }
@@ -319,11 +352,27 @@ export function renderServiceSnippet(
       volumes.push(`${sourcePath}:${cs.mountAt}${cs.readOnly ? ":ro" : ""}`);
     }
   }
+  const exists = ctx.existsSync ?? existsSync;
   for (const bm of m.bindMounts ?? []) {
-    const src = resolveBindSource(bm, service, ctx.allServices ?? [service], ctx.composeOutDir);
+    const resolved = resolveBindSource(
+      bm,
+      service,
+      ctx.allServices ?? [service],
+      ctx.composeOutDir,
+    );
+    // `optional: true` + resolvable host path + path missing → skip the mount
+    // and surface an advisory. If the host path can't be resolved (only true
+    // for `$VAR` sources, which the manifest schema rejects with `optional`),
+    // fall through to emitting the mount as a defensive no-op.
+    if (bm.optional && resolved.absoluteHostPath && !exists(resolved.absoluteHostPath)) {
+      ctx.warnings?.push(
+        `service "${m.id}": skipping optional bind-mount: ${bm.source} → ${bm.target} (host source not present at ${resolved.absoluteHostPath})`,
+      );
+      continue;
+    }
     // readOnly defaults to true for bind mounts (config files, docker socket)
     const readOnly = bm.readOnly !== false;
-    volumes.push(`${src}:${bm.target}${readOnly ? ":ro" : ""}`);
+    volumes.push(`${resolved.src}:${bm.target}${readOnly ? ":ro" : ""}`);
   }
   if (volumes.length) snippet.volumes = volumes;
 
@@ -512,6 +561,11 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
     }
   }
 
+  // Single sink shared across every snippet render so `RenderResult.warnings`
+  // surfaces every skipped optional bind-mount in one pass. Callers can also
+  // pre-allocate `ctx.warnings` to capture into their own array.
+  const warnings: string[] = ctx.warnings ?? [];
+
   const composeServices: Record<string, ComposeServiceSnippet> = {};
   for (const s of sorted) {
     if (!s.enabled) continue;
@@ -524,6 +578,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       ...ctx,
       allServices: ctx.allServices ?? services,
       consumesPaths,
+      warnings,
     });
   }
 
@@ -542,5 +597,9 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
 
   const composeYaml = yamlDump(composeDoc, { lineWidth: 120, noRefs: true });
 
-  return { composeYaml, hardlinkPlan };
+  return {
+    composeYaml,
+    hardlinkPlan,
+    ...(warnings.length ? { warnings } : {}),
+  };
 }

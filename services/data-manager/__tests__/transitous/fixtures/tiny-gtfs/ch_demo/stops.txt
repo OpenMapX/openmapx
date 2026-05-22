@@ -1,0 +1,4 @@
+stop_id,stop_name,stop_lat,stop_lon,location_type
+ch_demo_hb,Zurich Hauptbahnhof,47.378,8.540,0
+ch_demo_oerlikon,Zurich Oerlikon,47.412,8.544,0
+ch_demo_enge,Zurich Enge,47.364,8.532,0

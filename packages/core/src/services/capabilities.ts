@@ -22,6 +22,7 @@ export const WELL_KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
   "routing-engine",
   // Transit
   "transit-engine",
+  "transit-engine-staging",
   // Geocoding
   "geocoder",
   // Tiles
@@ -50,6 +51,7 @@ export const WELL_KNOWN_DATA_TYPES: ReadonlySet<string> = new Set([
   "osrm-graph",
   "otp-graph",
   "motis-data",
+  "motis-staging-data",
   "motis-feed-proxy-config",
   "gtfs",
   "tile-mbtiles",

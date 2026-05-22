@@ -29,6 +29,13 @@
       "when": 1776551867791,
       "tag": "0003_service_config",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779447870601,
+      "tag": "0004_data_manager_jobs_and_feed_state",
+      "breakpoints": true
     }
   ]
 }

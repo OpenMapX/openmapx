@@ -2,14 +2,18 @@ import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockDownloadGtfs = vi.fn();
-const mockDownloadGtfsViaTransitous = vi.fn();
+const mockRunTransitousPipeline = vi.fn();
+const mockBuildJobContext = vi.fn();
+const mockToDownloadGtfsResult = vi.fn();
 
 vi.mock("../src/jobs/download-gtfs.js", () => ({
   downloadGtfs: mockDownloadGtfs,
 }));
 
-vi.mock("../src/jobs/transitous-pipeline.js", () => ({
-  downloadGtfsViaTransitous: mockDownloadGtfsViaTransitous,
+vi.mock("../src/jobs/transitous/index.js", () => ({
+  buildJobContext: mockBuildJobContext,
+  runTransitousPipeline: mockRunTransitousPipeline,
+  toDownloadGtfsResult: mockToDownloadGtfsResult,
 }));
 
 const { registerApi } = await import("../src/api.js");
@@ -17,7 +21,19 @@ const { registerApi } = await import("../src/api.js");
 describe("data-manager GTFS API", () => {
   beforeEach(() => {
     mockDownloadGtfs.mockReset();
-    mockDownloadGtfsViaTransitous.mockReset();
+    mockRunTransitousPipeline.mockReset();
+    mockBuildJobContext.mockReset();
+    mockToDownloadGtfsResult.mockReset();
+    mockBuildJobContext.mockImplementation((opts) => ({
+      jobId: "test-job",
+      ...opts,
+      state: {},
+    }));
+    mockRunTransitousPipeline.mockResolvedValue({
+      jobId: "test-job",
+      results: [],
+      finalStatus: "ok",
+    });
   });
 
   afterEach(async () => {
@@ -25,7 +41,7 @@ describe("data-manager GTFS API", () => {
   });
 
   it("returns partial-success GTFS download details when some feeds fail", async () => {
-    mockDownloadGtfsViaTransitous.mockResolvedValue({
+    mockToDownloadGtfsResult.mockReturnValue({
       requestedCount: 2,
       selectedCount: 2,
       skippedCount: 0,
@@ -79,7 +95,7 @@ describe("data-manager GTFS API", () => {
       ],
     });
 
-    expect(mockDownloadGtfsViaTransitous).toHaveBeenCalledTimes(1);
+    expect(mockRunTransitousPipeline).toHaveBeenCalledTimes(1);
     expect(mockDownloadGtfs).not.toHaveBeenCalled();
 
     await app.close();
@@ -97,7 +113,7 @@ describe("data-manager GTFS API", () => {
 
     expect(res.statusCode).toBe(500);
     expect(res.body).toContain("either `feeds` or `source: 'transitous'` is required");
-    expect(mockDownloadGtfsViaTransitous).not.toHaveBeenCalled();
+    expect(mockRunTransitousPipeline).not.toHaveBeenCalled();
     expect(mockDownloadGtfs).not.toHaveBeenCalled();
 
     await app.close();

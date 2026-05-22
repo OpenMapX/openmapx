@@ -155,47 +155,65 @@ const producesSchema = z.object({
 // compose error.
 const COMPOSE_VAR_SOURCE_REGEX = /^\$(\{[^{}]+\}|[A-Za-z_][A-Za-z0-9_]*)/;
 
-const bindMountSchema = z.object({
-  source: z
-    .string()
-    .min(1)
-    .refine((s) => {
-      if (SPECIAL_BIND_SOURCES.has(s)) return true;
-      if (isServiceBindSource(s)) {
-        // Validate the embedded path part doesn't try to escape the named service.
-        const path = s.slice(SERVICE_BIND_SOURCE_PREFIX.length).split(":").slice(1).join(":");
-        if (!path || path.startsWith("/")) return false;
-        return !pathHasParentEscape(path);
-      }
-      if (isInfraBindSource(s)) {
-        const path = s.slice(INFRA_BIND_SOURCE_PREFIX.length);
-        if (!path || path.startsWith("/")) return false;
-        return !pathHasParentEscape(path);
-      }
-      if (COMPOSE_VAR_SOURCE_REGEX.test(s)) {
-        // Compose-variable pass-through — rendered verbatim, no '..'/traversal
-        // analysis possible because the path is resolved at stack-up time.
-        return !pathHasParentEscape(s);
-      }
-      if (s.startsWith("@")) return false; // unknown special source
-      if (s.startsWith("/")) return false; // absolute paths forbidden
-      if (pathHasParentEscape(s)) return false;
-      return true;
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: error message documents literal compose-substitution syntax (${VAR}, ${VAR:-default}), not JS template placeholders
-    }, "source must be a relative path (no '..', no absolute paths), a known special source (@docker-socket, @service:<slug>:<rel-path>, @infra:<rel-path>), or a Compose-variable reference (${VAR}, ${VAR:-default})"),
-  target: z
-    .string()
-    .min(1)
-    .refine((p) => {
-      // Compose-variable reference at the start → pass-through. Even so we
-      // forbid `..` anywhere in the string so a malicious default can't
-      // traverse out of the container root.
-      if (COMPOSE_VAR_SOURCE_REGEX.test(p)) return !pathHasParentEscape(p);
-      if (!ABSOLUTE_PATH_REGEX.test(p)) return false;
-      return !pathHasParentEscape(p);
-    }, "must be absolute or a Compose-variable reference, and must not contain '..'"),
-  readOnly: z.boolean().optional(),
-});
+const bindMountSchema = z
+  .object({
+    source: z
+      .string()
+      .min(1)
+      .refine((s) => {
+        if (SPECIAL_BIND_SOURCES.has(s)) return true;
+        if (isServiceBindSource(s)) {
+          // Validate the embedded path part doesn't try to escape the named service.
+          const path = s.slice(SERVICE_BIND_SOURCE_PREFIX.length).split(":").slice(1).join(":");
+          if (!path || path.startsWith("/")) return false;
+          return !pathHasParentEscape(path);
+        }
+        if (isInfraBindSource(s)) {
+          const path = s.slice(INFRA_BIND_SOURCE_PREFIX.length);
+          if (!path || path.startsWith("/")) return false;
+          return !pathHasParentEscape(path);
+        }
+        if (COMPOSE_VAR_SOURCE_REGEX.test(s)) {
+          // Compose-variable pass-through — rendered verbatim, no '..'/traversal
+          // analysis possible because the path is resolved at stack-up time.
+          return !pathHasParentEscape(s);
+        }
+        if (s.startsWith("@")) return false; // unknown special source
+        if (s.startsWith("/")) return false; // absolute paths forbidden
+        if (pathHasParentEscape(s)) return false;
+        return true;
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: error message documents literal compose-substitution syntax (${VAR}, ${VAR:-default}), not JS template placeholders
+      }, "source must be a relative path (no '..', no absolute paths), a known special source (@docker-socket, @service:<slug>:<rel-path>, @infra:<rel-path>), or a Compose-variable reference (${VAR}, ${VAR:-default})"),
+    target: z
+      .string()
+      .min(1)
+      .refine((p) => {
+        // Compose-variable reference at the start → pass-through. Even so we
+        // forbid `..` anywhere in the string so a malicious default can't
+        // traverse out of the container root.
+        if (COMPOSE_VAR_SOURCE_REGEX.test(p)) return !pathHasParentEscape(p);
+        if (!ABSOLUTE_PATH_REGEX.test(p)) return false;
+        return !pathHasParentEscape(p);
+      }, "must be absolute or a Compose-variable reference, and must not contain '..'"),
+    readOnly: z.boolean().optional(),
+    // Optional bind mounts are silently dropped from the rendered compose when
+    // the host-side source file/directory is absent at render time. Used for
+    // operator-supplied secrets (e.g. an age private key for Transitous): the
+    // manifest declares the contract once, but the mount only materialises
+    // after the operator drops the file at the documented path. Without this,
+    // docker-compose would create the missing source as an empty host
+    // directory and shadow `/secrets/<file>` inside the container.
+    //
+    // Limitations: the renderer can only check existence for sources that
+    // resolve to a concrete host path at render time. `$VAR`-prefixed sources
+    // are substituted by docker-compose at stack-up time, so `optional` on
+    // those is rejected here — there's no host path to stat.
+    optional: z.boolean().optional(),
+  })
+  .refine(
+    (bm) => !(bm.optional && COMPOSE_VAR_SOURCE_REGEX.test(bm.source)),
+    "optional: true is not supported with Compose-variable sources — the host path is unknown until stack-up time",
+  );
 
 const dependsOnSchema = z.object({
   service: z.string(),
@@ -206,6 +224,11 @@ const containerSchema = z.object({
   image: z.string().regex(IMAGE_REGEX, "must be lowercase, no tag suffix (use 'tag' field)"),
   tag: z.string().regex(TAG_REGEX),
   expose: z.array(z.number().int().min(1).max(65535)).optional(),
+  networkAliases: z
+    .array(
+      z.string().regex(/^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$/, "must be a valid DNS label"),
+    )
+    .optional(),
   command: z.union([z.array(z.string()), z.string()]).optional(),
   entrypoint: z.union([z.array(z.string()), z.string()]).optional(),
   environment: z.record(z.string(), z.string()).optional(),

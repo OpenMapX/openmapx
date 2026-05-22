@@ -30,6 +30,12 @@ export interface RenderRepoResult {
   requestedServiceIds: string[];
   enabledServiceIds: string[];
   selectionWarnings: string[];
+  /**
+   * Render-time advisories from the compose renderer — currently emitted for
+   * optional bind-mounts whose host source is missing and was therefore
+   * skipped (see `bindMounts[].optional` in the manifest schema).
+   */
+  renderWarnings: string[];
 }
 
 export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<RenderRepoResult> {
@@ -82,6 +88,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     requestedServiceIds: applied.requestedIds,
     enabledServiceIds: applied.selection.enabledIdsOrdered,
     selectionWarnings: applied.selection.warnings,
+    renderWarnings: result.warnings ?? [],
   };
 }
 
@@ -109,6 +116,7 @@ export function registerComposeCommands(program: Command): void {
           log.dim(`Selected services → ${r.enabledServiceIds.join(", ")}`);
         }
         for (const warning of r.selectionWarnings) log.warn(warning);
+        for (const warning of r.renderWarnings) log.warn(warning);
         log.dim(`Hardlink plan → ${r.hardlinkPath}`);
       } catch (err) {
         log.err(`Render failed: ${(err as Error).message}`);
@@ -134,6 +142,7 @@ export function registerComposeCommands(program: Command): void {
         });
         log.ok(`Rendered ${r.servicesRendered} services → ${r.composePath}`);
         for (const warning of r.selectionWarnings) log.warn(warning);
+        for (const warning of r.renderWarnings) log.warn(warning);
         const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
         log.ok(
           `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,

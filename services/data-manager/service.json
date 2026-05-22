@@ -15,7 +15,9 @@
       "DATA_DIR": "/data",
       "PORT": "4000",
       "HOST": "0.0.0.0",
-      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}"
+      "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
+      "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — the data-manager container persists the Transitous lockfile (POST /transit/bump) via this path; see infra/docker/.env.example}",
+      "TRANSITOUS_FEED_PROXY_KEY_FILE": "/secrets/transitous-feed-proxy.age"
     },
     "memory": "8g",
     "restart": "unless-stopped",
@@ -42,6 +44,22 @@
       "source": "@service:motis:tools/transitous",
       "target": "/config/transitous",
       "readOnly": true
+    },
+    {
+      "source": "@docker-socket",
+      "target": "/var/run/docker.sock",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — the data-manager bind-mounts the repo root so POST /transit/bump can persist infra/docker/transitous.lock.json on the host}",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
+      "readOnly": false
+    },
+    {
+      "source": "@infra:secrets/transitous-feed-proxy.age",
+      "target": "/secrets/transitous-feed-proxy.age",
+      "readOnly": true,
+      "optional": true
     }
   ],
   "exposure": {
