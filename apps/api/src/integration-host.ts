@@ -140,6 +140,13 @@ function createCacheClient(prefix: string): CacheClient {
       if (!redis) return;
       await redis.del(`int:${prefix}:${key}`);
     },
+    async hmget<T>(key: string, fields: readonly string[]): Promise<(T | null)[]> {
+      if (!redis) return fields.map(() => null);
+      if (fields.length === 0) return [];
+      const k = `int:${prefix}:${key}`;
+      const values = await redis.hmget(k, ...fields);
+      return values.map((v) => (v ? (JSON.parse(v) as T) : null));
+    },
     async withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
       if (redis) {
         const k = `int:${prefix}:${key}`;

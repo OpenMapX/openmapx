@@ -27,6 +27,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/poi-source-registry": "workspace:^",
     "js-yaml": "^4.1.1",
     "zod": "^4.4.1"
   },

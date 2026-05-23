@@ -28,6 +28,12 @@ export interface CacheClient {
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
   withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T>;
+  /**
+   * Bulk read fields from a Redis hash stored at the prefixed key. Returns
+   * one entry per requested field, in the same order; null for missing
+   * fields. JSON-decoded the same way get() decodes its value.
+   */
+  hmget<T = unknown>(key: string, fields: readonly string[]): Promise<(T | null)[]>;
 }
 
 export interface Logger {

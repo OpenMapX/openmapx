@@ -121,6 +121,13 @@ export {
   validateManifest,
 } from "./manifest";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
+export {
+  createStaticPoiReader,
+  createTwoTierPoiReader,
+  type PoiReader,
+  type StaticPoiReaderOptions,
+  type TwoTierPoiReaderOptions,
+} from "./poi-source-reader";
 export { IntegrationRegistry } from "./registry";
 // `useIntegrationRegistry` and `IntegrationRegistryContext` live in the
 // `/react` subpath — pulling them into this barrel would force every

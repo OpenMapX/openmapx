@@ -124,6 +124,7 @@ describe("MdbClient", () => {
       set: vi.fn(async () => {}),
       del: vi.fn(async () => {}),
       withCache: vi.fn(),
+      hmget: vi.fn(async (_key: string, fields: readonly string[]) => fields.map(() => null)),
     };
     const fetchImpl = vi.fn();
     const client = new MdbClient({

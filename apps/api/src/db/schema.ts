@@ -6,6 +6,7 @@ export {
   feedState as dataManagerFeedState,
   jobStages as dataManagerJobStages,
   jobs as dataManagerJobs,
+  poiFeedState as dataManagerPoiFeedState,
 } from "@openmapx/db-schema";
 // Admin audit log
 export { adminAuditLog } from "./admin-audit-schema";

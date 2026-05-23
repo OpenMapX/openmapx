@@ -68,3 +68,21 @@ export const feedState = dataManager.table("feed_state", {
    */
   consecutiveFailures: integer("consecutive_failures").notNull().default(0),
 });
+
+export const poiFeedState = dataManager.table("poi_feed_state", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Registry id from POI_SOURCES (e.g. "bnetza-ev", "utmc-newcastle-parking"). */
+  sourceId: text("source_id").notNull().unique(),
+  /** Domain bucket from PoiSource.domain — "ev-charging" | "parking" | future. */
+  domain: text("domain").notNull(),
+  lastStaticIngestAt: timestamp("last_static_ingest_at", { withTimezone: true }),
+  lastStaticRowCount: integer("last_static_row_count"),
+  /** Hash from BundledPoiSpec.staticChangeKey — drives the skip-swap-if-unchanged path. */
+  lastStaticHash: text("last_static_hash"),
+  lastLiveIngestAt: timestamp("last_live_ingest_at", { withTimezone: true }),
+  lastLiveRowCount: integer("last_live_row_count"),
+  /** "active" | "stale" | "failed" | "unknown" */
+  status: text("status").notNull().default("unknown"),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  lastError: jsonb("last_error"),
+});

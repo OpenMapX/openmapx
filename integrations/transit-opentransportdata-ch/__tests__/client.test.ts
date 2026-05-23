@@ -36,6 +36,9 @@ function createMemoryCache(): CacheClient {
       store.set(key, value);
       return value;
     },
+    async hmget<T>(_key: string, fields: readonly string[]) {
+      return fields.map(() => null as T | null);
+    },
   };
 }
 

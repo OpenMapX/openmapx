@@ -43,6 +43,13 @@
       "when": 1779491998052,
       "tag": "0005_feed_state_consecutive_failures",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779573972134,
+      "tag": "0006_add_poi_feed_state",
+      "breakpoints": true
     }
   ]
 }
