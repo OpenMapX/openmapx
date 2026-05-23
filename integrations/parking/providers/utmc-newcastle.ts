@@ -4,24 +4,25 @@ import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parki
 /**
  * UTMC (Urban Traffic Management and Control) Tyne & Wear parking client.
  *
- * Provides real-time car park occupancy for ~16 car parks in the
- * Newcastle / Tyne & Wear area via the NE Travel Data open data service.
+ * Provides real-time car park occupancy for car parks in the Newcastle /
+ * Tyne & Wear area via the NE Travel Data open data service.
  *
  * Two feeds:
- *   - Static: name, location, capacity (refreshed every 24h)
- *   - Dynamic: live occupancy + state (refreshed every ~60s, cached 2 min)
+ *   - Static  (/api/v2/carpark/static):  name, location, capacity (~24h refresh)
+ *   - Dynamic (/api/v2/carpark/dynamic): live occupancy + state (~60s refresh)
  *
- * Auth: username + password sent as Basic auth header.
+ * Auth: HTTP Basic (username + password).
  * License: OGL v3.
+ *
+ * Per Tyne and Wear Open Data Services Platform API Specification
+ * (Mott MacDonald, October 2019). The authoritative samples in sections 5.4
+ * and 6.4 of that document are the source of the shapes below.
  */
-
-// TODO: Verify exact JSON field names with actual API credentials.
-// The field names below are based on the published API specification
-// (https://www.netraveldata.co.uk/?page_id=32) and may need adjustment.
 
 interface UtmcStaticCarPark {
   systemCodeNumber: string;
-  definitions: {
+  /** Typically one element per car park, per spec section 5. */
+  definitions: Array<{
     shortDescription?: string;
     longDescription?: string;
     point?: {
@@ -31,29 +32,28 @@ interface UtmcStaticCarPark {
       longitude?: number;
     };
     lastUpdated?: string;
-  };
-  configurations?: {
+  }>;
+  /** Typically one element per car park, per spec section 5. */
+  configurations: Array<{
     capacity?: number;
     configurationDate?: string;
-  };
+  }>;
 }
+
+type UtmcState = "SPACES" | "ALMOST FULL" | "FULL" | "OPEN" | "CLOSED" | "UNKNOWN" | "FAULTY";
 
 interface UtmcDynamicCarPark {
   systemCodeNumber: string;
-  dynamics: {
+  /** Typically one element per car park, per spec section 6. */
+  dynamics: Array<{
     occupancy?: number;
-    stateDescription?: string; // SPACES | ALMOST FULL | FULL | OPEN | CLOSED | UNKNOWN | FAULTY
+    stateDescription?: UtmcState;
     lastUpdated?: string;
-  };
+  }>;
 }
 
-// TODO: The top-level response wrapper may differ — verify whether the API
-// returns a bare array or an object with a property (e.g. { carParks: [...] }).
-type UtmcStaticResponse = UtmcStaticCarPark[] | { carParks: UtmcStaticCarPark[] };
-type UtmcDynamicResponse = UtmcDynamicCarPark[] | { carParks: UtmcDynamicCarPark[] };
-
-const STATIC_API = "https://www.netraveldata.co.uk/api/v1/carpark/static";
-const DYNAMIC_API = "https://www.netraveldata.co.uk/api/v1/carpark/dynamic";
+const STATIC_API = "https://www.netraveldata.co.uk/api/v2/carpark/static";
+const DYNAMIC_API = "https://www.netraveldata.co.uk/api/v2/carpark/dynamic";
 
 const STATIC_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 const DYNAMIC_CACHE_TTL = 2 * 60 * 1000; // 2 min
@@ -94,20 +94,14 @@ function authHeaders(creds: { username: string; password: string }): Record<stri
   };
 }
 
-function unwrapStatic(data: UtmcStaticResponse): UtmcStaticCarPark[] {
-  return Array.isArray(data) ? data : (data.carParks ?? []);
-}
-
-function unwrapDynamic(data: UtmcDynamicResponse): UtmcDynamicCarPark[] {
-  return Array.isArray(data) ? data : (data.carParks ?? []);
-}
-
-function mapState(stateDescription?: string): "open" | "closed" | "unknown" {
+function mapState(stateDescription?: UtmcState | string): "open" | "closed" | "unknown" {
   if (!stateDescription) return "unknown";
   const upper = stateDescription.toUpperCase();
   if (upper === "CLOSED") return "closed";
   if (upper === "FAULTY") return "closed";
-  if (["SPACES", "ALMOST FULL", "FULL", "OPEN"].includes(upper)) return "open";
+  if (upper === "SPACES" || upper === "ALMOST FULL" || upper === "FULL" || upper === "OPEN") {
+    return "open";
+  }
   return "unknown";
 }
 
@@ -120,31 +114,49 @@ function deriveFreeSpaces(
   return free >= 0 ? free : 0;
 }
 
-function staticToFacility(
+/**
+ * Build a ParkingFacility from one static + (optionally) one dynamic record.
+ *
+ * Per Tyne and Wear Open Data Services Platform API Specification
+ * (Mott MacDonald, October 2019), `definitions`, `configurations`, and
+ * `dynamics` are all arrays — sections 5.4 and 6.4 show one element per
+ * car park as the typical case, and we take the first.
+ */
+export function staticToFacility(
   record: UtmcStaticCarPark,
   dynamic?: UtmcDynamicCarPark,
 ): ParkingFacility | null {
-  const lat = record.definitions?.point?.latitude;
-  const lng = record.definitions?.point?.longitude;
-  if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) return null;
+  const def = record.definitions?.[0];
+  const cfg = record.configurations?.[0];
+  if (!def) return null;
 
-  const capacity = record.configurations?.capacity;
-  const occupancy = dynamic?.dynamics?.occupancy;
+  const lat = def.point?.latitude;
+  const lng = def.point?.longitude;
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  const capacity = cfg?.capacity;
+  const dyn = dynamic?.dynamics?.[0];
+  const occupancy = dyn?.occupancy;
   const freeSpaces = deriveFreeSpaces(occupancy, capacity);
-  const hasDynamic = dynamic != null && occupancy != null;
+  const hasDynamic = dyn != null && occupancy != null;
 
   return {
     id: `utmc:${record.systemCodeNumber}`,
-    name: record.definitions?.shortDescription || `Car Park ${record.systemCodeNumber}`,
+    name: def.shortDescription || `Car Park ${record.systemCodeNumber}`,
     coordinates: [lng, lat],
     sources: ["utmc-newcastle"],
     parkingType: "garage" as ParkingType,
     capacity: capacity != null && capacity > 0 ? capacity : undefined,
     freeSpaces,
     hasRealtimeData: hasDynamic,
+    dataUpdatedAt: dyn?.lastUpdated ?? def.lastUpdated,
+    staticDataUpdatedAt: def.lastUpdated,
+    realtimeDataUpdatedAt: hasDynamic ? dyn?.lastUpdated : undefined,
     fee: "unknown",
-    address: record.definitions?.longDescription ?? undefined,
-    state: hasDynamic ? mapState(dynamic.dynamics?.stateDescription) : "unknown",
+    address: def.longDescription ?? undefined,
+    state: hasDynamic ? mapState(dyn?.stateDescription) : "unknown",
   };
 }
 
@@ -166,8 +178,9 @@ async function fetchStatic(creds: {
     return [];
   }
 
-  const data = (await res.json()) as UtmcStaticResponse;
-  const carParks = unwrapStatic(data);
+  // Per spec section 5.4: the response is always a bare JSON array.
+  const data = (await res.json()) as UtmcStaticCarPark[];
+  const carParks = Array.isArray(data) ? data : [];
   staticCache = { carParks, fetchedAt: Date.now() };
   return carParks;
 }
@@ -190,11 +203,12 @@ async function fetchDynamic(creds: {
     return new Map();
   }
 
-  const data = (await res.json()) as UtmcDynamicResponse;
-  const records = unwrapDynamic(data);
+  // Per spec section 6.4: the response is always a bare JSON array.
+  const data = (await res.json()) as UtmcDynamicCarPark[];
+  const records = Array.isArray(data) ? data : [];
   const map = new Map<string, UtmcDynamicCarPark>();
   for (const r of records) {
-    map.set(r.systemCodeNumber, r);
+    if (r?.systemCodeNumber) map.set(r.systemCodeNumber, r);
   }
 
   dynamicCache = { carParks: map, fetchedAt: Date.now() };
@@ -219,6 +233,10 @@ export async function searchUtmcNewcastle(bbox: BoundingBox): Promise<ParkingFac
 
   const facilities: ParkingFacility[] = [];
   for (const record of statics) {
+    if (!record?.definitions?.length) {
+      console.warn(`[utmc-newcastle] skipping ${record?.systemCodeNumber}: empty definitions`);
+      continue;
+    }
     const dynamic = dynamics.get(record.systemCodeNumber);
     const facility = staticToFacility(record, dynamic);
     if (!facility) continue;

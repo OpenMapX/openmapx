@@ -10,5 +10,5 @@ export function setup(ctx: IntegrationContext): void {
 
   setOsrmUrl(url);
 
-  ctx.registerProvider("routing", osrmService);
+  ctx.registerRoutingProvider(osrmService);
 }

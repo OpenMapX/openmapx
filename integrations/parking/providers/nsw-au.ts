@@ -8,98 +8,211 @@ import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parki
  * in the Greater Sydney area via the TfNSW Open Data Car Park API.
  *
  * Endpoints:
- *   - GET /v1/carpark              → list of facilities (no facility param)
- *   - GET /v1/carpark?facility=ID  → occupancy for a specific facility
+ *   - GET /v1/carpark              -> bare array of { facility_id, facility_name }
+ *   - GET /v1/carpark?facility=ID  -> single facility detail object (see NswFacilityDetail)
  *
  * Auth: API key in Authorization header as "apikey {KEY}".
  * License: CC BY 4.0.
  *
- * Reference:
- *   https://opendata.transport.nsw.gov.au/dataset/car-park-api
+ * Per TfNSW Car Park API documentation v2.3 (December 2025).
+ * Reference: https://opendata.transport.nsw.gov.au/dataset/car-park-api
  */
 
-// TODO: Verify exact JSON field names with actual API key.
-// The field names below are inferred from the Swagger spec, documentation PDF,
-// and community usage examples. The list endpoint may return a different shape
-// than the facility detail endpoint.
-
-interface NswFacilityListItem {
-  facility_id?: string;
-  facility_name?: string;
-  // TODO: The list endpoint may not include coordinates; verify with credentials.
-  // If coordinates are absent in the list, we may need a static lookup table.
-  latitude?: number;
-  longitude?: number;
-  capacity?: number;
-  // TODO: The list endpoint might include a "zones" array or "spots" count.
-  zones?: NswZone[];
+/** List endpoint entry — bare array of these objects per spec section 2.1. */
+interface NswFacilityListEntry {
+  facility_id: string;
+  facility_name: string;
 }
 
+/**
+ * Zone object inside the detail response.
+ * Per spec section 2.1.5: all numeric-looking fields are returned as strings,
+ * and the occupancy counters may be null.
+ */
 interface NswZone {
-  zone_id?: string;
-  zone_name?: string;
-  spots?: number;
-  occupancy?: number;
-  // TODO: Confirm whether zone-level capacity/occupancy fields exist.
-}
-
-interface NswFacilityDetail {
-  facility_id?: string;
-  facility_name?: string;
-  latitude?: number;
-  longitude?: number;
-  capacity?: number;
-  occupancy?: {
-    total?: number;
-    zones?: NswOccupancyZone[];
+  spots: string;
+  zone_id: string;
+  zone_name: string;
+  parent_zone_id: string;
+  occupancy: {
+    loop: string | null;
+    total: string | null;
+    monthlies: string | null;
+    open_gate: string | null;
+    transients: string | null;
   };
-  // TODO: Verify whether "spots", "time", "MessageType" or other fields exist.
-  spots?: number;
-  time?: string;
-  MessageType?: string;
-  zones?: NswZone[];
 }
 
-interface NswOccupancyZone {
-  zone_id?: string;
-  zone_name?: string;
-  spots?: number;
-  occupancy?: number;
+/**
+ * Detail endpoint response shape per spec section 2.1.5 (Sample feed).
+ * All numeric fields are strings; `location` and per-facility coordinates
+ * were added July 2024 and are present on every detail response.
+ */
+interface NswFacilityDetail {
+  tsn: string;
+  /** Per spec: "Please do not use this field. Instead, use MessageDate". */
+  time: string;
+  spots: string;
+  zones: NswZone[];
+  ParkID: string;
+  location: {
+    suburb: string;
+    address: string;
+    latitude: string;
+    longitude: string;
+  };
+  occupancy: {
+    loop: string | null;
+    total: string | null;
+    monthlies: string | null;
+    open_gate: string | null;
+    transients: string | null;
+  };
+  /** Authoritative feed timestamp (ISO 8601, naive local). */
+  MessageDate: string;
+  facility_id: string;
+  facility_name: string;
+  tfnsw_facility_id: string;
 }
-
-// TODO: Verify whether the list endpoint returns a bare array, a wrapper object,
-// or a different structure. Adjust accordingly.
-type NswListResponse = NswFacilityListItem[] | { facilities: NswFacilityListItem[] };
 
 const API_BASE = "https://api.transport.nsw.gov.au/v1";
 
 const LIST_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h — facility list is mostly static
 const OCCUPANCY_CACHE_TTL = 2 * 60 * 1000; // 2 min — real-time occupancy
 
-const COVERAGE_BBOX = { south: -34.2, west: 150.6, north: -33.5, east: 151.4 };
+const COVERAGE_BBOX = { south: -34.8, west: 150.6, north: -33.4, east: 151.4 };
 
-// Known facility IDs with approximate coordinates for Park & Ride / Metro stations.
-// Used as fallback when the list endpoint does not include coordinates.
-// TODO: Remove this table once the list endpoint is verified to include lat/lng.
-const KNOWN_FACILITIES: Record<
-  string,
-  { name: string; lat: number; lng: number; capacity: number }
-> = {
-  "2": { name: "Tallawong Station", lat: -33.693, lng: 150.9065, capacity: 1400 },
-  "4": { name: "Kellyville Station", lat: -33.7184, lng: 150.9554, capacity: 600 },
-  "6": { name: "Hills Showground Station", lat: -33.729, lng: 150.9863, capacity: 300 },
-  "8": { name: "Cherrybrook Station", lat: -33.7477, lng: 151.0318, capacity: 400 },
-  "10": { name: "Bella Vista Station", lat: -33.7297, lng: 150.9467, capacity: 800 },
-  "12": { name: "Gordon Station", lat: -33.7561, lng: 151.1536, capacity: 200 },
-  "14": { name: "Ashfield Station", lat: -33.8878, lng: 151.1261, capacity: 100 },
-  "16": { name: "Seven Hills Station", lat: -33.7746, lng: 150.9356, capacity: 300 },
-  "18": { name: "Kogarah Station", lat: -33.9632, lng: 151.1314, capacity: 100 },
-  "20": { name: "Narrabeen", lat: -33.7152, lng: 151.2946, capacity: 80 },
-  "22": { name: "Manly Vale", lat: -33.7783, lng: 151.2594, capacity: 100 },
+interface KnownFacility {
+  name: string;
+  lat: number;
+  lng: number;
+  capacity: number;
+}
+
+/**
+ * Static lookup of all 44 facilities published in the TfNSW Car Park API
+ * documentation v2.3, section 4 ("Car Parks"). Coordinates are the TSN
+ * (station) coordinates from the documentation; the per-facility detail
+ * endpoint returns the actual car-park-entrance coordinates in `location`
+ * and overrides this fallback when fetched.
+ *
+ * "Number of spots" values from the table are documented as approximate
+ * ("Do not hard code these figures as they may change from time to time")
+ * but are used as a static-only capacity fallback; the detail endpoint's
+ * `spots` field overrides this whenever a fresh poll has occurred.
+ */
+const KNOWN_FACILITIES: Record<string, KnownFacility> = {
+  // Rows 1-5: historical-only legacy entries (per spec these are still
+  // returned by the list endpoint).
+  "1": { name: "Tallawong Station Car Park", lat: -33.69163, lng: 150.906022, capacity: 1004 },
+  "2": { name: "Kellyville Station Car Park", lat: -33.713514, lng: 150.935304, capacity: 1374 },
+  "3": { name: "Bella Vista Station Car Park", lat: -33.730592, lng: 150.944024, capacity: 800 },
+  "4": {
+    name: "Hills Showground Station Car Park",
+    lat: -33.72782,
+    lng: 150.987345,
+    capacity: 600,
+  },
+  "5": { name: "Cherrybrook Station Car Park", lat: -33.736703, lng: 151.031977, capacity: 400 },
+  // Rows 6-39: active Park&Ride facilities.
+  "6": {
+    name: "Park&Ride - Gordon Henry St (north)",
+    lat: -33.756009,
+    lng: 151.154528,
+    capacity: 213,
+  },
+  "7": { name: "Park&Ride - Kiama", lat: -34.672518, lng: 150.854695, capacity: 42 },
+  "8": { name: "Park&Ride - Gosford", lat: -33.423883, lng: 151.341711, capacity: 1057 },
+  "9": { name: "Park&Ride - Revesby", lat: -33.95246, lng: 151.014838, capacity: 934 },
+  // Row 10 PDF prints latitude without sign (33.697777); corrected to the
+  // negative-southern-hemisphere value consistent with the address.
+  "10": { name: "Park&Ride - Warriewood", lat: -33.697777, lng: 151.300667, capacity: 244 },
+  "11": { name: "Park&Ride - Narrabeen", lat: -33.713514, lng: 151.297315, capacity: 46 },
+  "12": { name: "Park&Ride - Mona Vale", lat: -33.677276, lng: 151.305146, capacity: 68 },
+  "13": { name: "Park&Ride - Dee Why", lat: -33.752797, lng: 151.286485, capacity: 117 },
+  "14": { name: "Park&Ride - West Ryde", lat: -33.807172, lng: 151.090229, capacity: 151 },
+  "15": {
+    name: "Park&Ride - Sutherland East Parade",
+    lat: -34.031787,
+    lng: 151.05719,
+    capacity: 373,
+  },
+  "16": { name: "Park&Ride - Leppington", lat: -33.9544, lng: 150.8081, capacity: 1884 },
+  "17": {
+    name: "Park&Ride - Edmondson Park (south)",
+    lat: -33.9693,
+    lng: 150.8587,
+    capacity: 1431,
+  },
+  "18": { name: "Park&Ride - St Marys", lat: -33.762256, lng: 150.776029, capacity: 682 },
+  "19": {
+    name: "Park&Ride - Campbelltown Farrow Rd (north)",
+    lat: -34.063835,
+    lng: 150.813929,
+    capacity: 68,
+  },
+  "20": {
+    name: "Park&Ride - Campbelltown Hurley St",
+    lat: -34.063835,
+    lng: 150.813929,
+    capacity: 118,
+  },
+  "21": { name: "Park&Ride - Penrith (at-grade)", lat: -33.750055, lng: 150.696135, capacity: 230 },
+  "22": {
+    name: "Park&Ride - Penrith (multi-level)",
+    lat: -33.750055,
+    lng: 150.696135,
+    capacity: 1144,
+  },
+  "23": { name: "Park&Ride - Warwick Farm", lat: -33.91345, lng: 150.935036, capacity: 910 },
+  "24": { name: "Park&Ride - Schofields", lat: -33.704477, lng: 150.873817, capacity: 700 },
+  "25": { name: "Park&Ride - Hornsby", lat: -33.702801, lng: 151.098494, capacity: 145 },
+  "26": { name: "Park&Ride - Tallawong P1", lat: -33.69163, lng: 150.906022, capacity: 121 },
+  "27": { name: "Park&Ride - Tallawong P2", lat: -33.69163, lng: 150.906022, capacity: 455 },
+  "28": { name: "Park&Ride - Tallawong P3", lat: -33.69163, lng: 150.906022, capacity: 397 },
+  "29": { name: "Park&Ride - Kellyville (north)", lat: -33.713514, lng: 150.935304, capacity: 351 },
+  "30": { name: "Park&Ride - Kellyville (south)", lat: -33.713514, lng: 150.935304, capacity: 964 },
+  "31": { name: "Park&Ride - Bella Vista", lat: -33.730592, lng: 150.944024, capacity: 777 },
+  "32": { name: "Park&Ride - Hills Showground", lat: -33.72782, lng: 150.987345, capacity: 584 },
+  "33": { name: "Park&Ride - Cherrybrook", lat: -33.736703, lng: 151.031977, capacity: 384 },
+  "34": {
+    name: "Park&Ride - Lindfield Village Green",
+    lat: -33.775185,
+    lng: 151.169111,
+    capacity: 94,
+  },
+  "35": { name: "Park&Ride - Beverly Hills", lat: -33.948849, lng: 151.081692, capacity: 200 },
+  "36": { name: "Park&Ride - Emu Plains", lat: -33.745527, lng: 150.66987, capacity: 751 },
+  "37": { name: "Park&Ride - Riverwood", lat: -33.952727, lng: 151.050035, capacity: 142 },
+  "38": { name: "Park&Ride - North Rocks", lat: -33.765539, lng: 151.014131, capacity: 139 },
+  "39": {
+    name: "Park&Ride - Edmondson Park (north)",
+    lat: -33.969123,
+    lng: 150.861594,
+    capacity: 917,
+  },
+  // Rows 486-490: non-sequential IDs per spec.
+  "486": { name: "Park&Ride - Ashfield", lat: -33.8875506079, lng: 151.125504163, capacity: 225 },
+  "487": { name: "Park&Ride - Kogarah", lat: -33.9621493059, lng: 151.132641462, capacity: 259 },
+  "488": {
+    name: "Park&Ride - Seven Hills",
+    lat: -33.774430434,
+    lng: 150.936513359,
+    capacity: 1613,
+  },
+  // ID 489 (Manly Vale) uses a synthetic parent stop TSN 2093117 per the
+  // spec note ("not associated with a station, ferry wharf or light rail stop").
+  "489": { name: "Park&Ride - Manly Vale", lat: -33.786247, lng: 151.26671, capacity: 142 },
+  "490": { name: "Park&Ride - Brookvale", lat: -33.767508, lng: 151.268541, capacity: 246 },
 };
 
-let listCache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
-const occupancyCache: Map<string, { total: number; fetchedAt: number }> = new Map();
+interface CachedDetail {
+  detail: NswFacilityDetail;
+  fetchedAt: number;
+}
+
+let listCache: { entries: NswFacilityListEntry[]; fetchedAt: number } | null = null;
+const detailCache: Map<string, CachedDetail> = new Map();
 
 // Populated by setup(ctx) from the resolved integration config cascade.
 let cachedApiKey: string | undefined;
@@ -127,42 +240,76 @@ function authHeaders(apiKey: string): Record<string, string> {
   };
 }
 
-function listItemToFacility(item: NswFacilityListItem): ParkingFacility | null {
-  const facilityId = item.facility_id ?? "";
+function parseIntStrict(value: string | null | undefined): number | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Build a ParkingFacility from a list entry + the static KNOWN_FACILITIES
+ * fallback, optionally enriched with a cached detail response.
+ *
+ * Per TfNSW Car Park API documentation v2.3 (December 2025):
+ *   - List endpoint returns only { facility_id, facility_name }; coordinates
+ *     and capacity come from the static table or from the detail response.
+ *   - Detail endpoint's `spots` is authoritative capacity; `occupancy.total`
+ *     is authoritative vehicle count. Availability = spots - total.
+ *   - `MessageDate` is the authoritative feed timestamp; `time` is deprecated.
+ */
+export function buildNswFacility(
+  entry: NswFacilityListEntry,
+  detail?: NswFacilityDetail | null,
+): ParkingFacility | null {
+  const facilityId = entry.facility_id;
   if (!facilityId) return null;
 
-  let lat = item.latitude;
-  let lng = item.longitude;
-  let name = item.facility_name || `Car Park ${facilityId}`;
-  let capacity = item.capacity;
+  const known = KNOWN_FACILITIES[facilityId];
 
-  // Fallback to known facilities table if coordinates are missing
-  if (lat == null || lng == null) {
-    const known = KNOWN_FACILITIES[facilityId];
-    if (!known) return null;
+  let lat: number | undefined;
+  let lng: number | undefined;
+  let capacity: number | undefined;
+  let freeSpaces: number | undefined;
+  let dataUpdatedAt: string | undefined;
+  let hasRealtimeData = false;
+
+  if (known) {
     lat = known.lat;
     lng = known.lng;
-    name = item.facility_name || known.name;
-    capacity = capacity ?? known.capacity;
+    capacity = known.capacity;
   }
 
-  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-
-  // Compute total capacity from zones if top-level capacity is missing
-  if (capacity == null && item.zones) {
-    let zoneTotal = 0;
-    for (const z of item.zones) {
-      if (z.spots != null) zoneTotal += z.spots;
+  if (detail) {
+    const detailLat = Number(detail.location?.latitude);
+    const detailLng = Number(detail.location?.longitude);
+    if (Number.isFinite(detailLat) && Number.isFinite(detailLng)) {
+      lat = detailLat;
+      lng = detailLng;
     }
-    if (zoneTotal > 0) capacity = zoneTotal;
+    const detailSpots = parseIntStrict(detail.spots);
+    const detailTotal = parseIntStrict(detail.occupancy?.total ?? null);
+    if (detailSpots != null && detailSpots > 0) {
+      capacity = detailSpots;
+    }
+    if (detailSpots != null && detailTotal != null) {
+      freeSpaces = Math.max(0, detailSpots - detailTotal);
+      hasRealtimeData = true;
+    }
+    if (detail.MessageDate) {
+      dataUpdatedAt = detail.MessageDate;
+    }
   }
 
-  // Check cached occupancy
-  const cachedOcc = occupancyCache.get(facilityId);
-  const hasCachedOccupancy = cachedOcc && Date.now() - cachedOcc.fetchedAt < OCCUPANCY_CACHE_TTL;
-  const occupied = hasCachedOccupancy ? cachedOcc.total : undefined;
-  const freeSpaces =
-    occupied != null && capacity != null ? Math.max(0, capacity - occupied) : undefined;
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  const name = entry.facility_name || known?.name || `Car Park ${facilityId}`;
+  const address = detail?.location?.address
+    ? [detail.location.address, detail.location.suburb].filter(Boolean).join(", ")
+    : undefined;
 
   return {
     id: `nsw:${facilityId}`,
@@ -172,15 +319,18 @@ function listItemToFacility(item: NswFacilityListItem): ParkingFacility | null {
     parkingType: "surface" as ParkingType, // Park & Ride lots are typically surface
     capacity: capacity != null && capacity > 0 ? capacity : undefined,
     freeSpaces,
-    hasRealtimeData: hasCachedOccupancy ?? false,
+    hasRealtimeData,
+    dataUpdatedAt,
+    realtimeDataUpdatedAt: hasRealtimeData ? dataUpdatedAt : undefined,
     fee: "free", // Park & Ride is generally free
     parkAndRide: true,
+    address,
   };
 }
 
-async function fetchFacilityList(apiKey: string): Promise<ParkingFacility[]> {
+async function fetchFacilityList(apiKey: string): Promise<NswFacilityListEntry[]> {
   if (listCache && Date.now() - listCache.fetchedAt < LIST_CACHE_TTL) {
-    return listCache.facilities;
+    return listCache.entries;
   }
 
   const res = await fetch(`${API_BASE}/carpark`, {
@@ -189,44 +339,28 @@ async function fetchFacilityList(apiKey: string): Promise<ParkingFacility[]> {
   });
 
   if (!res.ok) {
-    if (listCache) return listCache.facilities;
+    if (listCache) return listCache.entries;
     return [];
   }
 
-  const data = (await res.json()) as NswListResponse;
-  const items = Array.isArray(data) ? data : (data.facilities ?? []);
+  // Per TfNSW Car Park API documentation v2.3 (December 2025): the list
+  // endpoint always returns a bare JSON array of { facility_id, facility_name }.
+  const data = (await res.json()) as NswFacilityListEntry[];
+  const entries = Array.isArray(data)
+    ? data.filter((e): e is NswFacilityListEntry => !!e?.facility_id)
+    : [];
 
-  const facilities: ParkingFacility[] = [];
-  for (const item of items) {
-    const facility = listItemToFacility(item);
-    if (facility) facilities.push(facility);
-  }
-
-  // If the list endpoint returned no parseable facilities, fall back to known list
-  if (facilities.length === 0) {
-    for (const [fid, known] of Object.entries(KNOWN_FACILITIES)) {
-      facilities.push({
-        id: `nsw:${fid}`,
-        name: known.name,
-        coordinates: [known.lng, known.lat],
-        sources: ["nsw-au"],
-        parkingType: "surface",
-        capacity: known.capacity,
-        hasRealtimeData: false,
-        fee: "free",
-        parkAndRide: true,
-      });
-    }
-  }
-
-  listCache = { facilities, fetchedAt: Date.now() };
-  return facilities;
+  listCache = { entries, fetchedAt: Date.now() };
+  return entries;
 }
 
-async function fetchOccupancy(apiKey: string, facilityId: string): Promise<number | null> {
-  const cached = occupancyCache.get(facilityId);
+async function fetchFacilityDetail(
+  apiKey: string,
+  facilityId: string,
+): Promise<NswFacilityDetail | null> {
+  const cached = detailCache.get(facilityId);
   if (cached && Date.now() - cached.fetchedAt < OCCUPANCY_CACHE_TTL) {
-    return cached.total;
+    return cached.detail;
   }
 
   try {
@@ -235,30 +369,36 @@ async function fetchOccupancy(apiKey: string, facilityId: string): Promise<numbe
       signal: AbortSignal.timeout(10_000),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) return cached?.detail ?? null;
 
     const data = (await res.json()) as NswFacilityDetail;
-
-    // The occupancy may be nested under an "occupancy" object or at the top level
-    // TODO: Verify the exact response shape with credentials
-    const total = data.occupancy?.total ?? data.spots ?? null;
-    if (total != null) {
-      occupancyCache.set(facilityId, { total, fetchedAt: Date.now() });
+    if (!data || typeof data !== "object" || !data.facility_id) {
+      return cached?.detail ?? null;
     }
-
-    return total;
+    detailCache.set(facilityId, { detail: data, fetchedAt: Date.now() });
+    return data;
   } catch {
-    return null;
+    return cached?.detail ?? null;
   }
 }
 
-async function fetchOccupancyBatch(apiKey: string, facilityIds: string[]): Promise<void> {
-  // Fetch occupancy for all facilities in parallel (limited concurrency)
+async function fetchDetailBatch(apiKey: string, facilityIds: string[]): Promise<void> {
   const BATCH_SIZE = 5;
   for (let i = 0; i < facilityIds.length; i += BATCH_SIZE) {
     const batch = facilityIds.slice(i, i + BATCH_SIZE);
-    await Promise.allSettled(batch.map((id) => fetchOccupancy(apiKey, id)));
+    await Promise.allSettled(batch.map((id) => fetchFacilityDetail(apiKey, id)));
   }
+}
+
+function buildFromEntriesWithCache(entries: NswFacilityListEntry[]): ParkingFacility[] {
+  const facilities: ParkingFacility[] = [];
+  for (const entry of entries) {
+    const cached = detailCache.get(entry.facility_id);
+    const fresh = cached && Date.now() - cached.fetchedAt < OCCUPANCY_CACHE_TTL;
+    const facility = buildNswFacility(entry, fresh ? cached.detail : null);
+    if (facility) facilities.push(facility);
+  }
+  return facilities;
 }
 
 export async function searchNswAu(bbox: BoundingBox): Promise<ParkingFacility[]> {
@@ -266,53 +406,43 @@ export async function searchNswAu(bbox: BoundingBox): Promise<ParkingFacility[]>
 
   const apiKey = getApiKey();
   if (!apiKey) return [];
-  const allFacilities = await fetchFacilityList(apiKey);
 
-  // Filter to bbox
-  const inBbox = allFacilities.filter((f) => {
+  const entries = await fetchFacilityList(apiKey);
+
+  // Build using only static info first so we can bbox-filter cheaply.
+  const staticFacilities = buildFromEntriesWithCache(entries);
+  const inBbox = staticFacilities.filter((f) => {
     const [lng, lat] = f.coordinates;
     return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
   });
 
-  // Fetch live occupancy for visible facilities
-  const facilityIds = inBbox.map((f) => f.id.slice("nsw:".length));
-  await fetchOccupancyBatch(apiKey, facilityIds);
+  // Fetch live detail for visible facilities.
+  const visibleEntries = entries.filter((e) => inBbox.some((f) => f.id === `nsw:${e.facility_id}`));
+  await fetchDetailBatch(
+    apiKey,
+    visibleEntries.map((e) => e.facility_id),
+  );
 
-  // Re-map with updated occupancy data
-  return inBbox.map((f) => {
-    const fid = f.id.slice("nsw:".length);
-    const cached = occupancyCache.get(fid);
-    const hasCachedOccupancy = cached && Date.now() - cached.fetchedAt < OCCUPANCY_CACHE_TTL;
-
-    if (hasCachedOccupancy && f.capacity) {
-      return {
-        ...f,
-        freeSpaces: Math.max(0, f.capacity - cached.total),
-        hasRealtimeData: true,
-      };
-    }
-    return f;
-  });
+  return visibleEntries
+    .map((entry) => {
+      const cached = detailCache.get(entry.facility_id);
+      return buildNswFacility(entry, cached?.detail ?? null);
+    })
+    .filter((f): f is ParkingFacility => f != null);
 }
 
 export async function fetchNswAuDetail(facilityId: string): Promise<ParkingFacility | null> {
   const apiKey = getApiKey();
   if (!apiKey) return null;
-  const allFacilities = await fetchFacilityList(apiKey);
 
-  const facility = allFacilities.find((f) => f.id === `nsw:${facilityId}`);
-  if (!facility) return null;
+  const entries = await fetchFacilityList(apiKey);
+  const entry =
+    entries.find((e) => e.facility_id === facilityId) ??
+    (KNOWN_FACILITIES[facilityId]
+      ? { facility_id: facilityId, facility_name: KNOWN_FACILITIES[facilityId].name }
+      : null);
+  if (!entry) return null;
 
-  // Fetch fresh occupancy for this specific facility
-  const total = await fetchOccupancy(apiKey, facilityId);
-
-  if (total != null && facility.capacity) {
-    return {
-      ...facility,
-      freeSpaces: Math.max(0, facility.capacity - total),
-      hasRealtimeData: true,
-    };
-  }
-
-  return facility;
+  const detail = await fetchFacilityDetail(apiKey, facilityId);
+  return buildNswFacility(entry, detail);
 }

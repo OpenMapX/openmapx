@@ -8,5 +8,5 @@ export function setup(ctx: IntegrationContext): void {
 
   setPhotonUrl(url);
 
-  ctx.registerProvider("geocoding", photonService);
+  ctx.registerGeocodingProvider(photonService);
 }

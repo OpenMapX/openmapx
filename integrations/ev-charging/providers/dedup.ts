@@ -11,11 +11,10 @@ function stationPriority(station: EvChargingStation): number {
   return getEvChargingSourcePriority(station.sources[0]);
 }
 
-// TODO(policy): mobility-core's DEDUP.EV_RADIUS_M is 50m. EV clustering
-// uses a three-tier window (20m always, 20-90m soft with names, 90-150m
-// strict with names+operator+address) tuned for charging-station data
-// where physical sites span multiple bays. Kept raw until thresholds
-// are reconciled across providers.
+// EV clustering deliberately widens past `DEDUP.EV_RADIUS_M` (50 m) into a
+// three-tier window — 20 m always, 20-90 m soft with names, 90-150 m strict
+// with names + operator + address — because physical charging sites span
+// multiple bays and shared infrastructure across operators.
 const ALWAYS_MERGE_M = 20;
 const SOFT_MERGE_M = 90;
 const NEVER_MERGE_M = 150;

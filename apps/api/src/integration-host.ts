@@ -914,19 +914,60 @@ export async function initIntegrations(
       getRequiredService(key: string) {
         return requiresMap.get(key) ?? null;
       },
-      registerProvider(domain: string, provider: unknown) {
-        const existing = providers.get(domain) ?? [];
-        existing.push(provider);
-        providers.set(domain, existing);
-      },
       registerTransitProvider(provider) {
-        this.registerProvider("transit", provider);
+        const existing = providers.get("transit") ?? [];
+        existing.push(provider);
+        providers.set("transit", existing);
       },
       registerRealtimeProvider(provider) {
-        this.registerProvider("live-transit", provider);
+        const existing = providers.get("live-transit") ?? [];
+        existing.push(provider);
+        providers.set("live-transit", existing);
       },
       registerMobilityDataSource(provider) {
-        this.registerProvider("data-source", provider);
+        const existing = providers.get("data-source") ?? [];
+        existing.push(provider);
+        providers.set("data-source", existing);
+      },
+      registerWeatherProvider(provider) {
+        const existing = providers.get("weather") ?? [];
+        existing.push(provider);
+        providers.set("weather", existing);
+      },
+      registerGeocodingProvider(provider) {
+        const existing = providers.get("geocoding") ?? [];
+        existing.push(provider);
+        providers.set("geocoding", existing);
+      },
+      registerRoutingProvider(provider) {
+        const existing = providers.get("routing") ?? [];
+        existing.push(provider);
+        providers.set("routing", existing);
+      },
+      registerPhotoProvider(provider) {
+        const existing = providers.get("photos") ?? [];
+        existing.push(provider);
+        providers.set("photos", existing);
+      },
+      registerReviewProvider(provider) {
+        const existing = providers.get("reviews") ?? [];
+        existing.push(provider);
+        providers.set("reviews", existing);
+      },
+      registerPoiSearchProvider(provider) {
+        const existing = providers.get("poi-search") ?? [];
+        existing.push(provider);
+        providers.set("poi-search", existing);
+      },
+      registerKnowledgeProvider(provider) {
+        const existing = providers.get("knowledge") ?? [];
+        existing.push(provider);
+        providers.set("knowledge", existing);
+      },
+      registerGtfsCatalogProvider(provider) {
+        const existing = providers.get("gtfs-catalog") ?? [];
+        existing.push(provider);
+        providers.set("gtfs-catalog", existing);
       },
       registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
         registerIntegrationRoute(id, method, path, handler, options);
@@ -1260,19 +1301,60 @@ export async function reloadIntegrations(): Promise<{
       getRequiredService(key: string) {
         return reloadRequiresMap.get(key) ?? null;
       },
-      registerProvider(domain: string, provider: unknown) {
-        const existing = providers.get(domain) ?? [];
-        existing.push(provider);
-        providers.set(domain, existing);
-      },
       registerTransitProvider(provider) {
-        this.registerProvider("transit", provider);
+        const existing = providers.get("transit") ?? [];
+        existing.push(provider);
+        providers.set("transit", existing);
       },
       registerRealtimeProvider(provider) {
-        this.registerProvider("live-transit", provider);
+        const existing = providers.get("live-transit") ?? [];
+        existing.push(provider);
+        providers.set("live-transit", existing);
       },
       registerMobilityDataSource(provider) {
-        this.registerProvider("data-source", provider);
+        const existing = providers.get("data-source") ?? [];
+        existing.push(provider);
+        providers.set("data-source", existing);
+      },
+      registerWeatherProvider(provider) {
+        const existing = providers.get("weather") ?? [];
+        existing.push(provider);
+        providers.set("weather", existing);
+      },
+      registerGeocodingProvider(provider) {
+        const existing = providers.get("geocoding") ?? [];
+        existing.push(provider);
+        providers.set("geocoding", existing);
+      },
+      registerRoutingProvider(provider) {
+        const existing = providers.get("routing") ?? [];
+        existing.push(provider);
+        providers.set("routing", existing);
+      },
+      registerPhotoProvider(provider) {
+        const existing = providers.get("photos") ?? [];
+        existing.push(provider);
+        providers.set("photos", existing);
+      },
+      registerReviewProvider(provider) {
+        const existing = providers.get("reviews") ?? [];
+        existing.push(provider);
+        providers.set("reviews", existing);
+      },
+      registerPoiSearchProvider(provider) {
+        const existing = providers.get("poi-search") ?? [];
+        existing.push(provider);
+        providers.set("poi-search", existing);
+      },
+      registerKnowledgeProvider(provider) {
+        const existing = providers.get("knowledge") ?? [];
+        existing.push(provider);
+        providers.set("knowledge", existing);
+      },
+      registerGtfsCatalogProvider(provider) {
+        const existing = providers.get("gtfs-catalog") ?? [];
+        existing.push(provider);
+        providers.set("gtfs-catalog", existing);
       },
       registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
         registerIntegrationRoute(id, method, path, handler, options);

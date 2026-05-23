@@ -70,8 +70,12 @@ export interface TripPlanRequest {
 // @openmapx/core import just for this one return type.
 export type { VehicleJourney };
 
-// TODO(types): tighten in B2 once a concrete timetable consumer exists.
-export type TimetableEntry = unknown;
+/**
+ * Static timetable entry for a stop. Both `transit-entur` and
+ * `transit-gtfs-local` resolve `getStopTimetable(stopId, date)` to a
+ * `Departure[]` so the canonical shape is reused here.
+ */
+export type TimetableEntry = Departure;
 
 export interface TransitProvider {
   readonly id: string;

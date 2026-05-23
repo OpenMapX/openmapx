@@ -1,11 +1,12 @@
 import { normalizeProducerUrl } from "@integrations/transit-mobility-database";
 import type { BBox } from "@openmapx/core";
 import { USER_AGENT_TRANSIT } from "@openmapx/core";
+import type { GtfsCatalogProvider } from "@openmapx/integration-framework";
 import { getIntegrationsByDomain } from "../../integration-host.js";
 import type { CatalogFeed } from "./types";
 
 /**
- * Provider shape registered by the `transit-mobility-database` integration
+ * The `transit-mobility-database` integration registers a `GtfsCatalogProvider`
  * under the `gtfs-catalog` domain (see its `setup()`). We have to go through
  * the registry because in development the integration host imports built-in
  * modules with an mtime query string for HMR — a direct
@@ -13,19 +14,14 @@ import type { CatalogFeed } from "./types";
  * pulls a separate module instance whose `state.client` is never initialized,
  * so the call would always return `[]`.
  */
-interface MdbCatalogProvider {
-  id: string;
-  listFeeds: () => Promise<CatalogFeed[]>;
-}
-
 async function getMdbCatalogFeeds(): Promise<CatalogFeed[]> {
   const out: CatalogFeed[] = [];
   for (const integration of getIntegrationsByDomain("gtfs-catalog")) {
-    const providers = (integration.providers.get("gtfs-catalog") ?? []) as MdbCatalogProvider[];
+    const providers = (integration.providers.get("gtfs-catalog") ?? []) as GtfsCatalogProvider[];
     for (const provider of providers) {
       try {
         const feeds = await provider.listFeeds();
-        out.push(...feeds);
+        out.push(...(feeds as CatalogFeed[]));
       } catch (err) {
         console.warn(`[gtfs-catalog] provider "${provider.id}" listFeeds failed:`, err);
       }

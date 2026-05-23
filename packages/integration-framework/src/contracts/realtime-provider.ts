@@ -14,7 +14,12 @@ export interface RealtimeCapabilities {
   tripUpdates: boolean;
 }
 
-// TODO(types): tighten once a stable GTFS-RT trip-update shape is in place.
+/**
+ * Per-provider trip update delta. Intentionally `unknown`: each realtime
+ * provider's source shape differs (MOTIS returns a full `Itinerary`, an
+ * Entur SIRI-ET adapter would return a SIRI fragment, etc.). Consumers
+ * narrow on a provider-specific type guard.
+ */
 export type TripUpdate = unknown;
 
 export interface RealtimeProvider {

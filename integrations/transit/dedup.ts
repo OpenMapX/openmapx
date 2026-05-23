@@ -99,9 +99,9 @@ export function normalizeTimestamp(ts: string): string {
 export function bucketTimestamps(ts: string): [string, string] {
   try {
     const ms = new Date(ts).getTime();
-    // TODO(policy): mobility-core's DEDUP.DEPARTURE_BUCKET_SECONDS is 60s.
-    // This bucket is 120s to absorb realtime drift between providers for
-    // the same trip; tightening to 60s would break inter-provider dedup.
+    // Deliberately wider than `DEDUP.DEPARTURE_BUCKET_SECONDS` (60 s): inter-
+    // provider realtime drift for the same trip routinely spans up to 90 s,
+    // so a 120 s bucket is what keeps dedup honest in practice.
     const BUCKET = 120_000; // 2 minutes
     const lower = Math.floor(ms / BUCKET) * BUCKET;
     const upper = lower + BUCKET;
@@ -157,13 +157,12 @@ export function isTripNumber(shortName: string): boolean {
 
 // Deduplication
 //
-// TODO(policy): mobility-core's DEDUP.STOP_RADIUS_M is 50m and
-// DEDUP.NAME_SIMILARITY_MIN is 0.6. Transit-stop clustering uses a
-// wider 300m window with a more permissive 0.5 Dice floor because
-// platforms of one logical station can sit hundreds of metres apart
-// (e.g. opposite-direction bus stops, S/U-Bahn entrances). Tightening
-// to policy would drop legitimate same-station dedup; kept raw until
-// thresholds are reconciled.
+// Transit-stop clustering deliberately widens past `DEDUP.STOP_RADIUS_M`
+// (50 m) + `DEDUP.NAME_SIMILARITY_MIN` (0.6) into a 300 m / 0.5 Dice
+// window — platforms of one logical station routinely sit hundreds of
+// metres apart (opposite-direction bus stops, multi-entrance S/U-Bahn
+// stations). Tightening to the policy defaults would drop legitimate
+// same-station dedup.
 const MAX_DISTANCE_M = 300;
 const MIN_DICE = 0.5;
 

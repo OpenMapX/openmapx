@@ -1,12 +1,12 @@
-import type { KnowledgeSource } from "@openmapx/core";
+import type { KnowledgeProvider } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock knowledge sources
-const mockWikidataSource: KnowledgeSource = {
+const mockWikidataSource: KnowledgeProvider = {
   name: "wikidata",
   lookup: vi.fn(),
 };
-const mockWikipediaSource: KnowledgeSource = {
+const mockWikipediaSource: KnowledgeProvider = {
   name: "wikipedia",
   lookup: vi.fn(),
 };

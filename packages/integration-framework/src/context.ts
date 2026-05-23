@@ -1,6 +1,14 @@
+import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
+import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
+import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider.js";
+import type { PhotoProvider } from "./contracts/photo-provider.js";
+import type { PoiSearchProvider } from "./contracts/poi-search-provider.js";
 import type { RealtimeProvider } from "./contracts/realtime-provider.js";
+import type { ReviewProvider } from "./contracts/review-provider.js";
+import type { RoutingProvider } from "./contracts/routing-provider.js";
 import type { TransitProvider } from "./contracts/transit-provider.js";
+import type { WeatherProvider } from "./contracts/weather-provider.js";
 import type { LoadedIntegration } from "./loader";
 import type { IntegrationManifest } from "./manifest";
 
@@ -171,34 +179,38 @@ export interface IntegrationContext {
   readonly metricsRecorder?: MetricsRecorder;
 
   /**
-   * Untyped registrar for domains that don't yet have a canonical contract.
-   * Currently used by: `geocoding`, `routing`, `weather`, `knowledge`,
-   * `photos`, `reviews`, `poi-search`, `gtfs-catalog`. Each of these passes
-   * a domain-specific provider shape; the host stores them by domain key
-   * and exposes them via `getIntegrationsByDomain(domain)`. The mobility
-   * data domains have typed registrars (see below) — do NOT register
-   * a transit / live-transit / data-source provider via this method.
-   */
-  registerProvider(domain: string, provider: unknown): void;
-  /**
-   * Typed registrar for transit providers. Stores the provider in the same
-   * slot as the legacy `registerProvider("transit", p)` for orchestrator
-   * compatibility, but enforces the canonical `TransitProvider` shape at
-   * compile time.
+   * Typed registrar for transit providers — enforces the canonical
+   * `TransitProvider` shape at compile time. Registered providers are stored
+   * under the `transit` domain key.
    */
   registerTransitProvider(provider: TransitProvider): void;
   /**
    * Typed registrar for realtime (live-transit) providers — vehicle
-   * positions, alerts, trip updates. Stores in the same slot as the legacy
-   * `registerProvider("live-transit", p)`.
+   * positions, alerts, trip updates. Stored under the `live-transit` key.
    */
   registerRealtimeProvider(provider: RealtimeProvider): void;
   /**
    * Typed registrar for mobility data-source providers (bike-sharing,
    * car-sharing, scooter-sharing, parking, fuel, EV charging, webcams).
-   * Stores in the same slot as the legacy `registerProvider("data-source", p)`.
+   * Stored under the `data-source` key.
    */
   registerMobilityDataSource(provider: MobilityDataSourceProvider): void;
+  /** Typed registrar for weather providers. Stored under the `weather` key. */
+  registerWeatherProvider(provider: WeatherProvider): void;
+  /** Typed registrar for geocoding providers. Stored under the `geocoding` key. */
+  registerGeocodingProvider(provider: GeocodingProvider): void;
+  /** Typed registrar for routing providers. Stored under the `routing` key. */
+  registerRoutingProvider(provider: RoutingProvider): void;
+  /** Typed registrar for photo providers. Stored under the `photos` key. */
+  registerPhotoProvider(provider: PhotoProvider): void;
+  /** Typed registrar for review providers. Stored under the `reviews` key. */
+  registerReviewProvider(provider: ReviewProvider): void;
+  /** Typed registrar for POI search providers. Stored under the `poi-search` key. */
+  registerPoiSearchProvider(provider: PoiSearchProvider): void;
+  /** Typed registrar for knowledge providers. Stored under the `knowledge` key. */
+  registerKnowledgeProvider(provider: KnowledgeProvider): void;
+  /** Typed registrar for GTFS catalog providers. Stored under the `gtfs-catalog` key. */
+  registerGtfsCatalogProvider(provider: GtfsCatalogProvider): void;
   registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
 

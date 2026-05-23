@@ -25,7 +25,7 @@ interface SearchHit {
 
 export function setup(ctx: IntegrationContext): void {
   startBackgroundLoad(ctx.log);
-  ctx.registerProvider("knowledge", createOurAirportsSource(ctx.log));
+  ctx.registerKnowledgeProvider(createOurAirportsSource(ctx.log));
 
   // Place-resolver for `oa:` scheme. When the SearchBar / overlay clicks
   // an airport, it navigates to `oa:<ident>` (e.g. `oa:EDDL`). The resolver

@@ -15,7 +15,7 @@ export function setup(ctx: IntegrationContext): void {
     multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
   });
 
-  ctx.registerProvider("geocoding", enturGeocodingService);
+  ctx.registerGeocodingProvider(enturGeocodingService);
 
   registerPlaceResolver("entur", async (value: string, resolverCtx: PlaceResolverContext) =>
     lookupEnturPlaceById(value, resolverCtx.lang),

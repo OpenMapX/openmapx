@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { GtfsCatalogProvider, IntegrationContext } from "@openmapx/integration-framework";
 import { type MdbCatalogFeed, toMdbCatalogFeeds } from "./catalog.js";
 import { MdbClient } from "./client.js";
 
@@ -73,10 +73,11 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   // dataSources (CC0 attribution) propagate via the standard scan. The
   // actual catalog fetch is consumed by services/gtfs/catalog.ts via the
   // exported `getMdbCatalogFeeds` helper.
-  ctx.registerProvider("gtfs-catalog", {
+  const provider: GtfsCatalogProvider = {
     id: "transit-mobility-database",
     listFeeds: getMdbCatalogFeeds,
-  });
+  };
+  ctx.registerGtfsCatalogProvider(provider);
 
   ctx.onShutdown(async () => {
     state.client = null;

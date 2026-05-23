@@ -10,5 +10,5 @@ export function setup(ctx: IntegrationContext): void {
 
   setValhallaUrl(url);
 
-  ctx.registerProvider("routing", valhallaService);
+  ctx.registerRoutingProvider(valhallaService);
 }

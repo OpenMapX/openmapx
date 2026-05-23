@@ -8,5 +8,5 @@ export function setup(ctx: IntegrationContext): void {
 
   setPeliasUrl(url);
 
-  ctx.registerProvider("geocoding", peliasService);
+  ctx.registerGeocodingProvider(peliasService);
 }

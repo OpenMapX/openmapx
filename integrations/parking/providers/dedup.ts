@@ -7,11 +7,10 @@ function facilityPriority(f: ParkingFacility): number {
 
 // Clustering parameters
 //
-// TODO(policy): mobility-core's DEDUP.PARKING_RADIUS_M is 25m and
-// DEDUP.NAME_SIMILARITY_MIN is 0.6. Parking clustering uses a wider
-// two-tier window (40m always, 150m with names) tuned for real-world
-// sites that span >25m. Reconciling with policy would change behavior;
-// kept raw until we revisit thresholds across providers.
+// Parking clustering deliberately widens past `DEDUP.PARKING_RADIUS_M`
+// (25 m) + `DEDUP.NAME_SIMILARITY_MIN` (0.6) into a two-tier window —
+// 40 m always, 40-150 m with name agreement — tuned for real-world
+// parking sites that routinely span more than 25 m end to end.
 /** Distance below which two facilities are considered the same regardless of name. */
 const ALWAYS_MERGE_M = 40;
 /** Distance above which two facilities are never merged. */

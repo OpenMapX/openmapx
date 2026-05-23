@@ -10,5 +10,5 @@ export function setup(ctx: IntegrationContext): void {
   const transitousUrl = ctx.config.transitousUrl as string | undefined;
   if (transitousUrl && transitousUrl.length > 0) setTransitousUrl(transitousUrl);
 
-  ctx.registerProvider("geocoding", motisGeocodingService);
+  ctx.registerGeocodingProvider(motisGeocodingService);
 }

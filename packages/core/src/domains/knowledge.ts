@@ -1,10 +1,5 @@
 import type { LngLat } from "../types/geometry";
-import type { AirportInfo, Place, PlaceFact, PlacePhoto } from "../types/place";
-
-export interface KnowledgeProvider {
-  readonly id: string;
-  lookup(place: Place): Promise<Partial<Place>>;
-}
+import type { AirportInfo, PlaceFact, PlacePhoto } from "../types/place";
 
 export interface KnowledgeResult {
   photos?: PlacePhoto[];
@@ -20,7 +15,7 @@ export interface KnowledgeResult {
 }
 
 /**
- * Optional non-tag context passed to `KnowledgeSource.lookup`. Used by sources
+ * Optional non-tag context passed to `KnowledgeProvider.lookup`. Used by sources
  * that need spatial fallbacks (e.g. matching an airport terminal building to
  * its parent aerodrome when the terminal doesn't carry IATA/ICAO tags itself).
  */
@@ -29,7 +24,7 @@ export interface KnowledgeContext {
   name?: string;
 }
 
-export interface KnowledgeSource {
+export interface KnowledgeProvider {
   readonly name: string;
   lookup(
     osmTags: Record<string, string>,

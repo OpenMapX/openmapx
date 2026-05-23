@@ -2,5 +2,5 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { wikimediaProvider } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.registerProvider("photos", wikimediaProvider);
+  ctx.registerPhotoProvider(wikimediaProvider);
 }

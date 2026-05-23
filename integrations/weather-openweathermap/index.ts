@@ -225,5 +225,5 @@ export function setup(ctx: IntegrationContext): void {
     },
   };
 
-  ctx.registerProvider("weather", provider);
+  ctx.registerWeatherProvider(provider);
 }

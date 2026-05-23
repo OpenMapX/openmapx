@@ -201,5 +201,5 @@ const brightSkyProvider: WeatherProvider = {
 };
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.registerProvider("weather", brightSkyProvider);
+  ctx.registerWeatherProvider(brightSkyProvider);
 }

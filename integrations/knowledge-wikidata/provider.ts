@@ -1,7 +1,7 @@
 import {
   fetchCommonsMetadata,
+  type KnowledgeProvider,
   type KnowledgeResult,
-  type KnowledgeSource,
   type PlaceFact,
   USER_AGENT,
 } from "@openmapx/core";
@@ -113,7 +113,7 @@ function formatQuantity(qv: QuantityValue, lang = "en"): string {
   return formatted;
 }
 
-export const wikidataSource: KnowledgeSource = {
+export const wikidataSource: KnowledgeProvider = {
   name: "wikidata",
 
   async lookup(osmTags, lang?) {

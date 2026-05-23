@@ -1,4 +1,4 @@
-import type { AirportInfo, KnowledgeResult, KnowledgeSource, LngLat } from "@openmapx/core";
+import type { AirportInfo, KnowledgeProvider, KnowledgeResult, LngLat } from "@openmapx/core";
 import type { Logger } from "@openmapx/integration-framework";
 import { lookupAirport, lookupNearestAerodrome } from "./data.js";
 
@@ -39,7 +39,7 @@ const AIRPORT_INFRA_AEROWAYS = new Set([
 /** Max distance from an infra feature to its parent aerodrome (km). */
 const SPATIAL_FALLBACK_MAX_KM = 10;
 
-export function createOurAirportsSource(log: Logger): KnowledgeSource {
+export function createOurAirportsSource(log: Logger): KnowledgeProvider {
   return {
     name: "ourairports",
     async lookup(osmTags, _lang, context) {

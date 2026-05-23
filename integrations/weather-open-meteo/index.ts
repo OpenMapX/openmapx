@@ -177,5 +177,5 @@ const openMeteoProvider: WeatherProvider = {
 };
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.registerProvider("weather", openMeteoProvider);
+  ctx.registerWeatherProvider(openMeteoProvider);
 }

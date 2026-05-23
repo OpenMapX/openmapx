@@ -237,5 +237,5 @@ const metNorwayProvider: WeatherProvider = {
 };
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.registerProvider("weather", metNorwayProvider);
+  ctx.registerWeatherProvider(metNorwayProvider);
 }

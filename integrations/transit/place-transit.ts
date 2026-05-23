@@ -26,12 +26,11 @@ interface DepartureWithFeed extends Departure {
 }
 
 const LINK_RADIUS_M = 1000; // 1 km
-// TODO(policy): mobility-core's DEDUP.NAME_SIMILARITY_MIN is 0.6 (stricter).
-// Place→stop linking uses a permissive 0.4 floor because we match place
-// names against transit-stop names that often differ stylistically (e.g.
-// "Köln Hbf" vs "Köln Hauptbahnhof"). Tightening would drop legitimate
-// links; kept raw until policy is reconciled or the place-linking pass
-// is rewritten.
+// Place→stop linking deliberately uses a more permissive Dice floor (0.4)
+// than `DEDUP.NAME_SIMILARITY_MIN` (0.6) because place names and transit
+// stop names often differ stylistically ("Köln Hbf" vs "Köln
+// Hauptbahnhof"). Tightening to the policy default would drop legitimate
+// links.
 const MIN_NAME_DICE = 0.4;
 const MIN_INFORMATIVE_TOKEN_LEN = 4;
 

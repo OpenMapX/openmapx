@@ -93,7 +93,6 @@ export type {
   KnowledgeContext,
   KnowledgeProvider,
   KnowledgeResult,
-  KnowledgeSource,
   MapOverlayData,
   MapOverlayDetail,
   MapOverlayProvider,

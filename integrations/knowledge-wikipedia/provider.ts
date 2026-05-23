@@ -1,7 +1,7 @@
 import {
   fetchCommonsMetadata,
+  type KnowledgeProvider,
   type KnowledgeResult,
-  type KnowledgeSource,
   USER_AGENT,
 } from "@openmapx/core";
 
@@ -10,7 +10,7 @@ const HEADERS = {
   Accept: "application/json",
 };
 
-export const wikipediaSource: KnowledgeSource = {
+export const wikipediaSource: KnowledgeProvider = {
   name: "wikipedia",
 
   async lookup(osmTags, lang?) {

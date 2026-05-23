@@ -10,5 +10,5 @@ export function setup(ctx: IntegrationContext): void {
 
   setNominatimUrl(url);
 
-  ctx.registerProvider("geocoding", nominatimService);
+  ctx.registerGeocodingProvider(nominatimService);
 }

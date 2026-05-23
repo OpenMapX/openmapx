@@ -2,7 +2,6 @@ export type {
   KnowledgeContext,
   KnowledgeProvider,
   KnowledgeResult,
-  KnowledgeSource,
 } from "./knowledge";
 export type {
   GeoJsonFeatureCollection,

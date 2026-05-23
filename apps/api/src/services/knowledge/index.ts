@@ -1,13 +1,13 @@
-import type { KnowledgeResult, KnowledgeSource, Place } from "@openmapx/core";
+import type { KnowledgeProvider, KnowledgeResult, Place } from "@openmapx/core";
 import { getIntegrationsByDomain } from "../../integration-host.js";
 
 /**
  * Collect knowledge sources from all integrations registered under the "knowledge" domain.
  */
-function getKnowledgeSources(): KnowledgeSource[] {
-  const sources: KnowledgeSource[] = [];
+function getKnowledgeSources(): KnowledgeProvider[] {
+  const sources: KnowledgeProvider[] = [];
   for (const integration of getIntegrationsByDomain("knowledge")) {
-    for (const e of (integration.providers.get("knowledge") ?? []) as KnowledgeSource[]) {
+    for (const e of (integration.providers.get("knowledge") ?? []) as KnowledgeProvider[]) {
       sources.push(e);
     }
   }
