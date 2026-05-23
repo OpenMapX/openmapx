@@ -14,6 +14,7 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mangrove-react/package.json packages/mangrove-react/
+COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
@@ -34,6 +35,7 @@ COPY packages/i18n/ packages/i18n/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/mangrove-react/ packages/mangrove-react/
+COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/

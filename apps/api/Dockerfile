@@ -9,7 +9,10 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
-COPY packages/shared-mobility/package.json packages/shared-mobility/
+COPY packages/db-schema/package.json packages/db-schema/
+COPY packages/hardlinks/package.json packages/hardlinks/
+COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
@@ -29,7 +32,10 @@ FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/core/package.json packages/core/
-COPY packages/shared-mobility/package.json packages/shared-mobility/
+COPY packages/db-schema/package.json packages/db-schema/
+COPY packages/hardlinks/package.json packages/hardlinks/
+COPY packages/mobility-core/package.json packages/mobility-core/
+COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 COPY packages/mobility-formats/package.json packages/mobility-formats/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
@@ -57,8 +63,11 @@ WORKDIR /app
 COPY --from=deps /app ./
 
 COPY packages/core/ packages/core/
-COPY packages/shared-mobility/ packages/shared-mobility/
+COPY packages/db-schema/ packages/db-schema/
+COPY packages/hardlinks/ packages/hardlinks/
+COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/mobility-formats/ packages/mobility-formats/
+COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
@@ -112,8 +121,11 @@ COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 # .ts file's location upward, so `@better-auth/passkey` imported from
 # packages/core must be reachable via packages/core/node_modules).
 COPY packages/core/ packages/core/
-COPY packages/shared-mobility/ packages/shared-mobility/
+COPY packages/db-schema/ packages/db-schema/
+COPY packages/hardlinks/ packages/hardlinks/
+COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/mobility-formats/ packages/mobility-formats/
+COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
@@ -122,7 +134,8 @@ COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/presets/ packages/presets/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
-COPY --from=prod-deps /app/packages/shared-mobility/node_modules ./packages/shared-mobility/node_modules
+COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
+COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules

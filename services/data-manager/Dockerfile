@@ -3,7 +3,8 @@
 # IMPORTANT: build context MUST be the repo root. This Dockerfile reaches
 # outside its own directory to pick up:
 #   - pnpm-workspace.yaml + workspace package.json files (for dependency
-#     resolution of @openmapx/hardlinks and @openmapx/motis-feed-proxy-config)
+#     resolution of @openmapx/db-schema, @openmapx/hardlinks, and
+#     @openmapx/motis-feed-proxy-config)
 #   - services/motis/tools/transitous/requirements.txt (pulled into the
 #     runtime stage for the Transitous GTFS pipeline)
 #
@@ -29,10 +30,11 @@ ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/data-manager/package.json services/data-manager/
+COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 
-RUN pnpm install --filter @openmapx/data-manager --frozen-lockfile
+RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile
 
 FROM base AS prod-deps
 WORKDIR /app
@@ -40,14 +42,16 @@ ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/data-manager/package.json services/data-manager/
+COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
 COPY packages/motis-feed-proxy-config/package.json packages/motis-feed-proxy-config/
 
-RUN pnpm install --filter @openmapx/data-manager --frozen-lockfile --prod --ignore-scripts
+RUN pnpm install --filter @openmapx/data-manager... --frozen-lockfile --prod --ignore-scripts
 
 FROM deps AS builder
 WORKDIR /app
 
+COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY services/data-manager/ services/data-manager/
@@ -95,10 +99,11 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-manager/node_modules
-# The shared @openmapx/hardlinks and @openmapx/motis-feed-proxy-config packages
-# ship their TypeScript source directly; tsx/esm (preserved because it's a
-# prod dep) transpiles them on import. This matches how apps/api loads its
-# dynamic integration code.
+# The shared @openmapx/db-schema, @openmapx/hardlinks, and
+# @openmapx/motis-feed-proxy-config packages ship their TypeScript source
+# directly; tsx/esm (preserved because it's a prod dep) transpiles them on
+# import. This matches how apps/api loads its dynamic integration code.
+COPY packages/db-schema/ ./packages/db-schema/
 COPY packages/hardlinks/ ./packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
@@ -120,6 +125,6 @@ WORKDIR /app/services/data-manager
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fs http://localhost:4000/status || exit 1
 # `--import tsx/esm` lets the compiled dist entry reach back into
-# @openmapx/hardlinks's and @openmapx/motis-feed-proxy-config's .ts source
-# without a separate build step.
+# @openmapx/db-schema's, @openmapx/hardlinks's, and
+# @openmapx/motis-feed-proxy-config's .ts source without a separate build step.
 CMD ["node", "--import", "tsx/esm", "dist/index.js"]
