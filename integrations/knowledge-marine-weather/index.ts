@@ -224,6 +224,19 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const hourly = parseHourly(data);
+    // Open-Meteo returns 200 with an all-`null` wave_height series for
+    // inland points the marine grid doesn't cover (e.g. Aachen). The
+    // sentinel `error: true` is only emitted for far-from-water points;
+    // anywhere within the bounding box of an extrapolated grid cell gets
+    // the silent-nulls treatment instead. Treat any series with zero real
+    // wave_height samples as inland.
+    const hasMarineData = hourly.some((h) => h.waveHeightM !== undefined);
+    if (!hasMarineData) {
+      await ctx.cache.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
+      reply.status(204).send(null);
+      return;
+    }
+
     const current = buildCurrent(hourly);
     if (!current) {
       await ctx.cache.set(cacheKey, { notFound: true }, NOT_FOUND_TTL);
