@@ -20,7 +20,7 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
   VehicleFormFactor,
-} from "@openmapx/mobility-core/types";
+} from "@openmapx/mobility-core/shared-mobility";
 
 const TOKEN_URL =
   "https://www.mobilitaetsdaten.nrw/keycloak/realms/mobidrom/protocol/openid-connect/token";

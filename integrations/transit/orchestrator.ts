@@ -22,6 +22,7 @@ import type {
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
+import { enrichDeparturesWithRealtime } from "./realtime.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -212,13 +213,23 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   /**
-   * Build prefix map sorted by priority (lower = higher priority).
-   * First match wins — same as "first registered wins" but via priority.
+   * Build prefix map sorted by priority (lower = higher priority) and return
+   * the first provider that both matches the id's prefix AND is currently
+   * healthy. When the highest-priority match is in cooldown but another
+   * provider shares the same prefix, we fall through to it — today most
+   * prefixes are unique to a single provider so the fallback is rare, but
+   * the iteration costs nothing and keeps the contract correct as new
+   * providers come online.
+   *
+   * Returns `null` when no healthy provider matches. Callers translate that
+   * into an empty `MobilityResult`, which is preferable to hammering a
+   * known-disabled upstream and stretching its cooldown (G1 / plan §4.9).
    */
-  function resolveByPrefix(id: string): TransitProvider | null {
+  async function resolveByPrefix(id: string): Promise<TransitProvider | null> {
     const providers = collectProviders().sort((a, b) => a.priority - b.priority);
     for (const provider of providers) {
-      if (id.startsWith(provider.prefix)) return provider;
+      if (!id.startsWith(provider.prefix)) continue;
+      if (await providerHealth.isHealthy(provider.id)) return provider;
     }
     return null;
   }
@@ -284,34 +295,46 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     };
   }
 
+  // Bound `timed` for realtime-enrichment fan-out so its calls share the
+  // same health-tracking + OTEL recorder path as the orchestrator's own
+  // provider calls (G3 telemetry wiring).
+  const boundTimed = <T>(providerId: string, method: string, fn: () => Promise<T>) =>
+    timed(providerHealth, metricsRecorder, providerId, method, fn);
+
   async function getDepartures(
     stopId: string,
     minutes: number,
   ): Promise<MobilityResult<Departure[]>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getDepartures) return emptyResult<Departure[]>([], { hasRealtimeData: true });
     const fn = provider.getDepartures.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getDepartures", () =>
       fn(stopId, minutes),
     );
-    return outcome.ok ? outcome.value : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    const base = outcome.ok
+      ? outcome.value
+      : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    return enrichDeparturesWithRealtime({ ctx, timed: boundTimed }, base, { stopId });
   }
 
   async function getArrivals(
     stopId: string,
     minutes: number,
   ): Promise<MobilityResult<Departure[]>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getArrivals) return emptyResult<Departure[]>([], { hasRealtimeData: true });
     const fn = provider.getArrivals.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getArrivals", () =>
       fn(stopId, minutes),
     );
-    return outcome.ok ? outcome.value : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    const base = outcome.ok
+      ? outcome.value
+      : emptyResult<Departure[]>([], { hasRealtimeData: true });
+    return enrichDeparturesWithRealtime({ ctx, timed: boundTimed }, base, { stopId });
   }
 
   async function getStop(stopId: string): Promise<MobilityResult<TransitStop | null>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getStop) return emptyResult<TransitStop | null>(null);
     const fn = provider.getStop.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getStop", () =>
@@ -462,7 +485,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getStopPlatforms(stopId: string): Promise<MobilityResult<TransitStop[]>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getStopPlatforms) return emptyResult<TransitStop[]>([]);
     const fn = provider.getStopPlatforms.bind(provider);
     const outcome = await timed(
@@ -478,7 +501,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function getStopInfrastructure(
     stopId: string,
   ): Promise<MobilityResult<TransitStopInfrastructure | null>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getStopInfrastructure)
       return emptyResult<TransitStopInfrastructure | null>(null);
     const fn = provider.getStopInfrastructure.bind(provider);
@@ -496,7 +519,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     stopId: string,
     date: string,
   ): Promise<MobilityResult<Departure[]>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getStopTimetable) return emptyResult<Departure[]>([]);
     const fn = provider.getStopTimetable.bind(provider);
     const outcome = await timed(
@@ -514,7 +537,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getRoutesForStop(stopId: string): Promise<MobilityResult<TransitRoute[]>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider) return emptyResult<TransitRoute[]>([]);
 
     // Prefer provider-native route lookup when available.
@@ -598,7 +621,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getRoute(routeId: string): Promise<MobilityResult<TransitRoute | null>> {
-    const provider = resolveByPrefix(routeId);
+    const provider = await resolveByPrefix(routeId);
     if (!provider?.getRoute) return emptyResult<TransitRoute | null>(null);
     const fn = provider.getRoute.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getRoute", () =>
@@ -611,7 +634,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     routeId: string,
     hintStopId?: string,
   ): Promise<MobilityResult<TransitStop[]>> {
-    const provider = resolveByPrefix(routeId);
+    const provider = await resolveByPrefix(routeId);
     if (!provider) return emptyResult<TransitStop[]>([]);
 
     if (provider.getRouteStops) {
@@ -715,7 +738,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getStopAlerts(stopId: string): Promise<MobilityResult<ServiceAlert[]>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getAlertsForStop)
       return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
     const fn = provider.getAlertsForStop.bind(provider);
@@ -730,7 +753,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getRouteAlerts(routeId: string): Promise<MobilityResult<ServiceAlert[]>> {
-    const provider = resolveByPrefix(routeId);
+    const provider = await resolveByPrefix(routeId);
     if (!provider?.getAlertsForRoute)
       return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
     const fn = provider.getAlertsForRoute.bind(provider);
@@ -745,7 +768,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getVehiclePositions(routeId: string): Promise<MobilityResult<VehiclePosition[]>> {
-    const provider = resolveByPrefix(routeId);
+    const provider = await resolveByPrefix(routeId);
     if (!provider?.getVehiclePositions)
       return emptyResult<VehiclePosition[]>([], { hasRealtimeData: true });
     const fn = provider.getVehiclePositions.bind(provider);
@@ -766,7 +789,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     fromStopId?: string,
     toStopId?: string,
   ): Promise<MobilityResult<GeoJSONLineString | null>> {
-    const provider = resolveByPrefix(tripId);
+    const provider = await resolveByPrefix(tripId);
     if (!provider?.getLegGeometry) return emptyResult<GeoJSONLineString | null>(null);
     const fn = provider.getLegGeometry.bind(provider);
     const outcome = await timed(
@@ -788,7 +811,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     vehicleId: string,
     fallbackIds?: string[],
   ): Promise<MobilityResult<VehicleJourney | null>> {
-    const provider = resolveByPrefix(vehicleId);
+    const provider = await resolveByPrefix(vehicleId);
     if (!provider?.getVehicleJourney)
       return emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
     const fn = provider.getVehicleJourney.bind(provider);
@@ -805,7 +828,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getFacilities(stopId: string): Promise<MobilityResult<Facility[]>> {
-    const provider = resolveByPrefix(stopId);
+    const provider = await resolveByPrefix(stopId);
     if (!provider?.getFacilities) return emptyResult<Facility[]>([]);
     const fn = provider.getFacilities.bind(provider);
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getFacilities", () =>

@@ -217,10 +217,16 @@ async function planWithInstance(
 }
 
 export function setupLocal(ctx: IntegrationContext): void {
-  // Resolve local MOTIS URL from the service registry if available.
+  // Resolution order: service registry → manifest config → MOTIS_URL env →
+  // localhost fallback. The env var matches the one services/data-manager
+  // and live-transit-motis honour, so a single deployment-wide
+  // `MOTIS_URL=…` reaches every consumer of the local instance.
   const resolved = ctx.getRequiredService("motis");
   const motisUrl =
-    resolved?.url ?? (ctx.config.endpoint as string | undefined) ?? "http://localhost:8081";
+    resolved?.url ??
+    (ctx.config.endpoint as string | undefined) ??
+    process.env.MOTIS_URL ??
+    "http://localhost:8081";
   setMotisLocalUrl(motisUrl);
   cachedLocalReachable = false;
   cachedLocalReachableAt = 0;

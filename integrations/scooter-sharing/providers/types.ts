@@ -3,4 +3,4 @@ export type {
   SharedMobilityVehicle,
   VehicleFormFactor,
   VehiclePropulsion,
-} from "@openmapx/mobility-core/types";
+} from "@openmapx/mobility-core/shared-mobility";

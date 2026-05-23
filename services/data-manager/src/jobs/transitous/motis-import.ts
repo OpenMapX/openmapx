@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { IMPORT_MARKER_FILE } from "./internal.js";
 import type { StageFn, StageResult } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes for a planet-scale import
@@ -104,11 +105,33 @@ export const run: StageFn = async (ctx) => {
     ]);
 
     const durationMs = Date.now() - start;
+    // Drop a small marker file the promote stage uses as the strong signal
+    // that this staging volume is import-shaped. Best-effort: if the write
+    // fails (read-only mount, race with restart) we still return ok and let
+    // promote fall through to its MOTIS-file sentinel check.
+    const finishedAt = ctx.now();
+    try {
+      writeFileSync(
+        join(ctx.motisStagingDataDir, IMPORT_MARKER_FILE),
+        `${JSON.stringify(
+          {
+            finishedAt,
+            importDurationMs: durationMs,
+            container: STAGING_CONTAINER_NAME,
+          },
+          null,
+          2,
+        )}\n`,
+        "utf-8",
+      );
+    } catch {
+      /* non-fatal */
+    }
     return {
       stage: "motis-import",
       status: "ok",
       startedAt,
-      finishedAt: ctx.now(),
+      finishedAt,
       durationMs,
       message: `motis import completed against ${STAGING_CONTAINER_NAME}`,
       artifacts: {

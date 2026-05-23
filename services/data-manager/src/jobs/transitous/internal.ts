@@ -13,6 +13,14 @@ import { execa } from "execa";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
 import type { CommandRunner, FeedFileEntry, JobLogger } from "./types.js";
 
+/**
+ * Marker file the motis-import stage writes into the staging data
+ * directory after a successful `motis import`. Promote uses its
+ * presence as a strong signal that the volume is safe to swap. JSON so
+ * operators can read it; the body holds the import timestamp + duration.
+ */
+export const IMPORT_MARKER_FILE = ".data-manager-import.ok.json";
+
 export const RAW_BASE = "https://raw.githubusercontent.com/public-transport/transitous/main";
 export const DEFAULT_TRANSITOUS_REPO_URL = "https://github.com/public-transport/transitous.git";
 export const DEFAULT_TRANSITOUS_API_KEYS_PATH = "/config/transitous/api-keys.json";

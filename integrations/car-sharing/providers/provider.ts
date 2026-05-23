@@ -31,7 +31,10 @@ import {
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/mobility-core/types";
+import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/mobility-core/shared-mobility";
 import { mergeRegionalStations } from "./merge-stations.js";
 import { searchRegionalClients } from "./registry.js";
 

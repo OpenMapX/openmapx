@@ -15,12 +15,27 @@ export interface RealtimeCapabilities {
 }
 
 /**
- * Per-provider trip update delta. Intentionally `unknown`: each realtime
- * provider's source shape differs (MOTIS returns a full `Itinerary`, an
- * Entur SIRI-ET adapter would return a SIRI fragment, etc.). Consumers
- * narrow on a provider-specific type guard.
+ * Realtime delta for a single (trip, stop) pair. Consumed by the transit
+ * orchestrator to enrich scheduled departures with live `expectedAt` /
+ * `delaySeconds` / `canceled` / `platform` overrides — see plan §4.4(3) /
+ * D3 in docs/plans/2026-05-21-transit-mobility-architecture.md.
+ *
+ * Providers that cannot resolve the given tripId (wrong prefix, unknown
+ * trip) return `null` so the orchestrator can move on to the next provider
+ * without a thrown error path.
  */
-export type TripUpdate = unknown;
+export interface TripUpdate {
+  /** Trip id echoed back (with the caller's prefix) so the consumer can correlate. */
+  tripId: string;
+  /** Realtime expected departure (or arrival) time, ISO 8601. */
+  expectedAt?: string;
+  /** Positive when late, negative when early. Seconds. */
+  delaySeconds?: number;
+  /** True iff this trip or the requested stop within it is cancelled. */
+  canceled?: boolean;
+  /** Realtime platform/track override when the upstream feed exposes one. */
+  platform?: string;
+}
 
 export interface RealtimeProvider {
   readonly id: string;
@@ -33,7 +48,15 @@ export interface RealtimeProvider {
   getAlertsForStop?(stopId: string): Promise<MobilityResult<ServiceAlert[]>>;
   getAlertsForRoute?(routeId: string): Promise<MobilityResult<ServiceAlert[]>>;
   getAlertsForBbox?(bbox: BBox): Promise<MobilityResult<ServiceAlert[]>>;
-  getTripUpdate?(tripId: string): Promise<MobilityResult<TripUpdate | null>>;
+  /**
+   * Resolve a realtime delta for `tripId`, optionally narrowed to a specific
+   * `stopId`. When `stopId` is supplied, the provider should locate that stop
+   * within the trip and return its specific delta (departure-based);
+   * otherwise the provider returns the trip-level summary (typically the
+   * first stop). Return `null` when the trip cannot be resolved by this
+   * provider (e.g. id prefix not recognized).
+   */
+  getTripUpdate?(tripId: string, stopId?: string): Promise<MobilityResult<TripUpdate | null>>;
 
   /** Optional. Providers that have no meaningful self-check may omit this
    *  and rely on `ctx.registerHealthCheck()` declared at integration setup. */

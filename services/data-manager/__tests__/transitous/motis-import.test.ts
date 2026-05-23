@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -88,6 +88,13 @@ describe("motis-import stage", () => {
     expect(typeof (result.artifacts as { importDurationMs?: number }).importDurationMs).toBe(
       "number",
     );
+    // The promote stage relies on this marker as its strong "import done"
+    // signal — assert we drop it whenever the import succeeds.
+    const markerPath = join(stagingDir, ".data-manager-import.ok.json");
+    expect(existsSync(markerPath)).toBe(true);
+    const marker = JSON.parse(readFileSync(markerPath, "utf-8"));
+    expect(marker).toMatchObject({ container: "motis-staging" });
+    expect(typeof marker.importDurationMs).toBe("number");
   });
 
   it("returns error when docker compose up fails", async () => {

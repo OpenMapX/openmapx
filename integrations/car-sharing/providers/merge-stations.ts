@@ -10,7 +10,7 @@
  * before open data sources so its live availability numbers are kept.
  */
 
-import type { SharedMobilityStation } from "@openmapx/mobility-core/types";
+import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 
 /** Maximum distance in meters to consider two stations as the same location. */
 const MERGE_RADIUS_M = 50;

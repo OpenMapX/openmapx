@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IMPORT_MARKER_FILE } from "../../src/jobs/transitous/internal.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as promoteRun } from "../../src/jobs/transitous/promote.js";
 import { StateStore } from "../../src/state.js";
@@ -29,8 +30,24 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 interface FixtureOptions {
-  /** Create a non-empty staging dir with sentinel files. */
+  /**
+   * Populate a "fully primed" staging dir: config.yml + the data-manager
+   * import marker + the canonical MOTIS sentinel files. This is what a
+   * successful pipeline run leaves behind.
+   */
   staging?: boolean;
+  /**
+   * Variant for the sentinel-file fallback path: write config.yml and
+   * sentinel files but skip the marker (simulates an operator who ran
+   * MOTIS import out-of-band).
+   */
+  stagingWithoutMarker?: boolean;
+  /**
+   * Adversarial staging: directory exists, has some junk files, but no
+   * config.yml. Used to assert the gate now fails closed instead of
+   * passing on "directory non-empty" alone.
+   */
+  stagingJunk?: boolean;
   /** Create an existing live dir. */
   current?: boolean;
 }
@@ -46,9 +63,23 @@ function setupFixture(opts: FixtureOptions): {
   const currentDir = join(tmp, "motis-data");
   if (opts.staging) {
     mkdirSync(stagingDir, { recursive: true });
+    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
     writeFileSync(join(stagingDir, "tt.json"), "{}");
     writeFileSync(join(stagingDir, "adr_extend.json"), "{}");
     writeFileSync(join(stagingDir, "osr_footpath.json"), "{}");
+    writeFileSync(
+      join(stagingDir, IMPORT_MARKER_FILE),
+      JSON.stringify({ finishedAt: "2026-05-01T00:00:00.000Z" }),
+    );
+  }
+  if (opts.stagingWithoutMarker) {
+    mkdirSync(stagingDir, { recursive: true });
+    writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
+    writeFileSync(join(stagingDir, "tt.json"), "{}");
+  }
+  if (opts.stagingJunk) {
+    mkdirSync(stagingDir, { recursive: true });
+    writeFileSync(join(stagingDir, "leftover.log"), "junk");
   }
   if (opts.current) {
     mkdirSync(currentDir, { recursive: true });
@@ -179,5 +210,34 @@ describe("promote stage", () => {
     expect(result.status).toBe("ok");
     expect(existsSync(join(fx.currentDir, "tt.json"))).toBe(true);
     expect(existsSync(fx.previousDir)).toBe(false);
+  });
+
+  it("skips when staging has junk files but no config.yml or sentinels", async () => {
+    const fx = setupFixture({ stagingJunk: true, current: true });
+    const result = await promoteRun(
+      makeCtx({
+        dataDir: fx.dataDir,
+        runner: async () => {
+          throw new Error("docker should not be invoked");
+        },
+      }),
+    );
+    expect(result.status).toBe("skipped");
+    // Filesystem unchanged — nothing renamed.
+    expect(existsSync(fx.stagingDir)).toBe(true);
+    expect(existsSync(fx.currentDir)).toBe(true);
+    expect(existsSync(fx.previousDir)).toBe(false);
+  });
+
+  it("promotes via the MOTIS sentinel fallback when the marker file is absent", async () => {
+    const fx = setupFixture({ stagingWithoutMarker: true, current: true });
+    globalThis.fetch = vi.fn(async () => jsonResponse({ ok: true })) as unknown as typeof fetch;
+    const ctx = makeCtx({
+      dataDir: fx.dataDir,
+      runner: async () => {},
+    });
+    const result = await promoteRun(ctx);
+    expect(result.status).toBe("ok");
+    expect(existsSync(join(fx.currentDir, "tt.json"))).toBe(true);
   });
 });

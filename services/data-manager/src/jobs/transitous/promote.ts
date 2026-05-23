@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { IMPORT_MARKER_FILE } from "./internal.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const PRIMARY_CONTAINER = "motis";
@@ -12,13 +13,29 @@ const RESTART_BUDGET_MS = 5 * 60 * 1000;
 const RESTART_POLL_INTERVAL_MS = 5_000;
 
 /**
- * Smallest set of files MOTIS writes during a successful import. We do not
- * inspect the bytes — only that the staging directory looks "import-shaped"
- * before we trust it as a swap target. If MOTIS upgrades change these names
- * the check still passes via the directory-non-empty fallback below; this is
- * a best-effort sanity gate rather than a precise contract.
+ * Files MOTIS writes during a successful import. Names + locations come from
+ * the upstream Transitous CI pipeline (`out/data/meta/*.json` after
+ * `motis import`). We check both layouts — meta-nested AND flat — because
+ * the staging volume layout depends on which MOTIS version + config the
+ * operator runs. Used only as a fallback when the data-manager-written
+ * {@link IMPORT_MARKER_FILE} is absent (e.g. an operator hand-populated
+ * staging from an out-of-band MOTIS run).
  */
-const STAGING_SENTINEL_FILES = ["tt.json", "adr_extend.json", "osr_footpath.json"];
+const STAGING_SENTINEL_FILES = [
+  "tt.json",
+  "meta/tt.json",
+  "adr_extend.json",
+  "meta/adr_extend.json",
+  "osr_footpath.json",
+  "meta/osr_footpath.json",
+];
+
+/**
+ * `config.yml` is written by the gen-motis-config stage and is the one
+ * artifact we can rely on every successful run producing. Used as the
+ * outer guard before we look for any import marker.
+ */
+const STAGING_CONFIG_FILE = "config.yml";
 
 interface PromoteArtifacts {
   promotedAt: string;
@@ -75,13 +92,30 @@ async function runSmokeProbes(deadline: number): Promise<string | null> {
   return null;
 }
 
+/**
+ * Decide whether `dir` looks like a freshly-finished MOTIS import worth
+ * promoting. Three gates, in priority order:
+ *
+ *   1. `config.yml` must exist. Without the gen-motis-config artifact
+ *      there is no defined target for `motis import` and the rest of the
+ *      checks are moot.
+ *   2. EITHER the data-manager-written {@link IMPORT_MARKER_FILE} is
+ *      present (proves the motis-import stage completed in this pipeline
+ *      run), OR
+ *   3. at least one of the {@link STAGING_SENTINEL_FILES} is present
+ *      (fallback for operators who hand-imported MOTIS out-of-band).
+ *
+ * The previous implementation degraded to a tautological "directory
+ * non-empty" check, which let a partially-written staging volume pass
+ * the gate. We deliberately do NOT keep that fallback — empty or junk-
+ * filled staging dirs should fail closed.
+ */
 function isImportShaped(dir: string): boolean {
   if (!existsSync(dir)) return false;
   try {
-    const entries = readdirSync(dir);
-    if (entries.length === 0) return false;
-    const sentinelHit = STAGING_SENTINEL_FILES.some((name) => existsSync(join(dir, name)));
-    return sentinelHit || entries.length > 0;
+    if (!existsSync(join(dir, STAGING_CONFIG_FILE))) return false;
+    if (existsSync(join(dir, IMPORT_MARKER_FILE))) return true;
+    return STAGING_SENTINEL_FILES.some((name) => existsSync(join(dir, name)));
   } catch {
     return false;
   }

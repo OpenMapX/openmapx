@@ -72,7 +72,7 @@
       "types": "./src/types/transit.ts",
       "default": "./src/types/transit.ts"
     },
-    "./types": {
+    "./shared-mobility": {
       "types": "./src/types/shared-mobility.ts",
       "default": "./src/types/shared-mobility.ts"
     }

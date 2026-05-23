@@ -129,9 +129,23 @@ describe("live-transit-motis provider", () => {
     expect(result?.data).toEqual([]);
   });
 
-  it("returns the raw MOTIS itinerary for trip updates", async () => {
+  it("returns a structured TripUpdate from the MOTIS itinerary", async () => {
     const motisClient = await import("@motis-project/motis-client");
-    const itinerary = { legs: [{ headsign: "Berlin Hbf" }] };
+    const itinerary = {
+      legs: [
+        {
+          from: {
+            stopId: "DE:8000105",
+            scheduledDeparture: "2026-05-22T08:00:00Z",
+            departure: "2026-05-22T08:02:30Z",
+            track: "7",
+            cancelled: false,
+          },
+          to: { stopId: "DE:8000010" },
+          cancelled: false,
+        },
+      ],
+    };
     vi.mocked(motisClient.trip).mockResolvedValueOnce({ data: itinerary } as never);
 
     const mod = await loadModule();
@@ -139,12 +153,80 @@ describe("live-transit-motis provider", () => {
     mod.setup(ctx);
     const provider = getProvider();
 
-    const result = await provider.getTripUpdate?.("ms:trip-42");
+    const result = await provider.getTripUpdate?.("ms:trip-42", "ms:DE:8000105");
     expect(motisClient.trip).toHaveBeenCalledWith(
       expect.objectContaining({ query: expect.objectContaining({ tripId: "trip-42" }) }),
     );
-    expect(result?.data).toBe(itinerary);
+    expect(result?.data).toEqual({
+      tripId: "ms:trip-42",
+      expectedAt: "2026-05-22T08:02:30Z",
+      delaySeconds: 150,
+      platform: "7",
+    });
     expect(result?.freshness.hasRealtimeData).toBe(true);
+  });
+
+  it("returns null when the tripId prefix is not MOTIS-owned", async () => {
+    const motisClient = await import("@motis-project/motis-client");
+    const mod = await loadModule();
+    const { ctx, getProvider } = createCtx();
+    mod.setup(ctx);
+    const provider = getProvider();
+
+    const result = await provider.getTripUpdate?.("db-hafas:1234");
+    expect(motisClient.trip).not.toHaveBeenCalled();
+    expect(result?.data).toBeNull();
+  });
+
+  it("returns null when scheduled equals actual and nothing is cancelled", async () => {
+    const motisClient = await import("@motis-project/motis-client");
+    const itinerary = {
+      legs: [
+        {
+          from: {
+            stopId: "DE:8000105",
+            scheduledDeparture: "2026-05-22T08:00:00Z",
+            departure: "2026-05-22T08:00:00Z",
+          },
+          to: { stopId: "DE:8000010" },
+        },
+      ],
+    };
+    vi.mocked(motisClient.trip).mockResolvedValueOnce({ data: itinerary } as never);
+
+    const mod = await loadModule();
+    const { ctx, getProvider } = createCtx();
+    mod.setup(ctx);
+    const provider = getProvider();
+
+    const result = await provider.getTripUpdate?.("ms:trip-42", "ms:DE:8000105");
+    expect(result?.data).toBeNull();
+  });
+
+  it("propagates trip-level cancellation when no per-stop delta", async () => {
+    const motisClient = await import("@motis-project/motis-client");
+    const itinerary = {
+      legs: [
+        {
+          from: {
+            stopId: "DE:8000105",
+            scheduledDeparture: "2026-05-22T08:00:00Z",
+            departure: "2026-05-22T08:00:00Z",
+          },
+          to: { stopId: "DE:8000010" },
+          cancelled: true,
+        },
+      ],
+    };
+    vi.mocked(motisClient.trip).mockResolvedValueOnce({ data: itinerary } as never);
+
+    const mod = await loadModule();
+    const { ctx, getProvider } = createCtx();
+    mod.setup(ctx);
+    const provider = getProvider();
+
+    const result = await provider.getTripUpdate?.("ms:trip-42", "ms:DE:8000105");
+    expect(result?.data).toEqual({ tripId: "ms:trip-42", canceled: true });
   });
 
   it("maps severity levels to ServiceAlert severities", async () => {
@@ -155,5 +237,58 @@ describe("live-transit-motis provider", () => {
     expect(mapMotisAlertSeverity("INFO")).toBe("info");
     expect(mapMotisAlertSeverity("UNKNOWN_SEVERITY")).toBe("info");
     expect(mapMotisAlertSeverity(undefined)).toBe("info");
+  });
+
+  describe("resolveMotisUrl resolution chain", () => {
+    const ORIGINAL_ENV = process.env.MOTIS_URL;
+
+    afterEach(() => {
+      if (ORIGINAL_ENV === undefined) delete process.env.MOTIS_URL;
+      else process.env.MOTIS_URL = ORIGINAL_ENV;
+    });
+
+    function ctxWith(opts: {
+      service?: { url: string } | null;
+      configEndpoint?: string;
+    }): IntegrationContext {
+      return {
+        config: opts.configEndpoint ? { endpoint: opts.configEndpoint } : {},
+        getRequiredService: () => opts.service ?? null,
+      } as unknown as IntegrationContext;
+    }
+
+    it("prefers the service registry url", async () => {
+      delete process.env.MOTIS_URL;
+      const mod = await loadModule();
+      const ctx = ctxWith({
+        service: { url: "http://motis.registry:8080" },
+        configEndpoint: "http://config.example",
+      });
+      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://motis.registry:8080");
+    });
+
+    it("falls back to config.endpoint", async () => {
+      delete process.env.MOTIS_URL;
+      const mod = await loadModule();
+      const ctx = ctxWith({
+        service: null,
+        configEndpoint: "http://config.example",
+      });
+      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://config.example");
+    });
+
+    it("falls back to the MOTIS_URL env var", async () => {
+      process.env.MOTIS_URL = "http://env.example:9000";
+      const mod = await loadModule();
+      const ctx = ctxWith({ service: null });
+      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://env.example:9000");
+    });
+
+    it("uses the localhost default when nothing else is wired", async () => {
+      delete process.env.MOTIS_URL;
+      const mod = await loadModule();
+      const ctx = ctxWith({ service: null });
+      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://localhost:8081");
+    });
   });
 });

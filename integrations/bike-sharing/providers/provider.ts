@@ -31,16 +31,18 @@ import {
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/mobility-core/types";
+import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/mobility-core/shared-mobility";
 import { searchCityBikes } from "./citybikes-client.js";
 import { searchDbBikes } from "./db-bike-client.js";
 import { searchDonkey } from "./donkey-client.js";
 import { searchNextbike } from "./nextbike-client.js";
 
-const BIKE_FORM_FACTORS = new Set<import("@openmapx/mobility-core/types").VehicleFormFactor>([
-  "bicycle",
-  "cargo_bicycle",
-]);
+const BIKE_FORM_FACTORS = new Set<
+  import("@openmapx/mobility-core/shared-mobility").VehicleFormFactor
+>(["bicycle", "cargo_bicycle"]);
 
 const ATTRIBUTION: Attribution[] = [
   {

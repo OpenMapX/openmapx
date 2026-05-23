@@ -5,7 +5,7 @@
  */
 
 import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
-import type { SharedMobilityStation } from "@openmapx/mobility-core/types";
+import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
 const CAMBIO_BASE = "https://cwapi.cambio-carsharing.com/pub";
