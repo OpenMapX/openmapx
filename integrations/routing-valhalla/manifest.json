@@ -28,6 +28,7 @@
   },
   "healthCheck": {
     "type": "ping",
+    "urlTemplate": "${service:valhalla}/status",
     "url": "https://valhalla1.openstreetmap.de/status"
   },
   "quality": "built-in",

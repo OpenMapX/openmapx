@@ -29,8 +29,8 @@
     {
       "name": "MOTIS endpoint",
       "type": "ping",
-      "url": "http://localhost:8081",
-      "urlTemplate": "${endpoint}"
+      "urlTemplate": "${service:motis}",
+      "url": "http://localhost:8081"
     }
   ],
   "quality": "built-in",

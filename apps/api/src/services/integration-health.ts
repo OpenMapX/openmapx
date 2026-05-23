@@ -2,6 +2,7 @@ import { createConnection } from "node:net";
 import { USER_AGENT } from "@openmapx/core";
 import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
 import { recordHealthResult } from "./health-history";
+import { serviceUrl } from "./service-registry";
 
 const TIMEOUT = 5_000;
 const UA = USER_AGENT;
@@ -145,14 +146,41 @@ async function executeSingleHealthCheck(
   }
 
   // URL template interpolation (fall back to static url if template produces a broken URL).
-  // `${configKey}` placeholders resolve against the integration's resolved
-  // config (same source used at request time) — not raw process.env.
+  // Two placeholder syntaxes:
+  //   - `${configKey}` — resolves against the integration's resolved config
+  //     (same source used at request time).
+  //   - `${service:id}` — resolves to the URL of a self-hosted service in the
+  //     registry. When the service isn't enabled, the probe is marked
+  //     "unconfigured" rather than falling through to the static `url` (which
+  //     is typically the public-fallback endpoint a self-hosted operator
+  //     doesn't actually use).
   let checkUrl: string;
+  let unsatisfiedService: string | null = null;
+  function resolvePlaceholder(key: string): string {
+    if (key.startsWith("service:")) {
+      const serviceId = key.slice("service:".length);
+      const url = serviceUrl(serviceId);
+      if (!url) {
+        unsatisfiedService = unsatisfiedService ?? serviceId;
+        return "";
+      }
+      return url;
+    }
+    return resolveConfigValue(integration, key) ?? "";
+  }
   if (hc.urlTemplate) {
-    const resolved = (hc.urlTemplate as string).replace(
-      /\$\{(\w+)\}/g,
-      (_, key: string) => resolveConfigValue(integration, key) ?? "",
+    const resolved = (hc.urlTemplate as string).replace(/\$\{([\w:]+)\}/g, (_, key: string) =>
+      resolvePlaceholder(key),
     );
+    if (unsatisfiedService) {
+      return {
+        id,
+        name,
+        category,
+        url: `${unsatisfiedService} service not enabled`,
+        status: "unconfigured",
+      };
+    }
     const hasHost = /^https?:\/\/[^/]/.test(resolved);
     checkUrl = hasHost ? resolved : ((hc.url as string | undefined) ?? resolved);
   } else if (hc.url) {
@@ -167,14 +195,14 @@ async function executeSingleHealthCheck(
     "$1=***",
   );
 
-  // Interpolate `${configKey}` placeholders in headers (same resolution rules
-  // as urlTemplate — resolved config, not process.env).
+  // Interpolate `${configKey}` and `${service:id}` placeholders in headers
+  // (same resolution rules as urlTemplate — resolved config or service
+  // registry, not raw process.env).
   const rawHeaders = (hc.headers as Record<string, string>) ?? {};
   const interpolatedHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(rawHeaders)) {
-    interpolatedHeaders[k] = v.replace(
-      /\$\{(\w+)\}/g,
-      (_, key: string) => resolveConfigValue(integration, key) ?? "",
+    interpolatedHeaders[k] = v.replace(/\$\{([\w:]+)\}/g, (_, key: string) =>
+      resolvePlaceholder(key),
     );
   }
 

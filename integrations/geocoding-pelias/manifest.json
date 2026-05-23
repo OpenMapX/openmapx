@@ -28,7 +28,7 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "http://localhost:4300/v1/search?text=test&size=1"
+    "urlTemplate": "${service:pelias}/v1/search?text=test&size=1"
   },
   "quality": "built-in",
   "category": "Geocoding",
