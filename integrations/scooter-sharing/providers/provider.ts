@@ -1,6 +1,6 @@
 /**
  * Scooter Sharing data source provider.
- * Combines GBFS scooter feeds + Felyx + GO Sharing + Link + NRW Mobidrom + MOTIS/Transitous.
+ * Combines GBFS scooter feeds + Felyx + Link + NRW Mobidrom + MOTIS/Transitous.
  * Handles both free-floating vehicles and docked stations.
  */
 
@@ -36,7 +36,6 @@ import type {
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
 import { searchFelyx } from "./felyx-client.js";
-import { searchGoSharing } from "./gosharing-client.js";
 import { searchLink } from "./link-client.js";
 import { searchNrwMobidrom } from "./nrw-mobidrom-client.js";
 
@@ -109,23 +108,15 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
     ];
 
     // Fetch from all sources in parallel
-    const [
-      gbfsResult,
-      swissGbfsResult,
-      felyxResult,
-      goSharingResult,
-      linkResult,
-      nrwResult,
-      motisResult,
-    ] = await Promise.allSettled([
-      fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
-      fetchSwissSharedMobilityDataForBbox(bbox, SCOOTER_FORM_FACTORS, "other"),
-      searchFelyx(bbox),
-      searchGoSharing(bbox),
-      searchLink(bbox),
-      searchNrwMobidrom(bbox),
-      fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
-    ]);
+    const [gbfsResult, swissGbfsResult, felyxResult, linkResult, nrwResult, motisResult] =
+      await Promise.allSettled([
+        fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
+        fetchSwissSharedMobilityDataForBbox(bbox, SCOOTER_FORM_FACTORS, "other"),
+        searchFelyx(bbox),
+        searchLink(bbox),
+        searchNrwMobidrom(bbox),
+        fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
+      ]);
 
     const results: DataSourceResult[] = [];
 
@@ -152,7 +143,6 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
     if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
     if (swissGbfsResult.status === "fulfilled") allVehicles.push(...swissGbfsResult.value.vehicles);
     if (felyxResult.status === "fulfilled") allVehicles.push(...felyxResult.value);
-    if (goSharingResult.status === "fulfilled") allVehicles.push(...goSharingResult.value);
     if (linkResult.status === "fulfilled") allVehicles.push(...linkResult.value);
     if (nrwResult.status === "fulfilled") allVehicles.push(...nrwResult.value.vehicles);
     if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);

@@ -77,8 +77,8 @@
     {
       "name": "Entur National Stop Register",
       "type": "ping",
-      "url": "https://api.entur.io/stop-places/v1/read",
-      "urlTemplate": "${nsrEndpoint}"
+      "url": "https://api.entur.io/stop-places/v1/read/stop-places/NSR:StopPlace:337",
+      "urlTemplate": "${nsrEndpoint}/stop-places/NSR:StopPlace:337"
     }
   ],
   "dataSources": [

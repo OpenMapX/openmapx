@@ -44,7 +44,8 @@
     {
       "name": "Mobility Database API",
       "type": "http",
-      "url": "https://api.mobilitydatabase.org/v1/metadata"
+      "url": "https://api.mobilitydatabase.org/v1/metadata",
+      "requiredConfigKeys": ["refreshToken"]
     }
   ],
   "dataSources": [

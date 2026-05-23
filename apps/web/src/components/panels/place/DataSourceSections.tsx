@@ -52,7 +52,6 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
     titleKey: "eScooterSharing",
   },
   felyx: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
-  gosharing: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
   link: { icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />, titleKey: "eScooterSharing" },
   "nrw-mobidrom-scooter": {
     icon: <ElectricScooterIcon sx={{ fontSize: 20 }} />,

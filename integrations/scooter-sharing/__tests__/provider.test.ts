@@ -10,10 +10,6 @@ vi.mock("../providers/felyx-client.js", () => ({
   searchFelyx: vi.fn(),
 }));
 
-vi.mock("../providers/gosharing-client.js", () => ({
-  searchGoSharing: vi.fn(),
-}));
-
 vi.mock("../providers/link-client.js", () => ({
   searchLink: vi.fn(),
 }));
@@ -65,7 +61,6 @@ import {
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { searchFelyx } from "../providers/felyx-client.js";
-import { searchGoSharing } from "../providers/gosharing-client.js";
 import { searchLink } from "../providers/link-client.js";
 import { searchNrwMobidrom } from "../providers/nrw-mobidrom-client.js";
 import { scooterSharingProvider } from "../providers/provider.js";
@@ -132,7 +127,6 @@ describe("scooterSharingProvider.search", () => {
 
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [gbfsStation], vehicles: [] });
     vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [nrwStation], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [motisStation], vehicles: [] });
@@ -148,19 +142,17 @@ describe("scooterSharingProvider.search", () => {
     expect(dedupCall[2].id).toBe("mo1");
   });
 
-  it("vehicles from all 6 sources collected (GBFS, Felyx, GO Sharing, Link, NRW, MOTIS)", async () => {
+  it("vehicles from all 5 sources collected (GBFS, Felyx, Link, NRW, MOTIS)", async () => {
     vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
     vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
     const gbfsVehicle = makeVehicle("gbfs-v1", "gbfs");
     const felyxVehicle = makeVehicle("felyx-v1", "felyx");
-    const goVehicle = makeVehicle("go-v1", "gosharing");
     const linkVehicle = makeVehicle("link-v1", "link");
     const nrwVehicle = makeVehicle("nrw-v1", "nrw-mobidrom-scooter");
     const motisVehicle = makeVehicle("mo-v1", "motis");
 
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [gbfsVehicle] });
     vi.mocked(searchFelyx).mockResolvedValue([felyxVehicle]);
-    vi.mocked(searchGoSharing).mockResolvedValue([goVehicle]);
     vi.mocked(searchLink).mockResolvedValue([linkVehicle]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [nrwVehicle] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [motisVehicle] });
@@ -168,14 +160,13 @@ describe("scooterSharingProvider.search", () => {
 
     const results = (await scooterSharingProvider.search(makeBbox())).data;
 
-    expect(mapVehicleToResult).toHaveBeenCalledTimes(6);
+    expect(mapVehicleToResult).toHaveBeenCalledTimes(5);
     expect(mapVehicleToResult).toHaveBeenCalledWith(gbfsVehicle);
     expect(mapVehicleToResult).toHaveBeenCalledWith(felyxVehicle);
-    expect(mapVehicleToResult).toHaveBeenCalledWith(goVehicle);
     expect(mapVehicleToResult).toHaveBeenCalledWith(linkVehicle);
     expect(mapVehicleToResult).toHaveBeenCalledWith(nrwVehicle);
     expect(mapVehicleToResult).toHaveBeenCalledWith(motisVehicle);
-    expect(results).toHaveLength(6);
+    expect(results).toHaveLength(5);
   });
 
   it("stations + vehicles combined in results", async () => {
@@ -186,7 +177,6 @@ describe("scooterSharingProvider.search", () => {
 
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [gbfsStation], vehicles: [] });
     vi.mocked(searchFelyx).mockResolvedValue([felyxVehicle]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
@@ -201,8 +191,7 @@ describe("scooterSharingProvider.search", () => {
   it("individual source failures handled gracefully", async () => {
     vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
     vi.mocked(fetchGbfsData).mockRejectedValue(new Error("down"));
-    vi.mocked(searchFelyx).mockRejectedValue(new Error("down"));
-    vi.mocked(searchGoSharing).mockResolvedValue([makeVehicle("go-v1-solo", "gosharing")]);
+    vi.mocked(searchFelyx).mockResolvedValue([makeVehicle("felyx-v1-solo", "felyx")]);
     vi.mocked(searchLink).mockRejectedValue(new Error("down"));
     vi.mocked(searchNrwMobidrom).mockRejectedValue(new Error("down"));
     vi.mocked(fetchMotisRentals).mockRejectedValue(new Error("down"));
@@ -210,15 +199,14 @@ describe("scooterSharingProvider.search", () => {
 
     const results = (await scooterSharingProvider.search(makeBbox())).data;
 
-    // Only GO Sharing vehicle survives
+    // Only Felyx vehicle survives
     expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("go-v1-solo");
+    expect(results[0].id).toBe("felyx-v1-solo");
   });
 
   it("all sources fail → returns empty array", async () => {
     vi.mocked(fetchGbfsData).mockRejectedValue(new Error("down"));
     vi.mocked(searchFelyx).mockRejectedValue(new Error("down"));
-    vi.mocked(searchGoSharing).mockRejectedValue(new Error("down"));
     vi.mocked(searchLink).mockRejectedValue(new Error("down"));
     vi.mocked(searchNrwMobidrom).mockRejectedValue(new Error("down"));
     vi.mocked(fetchMotisRentals).mockRejectedValue(new Error("down"));
@@ -231,7 +219,6 @@ describe("scooterSharingProvider.search", () => {
   it("fetches GBFS with scooter form factors and 'other' exclude", async () => {
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
@@ -249,7 +236,6 @@ describe("scooterSharingProvider.search", () => {
   it("MOTIS called with scooter form factors", async () => {
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
@@ -267,7 +253,6 @@ describe("scooterSharingProvider.search", () => {
   it("NRW Mobidrom called with same bbox", async () => {
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
@@ -287,7 +272,6 @@ describe("scooterSharingProvider.search", () => {
 
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [vehicle] });
     vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
@@ -307,7 +291,6 @@ describe("scooterSharingProvider.getDetail", () => {
 
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [] });
     vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
@@ -334,7 +317,6 @@ describe("scooterSharingProvider.getDetail", () => {
 
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(searchFelyx).mockResolvedValue([vehicle]);
-    vi.mocked(searchGoSharing).mockResolvedValue([]);
     vi.mocked(searchLink).mockResolvedValue([]);
     vi.mocked(searchNrwMobidrom).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });

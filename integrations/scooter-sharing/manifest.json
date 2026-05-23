@@ -64,11 +64,6 @@
       "url": "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/map/cars/"
     },
     {
-      "name": "GO Sharing",
-      "type": "ping",
-      "url": "https://greenmo.core.gourban-mobility.com/front/vehicles?lat=52.52&lng=13.405&rad=1000"
-    },
-    {
       "name": "Link/Superpedestrian",
       "type": "ping",
       "url": "https://vehicles.linkyour.city/reservation-api/local-vehicles/?latitude=52.52&longitude=13.405&radius=1000"
@@ -86,7 +81,8 @@
     {
       "name": "NRW Mobidrom E-Scooter",
       "type": "http",
-      "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-gbfs-provider/conflated/v3.0/e-scooter-sharing-nrw/manifest.json"
+      "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-gbfs-provider/conflated/v3.0/e-scooter-sharing-nrw/manifest.json",
+      "requiredConfigKeys": ["nrwMobidromClientId", "nrwMobidromClientSecret"]
     }
   ],
   "quality": "built-in",
@@ -115,20 +111,6 @@
       "commercialUse": "unknown",
       "providerCountry": "NL",
       "providerPrivacyUrl": "https://cooltra.com/en/privacy-policy/",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "gosharing",
-      "name": "GO Sharing",
-      "url": "https://go-sharing.com/",
-      "license": "Proprietary (undocumented API)",
-      "licenseUrl": "https://go-sharing.com/terms-conditions/",
-      "commercialUse": "unknown",
-      "providerCountry": "NL",
-      "providerPrivacyUrl": "https://go-sharing.com/privacy-verklaring/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

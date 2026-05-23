@@ -1,6 +1,6 @@
 {
   "name": "Roller-Sharing",
-  "description": "E-Scooter- und Moped-Sharing von GBFS-Feeds, Felyx, GO Sharing und Link",
+  "description": "E-Scooter- und Moped-Sharing von GBFS-Feeds, Felyx und Link",
   "dataSources": [
     {
       "purpose": "GBFS-kompatible Shared-Mobility-Systeme weltweit entdecken",

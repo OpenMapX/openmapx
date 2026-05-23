@@ -13,11 +13,6 @@
       "dataReceived": "Vehicles with id, coordinates, fuel level, vehicle type"
     },
     {
-      "purpose": "GO Sharing scooters near the map center (primarily Netherlands)",
-      "dataSent": "Coordinates (latitude, longitude), search radius in meters",
-      "dataReceived": "Vehicles with id, coordinates, battery level, vehicle type"
-    },
-    {
       "purpose": "Link e-scooters (multiple European cities). Company shut down Dec 2023.",
       "dataSent": "Coordinates (latitude, longitude)",
       "dataReceived": "Vehicles with id, coordinates, battery level, vehicle type"
