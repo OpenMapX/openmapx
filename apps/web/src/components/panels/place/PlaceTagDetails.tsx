@@ -59,6 +59,7 @@ import {
   SiVimeo,
   SiVk,
 } from "react-icons/si";
+import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
 import { TEAL } from "@/lib/theme";
 
 /** Language code → country code for emoji flag rendering. */
@@ -542,9 +543,9 @@ export function PlaceTagDetails({ osmTags }: Props) {
 
   const tag = (k: string) => osmTags[k];
 
-  const operator = tag("operator");
-  const brand = tag("brand");
-  const network = tag("network");
+  const operator = humanizeOsmTagValue(tag("operator") ?? "") || tag("operator");
+  const brand = humanizeOsmTagValue(tag("brand") ?? "") || tag("brand");
+  const network = humanizeOsmTagValue(tag("network") ?? "") || tag("network");
   const email = tag("email") ?? tag("contact:email");
   const wheelchair = tag("wheelchair");
   const access = tag("access");
