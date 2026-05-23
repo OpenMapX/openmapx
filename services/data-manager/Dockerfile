@@ -103,7 +103,11 @@ COPY --from=prod-deps /app/services/data-manager/node_modules ./services/data-ma
 # @openmapx/motis-feed-proxy-config packages ship their TypeScript source
 # directly; tsx/esm (preserved because it's a prod dep) transpiles them on
 # import. This matches how apps/api loads its dynamic integration code.
+# db-schema needs its own node_modules so the symlinked drizzle-orm resolves
+# from its source files at runtime; the other two have no prod externals so
+# only the source is needed.
 COPY packages/db-schema/ ./packages/db-schema/
+COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
 COPY packages/hardlinks/ ./packages/hardlinks/
 COPY packages/motis-feed-proxy-config/ ./packages/motis-feed-proxy-config/
 COPY --from=builder /app/services/data-manager/dist ./services/data-manager/dist
