@@ -1,0 +1,1 @@
+ALTER TABLE "data_manager"."feed_state" ADD COLUMN "consecutive_failures" integer DEFAULT 0 NOT NULL;

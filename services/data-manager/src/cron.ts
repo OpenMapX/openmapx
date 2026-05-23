@@ -10,6 +10,12 @@ import {
 } from "./jobs/transitous/index.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
+import {
+  buildGithubIssueSink,
+  detectStaleFeeds,
+  emitFeedAlerts,
+  type GithubIssueSink,
+} from "./jobs/transitous/staleness-alerts.js";
 import type { StateStore } from "./state.js";
 
 /**
@@ -23,6 +29,12 @@ import type { StateStore } from "./state.js";
  */
 const TRANSITOUS_SYNC_CRON_DEFAULT = "0 3 * * *";
 const TRANSITOUS_FEED_PROXY_RELOAD_CRON_DEFAULT = "*/15 * * * *";
+/**
+ * Per-feed staleness alert cron. Runs daily at 04:00 UTC so it
+ * fires once the 03:00 sync above has finished writing `last_fetched_at` +
+ * `consecutive_failures`. Same disable sentinels apply.
+ */
+const TRANSITOUS_STALENESS_CHECK_CRON_DEFAULT = "0 4 * * *";
 
 /** Sentinel values that disable a cron entirely. Mirrors the K8s convention. */
 const DISABLED_SENTINELS = new Set(["", "disabled", "off", "false"]);
@@ -53,17 +65,30 @@ export interface CronSetupOptions {
   /** Override default schedule strings (e.g. for tests). */
   syncCronExpression?: string;
   feedProxyReloadCronExpression?: string;
+  /** Override the staleness-alert schedule (e.g. for tests). */
+  stalenessCheckCronExpression?: string;
+  /**
+   * Test seam: invoked instead of querying Postgres + (optionally) GitHub
+   * from `runStalenessCheckNow`. Production callers omit this and get the
+   * real `detectStaleFeeds` + GitHub sink wiring.
+   */
+  runStalenessCheck?: () => Promise<void>;
+  /** Test seam: pre-built GitHub sink. Overrides env-var lookup. */
+  githubIssueSink?: GithubIssueSink | null;
 }
 
 export interface CronHandles {
   syncCron: Cron | null;
   feedProxyReloadCron: Cron | null;
-  /** Stop both cron jobs; awaitable shutdown lives on the caller. */
+  stalenessCheckCron: Cron | null;
+  /** Stop all cron jobs; awaitable shutdown lives on the caller. */
   stop: () => void;
   /** Test seam: directly invoke the sync handler as if the cron fired. */
   runSyncNow: () => Promise<void>;
   /** Test seam: directly invoke the heartbeat as if the cron fired. */
   runFeedProxyReloadNow: () => Promise<void>;
+  /** Test seam: directly invoke the staleness-alert handler. */
+  runStalenessCheckNow: () => Promise<void>;
 }
 
 function pickCronExpression(
@@ -112,6 +137,22 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     "TRANSITOUS_FEED_PROXY_RELOAD_CRON",
     TRANSITOUS_FEED_PROXY_RELOAD_CRON_DEFAULT,
   );
+  const stalenessCheckExpr = pickCronExpression(
+    options.stalenessCheckCronExpression,
+    "TRANSITOUS_STALENESS_CHECK_CRON",
+    TRANSITOUS_STALENESS_CHECK_CRON_DEFAULT,
+  );
+
+  // Resolve the GitHub issue sink once. The env-var path is opt-in: without
+  // both `TRANSITOUS_ALERT_GH_TOKEN` and `TRANSITOUS_ALERT_GH_REPO` the
+  // staleness check only emits log lines.
+  const githubIssue: GithubIssueSink | null =
+    options.githubIssueSink !== undefined
+      ? options.githubIssueSink
+      : buildGithubIssueSink(
+          process.env.TRANSITOUS_ALERT_GH_TOKEN?.trim() || undefined,
+          process.env.TRANSITOUS_ALERT_GH_REPO?.trim() || undefined,
+        );
 
   let lastFeedProxyReloadAt: number | null = null;
   const feedProxyConfPath = join(options.dataDir, "motis-feed-proxy", "conf", "feed-proxy.conf");
@@ -172,7 +213,33 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       }
       options.singleFlight.markSyncFinished();
     }
+
+    // Run the staleness check immediately after every sync so an
+    // out-of-band failure that would otherwise wait for the daily 04:00 cron
+    // surfaces at the same wallclock minute as the sync that caused it.
+    try {
+      await runStalenessCheck();
+    } catch (err) {
+      log.warn("transitous-cron: post-sync staleness check failed", {
+        err: (err as Error).message,
+      });
+    }
   };
+
+  const defaultStalenessCheck = async (): Promise<void> => {
+    const alerts = await detectStaleFeeds();
+    if (alerts.length === 0) {
+      log.info("transitous-cron: staleness check found no alerts");
+      return;
+    }
+    await emitFeedAlerts({
+      alerts,
+      log,
+      githubIssue: githubIssue ?? undefined,
+    });
+  };
+
+  const runStalenessCheck = options.runStalenessCheck ?? defaultStalenessCheck;
 
   const defaultReload = async (): Promise<void> => {
     await execa("docker", ["exec", "motis-feed-proxy", "nginx", "-s", "reload"], {
@@ -232,6 +299,16 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       })
     : null;
 
+  const stalenessCheckCron = stalenessCheckExpr
+    ? new Cron(stalenessCheckExpr, { name: "transitous-staleness-check", protect: true }, () => {
+        void runStalenessCheck().catch((err) => {
+          log.warn("transitous-cron: staleness check threw", {
+            err: (err as Error).message,
+          });
+        });
+      })
+    : null;
+
   if (!syncCron) log.info("transitous-cron: sync disabled by env");
   else log.info("transitous-cron: sync scheduled", { expression: syncExpr });
   if (!feedProxyReloadCron) log.info("transitous-cron: feed-proxy reload disabled by env");
@@ -239,18 +316,27 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     log.info("transitous-cron: feed-proxy reload scheduled", {
       expression: feedProxyReloadExpr,
     });
+  if (!stalenessCheckCron) log.info("transitous-cron: staleness check disabled by env");
+  else
+    log.info("transitous-cron: staleness check scheduled", {
+      expression: stalenessCheckExpr,
+      githubIssueSink: githubIssue !== null,
+    });
 
   function stop(): void {
     syncCron?.stop();
     feedProxyReloadCron?.stop();
+    stalenessCheckCron?.stop();
   }
 
   return {
     syncCron,
     feedProxyReloadCron,
+    stalenessCheckCron,
     stop,
     runSyncNow: runSync,
     runFeedProxyReloadNow: runFeedProxyReload,
+    runStalenessCheckNow: runStalenessCheck,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()
     // for the shutdown helper — no need to surface it here.
   };

@@ -118,15 +118,14 @@ describe("runTransitousPipeline orchestrator", () => {
   });
 
   it("runs end-to-end on a seeded 3-feed catalog within a 60s wall-clock budget", async () => {
-    // This is the plan §E9 acceptance: a seeded fake transitous-catalog with
-    // multiple feeds across two regions, pipeline runs all 11 stages in order
-    // (stubs included), finishes under 60s.
+    // A seeded fake transitous-catalog with multiple feeds across two regions;
+    // the pipeline runs all 11 stages in order (stubs included) and finishes
+    // under 60s.
     //
     // A "real MOTIS container in CI" variant (where motis-import / motis-health
     // / promote actually run against a running staging container with a tiny
-    // GTFS fixture imported) is intentionally deferred — that requires Docker
-    // in the CI runner and a fixture small enough to import in ~10s. Tracked
-    // as a Phase E follow-up in docs/INTEGRATIONS.md.
+    // GTFS fixture imported) lives in pipeline-live-motis.test.ts, gated by
+    // OPENMAPX_E9_LIVE_MOTIS=true so it doesn't run in the default suite.
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-multi-feed-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");

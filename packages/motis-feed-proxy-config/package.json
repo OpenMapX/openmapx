@@ -1,0 +1,18 @@
+{
+  "name": "@openmapx/motis-feed-proxy-config",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/build.ts",
+  "types": "./src/build.ts",
+  "sideEffects": false,
+  "scripts": {
+    "test": "vitest run",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}

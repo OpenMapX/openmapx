@@ -14,7 +14,7 @@ export interface RealtimeCapabilities {
   tripUpdates: boolean;
 }
 
-// TODO(types): tighten when wiring MOTIS GTFS-RT in Phase D.
+// TODO(types): tighten once a stable GTFS-RT trip-update shape is in place.
 export type TripUpdate = unknown;
 
 export interface RealtimeProvider {

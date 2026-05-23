@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildFeedProxyConfig } from "../../../../motis-feed-proxy/lib/build.js";
+import { buildFeedProxyConfig } from "@openmapx/motis-feed-proxy-config";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const FEED_PROXY_CONTAINER = "motis-feed-proxy";

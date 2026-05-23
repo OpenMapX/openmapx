@@ -36,6 +36,13 @@
       "when": 1779447870601,
       "tag": "0004_data_manager_jobs_and_feed_state",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779491998052,
+      "tag": "0005_feed_state_consecutive_failures",
+      "breakpoints": true
     }
   ]
 }

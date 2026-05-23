@@ -563,9 +563,9 @@ export function isGtfsLocalId(stopId: string): boolean {
 
 /**
  * Per-feed attribution map. Keys match `TransitStop.provider`
- * (`gtfs-<slug>`) so the frontend's `resolveProvider(providers, stop.provider)`
- * call resolves the imported feed's `name` + `license` directly instead of
- * falling back to the synthesized "GTFS (<slug>)" label.
+ * (`gtfs-<slug>`) so envelope `attributions` carry the imported feed's
+ * `name` + `license` directly instead of falling back to a synthesized
+ * "GTFS (<slug>)" label.
  *
  * Only active feeds are surfaced — inactive/failed feeds shouldn't
  * advertise license claims they aren't actually serving data under.

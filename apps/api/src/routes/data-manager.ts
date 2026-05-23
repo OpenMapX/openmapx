@@ -5,6 +5,7 @@ import { and, asc, count, desc, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
+import { getProviderHealth } from "../services/provider-health/registry.js";
 import { requireAdmin } from "../utils/require-admin.js";
 
 /**
@@ -354,6 +355,67 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     const proxied = await proxyToDataManager("POST", "/transit/restart-motis");
     reply.code(proxied.status);
     return proxied.body;
+  });
+
+  // -------- Provider health --------
+  //
+  // Health is persistent (Redis) and cross-domain. The three endpoints below
+  // are operator-facing: list all providers, drill into one, force-reset its
+  // sliding window. Reads use dual auth (admin session OR service token);
+  // POST /reset is admin-session-only (mirrors /bump-transitous-ref policy:
+  // mutations against ops state need a logged-in human).
+
+  app.get("/data-manager/providers", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    reply.header("Cache-Control", "no-store");
+    const ph = getProviderHealth();
+    if (!ph) {
+      return { providers: [] };
+    }
+    const all = await ph.getAll();
+    const providers = Object.entries(all)
+      .map(([id, state]) => ({ id, ...state }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return { providers };
+  });
+
+  app.get<{ Params: { id: string } }>("/data-manager/providers/:id", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    reply.header("Cache-Control", "no-store");
+    const ph = getProviderHealth();
+    if (!ph) {
+      return reply.code(404).send({ error: "Provider not found" });
+    }
+    const state = await ph.getState(req.params.id);
+    if (!state) {
+      return reply.code(404).send({ error: "Provider not found" });
+    }
+    return { id: req.params.id, ...state };
+  });
+
+  app.post<{ Params: { id: string } }>("/data-manager/providers/:id/reset", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    if (auth.kind === "token") {
+      return reply.code(403).send({
+        error: "Resetting provider health requires an admin session, not a service token",
+      });
+    }
+    reply.header("Cache-Control", "no-store");
+    const ph = getProviderHealth();
+    if (!ph) {
+      return reply.code(503).send({ error: "Provider health tracker not initialised" });
+    }
+    await ph.reset(req.params.id);
+    return { ok: true, providerId: req.params.id };
   });
 
   app.post<{ Body?: { branch?: string; force?: boolean } }>(

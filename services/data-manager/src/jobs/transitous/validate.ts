@@ -1,7 +1,8 @@
 import { existsSync, statSync } from "node:fs";
 import { execa } from "execa";
+import { recordValidateOutcome } from "./feed-state-writer.js";
 import { scanGtfsArchives } from "./internal.js";
-import type { StageFn, StageResult, StageStatus } from "./types.js";
+import type { JobContext, StageFn, StageResult, StageStatus } from "./types.js";
 
 /**
  * Light validation: each archive in `outDir` must exist, be non-empty, and
@@ -17,15 +18,18 @@ export const run: StageFn = async (ctx) => {
     const archives = scanGtfsArchives(gtfsDir);
     const invalid: Array<{ id: string; reason: string }> = [];
     let validated = 0;
+    const perFeed: Array<{ id: string; ok: boolean; reason?: string }> = [];
 
     for (const archive of archives) {
       if (!existsSync(archive.path)) {
         invalid.push({ id: archive.id, reason: "archive missing on disk" });
+        perFeed.push({ id: archive.id, ok: false, reason: "archive missing on disk" });
         continue;
       }
       const size = statSync(archive.path).size;
       if (size <= 0) {
         invalid.push({ id: archive.id, reason: "archive is empty" });
+        perFeed.push({ id: archive.id, ok: false, reason: "archive is empty" });
         continue;
       }
       const memberOk = await hasZipMember(archive.path, "feed_info.txt");
@@ -35,10 +39,18 @@ export const run: StageFn = async (ctx) => {
         // marking the archive invalid; the fetch artifact already recorded
         // success so the data is still on disk for inspection.
         invalid.push({ id: archive.id, reason: "missing feed_info.txt" });
+        perFeed.push({ id: archive.id, ok: false, reason: "missing feed_info.txt" });
         continue;
       }
       validated++;
+      perFeed.push({ id: archive.id, ok: true });
     }
+
+    // Persist per-feed validation outcomes for the staleness-alert cron (G2).
+    // On success → reset `consecutive_failures` to 0. On failure → atomic
+    // increment. Best-effort: DB outages here are logged but do not flip the
+    // pipeline stage status.
+    await persistValidateOutcomes(perFeed, ctx);
 
     let status: StageStatus = "ok";
     if (invalid.length > 0) {
@@ -73,6 +85,38 @@ export const run: StageFn = async (ctx) => {
     };
   }
 };
+
+/**
+ * Translate `archive.id` (e.g. `de_vbb`) into the `(region, name)` natural key
+ * used by `data_manager.feed_state`, then push the outcome through the
+ * writer. Archives whose id doesn't start with a 2-letter country code are
+ * skipped — the staleness cron is region/country-scoped so an unparseable id
+ * cannot generate a useful alert.
+ */
+async function persistValidateOutcomes(
+  perFeed: Array<{ id: string; ok: boolean; reason?: string }>,
+  ctx: JobContext,
+): Promise<void> {
+  for (const entry of perFeed) {
+    const split = entry.id.indexOf("_");
+    if (split <= 0) continue;
+    const region = entry.id.slice(0, split).toLowerCase();
+    const name = entry.id.slice(split + 1).toLowerCase();
+    if (!region || !name) continue;
+    try {
+      await recordValidateOutcome({
+        region,
+        name,
+        ok: entry.ok,
+        message: entry.reason,
+      });
+    } catch (err) {
+      ctx.logger.warn(
+        `transitous-validate: feed_state write failed for ${entry.id}: ${(err as Error).message}`,
+      );
+    }
+  }
+}
 
 async function hasZipMember(archivePath: string, member: string): Promise<boolean> {
   try {

@@ -2107,7 +2107,7 @@ The transit-motis, live-transit-motis, geocoding-motis, motis-rentals integratio
 - Security trade-off: bind-mounting `/var/run/docker.sock` gives the data-manager container effective root on the host (any container that can talk to the daemon can spawn privileged containers). This is acceptable in single-tenant / operator-controlled deployments — the data-manager image is built from this repo and the cron stages only invoke a fixed set of `docker exec`/`docker restart` commands. In multi-tenant deployments where the data-manager image or its inputs are not under your control, run the atomic-swap promotion and cron-driven syncs from a privileged host-side process instead, and remove the `@docker-socket` bindMount.
 - Operator runtime setup: the runtime image ships a static `docker` CLI binary at `/usr/local/bin/docker` so `docker exec` is on PATH. The data-manager runs as a non-root user (`datamgr`, UID/GID 1001); to talk to the host's docker daemon through the bind-mounted socket, the host's docker group GID must match (`--group-add <docker-gid>` on `docker run`, or `group_add:` in compose). If the host docker group has a different GID, either add a matching supplementary group via `group_add` or remap the container user with `user:` in the compose service. The default rendered compose pulls UID/GID from `${UID:-1000}:${GID:-1000}`; override these to match an operator that's in the host docker group.
 
-### Phase E9 live-MOTIS end-to-end test
+### Live-MOTIS end-to-end test
 
 The data-manager package ships an opt-in integration test that drives the full 11-stage Transitous pipeline against a real `motis-staging` Docker container, seeded with three tiny GTFS fixtures (DE/CH/AT). It is the only test that exercises `motis-import` / `motis-health` / `promote` against actual MOTIS — the rest of the suite mocks these stages with the stub-runner path.
 
@@ -2119,8 +2119,19 @@ The data-manager package ships an opt-in integration test that drives the full 1
   - `OPENMAPX_E9_LIVE_MOTIS=true pnpm -C services/data-manager test pipeline-live-motis`.
   - When the daemon is unreachable or the image is missing the spec logs a clear reason and exits early instead of failing.
 - Container lifecycle is owned by the test: it generates a tmp `docker-compose.yml` that only declares `motis-staging`, brings the container up via `docker compose -p openmapx-e9-<pid> ... up -d motis-staging`, runs the pipeline, then tears the stack down in `afterAll`. No reliance on the operator's `infra/docker/data` tree.
-- Budget: 90 s end-to-end (more generous than the §E9 plan's 60 s budget to absorb cold-start of the MOTIS container in CI). Tighten if you observe consistent headroom on `actions/runner` after a few scheduled runs.
+- Budget: 90 s end-to-end (generous enough to absorb cold-start of the MOTIS container in CI). Tighten if you observe consistent headroom on `actions/runner` after a few scheduled runs.
 - Scheduled CI: `.github/workflows/e9-live-motis.yml` runs weekly (Mondays 04:17 UTC) and on `workflow_dispatch`. The workflow pre-pulls the MOTIS image, sets `OPENMAPX_E9_LIVE_MOTIS=true`, and uploads `/tmp/openmapx-e9-live-*/` on failure for post-mortem.
+
+### Feed staleness alerts
+
+The data-manager monitors every Transitous feed for two failure modes and emits a structured warning (and, optionally, a GitHub Issue) when either threshold is crossed. The check runs immediately after every sync run and on a separate daily cron so issues are surfaced even when the sync itself is healthy but a feed quietly stops updating.
+
+- **Stale**: `data_manager.feed_state.last_fetched_at` is older than 48 hours. Threshold tunable per call; the cron uses the default.
+- **Consecutive failures**: `data_manager.feed_state.consecutive_failures` is >= 3. The counter is incremented atomically by the `validate` stage on every failed validation, and reset to 0 on the next successful validation.
+- **Cron**: `TRANSITOUS_STALENESS_CHECK_CRON` (default `0 4 * * *`, daily at 04:00 UTC — runs one hour after the 03:00 sync). Same disable sentinels as the other crons (`disabled` / `off` / `false` / empty string).
+- **Log sink**: always on. Emits one `log.warn` per alert with `{region, name, kind, lastFetchedAt?, hoursStale?, consecutiveFailures?, validationMessage?}` — feed into your structured-logging pipeline (Loki, Cloudwatch, etc.) and alert at >= 1 line per scrape window.
+- **GitHub Issue sink**: opt-in. Set both `TRANSITOUS_ALERT_GH_TOKEN` (a PAT with `repo:public_repo` scope, or `repo` for private repos) and `TRANSITOUS_ALERT_GH_REPO` (e.g. `openmapx/openmapx`). When both are set the cron searches existing open issues by title (`Stale transit feed: de/vbb` for the stale kind, `Failing transit feed: de/vbb` for the consecutive-failures kind) and skips creation if a match is found, so a long-running outage doesn't spam the tracker.
+- **Schema**: `data_manager.feed_state` has the `consecutive_failures` column (migration `0005_feed_state_consecutive_failures.sql`). Fetch outcomes are written by the `fetch` stage; validation outcomes are written by the `validate` stage. Both writes are best-effort — a transient DB outage during the pipeline does not flip the stage status.
 
 ### Transitous lockfile
 

@@ -40,6 +40,12 @@ import { searchCatalog } from "./services/gtfs/catalog";
 import { gtfsManager } from "./services/gtfs/index";
 import * as gtfsQueries from "./services/gtfs/queries";
 import { executeAllIntegrationHealthChecks } from "./services/integration-health";
+import { getMetricsRecorder } from "./services/metrics/recorder";
+import {
+  getProviderHealth,
+  ProviderHealth,
+  setProviderHealth,
+} from "./services/provider-health/registry";
 import { getSecret, isSecretsConfigured, resolveVaultSecrets } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { createIntegrationLogger } from "./utils/integration-logger";
@@ -746,6 +752,24 @@ export async function initIntegrations(
     fastify.log.debug("Service registry unavailable — requires: resolution skipped");
   }
 
+  // Initialise the persistent ProviderHealth tracker once per host boot.
+  // When Redis is unavailable we leave the holder null and the orchestrator
+  // falls back to its no-op handle (treats every provider as healthy).
+  if (redis && !getProviderHealth()) {
+    try {
+      const providerHealthLog = {
+        info: (m: string) => fastify.log.info(m),
+        warn: (m: string) => fastify.log.warn(m),
+        error: (m: string) => fastify.log.error(m),
+        debug: (m: string) => fastify.log.debug(m),
+      };
+      const ph = await ProviderHealth.init({ redis, log: providerHealthLog });
+      setProviderHealth(ph);
+    } catch (err) {
+      fastify.log.warn(err, "ProviderHealth initialization failed (continuing without it)");
+    }
+  }
+
   // Initialise the AttributionIndex once per host boot. Pre-loads MOTIS
   // license.json + every integration manifest's dataSources[] so providers
   // can resolve attribution rows via ctx.attributionIndex without each one
@@ -885,6 +909,8 @@ export async function initIntegrations(
       log,
       secrets: { get: (key: string) => getSecret(id, key) },
       attributionIndex: getAttributionIndex() ?? undefined,
+      providerHealth: getProviderHealth() ?? undefined,
+      metricsRecorder: getMetricsRecorder(),
       getRequiredService(key: string) {
         return requiresMap.get(key) ?? null;
       },
@@ -1229,6 +1255,8 @@ export async function reloadIntegrations(): Promise<{
       log,
       secrets: { get: (key: string) => getSecret(id, key) },
       attributionIndex: getAttributionIndex() ?? undefined,
+      providerHealth: getProviderHealth() ?? undefined,
+      metricsRecorder: getMetricsRecorder(),
       getRequiredService(key: string) {
         return reloadRequiresMap.get(key) ?? null;
       },
@@ -1324,5 +1352,11 @@ export async function shutdownIntegrations(): Promise<void> {
   if (idx) {
     idx.close();
     setAttributionIndex(null);
+  }
+
+  const ph = getProviderHealth();
+  if (ph) {
+    ph.close();
+    setProviderHealth(null);
   }
 }

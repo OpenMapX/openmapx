@@ -1,7 +1,9 @@
 import type { BBox } from "@openmapx/core";
 import type {
   IntegrationContext,
-  ProviderAttribution,
+  MetricsRecorder,
+  ProviderCallOutcome,
+  ProviderHealthHandle,
   TransitProvider,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -20,7 +22,6 @@ import type {
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
-import { providerHealth } from "./health.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -117,7 +118,87 @@ function mergeFreshness(...lists: Freshness[]): Freshness {
   return { fetchedAt, hasRealtimeData, isStale, ...(dataAsOf ? { dataAsOf } : {}) };
 }
 
+/**
+ * Local fallback when the host doesn't wire a ProviderHealthHandle (e.g.
+ * tests, dev scripts). Treats every provider as healthy; success/failure
+ * records are dropped on the floor.
+ */
+const noopHealth: ProviderHealthHandle = {
+  isHealthy: () => Promise.resolve(true),
+  recordSuccess: () => Promise.resolve(),
+  recordFailure: () => Promise.resolve(),
+};
+
+const noopMetrics: MetricsRecorder = {
+  recordProviderCall: () => {},
+};
+
+function failureReason(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+/**
+ * Determine the call outcome from the returned value. `"ok"` when the value
+ * is a non-empty, non-null result; `"empty"` when the call succeeded but
+ * returned `null`, `undefined`, an empty array, or an empty object whose
+ * `data` key is itself empty. Used by `timed()` so OTEL counters distinguish
+ * a provider that successfully reported "no data" from one that returned
+ * actual content.
+ */
+function classifyOutcome(value: unknown): ProviderCallOutcome {
+  if (value === null || value === undefined) return "empty";
+  if (Array.isArray(value)) return value.length === 0 ? "empty" : "ok";
+  if (typeof value === "object") {
+    const obj = value as { data?: unknown };
+    if ("data" in obj) {
+      const data = obj.data;
+      if (data === null || data === undefined) return "empty";
+      if (Array.isArray(data)) return data.length === 0 ? "empty" : "ok";
+    }
+  }
+  return "ok";
+}
+
+/**
+ * Wraps a provider call with latency timing + health tracking + OTEL metrics.
+ * The provider's existing fallback semantics (catch + return null/empty) stay
+ * identical; this helper just feeds success/failure + latency into the
+ * health tracker and emits a `transit_provider_calls_total` increment plus
+ * a `transit_provider_call_duration_ms` observation with the same labels
+ * (G3 wiring).
+ */
+async function timed<T>(
+  health: ProviderHealthHandle,
+  metrics: MetricsRecorder,
+  providerId: string,
+  method: string,
+  fn: () => Promise<T>,
+): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+  const start = performance.now();
+  try {
+    const value = await fn();
+    const elapsed = performance.now() - start;
+    await health.recordSuccess(providerId, elapsed);
+    metrics.recordProviderCall({ providerId, method, outcome: classifyOutcome(value) }, elapsed);
+    return { ok: true, value };
+  } catch (error) {
+    const elapsed = performance.now() - start;
+    await health.recordFailure(providerId, elapsed, failureReason(error));
+    metrics.recordProviderCall({ providerId, method, outcome: "error" }, elapsed);
+    return { ok: false, error };
+  }
+}
+
 export function createTransitOrchestrator(ctx: IntegrationContext) {
+  const providerHealth: ProviderHealthHandle = ctx.providerHealth ?? noopHealth;
+  const metricsRecorder: MetricsRecorder = ctx.metricsRecorder ?? noopMetrics;
+
   /** Lazily collect all transit providers from registered integrations. */
   function collectProviders(): TransitProvider[] {
     const integrations = ctx.getIntegrationsByDomain("transit");
@@ -151,31 +232,33 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     return 100; // unknown providers get low priority
   }
 
-  function getProvidersForBbox(bbox: BBox): TransitProvider[] {
-    return collectProviders()
+  async function filterHealthy(providers: TransitProvider[]): Promise<TransitProvider[]> {
+    const checks = await Promise.all(providers.map((p) => providerHealth.isHealthy(p.id)));
+    return providers.filter((_, i) => checks[i]);
+  }
+
+  async function getProvidersForBbox(bbox: BBox): Promise<TransitProvider[]> {
+    const overlapping = collectProviders()
       .filter((p) => providerOverlapsBbox(p, bbox))
-      .filter((p) => providerHealth.isHealthy(p.id))
       .sort((a, b) => a.priority - b.priority);
+    return filterHealthy(overlapping);
   }
 
   async function getStopsInBbox(
     bbox: BBox,
     modes?: string[],
   ): Promise<MobilityResult<TransitStop[]>> {
-    const matching = getProvidersForBbox(bbox).filter((p) => p.getStopsNearby);
+    const matching = (await getProvidersForBbox(bbox)).filter((p) => p.getStopsNearby);
     const { lat, lng, radiusMeters } = bboxToCenter(bbox);
 
     const results = await Promise.allSettled(
       matching.map(async (p) => {
-        try {
-          if (!p.getStopsNearby) return null;
-          const res = await p.getStopsNearby(lat, lng, radiusMeters);
-          providerHealth.recordSuccess(p.id);
-          return res;
-        } catch {
-          providerHealth.recordFailure(p.id);
-          return null;
-        }
+        if (!p.getStopsNearby) return null;
+        const fn = p.getStopsNearby.bind(p);
+        const outcome = await timed(providerHealth, metricsRecorder, p.id, "getStopsInBbox", () =>
+          fn(lat, lng, radiusMeters),
+        );
+        return outcome.ok ? outcome.value : null;
       }),
     );
 
@@ -207,14 +290,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   ): Promise<MobilityResult<Departure[]>> {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getDepartures) return emptyResult<Departure[]>([], { hasRealtimeData: true });
-    try {
-      const result = await provider.getDepartures(stopId, minutes);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<Departure[]>([], { hasRealtimeData: true });
-    }
+    const fn = provider.getDepartures.bind(provider);
+    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getDepartures", () =>
+      fn(stopId, minutes),
+    );
+    return outcome.ok ? outcome.value : emptyResult<Departure[]>([], { hasRealtimeData: true });
   }
 
   async function getArrivals(
@@ -223,27 +303,21 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   ): Promise<MobilityResult<Departure[]>> {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getArrivals) return emptyResult<Departure[]>([], { hasRealtimeData: true });
-    try {
-      const result = await provider.getArrivals(stopId, minutes);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<Departure[]>([], { hasRealtimeData: true });
-    }
+    const fn = provider.getArrivals.bind(provider);
+    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getArrivals", () =>
+      fn(stopId, minutes),
+    );
+    return outcome.ok ? outcome.value : emptyResult<Departure[]>([], { hasRealtimeData: true });
   }
 
   async function getStop(stopId: string): Promise<MobilityResult<TransitStop | null>> {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getStop) return emptyResult<TransitStop | null>(null);
-    try {
-      const result = await provider.getStop(stopId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<TransitStop | null>(null);
-    }
+    const fn = provider.getStop.bind(provider);
+    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getStop", () =>
+      fn(stopId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<TransitStop | null>(null);
   }
 
   async function searchByName(
@@ -268,25 +342,23 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     limit: number,
     bbox?: BBox,
   ): Promise<MobilityResult<TransitStop[]>> {
-    const withSearch = (
-      bbox
-        ? getProvidersForBbox(bbox)
-        : collectProviders()
-            .filter((p) => providerHealth.isHealthy(p.id))
-            .sort((a, b) => a.priority - b.priority)
-    ).filter((p) => p.searchStopsByName);
+    const baseProviders = bbox
+      ? await getProvidersForBbox(bbox)
+      : await filterHealthy(collectProviders().sort((a, b) => a.priority - b.priority));
+    const withSearch = baseProviders.filter((p) => p.searchStopsByName);
 
     const results = await Promise.allSettled(
       withSearch.map(async (p) => {
-        try {
-          if (!p.searchStopsByName) return null;
-          const res = await p.searchStopsByName(query, limit);
-          providerHealth.recordSuccess(p.id);
-          return res;
-        } catch {
-          providerHealth.recordFailure(p.id);
-          return null;
-        }
+        if (!p.searchStopsByName) return null;
+        const fn = p.searchStopsByName.bind(p);
+        const outcome = await timed(
+          providerHealth,
+          metricsRecorder,
+          p.id,
+          "searchStopsByName",
+          () => fn(query, limit),
+        );
+        return outcome.ok ? outcome.value : null;
       }),
     );
 
@@ -315,42 +387,41 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       Math.max(params.from.lat, params.to.lat) + 0.5,
     ];
 
-    const matching = getProvidersForBbox(tripBbox).filter((p) => p.planTrip);
+    const matching = (await getProvidersForBbox(tripBbox)).filter((p) => p.planTrip);
 
     // Waterfall: try each in priority order, return first success
     for (const provider of matching) {
-      try {
-        const res = await provider.planTrip?.(params);
-        const first = res?.data?.[0];
-        if (first?.itineraries?.length) {
-          providerHealth.recordSuccess(provider.id);
-          return {
-            data: { ...first, provider: first.provider ?? provider.prefix.replace(/:$/, "") },
-            attributions: res?.attributions ?? [],
-            freshness: res?.freshness ?? freshnessNow(),
-          };
-        }
-      } catch {
-        providerHealth.recordFailure(provider.id);
+      const planFn = provider.planTrip;
+      if (!planFn) continue;
+      const bound = planFn.bind(provider);
+      const outcome = await timed(providerHealth, metricsRecorder, provider.id, "planTrip", () =>
+        bound(params),
+      );
+      if (!outcome.ok) continue;
+      const res = outcome.value;
+      const first = res?.data?.[0];
+      if (first?.itineraries?.length) {
+        return {
+          data: { ...first, provider: first.provider ?? provider.prefix.replace(/:$/, "") },
+          attributions: res?.attributions ?? [],
+          freshness: res?.freshness ?? freshnessNow(),
+        };
       }
     }
     return emptyResult<TripPlan | null>(null);
   }
 
   async function getVehicleRadar(bbox: BBox): Promise<MobilityResult<VehiclePosition[]>> {
-    const matching = getProvidersForBbox(bbox).filter((p) => p.getVehicleRadar);
+    const matching = (await getProvidersForBbox(bbox)).filter((p) => p.getVehicleRadar);
 
     const results = await Promise.allSettled(
       matching.map(async (p) => {
-        try {
-          if (!p.getVehicleRadar) return null;
-          const res = await p.getVehicleRadar(bbox);
-          providerHealth.recordSuccess(p.id);
-          return res;
-        } catch {
-          providerHealth.recordFailure(p.id);
-          return null;
-        }
+        if (!p.getVehicleRadar) return null;
+        const fn = p.getVehicleRadar.bind(p);
+        const outcome = await timed(providerHealth, metricsRecorder, p.id, "getVehicleRadar", () =>
+          fn(bbox),
+        );
+        return outcome.ok ? outcome.value : null;
       }),
     );
 
@@ -366,19 +437,16 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getAlerts(bbox: BBox): Promise<MobilityResult<ServiceAlert[]>> {
-    const matching = getProvidersForBbox(bbox).filter((p) => p.getAlertsForBbox);
+    const matching = (await getProvidersForBbox(bbox)).filter((p) => p.getAlertsForBbox);
 
     const results = await Promise.allSettled(
       matching.map(async (p) => {
-        try {
-          if (!p.getAlertsForBbox) return null;
-          const res = await p.getAlertsForBbox(bbox);
-          providerHealth.recordSuccess(p.id);
-          return res;
-        } catch {
-          providerHealth.recordFailure(p.id);
-          return null;
-        }
+        if (!p.getAlertsForBbox) return null;
+        const fn = p.getAlertsForBbox.bind(p);
+        const outcome = await timed(providerHealth, metricsRecorder, p.id, "getAlertsForBbox", () =>
+          fn(bbox),
+        );
+        return outcome.ok ? outcome.value : null;
       }),
     );
 
@@ -396,14 +464,15 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function getStopPlatforms(stopId: string): Promise<MobilityResult<TransitStop[]>> {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getStopPlatforms) return emptyResult<TransitStop[]>([]);
-    try {
-      const result = await provider.getStopPlatforms(stopId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<TransitStop[]>([]);
-    }
+    const fn = provider.getStopPlatforms.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getStopPlatforms",
+      () => fn(stopId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<TransitStop[]>([]);
   }
 
   async function getStopInfrastructure(
@@ -412,14 +481,15 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getStopInfrastructure)
       return emptyResult<TransitStopInfrastructure | null>(null);
-    try {
-      const result = await provider.getStopInfrastructure(stopId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<TransitStopInfrastructure | null>(null);
-    }
+    const fn = provider.getStopInfrastructure.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getStopInfrastructure",
+      () => fn(stopId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<TransitStopInfrastructure | null>(null);
   }
 
   async function getStopTimetable(
@@ -428,16 +498,19 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   ): Promise<MobilityResult<Departure[]>> {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getStopTimetable) return emptyResult<Departure[]>([]);
-    try {
-      const result = await provider.getStopTimetable(stopId, date);
-      providerHealth.recordSuccess(provider.id);
-      // Provider may return TimetableEntry[]; we expose them as Departure[]
-      // because every current implementer happens to emit Departure shapes.
-      return result as MobilityResult<Departure[]>;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<Departure[]>([]);
-    }
+    const fn = provider.getStopTimetable.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getStopTimetable",
+      () => fn(stopId, date),
+    );
+    // Provider may return TimetableEntry[]; we expose them as Departure[]
+    // because every current implementer happens to emit Departure shapes.
+    return outcome.ok
+      ? (outcome.value as MobilityResult<Departure[]>)
+      : emptyResult<Departure[]>([]);
   }
 
   async function getRoutesForStop(stopId: string): Promise<MobilityResult<TransitRoute[]>> {
@@ -446,15 +519,21 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     // Prefer provider-native route lookup when available.
     if (provider.getRoutesForStop) {
-      try {
-        const result = await provider.getRoutesForStop(stopId);
-        providerHealth.recordSuccess(provider.id);
+      const fn = provider.getRoutesForStop.bind(provider);
+      const outcome = await timed(
+        providerHealth,
+        metricsRecorder,
+        provider.id,
+        "getRoutesForStop",
+        () => fn(stopId),
+      );
+      if (outcome.ok) {
+        const result = outcome.value;
         // Keep old behavior: if provider route lookup returns nothing, derive
         // routes from departures as a fallback.
         if (result.data.length > 0 || !provider.getDepartures) return result;
-      } catch {
-        providerHealth.recordFailure(provider.id);
-        if (!provider.getDepartures) return emptyResult<TransitRoute[]>([]);
+      } else if (!provider.getDepartures) {
+        return emptyResult<TransitRoute[]>([]);
       }
     } else if (!provider.getDepartures) {
       return emptyResult<TransitRoute[]>([]);
@@ -462,48 +541,50 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     // Compatibility fallback: derive routes from a 12-hour departures window.
     // Several providers expose departures but no route-by-stop endpoint.
-    try {
-      const depRes = await provider.getDepartures?.(stopId, 720);
-      const departures = depRes?.data;
-      if (!departures) return emptyResult<TransitRoute[]>([]);
-      providerHealth.recordSuccess(provider.id);
-      const byRouteId = new Map<string, TransitRoute>();
-      for (const dep of departures) {
-        if (byRouteId.has(dep.route.id)) continue;
-        if (isTripNumber(dep.route.shortName)) continue;
-        byRouteId.set(dep.route.id, {
-          id: dep.route.id,
-          shortName: dep.route.shortName,
-          longName: dep.route.longName,
-          mode: dep.route.mode,
-          color: dep.route.color,
-          operatorName: "",
-        });
-      }
-      return {
-        data: Array.from(byRouteId.values()),
-        attributions: depRes?.attributions ?? [],
-        freshness: depRes?.freshness ?? freshnessNow(),
-      };
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<TransitRoute[]>([]);
+    const depFn = provider.getDepartures;
+    if (!depFn) return emptyResult<TransitRoute[]>([]);
+    const boundDep = depFn.bind(provider);
+    const depOutcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getRoutesForStop.viaDepartures",
+      () => boundDep(stopId, 720),
+    );
+    if (!depOutcome.ok) return emptyResult<TransitRoute[]>([]);
+    const depRes = depOutcome.value;
+    const departures = depRes?.data;
+    if (!departures) return emptyResult<TransitRoute[]>([]);
+    const byRouteId = new Map<string, TransitRoute>();
+    for (const dep of departures) {
+      if (byRouteId.has(dep.route.id)) continue;
+      if (isTripNumber(dep.route.shortName)) continue;
+      byRouteId.set(dep.route.id, {
+        id: dep.route.id,
+        shortName: dep.route.shortName,
+        longName: dep.route.longName,
+        mode: dep.route.mode,
+        color: dep.route.color,
+        operatorName: "",
+      });
     }
+    return {
+      data: Array.from(byRouteId.values()),
+      attributions: depRes?.attributions ?? [],
+      freshness: depRes?.freshness ?? freshnessNow(),
+    };
   }
 
   async function getRoutesInBbox(bbox: BBox): Promise<MobilityResult<TransitRoute[]>> {
-    const matching = getProvidersForBbox(bbox).filter((p) => p.getRoutesInBbox);
+    const matching = (await getProvidersForBbox(bbox)).filter((p) => p.getRoutesInBbox);
     const results = await Promise.allSettled(
       matching.map(async (p) => {
-        try {
-          if (!p.getRoutesInBbox) return null;
-          const res = await p.getRoutesInBbox(bbox);
-          providerHealth.recordSuccess(p.id);
-          return res;
-        } catch {
-          providerHealth.recordFailure(p.id);
-          return null;
-        }
+        if (!p.getRoutesInBbox) return null;
+        const fn = p.getRoutesInBbox.bind(p);
+        const outcome = await timed(providerHealth, metricsRecorder, p.id, "getRoutesInBbox", () =>
+          fn(bbox),
+        );
+        return outcome.ok ? outcome.value : null;
       }),
     );
     const ok = results
@@ -519,14 +600,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function getRoute(routeId: string): Promise<MobilityResult<TransitRoute | null>> {
     const provider = resolveByPrefix(routeId);
     if (!provider?.getRoute) return emptyResult<TransitRoute | null>(null);
-    try {
-      const result = await provider.getRoute(routeId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<TransitRoute | null>(null);
-    }
+    const fn = provider.getRoute.bind(provider);
+    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getRoute", () =>
+      fn(routeId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<TransitRoute | null>(null);
   }
 
   async function getRouteStops(
@@ -537,9 +615,16 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     if (!provider) return emptyResult<TransitStop[]>([]);
 
     if (provider.getRouteStops) {
-      try {
-        const result = await provider.getRouteStops(routeId, hintStopId);
-        providerHealth.recordSuccess(provider.id);
+      const fn = provider.getRouteStops.bind(provider);
+      const outcome = await timed(
+        providerHealth,
+        metricsRecorder,
+        provider.id,
+        "getRouteStops",
+        () => fn(routeId, hintStopId),
+      );
+      if (outcome.ok) {
+        const result = outcome.value;
         if (
           result.data.length > 0 ||
           !hintStopId ||
@@ -548,10 +633,8 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
         ) {
           return result;
         }
-      } catch {
-        providerHealth.recordFailure(provider.id);
-        if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney)
-          return emptyResult<TransitStop[]>([]);
+      } else if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) {
+        return emptyResult<TransitStop[]>([]);
       }
     } else if (!hintStopId || !provider.getDepartures || !provider.getVehicleJourney) {
       return emptyResult<TransitStop[]>([]);
@@ -559,100 +642,123 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     // Compatibility fallback (pre-refactor behavior):
     // derive route stop sequence via a departure trip detail.
-    try {
-      const depRes = await provider.getDepartures?.(hintStopId as string, 720);
-      const departures = depRes?.data;
-      if (!departures) return emptyResult<TransitStop[]>([]);
-      const dep = departures.find((d) => d.route.id === routeId && !!d.tripId);
-      if (!dep?.tripId) return emptyResult<TransitStop[]>([]);
-      const journeyRes = await provider.getVehicleJourney?.(dep.tripId);
-      const journey = journeyRes?.data ?? null;
-      if (
-        !journey ||
-        typeof journey !== "object" ||
-        !Array.isArray((journey as { stops?: unknown[] }).stops)
-      ) {
-        return emptyResult<TransitStop[]>([]);
-      }
+    const depFn = provider.getDepartures;
+    const journeyFn = provider.getVehicleJourney;
+    if (!depFn || !journeyFn || !hintStopId) return emptyResult<TransitStop[]>([]);
 
-      const stops = (
-        journey as {
-          stops: Array<{
-            stopId: string;
-            name: string;
-            lat: number;
-            lng: number;
-            platform?: string;
-          }>;
-        }
-      ).stops.map((s, i) => ({
-        id: s.stopId,
-        name: s.name,
-        lat: s.lat,
-        lng: s.lng,
-        modes: [],
-        platformCode: s.platform,
-        provider: provider.id,
-        sequence: i + 1,
-      }));
-      return {
-        data: stops,
-        attributions: mergeAttributions(
-          ctx.attributionIndex,
-          depRes?.attributions ?? [],
-          journeyRes?.attributions ?? [],
-        ),
-        freshness: mergeFreshness(
-          depRes?.freshness ?? freshnessNow(),
-          journeyRes?.freshness ?? freshnessNow(),
-        ),
-      };
-    } catch {
-      providerHealth.recordFailure(provider.id);
+    const boundDep = depFn.bind(provider);
+    const depOutcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getRouteStops.viaDepartures",
+      () => boundDep(hintStopId, 720),
+    );
+    if (!depOutcome.ok) return emptyResult<TransitStop[]>([]);
+    const depRes = depOutcome.value;
+    const departures = depRes?.data;
+    if (!departures) return emptyResult<TransitStop[]>([]);
+    const dep = departures.find((d) => d.route.id === routeId && !!d.tripId);
+    if (!dep?.tripId) return emptyResult<TransitStop[]>([]);
+
+    const boundJourney = journeyFn.bind(provider);
+    const journeyOutcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getRouteStops.viaJourney",
+      () => boundJourney(dep.tripId as string),
+    );
+    if (!journeyOutcome.ok) return emptyResult<TransitStop[]>([]);
+    const journeyRes = journeyOutcome.value;
+    const journey = journeyRes?.data ?? null;
+    if (
+      !journey ||
+      typeof journey !== "object" ||
+      !Array.isArray((journey as { stops?: unknown[] }).stops)
+    ) {
       return emptyResult<TransitStop[]>([]);
     }
+
+    const stops = (
+      journey as {
+        stops: Array<{
+          stopId: string;
+          name: string;
+          lat: number;
+          lng: number;
+          platform?: string;
+        }>;
+      }
+    ).stops.map((s, i) => ({
+      id: s.stopId,
+      name: s.name,
+      lat: s.lat,
+      lng: s.lng,
+      modes: [],
+      platformCode: s.platform,
+      provider: provider.id,
+      sequence: i + 1,
+    }));
+    return {
+      data: stops,
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        depRes?.attributions ?? [],
+        journeyRes?.attributions ?? [],
+      ),
+      freshness: mergeFreshness(
+        depRes?.freshness ?? freshnessNow(),
+        journeyRes?.freshness ?? freshnessNow(),
+      ),
+    };
   }
 
   async function getStopAlerts(stopId: string): Promise<MobilityResult<ServiceAlert[]>> {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getAlertsForStop)
       return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
-    try {
-      const result = await provider.getAlertsForStop(stopId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
-    }
+    const fn = provider.getAlertsForStop.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getAlertsForStop",
+      () => fn(stopId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
   }
 
   async function getRouteAlerts(routeId: string): Promise<MobilityResult<ServiceAlert[]>> {
     const provider = resolveByPrefix(routeId);
     if (!provider?.getAlertsForRoute)
       return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
-    try {
-      const result = await provider.getAlertsForRoute(routeId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
-    }
+    const fn = provider.getAlertsForRoute.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getAlertsForRoute",
+      () => fn(routeId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<ServiceAlert[]>([], { hasRealtimeData: true });
   }
 
   async function getVehiclePositions(routeId: string): Promise<MobilityResult<VehiclePosition[]>> {
     const provider = resolveByPrefix(routeId);
     if (!provider?.getVehiclePositions)
       return emptyResult<VehiclePosition[]>([], { hasRealtimeData: true });
-    try {
-      const result = await provider.getVehiclePositions(routeId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<VehiclePosition[]>([], { hasRealtimeData: true });
-    }
+    const fn = provider.getVehiclePositions.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getVehiclePositions",
+      () => fn(routeId),
+    );
+    return outcome.ok
+      ? outcome.value
+      : emptyResult<VehiclePosition[]>([], { hasRealtimeData: true });
   }
 
   async function getLegGeometry(
@@ -662,17 +768,20 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   ): Promise<MobilityResult<GeoJSONLineString | null>> {
     const provider = resolveByPrefix(tripId);
     if (!provider?.getLegGeometry) return emptyResult<GeoJSONLineString | null>(null);
-    try {
-      const result = await provider.getLegGeometry(tripId, fromStopId, toStopId);
-      providerHealth.recordSuccess(provider.id);
-      // GeoJSON LineString from the framework's LineString type matches our local
-      // GeoJSONLineString shape closely enough (we widen coordinates to
-      // [number, number][] at the boundary).
-      return result as unknown as MobilityResult<GeoJSONLineString | null>;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<GeoJSONLineString | null>(null);
-    }
+    const fn = provider.getLegGeometry.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getLegGeometry",
+      () => fn(tripId, fromStopId, toStopId),
+    );
+    // GeoJSON LineString from the framework's LineString type matches our local
+    // GeoJSONLineString shape closely enough (we widen coordinates to
+    // [number, number][] at the boundary).
+    return outcome.ok
+      ? (outcome.value as unknown as MobilityResult<GeoJSONLineString | null>)
+      : emptyResult<GeoJSONLineString | null>(null);
   }
 
   async function getVehicleJourney(
@@ -682,27 +791,27 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     const provider = resolveByPrefix(vehicleId);
     if (!provider?.getVehicleJourney)
       return emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
-    try {
-      const result = await provider.getVehicleJourney(vehicleId, fallbackIds);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
-    }
+    const fn = provider.getVehicleJourney.bind(provider);
+    const outcome = await timed(
+      providerHealth,
+      metricsRecorder,
+      provider.id,
+      "getVehicleJourney",
+      () => fn(vehicleId, fallbackIds),
+    );
+    return outcome.ok
+      ? outcome.value
+      : emptyResult<VehicleJourney | null>(null, { hasRealtimeData: true });
   }
 
   async function getFacilities(stopId: string): Promise<MobilityResult<Facility[]>> {
     const provider = resolveByPrefix(stopId);
     if (!provider?.getFacilities) return emptyResult<Facility[]>([]);
-    try {
-      const result = await provider.getFacilities(stopId);
-      providerHealth.recordSuccess(provider.id);
-      return result;
-    } catch {
-      providerHealth.recordFailure(provider.id);
-      return emptyResult<Facility[]>([]);
-    }
+    const fn = provider.getFacilities.bind(provider);
+    const outcome = await timed(providerHealth, metricsRecorder, provider.id, "getFacilities", () =>
+      fn(stopId),
+    );
+    return outcome.ok ? outcome.value : emptyResult<Facility[]>([]);
   }
 
   async function getReachableStops(
@@ -712,21 +821,21 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     modes?: string[],
   ): Promise<MobilityResult<TransitStop[]>> {
     // Use all healthy providers and merge results
-    const allProviders = collectProviders().filter(
-      (p) => p.getReachableStops && providerHealth.isHealthy(p.id),
-    );
+    const candidates = collectProviders().filter((p) => p.getReachableStops);
+    const allProviders = await filterHealthy(candidates);
 
     const results = await Promise.allSettled(
       allProviders.map(async (p) => {
-        try {
-          if (!p.getReachableStops) return null;
-          const res = await p.getReachableStops(lat, lng, maxMinutes, modes);
-          providerHealth.recordSuccess(p.id);
-          return res;
-        } catch {
-          providerHealth.recordFailure(p.id);
-          return null;
-        }
+        if (!p.getReachableStops) return null;
+        const fn = p.getReachableStops.bind(p);
+        const outcome = await timed(
+          providerHealth,
+          metricsRecorder,
+          p.id,
+          "getReachableStops",
+          () => fn(lat, lng, maxMinutes, modes),
+        );
+        return outcome.ok ? outcome.value : null;
       }),
     );
     const ok = results
@@ -737,10 +846,6 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
-  }
-
-  function getHealthStatus(): Record<string, { healthy: boolean; failures: number }> {
-    return providerHealth.getStatus();
   }
 
   return {
@@ -771,84 +876,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     getVehicleJourney,
     getFacilities,
     getReachableStops,
-    getHealthStatus,
   };
 }
 
 export type TransitOrchestrator = ReturnType<typeof createTransitOrchestrator>;
-
-/**
- * Build a provider attribution map for transit-related integrations.
- *
- * Keys come from three sources:
- *  - For `transit` domain integrations: the provider prefix (`db`, `tfl`,
- *    …) — this is what stop/route ID consumers look up.
- *  - For `gtfs-catalog` domain integrations (e.g. Mobility Database): the
- *    integration id (`transit-mobility-database`). These don't carry an
- *    ID prefix; consumers attributing imported feeds match against
- *    `ImportedFeed.source` instead.
- *  - For providers that expose `getFeedAttribution()`: one row per
- *    runtime feed/instance keyed by what consumers actually carry on
- *    `TransitStop.provider` (e.g. `gtfs-de_vbb`). Lets `transit-gtfs-local`
- *    surface per-feed license without bloating every stop response.
- *
- * Per-feed rows take precedence over the integration-level row because
- * the integration row is the fallback when no instance-level data exists.
- */
-export async function getTransitProviderAttribution(
-  ctx: IntegrationContext,
-): Promise<Record<string, ProviderAttribution>> {
-  const result: Record<string, ProviderAttribution> = {};
-
-  const transitIntegrations = ctx.getIntegrationsByDomain("transit");
-  const perFeedTasks: Array<Promise<Record<string, ProviderAttribution>>> = [];
-  for (const integration of transitIntegrations) {
-    const domainProviders = (integration.providers.get("transit") ?? []) as TransitProvider[];
-    for (const provider of domainProviders) {
-      const prefix = provider.prefix.replace(/:$/, "");
-      if (!result[prefix]) {
-        const ds = integration.manifest.dataSources?.[0];
-        if (ds) {
-          result[prefix] = {
-            label: ds.name,
-            url: ds.url,
-            license: ds.license,
-            licenseUrl: ds.licenseUrl,
-          };
-        }
-      }
-      if (provider.getFeedAttribution) {
-        perFeedTasks.push(
-          provider.getFeedAttribution().catch((err) => {
-            ctx.log.warn(`[transit] getFeedAttribution failed for ${provider.id}:`, err);
-            return {};
-          }),
-        );
-      }
-    }
-  }
-
-  const catalogIntegrations = ctx.getIntegrationsByDomain("gtfs-catalog");
-  for (const integration of catalogIntegrations) {
-    const ds = integration.manifest.dataSources?.[0];
-    if (!ds) continue;
-    if (result[integration.id]) continue;
-    result[integration.id] = {
-      label: ds.name,
-      url: ds.url,
-      license: ds.license,
-      licenseUrl: ds.licenseUrl,
-    };
-  }
-
-  const perFeedResults = await Promise.all(perFeedTasks);
-  for (const map of perFeedResults) {
-    for (const [key, value] of Object.entries(map)) {
-      // Per-feed rows are instance-specific and always win over
-      // integration-level fallbacks keyed by the same string.
-      result[key] = value;
-    }
-  }
-
-  return result;
-}

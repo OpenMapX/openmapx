@@ -1,7 +1,8 @@
 import { statSync } from "node:fs";
 import type { FeedDownloadFailure } from "../download-gtfs.js";
+import { feedKeyForFailure, feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
 import { runFetchPipeline, scanGtfsArchives } from "./internal.js";
-import type { JobContext, StageFn, StageResult, StageStatus } from "./types.js";
+import type { FeedFileEntry, JobContext, StageFn, StageResult, StageStatus } from "./types.js";
 
 /**
  * Run Transitous's `src/fetch.py` for every selected feed file. Captures
@@ -45,6 +46,11 @@ export const run: StageFn = async (ctx) => {
     const failures: FeedDownloadFailure[] = [...parseFailures, ...fetchFailures];
     ctx.state.fetchFailures = failures;
 
+    // Persist per-feed fetch outcomes so the staleness-alert cron (G2) sees
+    // which feeds successfully refreshed and which failed. Best-effort: a DB
+    // outage here is logged at warn level and otherwise non-fatal.
+    await persistFetchOutcomes(selectedFeedFiles, failures, ctx);
+
     // A feed file with N active schedule sources may surface 1..N failures
     // attributable to specific sources. We treat the stage as fully failed
     // when every selected source failed, partial when only some did.
@@ -86,3 +92,36 @@ export const run: StageFn = async (ctx) => {
 };
 
 export type { JobContext };
+
+/**
+ * Push per-feed fetch outcomes into `data_manager.feed_state`. Each selected
+ * source generates one row; if a `FeedDownloadFailure` referenced the source
+ * the outcome is `ok: false`, otherwise `ok: true`. DB errors are logged but
+ * do not propagate (they would otherwise mask the genuine fetch result).
+ */
+async function persistFetchOutcomes(
+  selectedFeedFiles: FeedFileEntry[],
+  failures: FeedDownloadFailure[],
+  ctx: JobContext,
+): Promise<void> {
+  const failedKeys = new Set(
+    failures.map((failure) => {
+      const key = feedKeyForFailure(failure);
+      return `${key.region}::${key.name}`;
+    }),
+  );
+  for (const feed of selectedFeedFiles) {
+    for (const source of feed.activeScheduleSources) {
+      const key = feedKeyForSource(feed, source.name);
+      const fingerprint = `${key.region}::${key.name}`;
+      const ok = !failedKeys.has(fingerprint);
+      try {
+        await recordFetchOutcome({ region: key.region, name: key.name, ok });
+      } catch (err) {
+        ctx.logger.warn(
+          `transitous-fetch: feed_state write failed for ${fingerprint}: ${(err as Error).message}`,
+        );
+      }
+    }
+  }
+}

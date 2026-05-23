@@ -73,6 +73,49 @@ export interface SecretsClient {
 }
 
 /**
+ * Minimal ProviderHealthHandle shape — the actual implementation lives in
+ * `apps/api/src/services/provider-health/`. Declared here as a structural
+ * interface so the integration framework doesn't depend on apps/api at
+ * compile time.
+ *
+ * Orchestrators consult the handle before dispatching a provider call and
+ * record success/failure (with timing) afterwards. Persistence + sliding
+ * window failure rate live in the host implementation.
+ */
+export interface ProviderHealthHandle {
+  /** Returns false when the provider is currently in cooldown. */
+  isHealthy(providerId: string): Promise<boolean>;
+  /** Record a successful call with its measured latency. */
+  recordSuccess(providerId: string, latencyMs: number): Promise<void>;
+  /**
+   * Record a failed call. `reason` is truncated to 200 chars on the host.
+   * `latencyMs` is the wall-clock time elapsed before the failure surfaced
+   * (so timeouts still contribute to the EMA).
+   */
+  recordFailure(providerId: string, latencyMs: number, reason: string): Promise<void>;
+}
+
+/**
+ * Minimal MetricsRecorder shape — the actual implementation lives in
+ * `apps/api/src/services/metrics/`. Declared here as a structural interface
+ * so the integration framework doesn't depend on apps/api at compile time.
+ *
+ * Outcome labels follow a closed enum: `"ok"` (call returned a value),
+ * `"empty"` (call succeeded but returned null / empty list), `"error"` (call
+ * threw / rejected), `"skipped"` (orchestrator pre-flight skipped the call
+ * before invoking the provider, e.g. due to a health cooldown or a
+ * capability mismatch).
+ */
+export type ProviderCallOutcome = "ok" | "empty" | "error" | "skipped";
+
+export interface MetricsRecorder {
+  recordProviderCall(
+    labels: { providerId: string; method: string; outcome: ProviderCallOutcome },
+    latencyMs: number,
+  ): void;
+}
+
+/**
  * Minimal AttributionIndex shape — the actual implementation lives in
  * `apps/api/src/services/attribution/`. Declared here as a structural
  * interface so the integration framework doesn't depend on apps/api at
@@ -109,6 +152,23 @@ export interface IntegrationContext {
    * scripts).
    */
   readonly attributionIndex?: AttributionIndexHandle;
+
+  /**
+   * Optional handle to the host's persistent ProviderHealth tracker. When
+   * present, orchestrators record latency + outcome per call so the host can
+   * compute sliding-window failure rates and auto-disable misbehaving
+   * providers across process restarts. Undefined in tests / dev scripts; the
+   * orchestrator treats the absence as "all providers healthy".
+   */
+  readonly providerHealth?: ProviderHealthHandle;
+
+  /**
+   * Optional handle to the host's OpenTelemetry metrics recorder. When
+   * present, orchestrators bump a per-call counter + histogram alongside the
+   * provider-health write — same `(providerId, method, outcome)` labels both
+   * places. Undefined when the host has not wired OTEL (tests, CLI scripts).
+   */
+  readonly metricsRecorder?: MetricsRecorder;
 
   /**
    * Untyped registrar for domains that don't yet have a canonical contract.

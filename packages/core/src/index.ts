@@ -86,13 +86,7 @@ export type { OAuthProviderMeta } from "./auth/oauth-providers";
 export { oauthProviders } from "./auth/oauth-providers";
 export { useSession } from "./auth/useSession";
 // Constants
-export type { ProviderAttribution } from "./constants/transit";
-export {
-  MODE_COLORS,
-  providerAttribution,
-  providerLabel,
-  resolveProvider,
-} from "./constants/transit";
+export { MODE_COLORS } from "./constants/transit";
 // Domains
 export type {
   GeoJsonFeatureCollection,
@@ -125,7 +119,6 @@ export {
   useLinkedTransitRoutes,
   useLinkedTransitStops,
   usePlaceStopInfrastructure,
-  useProviders,
   useRouteAlerts,
   useRouteLive,
   useRouteStops,

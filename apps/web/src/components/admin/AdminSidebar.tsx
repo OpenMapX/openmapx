@@ -13,6 +13,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import ReposIcon from "@mui/icons-material/Source";
 import DataIcon from "@mui/icons-material/Storage";
 import StoreIcon from "@mui/icons-material/Store";
+import TransitIcon from "@mui/icons-material/Train";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
@@ -86,6 +87,12 @@ const BASE_NAV_ITEMS = [
     href: "/admin/services",
     icon: <ServicesIcon fontSize="small" />,
     selfHostedOnly: true,
+  },
+  {
+    label: "Transit",
+    href: "/admin/transit",
+    icon: <TransitIcon fontSize="small" />,
+    selfHostedOnly: false,
   },
   {
     label: "Status",

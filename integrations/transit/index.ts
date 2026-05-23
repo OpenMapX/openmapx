@@ -4,12 +4,12 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
 import type { MobilityEnvelope, MobilityResult } from "@openmapx/mobility-core/result";
 import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
-import { createTransitOrchestrator, getTransitProviderAttribution } from "./orchestrator.js";
+import { createTransitOrchestrator } from "./orchestrator.js";
 import { createPlaceTransit } from "./place-transit.js";
 
 /**
  * Strip the server-only `trace` field from a MobilityResult and return the
- * `{ data, attributions, freshness }` envelope sent on the wire (plan §F4/§B5).
+ * `{ data, attributions, freshness }` envelope sent on the wire.
  */
 function toEnvelope<T>(result: MobilityResult<T>): MobilityEnvelope<T> {
   return {
@@ -596,15 +596,14 @@ export function setup(ctx: IntegrationContext): void {
     reply.send(toEnvelope(result));
   });
 
-  // GET /providers
-  ctx.registerRoute("GET", "/providers", async (_req, reply) => {
-    reply.header("Cache-Control", "public, max-age=3600, s-maxage=3600");
-    const attribution = await getTransitProviderAttribution(ctx);
-    reply.send(attribution);
-  });
-
   // GET /health
+  // Provider health is now persistent (Redis) and exposed cross-domain via
+  // /api/data-manager/providers. This route is kept as a deprecation hint so
+  // legacy callers see a clear redirect instead of an empty response.
   ctx.registerRoute("GET", "/health", async (_req, reply) => {
-    reply.send({ providers: orchestrator.getHealthStatus() });
+    reply.status(410).send({
+      error: "Gone",
+      message: "Provider health moved to /api/data-manager/providers (persistent, cross-domain).",
+    });
   });
 }

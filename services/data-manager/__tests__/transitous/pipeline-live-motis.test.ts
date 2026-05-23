@@ -1,5 +1,5 @@
 /**
- * Phase E9: end-to-end Transitous pipeline against a real `motis-staging`
+ * End-to-end Transitous pipeline against a real `motis-staging`
  * Docker container, seeded with three tiny GTFS feeds (DE/CH/AT). Drives all
  * 11 stages so the previously-stubbed `motis-import`, `motis-health`, and
  * `promote` paths actually exec MOTIS and observe the atomic swap.
@@ -325,8 +325,8 @@ describeLive("transitous pipeline end-to-end against motis-staging", () => {
       // cycle. Either empty or freshly populated is acceptable.
       expect(existsSync(stagingDataDir as string)).toBe(true);
 
-      // 90s is more generous than the plan's 60s budget to account for
-      // first-boot of the MOTIS container in a cold-cache CI runner.
+      // 90s budget — generous enough to absorb first-boot of the MOTIS
+      // container in a cold-cache CI runner.
       expect(elapsed).toBeLessThan(TOTAL_BUDGET_MS);
     },
     TOTAL_BUDGET_MS + 30_000,

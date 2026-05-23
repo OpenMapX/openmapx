@@ -1,4 +1,7 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/**/*", "../motis-feed-proxy/lib/**/*.ts"]
+  "compilerOptions": {
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"]
 }

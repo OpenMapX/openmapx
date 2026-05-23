@@ -4,7 +4,7 @@ import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 /**
- * Public hook return shape after the wire-format flip (plan §F4/§B5).
+ * Public hook return shape for endpoints that return a `MobilityEnvelope<T>`.
  *
  * Hooks call `useQuery<MobilityEnvelope<T>>(...)` against an API route that now
  * returns `{ data, attributions, freshness }`. The hook unwraps the envelope so

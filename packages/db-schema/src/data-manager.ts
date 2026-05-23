@@ -60,4 +60,11 @@ export const feedState = dataManager.table("feed_state", {
   validationMessage: text("validation_message"),
   /** "active" | "stale" | "failed" | "unknown" */
   status: text("status").notNull().default("unknown"),
+  /**
+   * Number of consecutive validation failures since the last successful
+   * validation. Reset to 0 on `validation_status = 'ok'`. Drives the
+   * staleness-alert cron (G2) — at >= 3 consecutive failures we emit a
+   * structured warning + (optional) GitHub Issue.
+   */
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
 });
