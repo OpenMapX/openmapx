@@ -3,9 +3,10 @@
 import Box from "@mui/material/Box";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
-import { buildSourceAttribution, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
+import { useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
 import { windDirectionLabel } from "@/components/weather/weatherUtils";
 
@@ -38,9 +39,7 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
         .getByDomain("weather")
         .find((m) => m.dataSources?.some((ds) => ds.sourceId === data.source))
     : undefined;
-  const attributionHtml = weatherMeta?.dataSources
-    ? buildSourceAttribution(weatherMeta.dataSources, [data.source])
-    : "";
+  const attributionSource = weatherMeta?.dataSources?.find((ds) => ds.sourceId === data.source);
 
   return (
     <Box sx={{ py: 1 }}>
@@ -68,21 +67,12 @@ export function PlaceWeather({ lat, lng, enabled = true }: Props) {
           {t("pressure")}: {current.pressure} hPa
         </Typography>
       </Box>
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{
-            mt: 0.5,
-            display: "block",
-            "& a": {
-              color: "text.secondary",
-              textDecoration: "none",
-              "&:hover": { textDecoration: "underline" },
-            },
-          }}
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
-          dangerouslySetInnerHTML={{ __html: `${t("attribution")} ${attributionHtml}` }}
+      {attributionSource && (
+        <SectionAttribution
+          name={attributionSource.name}
+          url={attributionSource.url}
+          license={attributionSource.license}
+          licenseUrl={attributionSource.licenseUrl}
         />
       )}
     </Box>

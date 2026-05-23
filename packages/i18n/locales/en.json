@@ -412,8 +412,7 @@
     "seaState-very-rough": "Very rough",
     "seaState-high": "High",
     "seaState-very-high": "Very high",
-    "seaState-phenomenal": "Phenomenal",
-    "attribution": "Source"
+    "seaState-phenomenal": "Phenomenal"
   },
   "nautical": {
     "title": "Nautical",
@@ -1215,7 +1214,6 @@
     "radarPlay": "Play animation",
     "radarPause": "Pause animation",
     "currentWeather": "Current weather",
-    "attribution": "Weather data provided by",
     "radarBy": "Radar by",
     "tilesBy": "Tiles by",
     "now": "Now",
@@ -1231,8 +1229,7 @@
     "civilTwilight": "Civil twilight",
     "nauticalTwilight": "Nautical twilight",
     "astronomicalTwilight": "Astronomical twilight",
-    "noData": "Sun times data unavailable",
-    "attribution": "Data by"
+    "noData": "Sun times data unavailable"
   },
   "environment": {
     "environmentalSensors": "Environmental Sensors",

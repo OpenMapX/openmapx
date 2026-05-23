@@ -412,8 +412,7 @@
     "seaState-very-rough": "Sehr grobe See",
     "seaState-high": "Hohe See",
     "seaState-very-high": "Sehr hohe See",
-    "seaState-phenomenal": "Phänomenal",
-    "attribution": "Quelle"
+    "seaState-phenomenal": "Phänomenal"
   },
   "nautical": {
     "title": "Seekarten",
@@ -1215,7 +1214,6 @@
     "radarPlay": "Animation abspielen",
     "radarPause": "Animation anhalten",
     "currentWeather": "Aktuelles Wetter",
-    "attribution": "Wetterdaten von",
     "radarBy": "Radar von",
     "tilesBy": "Kacheln von",
     "now": "Jetzt",
@@ -1231,8 +1229,7 @@
     "civilTwilight": "Bürgerliche Dämmerung",
     "nauticalTwilight": "Nautische Dämmerung",
     "astronomicalTwilight": "Astronomische Dämmerung",
-    "noData": "Sonnenzeitdaten nicht verfügbar",
-    "attribution": "Daten von"
+    "noData": "Sonnenzeitdaten nicht verfügbar"
   },
   "environment": {
     "environmentalSensors": "Umweltsensoren",

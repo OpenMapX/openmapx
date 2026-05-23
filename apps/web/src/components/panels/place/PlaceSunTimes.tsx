@@ -1,11 +1,11 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Link from "@mui/material/Link";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { useSunTimes } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 
 interface Props {
   lat: number;
@@ -86,35 +86,12 @@ export function PlaceSunTimes({ lat, lng, enabled = true }: Props) {
       </Box>
 
       {data.attribution && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
-          {t("attribution")}{" "}
-          <Link
-            href={data.attribution.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            color="text.secondary"
-          >
-            {data.attribution.name}
-          </Link>
-          {data.attribution.licenseUrl ? (
-            <>
-              {" ("}
-              <Link
-                href={data.attribution.licenseUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                underline="hover"
-                color="text.secondary"
-              >
-                {data.attribution.license}
-              </Link>
-              {")"}
-            </>
-          ) : data.attribution.license ? (
-            ` (${data.attribution.license})`
-          ) : null}
-        </Typography>
+        <SectionAttribution
+          name={data.attribution.name}
+          url={data.attribution.url}
+          license={data.attribution.license}
+          licenseUrl={data.attribution.licenseUrl}
+        />
       )}
     </Box>
   );

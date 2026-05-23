@@ -1,11 +1,11 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { DouglasSeaState, MarineHourlyPoint, MarineWeatherResponse } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { SectionAttribution } from "@/components/ui/SectionAttribution";
 
 /**
  * Sea-conditions widget for coastal place panels. Mounted by
@@ -64,23 +64,12 @@ export function PlaceMarineWeatherContent({ data }: { data: MarineWeatherRespons
       )}
 
       {attributionSource && (
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ mt: 1, display: "block", fontSize: 10 }}
-        >
-          {t("attribution")}:{" "}
-          <Link
-            href={attributionSource.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            color="inherit"
-          >
-            {attributionSource.name}
-          </Link>
-          {attributionSource.license && ` (${attributionSource.license})`}
-        </Typography>
+        <SectionAttribution
+          name={attributionSource.name}
+          url={attributionSource.url}
+          license={attributionSource.license}
+          licenseUrl={attributionSource.licenseUrl}
+        />
       )}
     </Box>
   );
