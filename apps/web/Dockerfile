@@ -18,6 +18,7 @@ COPY packages/mobility-core/package.json packages/mobility-core/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
 COPY apps/web/package.json apps/web/
 COPY integrations/ integrations/
@@ -39,6 +40,7 @@ COPY packages/mobility-core/ packages/mobility-core/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
+COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
 COPY integrations/ integrations/
 COPY apps/web/ apps/web/

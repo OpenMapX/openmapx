@@ -22,6 +22,7 @@ COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
@@ -45,6 +46,7 @@ COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/place-ids/package.json packages/place-ids/
+COPY packages/poi-source-registry/package.json packages/poi-source-registry/
 COPY packages/presets/package.json packages/presets/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
@@ -74,6 +76,7 @@ COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
+COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
 COPY apps/api/ apps/api/
 COPY tsconfig.base.json ./
@@ -132,6 +135,7 @@ COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/place-ids/ packages/place-ids/
+COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
