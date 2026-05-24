@@ -93,13 +93,23 @@ async function loadAllFeedStateRows(): Promise<Map<string, PoiFeedStateRow>> {
 }
 
 export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOptions): void {
-  const sources = opts.sources ?? getAllPoiSources();
-  const sourcesById = new Map<string, PoiSource>(sources.map((s) => [s.id, s] as const));
+  // Resolve sources per-request, not at registration time: when this runs
+  // pre-listen (the Fastify no-routes-after-listen rule), the discovery
+  // scanner hasn't populated the registry yet — snapshotting here would
+  // leave every handler with an empty source list. The registry is a
+  // process-local Map; lookups are O(1), so this costs nothing.
+  function listSources(): readonly PoiSource[] {
+    return opts.sources ?? getAllPoiSources();
+  }
+  function findSource(id: string): PoiSource | undefined {
+    return listSources().find((s) => s.id === id);
+  }
   const logger = adaptFastifyLogger(app);
 
   app.get("/poi-ingest/state", async () => {
     const rows = await loadAllFeedStateRows();
 
+    const sources = listSources();
     const byStatus = { active: 0, stale: 0, failed: 0, unknown: 0 };
     const byDomain: Record<string, number> = {};
     for (const source of sources) {
@@ -164,7 +174,7 @@ export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOpt
       const { domain, status } = req.query ?? {};
       const rows = await loadAllFeedStateRows();
       const items: SourceSummary[] = [];
-      for (const source of sources) {
+      for (const source of listSources()) {
         if (domain && source.domain !== domain) continue;
         const row = rows.get(source.id);
         const effectiveStatus = row?.status ?? "unknown";
@@ -177,7 +187,7 @@ export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOpt
   );
 
   app.get<{ Params: { id: string } }>("/poi-ingest/sources/:id", async (req, reply) => {
-    const source = sourcesById.get(req.params.id);
+    const source = findSource(req.params.id);
     if (!source) {
       return reply.code(404).send({ error: "unknown-source", sourceId: req.params.id });
     }
@@ -279,7 +289,7 @@ export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOpt
     reply: FastifyReply,
     explicitKind: PoiIngestKind | "auto",
   ): Promise<void> {
-    const source = sourcesById.get(req.params.id);
+    const source = findSource(req.params.id);
     if (!source) {
       reply.code(404).send({ ok: false, error: "unknown-source", sourceId: req.params.id });
       return;

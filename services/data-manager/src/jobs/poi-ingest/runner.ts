@@ -98,6 +98,9 @@ export async function runOneAndPersist(opts: RunOneOptions): Promise<PoiIngestRe
           ? await runLiveIngest(ctx)
           : await runBundledIngest(ctx);
 
+    // Surface the failing stage + its error message so operators can diagnose
+    // without correlating job ids. Successful runs log a thinner line.
+    const failedStage = result.stages.find((s) => s.status === "error");
     logger.info(`${logPrefix}: run completed`, {
       sourceId,
       kind,
@@ -108,6 +111,8 @@ export async function runOneAndPersist(opts: RunOneOptions): Promise<PoiIngestRe
       staticRowCount: result.staticRowCount,
       liveRowCount: result.liveRowCount,
       skippedStaticSwap: result.skippedStaticSwap,
+      failedStage: failedStage?.stage,
+      err: failedStage?.error?.message ?? result.error?.message,
     });
   } catch (err) {
     logger.error(`${logPrefix}: run threw`, {
