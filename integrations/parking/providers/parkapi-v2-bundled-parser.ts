@@ -104,7 +104,7 @@ function parseCityCatalog(buffer: Buffer, log: PoiSourceLogger): Map<string, Par
     const cityMap = raw.cities ?? {};
     const cities = new Map<string, ParkApiV2City>();
     for (const [name, city] of Object.entries(cityMap)) {
-      if (!city || !city.coords) continue;
+      if (!city?.coords) continue;
       if (!city.active_support) continue;
       cities.set(name, { ...city, name });
     }

@@ -13,8 +13,6 @@ import { mapRdwNlPayload } from "./rdw-nl-mapper.js";
  * parking provider chain to the shared static reader.
  */
 
-const STATION_ID_PREFIX = "rdw:";
-
 const reader = createStaticPoiReader<ParkingFacility>({
   sourceId: "rdw-nl",
   mapStatic: mapRdwNlPayload,
