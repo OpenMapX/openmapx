@@ -8,6 +8,7 @@ import { sql } from "./db/index.js";
 import { registerPoiIngestApi } from "./jobs/poi-ingest/api.js";
 import { runBootstrap } from "./jobs/poi-ingest/bootstrap.js";
 import { createDriftGuard, type DriftGuard } from "./jobs/poi-ingest/drift-guard.js";
+import { getPoiMetrics } from "./jobs/poi-ingest/otel-metrics.js";
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
@@ -124,6 +125,16 @@ app
       singleFlight: poiHandles.singleFlight,
       metricsSink: poiHandles.metricsSink,
       driftGuard,
+    });
+
+    // Prometheus scrape endpoint. Auth is bypassed (see auth.ts HEALTH_PATHS)
+    // because the data-manager port is bound to 127.0.0.1 on the host — only
+    // an in-cluster scraper can reach it. Mirrors apps/api's posture for the
+    // sibling `/internal/metrics` route.
+    app.get("/internal/metrics", async (_request, reply) => {
+      const handle = getPoiMetrics();
+      const text = await handle.renderPrometheus();
+      reply.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8").send(text);
     });
 
     // Optional first-deploy bootstrap: kicks off an ingest for any source

@@ -7,13 +7,34 @@ import { Cron } from "croner";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
 import { createLogMetricsSink, type PoiIngestMetricsSink } from "./metrics.js";
+import { combineMetricsSinks, createOtelMetricsSink } from "./otel-metrics.js";
 import { createPoiJobRow, getLastPoiFeedState } from "./persistence.js";
 import { runOneAndPersist } from "./runner.js";
 import { createPoiSingleFlight, type PoiSingleFlight } from "./single-flight.js";
+import {
+  buildPoiGithubIssueSink,
+  detectStalePoiSources,
+  emitPoiAlerts,
+  type PoiGithubIssueSink,
+} from "./staleness-alerts.js";
 import type { PoiIngestKind, PoiJobLogger } from "./types.js";
+
+/**
+ * When no metrics sink is supplied we fan out to both the structured-log sink
+ * (free) and the OTEL sink (one in-process counter increment per call). The
+ * OTEL pipeline is lazy — `createOtelMetricsSink()` initialises the meter
+ * provider on first use, so tests that pass `noopMetricsSink` never touch it.
+ */
 
 /** Mirrors the K8s "disable a cron entirely" convention used by `cron.ts`. */
 const DISABLED_SENTINELS = new Set(["", "disabled", "off", "false"]);
+
+/**
+ * Per-POI-source staleness check cron. Runs daily at 04:30 UTC — 30 minutes
+ * after the transitous staleness check so the two warnings don't interleave
+ * in centralized logging. Same disable sentinels apply.
+ */
+const POI_STALENESS_CHECK_CRON_DEFAULT = "30 4 * * *";
 
 export interface PoiSchedulerLogger {
   info(msg: string, extra?: Record<string, unknown>): void;
@@ -31,6 +52,19 @@ export interface PoiSchedulerOptions {
   singleFlight?: PoiSingleFlight;
   /** Defaults to a structured-log sink. Pass noopMetricsSink for tests. */
   metricsSink?: PoiIngestMetricsSink;
+  /**
+   * Override the staleness-alert cron expression. Defaults to env var
+   * `POI_INGEST_STALENESS_CHECK_CRON` or the daily 04:30 UTC default. Pass
+   * a disable sentinel ("disabled", "off", "false", "") to skip wiring.
+   */
+  stalenessCheckCronExpression?: string;
+  /**
+   * Test seam: run the staleness check directly instead of going through
+   * `detectStalePoiSources` + `emitPoiAlerts`. Production callers omit this.
+   */
+  runStalenessCheck?: () => Promise<void>;
+  /** Test seam: pre-built GitHub sink. Overrides the env-var lookup. */
+  githubIssueSink?: PoiGithubIssueSink | null;
 }
 
 export interface PoiSchedulerHandles {
@@ -38,10 +72,14 @@ export interface PoiSchedulerHandles {
   crons: Map<string, Cron>;
   /** Disabled job keys (env-var sentinel matched). */
   disabled: string[];
+  /** Staleness-alert cron — `null` when disabled by env. */
+  stalenessCheckCron: Cron | null;
   /** Stop every cron. */
   stop(): void;
   /** Test seam — invoke the handler for one (sourceId, kind) immediately. */
   runNow(sourceId: string, kind: PoiIngestKind): Promise<void>;
+  /** Test seam — invoke the staleness check as if the cron fired. */
+  runStalenessCheckNow(): Promise<void>;
   /** Process-wide single-flight handle so HTTP routes (B4) can share it. */
   singleFlight: PoiSingleFlight;
   /** Same for the metrics sink. */
@@ -110,7 +148,9 @@ export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandl
 
   const singleFlight = opts.singleFlight ?? createPoiSingleFlight();
   const jobLogger = adaptLogger(opts.logger);
-  const metricsSink = opts.metricsSink ?? createLogMetricsSink(jobLogger);
+  const metricsSink =
+    opts.metricsSink ??
+    combineMetricsSinks(createLogMetricsSink(jobLogger), createOtelMetricsSink());
   const logger = opts.logger;
 
   const crons = new Map<string, Cron>();
@@ -231,8 +271,60 @@ export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandl
     disabled: disabled.length,
   });
 
+  // Staleness-alert wiring. Mirrors transitous: the GitHub sink is opt-in via
+  // `POI_INGEST_ALERT_GH_TOKEN` + `POI_INGEST_ALERT_GH_REPO`; without those,
+  // the structured-log path still fires. The cron itself can be disabled with
+  // the standard sentinel set, identical to per-source crons.
+  const githubIssueSink: PoiGithubIssueSink | null =
+    opts.githubIssueSink !== undefined
+      ? opts.githubIssueSink
+      : buildPoiGithubIssueSink(
+          process.env.POI_INGEST_ALERT_GH_TOKEN?.trim() || undefined,
+          process.env.POI_INGEST_ALERT_GH_REPO?.trim() || undefined,
+        );
+
+  const defaultStalenessCheck = async (): Promise<void> => {
+    const alerts = await detectStalePoiSources();
+    if (alerts.length === 0) {
+      logger.info("poi-ingest-cron: staleness check found no alerts");
+      return;
+    }
+    await emitPoiAlerts({
+      alerts,
+      log: jobLogger,
+      githubIssue: githubIssueSink ?? undefined,
+    });
+  };
+
+  const runStalenessCheck = opts.runStalenessCheck ?? defaultStalenessCheck;
+
+  const stalenessExprRaw =
+    opts.stalenessCheckCronExpression ??
+    process.env.POI_INGEST_STALENESS_CHECK_CRON ??
+    POI_STALENESS_CHECK_CRON_DEFAULT;
+  const stalenessDisabled = DISABLED_SENTINELS.has(stalenessExprRaw.trim().toLowerCase());
+  const stalenessCheckCron: Cron | null = stalenessDisabled
+    ? null
+    : new Cron(stalenessExprRaw, { name: "poi-ingest:staleness-check", protect: true }, () => {
+        void runStalenessCheck().catch((err) => {
+          logger.warn("poi-ingest-cron: staleness check threw", {
+            err: (err as Error).message,
+          });
+        });
+      });
+
+  if (stalenessDisabled) {
+    logger.info("poi-ingest-cron: staleness check disabled by env");
+  } else {
+    logger.info("poi-ingest-cron: staleness check scheduled", {
+      expression: stalenessExprRaw,
+      githubIssueSink: githubIssueSink !== null,
+    });
+  }
+
   function stop(): void {
     for (const cron of crons.values()) cron.stop();
+    stalenessCheckCron?.stop();
   }
 
   async function runNow(sourceId: string, kind: PoiIngestKind): Promise<void> {
@@ -246,8 +338,10 @@ export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandl
   return {
     crons,
     disabled,
+    stalenessCheckCron,
     stop,
     runNow,
+    runStalenessCheckNow: runStalenessCheck,
     singleFlight,
     metricsSink,
   };

@@ -17,6 +17,9 @@
       "HOST": "0.0.0.0",
       "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
       "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — the data-manager container persists the Transitous lockfile (POST /transit/bump) via this path; see infra/docker/.env.example}",
+      "OPENMAPX_CUSTOM_INTEGRATIONS_DIR": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
+      "APP_API_BASE_URL": "${APP_API_BASE_URL:-http://app-api:3001}",
+      "POI_INGEST_BOOTSTRAP": "${POI_INGEST_BOOTSTRAP:-true}",
       "UTMC_USERNAME": "${UTMC_USERNAME:-}",
       "UTMC_PASSWORD": "${UTMC_PASSWORD:-}",
       "DB_BAHNPARK_CLIENT_ID": "${DB_BAHNPARK_CLIENT_ID:-}",
@@ -58,6 +61,11 @@
     {
       "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — the data-manager bind-mounts the repo root so POST /transit/bump can persist infra/docker/transitous.lock.json on the host}",
       "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — community integrations contribute POI sources via discoverPoiSources(); without this mount data-manager and apps/api drift on the source list}/custom_integrations",
+      "target": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
       "readOnly": false
     },
     {

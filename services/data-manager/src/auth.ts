@@ -1,7 +1,15 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-const HEALTH_PATHS = new Set<string>(["/status"]);
+/**
+ * Paths that bypass the bearer-token pre-handler:
+ *   - `/status` — container/k8s health probes.
+ *   - `/internal/metrics` — Prometheus scrape endpoint. The data-manager
+ *     port is bound to 127.0.0.1 on the host (see service.json) so the
+ *     surface is already firewalled off; matches the apps/api posture for
+ *     its own `/internal/metrics` route.
+ */
+const HEALTH_PATHS = new Set<string>(["/status", "/internal/metrics"]);
 
 function safeEqual(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);

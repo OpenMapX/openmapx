@@ -1810,6 +1810,15 @@ importers:
       '@openmapx/poi-source-registry':
         specifier: workspace:^
         version: link:../../packages/poi-source-registry
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@opentelemetry/exporter-prometheus':
+        specifier: ^0.218.0
+        version: 0.218.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics':
+        specifier: ^2.7.1
+        version: 2.7.1(@opentelemetry/api@1.9.1)
       croner:
         specifier: ^9.0.0
         version: 9.1.0
