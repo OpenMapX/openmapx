@@ -91,7 +91,7 @@ async function runSearchQuery(
        LIMIT $5`,
       [bbox[0], bbox[1], bbox[2], bbox[3], MAX_ROWS_PER_BBOX],
     );
-    return (rows ?? []) as unknown as StaticRow[];
+    return normaliseRows((rows ?? []) as unknown as StaticRow[]);
   } catch (err) {
     if (isTableMissingError(err)) {
       warnMissingTableOnce(ctx, sourceId, tableIdent);
@@ -99,6 +99,23 @@ async function runSearchQuery(
     }
     throw err;
   }
+}
+
+// postgres-js's `sql.unsafe(query, params)` runs in simple-query mode and
+// returns jsonb columns as raw JSON strings rather than auto-parsed objects.
+// apps/api's IntegrationContext.db.execute wraps `unsafe`, so we parse here
+// at the reader boundary rather than make every mapper handle both shapes.
+function normaliseRows(rows: StaticRow[]): StaticRow[] {
+  for (const row of rows) {
+    if (typeof row.payload === "string") {
+      try {
+        row.payload = JSON.parse(row.payload);
+      } catch {
+        // Leave as string — the mapper will treat it as opaque + return defaults.
+      }
+    }
+  }
+  return rows;
 }
 
 async function runDetailQuery(
@@ -113,7 +130,7 @@ async function runDetailQuery(
       `SELECT poi_id, payload FROM ${tableIdent} WHERE poi_id = $1 LIMIT 1`,
       [poiId],
     );
-    const list = (rows ?? []) as unknown as StaticRow[];
+    const list = normaliseRows((rows ?? []) as unknown as StaticRow[]);
     return list.length > 0 ? (list[0] as StaticRow) : null;
   } catch (err) {
     if (isTableMissingError(err)) {

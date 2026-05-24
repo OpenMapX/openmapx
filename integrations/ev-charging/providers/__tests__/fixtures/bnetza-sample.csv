@@ -1,0 +1,5 @@
+Bundesnetzagentur Ladesäulenregister Export 2026-05-23
+Ladeeinrichtungs-ID;Betreiber;Anzeigename (Karte);Standortbezeichnung;Straße;Hausnummer;Postleitzahl;Ort;Bundesland;Breitengrad;Längengrad;Inbetriebnahmedatum;Nennleistung Ladeeinrichtung [kW];Art der Ladeeinrichtung;Anzahl Ladepunkte;Steckertypen1;Nennleistung Stecker1;EVSE-ID1;Steckertypen2;Nennleistung Stecker2;EVSE-ID2;Öffnungszeiten;Bezahlsysteme;Status;Informationen zum Parkraum
+LE-1001;Stadtwerke Berlin;Charging Berlin Mitte;Hauptbahnhof West;Invalidenstraße;12;10115;Berlin;Berlin;52,52000;13,37700;2024-06-15;44;Schnelllader;2;Typ 2;22;DE*BER*E001;CCS;150;DE*BER*E002;247;Kostenlos;In Betrieb;Parkplatz öffentlich
+LE-1002;Stadtwerke München;Marienplatz Charger;Marienplatz Süd;Marienplatz;1;80331;München;Bayern;48,13710;11,57500;2025-01-10;22;Normallader;1;Typ 2;22;DE*MUC*E001;;;;Mo-Fr: 08:00-20:00;Karte,App;Im Bau;
+LE-INVALID;Nowhere;Bad row;;Test;0;00000;;;;;;;;;;;;;;;;;Außer Betrieb;

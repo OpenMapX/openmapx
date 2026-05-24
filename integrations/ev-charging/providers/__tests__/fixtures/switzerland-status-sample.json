@@ -1,0 +1,12 @@
+{
+  "EVSEStatuses": [
+    {
+      "OperatorID": "CH*GRN",
+      "EVSEStatusRecord": [
+        { "EvseID": "CH*GRN*E001", "EVSEStatus": "AVAILABLE" },
+        { "EvseID": "CH*GRN*E002", "EVSEStatus": "OUTOFORDER" },
+        { "EvseID": "CH*GRN*E999", "EVSEStatus": "AVAILABLE" }
+      ]
+    }
+  ]
+}

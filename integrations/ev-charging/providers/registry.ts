@@ -27,9 +27,9 @@ function source(
 
 export const EV_CHARGING_SOURCE_REGISTRY: EvChargingSource[] = [
   source("afdc", searchAfdcCharging, "afdc:", fetchAfdcChargingDetail),
-  source("bnetza", searchBnetzaCharging, "bnetza:", fetchBnetzaChargingDetail),
+  source("bnetza-ev", searchBnetzaCharging, "bnetza:", fetchBnetzaChargingDetail),
   source("france-irve", searchFranceIrveCharging, "france-irve:", fetchFranceIrveChargingDetail),
-  source("swiss-sfoe", searchSwissSfoeCharging, "swiss-sfoe:", fetchSwissSfoeChargingDetail),
+  source("switzerland-ev", searchSwissSfoeCharging, "swiss-sfoe:", fetchSwissSfoeChargingDetail),
   source("nobil", searchNobilCharging, "nobil:", fetchNobilChargingDetail),
   source(
     "ocm",

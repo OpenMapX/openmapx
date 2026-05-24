@@ -19,9 +19,11 @@ dangerouslyAllowAllBuilds: false
 allowBuilds:
   "@parcel/watcher": true
   "@swc/core": true
+  cpu-features: set this to true or false
   esbuild: true
   protobufjs: false
   sharp: true
+  ssh2: set this to true or false
 blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true

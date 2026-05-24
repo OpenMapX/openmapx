@@ -1,0 +1,66 @@
+{
+  "EVSEData": [
+    {
+      "OperatorID": "CH*GRN",
+      "OperatorName": "Green Motion AG",
+      "EVSEDataRecord": [
+        {
+          "ChargingStationId": "CH-GRN-S001",
+          "EvseID": "CH*GRN*E001",
+          "ChargingStationNames": [
+            { "lang": "en", "value": "Zurich HB Station" },
+            { "lang": "de", "value": "Zürich HB Ladestation" }
+          ],
+          "Address": {
+            "Street": "Bahnhofplatz 1",
+            "City": "Zürich",
+            "PostalCode": "8001",
+            "Country": "Switzerland",
+            "Region": "ZH"
+          },
+          "GeoCoordinates": { "Google": "47.378177 8.540192" },
+          "Plugs": ["Type 2", "CCS"],
+          "ChargingFacilities": [
+            { "power": 22, "powertype": "AC_3_PHASE" },
+            { "power": 150, "powertype": "DC" }
+          ],
+          "AuthenticationModes": ["Direct payment", "Charging card"],
+          "Accessibility": "Public",
+          "AccessibilityLocation": "Outdoor",
+          "IsOpen24Hours": true,
+          "DynamicInfoAvailable": true,
+          "RenewableEnergy": true,
+          "HotlinePhoneNumber": "+41 800 000 000",
+          "lastUpdate": "2026-05-01T10:00:00Z"
+        },
+        {
+          "ChargingStationId": "CH-GRN-S002",
+          "EvseID": "CH*GRN*E002",
+          "ChargingStationNames": [{ "lang": "de", "value": "Bern Station" }],
+          "Address": {
+            "Street": "Bundesplatz 3",
+            "City": "Bern",
+            "PostalCode": "3003",
+            "Country": "Switzerland"
+          },
+          "GeoCoordinates": { "Google": "46.946995 7.444608" },
+          "Plugs": ["Type 2"],
+          "ChargingFacilities": [{ "Voltage": 400, "Amperage": 32 }],
+          "IsOpen24Hours": false,
+          "lastUpdate": "2026-04-15T08:00:00Z"
+        }
+      ]
+    },
+    {
+      "OperatorID": "CH*MOB",
+      "OperatorName": "Mobility Cooperative",
+      "EVSEDataRecord": [
+        {
+          "ChargingStationId": "",
+          "GeoCoordinates": { "Google": "" },
+          "Plugs": []
+        }
+      ]
+    }
+  ]
+}

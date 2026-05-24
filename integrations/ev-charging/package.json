@@ -9,6 +9,7 @@
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/integration-geocoding": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
-    "@openmapx/place-ids": "workspace:^"
+    "@openmapx/place-ids": "workspace:^",
+    "@openmapx/poi-source-registry": "workspace:^"
   }
 }

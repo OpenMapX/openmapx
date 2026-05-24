@@ -7,9 +7,9 @@
  */
 const SOURCE_PRIORITY: Record<string, number> = {
   afdc: 0,
-  bnetza: 0,
+  "bnetza-ev": 0,
   "france-irve": 0,
-  "swiss-sfoe": 0,
+  "switzerland-ev": 0,
   nobil: 0,
   ocm: 3,
   osm: 5,

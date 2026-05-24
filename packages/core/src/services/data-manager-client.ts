@@ -209,6 +209,73 @@ export class DataManagerClient {
       pruned: parsed.pruned ?? 0,
     };
   }
+
+  // POI ingest pipeline — wraps the /poi-ingest/* routes. Methods are typed
+  // loosely (Record<string, unknown>) because the server-side response shape is
+  // expanding (drift guard, etc.) and CLI callers don't need strict types.
+
+  async poiIngestState(): Promise<Record<string, unknown>> {
+    const res = await this.fetchImpl(`${this.baseUrl}/poi-ingest/state`, this.authed());
+    if (!res.ok) throw new Error(`poi-ingest/state failed: HTTP ${res.status}`);
+    return (await res.json()) as Record<string, unknown>;
+  }
+
+  async poiIngestSources(filter?: {
+    domain?: string;
+    status?: string;
+  }): Promise<Array<Record<string, unknown>>> {
+    const params = new URLSearchParams();
+    if (filter?.domain) params.set("domain", filter.domain);
+    if (filter?.status) params.set("status", filter.status);
+    const qs = params.toString();
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/poi-ingest/sources${qs ? `?${qs}` : ""}`,
+      this.authed(),
+    );
+    if (!res.ok) throw new Error(`poi-ingest/sources failed: HTTP ${res.status}`);
+    const body = (await res.json()) as { sources?: Array<Record<string, unknown>> };
+    return body.sources ?? [];
+  }
+
+  async poiIngestSource(id: string): Promise<Record<string, unknown>> {
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/poi-ingest/sources/${encodeURIComponent(id)}`,
+      this.authed(),
+    );
+    if (res.status === 404) throw new Error(`poi-ingest source "${id}" not found`);
+    if (!res.ok) throw new Error(`poi-ingest/sources/${id} failed: HTTP ${res.status}`);
+    return (await res.json()) as Record<string, unknown>;
+  }
+
+  async poiIngestSync(
+    id: string,
+    opts: { liveOnly?: boolean; idempotencyKey?: string; triggeredBy?: string } = {},
+  ): Promise<Record<string, unknown>> {
+    const route = opts.liveOnly ? "sync-live" : "sync";
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/poi-ingest/sources/${encodeURIComponent(id)}/${route}`,
+      this.authed({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotencyKey: opts.idempotencyKey,
+          triggeredBy: opts.triggeredBy ?? "cli",
+        }),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.status === 404) throw new Error(`poi-ingest source "${id}" not found`);
+    if (res.status === 409) {
+      throw new Error(
+        `poi-ingest sync conflict: ${(body.reason as string) ?? "in-flight"} (existing job ${(body.existingJobId as string) ?? "?"})`,
+      );
+    }
+    if (res.status === 400) {
+      throw new Error(`poi-ingest sync rejected: ${(body.error as string) ?? "bad-request"}`);
+    }
+    if (!res.ok) throw new Error(`poi-ingest sync failed: HTTP ${res.status}`);
+    return body;
+  }
 }
 
 /**

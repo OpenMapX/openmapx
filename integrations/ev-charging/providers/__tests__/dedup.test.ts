@@ -179,7 +179,7 @@ describe("deduplicateChargingStations", () => {
       id: "bnetza:1",
       name: "Main Street Chargers",
       coordinates: [13.377, 52.52],
-      sources: ["bnetza"],
+      sources: ["bnetza-ev"],
       connectors: [{ type: "Type 2", powerKw: 22, quantity: 2 }],
       operator: { name: "City Utility" },
     });
@@ -202,7 +202,7 @@ describe("deduplicateChargingStations", () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe("bnetza:1");
-    expect(merged[0].sources).toEqual(["bnetza", "ocm"]);
+    expect(merged[0].sources).toEqual(["bnetza-ev", "ocm"]);
     expect(merged[0].operator?.name).toBe("City Utility");
     expect(merged[0].connectors).toEqual(
       expect.arrayContaining([
@@ -250,14 +250,14 @@ describe("deduplicateChargingStations", () => {
       id: "bnetza:first",
       name: "Mall East",
       coordinates: [13.377, 52.52],
-      sources: ["bnetza"],
+      sources: ["bnetza-ev"],
       operator: { name: "Operator A" },
     });
     const second = makeStation({
       id: "bnetza:second",
       name: "Hotel West",
       coordinates: [13.377, 52.52055],
-      sources: ["bnetza"],
+      sources: ["bnetza-ev"],
       operator: { name: "Operator B" },
     });
 
