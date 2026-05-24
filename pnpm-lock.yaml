@@ -87,6 +87,9 @@ importers:
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      '@openmapx/poi-source-registry':
+        specifier: workspace:^
+        version: link:../../packages/poi-source-registry
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1

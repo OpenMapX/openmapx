@@ -23,6 +23,7 @@ import {
   integrationBackendBundlePath,
   integrationFrontendBundlePath,
 } from "@openmapx/integration-framework/installer";
+import { registerPoiSources as registerPoiSourcesInStore } from "@openmapx/poi-source-registry";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db, sql as pgClient } from "./db";
@@ -976,6 +977,15 @@ export async function initIntegrations(
         existing.push(provider);
         providers.set("gtfs-catalog", existing);
       },
+      registerPoiSources(sources) {
+        // Forward to the shared @openmapx/poi-source-registry store. The
+        // wrapper logger tags warnings with the integration id so cross-
+        // integration id collisions are traceable. `log` is the per-
+        // integration Logger built earlier in this ctx builder.
+        registerPoiSourcesInStore(sources, {
+          warn: (msg: string, ...args: unknown[]) => log.warn(`[poi-sources] ${msg}`, ...args),
+        });
+      },
       registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
         registerIntegrationRoute(id, method, path, handler, options);
       },
@@ -1362,6 +1372,15 @@ export async function reloadIntegrations(): Promise<{
         const existing = providers.get("gtfs-catalog") ?? [];
         existing.push(provider);
         providers.set("gtfs-catalog", existing);
+      },
+      registerPoiSources(sources) {
+        // Forward to the shared @openmapx/poi-source-registry store. The
+        // wrapper logger tags warnings with the integration id so cross-
+        // integration id collisions are traceable. `log` is the per-
+        // integration Logger built earlier in this ctx builder.
+        registerPoiSourcesInStore(sources, {
+          warn: (msg: string, ...args: unknown[]) => log.warn(`[poi-sources] ${msg}`, ...args),
+        });
       },
       registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
         registerIntegrationRoute(id, method, path, handler, options);

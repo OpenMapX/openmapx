@@ -1,3 +1,4 @@
+import type { PoiSource } from "@openmapx/poi-source-registry";
 import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
@@ -217,6 +218,16 @@ export interface IntegrationContext {
   registerKnowledgeProvider(provider: KnowledgeProvider): void;
   /** Typed registrar for GTFS catalog providers. Stored under the `gtfs-catalog` key. */
   registerGtfsCatalogProvider(provider: GtfsCatalogProvider): void;
+  /**
+   * Typed registrar for POI sources (EV charging, parking, etc.) that the
+   * data-manager ingest pipeline consumes. The host forwards to the shared
+   * `@openmapx/poi-source-registry` store; the same store is read by both
+   * the data-source provider chain on apps/api and the ingest scheduler on
+   * data-manager. Re-registering an id (within one integration or across
+   * two) is warn-and-drop, not throw — operator drift surfaces in the admin
+   * UI rather than crashing the host.
+   */
+  registerPoiSources(sources: readonly PoiSource[]): void;
   registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
 

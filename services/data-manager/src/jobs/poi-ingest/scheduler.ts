@@ -1,5 +1,5 @@
 import {
-  ALL_POI_SOURCES,
+  getAllPoiSources,
   type PoiSource,
   validatePoiSourceRegistry,
 } from "@openmapx/poi-source-registry";
@@ -25,7 +25,7 @@ export interface PoiSchedulerOptions {
   sql: Sql;
   redis: Redis;
   logger: PoiSchedulerLogger;
-  /** Defaults to ALL_POI_SOURCES — override for tests. */
+  /** Defaults to the current registry snapshot (getAllPoiSources()). Override for tests. */
   sources?: readonly PoiSource[];
   /** Defaults to createPoiSingleFlight(). */
   singleFlight?: PoiSingleFlight;
@@ -95,7 +95,7 @@ function adaptLogger(logger: PoiSchedulerLogger): PoiJobLogger {
 }
 
 export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandles {
-  const sources = opts.sources ?? ALL_POI_SOURCES;
+  const sources = opts.sources ?? getAllPoiSources();
 
   // Boot-time validation: a malformed registry must crash the process loudly
   // rather than silently skip jobs at runtime.

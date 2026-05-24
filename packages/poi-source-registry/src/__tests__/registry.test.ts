@@ -1,12 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  ALL_POI_SOURCES,
+  __clearPoiSourceRegistry,
+  getAllPoiSources,
   getPoiSource,
   getPoiSourcesByDomain,
   type PoiBundledParseFn,
   type PoiLiveParseFn,
   type PoiSource,
   type PoiStaticParseFn,
+  registerPoiSource,
+  registerPoiSources,
   validatePoiSourceRegistry,
 } from "../index.js";
 
@@ -42,14 +45,18 @@ function makeBundledSource(overrides: Partial<PoiSource> = {}): PoiSource {
   } as PoiSource;
 }
 
+beforeEach(() => {
+  __clearPoiSourceRegistry();
+});
+
 describe("validatePoiSourceRegistry", () => {
   it("passes with empty array", () => {
     expect(() => validatePoiSourceRegistry([])).not.toThrow();
   });
 
-  it("passes with default ALL_POI_SOURCES (empty)", () => {
+  it("passes with default empty registry snapshot", () => {
     expect(() => validatePoiSourceRegistry()).not.toThrow();
-    expect(ALL_POI_SOURCES).toEqual([]);
+    expect(getAllPoiSources()).toEqual([]);
   });
 
   it("throws on duplicate id with both indexes in message", () => {
@@ -188,6 +195,57 @@ describe("validatePoiSourceRegistry", () => {
   });
 });
 
+describe("registerPoiSource", () => {
+  it("populates the registry; readable via getAllPoiSources", () => {
+    registerPoiSource(makeStaticSource({ id: "src-1" }));
+    expect(getAllPoiSources().map((s) => s.id)).toEqual(["src-1"]);
+  });
+
+  it("throws on invalid declaration at registration time (not at validate time)", () => {
+    expect(() => registerPoiSource(makeStaticSource({ id: "BAD" }))).toThrow(
+      /invalid declaration for "BAD"/,
+    );
+    expect(getAllPoiSources()).toEqual([]);
+  });
+
+  it("re-registering the same object is a silent no-op", () => {
+    const src = makeStaticSource({ id: "src-1" });
+    const log = { warn: vi.fn() };
+    registerPoiSource(src, log);
+    registerPoiSource(src, log);
+    expect(getAllPoiSources()).toHaveLength(1);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it("re-registering a different object with the same id logs warn + drops the duplicate", () => {
+    registerPoiSource(makeStaticSource({ id: "src-1", name: "First" }));
+    const log = { warn: vi.fn() };
+    registerPoiSource(makeStaticSource({ id: "src-1", name: "Second" }), log);
+    expect(getAllPoiSources()).toHaveLength(1);
+    expect(getPoiSource("src-1")?.name).toBe("First");
+    expect(log.warn).toHaveBeenCalledWith(expect.stringMatching(/already registered/));
+  });
+});
+
+describe("registerPoiSources (bulk)", () => {
+  it("registers all valid sources", () => {
+    registerPoiSources([makeStaticSource({ id: "src-1" }), makeBundledSource({ id: "src-2" })]);
+    expect(getAllPoiSources().map((s) => s.id)).toEqual(["src-1", "src-2"]);
+  });
+
+  it("first invalid declaration halts the batch", () => {
+    expect(() =>
+      registerPoiSources([
+        makeStaticSource({ id: "src-1" }),
+        makeStaticSource({ id: "BAD" }),
+        makeStaticSource({ id: "src-3" }),
+      ]),
+    ).toThrow(/invalid declaration for "BAD"/);
+    // src-1 made it in before the throw; src-3 did not
+    expect(getAllPoiSources().map((s) => s.id)).toEqual(["src-1"]);
+  });
+});
+
 describe("getPoiSource / getPoiSourcesByDomain", () => {
   it("getPoiSource returns undefined for unknown id (default empty registry)", () => {
     expect(getPoiSource("nope")).toBeUndefined();
@@ -197,14 +255,14 @@ describe("getPoiSource / getPoiSourcesByDomain", () => {
     expect(getPoiSourcesByDomain("ev-charging")).toEqual([]);
   });
 
-  it("validates a synthetic list and lookups work on it", () => {
-    const sources = [
-      makeStaticSource({ id: "src-1" }),
-      makeBundledSource({ id: "src-2", domain: "ev-charging" }),
-    ];
-    validatePoiSourceRegistry(sources);
-    const found = sources.find((s) => s.id === "src-1");
-    expect(found?.id).toBe("src-1");
-    expect(sources.filter((s) => s.domain === "ev-charging").length).toBe(2);
+  it("reads from the live registry after registration", () => {
+    registerPoiSources([
+      makeStaticSource({ id: "src-1", domain: "ev-charging" }),
+      makeBundledSource({ id: "src-2", domain: "parking" }),
+      makeStaticSource({ id: "src-3", domain: "ev-charging" }),
+    ]);
+    expect(getPoiSource("src-1")?.id).toBe("src-1");
+    expect(getPoiSourcesByDomain("ev-charging").map((s) => s.id)).toEqual(["src-1", "src-3"]);
+    expect(getPoiSourcesByDomain("parking").map((s) => s.id)).toEqual(["src-2"]);
   });
 });

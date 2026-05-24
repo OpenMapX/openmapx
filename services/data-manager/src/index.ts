@@ -6,8 +6,10 @@ import { registerAuth, resolveAuthToken } from "./auth.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
 import { sql } from "./db/index.js";
 import { registerPoiIngestApi } from "./jobs/poi-ingest/api.js";
+import { createDriftGuard, type DriftGuard } from "./jobs/poi-ingest/drift-guard.js";
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
+import { discoverPoiSources } from "./poi-source-discovery.js";
 import { StateStore } from "./state.js";
 
 const app = Fastify({ logger: true });
@@ -54,7 +56,7 @@ const redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 3 
 
 app
   .listen({ port, host })
-  .then((addr) => {
+  .then(async (addr) => {
     app.log.info(`data-manager listening on ${addr}`);
 
     // Wire cron _after_ listen so an early Fastify failure doesn't leave
@@ -74,6 +76,26 @@ app
       logger: app.log,
     });
 
+    // Discover POI sources from each integration's poi-sources.{js,ts} file
+    // BEFORE setupPoiIngestCron — the scheduler reads the registry snapshot
+    // at boot, so anything that hasn't been registered yet won't get a cron.
+    const customIntegrationsDir = process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR;
+    if (repoRoot) {
+      await discoverPoiSources({
+        rootDir: repoRoot,
+        customIntegrationsDir,
+        logger: {
+          info: (m, e) => (e ? app.log.info(e, m) : app.log.info(m)),
+          warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)),
+          error: (m, e) => (e ? app.log.error(e, m) : app.log.error(m)),
+        },
+      });
+    } else {
+      app.log.warn(
+        "OPENMAPX_ROOT_DIR not set — skipping POI source discovery (data-manager will see an empty registry)",
+      );
+    }
+
     poiHandles = setupPoiIngestCron({
       sql,
       redis,
@@ -87,11 +109,20 @@ app
     // Register the POI ingest admin routes *after* the cron handles are
     // available — the HTTP routes share the cron's single-flight + metrics
     // sink so manual `/sync` triggers contend with scheduled fires correctly.
+    let driftGuard: DriftGuard | undefined;
+    const appApiBaseUrl = process.env.APP_API_BASE_URL;
+    if (appApiBaseUrl) {
+      driftGuard = createDriftGuard({
+        appApiBaseUrl,
+        logger: { warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)) },
+      });
+    }
     registerPoiIngestApi(app, {
       sql,
       redis,
       singleFlight: poiHandles.singleFlight,
       metricsSink: poiHandles.metricsSink,
+      driftGuard,
     });
   })
   .catch((err) => {

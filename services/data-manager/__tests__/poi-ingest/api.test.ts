@@ -243,6 +243,7 @@ describe("GET /poi-ingest/state", () => {
       byStatus: { active: 0, stale: 0, failed: 0, unknown: 0 },
       recentFailures: [],
       inflight: [],
+      registryCountMatchesUpstream: "unknown",
     });
     await app.close();
   });

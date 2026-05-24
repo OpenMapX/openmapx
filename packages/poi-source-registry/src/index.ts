@@ -2,14 +2,35 @@ import type { BBox, PoiSource } from "./types.js";
 
 export * from "./types.js";
 
-export const ALL_POI_SOURCES: readonly PoiSource[] = [];
+const REGISTRY = new Map<string, PoiSource>();
+
+/**
+ * Read-only snapshot of all currently-registered sources. The result is a
+ * fresh array each call — safe to mutate without affecting the underlying
+ * registry. Order is registration-order.
+ */
+export function getAllPoiSources(): readonly PoiSource[] {
+  return Array.from(REGISTRY.values());
+}
 
 export function getPoiSource(id: string): PoiSource | undefined {
-  return ALL_POI_SOURCES.find((s) => s.id === id);
+  return REGISTRY.get(id);
 }
 
 export function getPoiSourcesByDomain(domain: string): readonly PoiSource[] {
-  return ALL_POI_SOURCES.filter((s) => s.domain === domain);
+  const out: PoiSource[] = [];
+  for (const src of REGISTRY.values()) {
+    if (src.domain === domain) out.push(src);
+  }
+  return out;
+}
+
+/**
+ * Test-only: empty the registry. Production callers never invoke this; tests
+ * use it in `beforeEach` to isolate per-test state.
+ */
+export function __clearPoiSourceRegistry(): void {
+  REGISTRY.clear();
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -33,63 +54,111 @@ function checkBBox(id: string, bbox: BBox): string[] {
   return errors;
 }
 
-export function validatePoiSourceRegistry(sources: readonly PoiSource[] = ALL_POI_SOURCES): void {
+function collectErrorsForSource(src: PoiSource): string[] {
+  const errors: string[] = [];
+  const id = src.id;
+
+  if (!ID_RE.test(id)) {
+    errors.push(`source "${id}": id must match ${ID_RE} (table-name-safe)`);
+  }
+
+  const hasStatic = (src as { static?: unknown }).static !== undefined;
+  const hasBundled = (src as { bundled?: unknown }).bundled !== undefined;
+  const hasLive = (src as { live?: unknown }).live !== undefined;
+
+  if (hasStatic && hasBundled) {
+    errors.push(`source "${id}": cannot set both "static" and "bundled"`);
+  } else if (!hasStatic && !hasBundled) {
+    errors.push(`source "${id}": must set exactly one of "static" or "bundled"`);
+  }
+
+  if (hasLive && !hasStatic) {
+    errors.push(`source "${id}": "live" requires "static" (not allowed with "bundled")`);
+  }
+
+  if (hasStatic) {
+    const cron = (src as { static: { cron: string } }).static.cron;
+    if (!CRON_RE.test(cron)) {
+      errors.push(`source "${id}": static.cron "${cron}" is not a valid 5-field cron expression`);
+    }
+  }
+  if (hasLive) {
+    const cron = (src as { live: { cron: string } }).live.cron;
+    if (!CRON_RE.test(cron)) {
+      errors.push(`source "${id}": live.cron "${cron}" is not a valid 5-field cron expression`);
+    }
+  }
+  if (hasBundled) {
+    const cron = (src as { bundled: { cron: string } }).bundled.cron;
+    if (!CRON_RE.test(cron)) {
+      errors.push(`source "${id}": bundled.cron "${cron}" is not a valid 5-field cron expression`);
+    }
+  }
+
+  if (src.coverage) {
+    errors.push(...checkBBox(id, src.coverage));
+  }
+
+  return errors;
+}
+
+export interface PoiRegistryLogger {
+  warn(message: string, ...args: unknown[]): void;
+}
+
+/**
+ * Register one source. Throws synchronously on invalid declarations — a bad
+ * integration fails loudly on load rather than silently shipping a broken
+ * source. Re-registering the SAME object by the same id is a no-op (silent);
+ * re-registering a DIFFERENT object with the same id is also silent — first
+ * registration wins, the duplicate is dropped with a warning. This is
+ * intentional: integration code that runs multiple times (e.g. hot reload)
+ * shouldn't crash, and a third-party integration colliding on id should fail
+ * detectably but not crash the host.
+ */
+export function registerPoiSource(source: PoiSource, log?: PoiRegistryLogger): void {
+  const errors = collectErrorsForSource(source);
+  if (errors.length > 0) {
+    throw new Error(
+      `registerPoiSource: invalid declaration for "${source.id}":\n  - ${errors.join("\n  - ")}`,
+    );
+  }
+  const existing = REGISTRY.get(source.id);
+  if (existing) {
+    if (existing === source) return;
+    log?.warn(
+      `registerPoiSource: id "${source.id}" already registered; ignoring duplicate registration`,
+    );
+    return;
+  }
+  REGISTRY.set(source.id, source);
+}
+
+/** Bulk variant. Each source validated independently; first error halts. */
+export function registerPoiSources(sources: readonly PoiSource[], log?: PoiRegistryLogger): void {
+  for (const src of sources) registerPoiSource(src, log);
+}
+
+/**
+ * Validator that runs across an explicit list (or the current registry
+ * snapshot). Useful for tests + the data-manager's boot-time sanity check
+ * after the discovery scanner runs.
+ */
+export function validatePoiSourceRegistry(
+  sources: readonly PoiSource[] = getAllPoiSources(),
+): void {
   const errors: string[] = [];
   const seen = new Map<string, number>();
 
   for (let i = 0; i < sources.length; i++) {
     const src = sources[i] as PoiSource;
-    const id = src.id;
-
-    const prev = seen.get(id);
+    const prev = seen.get(src.id);
     if (prev !== undefined) {
-      errors.push(`duplicate source id "${id}" at indexes ${prev} and ${i}`);
+      errors.push(`duplicate source id "${src.id}" at indexes ${prev} and ${i}`);
     } else {
-      seen.set(id, i);
+      seen.set(src.id, i);
     }
-
-    if (!ID_RE.test(id)) {
-      errors.push(`source "${id}": id must match ${ID_RE} (table-name-safe)`);
-    }
-
-    const hasStatic = (src as { static?: unknown }).static !== undefined;
-    const hasBundled = (src as { bundled?: unknown }).bundled !== undefined;
-    const hasLive = (src as { live?: unknown }).live !== undefined;
-
-    if (hasStatic && hasBundled) {
-      errors.push(`source "${id}": cannot set both "static" and "bundled"`);
-    } else if (!hasStatic && !hasBundled) {
-      errors.push(`source "${id}": must set exactly one of "static" or "bundled"`);
-    }
-
-    if (hasLive && !hasStatic) {
-      errors.push(`source "${id}": "live" requires "static" (not allowed with "bundled")`);
-    }
-
-    if (hasStatic) {
-      const cron = (src as { static: { cron: string } }).static.cron;
-      if (!CRON_RE.test(cron)) {
-        errors.push(`source "${id}": static.cron "${cron}" is not a valid 5-field cron expression`);
-      }
-    }
-    if (hasLive) {
-      const cron = (src as { live: { cron: string } }).live.cron;
-      if (!CRON_RE.test(cron)) {
-        errors.push(`source "${id}": live.cron "${cron}" is not a valid 5-field cron expression`);
-      }
-    }
-    if (hasBundled) {
-      const cron = (src as { bundled: { cron: string } }).bundled.cron;
-      if (!CRON_RE.test(cron)) {
-        errors.push(
-          `source "${id}": bundled.cron "${cron}" is not a valid 5-field cron expression`,
-        );
-      }
-    }
-
-    if (src.coverage) {
-      errors.push(...checkBBox(id, src.coverage));
-    }
+    errors.push(...collectErrorsForSource(src));
   }
 
   if (errors.length > 0) {

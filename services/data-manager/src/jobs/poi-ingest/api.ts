@@ -1,10 +1,11 @@
 import { jobs, poiFeedState } from "@openmapx/db-schema";
-import { ALL_POI_SOURCES, type PoiSource } from "@openmapx/poi-source-registry";
+import { getAllPoiSources, type PoiSource } from "@openmapx/poi-source-registry";
 import { desc, sql as drizzleSql, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
 import { db } from "../../db/index.js";
+import type { DriftGuard } from "./drift-guard.js";
 import type { PoiIngestMetricsSink } from "./metrics.js";
 import { createPoiJobRow, getLastPoiFeedState } from "./persistence.js";
 import { runOneAndPersist } from "./runner.js";
@@ -16,6 +17,8 @@ export interface PoiIngestApiOptions {
   redis: Redis;
   singleFlight: PoiSingleFlight;
   metricsSink: PoiIngestMetricsSink;
+  /** Optional: cross-process drift checker against apps/api. Omit → `"unknown"`. */
+  driftGuard?: DriftGuard;
   /** Override the registry — used by tests. */
   sources?: readonly PoiSource[];
 }
@@ -90,7 +93,7 @@ async function loadAllFeedStateRows(): Promise<Map<string, PoiFeedStateRow>> {
 }
 
 export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOptions): void {
-  const sources = opts.sources ?? ALL_POI_SOURCES;
+  const sources = opts.sources ?? getAllPoiSources();
   const sourcesById = new Map<string, PoiSource>(sources.map((s) => [s.id, s] as const));
   const logger = adaptFastifyLogger(app);
 
@@ -130,12 +133,28 @@ export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOpt
       startedAt: entry.startedAt.toISOString(),
     }));
 
+    let registryCountMatchesUpstream: boolean | "unknown" = "unknown";
+    let driftDetail:
+      | {
+          local: { count: number; hash: string };
+          upstream: { count: number; hash: string } | null;
+          reason?: string;
+        }
+      | undefined;
+    if (opts.driftGuard) {
+      const result = await opts.driftGuard.check();
+      registryCountMatchesUpstream = result.registryCountMatchesUpstream;
+      driftDetail = { local: result.local, upstream: result.upstream, reason: result.reason };
+    }
+
     return {
       sourcesCount: sources.length,
       byDomain,
       byStatus,
       recentFailures,
       inflight,
+      registryCountMatchesUpstream,
+      drift: driftDetail,
     };
   });
 
