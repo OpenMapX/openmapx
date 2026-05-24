@@ -61,14 +61,13 @@
       "SMTP_USER": "${SMTP_USER:-}",
       "SMTP_PASS": "${SMTP_PASS:-}",
       "LOG_LEVEL": "${LOG_LEVEL:-info}",
-      "NODE_OPTIONS": "${NODE_OPTIONS:---max-old-space-size=1536}",
       "OPENMAPX_DISABLE_LOCALHOST_AUTH": "${OPENMAPX_DISABLE_LOCALHOST_AUTH:-}",
       "OPENMAPX_LOCAL_ADMIN_TOKEN": "${OPENMAPX_LOCAL_ADMIN_TOKEN:-}",
       "ISOCHRONE_PROVIDER": "${ISOCHRONE_PROVIDER:-}",
       "GITHUB_TOKEN": "${GITHUB_TOKEN:-}",
       "STORE_CATALOG_URL": "${STORE_CATALOG_URL:-}"
     },
-    "memory": "2g",
+    "memory": "1g",
     "restart": "unless-stopped",
     "dependsOn": [
       { "service": "postgis", "condition": "service_healthy" },
