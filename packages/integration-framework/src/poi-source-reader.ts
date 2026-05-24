@@ -16,10 +16,16 @@ const SOURCE_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 // per source no matter how many reader instances exist. Tests reset via
 // `__resetReaderState`.
 const coldStartSources = new Set<string>();
+// Warn-once tracking for the "integration registered POI sources but its
+// manifest didn't declare requires postgis, so ctx.db is undefined" case.
+// Without this warning the reader silently returns [] forever and the
+// integration looks like it's working — but no data ever surfaces.
+const noDbWarnedSources = new Set<string>();
 
 /** @internal Test-only helper. Resets the cold-start tracker between tests. */
 export function __resetReaderState(): void {
   coldStartSources.clear();
+  noDbWarnedSources.clear();
 }
 
 /**
@@ -105,12 +111,26 @@ function warnMissingTableOnce(ctx: IntegrationContext, sourceId: string, tableId
   );
 }
 
+function warnNoDbOnce(ctx: IntegrationContext, sourceId: string): void {
+  if (noDbWarnedSources.has(sourceId)) return;
+  noDbWarnedSources.add(sourceId);
+  ctx.log.warn(
+    `[poi-source-reader] ${sourceId}: ctx.db is undefined — returning empty result. ` +
+      `The integration registered a POI source but its manifest.json does not declare ` +
+      `requires: [{ service: "postgis" }], so the host did not wire up a database client. ` +
+      `Add postgis to the integration's requires list to enable PoiReader-backed sources.`,
+  );
+}
+
 async function runSearchQuery(
   ctx: IntegrationContext,
   sourceId: string,
   bbox: BBox,
 ): Promise<StaticRow[]> {
-  if (!ctx.db) return [];
+  if (!ctx.db) {
+    warnNoDbOnce(ctx, sourceId);
+    return [];
+  }
   const tableIdent = tableIdentFor(sourceId);
   try {
     const rows = await ctx.db.execute<StaticRow[]>(
@@ -152,7 +172,10 @@ async function runDetailQuery(
   sourceId: string,
   poiId: string,
 ): Promise<StaticRow | null> {
-  if (!ctx.db) return null;
+  if (!ctx.db) {
+    warnNoDbOnce(ctx, sourceId);
+    return null;
+  }
   const tableIdent = tableIdentFor(sourceId);
   try {
     const rows = await ctx.db.execute<StaticRow[]>(

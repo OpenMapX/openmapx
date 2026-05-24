@@ -47,6 +47,9 @@
     {
       "service": "overpass",
       "optional": true
+    },
+    {
+      "service": "postgis"
     }
   ],
   "healthCheck": [
