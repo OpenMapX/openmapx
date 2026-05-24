@@ -82,7 +82,8 @@ describe("mapStationToResult", () => {
       const station = makeStation();
       const result = mapStationToResult(station);
 
-      expect(result.id).toBe("station-1");
+      expect(result.id).toBe("s:station-1");
+      expect(result.kind).toBe("station");
       expect(result.name).toBe("Test Station");
       expect(result.coordinates).toEqual([13.41, 52.52]);
       expect(result.source).toBe("gbfs/test");
@@ -245,7 +246,8 @@ describe("mapVehicleToResult", () => {
       const vehicle = makeVehicle();
       const result = mapVehicleToResult(vehicle);
 
-      expect(result.id).toBe("vehicle-1");
+      expect(result.id).toBe("v:vehicle-1");
+      expect(result.kind).toBe("vehicle");
       expect(result.coordinates).toEqual([13.41, 52.52]);
       expect(result.source).toBe("gbfs/lime");
       expect(result.operator).toBe("Lime");
@@ -546,7 +548,7 @@ describe("mapStationToDetail", () => {
       }),
     );
 
-    expect(detail.id).toBe("station-1");
+    expect(detail.id).toBe("s:station-1");
     expect(detail.sources).toEqual(["gbfs/test"]);
     expect(detail.name).toBe("Test Station");
     expect(detail.coordinates).toEqual([13.41, 52.52]);
@@ -630,7 +632,7 @@ describe("mapVehicleToDetail", () => {
     const detail = mapVehicleToDetail(
       makeVehicle({ operator: "Lime", formFactor: "scooter_standing" }),
     );
-    expect(detail.id).toBe("vehicle-1");
+    expect(detail.id).toBe("v:vehicle-1");
     expect(detail.sources).toEqual(["gbfs/lime"]);
     expect(detail.name).toBe("Lime E-Scooter");
     expect(detail.coordinates).toEqual([13.41, 52.52]);

@@ -84,6 +84,7 @@ function buildGeoJson(
         status: r.status ?? "",
         summary: translateSummary(r.summary) ?? "",
         operator: r.operator ?? "",
+        kind: r.kind ?? "",
         ...(imageId ? { imageId } : {}),
       },
     })),
@@ -648,16 +649,27 @@ export function DataSourceLayer() {
       const layers = [markersLid, labelsLid].filter((l) => map.getLayer(l));
       const features = map.queryRenderedFeatures(e.point, { layers });
       if (!features.length) return;
-      const props = features[0].properties as { id: string; name: string; summary?: string };
+      const props = features[0].properties as {
+        id: string;
+        name: string;
+        summary?: string;
+        kind?: string;
+      };
       const coords = (features[0].geometry as { coordinates: number[] }).coordinates as LngLat;
       selectItem(currentSource, props.id);
+      // For free-floating vehicles, leave the preview address empty so
+      // `usePlaceDetails` sends `hasAddress=0` and the API resolver runs a
+      // reverse-geocode to fill in a real street address. The marker label
+      // (e.g. "Dott E-Scooter") is not an address and would otherwise win
+      // the merge in `useMergedPlace`.
+      const isVehicle = props.kind === "vehicle";
       // Set a preview place immediately so the floating card shows without waiting for detail API
       setSelectedPlace(
         createPlace({
           primaryScheme: currentSource,
           ids: { [currentSource]: props.id },
           name: props.name,
-          address: props.name,
+          address: isVehicle ? "" : props.name,
           coordinates: coords,
           category: activeMeta?.placeCategory,
           rawCategory: activeMeta?.placeCategoryRaw,

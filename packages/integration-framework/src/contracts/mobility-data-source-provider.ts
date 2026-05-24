@@ -93,6 +93,15 @@ export interface DataSourceResult {
   sources?: string[];
   /** Per-result attribution used by map/source attribution controls when a provider varies by item. */
   attributions?: DataSourceAttribution[];
+  /**
+   * Distinguishes fixed installations from free-floating items so the place
+   * resolver can decide whether to snap to an OSM POI (via `osmFilters`) or
+   * fall through to a plain reverse-geocode. Producers that already use the
+   * shared-mobility mappers carry the same distinction in the result `id`
+   * via an `s:`/`v:` prefix; non-mobility data sources (fuel, EV charging,
+   * webcams) leave this unset.
+   */
+  kind?: "station" | "vehicle";
   variant: string;
   status?: string;
   summary?: string;

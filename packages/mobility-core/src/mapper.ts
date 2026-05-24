@@ -92,10 +92,29 @@ function mapContextSelection(
   };
 }
 
+/**
+ * ID prefix that flows from the result through the click handler back to the
+ * place resolver, so it can branch on station vs free-floating vehicle
+ * without an extra lookup. See `createDataSourceResolver`.
+ */
+export const STATION_ID_PREFIX = "s:";
+export const VEHICLE_ID_PREFIX = "v:";
+
+/**
+ * Strip the kind prefix added by {@link mapStationToResult} / {@link mapVehicleToResult}.
+ * Use in `getDetail(itemId)` before looking the item up in the provider's raw-id cache.
+ */
+export function stripMobilityKindPrefix(id: string): string {
+  if (id.startsWith(STATION_ID_PREFIX)) return id.slice(STATION_ID_PREFIX.length);
+  if (id.startsWith(VEHICLE_ID_PREFIX)) return id.slice(VEHICLE_ID_PREFIX.length);
+  return id;
+}
+
 export function mapStationToResult(station: SharedMobilityStation): DataSourceResult {
   const variant = stationVariant(station);
   return {
-    id: station.id,
+    id: `${STATION_ID_PREFIX}${station.id}`,
+    kind: "station",
     name: station.name,
     coordinates: station.coordinates,
     source: station.sources[0],
@@ -287,7 +306,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   const branding = brandingFromStation(station);
 
   return {
-    id: station.id,
+    id: `${STATION_ID_PREFIX}${station.id}`,
     sources: station.sources,
     name: station.name,
     coordinates: station.coordinates,
@@ -333,7 +352,8 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
   const variant = vehicleVariant(vehicle);
   const formLabel = FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle";
   return {
-    id: vehicle.id,
+    id: `${VEHICLE_ID_PREFIX}${vehicle.id}`,
+    kind: "vehicle",
     name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,
     source: vehicle.sources[0],
@@ -404,7 +424,7 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
 
   const branding = brandingFromVehicle(vehicle);
   return {
-    id: vehicle.id,
+    id: `${VEHICLE_ID_PREFIX}${vehicle.id}`,
     sources: vehicle.sources,
     name: vehicle.operator
       ? `${vehicle.operator} ${FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"}`

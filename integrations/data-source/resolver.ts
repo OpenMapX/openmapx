@@ -5,6 +5,13 @@
  * Place panel can enrich with OSM-derived knowledge (wikidata, photos,
  * reviews). Falls back to a reverse-geocode for address-only details
  * when the provider has no OSM equivalent.
+ *
+ * Free-floating shared-mobility vehicles are explicitly excluded from the
+ * Overpass snap: a scooter sitting on the sidewalk would otherwise inherit
+ * the website / opening hours / wheelchair tags of the nearest matching
+ * OSM POI. The mobility-core mappers tag these items with a `v:` id
+ * prefix; stations get `s:` (see `STATION_ID_PREFIX`/`VEHICLE_ID_PREFIX`
+ * in `@openmapx/mobility-core/mapper`).
  */
 
 import { createPlace } from "@openmapx/core";
@@ -13,6 +20,7 @@ import {
   lookupAddressByCoords,
   lookupByOsmFilters,
 } from "@openmapx/integration-geocoding/place-lookup";
+import { VEHICLE_ID_PREFIX } from "@openmapx/mobility-core/mapper";
 import type { PlaceResolver } from "@openmapx/place-ids";
 
 export function createDataSourceResolver(provider: MobilityDataSourceProvider): PlaceResolver {
@@ -25,18 +33,24 @@ export function createDataSourceResolver(provider: MobilityDataSourceProvider): 
     const { lat, lng, hasAddress } = ctx;
     if (lat === undefined || lng === undefined) return null;
 
+    const isVehicle = value.startsWith(VEHICLE_ID_PREFIX);
+
     // Providers without an OSM equivalent (webcams, scooters, …) skip the
     // Overpass lookup and return an address-only Place so the panel can
-    // still show something sensible.
-    let place = osmFilters
-      ? await lookupByOsmFilters(lat, lng, osmFilters, `${scheme}:${value}`)
-      : null;
+    // still show something sensible. Free-floating vehicles take the same
+    // path even when the provider's stations would normally snap to OSM.
+    let place =
+      osmFilters && !isVehicle
+        ? await lookupByOsmFilters(lat, lng, osmFilters, `${scheme}:${value}`)
+        : null;
 
     // Skip the reverse-geocode fallback when the caller already has an
     // address — data-source items supply their own, and the client merge
     // keeps those over any OSM-derived address anyway. Avoids a Nominatim
-    // + possible Overpass call on every cold fetch.
-    if (!place?.address && !hasAddress) {
+    // + possible Overpass call on every cold fetch. Vehicles are the
+    // exception: their preview `address` is the marker label ("Dott
+    // E-Scooter"), not a real street address, so always pull one.
+    if (!place?.address && (isVehicle || !hasAddress)) {
       const addrOnly = await lookupAddressByCoords(lat, lng);
       if (addrOnly) {
         if (place) {

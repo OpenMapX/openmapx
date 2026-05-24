@@ -28,6 +28,7 @@ import {
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
+  stripMobilityKindPrefix,
 } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
@@ -163,7 +164,7 @@ class CarSharingProvider implements MobilityDataSourceProvider {
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-    const cached = itemCache.get(itemId);
+    const cached = itemCache.get(stripMobilityKindPrefix(itemId));
     if (cached) {
       if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached));
       return wrapRT(mapVehicleToDetail(cached));

@@ -34,6 +34,8 @@ vi.mock("@openmapx/mobility-core/mapper", () => ({
   mapStationToDetail: vi.fn(),
   mapVehicleToResult: vi.fn(),
   mapVehicleToDetail: vi.fn(),
+  stripMobilityKindPrefix: (id: string) =>
+    id.startsWith("s:") || id.startsWith("v:") ? id.slice(2) : id,
 }));
 
 vi.mock("../providers/merge-stations.js", () => ({
