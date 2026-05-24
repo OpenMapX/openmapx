@@ -101,6 +101,7 @@ const POI_READER_BACKED_PARKING_SOURCES = [
   "nrw-mobidrom-parking",
   "nrw-mobidrom-pr",
   "apag",
+  "apag-direct",
   "apcoa",
   "parkapi-v3",
   "parkapi-v2",

@@ -201,6 +201,11 @@
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-apag.json"
     },
     {
+      "name": "APAG (direct)",
+      "type": "http",
+      "url": "https://apag.de/api/v1/pms/facilities"
+    },
+    {
       "name": "NRW Mobidrom (GOLDBECK)",
       "type": "http",
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-goldbeck-parking-services.json"
@@ -562,6 +567,20 @@
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "apag-direct",
+      "name": "APAG – Aachener Parkhaus (direct)",
+      "url": "https://apag.de/",
+      "license": "operator-provided",
+      "licenseUrl": "https://apag.de/impressum/",
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://apag.de/datenschutz/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

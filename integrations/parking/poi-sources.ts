@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PoiRow, PoiSource } from "@openmapx/poi-source-registry";
+import { parseApagDirectBundled } from "./providers/apag-direct-parser.js";
 import { parseAutobahnDeBundled } from "./providers/autobahn-de-bundled-parser.js";
 import { parseBarcelonaEsStatic } from "./providers/barcelona-es-parser.js";
 import { parseBaselChBundled } from "./providers/basel-ch-parser.js";
@@ -200,6 +201,29 @@ export function declarePoiSources(): PoiSource[] {
           sourceId: "apag",
           operatorName: "APAG - Aachener Parkhaus GmbH",
         }),
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      // Direct APAG feed straight from apag.de's public PMS API. Kept alongside
+      // the Mobilithek-routed `apag` source so we keep live data even when the
+      // Mobilithek exporter is down (which has been the steady state). Same
+      // operator + same uuids upstream, so the static-row hash is stable across
+      // both sources and dedup at the runtime layer falls back to source-priority.
+      id: "apag-direct",
+      stationIdPrefix: "apag-direct:",
+      domain: "parking",
+      name: "APAG — Aachener Parkhaus GmbH (direct)",
+      coverage: [5.9, 50.65, 6.3, 50.9],
+      bundled: {
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          url: "https://apag.de/api/v1/pms/facilities",
+          timeoutMs: 30_000,
+        },
+        parse: parseApagDirectBundled(),
         liveTtlSeconds: 1800,
         staticChangeKey: mobidromStaticChangeKey,
       },

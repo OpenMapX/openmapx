@@ -7,6 +7,10 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "parkapi-v3": 1,
   "nrw-mobidrom-parking": 1,
   "nrw-mobidrom-pr": 2,
+  // apag-direct is preferred over the Mobilithek-mediated apag feed: same
+  // operator + same uuids upstream, but fetched without the middleman so it
+  // stays live when Mobilithek's exporter is broken.
+  "apag-direct": 1,
   apag: 2,
   "parkapi-v2": 2,
   "rdw-nl": 3,
