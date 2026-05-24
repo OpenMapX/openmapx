@@ -8,8 +8,14 @@ import { sql } from "./db/index.js";
 import { registerPoiIngestApi } from "./jobs/poi-ingest/api.js";
 import { runBootstrap } from "./jobs/poi-ingest/bootstrap.js";
 import { createDriftGuard, type DriftGuard } from "./jobs/poi-ingest/drift-guard.js";
-import { getPoiMetrics } from "./jobs/poi-ingest/otel-metrics.js";
+import { createLogMetricsSink, type PoiIngestMetricsSink } from "./jobs/poi-ingest/metrics.js";
+import {
+  combineMetricsSinks,
+  createOtelMetricsSink,
+  getPoiMetrics,
+} from "./jobs/poi-ingest/otel-metrics.js";
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
+import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
 import { StateStore } from "./state.js";
@@ -56,6 +62,49 @@ let poiHandles: PoiSchedulerHandles | null = null;
 const redisUrl = process.env.REDIS_URL ?? "redis://redis:6379";
 const redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 3 });
 
+// POI ingest singleFlight + metricsSink + drift guard are constructed BEFORE
+// `app.listen()` so the HTTP routes can be registered against them — Fastify
+// disallows `app.get(...)` calls after listen. setupPoiIngestCron (after
+// listen) takes the same instances via opts so the cron + HTTP triggers
+// share the same lock + metrics writer.
+const poiAdapter = {
+  info: (m: string, e?: Record<string, unknown>) => (e ? app.log.info(e, m) : app.log.info(m)),
+  warn: (m: string, e?: Record<string, unknown>) => (e ? app.log.warn(e, m) : app.log.warn(m)),
+  error: (m: string, e?: Record<string, unknown>) => (e ? app.log.error(e, m) : app.log.error(m)),
+  debug: (m: string, e?: Record<string, unknown>) => (e ? app.log.debug(e, m) : app.log.debug(m)),
+};
+const poiSingleFlight = createPoiSingleFlight();
+const poiMetricsSink: PoiIngestMetricsSink = combineMetricsSinks(
+  createLogMetricsSink(poiAdapter),
+  createOtelMetricsSink(),
+);
+let poiDriftGuard: DriftGuard | undefined;
+const appApiBaseUrl = process.env.APP_API_BASE_URL;
+if (appApiBaseUrl) {
+  poiDriftGuard = createDriftGuard({
+    appApiBaseUrl,
+    logger: { warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)) },
+  });
+}
+registerPoiIngestApi(app, {
+  sql,
+  redis,
+  singleFlight: poiSingleFlight,
+  metricsSink: poiMetricsSink,
+  driftGuard: poiDriftGuard,
+});
+
+// Prometheus scrape endpoint. Auth is bypassed (see auth.ts HEALTH_PATHS)
+// because the data-manager port is bound to 127.0.0.1 on the host — only
+// an in-cluster scraper can reach it. Mirrors apps/api's posture for the
+// sibling `/internal/metrics` route. Registered pre-listen to satisfy
+// Fastify's no-routes-after-listen invariant.
+app.get("/internal/metrics", async (_request, reply) => {
+  const handle = getPoiMetrics();
+  const text = await handle.renderPrometheus();
+  reply.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8").send(text);
+});
+
 app
   .listen({ port, host })
   .then(async (addr) => {
@@ -86,11 +135,7 @@ app
       await discoverPoiSources({
         rootDir: repoRoot,
         customIntegrationsDir,
-        logger: {
-          info: (m, e) => (e ? app.log.info(e, m) : app.log.info(m)),
-          warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)),
-          error: (m, e) => (e ? app.log.error(e, m) : app.log.error(m)),
-        },
+        logger: poiAdapter,
       });
     } else {
       app.log.warn(
@@ -101,40 +146,9 @@ app
     poiHandles = setupPoiIngestCron({
       sql,
       redis,
-      logger: {
-        info: (m, e) => (e ? app.log.info(e, m) : app.log.info(m)),
-        warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)),
-        error: (m, e) => (e ? app.log.error(e, m) : app.log.error(m)),
-      },
-    });
-
-    // Register the POI ingest admin routes *after* the cron handles are
-    // available — the HTTP routes share the cron's single-flight + metrics
-    // sink so manual `/sync` triggers contend with scheduled fires correctly.
-    let driftGuard: DriftGuard | undefined;
-    const appApiBaseUrl = process.env.APP_API_BASE_URL;
-    if (appApiBaseUrl) {
-      driftGuard = createDriftGuard({
-        appApiBaseUrl,
-        logger: { warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)) },
-      });
-    }
-    registerPoiIngestApi(app, {
-      sql,
-      redis,
-      singleFlight: poiHandles.singleFlight,
-      metricsSink: poiHandles.metricsSink,
-      driftGuard,
-    });
-
-    // Prometheus scrape endpoint. Auth is bypassed (see auth.ts HEALTH_PATHS)
-    // because the data-manager port is bound to 127.0.0.1 on the host — only
-    // an in-cluster scraper can reach it. Mirrors apps/api's posture for the
-    // sibling `/internal/metrics` route.
-    app.get("/internal/metrics", async (_request, reply) => {
-      const handle = getPoiMetrics();
-      const text = await handle.renderPrometheus();
-      reply.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8").send(text);
+      logger: poiAdapter,
+      singleFlight: poiSingleFlight,
+      metricsSink: poiMetricsSink,
     });
 
     // Optional first-deploy bootstrap: kicks off an ingest for any source
@@ -146,14 +160,9 @@ app
       void runBootstrap({
         sql,
         redis,
-        singleFlight: poiHandles.singleFlight,
-        metricsSink: poiHandles.metricsSink,
-        logger: {
-          info: (m, e) => (e ? app.log.info(e, m) : app.log.info(m)),
-          warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)),
-          error: (m, e) => (e ? app.log.error(e, m) : app.log.error(m)),
-          debug: (m, e) => (e ? app.log.debug(e, m) : app.log.debug(m)),
-        },
+        singleFlight: poiSingleFlight,
+        metricsSink: poiMetricsSink,
+        logger: poiAdapter,
       })
         .then((result) => app.log.info(result, "poi-ingest-bootstrap: complete"))
         .catch((err) => app.log.error({ err }, "poi-ingest-bootstrap: threw"));
