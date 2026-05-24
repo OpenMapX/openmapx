@@ -6,21 +6,21 @@ import { getRuntimeContext } from "../runtime.js";
 import { makeMobidromMapper, mergeMobidromLive } from "./mobidrom-mapper.js";
 
 /**
- * Direct APAG (Aachener Parkhaus GmbH) operator feed thin wrapper.
- *
- * Reads from the `apag-direct` ingest source, which fans out from apag.de's
- * own PMS API. The Mobidrom-shaped payload (see apag-direct-parser.ts) lets
- * us reuse the Mobidrom mapper + live merger verbatim.
+ * APAG (Aachener Parkhaus GmbH) operator feed via the NRW Mobilithek exporter
+ * (mobilitaetsdaten.nrw). Kept alongside the primary `apag` reader (which
+ * fetches apag.de directly) so the data lineage through the open-data
+ * intermediary stays available; when the Mobilithek exporter is broken
+ * upstream the primary reader continues to surface live data.
  */
 
-const STATION_ID_PREFIX = "apag-direct:";
+const STATION_ID_PREFIX = "apag-mobidrom:";
 const OPERATOR_NAME = "APAG - Aachener Parkhaus GmbH";
 
 const reader = createTwoTierPoiReader<ParkingFacility>({
-  sourceId: "apag-direct",
+  sourceId: "apag-mobidrom",
   mapStatic: makeMobidromMapper({
-    sourceId: "apag-direct",
-    idPrefix: "apag-direct",
+    sourceId: "apag-mobidrom",
+    idPrefix: "apag-mobidrom",
     operatorName: OPERATOR_NAME,
   }),
   mergeWithLive: mergeMobidromLive,
@@ -31,11 +31,11 @@ function toBboxTuple(b: BoundingBox): BBox {
   return [b.west, b.south, b.east, b.north];
 }
 
-export async function searchApagDirect(bbox: BoundingBox): Promise<ParkingFacility[]> {
+export async function searchApagMobidrom(bbox: BoundingBox): Promise<ParkingFacility[]> {
   return reader.search(getRuntimeContext(), toBboxTuple(bbox));
 }
 
-export async function fetchApagDirectDetail(externalId: string): Promise<ParkingFacility | null> {
+export async function fetchApagMobidromDetail(externalId: string): Promise<ParkingFacility | null> {
   const poiId = externalId.startsWith(STATION_ID_PREFIX)
     ? externalId.slice(STATION_ID_PREFIX.length)
     : externalId;

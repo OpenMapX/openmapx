@@ -7,11 +7,11 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "parkapi-v3": 1,
   "nrw-mobidrom-parking": 1,
   "nrw-mobidrom-pr": 2,
-  // apag-direct is preferred over the Mobilithek-mediated apag feed: same
-  // operator + same uuids upstream, but fetched without the middleman so it
-  // stays live when Mobilithek's exporter is broken.
-  "apag-direct": 1,
-  apag: 2,
+  // `apag` reads apag.de directly; `apag-mobidrom` reaches the same operator
+  // via NRW Mobilithek and is the lower-priority backup lineage (the
+  // Mobilithek exporter has been intermittently broken upstream).
+  apag: 1,
+  "apag-mobidrom": 2,
   "parkapi-v2": 2,
   "rdw-nl": 3,
   "ndw-truck-nl": 3,

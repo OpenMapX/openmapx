@@ -1,7 +1,7 @@
 import type { BoundingBox } from "@openmapx/core";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { fetchApagDetail, searchApag } from "./apag.js";
-import { fetchApagDirectDetail, searchApagDirect } from "./apag-direct.js";
+import { fetchApagMobidromDetail, searchApagMobidrom } from "./apag-mobidrom.js";
 import { fetchApcoaDetail, searchApcoa } from "./apcoa.js";
 import { fetchAutobahnDeDetail, searchAutobahnDe } from "./autobahn-de.js";
 import { fetchBarcelonaEsDetail, searchBarcelonaEs } from "./barcelona-es.js";
@@ -64,8 +64,8 @@ export const PARKING_SOURCE_REGISTRY: ParkingSourceRegistryEntry[] = [
   }),
   entry("nrw-mobidrom-parking", searchNrwMobidrom, "nrw:", fetchNrwMobidromDetail),
   entry("nrw-mobidrom-pr", searchNrwPr, "nrw-pr:", fetchNrwPrDetail),
-  entry("apag-direct", searchApagDirect, "apag-direct:", fetchApagDirectDetail),
   entry("apag", searchApag, "apag:", fetchApagDetail),
+  entry("apag-mobidrom", searchApagMobidrom, "apag-mobidrom:", fetchApagMobidromDetail),
   entry("parkapi-v2", searchParkApiV2, "parkapi-v2:", async (rest) => {
     const slashIdx = rest.indexOf("/");
     if (slashIdx <= 0) return null;

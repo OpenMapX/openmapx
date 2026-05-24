@@ -196,14 +196,14 @@
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parking-apcoa.json"
     },
     {
+      "name": "APAG",
+      "type": "http",
+      "url": "https://apag.de/api/v1/pms/facilities"
+    },
+    {
       "name": "NRW Mobidrom (APAG)",
       "type": "http",
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-apag.json"
-    },
-    {
-      "name": "APAG (direct)",
-      "type": "http",
-      "url": "https://apag.de/api/v1/pms/facilities"
     },
     {
       "name": "NRW Mobidrom (GOLDBECK)",
@@ -560,27 +560,27 @@
     },
     {
       "sourceId": "apag",
-      "name": "APAG – Aachener Parkhaus (via NRW.Mobidrom)",
-      "url": "https://www.mobilitaetsdaten.nrw/",
-      "license": "Datenlizenz Deutschland Namensnennung 2.0",
-      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
-      "commercialUse": "yes",
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "apag-direct",
-      "name": "APAG – Aachener Parkhaus (direct)",
+      "name": "APAG – Aachener Parkhaus",
       "url": "https://apag.de/",
       "license": "operator-provided",
       "licenseUrl": "https://apag.de/impressum/",
       "commercialUse": "unknown",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://apag.de/datenschutz/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "apag-mobidrom",
+      "name": "APAG – Aachener Parkhaus",
+      "url": "https://www.mobilitaetsdaten.nrw/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

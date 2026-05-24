@@ -6,10 +6,11 @@ import { getRuntimeContext } from "../runtime.js";
 import { makeMobidromMapper, mergeMobidromLive } from "./mobidrom-mapper.js";
 
 /**
- * APAG (Aachener Parkhaus GmbH) operator feed thin wrapper.
- *
- * Richer than the APAG subset of the aggregate `parken-nrw` feed because
- * this operator endpoint reports live `availableSpaces` for every site.
+ * APAG (Aachener Parkhaus GmbH) operator feed thin wrapper, reading the
+ * apag.de PMS API directly. The companion `apag-mobidrom` reader is kept as
+ * a backup data lineage going through the NRW Mobilithek exporter. The
+ * Mobidrom-shaped payload (see apag-parser.ts) lets us reuse the Mobidrom
+ * mapper + live merger verbatim.
  */
 
 const STATION_ID_PREFIX = "apag:";

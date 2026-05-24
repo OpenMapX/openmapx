@@ -2,13 +2,13 @@ import type { ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiBundledParseFn, PoiLiveState, PoiRow } from "@openmapx/poi-source-registry";
 
 /**
- * Direct APAG (Aachener Parkhaus GmbH) feed via the operator's own API.
+ * APAG (Aachener Parkhaus GmbH) feed via the operator's own apag.de PMS API.
  *
- * Why a second APAG source: the existing `apag` source goes through
- * mobilitaetsdaten.nrw (Mobilithek), which has been intermittently broken
- * upstream. APAG also runs a public API on apag.de that powers their own
- * website's live occupancy display; reading it directly removes the
- * middleman and lets users see live data even when Mobilithek is down.
+ * The companion `apag-mobidrom` source ingests the same operator's data via
+ * the NRW Mobilithek exporter (mobilitaetsdaten.nrw), which has been
+ * intermittently broken upstream. APAG's own public API powers their
+ * website's live occupancy display, so reading it directly removes the
+ * middleman and keeps live data flowing when Mobilithek is down.
  *
  * One endpoint, no fan-out: `/api/v1/pms/facilities` already includes both
  * static metadata (uuid, name, lat/lng, address, capacity, opening hours,
@@ -95,19 +95,19 @@ function summariseRates(rates: ApagRate[] | null | undefined): string | undefine
   return first ? first.trim() : undefined;
 }
 
-export function parseApagDirectBundled(): PoiBundledParseFn {
+export function parseApagBundled(): PoiBundledParseFn {
   return async (buffer, { log }) => {
     let data: unknown;
     try {
       data = JSON.parse(buffer.toString("utf-8"));
     } catch (err) {
-      log.warn("apag-direct: failed to parse facilities JSON", {
+      log.warn("apag: failed to parse facilities JSON", {
         error: (err as Error).message,
       });
       return { static: [], live: new Map<string, PoiLiveState>() };
     }
     if (!Array.isArray(data)) {
-      log.warn("apag-direct: facilities payload is not an array", {
+      log.warn("apag: facilities payload is not an array", {
         actual: typeof data,
       });
       return { static: [], live: new Map<string, PoiLiveState>() };
@@ -181,7 +181,7 @@ export function parseApagDirectBundled(): PoiBundledParseFn {
     }
 
     if (skippedNonParking > 0 || skippedBadCoords > 0) {
-      log.info("apag-direct: parse summary", {
+      log.info("apag: parse summary", {
         emitted: staticRows.length,
         skippedNonParking,
         skippedBadCoords,
