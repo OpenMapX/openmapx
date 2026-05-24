@@ -1,8 +1,12 @@
 import { accessSync, constants } from "node:fs";
 import Fastify from "fastify";
+import { Redis } from "ioredis";
 import { registerApi } from "./api.js";
 import { registerAuth, resolveAuthToken } from "./auth.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
+import { sql } from "./db/index.js";
+import { registerPoiIngestApi } from "./jobs/poi-ingest/api.js";
+import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { StateStore } from "./state.js";
 
@@ -40,6 +44,13 @@ const host = process.env.HOST ?? "127.0.0.1";
 
 // Track cron handles so the SIGTERM hook can stop them cleanly.
 let cronHandles: CronHandles | null = null;
+let poiHandles: PoiSchedulerHandles | null = null;
+
+// Single shared Redis client for the POI ingest pipeline. Defined at module
+// scope so `shutdown()` can disconnect it explicitly — otherwise SIGTERM
+// hangs on the open socket.
+const redisUrl = process.env.REDIS_URL ?? "redis://redis:6379";
+const redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 3 });
 
 app
   .listen({ port, host })
@@ -62,6 +73,26 @@ app
       singleFlight,
       logger: app.log,
     });
+
+    poiHandles = setupPoiIngestCron({
+      sql,
+      redis,
+      logger: {
+        info: (m, e) => (e ? app.log.info(e, m) : app.log.info(m)),
+        warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)),
+        error: (m, e) => (e ? app.log.error(e, m) : app.log.error(m)),
+      },
+    });
+
+    // Register the POI ingest admin routes *after* the cron handles are
+    // available — the HTTP routes share the cron's single-flight + metrics
+    // sink so manual `/sync` triggers contend with scheduled fires correctly.
+    registerPoiIngestApi(app, {
+      sql,
+      redis,
+      singleFlight: poiHandles.singleFlight,
+      metricsSink: poiHandles.metricsSink,
+    });
   })
   .catch((err) => {
     app.log.error(err);
@@ -75,6 +106,12 @@ app
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, "data-manager: shutdown requested");
   cronHandles?.stop();
+  poiHandles?.stop();
+  try {
+    redis.disconnect();
+  } catch {
+    // Closing an already-closed socket throws; ignore.
+  }
   const result = await awaitInflightSync(singleFlight, 30_000);
   if (result === "timeout") {
     app.log.warn("data-manager: in-flight Transitous sync did not finish within 30s; forcing exit");
