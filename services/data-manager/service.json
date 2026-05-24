@@ -17,6 +17,11 @@
       "HOST": "0.0.0.0",
       "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
       "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — the data-manager container persists the Transitous lockfile (POST /transit/bump) via this path; see infra/docker/.env.example}",
+      "UTMC_USERNAME": "${UTMC_USERNAME:-}",
+      "UTMC_PASSWORD": "${UTMC_PASSWORD:-}",
+      "DB_BAHNPARK_CLIENT_ID": "${DB_BAHNPARK_CLIENT_ID:-}",
+      "DB_BAHNPARK_API_KEY": "${DB_BAHNPARK_API_KEY:-}",
+      "NSW_TRANSPORT_API_KEY": "${NSW_TRANSPORT_API_KEY:-}",
       "TRANSITOUS_FEED_PROXY_KEY_FILE": "/secrets/transitous-feed-proxy.age"
     },
     "memory": "8g",

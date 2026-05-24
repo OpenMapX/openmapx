@@ -1,0 +1,13 @@
+[
+  {
+    "areamanagerid": "100",
+    "areaid": "G1",
+    "areadesc": "Centrum Garage",
+    "location": { "latitude": "52.37", "longitude": "4.89" },
+    "usageid": "GARAGEP",
+    "aantal_parkeer_plaatsen": "300",
+    "aantal_laad_punten": "4",
+    "maximale_inrij_hoogte": "1.95",
+    "toegankelijk_voor_gehandicapten": "Ja"
+  }
+]

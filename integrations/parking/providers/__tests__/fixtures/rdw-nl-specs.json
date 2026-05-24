@@ -1,0 +1,15 @@
+[
+  {
+    "areamanagerid": "100",
+    "areaid": "G1",
+    "capacity": "320",
+    "chargingpointcapacity": "6",
+    "disabledaccess": "True",
+    "maximumvehicleheight": "200"
+  },
+  {
+    "areamanagerid": "999",
+    "areaid": "X",
+    "capacity": "10"
+  }
+]

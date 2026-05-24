@@ -1,0 +1,62 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.567, 55.676] },
+      "properties": {
+        "id": 1,
+        "vejkode": "100",
+        "vejnavn": "Nørreport",
+        "husnr": "1",
+        "postdistrikt": "København K",
+        "antal_pladser": 250,
+        "ejer_status": "Offentlig",
+        "p_hus_type": null,
+        "type_beskrivelse": "Parkeringshus",
+        "opret_dato": null,
+        "ret_dato": null,
+        "bemaerkning": "Nørreport Parking",
+        "ogc_fid": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.58, 55.68] },
+      "properties": {
+        "id": 2,
+        "vejkode": "200",
+        "vejnavn": "Rådhuspladsen",
+        "husnr": null,
+        "postdistrikt": "København K",
+        "antal_pladser": 100,
+        "ejer_status": "Privat",
+        "p_hus_type": null,
+        "type_beskrivelse": "Kælderparkering",
+        "opret_dato": null,
+        "ret_dato": null,
+        "bemaerkning": null,
+        "ogc_fid": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [12.6, 55.69] },
+      "properties": {
+        "id": 3,
+        "vejkode": null,
+        "vejnavn": null,
+        "husnr": null,
+        "postdistrikt": null,
+        "antal_pladser": 0,
+        "ejer_status": null,
+        "p_hus_type": null,
+        "type_beskrivelse": null,
+        "opret_dato": null,
+        "ret_dato": null,
+        "bemaerkning": null,
+        "ogc_fid": null
+      }
+    }
+  ]
+}

@@ -39,13 +39,13 @@
       "utmcUsername": {
         "type": "string",
         "title": "UTMC Username",
-        "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk",
+        "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk. The data-manager POI ingest reads UTMC_USERNAME from its own env vars; this UI field is retained for operator visibility.",
         "x-openmapx-secret": true
       },
       "utmcPassword": {
         "type": "string",
         "title": "UTMC Password",
-        "description": "NE Travel Data (Newcastle) password.",
+        "description": "NE Travel Data (Newcastle) password. The data-manager POI ingest reads UTMC_PASSWORD from its own env vars; this UI field is retained for operator visibility.",
         "x-openmapx-secret": true
       },
       "nswTransportApiKey": {

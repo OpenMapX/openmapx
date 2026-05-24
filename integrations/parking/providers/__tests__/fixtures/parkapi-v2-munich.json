@@ -1,0 +1,22 @@
+{
+  "lots": [
+    {
+      "id": "marienplatz",
+      "name": "Marienplatz Tief",
+      "coords": { "lat": 48.137, "lng": 11.575 },
+      "total": 200,
+      "free": 50,
+      "lot_type": "Tiefgarage",
+      "state": "open"
+    },
+    {
+      "id": "olympiastadion",
+      "name": "Olympia P1",
+      "coords": { "lat": 48.171, "lng": 11.547 },
+      "total": 800,
+      "free": 0,
+      "lot_type": "Parkplatz",
+      "state": "closed"
+    }
+  ]
+}

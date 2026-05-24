@@ -21,16 +21,6 @@ export interface PoiLiveState {
   [key: string]: unknown;
 }
 
-/** HTTP fetch spec. Auth is resolved by data-manager's secrets client. */
-export interface PoiHttpFetchSpec {
-  type: "http";
-  url?: string;
-  timeoutMs?: number;
-  encoding?: BufferEncoding | "windows-1252";
-  headers?: Record<string, string>;
-}
-export type PoiFetchSpec = PoiHttpFetchSpec;
-
 /** Logger handed to resolveUrl/parse callbacks. */
 export interface PoiSourceLogger {
   info(message: string, ...args: unknown[]): void;
@@ -38,6 +28,23 @@ export interface PoiSourceLogger {
   error(message: string, ...args: unknown[]): void;
   debug(message: string, ...args: unknown[]): void;
 }
+
+/** HTTP fetch spec. Auth is resolved by data-manager's secrets client. */
+export interface PoiHttpFetchSpec {
+  type: "http";
+  url?: string;
+  timeoutMs?: number;
+  encoding?: BufferEncoding | "windows-1252";
+  headers?: Record<string, string>;
+  /**
+   * Optional async header resolver. Runs at fetch time inside data-manager,
+   * receives the source logger, returns headers to merge with `headers`
+   * above (resolved values win on conflict). Use cases: HTTP Basic / Bearer
+   * built from per-source env vars (UTMC, NSW, DB BahnPark, etc.).
+   */
+  resolveHeaders?: (log: PoiSourceLogger) => Promise<Record<string, string>>;
+}
+export type PoiFetchSpec = PoiHttpFetchSpec;
 
 /** Streaming parser. Returns rows lazily so large CSVs don't buffer fully in memory. */
 export type PoiStaticParseFn = (

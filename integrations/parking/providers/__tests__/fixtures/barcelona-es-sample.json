@@ -1,0 +1,64 @@
+[
+  {
+    "register_id": 1001,
+    "name": "Pàrquing Bamsa Plaça Catalunya",
+    "status_name": "Publicat",
+    "addresses": [
+      {
+        "address_name": "Plaça Catalunya",
+        "start_street_number": 5,
+        "zip_code": "08002",
+        "town": "Barcelona",
+        "location_4326": {
+          "type": "GeometryCollection",
+          "geometries": [{ "type": "Point", "coordinates": [41.387, 2.17] }]
+        }
+      }
+    ],
+    "attribute_categories": [
+      {
+        "name": "Contact",
+        "attributes": [{ "name": "Tel.", "values": [{ "value": "+34 932 123 456" }] }]
+      }
+    ]
+  },
+  {
+    "register_id": 1002,
+    "name": "Pàrquing Sagrada Família",
+    "status_name": "Pendent",
+    "addresses": [
+      {
+        "address_name": "carrer de marina",
+        "start_street_number": null,
+        "town": "Barcelona",
+        "location_4326": {
+          "type": "GeometryCollection",
+          "geometries": [{ "type": "Point", "coordinates": [41.404, 2.174] }]
+        }
+      }
+    ]
+  },
+  {
+    "register_id": 1003,
+    "name": "Missing address",
+    "status_name": "Publicat",
+    "addresses": []
+  },
+  {
+    "register_id": 1004,
+    "name": "Missing coords",
+    "status_name": "Publicat",
+    "addresses": [
+      {
+        "address_name": "Some street",
+        "start_street_number": 1,
+        "zip_code": "08001",
+        "town": "Barcelona",
+        "location_4326": {
+          "type": "GeometryCollection",
+          "geometries": []
+        }
+      }
+    ]
+  }
+]

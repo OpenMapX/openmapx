@@ -1,0 +1,62 @@
+{
+  "total_count": 3,
+  "results": [
+    {
+      "name": "Kouter",
+      "lastupdate": "2026-05-01T10:00:00Z",
+      "totalcapacity": 350,
+      "availablecapacity": 50,
+      "occupation": 86,
+      "type": "Off-Street",
+      "description": null,
+      "id": "k1",
+      "openingtimesdescription": "24/7",
+      "isopennow": 1,
+      "temporaryclosed": 0,
+      "operatorinformation": "Mobiliteitsbedrijf",
+      "freeparking": 0,
+      "urllinkaddress": "https://example.test/kouter",
+      "occupancytrend": "stable",
+      "location": { "lon": 3.722, "lat": 51.052 },
+      "categorie": null
+    },
+    {
+      "name": "Vrijdagmarkt",
+      "lastupdate": "2026-05-01T10:00:00Z",
+      "totalcapacity": 0,
+      "availablecapacity": 0,
+      "occupation": 100,
+      "type": "Off-Street",
+      "description": null,
+      "id": "v1",
+      "openingtimesdescription": null,
+      "isopennow": 0,
+      "temporaryclosed": 1,
+      "operatorinformation": null,
+      "freeparking": 1,
+      "urllinkaddress": null,
+      "occupancytrend": null,
+      "location": { "lon": 3.726, "lat": 51.058 },
+      "categorie": null
+    },
+    {
+      "name": "no-coords",
+      "lastupdate": "2026-05-01T10:00:00Z",
+      "totalcapacity": 100,
+      "availablecapacity": -1,
+      "occupation": 0,
+      "type": "Off-Street",
+      "description": null,
+      "id": "n1",
+      "openingtimesdescription": null,
+      "isopennow": 0,
+      "temporaryclosed": 0,
+      "operatorinformation": null,
+      "freeparking": 0,
+      "urllinkaddress": null,
+      "occupancytrend": null,
+      "location": null,
+      "categorie": null
+    }
+  ]
+}

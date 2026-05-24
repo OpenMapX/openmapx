@@ -1,0 +1,24 @@
+{
+  "tsn": "2155384",
+  "time": "785808515",
+  "spots": "123",
+  "zones": [],
+  "ParkID": "1",
+  "location": {
+    "suburb": "Tallawong",
+    "address": "Conferta Avenue",
+    "latitude": "-33.69304704",
+    "longitude": "150.9052577"
+  },
+  "occupancy": {
+    "loop": "4786",
+    "total": "75",
+    "monthlies": null,
+    "open_gate": null,
+    "transients": null
+  },
+  "MessageDate": "2024-11-25T11:08:35",
+  "facility_id": "26",
+  "facility_name": "Park&Ride - Tallawong P1",
+  "tfnsw_facility_id": "2155384TPR001"
+}

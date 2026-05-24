@@ -1,0 +1,76 @@
+[
+  {
+    "@type": "mobidp.parking.ParkingSite$Bean",
+    "name": "Parkhaus Münster Hbf",
+    "description": "Tiefgarage am Hauptbahnhof",
+    "publicationTime": "2026-05-23T10:00:00Z",
+    "externalId": "MS-001",
+    "type": "CAR_PARK",
+    "equipmentAndServices": ["Aufladen", "behindertengerecht"],
+    "openingTimesDescription": ["Mo-So 00:00-24:00"],
+    "isOpenNow": true,
+    "tariffDescription": ["1h: 2,00 EUR", "Tag: 12,00 EUR"],
+    "freeParking": false,
+    "zoneDescription": [],
+    "urlLinkAddress": "https://example.test/ms-hbf",
+    "numberOfSpaces": 250,
+    "availableSpaces": 42,
+    "occupancyTrend": "DECREASING",
+    "assignedFor": [
+      { "user": "DISABLED", "availableSpaces": 4 },
+      { "fuelType": "BATTERY", "availableSpaces": 6 }
+    ],
+    "locationAndDimension": {
+      "locationDescriptor": "Bahnhofstraße 1, 48143 Münster",
+      "dimension": { "height": 2.1 },
+      "coordinatesForDisplay": {
+        "geometry": { "type": "Point", "coordinates": [7.62, 51.96] },
+        "srid": 4326
+      }
+    }
+  },
+  {
+    "@type": "mobidp.parking.ParkingSite$Bean",
+    "name": "P+R Düsseldorf Süd",
+    "description": "Park-und-Ride-Platz",
+    "externalId": "DUS-PR-7",
+    "type": "OFF_STREET_PARKING_GROUND",
+    "openingTimesDescription": ["Mo-Fr 05:00-24:00"],
+    "isOpenNow": false,
+    "freeParking": true,
+    "zoneDescription": ["P+R"],
+    "numberOfSpaces": 80,
+    "availableSpaces": null,
+    "assignedFor": [],
+    "locationAndDimension": {
+      "locationDescriptor": "Südring 99, 40221 Düsseldorf",
+      "coordinatesForDisplay": {
+        "geometry": { "type": "Point", "coordinates": [6.77, 51.18] },
+        "srid": 4326
+      }
+    }
+  },
+  {
+    "@type": "mobidp.parking.ParkingSite$Bean",
+    "name": "Parkplatz Hauptmarkt",
+    "externalId": "AC-44",
+    "openingTimesDescription": [],
+    "tariffDescription": [],
+    "numberOfSpaces": 30,
+    "availableSpaces": 0,
+    "locationAndDimension": {
+      "locationDescriptor": null,
+      "coordinatesForDisplay": {
+        "geometry": { "type": "Point", "coordinates": [50.78, 6.08] },
+        "srid": 4326
+      }
+    }
+  },
+  {
+    "@type": "mobidp.parking.ParkingSite$Bean",
+    "name": "Broken record (no coords)",
+    "externalId": "NOPE-1",
+    "numberOfSpaces": 10,
+    "locationAndDimension": { "coordinatesForDisplay": null }
+  }
+]

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d2LogicalModel>
+  <payloadPublication>
+    <parkingRecordStatus>
+      <parkingRecordReference id="P/1" />
+      <parkingStatusOriginTime>2026-05-23T11:00:00.000Z</parkingStatusOriginTime>
+      <parkingSiteStatus>open</parkingSiteStatus>
+      <parkingOccupancy>
+        <parkingNumberOfVacantSpaces>120</parkingNumberOfVacantSpaces>
+      </parkingOccupancy>
+    </parkingRecordStatus>
+    <parkingRecordStatus>
+      <parkingRecordReference id="P-2" />
+      <parkingStatusOriginTime>2026-05-23T11:00:00.000Z</parkingStatusOriginTime>
+      <parkingSiteStatus>full</parkingSiteStatus>
+      <parkingOccupancy>
+        <parkingNumberOfVacantSpaces>0</parkingNumberOfVacantSpaces>
+      </parkingOccupancy>
+    </parkingRecordStatus>
+  </payloadPublication>
+</d2LogicalModel>

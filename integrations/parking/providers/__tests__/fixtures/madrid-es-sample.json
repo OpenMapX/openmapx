@@ -1,0 +1,64 @@
+{
+  "@context": {},
+  "@graph": [
+    {
+      "@id": "https://datos.madrid.es/egob/catalogo/202625-0/1",
+      "@type": "Parking",
+      "id": "1",
+      "title": "Aparcamiento Subterráneo Plaza Mayor",
+      "relation": "https://example.com/info1",
+      "address": {
+        "locality": "Madrid",
+        "postal-code": "28012",
+        "street-address": "PLAZA MAYOR 27"
+      },
+      "location": {
+        "latitude": 40.4154,
+        "longitude": -3.7074
+      },
+      "organization": {
+        "organization-desc": "Plazas: 463. 17 minusválidos. Abierto 24 horas.",
+        "organization-name": "EMT Madrid",
+        "schedule": "L-D 0:00-24:00"
+      }
+    },
+    {
+      "@id": "https://datos.madrid.es/egob/catalogo/202625-0/2",
+      "@type": "Parking",
+      "id": "2",
+      "title": "Aparcamiento en Superficie Estación P+R Norte",
+      "relation": "https://example.com/info2",
+      "address": {
+        "locality": "Madrid",
+        "postal-code": "28036",
+        "street-address": "AVENIDA DE LA PAZ 1"
+      },
+      "location": {
+        "latitude": 40.4751,
+        "longitude": -3.6885
+      },
+      "organization": {
+        "organization-desc": "Plazas: 104 públicas y 550 residentes."
+      }
+    },
+    {
+      "@id": "https://datos.madrid.es/egob/catalogo/202625-0/3",
+      "@type": "Parking",
+      "id": "3",
+      "title": "Aparcamiento Disuasorio Sur",
+      "location": {
+        "latitude": 40.3402,
+        "longitude": -3.7501
+      },
+      "organization": {
+        "organization-desc": "automóviles 344"
+      }
+    },
+    {
+      "@id": "https://datos.madrid.es/egob/catalogo/202625-0/4",
+      "@type": "Parking",
+      "id": "4-no-location",
+      "title": "No location"
+    }
+  ]
+}

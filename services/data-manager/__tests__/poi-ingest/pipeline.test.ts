@@ -319,6 +319,92 @@ describe("pipeline (bundled)", () => {
   });
 });
 
+describe("pipeline fetch — resolveHeaders", () => {
+  it("invokes resolveHeaders with the logger and merges return value into fetch headers", async () => {
+    const sqlRec = makeFakeSql();
+    let capturedHeaders: Record<string, string> | undefined;
+    let loggerSeen: unknown;
+    const fetchImpl: typeof fetch = (async (_url: string, init?: RequestInit) => {
+      capturedHeaders = init?.headers as Record<string, string> | undefined;
+      return new Response("payload", { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const source: PoiSource = {
+      id: "demo-headers",
+      domain: "ev-charging",
+      name: "Headers Demo",
+      static: {
+        cron: "0 4 * * *",
+        fetch: {
+          type: "http",
+          url: "https://example.com/x.csv",
+          headers: { "X-Static": "static-value", "X-Override": "static" },
+          resolveHeaders: async (log) => {
+            loggerSeen = log;
+            return { Authorization: "Basic ZGVtbzpwdw==", "X-Override": "resolved" };
+          },
+        },
+        parse: () => sampleRows,
+        minRowCount: 1,
+      },
+    };
+
+    const ctx = buildPoiJobContext({
+      source,
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      fetch: fetchImpl,
+    });
+    const result = await runStaticIngest(ctx);
+
+    expect(result.status).toBe("ok");
+    expect(capturedHeaders).toEqual({
+      "X-Static": "static-value",
+      "X-Override": "resolved",
+      Authorization: "Basic ZGVtbzpwdw==",
+    });
+    expect(loggerSeen).toBe(ctx.logger);
+  });
+
+  it("returns fetch-stage error when resolveHeaders throws", async () => {
+    const sqlRec = makeFakeSql();
+    const fetchImpl: typeof fetch = (async () =>
+      new Response("never", { status: 200 })) as unknown as typeof fetch;
+
+    const source: PoiSource = {
+      id: "demo-headers-fail",
+      domain: "ev-charging",
+      name: "Headers Demo Fail",
+      static: {
+        cron: "0 4 * * *",
+        fetch: {
+          type: "http",
+          url: "https://example.com/x.csv",
+          resolveHeaders: async () => {
+            throw new Error("secret missing");
+          },
+        },
+        parse: () => sampleRows,
+      },
+    };
+
+    const ctx = buildPoiJobContext({
+      source,
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      fetch: fetchImpl,
+    });
+    const result = await runStaticIngest(ctx);
+
+    expect(result.status).toBe("error");
+    expect(result.stages[0]?.stage).toBe("fetch");
+    expect(result.stages[0]?.status).toBe("error");
+    expect(result.stages[0]?.message).toContain("secret missing");
+  });
+});
+
 describe("pipeline persistence hook", () => {
   it("invokes onStageComplete for every completed stage and swallows hook errors", async () => {
     const sqlRec = makeFakeSql();

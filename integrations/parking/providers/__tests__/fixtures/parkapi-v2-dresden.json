@@ -1,0 +1,29 @@
+{
+  "lots": [
+    {
+      "id": "altmarkt",
+      "name": "Altmarkt Galerie",
+      "address": "Webergasse 1",
+      "coords": { "lat": 51.05, "lng": 13.737 },
+      "total": 460,
+      "free": 120,
+      "lot_type": "Tiefgarage",
+      "state": "open"
+    },
+    {
+      "id": "centrum",
+      "name": "Centrum Galerie",
+      "coords": { "lat": 51.048, "lng": 13.738 },
+      "total": 1100,
+      "lot_type": "Parkhaus",
+      "state": "open"
+    },
+    {
+      "id": "no-coords",
+      "name": "Mystery Lot",
+      "total": 50,
+      "lot_type": "Parkplatz",
+      "state": "open"
+    }
+  ]
+}

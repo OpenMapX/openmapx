@@ -1,0 +1,61 @@
+{
+  "total_count": 3,
+  "results": [
+    {
+      "published": "2026-05-01T10:00:00+00:00",
+      "free": 120,
+      "total": 500,
+      "auslastungen": 76,
+      "id": "1",
+      "id2": "city-parking",
+      "title": "City Parking",
+      "name": "city-parking",
+      "address": "Steinenberg 1",
+      "link": "https://example.test/city",
+      "geo_point_2d": { "lon": 7.585, "lat": 47.555 },
+      "description": "Central garage"
+    },
+    {
+      "published": "2026-05-01T10:00:00+00:00",
+      "free": 0,
+      "total": 200,
+      "auslastungen": 100,
+      "id": "2",
+      "id2": "bahnhof-sbb",
+      "title": "Bahnhof SBB",
+      "name": "bahnhof-sbb",
+      "address": null,
+      "link": null,
+      "geo_point_2d": { "lon": 7.589, "lat": 47.547 },
+      "description": null
+    },
+    {
+      "published": "2026-05-01T10:00:00+00:00",
+      "free": 50,
+      "total": 0,
+      "auslastungen": null,
+      "id": "3",
+      "id2": "rosental",
+      "title": "",
+      "name": "rosental",
+      "address": "Rosentalstrasse 7",
+      "link": "https://example.test/rosental",
+      "geo_point_2d": { "lon": 7.6, "lat": 47.57 },
+      "description": null
+    },
+    {
+      "published": "2026-05-01T10:00:00+00:00",
+      "free": 33,
+      "total": 100,
+      "auslastungen": 67,
+      "id": "4",
+      "id2": "no-coords",
+      "title": "Missing Coords",
+      "name": "no-coords",
+      "address": null,
+      "link": null,
+      "geo_point_2d": null,
+      "description": null
+    }
+  ]
+}

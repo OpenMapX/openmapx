@@ -1,46 +1,40 @@
 import type { BoundingBox } from "@openmapx/core";
+import { createTwoTierPoiReader } from "@openmapx/integration-framework";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
-import { fetchMobidromSites, filterByBbox, mapMobidromSite } from "./mobidrom-common.js";
+import type { BBox } from "@openmapx/poi-source-registry";
+import { getRuntimeContext } from "../runtime.js";
+import { makeMobidromMapper, mergeMobidromLive } from "./mobidrom-mapper.js";
 
 /**
- * APCOA Deutschland GmbH parking facilities via NRW Mobidrom.
- *
- * Operator feed covering APCOA-managed garages. Currently published as an
- * empty array but the schema matches the Mobidrom Parking Light profile.
- * No geographic restriction is applied since APCOA operates across Europe.
+ * APCOA Deutschland operator feed thin wrapper. No geographic coverage gate —
+ * APCOA operates across Europe and the feed is currently small (often empty)
+ * so an early-return short-circuit isn't worth the maintenance.
  */
 
-const API_URL =
-  "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parking-apcoa.json";
-const CACHE_TTL = 6 * 60 * 60 * 1000;
+const STATION_ID_PREFIX = "apcoa:";
 const OPERATOR_NAME = "APCOA Deutschland GmbH";
 
-let cache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
+const reader = createTwoTierPoiReader<ParkingFacility>({
+  sourceId: "apcoa",
+  mapStatic: makeMobidromMapper({
+    sourceId: "apcoa",
+    idPrefix: "apcoa",
+    operatorName: OPERATOR_NAME,
+  }),
+  mergeWithLive: mergeMobidromLive,
+});
 
-async function fetchAllFacilities(): Promise<ParkingFacility[]> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL) return cache.facilities;
-
-  const sites = await fetchMobidromSites(API_URL, CACHE_TTL);
-  const facilities: ParkingFacility[] = [];
-  for (const site of sites) {
-    const facility = mapMobidromSite(site, {
-      idPrefix: "apcoa",
-      sourceId: "apcoa",
-      operatorName: OPERATOR_NAME,
-    });
-    if (facility) facilities.push(facility);
-  }
-
-  cache = { facilities, fetchedAt: Date.now() };
-  return facilities;
+function toBboxTuple(b: BoundingBox): BBox {
+  return [b.west, b.south, b.east, b.north];
 }
 
 export async function searchApcoa(bbox: BoundingBox): Promise<ParkingFacility[]> {
-  const all = await fetchAllFacilities();
-  return filterByBbox(all, bbox);
+  return reader.search(getRuntimeContext(), toBboxTuple(bbox));
 }
 
 export async function fetchApcoaDetail(externalId: string): Promise<ParkingFacility | null> {
-  const all = await fetchAllFacilities();
-  return all.find((f) => f.id === `apcoa:${externalId}`) ?? null;
+  const poiId = externalId.startsWith(STATION_ID_PREFIX)
+    ? externalId.slice(STATION_ID_PREFIX.length)
+    : externalId;
+  return reader.fetchDetail(getRuntimeContext(), poiId);
 }

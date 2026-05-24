@@ -1,0 +1,65 @@
+[
+  {
+    "id": "100",
+    "name": [
+      { "name": "Berlin Hbf P1 (Display)", "context": "DISPLAY" },
+      { "name": "Berlin Hbf P1", "context": "NAME" }
+    ],
+    "url": "https://www.bahnpark.de/p100",
+    "type": { "name": "Parkhaus" },
+    "operator": { "name": "DB BahnPark", "url": "https://www.bahnpark.de" },
+    "address": {
+      "streetAndNumber": "Europaplatz 1",
+      "zip": "10557",
+      "city": "Berlin",
+      "location": { "latitude": 52.525, "longitude": 13.369 }
+    },
+    "station": { "name": "Berlin Hbf" },
+    "capacity": [
+      { "type": "PARKING", "total": "920" },
+      { "type": "HANDICAPPED_PARKING", "total": "16" }
+    ],
+    "access": {
+      "outOfService": { "isOutOfService": false },
+      "openingHours": { "is24h": true },
+      "restrictions": { "clearance": { "height": "200" } }
+    },
+    "equipment": { "charging": { "hasChargingStation": true, "details": "6 chargers" } },
+    "tariff": {
+      "information": { "dynamic": { "tariffPaymentOptions": "Coin, Card, App" } },
+      "prices": [
+        { "group": { "groupName": "standard" }, "duration": "1hour", "price": 3.0 },
+        { "group": { "groupName": "standard" }, "duration": "1day", "price": 18.0 },
+        { "group": { "groupName": "monthly" }, "duration": "1monthLongTerm", "price": 140.0 }
+      ]
+    }
+  },
+  {
+    "id": "200",
+    "name": [{ "name": "Hamburg Altona P+R", "context": "NAME" }],
+    "type": { "name": "P+R-Anlage" },
+    "operator": { "name": "DB BahnPark" },
+    "address": {
+      "streetAndNumber": "Scheel-Plessen-Str.",
+      "zip": "22765",
+      "city": "Hamburg",
+      "location": { "latitude": 53.5527, "longitude": 9.9351 }
+    },
+    "station": { "name": "Hamburg-Altona" },
+    "capacity": [{ "type": "PARKING", "total": "400" }],
+    "access": { "outOfService": { "isOutOfService": false } },
+    "tariff": { "prices": [] }
+  },
+  {
+    "id": "300",
+    "name": [{ "name": "Munchen Hbf Tiefgarage", "context": "NAME" }],
+    "type": { "name": "Tiefgarage" },
+    "operator": { "name": "DB BahnPark" },
+    "address": {
+      "city": "Munchen",
+      "location": { "latitude": 48.14, "longitude": 11.558 }
+    },
+    "capacity": [{ "type": "PARKING", "total": "0" }],
+    "access": { "outOfService": { "isOutOfService": true } }
+  }
+]

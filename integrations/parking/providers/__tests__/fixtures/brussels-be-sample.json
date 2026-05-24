@@ -1,0 +1,53 @@
+{
+  "total_count": 3,
+  "results": [
+    {
+      "name_fr": "Parking 58",
+      "name_nl": "Parking 58",
+      "adressee": "Rue de l'Évêque 1",
+      "adres_": "Bisschopsstraat 1",
+      "geo_point_2d": { "lon": 4.351, "lat": 50.848 },
+      "operator_fr": "Interparking",
+      "contact_mail": null,
+      "contact_phone": null,
+      "capacity": 800,
+      "disabledcapacity": 12,
+      "floors": 5,
+      "maxwidth": null,
+      "maxheight": 2.0,
+      "commune_gemeente": "Bruxelles"
+    },
+    {
+      "name_fr": "Parking Albertine",
+      "name_nl": null,
+      "adressee": "Boulevard de l'Empereur 6",
+      "adres_": null,
+      "geo_point_2d": { "lon": 4.357, "lat": 50.844 },
+      "operator_fr": null,
+      "contact_mail": null,
+      "contact_phone": null,
+      "capacity": 365,
+      "disabledcapacity": null,
+      "floors": null,
+      "maxwidth": null,
+      "maxheight": 195,
+      "commune_gemeente": "Bruxelles"
+    },
+    {
+      "name_fr": null,
+      "name_nl": null,
+      "adressee": null,
+      "adres_": null,
+      "geo_point_2d": null,
+      "operator_fr": null,
+      "contact_mail": null,
+      "contact_phone": null,
+      "capacity": null,
+      "disabledcapacity": null,
+      "floors": null,
+      "maxwidth": null,
+      "maxheight": null,
+      "commune_gemeente": null
+    }
+  ]
+}

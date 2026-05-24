@@ -1,0 +1,34 @@
+{
+  "result": {
+    "records": [
+      {
+        "car_park_no": "ACB",
+        "address": "BLK 270/271 ALBERT CENTRE BASEMENT CAR PARK",
+        "x_coord": "30314.7936",
+        "y_coord": "31490.4942",
+        "car_park_type": "BASEMENT CAR PARK",
+        "type_of_parking_system": "ELECTRONIC PARKING",
+        "short_term_parking": "WHOLE DAY",
+        "free_parking": "NO",
+        "night_parking": "YES",
+        "car_park_decks": 1,
+        "gantry_height": 1.8,
+        "car_park_basement": "Y"
+      },
+      {
+        "car_park_no": "BBB",
+        "address": "BLK 401 BUKIT BATOK WEST AVE 8",
+        "x_coord": "16207.8147",
+        "y_coord": "37976.93",
+        "car_park_type": "SURFACE CAR PARK",
+        "type_of_parking_system": "ELECTRONIC PARKING",
+        "short_term_parking": "WHOLE DAY",
+        "free_parking": "SUN & PH FR 7AM-10.30PM",
+        "night_parking": "YES",
+        "car_park_decks": 0,
+        "gantry_height": 0,
+        "car_park_basement": "N"
+      }
+    ]
+  }
+}

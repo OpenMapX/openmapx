@@ -1,0 +1,10 @@
+[
+  {
+    "areamanagerid": "200",
+    "areaid": "P1",
+    "areadesc": "Station P+R",
+    "location": { "latitude": "52.10", "longitude": "5.12" },
+    "usageid": "PARKRIDE",
+    "aantal_parkeer_plaatsen": "120"
+  }
+]

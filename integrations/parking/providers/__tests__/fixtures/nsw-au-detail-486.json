@@ -1,0 +1,24 @@
+{
+  "tsn": "2155486",
+  "time": "1",
+  "spots": "225",
+  "zones": [],
+  "ParkID": "486",
+  "location": {
+    "suburb": "Ashfield",
+    "address": "Ashfield Mall",
+    "latitude": "-33.8875",
+    "longitude": "151.1255"
+  },
+  "occupancy": {
+    "loop": null,
+    "total": "200",
+    "monthlies": null,
+    "open_gate": null,
+    "transients": null
+  },
+  "MessageDate": "2024-11-25T11:09:00",
+  "facility_id": "486",
+  "facility_name": "Park&Ride - Ashfield",
+  "tfnsw_facility_id": "2155486TPR001"
+}

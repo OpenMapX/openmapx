@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "scode": "BZ-001",
+      "sname": "Parkhaus Bozen",
+      "scoordinate": { "x": 11.34, "y": 46.5, "srid": 4326 },
+      "smetadata": {
+        "name_en": "Bolzano Parking Centre",
+        "capacity": 480,
+        "municipality": "Bolzano",
+        "netex_parking": { "layout": "multiStorey", "charging": true }
+      }
+    },
+    {
+      "scode": "MR-014",
+      "sname": "Parking Meran",
+      "scoordinate": { "x": 11.16, "y": 46.67, "srid": 4326 },
+      "smetadata": {
+        "name_de": "Parkhaus Meran",
+        "capacity": 250,
+        "municipality": "Meran",
+        "netex_parking": { "layout": "underground" }
+      }
+    },
+    {
+      "scode": "BR-007",
+      "sname": "Brixen Park",
+      "scoordinate": { "x": 11.66, "y": 46.71, "srid": 4326 },
+      "smetadata": {
+        "capacity": 120,
+        "standard_name": "Brixen Park",
+        "municipality": "Brixen",
+        "netex_parking": { "layout": "openSpace" }
+      }
+    },
+    {
+      "scode": "INVALID",
+      "sname": "Bad coords",
+      "scoordinate": { "x": null, "y": null, "srid": 4326 },
+      "smetadata": {}
+    }
+  ]
+}

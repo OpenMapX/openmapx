@@ -1,0 +1,68 @@
+{
+  "features": [
+    {
+      "id": "bern-pr",
+      "geometry": {
+        "geometries": [{ "type": "Point", "coordinates": [7.4391, 46.9489] }]
+      },
+      "properties": {
+        "address": {
+          "addressLine": "Bahnhofplatz 10",
+          "city": "Bern",
+          "postalCode": "3001"
+        },
+        "additionalInformationForCustomers": "Covered parking",
+        "callToAction": {
+          "externalDesktop": { "en": "https://parking.example/bern-pr" }
+        },
+        "capacities": [
+          { "categoryType": "DEFAULT", "total": 100 },
+          { "categoryType": "WITH_CHARGING_STATION", "total": 8 },
+          { "categoryType": "DISABLED_PARKING_SPACE", "total": 4 }
+        ],
+        "currentEstimatedOccupancy": 0.25,
+        "displayName": "Bern Park+Rail",
+        "operationTime": {
+          "daysOfWeek": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"],
+          "operatingFrom": "00:00:00",
+          "operatingTo": "00:00:00"
+        },
+        "operator": "SBB",
+        "parkingFacilityCategory": "CAR",
+        "parkingFacilityType": "PARK_AND_RAIL",
+        "pricingModel": {
+          "maximumDayPrice": 2400,
+          "monthlyTicketPrice": 12000,
+          "priceSegments": [{ "startingFrom": 60, "price": 200 }]
+        },
+        "publicAccess": true
+      }
+    },
+    {
+      "id": "zurich-ug",
+      "geometry": {
+        "geometries": [{ "type": "Point", "coordinates": [8.541, 47.376] }]
+      },
+      "properties": {
+        "capacities": [{ "categoryType": "DEFAULT", "total": 200 }],
+        "displayName": "Zurich Underground",
+        "parkingFacilityCategory": "CAR",
+        "parkingFacilityType": "UNDERGROUND",
+        "publicAccess": true
+      }
+    },
+    {
+      "id": "bern-bike",
+      "geometry": {
+        "geometries": [{ "type": "Point", "coordinates": [7.44, 46.95] }]
+      },
+      "properties": {
+        "capacities": [{ "categoryType": "DEFAULT", "total": 24 }],
+        "displayName": "Bern Bike Parking",
+        "parkingFacilityCategory": "BIKE",
+        "parkingFacilityType": "BIKE_PARKING",
+        "publicAccess": true
+      }
+    }
+  ]
+}

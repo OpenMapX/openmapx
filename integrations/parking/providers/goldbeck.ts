@@ -1,45 +1,40 @@
 import type { BoundingBox } from "@openmapx/core";
+import { createTwoTierPoiReader } from "@openmapx/integration-framework";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
-import { fetchMobidromSites, filterByBbox, mapMobidromSite } from "./mobidrom-common.js";
+import type { BBox } from "@openmapx/poi-source-registry";
+import { getRuntimeContext } from "../runtime.js";
+import { makeMobidromMapper, mergeMobidromLive } from "./mobidrom-mapper.js";
 
 /**
- * GOLDBECK Parking Services GmbH feed via NRW Mobidrom.
- *
- * Static operator data for ~50 garages across Germany (currently NRW-heavy
- * but not geographically restricted). No real-time occupancy.
+ * GOLDBECK Parking Services operator feed thin wrapper. No coverage gate —
+ * the operator is mostly NRW-resident but not formally constrained, and the
+ * dataset is small enough that a Germany-wide DB roundtrip is acceptable.
  */
 
-const API_URL =
-  "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-goldbeck-parking-services.json";
-const CACHE_TTL = 6 * 60 * 60 * 1000;
+const STATION_ID_PREFIX = "goldbeck:";
 const OPERATOR_NAME = "GOLDBECK Parking Services GmbH";
 
-let cache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
+const reader = createTwoTierPoiReader<ParkingFacility>({
+  sourceId: "goldbeck",
+  mapStatic: makeMobidromMapper({
+    sourceId: "goldbeck",
+    idPrefix: "goldbeck",
+    operatorName: OPERATOR_NAME,
+  }),
+  mergeWithLive: mergeMobidromLive,
+});
 
-async function fetchAllFacilities(): Promise<ParkingFacility[]> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL) return cache.facilities;
-
-  const sites = await fetchMobidromSites(API_URL, CACHE_TTL);
-  const facilities: ParkingFacility[] = [];
-  for (const site of sites) {
-    const facility = mapMobidromSite(site, {
-      idPrefix: "goldbeck",
-      sourceId: "goldbeck",
-      operatorName: OPERATOR_NAME,
-    });
-    if (facility) facilities.push(facility);
-  }
-
-  cache = { facilities, fetchedAt: Date.now() };
-  return facilities;
+function toBboxTuple(b: BoundingBox): BBox {
+  return [b.west, b.south, b.east, b.north];
 }
 
 export async function searchGoldbeck(bbox: BoundingBox): Promise<ParkingFacility[]> {
-  const all = await fetchAllFacilities();
-  return filterByBbox(all, bbox);
+  return reader.search(getRuntimeContext(), toBboxTuple(bbox));
 }
 
 export async function fetchGoldbeckDetail(externalId: string): Promise<ParkingFacility | null> {
-  const all = await fetchAllFacilities();
-  return all.find((f) => f.id === `goldbeck:${externalId}`) ?? null;
+  const poiId = externalId.startsWith(STATION_ID_PREFIX)
+    ? externalId.slice(STATION_ID_PREFIX.length)
+    : externalId;
+  return reader.fetchDetail(getRuntimeContext(), poiId);
 }

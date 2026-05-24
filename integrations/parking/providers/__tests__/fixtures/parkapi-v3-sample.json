@@ -1,0 +1,67 @@
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "Kongressgarage",
+      "address": "Königstr. 1, 70173 Stuttgart",
+      "lat": "48.7758",
+      "lon": "9.1829",
+      "capacity": 80,
+      "realtime_free_capacity": 120,
+      "purpose": "CAR",
+      "source_uid": "bw",
+      "type": "UNDERGROUND",
+      "has_realtime_data": true,
+      "has_fee": true,
+      "fee_description": "1h: 2,00 EUR",
+      "opening_hours": "Mo-So 00:00-24:00",
+      "operator_name": "APCOA",
+      "public_url": "https://example.test/kongressgarage",
+      "capacity_disabled": 3,
+      "capacity_charging": 2,
+      "max_height": 200,
+      "static_data_updated_at": "2026-05-06T08:00:00.000Z",
+      "realtime_data_updated_at": "2026-05-06T11:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "Bike box",
+      "lat": "48.776",
+      "lon": "9.183",
+      "capacity": 20,
+      "purpose": "BIKE",
+      "source_uid": "bw",
+      "type": "BIKE_BOX"
+    },
+    {
+      "id": 3,
+      "name": "Bahnhof Parkhaus",
+      "lat": "48.7",
+      "lon": "9.1",
+      "capacity": 40,
+      "purpose": "CAR",
+      "source_uid": "rail",
+      "type": "CAR_PARK",
+      "has_realtime_data": true,
+      "realtime_free_capacity": -5,
+      "realtime_data_updated_at": "2026-05-06T11:55:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "Surface Lot Schloss",
+      "lat": "48.781",
+      "lon": "9.182",
+      "capacity": 60,
+      "purpose": "CAR",
+      "source_uid": "rail",
+      "type": "OFF_STREET_PARKING_GROUND",
+      "has_fee": false
+    },
+    {
+      "id": 5,
+      "name": "Missing coords",
+      "purpose": "CAR",
+      "source_uid": "bw"
+    }
+  ]
+}

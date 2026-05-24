@@ -1,0 +1,21 @@
+{
+  "cities": {
+    "Dresden": {
+      "coords": { "lat": 51.05, "lng": 13.74 },
+      "url": "https://dresden.example",
+      "source": "Dresden Mobile",
+      "attribution": { "contributor": "Stadt Dresden", "url": "https://dresden.de" },
+      "active_support": true
+    },
+    "Munich": {
+      "coords": { "lat": 48.13, "lng": 11.58 },
+      "url": "https://munich.example",
+      "active_support": true
+    },
+    "Berlin": {
+      "coords": { "lat": 52.52, "lng": 13.41 },
+      "url": "https://berlin.example",
+      "active_support": false
+    }
+  }
+}

@@ -1,57 +1,41 @@
 import type { BoundingBox } from "@openmapx/core";
+import { createTwoTierPoiReader } from "@openmapx/integration-framework";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
-import {
-  bboxOverlaps,
-  fetchMobidromSites,
-  filterByBbox,
-  mapMobidromSite,
-} from "./mobidrom-common.js";
+import type { BBox } from "@openmapx/poi-source-registry";
+import { getRuntimeContext } from "../runtime.js";
+import { makeMobidromMapper, mergeMobidromLive } from "./mobidrom-mapper.js";
 
 /**
- * NRW Mobidrom bundled parking feed.
+ * NRW Mobidrom aggregate parking feed thin wrapper.
  *
- * Aggregate dataset covering Düsseldorf, Köln, Bielefeld, Krefeld, Wuppertal,
- * Aachen (APAG), plus static data for APCOA and GOLDBECK operator locations.
- * Real-time occupancy for participating cities; static for operator feeds.
- *
- * Format: DATEX II "Parking Light" JSON (`mobidp.parking.ParkingSite$Bean`).
- * License: Datenlizenz Deutschland Namensnennung 2.0 (dl-de-by-20-1).
- * Update frequency: every minute per CKAN metadata.
- * No authentication required.
+ * Static + per-poi live state now live in the POI ingest pipeline
+ * (poi_ingest.nrw_mobidrom_parking_static + Redis hash `poi:live:nrw-mobidrom-parking`);
+ * this file just bridges the parking provider chain to the shared two-tier reader.
  */
 
-const API_URL =
-  "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parken-nrw.json";
-const CACHE_TTL = 5 * 60 * 1000;
+const STATION_ID_PREFIX = "nrw:";
 
-const COVERAGE_BBOX: BoundingBox = { south: 50.32, west: 5.87, north: 52.53, east: 9.46 };
+const reader = createTwoTierPoiReader<ParkingFacility>({
+  sourceId: "nrw-mobidrom-parking",
+  mapStatic: makeMobidromMapper({
+    sourceId: "nrw-mobidrom-parking",
+    idPrefix: "nrw",
+  }),
+  mergeWithLive: mergeMobidromLive,
+  coverage: [5.87, 50.32, 9.46, 52.53],
+});
 
-let cache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
-
-async function fetchAllFacilities(): Promise<ParkingFacility[]> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL) return cache.facilities;
-
-  const sites = await fetchMobidromSites(API_URL, CACHE_TTL);
-  const facilities: ParkingFacility[] = [];
-  for (const site of sites) {
-    const facility = mapMobidromSite(site, {
-      idPrefix: "nrw",
-      sourceId: "nrw-mobidrom-parking",
-    });
-    if (facility) facilities.push(facility);
-  }
-
-  cache = { facilities, fetchedAt: Date.now() };
-  return facilities;
+function toBboxTuple(b: BoundingBox): BBox {
+  return [b.west, b.south, b.east, b.north];
 }
 
 export async function searchNrwMobidrom(bbox: BoundingBox): Promise<ParkingFacility[]> {
-  if (!bboxOverlaps(bbox, COVERAGE_BBOX)) return [];
-  const all = await fetchAllFacilities();
-  return filterByBbox(all, bbox);
+  return reader.search(getRuntimeContext(), toBboxTuple(bbox));
 }
 
 export async function fetchNrwMobidromDetail(externalId: string): Promise<ParkingFacility | null> {
-  const all = await fetchAllFacilities();
-  return all.find((f) => f.id === `nrw:${externalId}`) ?? null;
+  const poiId = externalId.startsWith(STATION_ID_PREFIX)
+    ? externalId.slice(STATION_ID_PREFIX.length)
+    : externalId;
+  return reader.fetchDetail(getRuntimeContext(), poiId);
 }

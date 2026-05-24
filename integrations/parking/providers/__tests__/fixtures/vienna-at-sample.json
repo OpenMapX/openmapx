@@ -1,0 +1,71 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [16.372, 48.208] },
+      "properties": {
+        "OBJECTID": 1,
+        "GARAGE_ID": "VIE-001",
+        "BETREIBER": "WIPARK",
+        "BEZEICHNUNG": "Garage Innere Stadt",
+        "PLZ": 1010,
+        "ORT": "Wien",
+        "ADRESSE": "Stephansplatz 1",
+        "WEBLINK_BETR_DE": "https://example.test/wipark",
+        "WEBLINK_BETR_EN": null,
+        "WEBLINK_WK_DE": null,
+        "WEBLINK_WK_EN": null,
+        "LONGITUDE": 16.372,
+        "LATITUDE": 48.208,
+        "PARK_AND_RIDE": "N",
+        "BEHINDERTENPARKPL": "Y",
+        "SE_ANNO_CAD_DATA": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [16.42, 48.19] },
+      "properties": {
+        "OBJECTID": 2,
+        "GARAGE_ID": "VIE-PR-002",
+        "BETREIBER": null,
+        "BEZEICHNUNG": "P+R Erdberg",
+        "PLZ": 1030,
+        "ORT": "Wien",
+        "ADRESSE": "Erdbergstraße 200",
+        "WEBLINK_BETR_DE": null,
+        "WEBLINK_BETR_EN": null,
+        "WEBLINK_WK_DE": "https://example.test/wk",
+        "WEBLINK_WK_EN": null,
+        "LONGITUDE": 16.42,
+        "LATITUDE": 48.19,
+        "PARK_AND_RIDE": "Y",
+        "BEHINDERTENPARKPL": "N",
+        "SE_ANNO_CAD_DATA": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [16.5, 48.2] },
+      "properties": {
+        "OBJECTID": 3,
+        "GARAGE_ID": "VIE-003",
+        "BETREIBER": "Apcoa",
+        "BEZEICHNUNG": "",
+        "PLZ": null,
+        "ORT": null,
+        "ADRESSE": null,
+        "WEBLINK_BETR_DE": null,
+        "WEBLINK_BETR_EN": null,
+        "WEBLINK_WK_DE": null,
+        "WEBLINK_WK_EN": null,
+        "LONGITUDE": 16.5,
+        "LATITUDE": 48.2,
+        "PARK_AND_RIDE": "N",
+        "BEHINDERTENPARKPL": "N",
+        "SE_ANNO_CAD_DATA": null
+      }
+    }
+  ]
+}

@@ -62,6 +62,17 @@ export async function run(ctx: PoiJobContext): Promise<PoiIngestStageResult> {
       throw new Error("no fetch implementation available (globalThis.fetch is undefined)");
     }
 
+    // Static `headers` first, then async `resolveHeaders` — letting the
+    // resolved values win on conflict so per-source env-based auth (UTMC
+    // Basic, DB BahnPark, NSW) can override a placeholder declared in the
+    // PoiSource manifest. A resolveHeaders throw surfaces as a fetch-stage
+    // error via the outer try/catch — same path as URL resolution failures.
+    const headers: Record<string, string> = { ...(fetchSpec.headers ?? {}) };
+    if (fetchSpec.resolveHeaders) {
+      const resolved = await fetchSpec.resolveHeaders(ctx.logger);
+      Object.assign(headers, resolved);
+    }
+
     const timeoutMs = fetchSpec.timeoutMs ?? 60_000;
     // Compose timeout with the caller's abort signal so an external cancel
     // also tears down the in-flight HTTP request.
@@ -74,7 +85,7 @@ export async function run(ctx: PoiJobContext): Promise<PoiIngestStageResult> {
           : timeoutSignal;
 
     const response = await fetchImpl(url, {
-      headers: fetchSpec.headers,
+      headers,
       signal: composed,
     });
 

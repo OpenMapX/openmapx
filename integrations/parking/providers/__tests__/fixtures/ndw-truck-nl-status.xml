@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d2LogicalModel>
+  <payloadPublication>
+    <parkingRecordStatus>
+      <parkingRecordReference id="NL-TRK-001" />
+      <parkingStatusOriginTime>2026-05-23T11:00:00.000Z</parkingStatusOriginTime>
+      <parkingSiteStatus>open</parkingSiteStatus>
+      <parkingOccupancy>
+        <parkingNumberOfVacantSpaces>34</parkingNumberOfVacantSpaces>
+      </parkingOccupancy>
+    </parkingRecordStatus>
+    <parkingRecordStatus>
+      <parkingRecordReference id="NL-TRK-002" />
+      <parkingStatusOriginTime>2026-05-23T11:00:00.000Z</parkingStatusOriginTime>
+      <parkingSiteStatus>closed</parkingSiteStatus>
+    </parkingRecordStatus>
+  </payloadPublication>
+</d2LogicalModel>

@@ -1,109 +1,35 @@
 import type { BoundingBox } from "@openmapx/core";
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import { createTwoTierPoiReader } from "@openmapx/integration-framework";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
+import type { BBox } from "@openmapx/poi-source-registry";
+import { getRuntimeContext } from "../runtime.js";
+import { mapBaselPayload, mergeBaselLive } from "./basel-ch-mapper.js";
 
 /**
- * Basel (Switzerland) real-time parking garage client.
+ * Basel-Stadt parking garages thin wrapper.
  *
- * Uses the Kanton Basel-Stadt Opendatasoft v2.1 API for real-time parking
- * garage occupancy data. ~20 garages with live availability updates.
- *
- * License: CC BY 4.0. No authentication required.
+ * Static metadata + per-garage live `freeSpaces` now flow through the POI
+ * ingest pipeline (`poi_ingest.basel_ch_static` + Redis hash `poi:live:basel-ch`).
  */
 
-interface BaselRecord {
-  published: string;
-  free: number;
-  total: number;
-  auslastungen: number | null;
-  id: string;
-  id2: string;
-  title: string;
-  name: string;
-  address: string | null;
-  link: string | null;
-  geo_point_2d: { lon: number; lat: number } | null;
-  description: string | null;
-}
+const STATION_ID_PREFIX = "basel:";
 
-interface BaselResponse {
-  total_count: number;
-  results: BaselRecord[];
-}
+const reader = createTwoTierPoiReader<ParkingFacility>({
+  sourceId: "basel-ch",
+  mapStatic: mapBaselPayload,
+  mergeWithLive: mergeBaselLive,
+  coverage: [7.55, 47.52, 7.65, 47.6],
+});
 
-const API_URL = "https://data.bs.ch/api/explore/v2.1/catalog/datasets/100014/records?limit=100";
-const CACHE_TTL = 2 * 60 * 1000; // 2 min — real-time data
-
-const COVERAGE_BBOX = { south: 47.52, west: 7.55, north: 47.6, east: 7.65 };
-
-let listCache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
-
-function overlapsCoverage(bbox: BoundingBox): boolean {
-  return (
-    bbox.south <= COVERAGE_BBOX.north &&
-    bbox.north >= COVERAGE_BBOX.south &&
-    bbox.west <= COVERAGE_BBOX.east &&
-    bbox.east >= COVERAGE_BBOX.west
-  );
-}
-
-function recordToFacility(record: BaselRecord): ParkingFacility | null {
-  const lng = record.geo_point_2d?.lon;
-  const lat = record.geo_point_2d?.lat;
-  if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) return null;
-
-  const capacity = record.total > 0 ? record.total : undefined;
-  const freeSpaces = record.free != null && record.free >= 0 ? record.free : undefined;
-
-  return {
-    id: `basel:${record.id2}`,
-    name: record.title || record.name || "Parking",
-    coordinates: [lng, lat],
-    sources: ["basel-ch"],
-    parkingType: "garage" as ParkingType,
-    capacity,
-    freeSpaces,
-    hasRealtimeData: true,
-    fee: "paid",
-    address: record.address ?? undefined,
-    url: record.link ?? undefined,
-  };
-}
-
-async function fetchAllFacilities(): Promise<ParkingFacility[]> {
-  if (listCache && Date.now() - listCache.fetchedAt < CACHE_TTL) {
-    return listCache.facilities;
-  }
-
-  const res = await fetch(API_URL, { signal: AbortSignal.timeout(10_000) });
-
-  if (!res.ok) {
-    if (listCache) return listCache.facilities;
-    throw new Error(`Basel parking failed: ${res.status}`);
-  }
-
-  const data = (await res.json()) as BaselResponse;
-
-  const facilities: ParkingFacility[] = [];
-  for (const record of data.results) {
-    const facility = recordToFacility(record);
-    if (facility) facilities.push(facility);
-  }
-
-  listCache = { facilities, fetchedAt: Date.now() };
-  return facilities;
+function toBboxTuple(b: BoundingBox): BBox {
+  return [b.west, b.south, b.east, b.north];
 }
 
 export async function searchBaselCh(bbox: BoundingBox): Promise<ParkingFacility[]> {
-  if (!overlapsCoverage(bbox)) return [];
-
-  const allFacilities = await fetchAllFacilities();
-  return allFacilities.filter((f) => {
-    const [lng, lat] = f.coordinates;
-    return lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east;
-  });
+  return reader.search(getRuntimeContext(), toBboxTuple(bbox));
 }
 
 export async function fetchBaselChDetail(id: string): Promise<ParkingFacility | null> {
-  const allFacilities = await fetchAllFacilities();
-  return allFacilities.find((f) => f.id === `basel:${id}`) ?? null;
+  const poiId = id.startsWith(STATION_ID_PREFIX) ? id.slice(STATION_ID_PREFIX.length) : id;
+  return reader.fetchDetail(getRuntimeContext(), poiId);
 }

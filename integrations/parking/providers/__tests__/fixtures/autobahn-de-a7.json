@@ -1,0 +1,24 @@
+{
+  "parking_lorry": [
+    {
+      "identifier": "A7-RAST-010",
+      "isBlocked": "false",
+      "future": false,
+      "subtitle": "Rastplatz Hamburg-Stillhorn",
+      "title": "Hamburg-Stillhorn",
+      "coordinate": { "long": "10.04", "lat": "53.485" },
+      "description": ["PKW Stellplätze: 80", "LKW Stellplätze: 40"],
+      "lorryParkingFeatureIcons": []
+    },
+    {
+      "identifier": "A1-RAST-001",
+      "isBlocked": "false",
+      "future": false,
+      "subtitle": "Duplicate of A1",
+      "title": "Duplicate",
+      "coordinate": { "long": "7.6075", "lat": "51.9412" },
+      "description": ["PKW Stellplätze: 999"],
+      "lorryParkingFeatureIcons": []
+    }
+  ]
+}

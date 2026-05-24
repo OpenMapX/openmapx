@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "timestamp": "2026-05-23T10:00:00+08:00",
+      "carpark_data": [
+        {
+          "carpark_number": "ACB",
+          "update_datetime": "2026-05-23T09:59:30",
+          "carpark_info": [
+            { "total_lots": "120", "lot_type": "C", "lots_available": "45" },
+            { "total_lots": "10", "lot_type": "Y", "lots_available": "3" }
+          ]
+        },
+        {
+          "carpark_number": "BBB",
+          "update_datetime": "2026-05-23T09:59:35",
+          "carpark_info": [{ "total_lots": "60", "lot_type": "C", "lots_available": "20" }]
+        }
+      ]
+    }
+  ]
+}

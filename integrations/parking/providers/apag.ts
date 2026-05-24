@@ -1,54 +1,42 @@
 import type { BoundingBox } from "@openmapx/core";
+import { createTwoTierPoiReader } from "@openmapx/integration-framework";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
-import {
-  bboxOverlaps,
-  fetchMobidromSites,
-  filterByBbox,
-  mapMobidromSite,
-} from "./mobidrom-common.js";
+import type { BBox } from "@openmapx/poi-source-registry";
+import { getRuntimeContext } from "../runtime.js";
+import { makeMobidromMapper, mergeMobidromLive } from "./mobidrom-mapper.js";
 
 /**
- * APAG - Aachener Parkhaus GmbH feed via NRW Mobidrom.
+ * APAG (Aachener Parkhaus GmbH) operator feed thin wrapper.
  *
- * Operator-managed garages in Aachen with real-time occupancy. Only ~20 sites
- * but all report live `availableSpaces`, making this richer than the aggregate
- * `parken-nrw` feed's APAG subset (which has static data only).
+ * Richer than the APAG subset of the aggregate `parken-nrw` feed because
+ * this operator endpoint reports live `availableSpaces` for every site.
  */
 
-const API_URL =
-  "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-apag.json";
-const CACHE_TTL = 5 * 60 * 1000;
+const STATION_ID_PREFIX = "apag:";
 const OPERATOR_NAME = "APAG - Aachener Parkhaus GmbH";
 
-const COVERAGE_BBOX: BoundingBox = { south: 50.65, west: 5.9, north: 50.9, east: 6.3 };
+const reader = createTwoTierPoiReader<ParkingFacility>({
+  sourceId: "apag",
+  mapStatic: makeMobidromMapper({
+    sourceId: "apag",
+    idPrefix: "apag",
+    operatorName: OPERATOR_NAME,
+  }),
+  mergeWithLive: mergeMobidromLive,
+  coverage: [5.9, 50.65, 6.3, 50.9],
+});
 
-let cache: { facilities: ParkingFacility[]; fetchedAt: number } | null = null;
-
-async function fetchAllFacilities(): Promise<ParkingFacility[]> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL) return cache.facilities;
-
-  const sites = await fetchMobidromSites(API_URL, CACHE_TTL);
-  const facilities: ParkingFacility[] = [];
-  for (const site of sites) {
-    const facility = mapMobidromSite(site, {
-      idPrefix: "apag",
-      sourceId: "apag",
-      operatorName: OPERATOR_NAME,
-    });
-    if (facility) facilities.push(facility);
-  }
-
-  cache = { facilities, fetchedAt: Date.now() };
-  return facilities;
+function toBboxTuple(b: BoundingBox): BBox {
+  return [b.west, b.south, b.east, b.north];
 }
 
 export async function searchApag(bbox: BoundingBox): Promise<ParkingFacility[]> {
-  if (!bboxOverlaps(bbox, COVERAGE_BBOX)) return [];
-  const all = await fetchAllFacilities();
-  return filterByBbox(all, bbox);
+  return reader.search(getRuntimeContext(), toBboxTuple(bbox));
 }
 
 export async function fetchApagDetail(externalId: string): Promise<ParkingFacility | null> {
-  const all = await fetchAllFacilities();
-  return all.find((f) => f.id === `apag:${externalId}`) ?? null;
+  const poiId = externalId.startsWith(STATION_ID_PREFIX)
+    ? externalId.slice(STATION_ID_PREFIX.length)
+    : externalId;
+  return reader.fetchDetail(getRuntimeContext(), poiId);
 }

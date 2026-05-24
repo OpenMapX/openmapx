@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d2LogicalModel>
+  <payloadPublication>
+    <parkingTable>
+      <parkingRecord id="NL-TRK-001">
+        <parkingName>
+          <values>
+            <value lang="en">Truckparking Maasvlakte</value>
+          </values>
+        </parkingName>
+        <parkingLocation>
+          <pointByCoordinates>
+            <pointCoordinates>
+              <latitude>51.95</latitude>
+              <longitude>4.05</longitude>
+            </pointCoordinates>
+          </pointByCoordinates>
+        </parkingLocation>
+        <groupOfParkingSpaces>
+          <parkingNumberOfSpaces>110</parkingNumberOfSpaces>
+        </groupOfParkingSpaces>
+        <tariffsAndPayment>
+          <freeOfCharge>false</freeOfCharge>
+        </tariffsAndPayment>
+        <parkingEquipmentOrServiceFacility>
+          <equipmentOrServiceFacilityType>electricChargingStation</equipmentOrServiceFacilityType>
+        </parkingEquipmentOrServiceFacility>
+      </parkingRecord>
+      <parkingRecord id="NL-TRK-002">
+        <parkingName>
+          <values>
+            <value lang="en">Truckparking Venlo</value>
+          </values>
+        </parkingName>
+        <parkingLocation>
+          <pointByCoordinates>
+            <pointCoordinates>
+              <latitude>51.35</latitude>
+              <longitude>6.18</longitude>
+            </pointCoordinates>
+          </pointByCoordinates>
+        </parkingLocation>
+        <groupOfParkingSpaces>
+          <parkingNumberOfSpaces>60</parkingNumberOfSpaces>
+        </groupOfParkingSpaces>
+      </parkingRecord>
+    </parkingTable>
+  </payloadPublication>
+</d2LogicalModel>

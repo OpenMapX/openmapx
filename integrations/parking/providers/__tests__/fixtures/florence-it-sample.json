@@ -1,0 +1,34 @@
+[
+  {
+    "Id": "1",
+    "Name": "Parterre",
+    "FreeSpot": "200",
+    "UpdateDate": "2026-05-01T10:00:00Z",
+    "Latitude": "43.7825",
+    "Longitude": "11.2625"
+  },
+  {
+    "Id": "2",
+    "Name": "Sant'Ambrogio",
+    "FreeSpot": "0",
+    "UpdateDate": "2026-05-01T10:00:00Z",
+    "Latitude": "43.770",
+    "Longitude": "11.270"
+  },
+  {
+    "Id": "3",
+    "Name": "Beccaria",
+    "FreeSpot": "-1",
+    "UpdateDate": "2026-05-01T10:00:00Z",
+    "Latitude": "43.768",
+    "Longitude": "11.265"
+  },
+  {
+    "Id": "4",
+    "Name": "Invalid",
+    "FreeSpot": "nope",
+    "UpdateDate": "2026-05-01T10:00:00Z",
+    "Latitude": "NaN",
+    "Longitude": "11.0"
+  }
+]

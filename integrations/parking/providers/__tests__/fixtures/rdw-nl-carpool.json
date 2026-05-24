@@ -1,0 +1,11 @@
+[
+  {
+    "areamanagerid": "300",
+    "areaid": "C1",
+    "areadesc": "Carpool A2",
+    "location": { "latitude": "52.05", "longitude": "5.05" },
+    "usageid": "CARPOOL",
+    "aantal_parkeer_plaatsen": "50",
+    "maximale_inrij_hoogte": "12"
+  }
+]

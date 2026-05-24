@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "scode": "BZ-001",
+      "tname": "free",
+      "mvalue": 120,
+      "mvalidtime": "2026-05-23T11:55:00.000Z"
+    },
+    {
+      "scode": "MR-014",
+      "tname": "occupied",
+      "mvalue": 200,
+      "mvalidtime": "2026-05-23T11:50:00.000Z"
+    },
+    {
+      "scode": "MR-014",
+      "tname": "free",
+      "mvalue": 50,
+      "mvalidtime": "2026-05-23T11:55:00.000Z"
+    },
+    {
+      "scode": "BR-007",
+      "tname": "occupied",
+      "mvalue": 80,
+      "mvalidtime": "2026-05-23T10:30:00.000Z"
+    }
+  ]
+}

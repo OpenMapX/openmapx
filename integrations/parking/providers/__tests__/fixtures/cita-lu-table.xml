@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d2LogicalModel>
+  <payloadPublication>
+    <parkingTable>
+      <parkingRecord id="P/1">
+        <parkingName>
+          <values>
+            <value lang="en">Glacis</value>
+          </values>
+        </parkingName>
+        <parkingLocation>
+          <pointByCoordinates>
+            <pointCoordinates>
+              <latitude>49.6175</latitude>
+              <longitude>6.1296</longitude>
+            </pointCoordinates>
+          </pointByCoordinates>
+        </parkingLocation>
+        <groupOfParkingSpaces>
+          <parkingNumberOfSpaces>410</parkingNumberOfSpaces>
+        </groupOfParkingSpaces>
+        <tariffsAndPayment>
+          <freeOfCharge>false</freeOfCharge>
+        </tariffsAndPayment>
+      </parkingRecord>
+      <parkingRecord id="P-2">
+        <parkingName>
+          <values>
+            <value lang="en">Knuedler</value>
+          </values>
+        </parkingName>
+        <parkingLocation>
+          <pointByCoordinates>
+            <pointCoordinates>
+              <latitude>49.6109</latitude>
+              <longitude>6.1318</longitude>
+            </pointCoordinates>
+          </pointByCoordinates>
+        </parkingLocation>
+        <groupOfParkingSpaces>
+          <parkingNumberOfSpaces>241</parkingNumberOfSpaces>
+        </groupOfParkingSpaces>
+        <tariffsAndPayment>
+          <freeOfCharge>false</freeOfCharge>
+        </tariffsAndPayment>
+      </parkingRecord>
+      <parkingRecord id="P3">
+        <parkingName>
+          <values>
+            <value lang="en">Theatre</value>
+          </values>
+        </parkingName>
+        <parkingLocation>
+          <pointByCoordinates>
+            <pointCoordinates>
+              <latitude>49.6147</latitude>
+              <longitude>6.1267</longitude>
+            </pointCoordinates>
+          </pointByCoordinates>
+        </parkingLocation>
+        <groupOfParkingSpaces>
+          <parkingNumberOfSpaces>320</parkingNumberOfSpaces>
+        </groupOfParkingSpaces>
+      </parkingRecord>
+    </parkingTable>
+  </payloadPublication>
+</d2LogicalModel>

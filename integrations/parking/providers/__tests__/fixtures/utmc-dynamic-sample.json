@@ -1,0 +1,26 @@
+[
+  {
+    "systemCodeNumber": "CP1",
+    "dynamics": [
+      {
+        "occupancy": 142,
+        "stateDescription": "SPACES",
+        "lastUpdated": "2012-01-13T12:19:32.419+0000"
+      }
+    ]
+  },
+  {
+    "systemCodeNumber": "CP2",
+    "dynamics": [
+      {
+        "occupancy": 80,
+        "stateDescription": "FULL",
+        "lastUpdated": "2012-01-14T10:00:00.000+0000"
+      }
+    ]
+  },
+  {
+    "systemCodeNumber": "CP-EMPTY",
+    "dynamics": []
+  }
+]
