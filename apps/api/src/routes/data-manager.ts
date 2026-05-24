@@ -418,6 +418,92 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     return { ok: true, providerId: req.params.id };
   });
 
+  // -------- POI ingest --------
+  //
+  // POI ingest is data-manager-owned end-to-end: feed_state lives in the
+  // data-manager's own Postgres tables, not in the BFF. All reads and
+  // mutations proxy through the data-manager HTTP API, which holds the
+  // inflight lock + cron state and writes audit rows.
+
+  app.get("/data-manager/poi-ingest/state", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    const result = await proxyToDataManager("GET", "/poi-ingest/state");
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.get<{ Querystring: { domain?: string; status?: string } }>(
+    "/data-manager/poi-ingest/sources",
+    async (req, reply) => {
+      const auth = await authenticateDataManager(req);
+      if (auth.kind === "denied") {
+        return reply.code(401).send({ error: "Authentication required" });
+      }
+      const params = new URLSearchParams();
+      if (req.query.domain) params.set("domain", req.query.domain);
+      if (req.query.status) params.set("status", req.query.status);
+      const qs = params.toString();
+      const path = qs ? `/poi-ingest/sources?${qs}` : "/poi-ingest/sources";
+      const result = await proxyToDataManager("GET", path);
+      return reply.code(result.status).send(result.body);
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/data-manager/poi-ingest/sources/:id",
+    async (req, reply) => {
+      const auth = await authenticateDataManager(req);
+      if (auth.kind === "denied") {
+        return reply.code(401).send({ error: "Authentication required" });
+      }
+      const result = await proxyToDataManager(
+        "GET",
+        `/poi-ingest/sources/${encodeURIComponent(req.params.id)}`,
+      );
+      return reply.code(result.status).send(result.body);
+    },
+  );
+
+  app.post<{
+    Params: { id: string };
+    Body?: { idempotencyKey?: string; triggeredBy?: string };
+  }>("/data-manager/poi-ingest/sources/:id/sync", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    const body = req.body ?? {};
+    const triggeredBy =
+      auth.kind === "session" ? `admin:${auth.userId}` : (body.triggeredBy ?? "service-token");
+    const result = await proxyToDataManager(
+      "POST",
+      `/poi-ingest/sources/${encodeURIComponent(req.params.id)}/sync`,
+      { ...body, triggeredBy },
+    );
+    return reply.code(result.status).send(result.body);
+  });
+
+  app.post<{
+    Params: { id: string };
+    Body?: { idempotencyKey?: string; triggeredBy?: string };
+  }>("/data-manager/poi-ingest/sources/:id/sync-live", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+    const body = req.body ?? {};
+    const triggeredBy =
+      auth.kind === "session" ? `admin:${auth.userId}` : (body.triggeredBy ?? "service-token");
+    const result = await proxyToDataManager(
+      "POST",
+      `/poi-ingest/sources/${encodeURIComponent(req.params.id)}/sync-live`,
+      { ...body, triggeredBy },
+    );
+    return reply.code(result.status).send(result.body);
+  });
+
   app.post<{ Body?: { branch?: string; force?: boolean } }>(
     "/data-manager/transit/bump-transitous-ref",
     async (req, reply) => {

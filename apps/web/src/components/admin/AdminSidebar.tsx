@@ -6,6 +6,7 @@ import OverviewIcon from "@mui/icons-material/Dashboard";
 import ServicesIcon from "@mui/icons-material/Dns";
 import IntegrationsIcon from "@mui/icons-material/Extension";
 import CatalogIcon from "@mui/icons-material/GridView";
+import PoiIcon from "@mui/icons-material/LocationOn";
 import StatusIcon from "@mui/icons-material/MonitorHeart";
 import UsersIcon from "@mui/icons-material/People";
 import BackupIcon from "@mui/icons-material/Restore";
@@ -92,6 +93,12 @@ const BASE_NAV_ITEMS = [
     label: "Transit",
     href: "/admin/transit",
     icon: <TransitIcon fontSize="small" />,
+    selfHostedOnly: false,
+  },
+  {
+    label: "POI ingest",
+    href: "/admin/poi-ingest",
+    icon: <PoiIcon fontSize="small" />,
     selfHostedOnly: false,
   },
   {
