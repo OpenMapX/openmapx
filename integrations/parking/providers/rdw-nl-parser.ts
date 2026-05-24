@@ -140,10 +140,27 @@ async function* rdwNlAsyncIterable(buffer: Buffer, log: PoiSourceLogger): AsyncI
     fetchGeoDataset(CARPOOL_RESOURCE, log),
   ]);
 
+  // The three GEO datasets are NOT disjoint — the same (areamanagerid,
+  // areaid) pair can appear in both `garages` and `pnr` when a garage also
+  // offers Park & Ride. Iterating order = garages first; subsequent dupes
+  // skipped. Pre-migration impl had the same overlap but escaped because
+  // bbox results were returned in-memory; PostGIS upsert needs a unique
+  // poi_id and rejects the second row with a PK violation.
+  const seen = new Set<string>();
+  let dupes = 0;
   for (const r of [...garages, ...pnr, ...carpool]) {
     const spec = specsMap.get(specsKey(r.areamanagerid, r.areaid));
     const row = recordToRow(r, spec);
-    if (row) yield row;
+    if (!row) continue;
+    if (seen.has(row.poiId)) {
+      dupes += 1;
+      continue;
+    }
+    seen.add(row.poiId);
+    yield row;
+  }
+  if (dupes > 0) {
+    log.info("rdw-nl: dropped duplicate area ids across geo datasets", { dupes });
   }
 }
 

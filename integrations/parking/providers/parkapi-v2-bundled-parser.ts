@@ -41,7 +41,11 @@ import type {
  */
 
 const API_BASE = "https://api.parkendd.de";
-const PER_CITY_TIMEOUT_MS = 10_000;
+// ParkenDD's per-city endpoints routinely return in 5–10s (the backend
+// composes per-city availability on demand); 10s was just too tight and
+// every city timed out from the prod data-manager. Generous threshold +
+// the outer source `timeoutMs` (90s) caps the whole bundled run.
+const PER_CITY_TIMEOUT_MS = 30_000;
 const PARKAPI_V2_CONCURRENCY = 5;
 
 const LOT_TYPE_MAP: Record<string, ParkingType> = {

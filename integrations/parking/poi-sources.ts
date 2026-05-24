@@ -256,7 +256,9 @@ export function declarePoiSources(): PoiSource[] {
         fetch: {
           type: "http",
           url: "https://api.parkendd.de",
-          timeoutMs: 30_000,
+          // ~12 cities × ~7s/city upstream, concurrency-5 inside parse.
+          // 90s is loose enough that one slow city doesn't fail the run.
+          timeoutMs: 90_000,
         },
         parse: makeParkApiV2BundledParser(),
         liveTtlSeconds: 1800,
