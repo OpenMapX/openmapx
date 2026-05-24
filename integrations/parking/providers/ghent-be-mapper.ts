@@ -1,8 +1,10 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
 const STATION_ID_PREFIX = "ghent:";
 const SOURCE_ID = "ghent-be";
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 function asStringOrUndef(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -63,10 +65,12 @@ export function mergeGhentLive(base: ParkingFacility, live: PoiLiveState | null)
   if (!live) return base;
   const freeSpaces = asNumberOrUndef((live as { freeSpaces?: unknown }).freeSpaces);
   const state = asState((live as { state?: unknown }).state);
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   return {
     ...base,
     freeSpaces: freeSpaces ?? base.freeSpaces,
     state,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
   };

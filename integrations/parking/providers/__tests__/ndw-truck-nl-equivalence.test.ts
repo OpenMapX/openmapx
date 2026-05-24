@@ -3,9 +3,17 @@ import { join } from "node:path";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { DatexParkingStatus } from "@openmapx/mobility-formats";
 import { parseDatexParkingStatus, parseDatexParkingTable } from "@openmapx/mobility-formats";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseNdwTruckNlBundled } from "../ndw-truck-nl-bundled-parser.js";
 import { mapNdwTruckNlPayload, mergeNdwTruckNlLive } from "../ndw-truck-nl-mapper.js";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-23T11:10:00Z"));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 /**
  * Pre-migration reference, lifted from the prior `ndw-truck-nl.ts`

@@ -124,6 +124,8 @@ export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 export {
   createStaticPoiReader,
   createTwoTierPoiReader,
+  isInColdStart,
+  isLiveTooStale,
   type PoiReader,
   type StaticPoiReaderOptions,
   type TwoTierPoiReaderOptions,

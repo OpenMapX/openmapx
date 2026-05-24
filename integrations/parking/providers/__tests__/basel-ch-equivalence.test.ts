@@ -1,9 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mapBaselPayload, mergeBaselLive } from "../basel-ch-mapper.js";
 import { parseBaselChBundled } from "../basel-ch-parser.js";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-01T10:10:00Z"));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 /**
  * Pre-migration reference, lifted verbatim from the prior basel-ch.ts.

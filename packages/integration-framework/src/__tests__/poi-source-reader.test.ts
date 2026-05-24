@@ -1,10 +1,12 @@
 import type { BBox, PoiLiveState } from "@openmapx/poi-source-registry";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CacheClient, DatabaseClient, IntegrationContext, Logger } from "../context";
 import {
   __resetReaderState,
   createStaticPoiReader,
   createTwoTierPoiReader,
+  isInColdStart,
+  isLiveTooStale,
 } from "../poi-source-reader.js";
 
 interface Entity {
@@ -318,5 +320,66 @@ describe("createTwoTierPoiReader", () => {
     expect(await reader.search(ctx, BBOX_US)).toEqual([]);
     expect(fn).not.toHaveBeenCalled();
     expect(hmget).not.toHaveBeenCalled();
+  });
+});
+
+describe("isInColdStart", () => {
+  it("returns false until a 42P01 is observed for the source", async () => {
+    expect(isInColdStart("bnetza-ev")).toBe(false);
+
+    const err = Object.assign(new Error("relation does not exist"), { code: "42P01" });
+    const { execute } = mockExecute(async () => {
+      throw err;
+    });
+    const ctx = makeCtx({ db: { execute } });
+    const reader = createStaticPoiReader<Entity>({ sourceId: "bnetza-ev", mapStatic });
+    await reader.search(ctx, BBOX_WORLD);
+
+    expect(isInColdStart("bnetza-ev")).toBe(true);
+    // Distinct sources are tracked independently.
+    expect(isInColdStart("other-source")).toBe(false);
+  });
+
+  it("__resetReaderState clears the cold-start tracker", async () => {
+    const err = Object.assign(new Error("relation does not exist"), { code: "42P01" });
+    const { execute } = mockExecute(async () => {
+      throw err;
+    });
+    const ctx = makeCtx({ db: { execute } });
+    const reader = createStaticPoiReader<Entity>({ sourceId: "bnetza-ev", mapStatic });
+    await reader.search(ctx, BBOX_WORLD);
+    expect(isInColdStart("bnetza-ev")).toBe(true);
+
+    __resetReaderState();
+    expect(isInColdStart("bnetza-ev")).toBe(false);
+  });
+});
+
+describe("isLiveTooStale", () => {
+  const NOW = Date.parse("2026-05-23T12:00:00Z");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(NOW));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns false when live is null", () => {
+    expect(isLiveTooStale(null, 30_000)).toBe(false);
+  });
+
+  it("returns false when asOf is fresh", () => {
+    expect(isLiveTooStale({ asOf: new Date(NOW - 1_000).toISOString() }, 30_000)).toBe(false);
+  });
+
+  it("returns true when asOf is older than the threshold", () => {
+    expect(isLiveTooStale({ asOf: new Date(NOW - 60_000).toISOString() }, 30_000)).toBe(true);
+  });
+
+  it("returns true when asOf is unparseable (defensive)", () => {
+    expect(isLiveTooStale({ asOf: "not-a-date" }, 30_000)).toBe(true);
   });
 });

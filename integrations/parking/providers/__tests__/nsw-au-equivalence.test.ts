@@ -86,6 +86,13 @@ async function runMigrated(): Promise<ParkingFacility[]> {
 
 beforeEach(() => {
   process.env.NSW_TRANSPORT_API_KEY = "test-key";
+  // Detail fixtures' MessageDate values are emitted without a timezone, so
+  // Date.parse interprets them as local time. Anchor system time to the
+  // same local-time base so the staleness gate (30 min) doesn't trip
+  // regardless of the host TZ.
+  vi.useFakeTimers();
+  const localFixtureBase = new Date("2024-11-25T11:09:00");
+  vi.setSystemTime(new Date(localFixtureBase.getTime() + 5 * 60 * 1000));
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: string | URL) => {
@@ -110,6 +117,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   process.env.NSW_TRANSPORT_API_KEY = undefined;
 });
 

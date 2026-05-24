@@ -6,7 +6,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import { isInColdStart, type MobilityDataSourceProvider } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -26,8 +26,22 @@ const ATTRIBUTION: Attribution[] = [
   },
 ];
 
+// PoiReader-backed sources whose cold-start state should flip
+// `freshness.isStale=true` on the wrapped result. Hardcoded (rather than
+// derived from `declarePoiSources()`) to avoid a circular import with
+// poi-sources.ts; the list is small and rarely changes.
+const POI_READER_BACKED_EV_SOURCES = ["bnetza-ev", "switzerland-ev"] as const;
+
+function anyEvSourceColdStart(): boolean {
+  return POI_READER_BACKED_EV_SOURCES.some((id) => isInColdStart(id));
+}
+
 const wrapStatic = <T>(data: T): MobilityResult<T> =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
+  withAttribution(
+    data,
+    ATTRIBUTION,
+    freshnessNow({ hasRealtimeData: false, isStale: anyEvSourceColdStart() }),
+  );
 
 const META: DataSourceMeta = {
   minZoom: 8,

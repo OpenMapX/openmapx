@@ -1,3 +1,4 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type {
   ParkingFacility,
   ParkingSourceAttribution,
@@ -52,13 +53,6 @@ function asParkingType(value: unknown): ParkingType {
 function asFee(value: unknown): "free" | "paid" | "unknown" {
   if (value === "free" || value === "paid" || value === "unknown") return value;
   return "unknown";
-}
-
-function isStaleTimestamp(value: string | undefined, staleAfterMs: number, now: number): boolean {
-  if (!value) return false;
-  const time = Date.parse(value);
-  if (!Number.isFinite(time)) return false;
-  return now - time > staleAfterMs;
 }
 
 function statusToState(siteStatus: string | null | undefined): ParkingFacility["state"] {
@@ -131,17 +125,17 @@ export function mergeCitaLuLive(base: ParkingFacility, live: PoiLiveState | null
     freeSpaces = capacity;
   }
 
-  const isStale = isStaleTimestamp(live.asOf, REALTIME_STALE_AFTER_MS, Date.now());
-  if (isStale) warnings.push("Realtime availability is older than 30 minutes.");
+  const stale = isLiveTooStale(live, REALTIME_STALE_AFTER_MS);
+  if (stale) warnings.push("Realtime availability is older than 30 minutes.");
 
   return {
     ...next,
     capacity,
     freeSpaces,
-    hasRealtimeData: true,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
-    isStale: isStale || undefined,
+    isStale: stale || undefined,
     qualityWarnings: warnings.length > 0 ? warnings : undefined,
   };
 }

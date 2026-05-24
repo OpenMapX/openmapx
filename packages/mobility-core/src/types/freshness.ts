@@ -15,14 +15,15 @@ export interface Freshness {
 }
 
 /**
- * Convenience factory: builds a `Freshness` with `fetchedAt = now()`,
- * `isStale = false`, and the requested realtime flag. Use this in
- * provider method wrappers so the per-integration boilerplate is gone.
+ * Convenience factory: builds a `Freshness` with `fetchedAt = now()` and the
+ * requested realtime / staleness flags. `isStale` defaults to false; callers
+ * pass true when the underlying static table has never been ingested (cold
+ * start) or when a max-age check on upstream realtime data tripped.
  */
-export function freshnessNow(opts?: { hasRealtimeData?: boolean }): Freshness {
+export function freshnessNow(opts?: { hasRealtimeData?: boolean; isStale?: boolean }): Freshness {
   return {
     fetchedAt: new Date().toISOString(),
     hasRealtimeData: opts?.hasRealtimeData ?? false,
-    isStale: false,
+    isStale: opts?.isStale ?? false,
   };
 }

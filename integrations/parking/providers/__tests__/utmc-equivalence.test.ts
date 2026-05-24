@@ -1,10 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseUtmcLive } from "../utmc-newcastle-live-parser.js";
 import { mapUtmcPayload, mergeUtmcLive } from "../utmc-newcastle-mapper.js";
 import { parseUtmcStatic } from "../utmc-newcastle-static-parser.js";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2012-01-14T10:10:00Z"));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 /**
  * Pre-migration reference implementation, lifted verbatim from the prior
@@ -53,9 +61,22 @@ function refDeriveFreeSpaces(
   return free >= 0 ? free : 0;
 }
 
+// Mirrors the shared isLiveTooStale helper so the reference impl reproduces
+// the post-migration "stale live ⇒ hasRealtimeData=false" behaviour. The
+// merger uses UTMC's 15-minute threshold.
+const UTMC_MAX_LIVE_AGE_MS = 15 * 60 * 1000;
+
+function refIsLiveTooStale(asOf: string | undefined, maxAgeMs: number, now: number): boolean {
+  if (!asOf) return false;
+  const t = Date.parse(asOf);
+  if (!Number.isFinite(t)) return true;
+  return now - t > maxAgeMs;
+}
+
 function refStaticToFacility(
   record: UtmcStaticCarParkRef,
-  dynamic?: UtmcDynamicCarParkRef,
+  dynamic: UtmcDynamicCarParkRef | undefined,
+  now: number,
 ): ParkingFacility | null {
   const def = record.definitions?.[0];
   const cfg = record.configurations?.[0];
@@ -68,7 +89,8 @@ function refStaticToFacility(
   const dyn = dynamic?.dynamics?.[0];
   const occupancy = dyn?.occupancy;
   const freeSpaces = refDeriveFreeSpaces(occupancy, capacity);
-  const hasDynamic = dyn != null && occupancy != null;
+  const hasDynamic = dyn != null;
+  const stale = hasDynamic ? refIsLiveTooStale(dyn?.lastUpdated, UTMC_MAX_LIVE_AGE_MS, now) : false;
 
   return {
     id: `utmc:${record.systemCodeNumber}`,
@@ -78,7 +100,7 @@ function refStaticToFacility(
     parkingType: "garage" as ParkingType,
     capacity: capacity != null && capacity > 0 ? capacity : undefined,
     freeSpaces,
-    hasRealtimeData: hasDynamic,
+    hasRealtimeData: hasDynamic && !stale,
     dataUpdatedAt: dyn?.lastUpdated ?? def.lastUpdated,
     staticDataUpdatedAt: def.lastUpdated,
     realtimeDataUpdatedAt: hasDynamic ? dyn?.lastUpdated : undefined,
@@ -99,6 +121,7 @@ const noopLog = {
 };
 
 function runReference(): ParkingFacility[] {
+  const now = Date.now();
   const statics = JSON.parse(STATIC.toString("utf-8")) as UtmcStaticCarParkRef[];
   const dyns = JSON.parse(DYNAMIC.toString("utf-8")) as UtmcDynamicCarParkRef[];
   const dynMap = new Map<string, UtmcDynamicCarParkRef>();
@@ -108,7 +131,7 @@ function runReference(): ParkingFacility[] {
   const out: ParkingFacility[] = [];
   for (const r of statics) {
     if (!r?.definitions?.length) continue;
-    const facility = refStaticToFacility(r, dynMap.get(r.systemCodeNumber));
+    const facility = refStaticToFacility(r, dynMap.get(r.systemCodeNumber), now);
     if (facility) out.push(facility);
   }
   return out;

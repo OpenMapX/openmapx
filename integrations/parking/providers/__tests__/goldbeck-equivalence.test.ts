@@ -1,11 +1,19 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, it } from "vitest";
+import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import {
   assertFacilitiesEqual,
   migratedRunAll,
   refRunAll,
 } from "./mobidrom-equivalence-helpers.js";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-23T10:10:00Z"));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const FIXTURE = readFileSync(join(__dirname, "fixtures", "mobidrom-sample.json"));
 const OPTS = {

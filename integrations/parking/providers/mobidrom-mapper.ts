@@ -1,5 +1,10 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+// Mobidrom-family upstream feeds publish every ~5 min; flag as not-realtime
+// after 30 min so a stuck cache stops reading as live.
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 interface MobidromMapperOptions {
   sourceId: string;
@@ -86,10 +91,11 @@ export function mergeMobidromLive(
   if (!live) return base;
   const freeSpaces = asNumberOrUndef((live as { freeSpaces?: unknown }).freeSpaces);
   if (freeSpaces == null) return base;
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   return {
     ...base,
     freeSpaces,
-    hasRealtimeData: true,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
   };

@@ -1,9 +1,12 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type {
   ParkingFacility,
   ParkingSourceAttribution,
   ParkingType,
 } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 /**
  * Mapper + live-merger for OpenTransportData.swiss bike-and-car-parking.
@@ -117,10 +120,11 @@ export function mergeOpenTransportDataChLive(
   if (!live) return base;
   const rawFree = asNumberOrUndef((live as { freeSpaces?: unknown }).freeSpaces);
   if (rawFree === undefined) return base;
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   return {
     ...base,
     freeSpaces: rawFree,
-    hasRealtimeData: true,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
   };

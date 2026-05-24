@@ -69,6 +69,16 @@ describe("parseSwissOicpLive", () => {
 });
 
 describe("mergeSwitzerlandLive", () => {
+  // Anchor wall-clock just after the fixture asOf so the staleness gate
+  // (30 min) leaves the live status intact.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-23T00:10:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const base: EvChargingStation = {
     id: "swiss-sfoe:abc",
     sources: ["switzerland-ev"],

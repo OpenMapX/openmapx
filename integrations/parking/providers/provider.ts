@@ -6,7 +6,7 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import { isInColdStart, type MobilityDataSourceProvider } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
@@ -90,8 +90,49 @@ const ATTRIBUTION: Attribution[] = [
   },
 ];
 
+// PoiReader-backed parking sources whose cold-start state should flip
+// `freshness.isStale=true` on the wrapped result. Hardcoded (rather than
+// derived from `declarePoiSources()`) to avoid a circular import with
+// poi-sources.ts; the list mirrors every entry registered there.
+const POI_READER_BACKED_PARKING_SOURCES = [
+  "utmc-newcastle",
+  "brussels-be",
+  "madrid-es",
+  "nrw-mobidrom-parking",
+  "nrw-mobidrom-pr",
+  "apag",
+  "apcoa",
+  "parkapi-v3",
+  "parkapi-v2",
+  "basel-ch",
+  "copenhagen-dk",
+  "florence-it",
+  "ghent-be",
+  "vienna-at",
+  "bnls-fr",
+  "barcelona-es",
+  "cita-lu",
+  "ndw-truck-nl",
+  "opendatahub-it",
+  "opentransportdata-ch-parking",
+  "autobahn-de",
+  "db-bahnpark",
+  "nsw-au",
+  "singapore",
+  "rdw-nl",
+  "goldbeck",
+] as const;
+
+function anyParkingSourceColdStart(): boolean {
+  return POI_READER_BACKED_PARKING_SOURCES.some((id) => isInColdStart(id));
+}
+
 const wrapStatic = <T>(data: T): MobilityResult<T> =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
+  withAttribution(
+    data,
+    ATTRIBUTION,
+    freshnessNow({ hasRealtimeData: false, isStale: anyParkingSourceColdStart() }),
+  );
 
 class ParkingDataSourceProvider implements MobilityDataSourceProvider {
   readonly id = "parking";

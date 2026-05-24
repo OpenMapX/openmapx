@@ -6,6 +6,7 @@ import { registerAuth, resolveAuthToken } from "./auth.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
 import { sql } from "./db/index.js";
 import { registerPoiIngestApi } from "./jobs/poi-ingest/api.js";
+import { runBootstrap } from "./jobs/poi-ingest/bootstrap.js";
 import { createDriftGuard, type DriftGuard } from "./jobs/poi-ingest/drift-guard.js";
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
@@ -124,6 +125,28 @@ app
       metricsSink: poiHandles.metricsSink,
       driftGuard,
     });
+
+    // Optional first-deploy bootstrap: kicks off an ingest for any source
+    // whose feed-state row shows it has never been ingested. Runs in the
+    // background so the HTTP listener stays responsive — the regular cron
+    // continues firing while bootstrap is still working through the list.
+    if (process.env.POI_INGEST_BOOTSTRAP === "true") {
+      app.log.info("poi-ingest-bootstrap: starting");
+      void runBootstrap({
+        sql,
+        redis,
+        singleFlight: poiHandles.singleFlight,
+        metricsSink: poiHandles.metricsSink,
+        logger: {
+          info: (m, e) => (e ? app.log.info(e, m) : app.log.info(m)),
+          warn: (m, e) => (e ? app.log.warn(e, m) : app.log.warn(m)),
+          error: (m, e) => (e ? app.log.error(e, m) : app.log.error(m)),
+          debug: (m, e) => (e ? app.log.debug(e, m) : app.log.debug(m)),
+        },
+      })
+        .then((result) => app.log.info(result, "poi-ingest-bootstrap: complete"))
+        .catch((err) => app.log.error({ err }, "poi-ingest-bootstrap: threw"));
+    }
   })
   .catch((err) => {
     app.log.error(err);

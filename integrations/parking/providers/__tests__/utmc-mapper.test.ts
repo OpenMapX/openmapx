@@ -1,10 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deriveFreeSpaces,
   mapState,
   mapUtmcPayload,
   mergeUtmcLive,
 } from "../utmc-newcastle-mapper.js";
+
+// Fixtures use 2012 timestamps; anchor `Date.now()` near them so the
+// mergeXLive staleness gate doesn't flip hasRealtimeData=false. The shared
+// helper compares `Date.now() - asOf` against MAX_LIVE_AGE_MS.
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2012-01-13T12:20:00Z"));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("mapState", () => {
   it("maps CLOSED and FAULTY to closed", () => {

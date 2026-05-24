@@ -146,7 +146,10 @@ function refSiteToFacility(
     parkingType: refMapType(site.type),
     capacity: realtime.capacity,
     freeSpaces: realtime.freeSpaces,
-    hasRealtimeData: realtime.hasRealtime,
+    // Post-migration: stale realtime flips hasRealtimeData=false so consumers
+    // stop trusting cached freeSpaces/state. Pre-migration set this to true
+    // unconditionally and surfaced staleness only via `isStale`/`qualityWarnings`.
+    hasRealtimeData: realtime.hasRealtime && !isStale,
     dataUpdatedAt,
     staticDataUpdatedAt,
     realtimeDataUpdatedAt,

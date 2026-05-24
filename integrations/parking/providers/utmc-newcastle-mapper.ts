@@ -1,8 +1,12 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
 const STATION_ID_PREFIX = "utmc:";
 const SOURCE_ID = "utmc-newcastle";
+// UTMC has a 2-min upstream cron; flag as not-realtime after 15 minutes of
+// silence (≈7.5 missed runs) so consumers stop trusting occupancy.
+const MAX_LIVE_AGE_MS = 15 * 60 * 1000;
 
 function asStringOrUndef(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -80,11 +84,12 @@ export function mergeUtmcLive(base: ParkingFacility, live: PoiLiveState | null):
     (live as { stateDescription?: unknown }).stateDescription,
   );
   const freeSpaces = deriveFreeSpaces(occupancy, base.capacity);
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   return {
     ...base,
     freeSpaces,
     state: mapState(stateDescription),
-    hasRealtimeData: true,
+    hasRealtimeData: !stale,
     realtimeDataUpdatedAt: live.asOf,
     dataUpdatedAt: live.asOf,
   };

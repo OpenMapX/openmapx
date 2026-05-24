@@ -1,8 +1,10 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
 const STATION_ID_PREFIX = "nsw:";
 const SOURCE_ID = "nsw-au";
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 function asStringOrUndef(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -56,11 +58,12 @@ export function mergeNswAuLive(base: ParkingFacility, live: PoiLiveState | null)
   const total = asNumberOrUndef((live as { total?: unknown }).total);
   if (spots == null || total == null) return base;
   const freeSpaces = Math.max(0, spots - total);
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   return {
     ...base,
     capacity: spots > 0 ? spots : base.capacity,
     freeSpaces,
-    hasRealtimeData: true,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
   };

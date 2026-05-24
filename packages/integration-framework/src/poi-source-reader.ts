@@ -5,16 +5,45 @@ const MAX_ROWS_PER_BBOX = 2000;
 const TABLE_MISSING_PG_CODE = "42P01";
 const SOURCE_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-// Warn-once-per-source semantics: a missing ingest table is the normal cold-start
-// state, and during boot every provider would spam the same warning on each
-// request. The Set is process-scoped so a long-running host warns once per
-// source no matter how many reader instances exist or how many bboxes get
-// searched. Tests need a way to reset it — see __resetReaderState below.
-const missingTableWarned = new Set<string>();
+// Cold-start tracking: a missing ingest table is the normal pre-first-ingest
+// state. The Set serves two purposes:
+//   1. Warn-once-per-source — during boot every provider would spam the same
+//      warning on each request, so we only log the first miss per source.
+//   2. Cold-start signal — exposed via `isInColdStart` so the data-source
+//      providers can flip `freshness.isStale=true` on the wrapped result
+//      without inspecting per-domain fields.
+// Process-scoped so a long-running host warns once + reports cold-start once
+// per source no matter how many reader instances exist. Tests reset via
+// `__resetReaderState`.
+const coldStartSources = new Set<string>();
 
-/** @internal Test-only helper. Resets the warn-once tracker between tests. */
+/** @internal Test-only helper. Resets the cold-start tracker between tests. */
 export function __resetReaderState(): void {
-  missingTableWarned.clear();
+  coldStartSources.clear();
+}
+
+/**
+ * Returns true if a search or fetchDetail call for this source most recently
+ * cold-started (table missing in PostGIS). Set on first 42P01 and stays true
+ * for the lifetime of the process — once an ingest succeeds, restart the
+ * process or call __resetReaderState() to clear (the reader has no way to
+ * know the table is now present without retrying, and we don't want a busy
+ * loop on the request path).
+ */
+export function isInColdStart(sourceId: string): boolean {
+  return coldStartSources.has(sourceId);
+}
+
+/**
+ * Returns true if the live state's asOf timestamp is older than the given
+ * threshold. Use in mergeXLive helpers to flip hasRealtimeData=false when
+ * the upstream is stale, even if Redis still has the value cached.
+ */
+export function isLiveTooStale(live: PoiLiveState | null, maxAgeMs: number): boolean {
+  if (!live) return false;
+  const asOfMs = Date.parse(live.asOf);
+  if (!Number.isFinite(asOfMs)) return true;
+  return Date.now() - asOfMs > maxAgeMs;
 }
 
 export interface PoiReader<TResult> {
@@ -68,8 +97,8 @@ function isTableMissingError(err: unknown): boolean {
 }
 
 function warnMissingTableOnce(ctx: IntegrationContext, sourceId: string, tableIdent: string): void {
-  if (missingTableWarned.has(sourceId)) return;
-  missingTableWarned.add(sourceId);
+  if (coldStartSources.has(sourceId)) return;
+  coldStartSources.add(sourceId);
   ctx.log.warn(
     `[poi-source-reader] ${sourceId}: table ${tableIdent} is missing — returning empty result. ` +
       `This is normal before the first ingest run; subsequent misses will not re-warn.`,

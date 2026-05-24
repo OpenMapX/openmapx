@@ -1,3 +1,4 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type {
   ParkingFacility,
   ParkingSourceAttribution,
@@ -68,13 +69,6 @@ function asAttribution(value: unknown): ParkingSourceAttribution | undefined {
   return out;
 }
 
-function isStaleTimestamp(value: string | undefined, staleAfterMs: number, now: number): boolean {
-  if (!value) return false;
-  const time = Date.parse(value);
-  if (!Number.isFinite(time)) return false;
-  return now - time > staleAfterMs;
-}
-
 export function mapParkApiV3Payload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
   const coordinates = Array.isArray(p.coordinates)
@@ -133,9 +127,11 @@ export function mergeParkApiV3Live(
 
   // Pre-migration code surfaced staleness against now(); the live `asOf` is
   // the freshest signal we have post-migration (data-manager writes it from
-  // the parser, which sources it from `realtime_data_updated_at`).
-  const isStale = isStaleTimestamp(live.asOf, REALTIME_STALE_AFTER_MS, Date.now());
-  if (isStale) warnings.push("Realtime availability is older than 30 minutes.");
+  // the parser, which sources it from `realtime_data_updated_at`). Use the
+  // shared `isLiveTooStale` helper so the realtime flag flip is consistent
+  // with the rest of the parking mappers.
+  const stale = isLiveTooStale(live, REALTIME_STALE_AFTER_MS);
+  if (stale) warnings.push("Realtime availability is older than 30 minutes.");
 
   const existingWarnings = base.qualityWarnings ?? [];
   const mergedWarnings = [...existingWarnings, ...warnings];
@@ -144,10 +140,10 @@ export function mergeParkApiV3Live(
     ...base,
     capacity,
     freeSpaces,
-    hasRealtimeData: true,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
-    isStale: isStale || undefined,
+    isStale: stale || undefined,
     qualityWarnings: mergedWarnings.length > 0 ? mergedWarnings : undefined,
   };
 }

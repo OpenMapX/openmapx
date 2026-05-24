@@ -1,5 +1,8 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 /**
  * Mapper + live-merger for ParkAPI v2 (ParkenDD federation).
@@ -68,10 +71,11 @@ export function mergeParkApiV2Live(
   if (!live) return base;
   const freeSpaces = asNumberOrUndef((live as { freeSpaces?: unknown }).freeSpaces);
   const stateOverride = (live as { state?: unknown }).state;
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   const next: ParkingFacility = { ...base };
   if (freeSpaces !== undefined) {
     next.freeSpaces = freeSpaces;
-    next.hasRealtimeData = true;
+    next.hasRealtimeData = !stale;
     next.dataUpdatedAt = live.asOf;
     next.realtimeDataUpdatedAt = live.asOf;
   }

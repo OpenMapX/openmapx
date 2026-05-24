@@ -1,10 +1,23 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseSingaporeLive } from "../singapore-live-parser.js";
 import { mapSingaporePayload, mergeSingaporeLive } from "../singapore-mapper.js";
 import { parseSingaporeStatic, svy21ToWgs84 } from "../singapore-static-parser.js";
+
+beforeEach(() => {
+  // Singapore's update_datetime values are emitted without a timezone, so
+  // Date.parse interprets them as local time. Anchor system time to the
+  // same local-time base so the staleness gate (30 min) doesn't trip
+  // regardless of the host TZ.
+  vi.useFakeTimers();
+  const localFixtureBase = new Date("2026-05-23T09:59:30");
+  vi.setSystemTime(new Date(localFixtureBase.getTime() + 5 * 60 * 1000));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 /**
  * Pre-migration reference: convert SVY21 to WGS84, type-map the carpark, then

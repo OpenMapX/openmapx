@@ -1,9 +1,19 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeMobidromBundledParser, mobidromSiteToPayload } from "../mobidrom-bundled-parser.js";
 import type { MobidromSiteBean } from "../mobidrom-common.js";
 import { makeMobidromMapper, mergeMobidromLive } from "../mobidrom-mapper.js";
+
+// Fixture asOf is 2026-05-23T10:00:00Z; anchor wall-clock 10 min later so the
+// shared isLiveTooStale gate (30 min) leaves hasRealtimeData=true.
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-05-23T10:10:00Z"));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const FIXTURE = readFileSync(join(__dirname, "fixtures", "mobidrom-sample.json"));
 

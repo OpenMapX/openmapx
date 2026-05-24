@@ -1,8 +1,10 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
 const STATION_ID_PREFIX = "basel:";
 const SOURCE_ID = "basel-ch";
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 function asStringOrUndef(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -57,9 +59,11 @@ export function mergeBaselLive(base: ParkingFacility, live: PoiLiveState | null)
   if (!live) return base;
   const freeSpaces = asNumberOrUndef((live as { freeSpaces?: unknown }).freeSpaces);
   if (freeSpaces == null) return base;
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   return {
     ...base,
     freeSpaces,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
   };

@@ -1,5 +1,8 @@
+import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 /**
  * Mapper + live-merger for Open Data Hub South Tyrol parking.
@@ -60,10 +63,11 @@ export function mapOdhItPayload(poiId: string, payload: unknown): ParkingFacilit
 export function mergeOdhItLive(base: ParkingFacility, live: PoiLiveState | null): ParkingFacility {
   if (!live) return base;
   const rawFree = asNumberOrUndef((live as { freeSpaces?: unknown }).freeSpaces);
+  const stale = isLiveTooStale(live, MAX_LIVE_AGE_MS);
   return {
     ...base,
     freeSpaces: rawFree,
-    hasRealtimeData: true,
+    hasRealtimeData: !stale,
     dataUpdatedAt: live.asOf,
     realtimeDataUpdatedAt: live.asOf,
   };
