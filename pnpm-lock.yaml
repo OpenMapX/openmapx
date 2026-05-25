@@ -78,12 +78,21 @@ importers:
       '@motis-project/motis-client':
         specifier: ^2.9.2
         version: 2.9.2
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@openmapx/db-schema':
         specifier: workspace:^
         version: link:../../packages/db-schema
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+      '@openmapx/mobility-formats':
+        specifier: workspace:^
+        version: link:../../packages/mobility-formats
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
@@ -148,15 +157,6 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
     devDependencies:
-      '@openmapx/core':
-        specifier: workspace:^
-        version: link:../../packages/core
-      '@openmapx/mobility-core':
-        specifier: workspace:^
-        version: link:../../packages/mobility-core
-      '@openmapx/mobility-formats':
-        specifier: workspace:^
-        version: link:../../packages/mobility-formats
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
