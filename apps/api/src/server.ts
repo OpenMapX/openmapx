@@ -31,7 +31,6 @@ import { imageProxyRoute } from "./routes/image-proxy";
 import { internalMetricsRoute } from "./routes/internal-metrics";
 import { internalPoiSourcesRoute } from "./routes/internal-poi-sources";
 import { isochroneRoute } from "./routes/isochrone";
-import { mapillaryRoute } from "./routes/mapillary";
 import { maptilerRoute } from "./routes/maptiler";
 import { motisRoute } from "./routes/motis";
 import { placesRoute } from "./routes/places";
@@ -143,7 +142,7 @@ const TILE_PUBLIC_PATTERNS = [
   /^\/api\/maptiler\//,
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
-  /^\/api\/mapillary(\/|$)/,
+  /^\/api\/integrations\/street-view-mapillary\/tiles\//,
 ];
 
 const EXPENSIVE_PUBLIC_PATTERNS = [
@@ -228,7 +227,6 @@ await server.register(placesRoute, { prefix: "/api" });
 await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });
 await server.register(tilesRoute, { prefix: "/api" });
-await server.register(mapillaryRoute, { prefix: "/api" });
 await server.register(maptilerRoute, { prefix: "/api" });
 await server.register(gtfsRoute, { prefix: "/api" });
 await server.register(isochroneRoute, { prefix: "/api" });

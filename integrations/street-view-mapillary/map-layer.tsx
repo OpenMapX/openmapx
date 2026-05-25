@@ -56,7 +56,7 @@ export function StreetViewLayer() {
       if (!map.getSource(MLY_SOURCE_ID)) {
         map.addSource(MLY_SOURCE_ID, {
           type: "vector",
-          tiles: [`${apiUrl}/api/mapillary/tiles/{z}/{x}/{y}`],
+          tiles: [`${apiUrl}/api/integrations/street-view-mapillary/tiles/{z}/{x}/{y}`],
           minzoom: 6,
           maxzoom: 14,
         });

@@ -13,6 +13,36 @@ interface MapillaryImagesResponse {
 }
 
 export function setup(ctx: IntegrationContext): void {
+  ctx.registerRoute("GET", "/tiles/:z/:x/:y", async (req, reply) => {
+    const token = ctx.config.accessToken as string | undefined;
+    if (!token) {
+      reply.status(503).send({ message: "Mapillary token not configured" });
+      return;
+    }
+
+    const { z, x, y } = req.params as { z: string; x: string; y: string };
+    if (!/^[0-9]{1,2}$/.test(z) || !/^[0-9]+$/.test(x) || !/^[0-9]+$/.test(y)) {
+      reply.status(400).send({ message: "Invalid tile coordinates" });
+      return;
+    }
+
+    const url = `https://tiles.mapillary.com/maps/vtp/mly1_public/2/${z}/${x}/${y}?access_token=${token}`;
+    const upstream = await fetch(url);
+    if (!upstream.ok) {
+      ctx.log.warn(`Mapillary tile request failed: ${upstream.status}`);
+      reply.status(upstream.status).send({ message: "Mapillary tile unavailable" });
+      return;
+    }
+
+    const bytes = await upstream.arrayBuffer();
+    const contentType =
+      upstream.headers.get("content-type") ?? "application/vnd.mapbox-vector-tile";
+    reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
+    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+    reply.type(contentType);
+    reply.send(Buffer.from(bytes));
+  });
+
   ctx.registerRoute("GET", "/streetview/images", async (req, reply) => {
     const token = ctx.config.accessToken as string | undefined;
     if (!token) {

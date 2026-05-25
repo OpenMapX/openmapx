@@ -33,8 +33,9 @@ export function Pegman() {
   // Street View requires a Mapillary client token, which is bundled into the
   // browser by design (Mapillary's `MLY|<app>|<token>` shape is intended for
   // client-side use). Operators who don't want to expose any token can leave
-  // `MAPILLARY_VIEWER_TOKEN` unset; the feature then hides entirely instead
-  // of leaking the server-side `MAPILLARY_TOKEN` to the bundle.
+  // `MAPILLARY_VIEWER_TOKEN` unset; the feature then hides entirely. The
+  // integration's tile-proxy token (INTEGRATION_STREET_VIEW_MAPILLARY_ACCESSTOKEN)
+  // is the server-side counterpart and never reaches the bundle.
   if (!env.mapillaryToken) return null;
 
   const findNearestDot = (clientX: number, clientY: number) => {
