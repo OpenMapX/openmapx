@@ -1,6 +1,16 @@
-import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
+import type {
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+  OsmIdentity,
+} from "@openmapx/core";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import opening_hours from "opening_hours";
+
+function stationIdentity(station: FuelStation): OsmIdentity | undefined {
+  if (!station.brand) return undefined;
+  return { brand: station.brand, operator: station.brand };
+}
 
 interface OpeningTime {
   text: string;
@@ -103,6 +113,7 @@ export function mapFuelStationToDetail(station: FuelStation): DataSourceDetail {
     sources: [extractSourcePrefix(station.id)],
     name: station.name,
     coordinates: station.coordinates,
+    identity: stationIdentity(station),
     address: station.address ? { line1: station.address } : undefined,
     operator: station.brand ? { name: station.brand } : undefined,
     sections,
@@ -185,6 +196,7 @@ export function buildTankerkoenigDetail(
     sources: ["tankerkoenig"],
     name: station.name,
     coordinates: station.coordinates,
+    identity: stationIdentity(station),
     address: station.address ? { line1: station.address } : undefined,
     operator: station.brand ? { name: station.brand } : undefined,
     openingHours: tankerkoenigToOsmHours(tankerkoenigRaw),

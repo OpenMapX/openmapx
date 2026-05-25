@@ -1130,6 +1130,20 @@ export function getAllIntegrations(): LoadedIntegration[] {
   return Array.from(integrations.values());
 }
 
+/**
+ * True when `scheme` matches the id of an installed integration manifest —
+ * regardless of whether its `setup()` succeeded. The places route uses this
+ * to decide whether an unregistered resolver should 404 (the integration
+ * owns the scheme but didn't boot) or fall through to the freeform name+
+ * coord lookup (the scheme is a UI-side convention like `saved`/`stylePoi`,
+ * not an integration). Manifest discovery runs before `setup()`, so this
+ * stays accurate even when an integration crashes during boot — which is
+ * the failure mode this gate exists to catch.
+ */
+export function isIntegrationScheme(scheme: string): boolean {
+  return integrations.has(scheme);
+}
+
 export function getIntegrationsByDomain(domain: string): LoadedIntegration[] {
   return Array.from(integrations.values()).filter(
     (i) => i.enabled && i.manifest.domains.includes(domain),

@@ -1,5 +1,25 @@
-import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
+import type {
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+  OsmIdentity,
+} from "@openmapx/core";
 import type { EvChargingConnector, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
+
+function stationIdentity(station: EvChargingStation): OsmIdentity | undefined {
+  const operator = station.operator?.name;
+  const legal = station.operator?.legalName;
+  if (!operator && !legal) return undefined;
+  const identity: OsmIdentity = {};
+  if (operator) {
+    identity.operator = operator;
+    identity.brand = operator;
+  }
+  if (legal && legal !== operator) {
+    identity.network = legal;
+  }
+  return identity;
+}
 
 function getMaxPower(station: EvChargingStation): number {
   return station.connectors.reduce((max, connector) => {
@@ -138,6 +158,7 @@ export function mapStationToDetail(station: EvChargingStation): DataSourceDetail
     sources: station.sources,
     name: station.name,
     coordinates: station.coordinates,
+    identity: stationIdentity(station),
     attributions: station.attributions,
     address: station.address,
     operator: station.operator,

@@ -1,5 +1,15 @@
-import type { DataSourceDetail, DataSourceDetailSection, DataSourceResult } from "@openmapx/core";
+import type {
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+  OsmIdentity,
+} from "@openmapx/core";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+
+function facilityIdentity(facility: ParkingFacility): OsmIdentity | undefined {
+  if (!facility.operator) return undefined;
+  return { operator: facility.operator };
+}
 
 /**
  * All string values emitted here must either:
@@ -209,6 +219,7 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     sources: facility.sources,
     name: facility.name,
     coordinates: facility.coordinates,
+    identity: facilityIdentity(facility),
     address: facility.address ? { line1: facility.address } : undefined,
     operator: facility.operator ? { name: facility.operator, url: facility.url } : undefined,
     openingHours: facility.openingHours,

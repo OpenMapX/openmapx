@@ -159,11 +159,29 @@ export interface DataSourceDetailSection {
   collapsed?: boolean;
 }
 
+/**
+ * Identity hints used by the place resolver to constrain the OSM snap so we
+ * don't pull in unrelated business metadata from a "compound" OSM node — e.g.
+ * an optician kiosk that's also tagged `amenity=bicycle_rental`. When the
+ * provider supplies one of these, `lookupByOsmFilters` will only accept
+ * candidates whose tags match at least one identity field (ref, operator,
+ * network, or brand — case-insensitive). When omitted, falls back to the old
+ * nearest-match behaviour.
+ */
+export interface OsmIdentity {
+  ref?: string;
+  operator?: string;
+  network?: string;
+  brand?: string;
+}
+
 export interface DataSourceDetail {
   id: string;
   sources: string[];
   name: string;
   coordinates: LngLat;
+  /** Identity used by the place resolver to gate OSM snapping. See {@link OsmIdentity}. */
+  identity?: OsmIdentity;
   address?: {
     line1?: string;
     town?: string;

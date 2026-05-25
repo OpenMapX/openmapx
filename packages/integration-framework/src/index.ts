@@ -60,6 +60,7 @@ export type {
   MatchShapeMatch,
   MatchTracePoint,
   MobilityDataSourceProvider,
+  OsmIdentity,
   PhotoProvider,
   PhotoQuery,
   PoiSearchProvider,

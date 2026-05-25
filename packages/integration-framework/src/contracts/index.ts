@@ -28,6 +28,7 @@ export type {
   DataSourceMeta,
   DataSourceResult,
   MobilityDataSourceProvider,
+  OsmIdentity,
   PricingPlanEntry,
 } from "./mobility-data-source-provider.js";
 export type {

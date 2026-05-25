@@ -15,13 +15,25 @@
  */
 
 import { createPlace } from "@openmapx/core";
-import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import type { MobilityDataSourceProvider, OsmIdentity } from "@openmapx/integration-framework";
 import {
   lookupAddressByCoords,
   lookupByOsmFilters,
 } from "@openmapx/integration-geocoding/place-lookup";
 import { VEHICLE_ID_PREFIX } from "@openmapx/mobility-core/mapper";
 import type { PlaceResolver } from "@openmapx/place-ids";
+
+async function fetchIdentity(
+  provider: MobilityDataSourceProvider,
+  itemId: string,
+): Promise<OsmIdentity | undefined> {
+  try {
+    const detail = await provider.getDetail(itemId);
+    return detail.data?.identity;
+  } catch {
+    return undefined;
+  }
+}
 
 export function createDataSourceResolver(provider: MobilityDataSourceProvider): PlaceResolver {
   const scheme = provider.id;
@@ -35,13 +47,20 @@ export function createDataSourceResolver(provider: MobilityDataSourceProvider): 
 
     const isVehicle = value.startsWith(VEHICLE_ID_PREFIX);
 
+    // When the provider supplies an identity for the item (operator / ref /
+    // network / brand), constrain the OSM snap to candidates that match it.
+    // Providers that don't yet expose `identity` on their detail get the
+    // legacy nearest-match behaviour — the gate inside `lookupByOsmFilters`
+    // ignores identity when none is passed.
+    const identity = osmFilters && !isVehicle ? await fetchIdentity(provider, value) : undefined;
+
     // Providers without an OSM equivalent (webcams, scooters, …) skip the
     // Overpass lookup and return an address-only Place so the panel can
     // still show something sensible. Free-floating vehicles take the same
     // path even when the provider's stations would normally snap to OSM.
     let place =
       osmFilters && !isVehicle
-        ? await lookupByOsmFilters(lat, lng, osmFilters, `${scheme}:${value}`)
+        ? await lookupByOsmFilters(lat, lng, osmFilters, `${scheme}:${value}`, identity)
         : null;
 
     // Skip the reverse-geocode fallback when the caller already has an

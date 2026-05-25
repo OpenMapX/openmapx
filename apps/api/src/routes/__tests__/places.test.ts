@@ -85,8 +85,10 @@ vi.mock("@integrations/reviews/orchestrator", () => ({
   fetchAggregate: vi.fn().mockResolvedValue(null),
 }));
 
+const mockIsIntegrationScheme = vi.fn().mockReturnValue(false);
 vi.mock("../../integration-host.js", () => ({
   getAllIntegrations: vi.fn().mockReturnValue([]),
+  isIntegrationScheme: (scheme: string) => mockIsIntegrationScheme(scheme),
 }));
 
 // Mock DB RIS service
@@ -453,6 +455,53 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(200);
     expect(mockLookupByNameAndCoords).toHaveBeenCalled();
     expect(mockLookupByCoords).toHaveBeenCalled();
+  });
+
+  it("returns 404 for an integration scheme whose resolver didn't register", async () => {
+    // Mirrors the failure mode that produced the original leak: a data-
+    // source integration (here scooter-sharing) is installed — its manifest
+    // is on disk so `isIntegrationScheme` returns true — but its `setup()`
+    // threw at boot, so no resolver was registered. Without this gate the
+    // route would fall through to lookupByCoords and substitute the
+    // nearest OSM POI's tags onto the scooter.
+    mockIsIntegrationScheme.mockImplementation((scheme) => scheme === "scooter-sharing");
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("scooter-sharing:dott-123")}?${qs({
+        lat: "50.7764",
+        lng: "6.0889",
+        name: "Dott E-Scooter",
+      })}`,
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
+    expect(mockLookupByCoords).not.toHaveBeenCalled();
+
+    mockIsIntegrationScheme.mockReturnValue(false);
+  });
+
+  it("allows coord-fallback for a non-integration freeform scheme (stylePoi)", async () => {
+    // `stylePoi` is emitted by the web client when the user clicks a basemap
+    // POI symbol. It corresponds to no integration manifest, so the route
+    // should let the name+coord lookup run as today — that's how we get the
+    // OSM POI's full enrichment when the user genuinely asked for it.
+    mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("stylePoi:abc")}?${qs({
+        lat: "52.52",
+        lng: "13.37",
+        name: "Some POI",
+      })}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockLookupByNameAndCoords).toHaveBeenCalled();
   });
 
   it("returns 404 when neither lookup returns a result", async () => {

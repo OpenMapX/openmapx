@@ -7,6 +7,7 @@
 import {
   createPlace,
   type OsmFilter,
+  type OsmIdentity,
   type OverpassNode,
   type OverpassWay,
   overpassQuery,
@@ -17,6 +18,101 @@ import {
 } from "@openmapx/core";
 import { formatAddress } from "./format-address.js";
 import { resolveOsmLabel } from "./osm-label.js";
+
+function normalizeIdValue(s: string | undefined): string {
+  return s?.trim().toLowerCase() ?? "";
+}
+
+/**
+ * Corporate suffixes and country-of-incorporation suffixes that carry no
+ * identity signal — stripped before token comparison so "Shell" matches
+ * "Shell Deutschland Oil GmbH" and "Dott" matches "Dott Pay AB".
+ */
+const NAME_FILLER_TOKENS = new Set([
+  "gmbh",
+  "ag",
+  "ltd",
+  "inc",
+  "llc",
+  "plc",
+  "se",
+  "kg",
+  "ohg",
+  "ug",
+  "ab",
+  "sa",
+  "srl",
+  "bv",
+  "co",
+  "corp",
+  "company",
+  "holding",
+  "holdings",
+  "group",
+  "international",
+  "deutschland",
+  "deutsche",
+  "europe",
+  "pay",
+  "mobility",
+]);
+
+function nameTokens(value: string): string[] {
+  return value
+    .split(/[\s.,/_\-&]+/u)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && !NAME_FILLER_TOKENS.has(t));
+}
+
+/** True when every non-empty token of `needle` appears in `haystack`. */
+function nameMatches(needle: string, haystack: string): boolean {
+  if (!needle || !haystack) return false;
+  if (needle === haystack) return true;
+  const needleTokens = nameTokens(needle);
+  const haystackTokens = new Set(nameTokens(haystack));
+  if (needleTokens.length === 0 || haystackTokens.size === 0) return false;
+  return needleTokens.every((t) => haystackTokens.has(t));
+}
+
+function nameMatchesEitherWay(a: string, b: string): boolean {
+  return nameMatches(a, b) || nameMatches(b, a);
+}
+
+/**
+ * Decide whether an OSM element belongs to the data-source item we resolved
+ * from. Match is intentionally loose — any single hit on ref/operator/network/
+ * brand accepts the candidate — but constrained enough to stop a Dott
+ * station from snapping to an optician kiosk that happens to be tagged
+ * `amenity=bicycle_rental`. For name fields, the shorter side's tokens must
+ * all appear in the longer side (case-insensitive, common corp suffixes
+ * stripped).
+ */
+function osmMatchesIdentity(tags: Record<string, string>, identity: OsmIdentity): boolean {
+  const refExp = normalizeIdValue(identity.ref);
+  if (refExp) {
+    const refTag = normalizeIdValue(tags.ref);
+    if (refTag && refTag === refExp) return true;
+    const gbfsRef = normalizeIdValue(tags["gbfs:station_id"]);
+    if (gbfsRef && gbfsRef === refExp) return true;
+  }
+
+  const opExp = normalizeIdValue(identity.operator);
+  const netExp = normalizeIdValue(identity.network);
+  const brandExp = normalizeIdValue(identity.brand);
+  const opTag = normalizeIdValue(tags.operator);
+  const netTag = normalizeIdValue(tags.network);
+  const brandTag = normalizeIdValue(tags.brand);
+
+  for (const expected of [opExp, netExp, brandExp]) {
+    if (!expected) continue;
+    for (const candidate of [opTag, netTag, brandTag]) {
+      if (!candidate) continue;
+      if (nameMatchesEitherWay(expected, candidate)) return true;
+    }
+  }
+
+  return false;
+}
 
 function buildIds(result: NominatimDetailResult, requestId: string): PlaceIds {
   const osmRef = `${result.osm_type}/${result.osm_id}`;
@@ -459,12 +555,19 @@ const OVERPASS_MAX_DISTANCE_M = 150;
  * Used to enrich data-source items (fuel, EV, bike sharing, parking, car sharing)
  * with the correct OSM node/way rather than a plain reverse geocode which returns
  * whatever element is geometrically closest regardless of type.
+ *
+ * When `identity` is provided, candidates must match at least one identity
+ * field (ref, operator, network, brand — case-insensitive). This stops a Dott
+ * bike station from snapping to a co-located optician kiosk whose OSM node
+ * happens to carry `amenity=bicycle_rental`. Without an identity hint, falls
+ * back to the legacy nearest-match behaviour.
  */
 export async function lookupByOsmFilters(
   lat: number,
   lng: number,
   filters: OsmFilter[],
   originalId: string,
+  identity?: OsmIdentity,
 ): Promise<Place | null> {
   const bboxStr = `${lat - OVERPASS_BBOX_DEG},${lng - OVERPASS_BBOX_DEG},${lat + OVERPASS_BBOX_DEG},${lng + OVERPASS_BBOX_DEG}`;
 
@@ -476,6 +579,10 @@ export async function lookupByOsmFilters(
     ])
     .join("\n  ");
   const query = `[out:json][timeout:10];\n(\n  ${lines}\n);\nout center 10;`;
+
+  const hasIdentity =
+    identity !== undefined &&
+    Boolean(identity.ref || identity.operator || identity.network || identity.brand);
 
   try {
     const data = await overpassQuery(query);
@@ -498,10 +605,17 @@ export async function lookupByOsmFilters(
         return { el, elLat, elLon, dist: distanceMetres(lat, lng, elLat, elLon) };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null)
+      .filter((c) => c.dist <= OVERPASS_MAX_DISTANCE_M)
       .sort((a, b) => a.dist - b.dist);
 
-    const best = candidates[0];
-    if (!best || best.dist > OVERPASS_MAX_DISTANCE_M) return null;
+    if (candidates.length === 0) return null;
+
+    let best = candidates[0];
+    if (hasIdentity && identity) {
+      const matched = candidates.find((c) => osmMatchesIdentity(c.el.tags ?? {}, identity));
+      if (!matched) return null;
+      best = matched;
+    }
 
     return overpassElementToPlace(best.el, best.elLat, best.elLon, originalId);
   } catch {

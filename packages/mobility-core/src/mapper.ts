@@ -7,9 +7,30 @@ import type {
   DataSourceDetail,
   DataSourceDetailSection,
   DataSourceResult,
+  OsmIdentity,
   PricingPlanEntry,
 } from "@openmapx/core";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types/shared-mobility.js";
+
+function stationIdentity(station: SharedMobilityStation): OsmIdentity | undefined {
+  const identity: OsmIdentity = {};
+  if (station.nativeId) identity.ref = station.nativeId;
+  if (station.operator) identity.operator = station.operator;
+  if (station.branding?.name && station.branding.name !== station.operator) {
+    identity.brand = station.branding.name;
+  }
+  return Object.keys(identity).length > 0 ? identity : undefined;
+}
+
+function vehicleIdentity(vehicle: SharedMobilityVehicle): OsmIdentity | undefined {
+  const identity: OsmIdentity = {};
+  if (vehicle.nativeId) identity.ref = vehicle.nativeId;
+  if (vehicle.operator) identity.operator = vehicle.operator;
+  if (vehicle.branding?.name && vehicle.branding.name !== vehicle.operator) {
+    identity.brand = vehicle.branding.name;
+  }
+  return Object.keys(identity).length > 0 ? identity : undefined;
+}
 
 /** Detects raw slugs like "berlin-scooter-system-pricing-plan" (no spaces, all lowercase). */
 const SLUG_RE = /^[a-z0-9][a-z0-9_-]*$/;
@@ -310,6 +331,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     sources: station.sources,
     name: station.name,
     coordinates: station.coordinates,
+    identity: stationIdentity(station),
     address,
     branding,
     operator:
@@ -426,6 +448,7 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
   return {
     id: `${VEHICLE_ID_PREFIX}${vehicle.id}`,
     sources: vehicle.sources,
+    identity: vehicleIdentity(vehicle),
     name: vehicle.operator
       ? `${vehicle.operator} ${FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"}`
       : (FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"),

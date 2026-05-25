@@ -31,7 +31,7 @@ import {
   type PlaceResolverContext,
 } from "@openmapx/place-ids";
 import type { FastifyPluginAsync } from "fastify";
-import { getAllIntegrations } from "../integration-host.js";
+import { getAllIntegrations, isIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
@@ -383,6 +383,25 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
                 throw err;
               }
               return enrichPlace(resolved, lang);
+            }
+            // No resolver registered for this scheme. The coord-fallback
+            // below would happily snap to the nearest OSM POI — fine for
+            // freeform UI schemes (saved labels, basemap POI clicks,
+            // Street View drops) that aren't backed by any integration,
+            // dangerous for an integration whose `setup()` failed and
+            // never got to register its resolver. The manifest registry
+            // tells us which is which: any scheme matching an installed
+            // integration id is strict; everything else is freeform.
+            if (isIntegrationScheme(parsedId.scheme)) {
+              fastify.log.warn(
+                { scheme: parsedId.scheme, rawId },
+                "places: integration scheme has no resolver; refusing coord-fallback",
+              );
+              const err: CacheableError = {
+                statusCode: 404,
+                message: `No resolver for scheme '${parsedId.scheme}'`,
+              };
+              throw err;
             }
           }
 

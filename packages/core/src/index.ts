@@ -67,6 +67,7 @@ export type {
   DataSourceMarkerStyle,
   DataSourceMeta,
   DataSourceResult,
+  OsmIdentity,
   PricingPlanEntry,
 } from "@openmapx/integration-framework";
 export { fetchCapabilities, isServiceAvailable } from "./api/capabilities";
