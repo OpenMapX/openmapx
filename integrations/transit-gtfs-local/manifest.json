@@ -31,5 +31,21 @@
       "service": "postgis",
       "optional": false
     }
+  ],
+  "dataSources": [
+    {
+      "sourceId": "transit-gtfs-local",
+      "name": "Local GTFS Feeds",
+      "url": "https://gtfs.org/",
+      "license": "Per-feed (see getFeedAttribution)",
+      "attribution": "Aggregated set of imported GTFS schedules; per-feed attribution surfaced via getFeedAttribution().",
+      "commercialUse": "conditional",
+      "providerCountry": "XX",
+      "providerPrivacyUrl": "https://gtfs.org/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
   ]
 }

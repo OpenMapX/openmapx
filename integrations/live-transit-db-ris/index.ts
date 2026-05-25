@@ -5,10 +5,15 @@ import {
 } from "@integrations/geocoding-db-ris/ris-client.js";
 import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+  type RealtimeProvider,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
+
+const attribution = createManifestAttribution();
 
 interface RisTransportInfo {
   journeyName?: string;
@@ -128,18 +133,8 @@ async function getDbLiveTransitVehicles(
   return [...byJourneyId.values()];
 }
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "db-ris-maps",
-    name: "Deutsche Bahn RIS Maps",
-    url: "https://apis.deutschebahn.com/",
-    licenseUrl: "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
-    attributionText: "Deutsche Bahn RIS Maps (bilateral license)",
-    publisher: { name: "Deutsche Bahn AG", url: "https://www.deutschebahn.com/" },
-  },
-];
-
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   setRisCredentials({
     clientId: ctx.config.clientId as string | undefined,
     apiKey: ctx.config.apiKey as string | undefined,
@@ -151,7 +146,7 @@ export function setup(ctx: IntegrationContext): void {
     id: "live-transit-db-ris",
     coverage: { bbox: GERMANY_BBOX },
     priority: 20,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       vehiclePositions: true,
       alerts: { byStop: false, byRoute: false, byBbox: false },
@@ -165,7 +160,7 @@ export function setup(ctx: IntegrationContext): void {
      */
     async getVehiclePositions(bbox: BBox) {
       const data = await getDbLiveTransitVehicles(bbox, administrationIds);
-      return withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+      return withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
     },
   };
 

@@ -1,7 +1,6 @@
 "use client";
 
 import type {
-  BoundingBox,
   DataSourceMapContextSelection,
   DataSourceMeta,
   DataSourceResult,
@@ -10,8 +9,6 @@ import type {
 import {
   applyClientSideFilters,
   createPlace,
-  extractSourcePrefix,
-  isPointInBBox,
   PANEL,
   splitFilters,
   useDataSourceMapContext,
@@ -22,7 +19,8 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import type { DataSourceAttribution, IntegrationDataSource } from "@openmapx/integration-framework";
+import type { DataSourceAttribution } from "@openmapx/integration-framework";
+import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type maplibregl from "maplibre-gl";
@@ -33,8 +31,8 @@ import { usePinMarker } from "@/hooks/usePinMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-import { useRegisterMapAttribution } from "@/lib/mapAttributionStore";
 import { createMarkerSvg } from "@/lib/markerSvg";
+import { useMapAttributions } from "@/lib/useMapAttributions";
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
 import { getFirstSymbolLayerId } from "./layerStyleUtils";
 import { useLayerReanchor } from "./useLayerReanchor";
@@ -91,17 +89,11 @@ function buildGeoJson(
   };
 }
 
-function manifestSourceToAttribution(ds: IntegrationDataSource): Attribution {
-  return {
-    sourceId: ds.sourceId,
-    name: ds.name,
-    url: ds.url,
-    spdxLicense: ds.license || undefined,
-    licenseUrl: ds.licenseUrl,
-    attributionText: ds.attribution,
-  };
-}
-
+// Per-record runtime attribution from providers — e.g. France IRVE's
+// per-station Licence-Ouverte publisher credit, OCM's upstream DataProvider.
+// Surfaced alongside the manifest credits so license-required per-publisher
+// attribution reaches the map strip even when the provider isn't enumerated
+// in the manifest.
 function runtimeAttributionToAttribution(attr: DataSourceAttribution): Attribution {
   return {
     sourceId: attr.text || attr.url,
@@ -129,14 +121,6 @@ function buildMapContextSelection(results: DataSourceResult[]): DataSourceMapCon
     systemIds: [...systemIds].sort(),
     vehicleTypeIds: [...vehicleTypeIds].sort(),
   };
-}
-
-function filterResultsToBbox(
-  results: DataSourceResult[],
-  bbox: BoundingBox | null,
-): DataSourceResult[] {
-  if (!bbox) return [];
-  return results.filter((result) => isPointInBBox(result.coordinates, bbox));
 }
 
 /**
@@ -249,7 +233,11 @@ export function DataSourceLayer() {
     searchBbox !== null &&
     (activeMeta ? viewportZoom >= activeMeta.minZoom : true);
 
-  const { data: searchResults } = useDataSourceSearch(
+  const {
+    data: searchResults,
+    attributions: searchAttributions,
+    isFetching: searchIsFetching,
+  } = useDataSourceSearch(
     shouldFetch ? activeSource : null,
     shouldFetch ? searchBbox : null,
     serverFilters,
@@ -261,11 +249,6 @@ export function DataSourceLayer() {
   const filteredResults = useMemo(
     () => applyClientSideFilters(searchResults ?? [], filters, openingHoursFilter),
     [searchResults, filters, openingHoursFilter],
-  );
-
-  const visibleResults = useMemo(
-    () => filterResultsToBbox(filteredResults, viewportBbox),
-    [filteredResults, viewportBbox],
   );
 
   const mapContextSelection = useMemo(
@@ -282,33 +265,65 @@ export function DataSourceLayer() {
     mapContextSelection,
   );
 
-  // Build the Attribution[] contribution for the React-driven attribution
-  // strip from the sources actually present in visible results. The strip
-  // dedupes by `sourceId`, so order matters: manifest-curated entries first,
-  // then runtime/per-result attributions.
-  const layerAttributions = useMemo<Attribution[]>(() => {
-    if (!activeSource || visibleResults.length === 0) return [];
+  // Attribution for the active integration's data sources. Filtered to the
+  // providers the envelope actually credited for this response — e.g.
+  // browsing fuel in Aachen only emits Tankerkoenig credit, not the full EU
+  // stack of country-specific fuel providers.
+  //
+  // While the search query is in flight we emit nothing; otherwise a freshly-
+  // selected source would briefly show ALL manifest credits, then snap to
+  // the actually-credited subset on first response. Once the response has
+  // landed and `searchAttributions` is empty, we fall back to the full
+  // manifest *only when there are visible results* — providers that don't
+  // yet emit envelope attributions still need credits surfaced, but an
+  // empty result set (zoomed out, no coverage area) shouldn't advertise
+  // every declared publisher.
+  const dataSourceAttributions = useMemo<Attribution[]>(() => {
+    if (!activeSource) return [];
+    if (searchIsFetching && searchAttributions.length === 0) return [];
     const meta = registry.get(activeSource);
-    const dataSources = meta?.dataSources ?? [];
-    const visiblePrefixes = new Set(
-      visibleResults
-        .flatMap((result) => result.sources ?? [result.source])
-        .map((s) => extractSourcePrefix(s)),
-    );
-    const manifest = dataSources
-      .filter((ds) => !ds.dynamic && visiblePrefixes.has(ds.sourceId))
-      .map(manifestSourceToAttribution);
-    const fallback =
-      manifest.length === 0
-        ? dataSources.filter((ds) => !ds.dynamic).map(manifestSourceToAttribution)
-        : [];
-    const runtime = visibleResults
-      .flatMap((result) => result.attributions ?? [])
-      .map(runtimeAttributionToAttribution);
-    return [...manifest, ...fallback, ...runtime];
-  }, [activeSource, registry, visibleResults]);
-
-  useRegisterMapAttribution(activeSource ? `data-source:${activeSource}` : null, layerAttributions);
+    const dataSources = (meta?.dataSources ?? []).filter((ds) => !ds.dynamic);
+    const creditedIds = new Set(searchAttributions.map((a) => a.sourceId));
+    const filtered = dataSources.filter((ds) => creditedIds.has(ds.sourceId));
+    if (filtered.length === 0 && creditedIds.size > 0) {
+      // Envelope credited sources the manifest doesn't declare — flag this in
+      // dev so manifests/providers can be reconciled. In prod we still show
+      // the full manifest to avoid an empty strip with rendered data.
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          `[DataSourceLayer] envelope.attributions for "${activeSource}" reference sourceIds ` +
+            `not declared in the integration manifest: ${[...creditedIds].join(", ")}`,
+        );
+      }
+    }
+    // Pick the credited set:
+    //  - envelope credited subset when present
+    //  - otherwise fall back to the full manifest, BUT only when there are
+    //    visible results (an empty viewport with no markers shouldn't
+    //    advertise every publisher the integration declared)
+    //  - otherwise nothing
+    const creditedSources =
+      filtered.length > 0 ? filtered : filteredResults.length > 0 ? dataSources : [];
+    const manifestCredits = creditedSources.map(dataSourceToAttribution);
+    // Surface per-record `result.attributions` (e.g. France IRVE municipal
+    // publishers under Licence Ouverte) so license-required per-publisher
+    // credit reaches the map strip alongside the manifest credits.
+    const seen = new Set(manifestCredits.map((a) => a.sourceId));
+    const runtimeCredits: Attribution[] = [];
+    for (const result of filteredResults) {
+      for (const attr of result.attributions ?? []) {
+        const credit = runtimeAttributionToAttribution(attr);
+        if (seen.has(credit.sourceId)) continue;
+        seen.add(credit.sourceId);
+        runtimeCredits.push(credit);
+      }
+    }
+    return [...manifestCredits, ...runtimeCredits];
+  }, [activeSource, registry, searchAttributions, searchIsFetching, filteredResults]);
+  useMapAttributions(
+    activeSource ? `data-source:${activeSource}` : "data-source",
+    dataSourceAttributions,
+  );
 
   // Show pin marker for hovered item
   const hoveredResult = filteredResults.find((r) => r.id === hoveredItemId) ?? null;

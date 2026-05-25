@@ -5,7 +5,7 @@ import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripLeg, TripPlan } from "@openmapx/mobility-core/transit";
 import * as motis from "./adapter.js";
-import { ATTRIBUTION_TRANSITOUS } from "./attributions.js";
+import { attributionLocal, attributionTransitous } from "./attributions.js";
 import {
   type MotisInstance,
   motisLocalInstance,
@@ -18,21 +18,11 @@ let cachedLocalReachableAt = 0;
 
 const LOCAL_REACHABILITY_TTL_MS = 15_000;
 
-const ATTRIBUTION_LOCAL: Attribution[] = [
-  {
-    sourceId: "transitous",
-    name: "MOTIS (self-hosted)",
-    url: "https://github.com/motis-project/motis",
-    spdxLicense: "MIT",
-    licenseUrl: "https://github.com/motis-project/motis",
-  },
-];
-
 function wrapTransitous<T>(data: T) {
-  return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow());
+  return withAttribution(data, attributionTransitous(), freshnessNow());
 }
 function wrapTransitousRT<T>(data: T) {
-  return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow({ hasRealtimeData: true }));
+  return withAttribution(data, attributionTransitous(), freshnessNow({ hasRealtimeData: true }));
 }
 
 interface MaybeStopShape {
@@ -149,7 +139,7 @@ function wrapLocalWithFeedAttribution<T>(
   isRealtime = false,
 ) {
   if (!index) {
-    return withAttribution(data, ATTRIBUTION_LOCAL, freshnessNow({ hasRealtimeData: isRealtime }));
+    return withAttribution(data, attributionLocal(), freshnessNow({ hasRealtimeData: isRealtime }));
   }
   const tagsByLength = index.listMotisFeedTags().sort((a, b) => b.length - a.length);
   const tags = extractFeedTags(data, tagsByLength);
@@ -158,7 +148,7 @@ function wrapLocalWithFeedAttribution<T>(
     const attr = index.getById(tag);
     if (attr) matched.push(attr);
   }
-  const attributions = matched.length > 0 ? matched : ATTRIBUTION_LOCAL;
+  const attributions = matched.length > 0 ? matched : attributionLocal();
   return withAttribution(data, attributions, freshnessNow({ hasRealtimeData: isRealtime }));
 }
 
@@ -246,7 +236,7 @@ export function setupLocal(ctx: IntegrationContext): void {
     prefix: "ms:",
     coverage: { all: true },
     priority: 1,
-    attribution: ATTRIBUTION_LOCAL,
+    attribution: attributionLocal(),
     capabilities: {
       stops: {
         lookup: true,
@@ -353,5 +343,5 @@ export const __testing = {
     wrapLocalWithFeedAttribution(data, index, false),
   wrapLocalRT: <T>(data: T, index: AttributionIndexHandle | undefined) =>
     wrapLocalWithFeedAttribution(data, index, true),
-  ATTRIBUTION_LOCAL,
+  attributionLocal,
 };

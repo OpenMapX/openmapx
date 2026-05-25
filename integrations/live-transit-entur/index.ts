@@ -1,6 +1,10 @@
 import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+  type RealtimeProvider,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
@@ -402,33 +406,17 @@ async function isEnturLiveTransitAvailable(): Promise<boolean> {
   }
 }
 
-const VEHICLES_ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "entur-live-vehicles",
-    name: "Entur Vehicle Positions v2",
-    url: "https://developer.entur.org/pages-real-time-vehicle/",
-    spdxLicense: "NLOD-2.0",
-    licenseUrl: "https://data.norge.no/nlod/en/2.0",
-    attributionText: "Data made available by Entur",
-    publisher: { name: "Entur AS", url: "https://entur.no/" },
-  },
-];
-
-const SITUATIONS_ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "entur-live-situations",
-    name: "Entur Journey Planner Situations",
-    url: "https://developer.entur.org/pages-journeyplanner-journeyplanner/",
-    spdxLicense: "NLOD-2.0",
-    licenseUrl: "https://data.norge.no/nlod/en/2.0",
-    attributionText: "Data made available by Entur",
-    publisher: { name: "Entur AS", url: "https://entur.no/" },
-  },
-];
-
-const PROVIDER_ATTRIBUTION: Attribution[] = [...VEHICLES_ATTRIBUTION, ...SITUATIONS_ATTRIBUTION];
+// Attribution metadata for the two sub-feeds (vehicles + situations) is
+// declared in the manifest's dataSources; we look each up by sourceId so
+// per-method calls credit only the feed that actually served them.
+const attribution = createManifestAttribution();
+function attributionFor(sourceId: string): Attribution[] {
+  const attr = attribution.bySource(sourceId);
+  return attr ? [attr] : [];
+}
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   clientName =
     ctx.config.clientName && String(ctx.config.clientName).trim().length > 0
       ? String(ctx.config.clientName).trim()
@@ -453,7 +441,7 @@ export function setup(ctx: IntegrationContext): void {
     id: "live-transit-entur",
     coverage: { bbox: NORWAY_BBOX },
     priority: 10,
-    attribution: PROVIDER_ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       vehiclePositions: true,
       alerts: { byStop: false, byRoute: false, byBbox: true },
@@ -467,11 +455,19 @@ export function setup(ctx: IntegrationContext): void {
      */
     async getVehiclePositions(bbox: BBox) {
       const data = await getEnturVehicles(bbox);
-      return withAttribution(data, VEHICLES_ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+      return withAttribution(
+        data,
+        attributionFor("entur-live-vehicles"),
+        freshnessNow({ hasRealtimeData: true }),
+      );
     },
     async getAlertsForBbox(bbox: BBox) {
       const data = await getEnturAlerts(bbox);
-      return withAttribution(data, SITUATIONS_ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+      return withAttribution(
+        data,
+        attributionFor("entur-live-situations"),
+        freshnessNow({ hasRealtimeData: true }),
+      );
     },
   };
 

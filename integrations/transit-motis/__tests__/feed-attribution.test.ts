@@ -2,7 +2,29 @@ import type { AttributionIndexHandle } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { TransitStop, TripItinerary } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
+import { attribution } from "../attributions.js";
 import { __testing, annotateLegsWithAttribution, extractFeedTags } from "../local.js";
+
+// Mirror the manifest dataSources the host loads at runtime so the local
+// fallback attribution has data to read.
+attribution.set([
+  {
+    sourceId: "motis",
+    name: "MOTIS (self-hosted)",
+    url: "https://github.com/motis-project/motis",
+    license: "MIT",
+    providerCountry: "DE",
+    providerPrivacyUrl: "https://github.com/motis-project/motis",
+  },
+  {
+    sourceId: "transitous",
+    name: "Transitous",
+    url: "https://api.transitous.org/",
+    license: "AGPL-3.0-or-later",
+    providerCountry: "DE",
+    providerPrivacyUrl: "https://transitous.org/",
+  },
+]);
 
 const FEED_TAGS = ["de_DELFI", "ch_SBB"];
 const FEED_TAGS_BY_LENGTH = [...FEED_TAGS].sort((a, b) => b.length - a.length);
@@ -102,8 +124,8 @@ describe("transit-motis feed attribution", () => {
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, fakeIndex);
-    expect(wrapped.attributions).toEqual(__testing.ATTRIBUTION_LOCAL);
-    expect(wrapped.attributions[0].sourceId).toBe("transitous");
+    expect(wrapped.attributions).toEqual(__testing.attributionLocal());
+    expect(wrapped.attributions[0].sourceId).toBe("motis");
   });
 
   it("falls back to ATTRIBUTION_LOCAL when no index is supplied", () => {
@@ -116,7 +138,7 @@ describe("transit-motis feed attribution", () => {
       provider: "ms",
     };
     const wrapped = __testing.wrapLocal(stop, undefined);
-    expect(wrapped.attributions).toEqual(__testing.ATTRIBUTION_LOCAL);
+    expect(wrapped.attributions).toEqual(__testing.attributionLocal());
   });
 
   it("extractFeedTags walks nested trip-plan shapes (legs with from/to stop ids)", () => {

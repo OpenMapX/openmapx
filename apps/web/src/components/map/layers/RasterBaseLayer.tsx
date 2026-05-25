@@ -6,7 +6,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { LayerSpecification } from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
-import { useRegisterMapAttribution } from "@/lib/mapAttributionStore";
+import { useMapAttributions } from "@/lib/useMapAttributions";
 import { getFirstSymbolLayerId, setLayerVisibility } from "./layerStyleUtils";
 
 type RasterPaint = Extract<LayerSpecification, { type: "raster" }>["paint"];
@@ -19,9 +19,9 @@ interface RasterBaseLayerProps {
   tileSize?: number;
   maxzoom?: number;
   /**
-   * Attributions to register with the map's React-driven attribution strip
-   * while this layer is the active base. No source-side `attribution` string
-   * is set on MapLibre — the strip is the single rendering path.
+   * Attributions to register via `useMapAttributions` while this layer is
+   * the active base. Each entry becomes its own atomic side-channel source so
+   * MapLibre's substring dedup collapses identical credits across layers.
    */
   attributions: Attribution[];
   paint?: RasterPaint;
@@ -41,9 +41,7 @@ export function RasterBaseLayer({
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const shouldShow = activeLayer === activeWhen;
 
-  // Only contribute to the attribution strip while this raster layer is the
-  // active base. When inactive, an empty list effectively unregisters.
-  useRegisterMapAttribution(`raster:${sourceId}`, shouldShow ? attributions : []);
+  useMapAttributions(`raster-${sourceId}`, shouldShow ? attributions : []);
 
   useEffect(() => {
     void styleVersion;

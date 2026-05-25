@@ -15,6 +15,18 @@ function createCtx(config: Record<string, unknown> = {}): CtxHandle {
   let provider: RealtimeProvider | undefined;
   const ctx = {
     config,
+    manifest: {
+      dataSources: [
+        {
+          sourceId: "motis-rt",
+          name: "MOTIS GTFS-RT Pass-through",
+          url: "https://motis-project.de/",
+          license: "MIT",
+          providerCountry: "DE",
+          providerPrivacyUrl: "https://motis-project.de/",
+        },
+      ],
+    },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     getRequiredService: () => null,
     registerRealtimeProvider: (next: RealtimeProvider) => {

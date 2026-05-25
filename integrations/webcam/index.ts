@@ -4,7 +4,7 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { initCache } from "./cache.js";
 import { setNpsApiKey } from "./providers/nps.js";
-import { webcamProvider } from "./providers/provider.js";
+import { setManifestDataSources, webcamProvider } from "./providers/provider.js";
 import { setWindyApiKey } from "./providers/windy.js";
 
 export function setup(ctx: IntegrationContext): void {
@@ -13,6 +13,7 @@ export function setup(ctx: IntegrationContext): void {
   if (resolved?.url) setOverpassUrl(resolved.url);
   setWindyApiKey(ctx.config.apiKey as string | undefined);
   setNpsApiKey(ctx.config.npsApiKey as string | undefined);
+  setManifestDataSources(ctx.manifest.dataSources ?? []);
   ctx.registerMobilityDataSource(webcamProvider);
   registerPlaceResolver(webcamProvider.id, createDataSourceResolver(webcamProvider));
 }

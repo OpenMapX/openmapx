@@ -1,6 +1,6 @@
 import type { BoundingBox, DataSourceDetail } from "@openmapx/core";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const sourceA = {
@@ -52,8 +52,39 @@ vi.mock("../reference.js", () => ({
 }));
 
 import { deduplicateChargingStations } from "../dedup.js";
-import { evChargingProvider } from "../provider.js";
+import { evChargingProvider, setManifestDataSources } from "../provider.js";
 import { mapStationToDetail, mapStationToResult } from "../station-mapper.js";
+
+// Mirror the manifest dataSources the host loads at runtime so the provider's
+// attribution lookup has something to map `source` prefixes against.
+beforeEach(() => {
+  setManifestDataSources([
+    {
+      sourceId: "ocm",
+      name: "OpenChargeMap",
+      url: "https://openchargemap.org/",
+      license: "CC-BY-SA-4.0",
+      providerCountry: "UK",
+      providerPrivacyUrl: "https://openchargemap.org/site/about/privacy",
+    },
+    {
+      sourceId: "source-a",
+      name: "Source A",
+      url: "https://example.com/a",
+      license: "test",
+      providerCountry: "XX",
+      providerPrivacyUrl: "https://example.com/a/privacy",
+    },
+    {
+      sourceId: "source-b",
+      name: "Source B",
+      url: "https://example.com/b",
+      license: "test",
+      providerCountry: "XX",
+      providerPrivacyUrl: "https://example.com/b/privacy",
+    },
+  ]);
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -102,8 +133,7 @@ describe("evChargingProvider.search", () => {
     expect(deduplicateChargingStations).toHaveBeenCalledWith([a, b]);
     expect(mapStationToResult).toHaveBeenCalledTimes(2);
     expect(results.map((result) => result.id)).toEqual(["a", "b"]);
-    expect(envelope.attributions.length).toBeGreaterThan(0);
-    expect(envelope.attributions[0].sourceId).toBe("ocm");
+    expect(envelope.attributions.map((a) => a.sourceId)).toEqual(["source-a", "source-b"]);
     expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
@@ -149,8 +179,7 @@ describe("evChargingProvider.getDetail", () => {
     const envelope = await evChargingProvider.getDetail("cached-detail");
 
     expect(envelope.data).toBe(detail);
-    expect(envelope.attributions.length).toBeGreaterThan(0);
-    expect(envelope.attributions[0].sourceId).toBe("ocm");
+    expect(envelope.attributions.map((a) => a.sourceId)).toEqual(["source-a", "source-b"]);
     expect(envelope.freshness.fetchedAt).toBeTruthy();
     expect(mocks.sourceA.fetchDetail).not.toHaveBeenCalled();
   });

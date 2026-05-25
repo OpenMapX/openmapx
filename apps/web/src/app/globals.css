@@ -18,6 +18,10 @@
   --omx-safe-bottom: env(safe-area-inset-bottom, 0px);
   --omx-safe-left: env(safe-area-inset-left, 0px);
   --omx-safe-right: env(safe-area-inset-right, 0px);
+  /* Pixels to shift the bottom-right attribution control left to clear the
+   * sidebar when it's open. Set by `<MapAttributionPositioner>` and consumed
+   * by the `.maplibregl-ctrl-bottom-right` rule below. */
+  --omx-attrib-shift: 0px;
 }
 
 .dark {
@@ -86,5 +90,19 @@ main {
   .omx-popup.maplibregl-popup .maplibregl-popup-close-button:hover {
     background: var(--omx-hover-bg) !important;
     color: var(--omx-overlay-text) !important;
+  }
+
+  /* MapLibre's built-in AttributionControl host: shift left to clear the
+   * sidebar when it's open, respect mobile safe-area insets, and cap width
+   * so it doesn't run under the legend host that sits bottom-center. */
+  .maplibregl-ctrl-bottom-right {
+    right: calc(var(--omx-safe-right) + var(--omx-attrib-shift)) !important;
+    bottom: var(--omx-safe-bottom) !important;
+    max-width: calc(100vw - var(--omx-safe-left) - var(--omx-safe-right) - var(--omx-attrib-shift) - 16px) !important;
+    transition: right 0.25s ease, max-width 0.25s ease;
+  }
+
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+    max-width: 100%;
   }
 }

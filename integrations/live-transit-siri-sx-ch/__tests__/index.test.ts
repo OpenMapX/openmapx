@@ -16,6 +16,18 @@ function createCtx(config: Record<string, unknown> = {}): CtxHandle {
   let provider: RealtimeProvider | undefined;
   const ctx = {
     config,
+    manifest: {
+      dataSources: [
+        {
+          sourceId: "opentransportdata-ch-siri-sx",
+          name: "Open Transport Data CH SIRI-SX",
+          url: "https://opentransportdata.swiss/",
+          license: "CC-BY-4.0",
+          providerCountry: "CH",
+          providerPrivacyUrl: "https://opentransportdata.swiss/",
+        },
+      ],
+    },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     registerRealtimeProvider: (next: RealtimeProvider) => {
       provider = next;

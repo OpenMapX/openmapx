@@ -1,26 +1,20 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as swiss from "./provider.js";
 
 const SWITZERLAND_BBOX: [number, number, number, number] = [5.96, 45.82, 10.49, 47.81];
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "opentransportdata-ch-ojp",
-    name: "Open data platform mobility Switzerland – Open Journey Planner",
-    url: "https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/",
-    licenseUrl: "https://opentransportdata.swiss/en/terms-of-use/",
-    attributionText: "Source: opentransportdata.swiss",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   swiss.setOpenTransportDataChConfig({
     apiKey: ctx.config.apiKey as string | undefined,
     cache: ctx.cache,
@@ -57,7 +51,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "otdch:",
     priority: 1,
     coverage: { bbox: SWITZERLAND_BBOX },
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

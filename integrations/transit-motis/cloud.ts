@@ -2,14 +2,14 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as motis from "./adapter.js";
-import { ATTRIBUTION_TRANSITOUS } from "./attributions.js";
+import { attributionTransitous } from "./attributions.js";
 import { configureTransitous, transitousInstance } from "./instances.js";
 
 function wrapTransitous<T>(data: T) {
-  return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow());
+  return withAttribution(data, attributionTransitous(), freshnessNow());
 }
 function wrapTransitousRT<T>(data: T) {
-  return withAttribution(data, ATTRIBUTION_TRANSITOUS, freshnessNow({ hasRealtimeData: true }));
+  return withAttribution(data, attributionTransitous(), freshnessNow({ hasRealtimeData: true }));
 }
 
 function withPrefix(id: string, prefix: "mo:"): string {
@@ -31,7 +31,7 @@ export function setupCloud(ctx: IntegrationContext): void {
     prefix: "mo:",
     coverage: { all: true },
     priority: 7,
-    attribution: ATTRIBUTION_TRANSITOUS,
+    attribution: attributionTransitous(),
     capabilities: {
       stops: {
         lookup: true,

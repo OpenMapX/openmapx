@@ -1,23 +1,18 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as ris from "./provider.js";
 import { setRisCredentials } from "./ris-client.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "db-ris-routing",
-    name: "Deutsche Bahn RIS Routing",
-    url: "https://apis.deutschebahn.com/",
-    licenseUrl: "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
-  },
-];
-
+const attribution = createManifestAttribution();
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   setRisCredentials({
     clientId: ctx.config.clientId as string | undefined,
     apiKey: ctx.config.apiKey as string | undefined,
@@ -29,7 +24,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "ris:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
     priority: 1,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: false,

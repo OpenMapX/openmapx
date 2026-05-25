@@ -1,22 +1,17 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { GtfsDeps } from "./gtfs-local.js";
 import * as gtfsLocal from "./gtfs-local.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "transit-gtfs-local",
-    name: "Local GTFS Feeds",
-    notes:
-      "Aggregated set of imported GTFS schedules; per-feed attribution surfaced via getFeedAttribution().",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   // Inject GTFS manager and queries from app config
   const gtfsDeps = ctx.config.gtfsDeps as GtfsDeps | undefined;
   if (gtfsDeps) {
@@ -44,7 +39,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "g-",
     coverage: { all: true },
     priority: 3,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

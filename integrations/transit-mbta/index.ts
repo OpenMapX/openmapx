@@ -1,30 +1,25 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as mbta from "./provider.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "mbta",
-    name: "MBTA",
-    url: "https://api-v3.mbta.com/",
-    licenseUrl: "https://www.mbta.com/developers/v3-api",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   mbta.setMbtaApiKey(ctx.config.apiKey as string | undefined);
   ctx.registerTransitProvider({
     id: "transit-mbta",
     prefix: "mb:",
     coverage: { bbox: [-71.9, 41.3, -69.9, 42.9] },
     priority: 1,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

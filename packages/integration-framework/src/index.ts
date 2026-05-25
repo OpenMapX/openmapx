@@ -114,9 +114,12 @@ export type {
   IntegrationManifest,
   IntegrationOverlay,
   IntegrationSearchCategory,
+  ManifestAttributionStore,
   ManifestValidationResult,
 } from "./manifest";
 export {
+  createManifestAttribution,
+  dataSourceToAttribution,
   INTEGRATION_ID_REGEX,
   integrationManifestSchema,
   validateManifest,

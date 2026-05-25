@@ -1,27 +1,20 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as entur from "./provider.js";
 
 const NORWAY_BBOX: [number, number, number, number] = [4.0, 57.0, 32.0, 71.5];
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "entur-journey-planner",
-    name: "Entur Journey Planner v3",
-    url: "https://developer.entur.org/pages-journeyplanner-journeyplanner/",
-    spdxLicense: "NLOD-2.0",
-    licenseUrl: "https://data.norge.no/nlod/en/2.0",
-    attributionText: "Data made available by Entur",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   entur.setEnturTransitConfig({
     geocoderEndpoint: ctx.config.geocoderEndpoint as string | undefined,
     journeyPlannerEndpoint: ctx.config.journeyPlannerEndpoint as string | undefined,
@@ -44,7 +37,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "entur:",
     coverage: { bbox: NORWAY_BBOX },
     priority: 1,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

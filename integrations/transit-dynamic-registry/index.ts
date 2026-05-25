@@ -1,4 +1,7 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
@@ -7,15 +10,12 @@ import { setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
 import { registry } from "./registry.js";
 
-const BASE_ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "jsdelivr",
-    name: "JSDelivr CDN (transport-apis catalog)",
-    url: "https://cdn.jsdelivr.net/",
-    spdxLicense: "MIT",
-    licenseUrl: "https://www.jsdelivr.com/terms/terms-of-use",
-  },
-];
+// Manifest declares the static infrastructure credits (jsdelivr CDN, GitHub
+// catalog). Per-upstream credits are constructed at runtime from the dynamic
+// registry payload itself — those entries can't be enumerated in a static
+// manifest because they're fetched from a community-maintained catalog at
+// startup.
+const attribution = createManifestAttribution();
 
 function buildAttributionFor(
   entryId: string,
@@ -26,7 +26,7 @@ function buildAttributionFor(
   },
 ): Attribution[] {
   return [
-    ...BASE_ATTRIBUTION,
+    ...attribution.all(),
     {
       sourceId: `dyn:${entryId}`,
       name: entryAttribution.name,
@@ -37,6 +37,7 @@ function buildAttributionFor(
 }
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
+  attribution.set(ctx.manifest.dataSources ?? []);
   // Inject the cache client so the fetcher can persist registry data
   setCache(ctx.cache);
   setGithubToken(ctx.config.githubToken as string | undefined);
@@ -68,20 +69,20 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
         }
       : null;
 
-    const attribution = entry.attribution
+    const entryAttribution = entry.attribution
       ? buildAttributionFor(entry.id, entry.attribution)
-      : BASE_ATTRIBUTION;
+      : attribution.all();
 
-    const wrap = <T>(data: T) => withAttribution(data, attribution, freshnessNow());
+    const wrap = <T>(data: T) => withAttribution(data, entryAttribution, freshnessNow());
     const wrapRT = <T>(data: T) =>
-      withAttribution(data, attribution, freshnessNow({ hasRealtimeData: true }));
+      withAttribution(data, entryAttribution, freshnessNow({ hasRealtimeData: true }));
 
     ctx.registerTransitProvider({
       id: `dyn:${entry.id}`,
       prefix: entry.prefix,
       coverage: { bbox: entry.bbox },
       priority: 5,
-      attribution,
+      attribution: entryAttribution,
       capabilities: {
         stops: {
           lookup: false,

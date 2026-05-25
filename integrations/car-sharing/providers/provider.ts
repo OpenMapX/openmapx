@@ -11,7 +11,10 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import {
+  createManifestAttribution,
+  type MobilityDataSourceProvider,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 import {
@@ -66,18 +69,15 @@ const META: DataSourceMeta = {
 
 const CAR_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>(["car"]);
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "cambio",
-    name: "Cambio CarSharing",
-    url: "https://www.cambio-carsharing.de/",
-  },
-];
+// Manifest-driven attribution. Populated by `setManifestDataSources` during
+// `setup(ctx)` from `ctx.manifest.dataSources`.
+const attribution = createManifestAttribution();
+export const setManifestDataSources = attribution.set;
 
-const wrapRT = <T>(data: T): MobilityResult<T> =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
-const wrapStatic = <T>(data: T): MobilityResult<T> =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
+const wrapRT = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
+  withAttribution(data, attributions, freshnessNow({ hasRealtimeData: true }));
+const wrapStatic = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
+  withAttribution(data, attributions, freshnessNow({ hasRealtimeData: false }));
 
 class CarSharingProvider implements MobilityDataSourceProvider {
   readonly id = "car-sharing";
@@ -85,7 +85,9 @@ class CarSharingProvider implements MobilityDataSourceProvider {
   readonly searchCacheTtl = 300;
   readonly detailCacheTtl = 300;
   readonly mapContextCacheTtl = 300;
-  readonly attribution = ATTRIBUTION;
+  get attribution(): Attribution[] {
+    return attribution.all();
+  }
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return [];
@@ -160,17 +162,21 @@ class CarSharingProvider implements MobilityDataSourceProvider {
       results.push(mapVehicleToResult(vehicle));
     }
 
-    return wrapRT(results);
+    return wrapRT(
+      results,
+      attribution.forResults(results, (r) => r.sources ?? r.source),
+    );
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = itemCache.get(stripMobilityKindPrefix(itemId));
     if (cached) {
-      if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached));
-      return wrapRT(mapVehicleToDetail(cached));
+      const attrs = attribution.forResults([cached], (c) => c.sources);
+      if ("availableVehicles" in cached) return wrapRT(mapStationToDetail(cached), attrs);
+      return wrapRT(mapVehicleToDetail(cached), attrs);
     }
 
-    return wrapRT(null);
+    return wrapRT(null, []);
   }
 
   async getMapContext(
@@ -178,7 +184,7 @@ class CarSharingProvider implements MobilityDataSourceProvider {
     _filters?: Record<string, unknown>,
     options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
   ) {
-    return wrapStatic(await buildEnturGeofencingMapContext(bbox, options));
+    return wrapStatic(await buildEnturGeofencingMapContext(bbox, options), attribution.all());
   }
 }
 

@@ -1,24 +1,17 @@
 import { setOverpassUrl } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as overpass from "./provider.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "overpass",
-    name: "OpenStreetMap (Overpass)",
-    url: "https://overpass-api.de/",
-    spdxLicense: "ODbL-1.0",
-    licenseUrl: "https://www.openstreetmap.org/copyright",
-    attributionText: "© OpenStreetMap contributors",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
 
@@ -35,7 +28,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "osm:",
     coverage: { all: true },
     priority: 10,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: false,

@@ -1,23 +1,18 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as hafas from "./provider.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "hafas",
-    name: "HAFAS REST APIs (transport.rest)",
-    url: "https://v6.db.transport.rest/",
-    licenseUrl: "https://github.com/public-transport/hafas-rest-api",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   // Register DB HAFAS as a transit provider (VBB and BVG are registered by their own integrations)
   const dbInst = hafas.HAFAS_INSTANCES.find((i) => i.id === "db");
   if (!dbInst) return;
@@ -26,7 +21,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "db-hafas:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
     priority: 3,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

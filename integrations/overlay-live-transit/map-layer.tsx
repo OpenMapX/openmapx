@@ -2,7 +2,6 @@
 
 import { escapeHtml, sanitizeUrl, useDebouncedCallback, useOverlayExclusion } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
   GeoJSONFeatureDiff,
   GeoJSONSource,
@@ -16,12 +15,12 @@ import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useEnv } from "@/lib/EnvProvider";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-import { useRegisterMapAttribution } from "@/lib/mapAttributionStore";
 import {
   loadTransitVehicleMarkers,
   modeColor,
   transitVehicleIconExpression,
 } from "@/lib/transitMarkers";
+import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
 import { useLiveTransitStore } from "./store";
 import type { LiveTransitSnapshot, LiveTransitVehicle } from "./types.js";
 
@@ -132,26 +131,6 @@ function toParsedVehicles(snapshot: LiveTransitSnapshot | null): ParsedVehicle[]
     color: modeColor(vehicle.mode),
     alerts: collectVehicleAlerts(vehicle, snapshot.alerts),
   }));
-}
-
-function buildProviderAttributions(
-  registry: ReturnType<typeof useIntegrationRegistry>,
-): Attribution[] {
-  const out: Attribution[] = [];
-  for (const integration of registry.getByDomain("live-transit")) {
-    for (const ds of integration.dataSources ?? []) {
-      if (ds.dynamic) continue;
-      out.push({
-        sourceId: ds.sourceId,
-        name: ds.name,
-        url: ds.url,
-        spdxLicense: ds.license || undefined,
-        licenseUrl: ds.licenseUrl,
-        attributionText: ds.attribution,
-      });
-    }
-  }
-  return out;
 }
 
 function toFeature(vehicle: ParsedVehicle): VehicleFeature {
@@ -315,12 +294,12 @@ export function LiveTransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
   const registry = useIntegrationRegistry();
-  const providerAttributions = useMemo(() => buildProviderAttributions(registry), [registry]);
   const layerVisible = useLiveTransitStore((s) => s.layerVisible);
-  useRegisterMapAttribution(
-    layerVisible ? "integration:overlay-live-transit" : null,
-    layerVisible ? providerAttributions : [],
-  );
+  // Credit every live-transit feed integration whose data the overlay is
+  // currently rendering (Entur, DB RIS, MOTIS, SIRI-SX CH). The overlay
+  // itself has no dataSources — its credits live on the sibling integrations
+  // that publish the feeds.
+  useIntegrationDomainAttribution("live-transit", layerVisible);
   const excludedProviders = useLiveTransitStore((s) => s.excludedProviders);
   const excludedModes = useLiveTransitStore((s) => s.excludedModes);
   const excludedCodespaces = useLiveTransitStore((s) => s.excludedCodespaces);

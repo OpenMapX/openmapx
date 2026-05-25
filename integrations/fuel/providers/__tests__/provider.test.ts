@@ -34,9 +34,32 @@ import {
   mapFuelStationToDetail,
   mapFuelStationToResult,
 } from "../mapper.js";
-import { fuelProvider } from "../provider.js";
+import { fuelProvider, setManifestDataSources } from "../provider.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;
+
+// Mirror the manifest dataSources the host loads at runtime so the provider's
+// attribution lookup has something to map `source` prefixes against.
+beforeEach(() => {
+  setManifestDataSources([
+    {
+      sourceId: "tankerkoenig",
+      name: "Tankerkoenig (MTS-K)",
+      url: "https://creativecommons.tankerkoenig.de/",
+      license: "CC BY 4.0",
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://onboarding.tankerkoenig.de/datenschutz",
+    },
+    {
+      sourceId: "osm",
+      name: "OpenStreetMap",
+      url: "https://www.openstreetmap.org/",
+      license: "ODbL 1.0",
+      providerCountry: "UK",
+      providerPrivacyUrl: "https://osmfoundation.org/wiki/Privacy_Policy",
+    },
+  ]);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();

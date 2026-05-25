@@ -3,13 +3,14 @@ import { createDataSourceResolver } from "@openmapx/integration-data-source/reso
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { declarePoiSources } from "./poi-sources.js";
-import { parkingProvider } from "./providers/provider.js";
+import { parkingProvider, setManifestDataSources } from "./providers/provider.js";
 import { initRuntime } from "./runtime.js";
 
 export function setup(ctx: IntegrationContext): void {
   initRuntime(ctx);
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
+  setManifestDataSources(ctx.manifest.dataSources ?? []);
   ctx.registerPoiSources(declarePoiSources());
   ctx.registerMobilityDataSource(parkingProvider);
   registerPlaceResolver(parkingProvider.id, createDataSourceResolver(parkingProvider));

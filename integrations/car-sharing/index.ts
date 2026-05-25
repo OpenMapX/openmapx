@@ -6,7 +6,7 @@ import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { bielefeldClient } from "./providers/bielefeld-client.js";
 import { cambioClient } from "./providers/cambio-client.js";
-import { carSharingProvider } from "./providers/provider.js";
+import { carSharingProvider, setManifestDataSources } from "./providers/provider.js";
 import { registerCarSharingClient } from "./providers/registry.js";
 import { stadtteilAutoClient } from "./providers/stadtteilauto-client.js";
 import { wuppertalClient } from "./providers/wuppertal-client.js";
@@ -23,6 +23,7 @@ export function setup(ctx: IntegrationContext): void {
   registerCarSharingClient(wuppertalClient);
   registerCarSharingClient(bielefeldClient);
 
+  setManifestDataSources(ctx.manifest.dataSources ?? []);
   ctx.registerMobilityDataSource(carSharingProvider);
   registerPlaceResolver(carSharingProvider.id, createDataSourceResolver(carSharingProvider));
 }

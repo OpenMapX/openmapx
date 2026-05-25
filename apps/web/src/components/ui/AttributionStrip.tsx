@@ -11,10 +11,9 @@ import type { JSX } from "react";
  * Visual variant for the AttributionStrip.
  *
  * - `inline`: small chips inline with surrounding text (~11px, muted).
- * - `footer`: positioned for use as a map overlay (semi-transparent background).
  * - `panel-header`: top of a panel, with optional label and a divider underneath.
  */
-export type AttributionStripVariant = "inline" | "footer" | "panel-header";
+export type AttributionStripVariant = "inline" | "panel-header";
 
 export interface AttributionStripProps {
   /** Attributions to render, typically from MobilityResult.attributions. */
@@ -65,7 +64,6 @@ export function AttributionStrip({
   const items = dedupBySourceId(attributions);
   if (items.length === 0) return null;
 
-  const isFooter = variant === "footer";
   const isPanelHeader = variant === "panel-header";
 
   const containerSx = {
@@ -73,20 +71,6 @@ export function AttributionStrip({
     flexWrap: "wrap" as const,
     alignItems: "center",
     gap: 0.75,
-    ...(isFooter
-      ? {
-          position: "absolute" as const,
-          right: 8,
-          bottom: 8,
-          maxWidth: "calc(100% - 16px)",
-          px: 1,
-          py: 0.5,
-          borderRadius: 1,
-          backgroundColor: "rgba(255, 255, 255, 0.85)",
-          backdropFilter: "blur(4px)",
-          pointerEvents: "auto" as const,
-        }
-      : {}),
     ...(isPanelHeader
       ? {
           px: 2,
@@ -119,7 +103,7 @@ export function AttributionStrip({
           fontSize,
           lineHeight: 1.4,
           color: "text.secondary",
-          backgroundColor: isFooter ? "transparent" : "action.hover",
+          backgroundColor: "action.hover",
           px: 0.75,
           py: 0.25,
           borderRadius: 0.75,

@@ -1,30 +1,24 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as irail from "./provider.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "irail",
-    name: "iRail",
-    url: "https://api.irail.be/",
-    spdxLicense: "AGPL-3.0",
-    licenseUrl: "https://hello.irail.be/api/",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   ctx.registerTransitProvider({
     id: "transit-irail",
     prefix: "ir:",
     coverage: { bbox: [2.54, 49.49, 5.92, 51.51] },
     priority: 1,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

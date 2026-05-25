@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@integrations/geocoding-db-ris/ris-client.js", () => ({
@@ -5,6 +8,14 @@ vi.mock("@integrations/geocoding-db-ris/ris-client.js", () => ({
   risPost: vi.fn(),
   setRisCredentials: vi.fn(),
 }));
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(__dirname, "../../../../../");
+
+function loadManifest(integrationId: string): { dataSources: unknown[] } {
+  const path = resolve(REPO_ROOT, "integrations", integrationId, "manifest.json");
+  return JSON.parse(readFileSync(path, "utf-8")) as { dataSources: unknown[] };
+}
 
 async function loadDbProviderModule() {
   vi.resetModules();
@@ -22,13 +33,14 @@ interface MobilityResultLike<T> {
   freshness: { fetchedAt: string; hasRealtimeData: boolean; isStale: boolean };
 }
 
-function createCtx(config: Record<string, unknown> = {}) {
+function createCtx(integrationId: string, config: Record<string, unknown> = {}) {
   let provider: unknown;
   let healthCheck: (() => Promise<unknown>) | undefined;
 
   return {
     ctx: {
       config,
+      manifest: loadManifest(integrationId),
       registerRealtimeProvider: (nextProvider: unknown) => {
         provider = nextProvider;
       },
@@ -99,7 +111,7 @@ describe("live-transit-db-ris provider", () => {
       });
 
     const mod = await loadDbProviderModule();
-    const { ctx, getProvider } = createCtx({
+    const { ctx, getProvider } = createCtx("live-transit-db-ris", {
       clientId: "client",
       apiKey: "secret",
       administrationIds: "80,81",
@@ -146,7 +158,7 @@ describe("live-transit-db-ris provider", () => {
       });
 
     const mod = await loadDbProviderModule();
-    const { ctx, getProvider } = createCtx({
+    const { ctx, getProvider } = createCtx("live-transit-db-ris", {
       clientId: "client",
       apiKey: "secret",
       administrationIds: "80,81",
@@ -249,7 +261,7 @@ describe("live-transit-entur provider", () => {
       } as Response);
 
     const mod = await loadEnturProviderModule();
-    const { ctx, getProvider } = createCtx({
+    const { ctx, getProvider } = createCtx("live-transit-entur", {
       clientName: "openmapx-tests",
       journeyPlannerEndpoint: "https://api.entur.io/journey-planner/v3/graphql",
       vehiclesEndpoint: "https://api.entur.io/realtime/v2/vehicles/graphql",

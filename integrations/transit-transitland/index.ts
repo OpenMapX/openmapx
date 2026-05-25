@@ -1,30 +1,25 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as transitland from "./provider.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "transitland",
-    name: "Transitland (Interline)",
-    url: "https://transit.land/",
-    licenseUrl: "https://www.transit.land/terms",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   transitland.setTransitlandApiKey(ctx.config.apiKey as string | undefined);
   ctx.registerTransitProvider({
     id: "transit-transitland",
     prefix: "tl:",
     coverage: { all: true },
     priority: 9,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

@@ -1,5 +1,5 @@
 import type { BoundingBox, DataSourceResult } from "@openmapx/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../windy.js", () => ({
   searchWindy: vi.fn(),
@@ -61,9 +61,64 @@ import { deduplicateByCoordinates } from "../dedup.js";
 import { getDotDetail, mapDotToDetail, mapDotToResult, searchDot } from "../dot/index.js";
 import { getNpsDetail, mapNpsToDetail, mapNpsToResult, searchNps } from "../nps.js";
 import { getOsmWebcamNode, mapOsmToDetail, mapOsmToResult, searchOsmWebcams } from "../osm.js";
-import { webcamProvider } from "../provider.js";
+import { setManifestDataSources, webcamProvider } from "../provider.js";
 import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "../tfl.js";
 import { getWindyDetail, mapWindyToDetail, mapWindyToResult, searchWindy } from "../windy.js";
+
+// Mirror the manifest dataSources the host loads at runtime so the provider's
+// attribution lookup has something to map `source` prefixes against.
+beforeEach(() => {
+  setManifestDataSources([
+    {
+      sourceId: "windy",
+      name: "Windy Webcams",
+      url: "https://www.windy.com/webcams",
+      license: "test",
+      providerCountry: "CZ",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+    {
+      sourceId: "osm",
+      name: "OpenStreetMap",
+      url: "https://www.openstreetmap.org/",
+      license: "ODbL 1.0",
+      providerCountry: "UK",
+      providerPrivacyUrl: "https://osmfoundation.org/wiki/Privacy_Policy",
+    },
+    {
+      sourceId: "caltrans",
+      name: "Caltrans",
+      url: "https://dot.ca.gov/",
+      license: "test",
+      providerCountry: "US",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+    {
+      sourceId: "tfl",
+      name: "TfL",
+      url: "https://tfl.gov.uk/",
+      license: "test",
+      providerCountry: "UK",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+    {
+      sourceId: "nps",
+      name: "NPS",
+      url: "https://www.nps.gov/",
+      license: "test",
+      providerCountry: "US",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+    {
+      sourceId: "dot-ny",
+      name: "DOT NY",
+      url: "https://example.com",
+      license: "test",
+      providerCountry: "US",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+  ]);
+});
 
 afterEach(() => {
   vi.clearAllMocks();

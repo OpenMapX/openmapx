@@ -1,30 +1,25 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as dbVendo from "./provider.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "db-vendo",
-    name: "Deutsche Bahn (db-vendo-client)",
-    url: "https://www.bahn.de/",
-    licenseUrl: "https://github.com/public-transport/db-vendo-client",
-  },
-];
-
-const wrap = <T>(data: T) => withAttribution(data, ATTRIBUTION, freshnessNow());
+const attribution = createManifestAttribution();
+const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   dbVendo.setDbVendoUserAgent(ctx.config.userAgent as string | undefined);
   ctx.registerTransitProvider({
     id: "transit-db-vendo",
     prefix: "db:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
     priority: 6,
-    attribution: ATTRIBUTION,
+    attribution: attribution.all(),
     capabilities: {
       stops: {
         lookup: true,

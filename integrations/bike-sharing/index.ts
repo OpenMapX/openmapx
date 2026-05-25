@@ -5,10 +5,11 @@ import { setSharedMobilityMotisUrl } from "@openmapx/mobility-core/motis-rentals
 import { setSharedMobilityNominatimUrl } from "@openmapx/mobility-core/nominatim";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { setDbBikeCredentials } from "./providers/db-bike-client.js";
-import { bikeSharingProvider } from "./providers/provider.js";
+import { bikeSharingProvider, setManifestDataSources } from "./providers/provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   initCache(ctx.cache);
+  setManifestDataSources(ctx.manifest.dataSources ?? []);
   const motis = ctx.getRequiredService("motis");
   const nominatim = ctx.getRequiredService("nominatim");
   if (motis?.url) setSharedMobilityMotisUrl(motis.url);

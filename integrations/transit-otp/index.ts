@@ -1,23 +1,17 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
+import {
+  createManifestAttribution,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import { isOtpAvailable, plan, setOtpUrl } from "./provider.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "otp",
-    name: "OpenTripPlanner (self-hosted)",
-    url: "http://localhost:8090/",
-    spdxLicense: "LGPL-3.0-or-later",
-    licenseUrl: "https://github.com/opentripplanner/OpenTripPlanner/blob/dev-2.x/LICENSE",
-  },
-];
-
+const attribution = createManifestAttribution();
 const wrapRT = <T>(data: T) =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: true }));
+  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
 
 export function setup(ctx: IntegrationContext): void {
+  attribution.set(ctx.manifest.dataSources ?? []);
   // Resolve OTP URL from the service registry if available.
   const resolved = ctx.getRequiredService("otp");
   const url =
@@ -32,7 +26,7 @@ export function setup(ctx: IntegrationContext): void {
       prefix: "otp:",
       coverage: { all: true },
       priority: 6,
-      attribution: ATTRIBUTION,
+      attribution: attribution.all(),
       capabilities: {
         stops: {
           lookup: false,

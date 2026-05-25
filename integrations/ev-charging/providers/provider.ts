@@ -6,7 +6,11 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import { isInColdStart, type MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import {
+  createManifestAttribution,
+  isInColdStart,
+  type MobilityDataSourceProvider,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -16,15 +20,10 @@ import { getEvChargingFilters } from "./reference.js";
 import { EV_CHARGING_SOURCE_REGISTRY } from "./registry.js";
 import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "ocm",
-    name: "OpenChargeMap",
-    url: "https://openchargemap.org/",
-    spdxLicense: "CC-BY-SA-4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
-  },
-];
+// Manifest-driven attribution. Populated by `setManifestDataSources` during
+// `setup(ctx)` from `ctx.manifest.dataSources`.
+const attribution = createManifestAttribution();
+export const setManifestDataSources = attribution.set;
 
 // PoiReader-backed sources whose cold-start state should flip
 // `freshness.isStale=true` on the wrapped result. Hardcoded (rather than
@@ -36,12 +35,16 @@ function anyEvSourceColdStart(): boolean {
   return POI_READER_BACKED_EV_SOURCES.some((id) => isInColdStart(id));
 }
 
-const wrapStatic = <T>(data: T): MobilityResult<T> =>
+const wrapStatic = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
   withAttribution(
     data,
-    ATTRIBUTION,
+    attributions,
     freshnessNow({ hasRealtimeData: false, isStale: anyEvSourceColdStart() }),
   );
+
+function attributionsForStation(station: EvChargingStation): Attribution[] {
+  return attribution.forResults([station], (s) => s.sources);
+}
 
 const META: DataSourceMeta = {
   minZoom: 8,
@@ -67,7 +70,9 @@ class EvChargingProvider implements MobilityDataSourceProvider {
   readonly serviceIds = [];
   readonly searchCacheTtl = 60;
   readonly detailCacheTtl = 60;
-  readonly attribution = ATTRIBUTION;
+  get attribution(): Attribution[] {
+    return attribution.all();
+  }
 
   private stationCache = new Map<string, EvChargingStation>();
 
@@ -99,19 +104,23 @@ class EvChargingProvider implements MobilityDataSourceProvider {
     );
     const merged = deduplicateChargingStations(allStations);
     for (const station of merged) this.cacheStation(station);
-    return wrapStatic(merged.map(mapStationToResult));
+    const mapped = merged.map(mapStationToResult);
+    return wrapStatic(
+      mapped,
+      attribution.forResults(mapped, (r) => r.sources ?? r.source),
+    );
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = this.stationCache.get(itemId);
-    if (cached) return wrapStatic(mapStationToDetail(cached));
+    if (cached) return wrapStatic(mapStationToDetail(cached), attributionsForStation(cached));
 
     const primary = await this.fetchByPrefix(itemId);
-    if (!primary) return wrapStatic(null);
+    if (!primary) return wrapStatic(null, []);
 
     const enriched = await this.enrichStation(primary);
     this.cacheStation(enriched);
-    return wrapStatic(mapStationToDetail(enriched));
+    return wrapStatic(mapStationToDetail(enriched), attributionsForStation(enriched));
   }
 
   private async fetchByPrefix(itemId: string): Promise<EvChargingStation | null> {

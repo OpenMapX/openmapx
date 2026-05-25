@@ -8,7 +8,7 @@ import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
+import { loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -34,19 +34,33 @@ export function MapCanvas() {
     const initMap = async (initialCenter: LngLat, initialZoom: number) => {
       setCenter(initialCenter);
       setZoom(initialZoom);
-      const maplibregl = (await import("maplibre-gl")).default;
+      // The maplibre-gl type definitions don't expose a typed `default` field
+      // on the module namespace, so we widen the runtime binding to `unknown`
+      // until inside the guard and then trust the top-level type-only import
+      // (`import type maplibregl`) for member typing.
+      let maplibreRuntime: unknown;
+      let style: Record<string, unknown> | string | undefined;
+      try {
+        maplibreRuntime = (await import("maplibre-gl")).default;
+        if (destroyed || !containerRef.current) return;
+        style =
+          env.styleProvider === "openmapx"
+            ? await loadOpenMapXStyle(env)
+            : await loadMaptilerStyle(mapStyle, env);
+      } catch (err) {
+        console.error("Failed to initialize map", err);
+        return;
+      }
+      if (!maplibreRuntime || !style) return;
+      const maplibregl = maplibreRuntime as unknown as typeof import("maplibre-gl");
+
       if (destroyed || !containerRef.current) return;
 
-      const style =
-        env.styleProvider === "openmapx"
-          ? await loadOpenMapXStyle(env)
-          : maptilerStyleUrl(mapStyle, env);
-
-      if (destroyed || !containerRef.current) return;
-
-      // Attribution is rendered exclusively by the React `<MapAttributionStrip>`
-      // host (driven by `useMapAttributionStore`). MapLibre's built-in
-      // AttributionControl is disabled so there's a single rendering path.
+      // MapLibre's built-in AttributionControl handles the bottom-right
+      // attribution strip. With the default options it auto-collapses to the
+      // ⓘ toggle on narrow viewports and expands on desktop. Per-layer
+      // attribution is contributed via the `useMapAttributions` hook (see
+      // apps/web/src/lib/useMapAttributions.ts).
       const map = new maplibregl.Map({
         container: containerRef.current,
         style: style as string | maplibregl.StyleSpecification,
@@ -54,7 +68,6 @@ export function MapCanvas() {
         zoom: initialZoom,
         bearing,
         pitch,
-        attributionControl: false,
         canvasContextAttributes: { antialias: true },
       });
 
@@ -67,7 +80,17 @@ export function MapCanvas() {
       });
 
       mapRef.current = map;
-      notifyMapReady();
+      // Defer `mapReady` until the style finishes loading so attribution
+      // hooks (`useMapAttributions`) don't have to fall through their
+      // `!isStyleLoaded()` retry path on first paint, which left the strip
+      // showing only style-baked credits until `idle` fired.
+      if (map.isStyleLoaded()) {
+        notifyMapReady();
+      } else {
+        map.once("style.load", () => {
+          if (!destroyed) notifyMapReady();
+        });
+      }
     };
 
     // If geolocation permission is already granted, initialize the map centered
@@ -116,16 +139,16 @@ export function MapCanvas() {
     if (mapStyle === initialStyleRef.current) return;
     initialStyleRef.current = mapStyle;
 
-    if (env.styleProvider === "openmapx") {
-      loadOpenMapXStyle(env).then((s) => {
+    const loadStyle =
+      env.styleProvider === "openmapx" ? loadOpenMapXStyle(env) : loadMaptilerStyle(mapStyle, env);
+    loadStyle
+      .then((s) => {
         map.setStyle(s as maplibregl.StyleSpecification);
         map.once("style.load", () => notifyStyleReload());
+      })
+      .catch((err) => {
+        console.error("Failed to swap map style", err);
       });
-    } else {
-      const newUrl = maptilerStyleUrl(mapStyle, env);
-      map.setStyle(newUrl);
-      map.once("style.load", () => notifyStyleReload());
-    }
   }, [env, mapStyle, mapRef, mapReady, notifyStyleReload]);
 
   // Update map label language when locale changes

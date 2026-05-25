@@ -2,7 +2,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { Suspense } from "react";
 import { GlobalKeybindings } from "@/components/command-palette/GlobalKeybindings";
 import { ElevationHoverProvider } from "@/components/elevation/ElevationHoverContext";
-import { BasemapAttribution } from "@/components/map/BasemapAttribution";
+import { BaseAttributions } from "@/components/map/BaseAttributions";
 import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
@@ -20,7 +20,7 @@ import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryL
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
 import { TransitVehicleLayer } from "@/components/map/layers/TransitVehicleLayer";
 import { VehicleLiveLayer } from "@/components/map/layers/VehicleLiveLayer";
-import { MapAttributionStrip } from "@/components/map/MapAttributionStrip";
+import { MapAttributionPositioner } from "@/components/map/MapAttributionPositioner";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { MapClickHandler } from "@/components/map/MapClickHandler";
 import { MapControls } from "@/components/map/MapControls";
@@ -44,6 +44,10 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/lib/MapContext";
 
+// Raster base layers register each Attribution as its own atomic side-channel
+// source via `useMapAttributions`, so identical credits (notably "© OSM"
+// shared with the always-loaded vector basemap) collapse automatically
+// through MapLibre's substring dedup.
 const SATELLITE_ATTRIBUTIONS: Attribution[] = [
   {
     sourceId: "maptiler",
@@ -99,7 +103,8 @@ export default function HomePage() {
         <div className="relative w-full h-dvh overflow-hidden">
           <MapCanvas />
           <GlobeProjection />
-          <BasemapAttribution />
+          <BaseAttributions />
+          <MapAttributionPositioner />
           <RasterBaseLayer
             sourceId="openmapx-satellite-source"
             layerId="openmapx-satellite-layer"
@@ -155,7 +160,6 @@ export default function HomePage() {
           <LayerSelector />
           <MapControls />
           <MapFooter />
-          <MapAttributionStrip />
           <Suspense>
             <DeepLinkManager />
           </Suspense>

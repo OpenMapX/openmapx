@@ -57,11 +57,7 @@ describe("AttributionStrip", () => {
     const inline = renderToStaticMarkup(
       <AttributionStrip attributions={[delfi]} variant="inline" label="Data:" />,
     );
-    const footer = renderToStaticMarkup(
-      <AttributionStrip attributions={[delfi]} variant="footer" label="Data:" />,
-    );
     expect(inline).not.toContain("Data:");
-    expect(footer).not.toContain("Data:");
   });
 
   it("renders chips without anchors when navigable=false", () => {

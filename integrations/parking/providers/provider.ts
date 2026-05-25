@@ -6,7 +6,11 @@ import type {
   DataSourceResult,
 } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import { isInColdStart, type MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import {
+  createManifestAttribution,
+  isInColdStart,
+  type MobilityDataSourceProvider,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
@@ -82,13 +86,10 @@ const PARKING_FILTERS: DataSourceFilterDef[] = [
 
 const MAX_CACHE_SIZE = 3000;
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "parkapi-v2",
-    name: "ParkenDD",
-    url: "https://github.com/ParkenDD/park-api-v2",
-  },
-];
+// Manifest-driven attribution. Populated by `setManifestDataSources` during
+// `setup(ctx)` from `ctx.manifest.dataSources`.
+const attribution = createManifestAttribution();
+export const setManifestDataSources = attribution.set;
 
 // PoiReader-backed parking sources whose cold-start state should flip
 // `freshness.isStale=true` on the wrapped result. Hardcoded (rather than
@@ -128,12 +129,16 @@ function anyParkingSourceColdStart(): boolean {
   return POI_READER_BACKED_PARKING_SOURCES.some((id) => isInColdStart(id));
 }
 
-const wrapStatic = <T>(data: T): MobilityResult<T> =>
+const wrapStatic = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
   withAttribution(
     data,
-    ATTRIBUTION,
+    attributions,
     freshnessNow({ hasRealtimeData: false, isStale: anyParkingSourceColdStart() }),
   );
+
+function attributionsForFacility(facility: ParkingFacility): Attribution[] {
+  return attribution.forResults([facility], (f) => f.sources);
+}
 
 class ParkingDataSourceProvider implements MobilityDataSourceProvider {
   readonly id = "parking";
@@ -141,7 +146,9 @@ class ParkingDataSourceProvider implements MobilityDataSourceProvider {
   readonly serviceIds = [];
   readonly searchCacheTtl = 60;
   readonly detailCacheTtl = 60;
-  readonly attribution = ATTRIBUTION;
+  get attribution(): Attribution[] {
+    return attribution.all();
+  }
 
   private facilityCache = new Map<string, ParkingFacility>();
 
@@ -180,31 +187,38 @@ class ParkingDataSourceProvider implements MobilityDataSourceProvider {
     filtered = this.applyAvailabilityFilter(filtered, filters);
     filtered = this.applyFeaturesFilter(filtered, filters);
 
-    return wrapStatic(filtered.map(mapParkingToResult));
+    const mapped = filtered.map(mapParkingToResult);
+    return wrapStatic(
+      mapped,
+      attribution.forResults(mapped, (r) => r.sources ?? r.source),
+    );
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     // Try in-memory cache first — contains merged data from search
     const cached = this.facilityCache.get(itemId);
-    if (cached) return wrapStatic(mapParkingToDetail(cached));
+    if (cached) return wrapStatic(mapParkingToDetail(cached), attributionsForFacility(cached));
 
     // Cache miss: fetch the primary source, then try to enrich with
     // data from other sources so detail always has merged information.
     const primary = await this.fetchByPrefix(itemId);
     if (!primary) {
-      return wrapStatic({
-        id: itemId,
-        sources: ["unknown"],
-        name: "Parking",
-        coordinates: [0, 0],
-        sections: [],
-      });
+      return wrapStatic(
+        {
+          id: itemId,
+          sources: ["unknown"],
+          name: "Parking",
+          coordinates: [0, 0],
+          sections: [],
+        },
+        [],
+      );
     }
 
     // Enrich: fetch nearby data from other sources and merge
     const enriched = await this.enrichFacility(primary);
     this.cacheFacility(enriched);
-    return wrapStatic(mapParkingToDetail(enriched));
+    return wrapStatic(mapParkingToDetail(enriched), attributionsForFacility(enriched));
   }
 
   private async fetchByPrefix(itemId: string): Promise<ParkingFacility | null> {

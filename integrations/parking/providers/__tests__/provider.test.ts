@@ -1,6 +1,6 @@
 import type { BoundingBox, DataSourceResult } from "@openmapx/core";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../apag.js", () => ({ searchApag: vi.fn(), fetchApagDetail: vi.fn() }));
 vi.mock("../apcoa.js", () => ({ searchApcoa: vi.fn(), fetchApcoaDetail: vi.fn() }));
@@ -76,11 +76,58 @@ import { searchOdhIt } from "../opendatahub-it.js";
 import { fetchOsmParkingElement, searchOsmParking } from "../osm.js";
 import { fetchParkApiV2Detail, searchParkApiV2 } from "../parkapi-v2.js";
 import { fetchParkApiV3Detail, searchParkApiV3 } from "../parkapi-v3.js";
-import { parkingProvider } from "../provider.js";
+import { parkingProvider, setManifestDataSources } from "../provider.js";
 import { fetchRdwNlDetail, searchRdwNl } from "../rdw-nl.js";
 import { searchSingapore } from "../singapore.js";
 import { searchUtmcNewcastle } from "../utmc-newcastle.js";
 import { searchViennaAt } from "../vienna-at.js";
+
+// Mirror the manifest dataSources the host loads at runtime so the provider's
+// attribution lookup has something to map `source` prefixes against.
+beforeEach(() => {
+  setManifestDataSources([
+    {
+      sourceId: "parkapi-v2",
+      name: "ParkenDD",
+      url: "https://github.com/ParkenDD/park-api-v2",
+      license: "test",
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+    {
+      sourceId: "parkapi-v3",
+      name: "ParkenDD v3",
+      url: "https://github.com/ParkenDD/park-api-v3",
+      license: "test",
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+    {
+      sourceId: "db-bahnpark",
+      name: "DB BahnPark",
+      url: "https://example.com/db",
+      license: "test",
+      providerCountry: "DE",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+    {
+      sourceId: "osm",
+      name: "OpenStreetMap",
+      url: "https://www.openstreetmap.org/",
+      license: "ODbL 1.0",
+      providerCountry: "UK",
+      providerPrivacyUrl: "https://osmfoundation.org/wiki/Privacy_Policy",
+    },
+    {
+      sourceId: "test",
+      name: "Test Source",
+      url: "https://example.com/test",
+      license: "test",
+      providerCountry: "XX",
+      providerPrivacyUrl: "https://example.com/privacy",
+    },
+  ]);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -103,12 +150,13 @@ function makeFacility(overrides: Partial<ParkingFacility> = {}): ParkingFacility
   };
 }
 
-function makeResult(id: string): DataSourceResult {
+function makeResult(id: string, sources: string[] = ["test"]): DataSourceResult {
   return {
     id,
     name: `Parking ${id}`,
     coordinates: [11.5, 48.5],
-    source: "parking",
+    source: sources[0],
+    sources,
     variant: "unknown",
     status: "unknown",
   };
@@ -166,9 +214,9 @@ describe("parkingProvider meta", () => {
 describe("parkingProvider.search", () => {
   it("queries all sources in parallel and combines in priority order", async () => {
     setupEmptySources();
-    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id));
-    const db = [makeFacility({ id: "db-bahnpark:1", sources: ["db"] })];
-    const v3 = [makeFacility({ id: "parkapi-v3:2", sources: ["v3"] })];
+    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id, f.sources));
+    const db = [makeFacility({ id: "db-bahnpark:1", sources: ["db-bahnpark"] })];
+    const v3 = [makeFacility({ id: "parkapi-v3:2", sources: ["parkapi-v3"] })];
     const osm = [makeFacility({ id: "osm:node/4", sources: ["osm"] })];
 
     vi.mocked(searchParkApiV3).mockResolvedValue(v3);
@@ -184,14 +232,19 @@ describe("parkingProvider.search", () => {
     expect(ids.indexOf("db-bahnpark:1")).toBeLessThan(ids.indexOf("parkapi-v3:2"));
     expect(ids.indexOf("parkapi-v3:2")).toBeLessThan(ids.indexOf("osm:node/4"));
     expect(results).toHaveLength(3);
-    expect(envelope.attributions.length).toBeGreaterThan(0);
-    expect(envelope.attributions[0].sourceId).toBe("parkapi-v2");
+    // Attribution credits only the sources that actually contributed, in the
+    // order they appear in the merged result list.
+    expect(envelope.attributions.map((a) => a.sourceId)).toEqual([
+      "db-bahnpark",
+      "parkapi-v3",
+      "osm",
+    ]);
     expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 
   it("individual source failures handled gracefully", async () => {
     setupEmptySources();
-    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id));
+    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id, f.sources));
     // Fail most sources but keep DB alive
     for (const fn of [
       searchParkApiV2,
@@ -255,7 +308,7 @@ describe("parkingProvider.search filters", () => {
     setupEmptySources();
     vi.mocked(searchOsmParking).mockResolvedValue(facilities);
     vi.mocked(deduplicateParking).mockReturnValue(facilities);
-    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id));
+    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id, f.sources));
   }
 
   it("parkingType filter: only matching types returned", async () => {
@@ -385,7 +438,7 @@ describe("parkingProvider.search filters", () => {
 
 describe("parkingProvider.getDetail", () => {
   it("cache hit returns mapped detail", async () => {
-    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id));
+    vi.mocked(mapParkingToResult).mockImplementation((f) => makeResult(f.id, f.sources));
     const facility = makeFacility({ id: "pk-cached-1" });
     vi.mocked(searchParkApiV2).mockResolvedValue([]);
     vi.mocked(searchParkApiV3).mockResolvedValue([]);
@@ -406,8 +459,8 @@ describe("parkingProvider.getDetail", () => {
     const envelope = await parkingProvider.getDetail("pk-cached-1");
     expect(mapParkingToDetail).toHaveBeenCalledWith(facility);
     expect(envelope.data).toBe(detail);
-    expect(envelope.attributions.length).toBeGreaterThan(0);
-    expect(envelope.attributions[0].sourceId).toBe("parkapi-v2");
+    // Credits the source the cached facility was loaded from.
+    expect(envelope.attributions.map((a) => a.sourceId)).toEqual(["test"]);
     expect(envelope.freshness.fetchedAt).toBeTruthy();
   });
 

@@ -5,7 +5,10 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
+import {
+  createManifestAttribution,
+  type MobilityDataSourceProvider,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
@@ -29,19 +32,13 @@ import { getTflDetail, mapTflToDetail, mapTflToResult, searchTfl } from "./tfl.j
 import type { RawWebcam } from "./types.js";
 import { getWindyDetail, mapWindyToDetail, mapWindyToResult, searchWindy } from "./windy.js";
 
-const ATTRIBUTION: Attribution[] = [
-  {
-    sourceId: "windy",
-    name: "Windy Webcams",
-    url: "https://www.windy.com/webcams",
-    licenseUrl: "https://api.windy.com/webcams/terms",
-    attributionText:
-      'Webcams provided by <a href="https://www.windy.com/">windy.com</a> — <a href="https://www.windy.com/webcams/add">add a webcam</a>',
-  },
-];
+// Manifest-driven attribution. Populated by `setManifestDataSources` during
+// `setup(ctx)` from `ctx.manifest.dataSources`.
+const attribution = createManifestAttribution();
+export const setManifestDataSources = attribution.set;
 
-const wrapStatic = <T>(data: T): MobilityResult<T> =>
-  withAttribution(data, ATTRIBUTION, freshnessNow({ hasRealtimeData: false }));
+const wrapStatic = <T>(data: T, attributions: Attribution[]): MobilityResult<T> =>
+  withAttribution(data, attributions, freshnessNow({ hasRealtimeData: false }));
 
 const META: DataSourceMeta = {
   minZoom: 8,
@@ -107,7 +104,9 @@ class WebcamProvider implements MobilityDataSourceProvider {
   readonly serviceIds = [];
   readonly searchCacheTtl = 3600;
   readonly detailCacheTtl = 300;
-  readonly attribution = ATTRIBUTION;
+  get attribution(): Attribution[] {
+    return attribution.all();
+  }
 
   async getFilters(): Promise<DataSourceFilterDef[]> {
     return buildFilters();
@@ -155,11 +154,16 @@ class WebcamProvider implements MobilityDataSourceProvider {
       }
     }
 
-    return wrapStatic(results);
+    return wrapStatic(
+      results,
+      attribution.forResults(results, (r) => r.sources ?? r.source),
+    );
   }
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-    return wrapStatic(await this.fetchDetail(itemId));
+    const detail = await this.fetchDetail(itemId);
+    const attrs = detail ? attribution.forResults([detail], (d) => d.sources) : [];
+    return wrapStatic(detail, attrs);
   }
 
   private async fetchDetail(itemId: string): Promise<DataSourceDetail | null> {
