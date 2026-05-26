@@ -5,10 +5,12 @@ import { useEffect } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
 
 /**
- * Drives the `--omx-attrib-shift` CSS variable that positions MapLibre's
- * built-in AttributionControl. When the sidebar is open (and not collapsed),
- * the attribution strip shifts left by `PANEL_WIDTH` so it doesn't end up
- * under the panel. The matching CSS lives in `app/globals.css`.
+ * Drives the `--omx-attrib-shift` CSS variable that clips the max-width of
+ * MapLibre's built-in AttributionControl. When the (left) sidebar is open
+ * and not collapsed, the attribution's available width shrinks by
+ * `PANEL_WIDTH` so its text can't extend left under the panel. The control
+ * itself stays anchored to the right edge; matching CSS lives in
+ * `app/globals.css`.
  */
 export function MapAttributionPositioner(): null {
   const sidebarOpen = useSidebarStore((s) => s.activeSidebarId !== null);
@@ -20,7 +22,7 @@ export function MapAttributionPositioner(): null {
     document.documentElement.style.setProperty("--omx-attrib-shift", value);
     return () => {
       // Reset on unmount so the variable doesn't strand at a non-zero value
-      // and leave the attribution control shifted on any future map mount
+      // and leave the attribution control clipped on any future map mount
       // that no longer has a positioner driving it.
       document.documentElement.style.setProperty("--omx-attrib-shift", "0px");
     };

@@ -18,9 +18,10 @@
   --omx-safe-bottom: env(safe-area-inset-bottom, 0px);
   --omx-safe-left: env(safe-area-inset-left, 0px);
   --omx-safe-right: env(safe-area-inset-right, 0px);
-  /* Pixels to shift the bottom-right attribution control left to clear the
-   * sidebar when it's open. Set by `<MapAttributionPositioner>` and consumed
-   * by the `.maplibregl-ctrl-bottom-right` rule below. */
+  /* Pixels to subtract from the bottom-right attribution control's max-width
+   * so its text can't extend left under the sidebar when it's open. Set by
+   * `<MapAttributionPositioner>` and consumed by the
+   * `.maplibregl-ctrl-bottom-right` rule below. */
   --omx-attrib-shift: 0px;
 }
 
@@ -92,14 +93,14 @@ main {
     color: var(--omx-overlay-text) !important;
   }
 
-  /* MapLibre's built-in AttributionControl host: shift left to clear the
-   * sidebar when it's open, respect mobile safe-area insets, and cap width
-   * so it doesn't run under the legend host that sits bottom-center. */
+  /* MapLibre's built-in AttributionControl host: stay anchored to the right
+   * edge (respecting mobile safe-area insets) and cap width so the text can't
+   * extend left under the sidebar when it's open. */
   .maplibregl-ctrl-bottom-right {
-    right: calc(var(--omx-safe-right) + var(--omx-attrib-shift)) !important;
+    right: var(--omx-safe-right) !important;
     bottom: var(--omx-safe-bottom) !important;
     max-width: calc(100vw - var(--omx-safe-left) - var(--omx-safe-right) - var(--omx-attrib-shift) - 16px) !important;
-    transition: right 0.25s ease, max-width 0.25s ease;
+    transition: max-width 0.25s ease;
   }
 
   .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
