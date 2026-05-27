@@ -1,6 +1,7 @@
 import type { BoundingBox, LngLat, OsmFilter } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
+import type { I18nToken, Translatable } from "../../strings/index.js";
 
 export interface DataSourceAttribution {
   text: string;
@@ -104,7 +105,8 @@ export interface DataSourceResult {
   kind?: "station" | "vehicle";
   variant: string;
   status?: string;
-  summary?: string;
+  /** transitional, Task 4.1 tightens to I18nToken-only */
+  summary?: I18nToken | string;
   operator?: string;
   branding?: DataSourceBranding;
   mapContext?: DataSourceMapContextSelection;
@@ -124,12 +126,22 @@ export interface PricingPlanEntry {
 }
 
 export interface DataSourceDetailSection {
-  title: string;
+  /** transitional, Task 4.1 tightens to I18nToken-only */
+  title: I18nToken | string;
   type: "table" | "list" | "text" | "image" | "embed" | "pricing";
-  columns?: string[];
-  rows?: (string | number)[][];
-  items?: string[];
-  content?: string;
+  /** transitional, Task 4.1 tightens to I18nToken-only */
+  columns?: (I18nToken | string)[];
+  /**
+   * Row tuple `[label, ...values]`. Label is an i18n token (or transitional
+   * string). Values are `Translatable` — token, raw string, or number.
+   *
+   * transitional, Task 4.1 tightens label slot to I18nToken-only.
+   */
+  rows?: (Translatable | number)[][];
+  /** transitional, Task 4.1 tightens to I18nToken-only */
+  items?: (I18nToken | string)[];
+  /** transitional, Task 4.1 tightens to I18nToken-only */
+  content?: I18nToken | string;
   /** Image URL for type "image". Rendered as a safe <img> element. */
   imageUrl?: string;
   /** Alt text for image sections. */

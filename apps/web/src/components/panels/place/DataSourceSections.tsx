@@ -169,20 +169,32 @@ function translateStructuredSection(
   resolveT: (value: Translatable | undefined) => string,
 ): StructuredSection {
   const translatedTitle = resolveT(section.title);
-  const translatedRows =
+  const translatedRows: (string | number)[][] | undefined =
     section.type === "table" && section.rows?.every((row) => row.length === 2)
-      ? section.rows.map(([label, value]) => {
-          return [resolveT(label), resolveT(value)] satisfies (string | number)[];
-        })
-      : section.rows;
+      ? section.rows.map(([label, value]) => [resolveT(label), resolveT(value)])
+      : section.rows?.map((row) =>
+          row.map((cell) => (typeof cell === "number" ? cell : resolveT(cell))),
+        );
   const translatedColumns = section.columns?.map((column) => resolveT(column));
+  // Re-build the StructuredSection explicitly (no spread) so the narrowed
+  // resolved field types win over `DataSourceDetailSection`'s wider
+  // `I18nToken | string` slots.
   return {
-    ...section,
-    content: section.content === undefined ? undefined : resolveT(section.content),
-    items: section.items?.map((item) => resolveT(item)),
+    id: undefined,
     title: translatedTitle,
-    rows: translatedRows,
+    type: section.type,
     columns: translatedColumns,
+    rows: translatedRows,
+    items: section.items?.map((item) => resolveT(item)),
+    content: section.content === undefined ? undefined : resolveT(section.content),
+    imageUrl: section.imageUrl,
+    imageAlt: section.imageAlt,
+    linkUrl: section.linkUrl,
+    embedUrl: section.embedUrl,
+    embedType: section.embedType,
+    sectionIcon: section.sectionIcon,
+    pricingPlans: section.pricingPlans,
+    collapsed: section.collapsed,
   };
 }
 

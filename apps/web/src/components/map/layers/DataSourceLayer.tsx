@@ -22,11 +22,13 @@ import {
 import type { DataSourceAttribution } from "@openmapx/integration-framework";
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import { isI18nToken, type Translatable } from "@openmapx/integration-framework/strings";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
@@ -63,7 +65,7 @@ function mapContextOutlineLayerId(dsId: string) {
 
 function buildGeoJson(
   results: DataSourceResult[],
-  translateSummary: (summary: string | undefined) => string | undefined,
+  translateSummary: (summary: Translatable | undefined) => string | undefined,
   imageId?: string,
 ) {
   return {
@@ -218,6 +220,7 @@ export function DataSourceLayer() {
   }, [activeSource, sourcesData]);
 
   const registry = useIntegrationRegistry();
+  const resolveToken = useDataSourceI18nResolver(activeSource ?? undefined);
 
   // Separate server-side filters (sent to the API) from client-side filters
   // (applied locally on the result set). Uses the `clientSide` flag from
@@ -419,7 +422,12 @@ export function DataSourceLayer() {
       const imageId = useIconMarkers ? `ds-marker-${activeSource}` : undefined;
       const geojson = buildGeoJson(
         filteredResults,
-        (summary) => translateDataSourceSummary(summary, t),
+        (summary) => {
+          if (summary === undefined) return undefined;
+          if (isI18nToken(summary)) return resolveToken(summary);
+          if (typeof summary === "number") return String(summary);
+          return translateDataSourceSummary(summary, t);
+        },
         imageId,
       );
 
@@ -645,6 +653,7 @@ export function DataSourceLayer() {
     mapRef,
     mapContext,
     t,
+    resolveToken,
   ]);
 
   const { setSelectedPlace } = usePlaceStore();

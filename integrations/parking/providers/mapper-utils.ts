@@ -1,4 +1,4 @@
-import type { ParkingType } from "@openmapx/mobility-core/parking";
+import type { I18nTokenLike, ParkingType } from "@openmapx/mobility-core/parking";
 
 /**
  * Shared payload-coercion helpers used by every `*-mapper.ts` in this
@@ -84,4 +84,35 @@ export function asParkingType(
   fallback: ParkingType | undefined,
 ): ParkingType | undefined {
   return PARKING_TYPES.includes(value as ParkingType) ? (value as ParkingType) : fallback;
+}
+
+function isI18nTokenLike(value: unknown): value is I18nTokenLike {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "$t" in value &&
+    typeof (value as { $t: unknown }).$t === "string"
+  );
+}
+
+/**
+ * Coerce a JSON-deserialized tariff-rows array into `[I18nToken | string, string][]`.
+ * Labels may be either an `I18nToken` (`{ $t, values? }`) emitted by the
+ * migrated parsers or a raw string (legacy payloads still in the registry).
+ * Prices are always pre-formatted strings.
+ */
+export function asTariffRows(value: unknown): [I18nTokenLike | string, string][] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const rows: [I18nTokenLike | string, string][] = [];
+  for (const item of value) {
+    if (!Array.isArray(item) || item.length !== 2) continue;
+    const [label, price] = item;
+    if (typeof price !== "string") continue;
+    if (typeof label === "string") {
+      rows.push([label, price]);
+    } else if (isI18nTokenLike(label)) {
+      rows.push([label, price]);
+    }
+  }
+  return rows.length > 0 ? rows : undefined;
 }

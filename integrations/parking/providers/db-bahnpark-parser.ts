@@ -1,4 +1,9 @@
-import type { DbBahnParkFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import { token } from "@openmapx/integration-framework/strings";
+import type {
+  DbBahnParkFacility,
+  I18nTokenLike,
+  ParkingType,
+} from "@openmapx/mobility-core/parking";
 import type { PoiRow } from "@openmapx/poi-source-registry";
 
 /**
@@ -42,28 +47,30 @@ function extractCapacity(facility: DbBahnParkFacility): { total?: number; disabl
   return { total, disabled };
 }
 
-const DURATION_LABELS: Record<string, string> = {
-  "20min": "20 min",
-  "30min": "30 min",
-  "1hour": "1h",
-  "1day": "1 day",
-  "1dayPCard": "1 day (P-Card)",
-  "1week": "1 week",
-  "1weekPCard": "1 week (P-Card)",
-  "1monthVendingMachine": "1 month",
-  "1monthLongTerm": "1 month (long-term)",
-  "1monthReservation": "1 month (reserved)",
+const DB_BAHNPARK_DURATION_TOKEN: Record<string, I18nTokenLike> = {
+  "20min": token("tariff.dur20min"),
+  "30min": token("tariff.dur30min"),
+  "1hour": token("tariff.dur1h"),
+  "1day": token("tariff.dur1day"),
+  "1dayPCard": token("tariff.dur1dayPCard"),
+  "1week": token("tariff.dur1week"),
+  "1weekPCard": token("tariff.dur1weekPCard"),
+  "1monthVendingMachine": token("tariff.dur1month"),
+  "1monthLongTerm": token("tariff.dur1monthLong"),
+  "1monthReservation": token("tariff.dur1monthReserved"),
 };
 
-function buildTariffRows(facility: DbBahnParkFacility): [string, string][] | undefined {
+function buildTariffRows(
+  facility: DbBahnParkFacility,
+): [I18nTokenLike | string, string][] | undefined {
   const prices = facility.tariff?.prices;
   if (!prices || prices.length === 0) return undefined;
 
-  const rows: [string, string][] = [];
+  const rows: [I18nTokenLike | string, string][] = [];
   for (const p of prices) {
     if (p.price == null || !p.duration) continue;
     if (p.group?.groupName !== "standard") continue;
-    const label = DURATION_LABELS[p.duration] ?? p.duration;
+    const label = DB_BAHNPARK_DURATION_TOKEN[p.duration] ?? p.duration;
     rows.push([label, `€${p.price.toFixed(2)}`]);
   }
   return rows.length > 0 ? rows : undefined;

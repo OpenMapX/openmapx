@@ -8,6 +8,7 @@ import {
   asNumberOrUndef,
   asParkingType,
   asStringOrUndef,
+  asTariffRows,
 } from "./mapper-utils.js";
 
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
@@ -30,22 +31,6 @@ const SOURCE_ATTRIBUTION: ParkingSourceAttribution = {
   license: "O-By 1.0",
   url: DATASET_PAGE_URL,
 };
-
-function asTariffRows(value: unknown): [string, string][] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const out: [string, string][] = [];
-  for (const row of value) {
-    if (
-      Array.isArray(row) &&
-      row.length === 2 &&
-      typeof row[0] === "string" &&
-      typeof row[1] === "string"
-    ) {
-      out.push([row[0], row[1]]);
-    }
-  }
-  return out.length > 0 ? out : undefined;
-}
 
 export function mapOpenTransportDataChPayload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;

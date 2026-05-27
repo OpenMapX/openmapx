@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { token } from "@openmapx/integration-framework/strings";
 import type {
+  I18nTokenLike,
   ParkingFacility,
   ParkingSourceAttribution,
   ParkingType,
@@ -73,32 +75,26 @@ function formatChf(cents: number | null | undefined): string | undefined {
   return `CHF ${(cents / 100).toFixed(2)}`;
 }
 
-function formatDuration(minutes: number): string {
-  if (minutes % 1440 === 0) {
-    const d = minutes / 1440;
-    return d === 1 ? "1 day" : `${d} days`;
-  }
-  if (minutes % 60 === 0) {
-    const h = minutes / 60;
-    return h === 1 ? "1 hour" : `${h} hours`;
-  }
-  return `${minutes} min`;
+function durationToken(minutes: number): I18nTokenLike {
+  if (minutes % 1440 === 0) return token("tariff.durDays", { count: minutes / 1440 });
+  if (minutes % 60 === 0) return token("tariff.durHours", { count: minutes / 60 });
+  return token("tariff.durMinutes", { count: minutes });
 }
 
-function buildTariffRows(pricing: Record<string, unknown>): [string, string][] | undefined {
+function buildTariffRows(pricing: Record<string, unknown>): [I18nTokenLike, string][] | undefined {
   if (!pricing) return undefined;
-  const rows: [string, string][] = [];
+  const rows: [I18nTokenLike, string][] = [];
   for (const seg of pricing.priceSegments ?? []) {
-    const label = formatDuration(seg.startingFrom ?? 0);
+    const label = durationToken(seg.startingFrom ?? 0);
     const price = formatChf(seg.price);
     if (price) rows.push([label, price]);
   }
   const day = formatChf(pricing.maximumDayPrice);
-  if (day) rows.push(["Max day price", day]);
+  if (day) rows.push([token("tariff.maxDayPrice"), day]);
   const monthly = formatChf(pricing.monthlyTicketPrice);
-  if (monthly) rows.push(["Monthly pass", monthly]);
+  if (monthly) rows.push([token("tariff.monthlyPass"), monthly]);
   const yearly = formatChf(pricing.yearlyTicketPrice);
-  if (yearly) rows.push(["Yearly pass", yearly]);
+  if (yearly) rows.push([token("tariff.yearlyPass"), yearly]);
   return rows.length ? rows : undefined;
 }
 

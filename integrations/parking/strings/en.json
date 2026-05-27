@@ -1,6 +1,73 @@
 {
   "name": "Parking Facilities",
   "description": "Parking facility locations, capacity, and occupancy",
+  "section": {
+    "availability": "Availability",
+    "facility": "Facility",
+    "dataQuality": "Data Quality",
+    "fee": "Fee"
+  },
+  "row": {
+    "freeSpaces": "Free Spaces",
+    "occupancy": "Occupancy",
+    "trend": "Trend",
+    "maxHeight": "Max Height",
+    "disabledSpaces": "Disabled Spaces",
+    "womenSpaces": "Women's Spaces",
+    "evCharging": "EV Charging",
+    "parkAndRide": "Park & Ride",
+    "nearestStation": "Nearest Station",
+    "dataFreshness": "Data Freshness"
+  },
+  "value": {
+    "parkingGarage": "Parking Garage",
+    "undergroundGarage": "Underground Garage",
+    "surfaceLot": "Surface Lot",
+    "onStreet": "On-Street",
+    "freeParking": "Free Parking",
+    "paidParking": "Paid Parking",
+    "trendIncreasing": "Filling up",
+    "trendDecreasing": "Emptying",
+    "trendConstant": "Steady"
+  },
+  "summary": {
+    "closed": "Closed",
+    "full": "Full",
+    "stale": "Availability stale",
+    "spacesOf": "{free}/{capacity} free",
+    "spaces": "{count} free",
+    "totalSpaces": "{count} spaces"
+  },
+  "tariff": {
+    "maxDayPrice": "Max day price",
+    "monthly": "Monthly",
+    "monthlyResident": "Monthly (resident)",
+    "monthlyPass": "Monthly pass",
+    "yearlyPass": "Yearly pass",
+    "dur20min": "20 min",
+    "dur30min": "30 min",
+    "dur1h": "1 hour",
+    "dur2h": "2 hours",
+    "dur3h": "3 hours",
+    "dur4h": "4 hours",
+    "dur1day": "1 day",
+    "dur1dayPCard": "1 day (P-Card)",
+    "dur1week": "1 week",
+    "dur1weekPCard": "1 week (P-Card)",
+    "dur1month": "1 month",
+    "dur1monthPCard": "1 month (P-Card)",
+    "dur1monthLong": "1 month (long-term)",
+    "dur1monthReserved": "1 month (reserved)",
+    "durMinutes": "{count} min",
+    "durHours": "{count, plural, =1 {1 hour} other {# hours}}",
+    "durDays": "{count, plural, =1 {1 day} other {# days}}"
+  },
+  "quality": {
+    "realtimeStale": "Realtime availability is older than 30 minutes.",
+    "freeSpacesClamped": "Realtime free-space count exceeded capacity and was clamped.",
+    "negativeFreeSpacesClamped": "Realtime free-space count was negative and was clamped to 0.",
+    "evChargingAvailable": "EV charging available"
+  },
   "dataSources": [
     {
       "purpose": "Real-time parking lot availability across European cities",

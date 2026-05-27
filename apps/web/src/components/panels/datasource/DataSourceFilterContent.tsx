@@ -41,8 +41,10 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { isI18nToken } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
+import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { TEAL } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
@@ -199,6 +201,7 @@ export function DataSourceFilterContent() {
   const t = useTranslations("dataSources");
   const tc = useTranslations("common");
   const activeSource = useDataSourceStore((s) => s.activeSource);
+  const resolveToken = useDataSourceI18nResolver(activeSource ?? undefined);
   const filters = useDataSourceStore((s) => s.filters);
   const searchBbox = useDataSourceStore((s) => s.searchBbox);
   const viewportZoom = useDataSourceStore((s) => s.viewportZoom);
@@ -537,7 +540,12 @@ export function DataSourceFilterContent() {
                         {result.summary && (
                           <Typography variant="caption" color="text.secondary">
                             <FormattedSummary
-                              text={translateDataSourceSummary(result.summary, t) ?? result.summary}
+                              text={
+                                isI18nToken(result.summary)
+                                  ? resolveToken(result.summary)
+                                  : (translateDataSourceSummary(result.summary, t) ??
+                                    result.summary)
+                              }
                             />
                           </Typography>
                         )}
