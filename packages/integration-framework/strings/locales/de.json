@@ -1,0 +1,41 @@
+{
+  "shared": {
+    "section": {
+      "source": "Quelle",
+      "notes": "Hinweise",
+      "pricing": "Preise",
+      "availability": "Verfügbarkeit",
+      "facility": "Einrichtung",
+      "access": "Zugang",
+      "dataQuality": "Datenqualität",
+      "payment": "Bezahlung",
+      "info": "Infos"
+    },
+    "row": {
+      "source": "Quelle",
+      "sources": "Quellen",
+      "sourceId": "Quell-ID",
+      "sourceUrl": "Quell-URL",
+      "license": "Lizenz",
+      "lastUpdated": "Zuletzt aktualisiert",
+      "type": "Typ",
+      "capacity": "Kapazität",
+      "status": "Status",
+      "access": "Zugang",
+      "address": "Adresse",
+      "operator": "Betreiber"
+    },
+    "value": {
+      "yes": "Ja",
+      "no": "Nein",
+      "open": "Geöffnet",
+      "closed": "Geschlossen",
+      "stale": "Veraltet",
+      "unknown": "Unbekannt",
+      "customers": "Kunden",
+      "private": "Privat",
+      "permit": "Mit Genehmigung",
+      "public": "Öffentlich"
+    }
+  }
+}

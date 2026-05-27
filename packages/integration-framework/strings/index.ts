@@ -1,3 +1,5 @@
+export { type ResolveOptions, resolveToken } from "./src/resolver.js";
+export { sharedStrings, sharedT, token } from "./src/token.js";
 export type { I18nToken, LocaleCatalog, LocaleStrings, Translatable } from "./src/types.js";
 
 /**
@@ -13,5 +15,3 @@ export function isI18nToken(value: unknown): value is import("./src/types.js").I
     typeof (value as { $t: unknown }).$t === "string"
   );
 }
-
-export { type ResolveOptions, resolveToken } from "./src/resolver.js";
