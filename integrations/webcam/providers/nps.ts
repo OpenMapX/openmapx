@@ -1,4 +1,15 @@
-import type { BoundingBox, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type {
+  BoundingBox,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+} from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import { withCache } from "../cache.js";
 import type { RawWebcam } from "./types.js";
 
@@ -131,11 +142,11 @@ export async function getNpsDetail(webcamId: string): Promise<RawWebcam | null> 
 }
 
 export function mapNpsToDetail(raw: RawWebcam): DataSourceDetail {
-  const sections: DataSourceDetail["sections"] = [];
+  const sections: DataSourceDetailSection[] = [];
 
   if (raw.thumbnailUrl) {
     sections.push({
-      title: "Preview",
+      title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
       imageAlt: raw.name,
@@ -144,13 +155,18 @@ export function mapNpsToDetail(raw: RawWebcam): DataSourceDetail {
     });
   }
 
-  const infoRows: [string, string][] = [];
-  if (raw.location?.city) infoRows.push(["Park", raw.location.city]);
-  if (raw.location?.region) infoRows.push(["State", raw.location.region]);
-  if (raw.categories?.length) infoRows.push(["Tags", raw.categories.join(", ")]);
-  if (raw.detailUrl) infoRows.push(["NPS Page", raw.detailUrl]);
+  const infoRows: [I18nToken, Translatable][] = [];
+  if (raw.location?.city) infoRows.push([token("row.park"), raw.location.city]);
+  if (raw.location?.region) infoRows.push([token("row.state"), raw.location.region]);
+  if (raw.categories?.length) infoRows.push([token("row.tags"), raw.categories.join(", ")]);
+  if (raw.detailUrl) infoRows.push([token("row.npsPage"), raw.detailUrl]);
   if (infoRows.length) {
-    sections.push({ title: "Info", type: "table", rows: infoRows, sectionIcon: "info" });
+    sections.push({
+      title: sharedT.section.info,
+      type: "table",
+      rows: infoRows,
+      sectionIcon: "info",
+    });
   }
 
   return {

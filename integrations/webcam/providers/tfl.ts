@@ -1,4 +1,15 @@
-import type { BoundingBox, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type {
+  BoundingBox,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+} from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import { withCache } from "../cache.js";
 import type { RawWebcam, TflJamCam } from "./types.js";
 
@@ -39,7 +50,7 @@ export function mapTflToResult(raw: RawWebcam): DataSourceResult {
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.direction ? `View: ${raw.direction}` : undefined,
+    summary: raw.direction ? token("summary.view", { direction: raw.direction }) : undefined,
   };
 }
 
@@ -59,11 +70,11 @@ export async function getTflDetail(cameraId: string): Promise<RawWebcam | null> 
 }
 
 export function mapTflToDetail(raw: RawWebcam): DataSourceDetail {
-  const sections: DataSourceDetail["sections"] = [];
+  const sections: DataSourceDetailSection[] = [];
 
   if (raw.thumbnailUrl) {
     sections.push({
-      title: "Preview",
+      title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
       imageAlt: raw.name,
@@ -73,7 +84,7 @@ export function mapTflToDetail(raw: RawWebcam): DataSourceDetail {
 
   if (raw.streamUrl) {
     sections.push({
-      title: "Video Clip",
+      title: token("section.videoClip"),
       type: "embed",
       embedUrl: raw.streamUrl,
       embedType: "video",
@@ -81,10 +92,15 @@ export function mapTflToDetail(raw: RawWebcam): DataSourceDetail {
     });
   }
 
-  const infoRows: [string, string][] = [];
-  if (raw.direction) infoRows.push(["View", raw.direction]);
+  const infoRows: [I18nToken, Translatable][] = [];
+  if (raw.direction) infoRows.push([token("row.view"), raw.direction]);
   if (infoRows.length) {
-    sections.push({ title: "Info", type: "table", rows: infoRows, sectionIcon: "info" });
+    sections.push({
+      title: sharedT.section.info,
+      type: "table",
+      rows: infoRows,
+      sectionIcon: "info",
+    });
   }
 
   return {

@@ -1,4 +1,15 @@
-import type { BoundingBox, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type {
+  BoundingBox,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+} from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import { withCache } from "../cache.js";
 import type { CaltransDistrictResponse, RawWebcam } from "./types.js";
 
@@ -81,7 +92,7 @@ export function mapCaltransToResult(raw: RawWebcam): DataSourceResult {
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.direction ? `Direction: ${raw.direction}` : undefined,
+    summary: raw.direction ? token("summary.direction", { direction: raw.direction }) : undefined,
   };
 }
 
@@ -116,11 +127,11 @@ export async function getCaltransDetail(
 }
 
 export function mapCaltransToDetail(raw: RawWebcam): DataSourceDetail {
-  const sections: DataSourceDetail["sections"] = [];
+  const sections: DataSourceDetailSection[] = [];
 
   if (raw.thumbnailUrl) {
     sections.push({
-      title: "Preview",
+      title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
       imageAlt: raw.name,
@@ -128,13 +139,18 @@ export function mapCaltransToDetail(raw: RawWebcam): DataSourceDetail {
     });
   }
 
-  const infoRows: [string, string][] = [];
-  if (raw.direction) infoRows.push(["Direction", raw.direction]);
-  if (raw.location?.city) infoRows.push(["Nearby", raw.location.city]);
-  if (raw.location?.region) infoRows.push(["County", raw.location.region]);
-  if (raw.streamUrl) infoRows.push(["Live Stream", raw.streamUrl]);
+  const infoRows: [I18nToken, Translatable][] = [];
+  if (raw.direction) infoRows.push([token("row.direction"), raw.direction]);
+  if (raw.location?.city) infoRows.push([token("row.nearby"), raw.location.city]);
+  if (raw.location?.region) infoRows.push([token("row.county"), raw.location.region]);
+  if (raw.streamUrl) infoRows.push([token("row.liveStream"), raw.streamUrl]);
   if (infoRows.length) {
-    sections.push({ title: "Info", type: "table", rows: infoRows, sectionIcon: "info" });
+    sections.push({
+      title: sharedT.section.info,
+      type: "table",
+      rows: infoRows,
+      sectionIcon: "info",
+    });
   }
 
   return {
