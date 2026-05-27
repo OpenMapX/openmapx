@@ -1568,6 +1568,9 @@ importers:
       '@openmapx/poi-source-registry':
         specifier: workspace:^
         version: link:../poi-source-registry
+      intl-messageformat:
+        specifier: ^11.2.3
+        version: 11.2.3
       js-yaml:
         specifier: ^4.1.1
         version: 4.1.1
