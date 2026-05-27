@@ -11,6 +11,7 @@ import { IntegrationRegistryContext } from "@openmapx/integration-framework/reac
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { FrameworkStringsProvider } from "@/lib/frameworkStringsContext";
 
 export function IntegrationProvider({ children }: { children: React.ReactNode }) {
   const { apiUrl } = useEnv();
@@ -88,7 +89,7 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
 
   return (
     <IntegrationRegistryContext.Provider value={registry}>
-      {children}
+      <FrameworkStringsProvider value={frameworkStrings ?? {}}>{children}</FrameworkStringsProvider>
     </IntegrationRegistryContext.Provider>
   );
 }
