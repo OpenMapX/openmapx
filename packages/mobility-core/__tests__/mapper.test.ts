@@ -40,6 +40,34 @@ function makeVehicle(overrides?: Partial<SharedMobilityVehicle>): SharedMobility
   };
 }
 
+/** Finds a row by its label token's `$t` key. Rows where the label is a plain
+ * string fall back to direct comparison. */
+function findRow(
+  section: { rows?: unknown[][] } | undefined,
+  keyOrLabel: string,
+): unknown[] | undefined {
+  return section?.rows?.find((r) => {
+    const label = r[0];
+    if (label && typeof label === "object" && "$t" in label) {
+      return (label as { $t: string }).$t === keyOrLabel;
+    }
+    return label === keyOrLabel;
+  });
+}
+
+function findSection<T extends { title: unknown }>(
+  sections: T[],
+  keyOrTitle: string,
+): T | undefined {
+  return sections.find((s) => {
+    const t = s.title;
+    if (t && typeof t === "object" && "$t" in t) {
+      return (t as { $t: string }).$t === keyOrTitle;
+    }
+    return t === keyOrTitle;
+  });
+}
+
 describe("mapStationToResult", () => {
   describe("variant computation", () => {
     it("returns 'available' when availableVehicles > 0 and emptySlots > 0", () => {
@@ -130,36 +158,25 @@ describe("mapStationToResult", () => {
   });
 
   describe("summary", () => {
-    it("includes available count", () => {
+    it("emits a summary.available token with the available count", () => {
       const result = mapStationToResult(makeStation({ availableVehicles: 5 }));
-      expect(result.summary).toContain("5 available");
+      expect(result.summary).toEqual({ $t: "summary.available", values: { count: 5 } });
     });
 
-    it("includes slot count when emptySlots is defined", () => {
-      const result = mapStationToResult(makeStation({ emptySlots: 3 }));
-      expect(result.summary).toContain("3 slots");
+    it("emits zero counts unchanged for the ICU plural rule to render", () => {
+      const result = mapStationToResult(makeStation({ availableVehicles: 0 }));
+      expect(result.summary).toEqual({ $t: "summary.available", values: { count: 0 } });
     });
 
-    it("omits slot count when emptySlots is undefined", () => {
-      const result = mapStationToResult(makeStation({ emptySlots: undefined }));
-      expect(result.summary).not.toContain("slots");
-    });
-
-    it("includes accessMethod when present", () => {
-      const result = mapStationToResult(makeStation({ accessMethod: "App" }));
-      expect(result.summary).toContain("App");
-    });
-
-    it("includes pricingSummary when present", () => {
-      const result = mapStationToResult(makeStation({ pricingSummary: "from 0.28 \u20AC/km" }));
-      expect(result.summary).toContain("from 0.28 \u20AC/km");
-    });
-
-    it("joins parts with middle dot separator", () => {
+    it("does not include slot or access information on the result card", () => {
+      // Slot counts and access methods now live in the station-detail
+      // Availability table where they can be resolved per-integration; the
+      // result card summary stays a single token to avoid client-side
+      // concatenation of locale fragments.
       const result = mapStationToResult(
         makeStation({ availableVehicles: 2, emptySlots: 4, accessMethod: "Chipkarte" }),
       );
-      expect(result.summary).toBe("2 available \u00B7 4 slots \u00B7 Chipkarte");
+      expect(result.summary).toEqual({ $t: "summary.available", values: { count: 2 } });
     });
   });
 });
@@ -253,14 +270,17 @@ describe("mapVehicleToResult", () => {
       expect(result.operator).toBe("Lime");
     });
 
-    it("name includes operator and form factor label", () => {
+    it("name includes operator and English form factor fallback label", () => {
+      // The vehicle `name` is a plain string used as both display and OSM
+      // identity input, so it carries an English fallback rather than a
+      // token. Tokenization of vehicle name follows in Task 4.1.
       const result = mapVehicleToResult(
         makeVehicle({ operator: "Lime", formFactor: "scooter_standing" }),
       );
       expect(result.name).toBe("Lime E-Scooter");
     });
 
-    it("name is just form factor label when no operator", () => {
+    it("name is just form factor fallback when no operator", () => {
       const result = mapVehicleToResult(
         makeVehicle({ operator: undefined, formFactor: "bicycle" }),
       );
@@ -317,19 +337,22 @@ describe("mapVehicleToResult", () => {
   });
 
   describe("summary", () => {
-    it("includes battery percentage", () => {
+    it("emits a battery format token when only battery is known", () => {
       const result = mapVehicleToResult(makeVehicle({ batteryLevel: 75 }));
-      expect(result.summary).toContain("75%");
+      expect(result.summary).toEqual({ $t: "format.batteryPercent", values: { value: 75 } });
     });
 
-    it("includes range in km", () => {
+    it("emits a distance format token when only range is known", () => {
       const result = mapVehicleToResult(makeVehicle({ rangeMeters: 12000 }));
-      expect(result.summary).toContain("12.0 km");
+      expect(result.summary).toEqual({ $t: "format.distanceKm", values: { value: "12.0" } });
     });
 
-    it("joins battery and range with middle dot", () => {
+    it("joins battery and range with middle dot as a pass-through string", () => {
+      // When both are present the legacy joined format is preserved; tokens
+      // for each piece would require client-side composition which the
+      // single-token result card does not currently support.
       const result = mapVehicleToResult(makeVehicle({ batteryLevel: 80, rangeMeters: 25000 }));
-      expect(result.summary).toBe("80% \u00B7 25.0 km");
+      expect(result.summary).toBe("80% · 25.0 km");
     });
 
     it("returns empty string when no battery or range", () => {
@@ -344,63 +367,63 @@ describe("mapVehicleToResult", () => {
 describe("mapStationToDetail", () => {
   it("includes Availability section with vehicle count", () => {
     const detail = mapStationToDetail(makeStation());
-    const section = detail.sections.find((s) => s.title === "Availability");
+    const section = findSection(detail.sections, "shared.section.availability");
     expect(section).toBeDefined();
     expect(section?.type).toBe("table");
     expect(section?.sectionIcon).toBe("info");
-    expect(section?.rows?.find((r) => r[0] === "Available Vehicles")?.[1]).toBe(3);
+    expect(findRow(section, "row.availableVehicles")?.[1]).toBe(3);
   });
 
   it("includes empty slots in Availability when defined", () => {
     const detail = mapStationToDetail(makeStation({ emptySlots: 7 }));
-    const section = detail.sections.find((s) => s.title === "Availability");
-    expect(section?.rows?.find((r) => r[0] === "Empty Slots")?.[1]).toBe(7);
+    const section = findSection(detail.sections, "shared.section.availability");
+    expect(findRow(section, "row.emptySlots")?.[1]).toBe(7);
   });
 
   it("omits empty slots from Availability when undefined", () => {
     const detail = mapStationToDetail(makeStation({ emptySlots: undefined }));
-    const section = detail.sections.find((s) => s.title === "Availability");
-    expect(section?.rows?.find((r) => r[0] === "Empty Slots")).toBeUndefined();
+    const section = findSection(detail.sections, "shared.section.availability");
+    expect(findRow(section, "row.emptySlots")).toBeUndefined();
   });
 
   it("includes capacity in Availability when defined", () => {
     const detail = mapStationToDetail(makeStation({ capacity: 20 }));
-    const section = detail.sections.find((s) => s.title === "Availability");
-    expect(section?.rows?.find((r) => r[0] === "Total Capacity")?.[1]).toBe(20);
+    const section = findSection(detail.sections, "shared.section.availability");
+    expect(findRow(section, "row.totalCapacity")?.[1]).toBe(20);
   });
 
-  it("maps stationType 'fixed' to 'Fixed Station'", () => {
+  it("maps stationType 'fixed' to a fixedStation token", () => {
     const detail = mapStationToDetail(makeStation({ stationType: "fixed" }));
-    const section = detail.sections.find((s) => s.title === "Availability");
-    expect(section?.rows?.find((r) => r[0] === "Type")?.[1]).toBe("Fixed Station");
+    const section = findSection(detail.sections, "shared.section.availability");
+    expect(findRow(section, "shared.row.type")?.[1]).toEqual({ $t: "value.fixedStation" });
   });
 
-  it("maps stationType 'free' to 'Free-floating Zone'", () => {
+  it("maps stationType 'free' to a freefloatingZone token", () => {
     const detail = mapStationToDetail(makeStation({ stationType: "free" }));
-    const section = detail.sections.find((s) => s.title === "Availability");
-    expect(section?.rows?.find((r) => r[0] === "Type")?.[1]).toBe("Free-floating Zone");
+    const section = findSection(detail.sections, "shared.section.availability");
+    expect(findRow(section, "shared.row.type")?.[1]).toEqual({ $t: "value.freefloatingZone" });
   });
 
   it("includes pricing summary in Availability when present", () => {
-    const detail = mapStationToDetail(makeStation({ pricingSummary: "from 1.50 \u20AC/h" }));
-    const section = detail.sections.find((s) => s.title === "Availability");
-    expect(section?.rows?.find((r) => r[0] === "Pricing")?.[1]).toBe("from 1.50 \u20AC/h");
+    const detail = mapStationToDetail(makeStation({ pricingSummary: "from 1.50 €/h" }));
+    const section = findSection(detail.sections, "shared.section.availability");
+    expect(findRow(section, "row.pricing")?.[1]).toBe("from 1.50 €/h");
   });
 
   it("includes Transit section when transitInfo has lines", () => {
     const detail = mapStationToDetail(
       makeStation({ transitInfo: { lines: "U5, U8", stops: "Alexanderplatz" } }),
     );
-    const section = detail.sections.find((s) => s.title === "Public Transit");
+    const section = findSection(detail.sections, "section.transit");
     expect(section).toBeDefined();
     expect(section?.sectionIcon).toBe("directions_bus");
-    expect(section?.rows?.find((r) => r[0] === "Bus Lines")?.[1]).toBe("U5, U8");
-    expect(section?.rows?.find((r) => r[0] === "Nearest Stops")?.[1]).toBe("Alexanderplatz");
+    expect(findRow(section, "row.busLines")?.[1]).toBe("U5, U8");
+    expect(findRow(section, "row.nearestStops")?.[1]).toBe("Alexanderplatz");
   });
 
   it("omits Transit section when no transitInfo", () => {
     const detail = mapStationToDetail(makeStation({ transitInfo: undefined }));
-    expect(detail.sections.find((s) => s.title === "Public Transit")).toBeUndefined();
+    expect(findSection(detail.sections, "section.transit")).toBeUndefined();
   });
 
   it("includes Vehicle Details section for vehicleTypeDetails", () => {
@@ -419,15 +442,19 @@ describe("mapStationToDetail", () => {
         ],
       }),
     );
-    const section = detail.sections.find((s) => s.title === "Vehicle Details");
+    const section = findSection(detail.sections, "section.vehicleDetails");
     expect(section).toBeDefined();
     expect(section?.sectionIcon).toBe("directions_car");
     expect(section?.collapsed).toBe(true);
-    expect(section?.rows?.find((r) => r[0] === "Vehicle")?.[1]).toBe("Bosch CX");
-    expect(section?.rows?.find((r) => r[0] === "Propulsion")?.[1]).toBe("Electric Assist");
-    expect(section?.rows?.find((r) => r[0] === "Seats")?.[1]).toBe(1);
-    expect(section?.rows?.find((r) => r[0] === "Features")?.[1]).toBe("Navigation");
-    expect(section?.rows?.find((r) => r[0] === "CO\u2082")?.[1]).toBe("Zero emissions");
+    // Make+model takes precedence over the structured name — emitted as a
+    // pass-through string since the value is operator-provided.
+    expect(findRow(section, "row.vehicle")?.[1]).toBe("Bosch CX");
+    expect(findRow(section, "row.propulsion")?.[1]).toEqual({
+      $t: "value.propulsionKind.electric_assist",
+    });
+    expect(findRow(section, "row.seats")?.[1]).toBe(1);
+    expect(findRow(section, "row.features")?.[1]).toBe("Navigation");
+    expect(findRow(section, "row.co2")?.[1]).toEqual({ $t: "value.zeroEmissions" });
   });
 
   it("shows CO2 value in g/km when > 0", () => {
@@ -436,8 +463,11 @@ describe("mapStationToDetail", () => {
         vehicleTypeDetails: [{ name: "Car", co2PerKm: 120 }],
       }),
     );
-    const section = detail.sections.find((s) => s.title === "Vehicle Details");
-    expect(section?.rows?.find((r) => r[0] === "CO\u2082")?.[1]).toBe("120 g/km");
+    const section = findSection(detail.sections, "section.vehicleDetails");
+    expect(findRow(section, "row.co2")?.[1]).toEqual({
+      $t: "format.co2PerKm",
+      values: { value: 120 },
+    });
   });
 
   it("falls back to Vehicle Classes list when no vehicleTypeDetails", () => {
@@ -447,7 +477,7 @@ describe("mapStationToDetail", () => {
         vehicleClassNames: ["Mini", "Kombi", "Estate"],
       }),
     );
-    const section = detail.sections.find((s) => s.title === "Vehicle Classes");
+    const section = findSection(detail.sections, "section.vehicleClasses");
     expect(section).toBeDefined();
     expect(section?.type).toBe("list");
     expect(section?.items).toEqual(["Mini", "Kombi", "Estate"]);
@@ -467,7 +497,7 @@ describe("mapStationToDetail", () => {
         ],
       }),
     );
-    const section = detail.sections.find((s) => s.title === "Pricing");
+    const section = findSection(detail.sections, "shared.section.pricing");
     expect(section).toBeDefined();
     expect(section?.type).toBe("pricing");
     expect(section?.sectionIcon).toBe("payments");
@@ -489,7 +519,7 @@ describe("mapStationToDetail", () => {
         pricingDetails: [{ name: "Free Plan", currency: "EUR" }],
       }),
     );
-    const section = detail.sections.find((s) => s.title === "Pricing");
+    const section = findSection(detail.sections, "shared.section.pricing");
     expect(section?.type).toBe("pricing");
     expect(section?.pricingPlans?.[0]).toEqual({
       name: "Free Plan",
@@ -512,19 +542,19 @@ describe("mapStationToDetail", () => {
         },
       }),
     );
-    const section = detail.sections.find((s) => s.title === "Book");
+    const section = findSection(detail.sections, "section.book");
     expect(section).toBeDefined();
     expect(section?.sectionIcon).toBe("open_in_new");
     expect(section?.rows).toEqual([
-      ["Web", "https://book.example.com"],
-      ["Android", "android://example"],
-      ["iOS", "ios://example"],
+      [{ $t: "row.web" }, "https://book.example.com"],
+      [{ $t: "row.android" }, "android://example"],
+      [{ $t: "row.ios" }, "ios://example"],
     ]);
   });
 
   it("includes Directions section when locationHint is present", () => {
     const detail = mapStationToDetail(makeStation({ locationHint: "Behind the train station" }));
-    const section = detail.sections.find((s) => s.title === "Directions");
+    const section = findSection(detail.sections, "section.directions");
     expect(section).toBeDefined();
     expect(section?.type).toBe("text");
     expect(section?.content).toBe("Behind the train station");
@@ -532,7 +562,7 @@ describe("mapStationToDetail", () => {
 
   it("includes Notes section when operatorNotes is present", () => {
     const detail = mapStationToDetail(makeStation({ operatorNotes: "Return with full tank" }));
-    const section = detail.sections.find((s) => s.title === "Notes");
+    const section = findSection(detail.sections, "section.notes");
     expect(section).toBeDefined();
     expect(section?.type).toBe("text");
     expect(section?.content).toBe("Return with full tank");
@@ -562,6 +592,8 @@ describe("mapStationToDetail", () => {
       name: "TestBikes",
       url: "https://testbikes.example.com",
     });
+    // usageInfo.type stays an English pass-through during the transitional
+    // phase; tightening to a token follows in Task 4.1.
     expect(detail.usageInfo).toEqual({ type: "Access: App" });
   });
 
@@ -582,50 +614,60 @@ describe("mapStationToDetail", () => {
 });
 
 describe("mapVehicleToDetail", () => {
-  it("includes Vehicle Info section with type and status", () => {
+  it("includes Vehicle Info section with type and status tokens", () => {
     const detail = mapVehicleToDetail(makeVehicle({ formFactor: "scooter_standing" }));
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
+    const section = findSection(detail.sections, "section.vehicleInfo");
     expect(section).toBeDefined();
     expect(section?.type).toBe("table");
     expect(section?.sectionIcon).toBe("info");
-    expect(section?.rows?.find((r) => r[0] === "Type")?.[1]).toBe("E-Scooter");
-    expect(section?.rows?.find((r) => r[0] === "Status")?.[1]).toBe("Available");
+    expect(findRow(section, "shared.row.type")?.[1]).toEqual({
+      $t: "value.formFactor.scooter_standing",
+    });
+    expect(findRow(section, "shared.row.status")?.[1]).toEqual({ $t: "value.available" });
   });
 
-  it("shows propulsion when defined", () => {
+  it("shows propulsion as a token when defined", () => {
     const detail = mapVehicleToDetail(makeVehicle({ propulsion: "electric" }));
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
-    expect(section?.rows?.find((r) => r[0] === "Propulsion")?.[1]).toBe("Electric");
+    const section = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(section, "row.propulsion")?.[1]).toEqual({
+      $t: "value.propulsionKind.electric",
+    });
   });
 
   it("omits propulsion row when undefined", () => {
     const detail = mapVehicleToDetail(makeVehicle({ propulsion: undefined }));
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
-    expect(section?.rows?.find((r) => r[0] === "Propulsion")).toBeUndefined();
+    const section = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(section, "row.propulsion")).toBeUndefined();
   });
 
-  it("shows battery percentage when defined", () => {
+  it("shows battery percentage as a format token when defined", () => {
     const detail = mapVehicleToDetail(makeVehicle({ batteryLevel: 85 }));
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
-    expect(section?.rows?.find((r) => r[0] === "Battery")?.[1]).toBe("85%");
+    const section = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(section, "row.battery")?.[1]).toEqual({
+      $t: "format.batteryPercent",
+      values: { value: 85 },
+    });
   });
 
-  it("shows range in km when defined", () => {
+  it("shows range as a format token in km when defined", () => {
     const detail = mapVehicleToDetail(makeVehicle({ rangeMeters: 15500 }));
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
-    expect(section?.rows?.find((r) => r[0] === "Range")?.[1]).toBe("15.5 km");
+    const section = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(section, "row.range")?.[1]).toEqual({
+      $t: "format.distanceKm",
+      values: { value: "15.5" },
+    });
   });
 
-  it("status shows Reserved when isReserved", () => {
+  it("status shows Reserved token when isReserved", () => {
     const detail = mapVehicleToDetail(makeVehicle({ isReserved: true }));
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
-    expect(section?.rows?.find((r) => r[0] === "Status")?.[1]).toBe("Reserved");
+    const section = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(section, "shared.row.status")?.[1]).toEqual({ $t: "value.reserved" });
   });
 
-  it("status shows Disabled when isDisabled", () => {
+  it("status shows Disabled token when isDisabled", () => {
     const detail = mapVehicleToDetail(makeVehicle({ isDisabled: true }));
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
-    expect(section?.rows?.find((r) => r[0] === "Status")?.[1]).toBe("Disabled");
+    const section = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(section, "shared.row.status")?.[1]).toEqual({ $t: "value.disabled" });
   });
 
   it("maps detail-level fields correctly", () => {
@@ -639,13 +681,13 @@ describe("mapVehicleToDetail", () => {
     expect(detail.operator).toEqual({ name: "Lime" });
   });
 
-  it("name uses form factor label alone when no operator", () => {
+  it("name uses English form factor fallback alone when no operator", () => {
     const detail = mapVehicleToDetail(makeVehicle({ operator: undefined, formFactor: "bicycle" }));
     expect(detail.name).toBe("Bicycle");
     expect(detail.operator).toBeUndefined();
   });
 
-  it("maps all form factor labels correctly", () => {
+  it("name fallbacks cover every known form factor", () => {
     const factors: Record<string, string> = {
       bicycle: "Bicycle",
       cargo_bicycle: "Cargo Bicycle",
@@ -667,24 +709,24 @@ describe("mapVehicleToDetail", () => {
     }
   });
 
-  it("maps all propulsion labels correctly", () => {
-    const propulsions: Record<string, string> = {
-      human: "Human-powered",
-      electric_assist: "Electric Assist",
-      electric: "Electric",
-      combustion: "Combustion",
-      combustion_diesel: "Diesel",
-      hybrid: "Hybrid",
-      plug_in_hybrid: "Plug-in Hybrid",
-      hydrogen_fuel_cell: "Hydrogen",
-    };
+  it("propulsion row emits the corresponding propulsionKind token for every known kind", () => {
+    const propulsions: SharedMobilityVehicle["propulsion"][] = [
+      "human",
+      "electric_assist",
+      "electric",
+      "combustion",
+      "combustion_diesel",
+      "hybrid",
+      "plug_in_hybrid",
+      "hydrogen_fuel_cell",
+    ];
 
-    for (const [propulsion, expectedLabel] of Object.entries(propulsions)) {
-      const detail = mapVehicleToDetail(
-        makeVehicle({ propulsion: propulsion as SharedMobilityVehicle["propulsion"] }),
-      );
-      const section = detail.sections.find((s) => s.title === "Vehicle Info");
-      expect(section?.rows?.find((r) => r[0] === "Propulsion")?.[1]).toBe(expectedLabel);
+    for (const propulsion of propulsions) {
+      const detail = mapVehicleToDetail(makeVehicle({ propulsion }));
+      const section = findSection(detail.sections, "section.vehicleInfo");
+      expect(findRow(section, "row.propulsion")?.[1]).toEqual({
+        $t: `value.propulsionKind.${propulsion}`,
+      });
     }
   });
 
@@ -699,11 +741,11 @@ describe("mapVehicleToDetail", () => {
     );
     expect(detail.name).toBe("E-Scooter");
     expect(detail.operator).toBeUndefined();
-    const section = detail.sections.find((s) => s.title === "Vehicle Info");
-    expect(section?.rows?.find((r) => r[0] === "Propulsion")).toBeUndefined();
-    expect(section?.rows?.find((r) => r[0] === "Battery")).toBeUndefined();
-    expect(section?.rows?.find((r) => r[0] === "Range")).toBeUndefined();
+    const section = findSection(detail.sections, "section.vehicleInfo");
+    expect(findRow(section, "row.propulsion")).toBeUndefined();
+    expect(findRow(section, "row.battery")).toBeUndefined();
+    expect(findRow(section, "row.range")).toBeUndefined();
     // Status should still be present
-    expect(section?.rows?.find((r) => r[0] === "Status")?.[1]).toBe("Available");
+    expect(findRow(section, "shared.row.status")?.[1]).toEqual({ $t: "value.available" });
   });
 });

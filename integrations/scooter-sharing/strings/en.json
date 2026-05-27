@@ -1,6 +1,84 @@
 {
   "name": "Scooter Sharing",
   "description": "E-scooter and moped sharing locations and availability",
+  "section": {
+    "transit": "Public Transit",
+    "vehicleDetails": "Vehicle Details",
+    "vehicleClasses": "Vehicle Classes",
+    "vehicleInfo": "Vehicle Info",
+    "book": "Book",
+    "apps": "Apps",
+    "directions": "Directions",
+    "notes": "Notes"
+  },
+  "row": {
+    "availableVehicles": "Available Scooters",
+    "emptySlots": "Empty Slots",
+    "totalCapacity": "Total Capacity",
+    "busLines": "Bus Lines",
+    "nearestStops": "Nearest Stops",
+    "vehicle": "Scooter",
+    "propulsion": "Propulsion",
+    "seats": "Seats",
+    "features": "Features",
+    "co2": "CO₂",
+    "battery": "Battery",
+    "range": "Range",
+    "web": "Web",
+    "android": "Android",
+    "ios": "iOS",
+    "iosApp": "iOS App",
+    "androidApp": "Android App",
+    "pricing": "Pricing"
+  },
+  "value": {
+    "fixedStation": "Fixed Station",
+    "freefloatingZone": "Free-floating Zone",
+    "zeroEmissions": "Zero emissions",
+    "reserved": "Reserved",
+    "disabled": "Disabled",
+    "available": "Available",
+    "vehicleFallback": "Scooter",
+    "formFactor": {
+      "bicycle": "Bicycle",
+      "cargo_bicycle": "Cargo Bicycle",
+      "scooter_standing": "E-Scooter",
+      "scooter_seated": "Seated Scooter",
+      "car": "Car",
+      "moped": "Moped",
+      "other": "Vehicle"
+    },
+    "propulsionKind": {
+      "human": "Human-powered",
+      "electric_assist": "Electric Assist",
+      "electric": "Electric",
+      "combustion": "Combustion",
+      "combustion_diesel": "Diesel",
+      "hybrid": "Hybrid",
+      "plug_in_hybrid": "Plug-in Hybrid",
+      "hydrogen_fuel_cell": "Hydrogen"
+    },
+    "accessory": {
+      "air_conditioning": "AC",
+      "cruise_control": "Cruise Control",
+      "automatic": "Automatic",
+      "manual": "Manual",
+      "navigation": "Navigation",
+      "doors_3": "3 doors",
+      "doors_4": "4 doors",
+      "doors_5": "5 doors"
+    }
+  },
+  "summary": {
+    "available": "{count, plural, =0 {No scooters available} one {1 scooter available} other {# scooters available}}",
+    "slots": "{count, plural, =0 {No empty slots} one {1 empty slot} other {# empty slots}}"
+  },
+  "format": {
+    "batteryPercent": "{value}%",
+    "distanceKm": "{value} km",
+    "co2PerKm": "{value} g/km",
+    "accessMethod": "Access: {method}"
+  },
   "dataSources": [
     {
       "purpose": "Discover GBFS-compliant shared mobility systems worldwide",
