@@ -1,3 +1,4 @@
+import type { LocaleStrings } from "../strings/index.js";
 import type { CustomHealthCheckFn } from "./context";
 import type { IntegrationManifest } from "./manifest";
 
@@ -26,6 +27,17 @@ export interface LoadedIntegrationMeta {
   dataSources?: IntegrationManifest["dataSources"];
   healthCheck?: IntegrationManifest["healthCheck"];
   strings?: IntegrationStrings;
+}
+
+/**
+ * Wire shape of the `/api/integrations` orchestrator response. The host
+ * returns the enabled integrations alongside the framework's shared strings
+ * catalog (locale-keyed) so clients can resolve `shared.*` i18n tokens
+ * without a separate fetch.
+ */
+export interface IntegrationsResponse {
+  integrations: Array<LoadedIntegrationMeta & { isBuiltIn?: boolean }>;
+  frameworkStrings: LocaleStrings;
 }
 
 export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegrationMeta {

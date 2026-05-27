@@ -4,8 +4,8 @@ import { configureApiClient, initOverlayRegistry } from "@openmapx/core";
 import {
   getCommunityModule,
   IntegrationRegistry,
+  type IntegrationsResponse,
   initCommunityIntegrationRegistry,
-  type LoadedIntegrationMeta,
 } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { useQuery } from "@tanstack/react-query";
@@ -32,15 +32,17 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  const { data: integrations } = useQuery({
+  const { data } = useQuery({
     queryKey: ["integrations", apiBase],
     queryFn: async () => {
       const res = await fetch(`${apiBase}/api/integrations`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load integrations");
-      return (await res.json()) as (LoadedIntegrationMeta & { isBuiltIn?: boolean })[];
+      return (await res.json()) as IntegrationsResponse;
     },
     staleTime: Infinity,
   });
+  const integrations = data?.integrations;
+  const frameworkStrings = data?.frameworkStrings;
 
   // Community integration bundles import `react`, `react/jsx-runtime`, and
   // `@openmapx/core` as externals. The page's import map (apps/web/src/app/
@@ -73,7 +75,10 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
     }
   }, [integrations, apiBase]);
 
-  const registry = useMemo(() => new IntegrationRegistry(integrations ?? []), [integrations]);
+  const registry = useMemo(
+    () => new IntegrationRegistry(integrations ?? [], frameworkStrings ?? {}),
+    [integrations, frameworkStrings],
+  );
 
   useEffect(() => {
     if (integrations?.length) {

@@ -105,7 +105,12 @@ export { IntegrationEventBus } from "./events";
 // node:fs/crypto/os/path, and any barrel that re-exports it taints everyone
 // who imports the barrel — including the client-reachable `@openmapx/core`
 // main entry. Consumers import them from `@openmapx/core/server` instead.
-export type { IntegrationStrings, LoadedIntegration, LoadedIntegrationMeta } from "./loader";
+export type {
+  IntegrationStrings,
+  IntegrationsResponse,
+  LoadedIntegration,
+  LoadedIntegrationMeta,
+} from "./loader";
 export { toIntegrationMeta } from "./loader";
 export type {
   IntegrationDataSource,

@@ -1,11 +1,20 @@
+import type { LocaleStrings } from "../strings/index.js";
 import type { LoadedIntegrationMeta } from "./loader";
 import type { IntegrationDataSource } from "./manifest";
 
 export class IntegrationRegistry {
   private integrations: LoadedIntegrationMeta[];
+  /**
+   * Framework shared strings catalog as shipped by `/api/integrations`.
+   * Task 1.5 will introduce `FrameworkStringsProvider` + `useFrameworkStrings`
+   * — for now we surface this on the registry so the next task has somewhere
+   * to read from without reshaping the provider tree.
+   */
+  readonly frameworkStrings: LocaleStrings;
 
-  constructor(integrations: LoadedIntegrationMeta[]) {
+  constructor(integrations: LoadedIntegrationMeta[], frameworkStrings: LocaleStrings = {}) {
     this.integrations = integrations;
+    this.frameworkStrings = frameworkStrings;
   }
 
   getAll(): LoadedIntegrationMeta[] {
