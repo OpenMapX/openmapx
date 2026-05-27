@@ -58,9 +58,12 @@ let poiHandles: PoiSchedulerHandles | null = null;
 
 // Single shared Redis client for the POI ingest pipeline. Defined at module
 // scope so `shutdown()` can disconnect it explicitly — otherwise SIGTERM
-// hangs on the open socket.
-const redisUrl = process.env.REDIS_URL ?? "redis://redis:6379";
-const redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 3 });
+// hangs on the open socket. `lazyConnect: true` defers the first TCP attempt
+// until a command actually runs, so a misconfigured REDIS_URL surfaces at the
+// callsite that depends on it instead of flooding the log with retries at
+// boot.
+const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
+const redis = new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 3 });
 
 // POI ingest singleFlight + metricsSink + drift guard are constructed BEFORE
 // `app.listen()` so the HTTP routes can be registered against them — Fastify

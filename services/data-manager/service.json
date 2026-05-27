@@ -17,6 +17,7 @@
       "HOST": "0.0.0.0",
       "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx",
+      "REDIS_URL": "redis://redis:6379",
       "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — the data-manager container persists the Transitous lockfile (POST /transit/bump) via this path; see infra/docker/.env.example}",
       "OPENMAPX_CUSTOM_INTEGRATIONS_DIR": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
       "TSX_TSCONFIG_PATH": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/tsconfig.base.json",
