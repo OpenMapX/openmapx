@@ -1,6 +1,20 @@
 {
   "name": "Deutsche-Bahn-Bahnhofssuche",
   "description": "Geokodierung deutscher Bahnhöfe über die Deutsche Bahn RIS::Stations API",
+  "section": {
+    "platforms": "Bahnsteige",
+    "transferTimes": "Umsteigezeiten",
+    "localServices": "Lokale Dienste"
+  },
+  "value": {
+    "travelerStandard": "Standard",
+    "travelerOccasional": "Gelegentlich",
+    "travelerMobilityRestricted": "Mobilitätseingeschränkt",
+    "stepFree": "Stufenfrei",
+    "metersValue": "{count} m",
+    "centimetersValue": "{count} cm",
+    "minutesValue": "{count, plural, =1 {1 Min.} other {# Min.}}"
+  },
   "dataSources": [
     {
       "purpose": "Vorwärts-/Rückwärts-Geokodierung deutscher Bahnhöfe sowie Bahnhofsdetail-Anreicherung",

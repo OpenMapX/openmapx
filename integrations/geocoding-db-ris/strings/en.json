@@ -1,6 +1,20 @@
 {
   "name": "Deutsche Bahn Station Search",
   "description": "German railway station geocoding",
+  "section": {
+    "platforms": "Platforms",
+    "transferTimes": "Transfer Times",
+    "localServices": "Local Services"
+  },
+  "value": {
+    "travelerStandard": "Standard",
+    "travelerOccasional": "Occasional",
+    "travelerMobilityRestricted": "Mobility-restricted",
+    "stepFree": "Step-free",
+    "metersValue": "{count} m",
+    "centimetersValue": "{count} cm",
+    "minutesValue": "{count, plural, =1 {1 min} other {# min}}"
+  },
   "dataSources": [
     {
       "purpose": "Forward/reverse geocoding of German railway stations, plus station detail lookup",

@@ -9,6 +9,7 @@ import {
   type Place,
   type SearchResult,
 } from "@openmapx/core";
+import { type I18nToken, type Translatable, token } from "@openmapx/integration-framework/strings";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type {
   RisConnectingTime,
@@ -112,18 +113,23 @@ export interface StationDetail {
 }
 
 interface StationDetailSection {
-  title: string;
+  title: I18nToken | string;
   type: "table" | "list";
   collapsed?: boolean;
-  rows?: string[][];
-  items?: string[];
+  rows?: Translatable[][];
+  items?: (I18nToken | string)[];
 }
 
-const TRAVELER_TYPE_LABELS: Record<string, string> = {
-  COMMUTER: "Standard",
-  OCCASIONAL: "Occasional",
-  MOBILITY_RESTRICTED: "Mobility-restricted",
+const TRAVELER_TYPE_TOKEN: Record<string, I18nToken> = {
+  COMMUTER: token("value.travelerStandard"),
+  OCCASIONAL: token("value.travelerOccasional"),
+  MOBILITY_RESTRICTED: token("value.travelerMobilityRestricted"),
 };
+
+function travelerTypeLabel(type: string | undefined): Translatable {
+  if (!type) return TRAVELER_TYPE_TOKEN.COMMUTER;
+  return TRAVELER_TYPE_TOKEN[type] ?? type;
+}
 
 export function buildStationDetail(
   platforms: RisPlatform[],
@@ -134,32 +140,32 @@ export function buildStationDetail(
 
   if (platforms.length > 0) {
     sections.push({
-      title: "Platforms",
+      title: token("section.platforms"),
       type: "table",
       rows: platforms.map((p) => [
         p.name,
-        p.length ? `${p.length} m` : "-",
-        p.height ? `${p.height} cm` : "-",
-        p.accessibility?.stepFreeAccess ? "Step-free" : "-",
+        p.length ? token("value.metersValue", { count: p.length }) : "-",
+        p.height ? token("value.centimetersValue", { count: p.height }) : "-",
+        p.accessibility?.stepFreeAccess ? token("value.stepFree") : "-",
       ]),
     });
   }
 
   if (connectingTimes.length > 0) {
     sections.push({
-      title: "Transfer Times",
+      title: token("section.transferTimes"),
       type: "table",
       collapsed: true,
       rows: connectingTimes.map((ct) => [
-        TRAVELER_TYPE_LABELS[ct.type ?? ""] ?? ct.type ?? "Standard",
-        ct.defaultDuration ? `${ct.defaultDuration} min` : "-",
+        travelerTypeLabel(ct.type),
+        ct.defaultDuration ? token("value.minutesValue", { count: ct.defaultDuration }) : "-",
       ]),
     });
   }
 
   if (localServices.length > 0) {
     sections.push({
-      title: "Local Services",
+      title: token("section.localServices"),
       type: "list",
       collapsed: true,
       items: localServices.map((s) => (s.category ? `${s.name} (${s.category})` : s.name)),
