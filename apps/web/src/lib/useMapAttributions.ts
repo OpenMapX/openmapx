@@ -99,14 +99,24 @@ function htmlFor(attr: Attribution): string {
   if (attr.attributionText) {
     return sanitizeAttributionHtml(attr.attributionText);
   }
-  const escapedText = escapeHtml(attr.name);
+  // Keep a leading "© " outside the anchor. Every manifest-authored credit
+  // uses the "© <a>Publisher</a>" form; if we left "©" inside the anchor
+  // here, the resulting HTML wouldn't `includes()` (or be included by) the
+  // manifest form, and MapLibre's substring dedup would render the same
+  // credit twice when a base layer and an overlay both register it. The
+  // fallback also has to match the post-sanitization attribute order
+  // (`target="_blank" rel="noopener noreferrer"`) for the same reason.
+  const hasCopyright = attr.name.startsWith("© ");
+  const inner = hasCopyright ? attr.name.slice(2) : attr.name;
+  const escapedInner = escapeHtml(inner);
   if (attr.url) {
     const safeUrl = sanitizeUrl(attr.url);
     if (safeUrl) {
-      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${escapedText}</a>`;
+      const anchor = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${escapedInner}</a>`;
+      return hasCopyright ? `© ${anchor}` : anchor;
     }
   }
-  return escapedText;
+  return escapeHtml(attr.name);
 }
 
 export function useMapAttributions(layerKey: string, attributions: Attribution[]): void {
