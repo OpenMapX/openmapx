@@ -1,6 +1,6 @@
-import type { BBox, PoiSource } from "./types.js";
+import type { BBox, PoiSource } from "./types";
 
-export * from "./types.js";
+export * from "./types";
 
 /**
  * Canonical Redis key for the cross-process live-state hash that
