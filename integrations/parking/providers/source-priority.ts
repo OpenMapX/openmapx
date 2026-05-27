@@ -32,6 +32,18 @@ const SOURCE_PRIORITY: Record<string, number> = {
   "cita-lu": 4,
   apcoa: 4,
   goldbeck: 4,
+  // Direct city/operator feeds: all priority 4 — same tier as other
+  // municipal city sources; the dedup pass falls back to source label for
+  // tie-breaking when multiple feeds (e.g. NRW Mobidrom + Düsseldorf
+  // direct) describe the same garage.
+  "braunschweig-de": 4,
+  "bremen-de": 4,
+  "duesseldorf-de": 4,
+  "salzburg-at": 4,
+  "bielefeld-de": 4,
+  "bamberg-de": 4,
+  "trier-de": 4,
+  "potsdam-de": 4,
   osm: 5,
 };
 

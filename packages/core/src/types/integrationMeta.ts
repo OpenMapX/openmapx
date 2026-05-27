@@ -31,7 +31,6 @@ export interface CacheClient {
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
   withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T>;
-  hmget<T = unknown>(key: string, fields: readonly string[]): Promise<(T | null)[]>;
 }
 
 export type IntegrationStrings = Record<string, Record<string, unknown>>;

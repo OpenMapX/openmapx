@@ -2,13 +2,18 @@ import { createHash } from "node:crypto";
 import type { PoiRow, PoiSource } from "@openmapx/poi-source-registry";
 import { parseApagBundled } from "./providers/apag-parser.js";
 import { parseAutobahnDeBundled } from "./providers/autobahn-de-bundled-parser.js";
+import { parseBambergDeBundled } from "./providers/bamberg-de-parser.js";
 import { parseBarcelonaEsStatic } from "./providers/barcelona-es-parser.js";
 import { parseBaselChBundled } from "./providers/basel-ch-parser.js";
+import { parseBielefeldDeBundled } from "./providers/bielefeld-de-parser.js";
 import { parseBnlsFrStatic } from "./providers/bnls-fr-parser.js";
+import { parseBraunschweigDeBundled } from "./providers/braunschweig-de-parser.js";
+import { parseBremenDeStatic } from "./providers/bremen-de-parser.js";
 import { parseBrusselsBeStatic } from "./providers/brussels-be-parser.js";
 import { parseCitaLuBundled } from "./providers/cita-lu-bundled-parser.js";
 import { parseCopenhagenDkStatic } from "./providers/copenhagen-dk-parser.js";
 import { parseDbBahnParkStatic } from "./providers/db-bahnpark-parser.js";
+import { parseDuesseldorfDeBundled } from "./providers/duesseldorf-de-parser.js";
 import { parseFlorenceItBundled } from "./providers/florence-it-parser.js";
 import { parseGhentBeBundled } from "./providers/ghent-be-parser.js";
 import { parseMadridEsStatic } from "./providers/madrid-es-parser.js";
@@ -22,9 +27,12 @@ import {
 } from "./providers/opentransportdata-ch-bundled-parser.js";
 import { makeParkApiV2BundledParser } from "./providers/parkapi-v2-bundled-parser.js";
 import { makeParkApiV3BundledParser } from "./providers/parkapi-v3-bundled-parser.js";
+import { parsePotsdamDeBundled } from "./providers/potsdam-de-parser.js";
 import { parseRdwNlStatic } from "./providers/rdw-nl-parser.js";
+import { parseSalzburgAtBundled } from "./providers/salzburg-at-parser.js";
 import { parseSingaporeLive } from "./providers/singapore-live-parser.js";
 import { parseSingaporeStatic } from "./providers/singapore-static-parser.js";
+import { parseTrierDeBundled } from "./providers/trier-de-parser.js";
 import { parseUtmcLive } from "./providers/utmc-newcastle-live-parser.js";
 import { parseUtmcStatic } from "./providers/utmc-newcastle-static-parser.js";
 import { parseViennaAtStatic } from "./providers/vienna-at-parser.js";
@@ -118,6 +126,9 @@ export function declarePoiSources(): PoiSource[] {
         cron: "0 4 * * *",
         fetch: {
           type: "http",
+          // Single-snapshot dataset (~28 facilities). OpenDataSoft v2.1 caps
+          // `limit` at 100 per page — fine here, ~3× headroom over the
+          // current facility count.
           url: "https://opendata.brussels.be/api/explore/v2.1/catalog/datasets/bruxelles_parkings_publics/records?limit=100",
           timeoutMs: 10_000,
         },
@@ -301,7 +312,15 @@ export function declarePoiSources(): PoiSource[] {
         cron: "*/5 * * * *",
         fetch: {
           type: "http",
-          url: "https://data.bs.ch/api/explore/v2.1/catalog/datasets/100014/records?limit=100",
+          // Time-series dataset (~16 active facilities × hourly snapshots ≈
+          // 1M records — `centralbahnparking` was decommissioned in 2024).
+          // OpenDataSoft v2.1 caps `limit` at 100, so we order newest-first
+          // and rely on the parser to dedupe by `id2`. 100 records covers
+          // ~6 snapshots of all 16 active facilities — plenty of headroom
+          // even if a snapshot is partial. A plain `limit=100` without
+          // ordering would mix old and new snapshots and the parser would
+          // pick whichever row appeared first (effectively random).
+          url: "https://data.bs.ch/api/explore/v2.1/catalog/datasets/100014/records?limit=100&order_by=published%20desc",
           timeoutMs: 10_000,
         },
         parse: parseBaselChBundled,
@@ -353,6 +372,8 @@ export function declarePoiSources(): PoiSource[] {
         cron: "*/5 * * * *",
         fetch: {
           type: "http",
+          // Single-snapshot dataset (~13 facilities, updated in place).
+          // OpenDataSoft v2.1 caps `limit` at 100 — fine here, ~8× headroom.
           url: "https://data.stad.gent/api/explore/v2.1/catalog/datasets/bezetting-parkeergarages-real-time/records?limit=100",
           timeoutMs: 10_000,
         },
@@ -611,6 +632,170 @@ export function declarePoiSources(): PoiSource[] {
           sourceId: "goldbeck",
           operatorName: "GOLDBECK Parking Services GmbH",
         }),
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      id: "braunschweig-de",
+      stationIdPrefix: "braunschweig:",
+      domain: "parking",
+      name: "Stadt Braunschweig — PULP parking",
+      coverage: [10.4, 52.18, 10.65, 52.36],
+      bundled: {
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          url: "https://www.braunschweig.de/apps/pulp/result/parkhaeuser.geojson",
+          timeoutMs: 15_000,
+        },
+        parse: parseBraunschweigDeBundled,
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      id: "bremen-de",
+      stationIdPrefix: "bremen:",
+      domain: "parking",
+      name: "VMZ Bremen — parking catalogue",
+      coverage: [8.45, 53.0, 8.95, 53.25],
+      static: {
+        cron: "0 4 * * *",
+        fetch: {
+          type: "http",
+          url: "https://vmz.bremen.de/geojson/parking.geojson",
+          timeoutMs: 15_000,
+        },
+        parse: parseBremenDeStatic,
+      },
+    },
+    {
+      id: "duesseldorf-de",
+      stationIdPrefix: "duesseldorf:",
+      domain: "parking",
+      name: "Stadt Düsseldorf — Parkhäuser (VT-Manager)",
+      coverage: [6.65, 51.12, 6.95, 51.35],
+      bundled: {
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          url: "https://vtmanager.duesseldorf.de/geoserverwfs?request=getfeature&service=wfs&version=1.1.0&typename=Parkhaeuser&outputFormat=application/json&srsname=epsg:4326",
+          timeoutMs: 15_000,
+          headers: {
+            // Geoserver rejects the default fetch UA with HTTP 403. Mirror what
+            // the city's own viewer sends so the WFS treats us as a browser.
+            "User-Agent": "Mozilla/5.0",
+            Accept: "application/json",
+          },
+        },
+        parse: parseDuesseldorfDeBundled,
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      id: "salzburg-at",
+      stationIdPrefix: "salzburg:",
+      domain: "parking",
+      name: "Stadt Salzburg — parkplatz WFS",
+      coverage: [12.95, 47.72, 13.13, 47.88],
+      bundled: {
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          url: "https://data.stadt-salzburg.at/geodaten/wfs?service=WFS&version=1.1.0&request=GetFeature&srsName=urn:x-ogc:def:crs:EPSG:4326&outputFormat=application/json&typeName=ogdsbg:parkplatz",
+          timeoutMs: 15_000,
+          headers: { "User-Agent": "Mozilla/5.0" },
+        },
+        parse: parseSalzburgAtBundled,
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      id: "bielefeld-de",
+      stationIdPrefix: "bielefeld:",
+      domain: "parking",
+      name: "Stadt Bielefeld — parkplaetze WFS",
+      coverage: [8.4, 51.9, 8.7, 52.13],
+      bundled: {
+        // The WFS bakes the PLS live counts (`b_pls_rest`, `b_pls_zeit`,
+        // `b_pls_status`) into the same feature collection as the static
+        // cadastre. Every 5 min matches the upstream PLS refresh cadence;
+        // the static-row hash skips the swap when only live fields changed.
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          // The `; subtype=geojson` part is part of the OGC-defined media-type
+          // identifier — URL-encoding the space avoids breakage at the HTTP
+          // client edges that try to "fix" the header otherwise.
+          url: "https://www.bielefeld01.de/md/WFS/parkplaetze/01?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetFeature&TYPENAME=parkplaetze_p&SRSNAME=EPSG:4326&OUTPUTFORMAT=application%2Fjson%3B%20subtype%3Dgeojson",
+          timeoutMs: 30_000,
+          headers: { "User-Agent": "Mozilla/5.0" },
+        },
+        parse: parseBielefeldDeBundled,
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      id: "bamberg-de",
+      stationIdPrefix: "bamberg:",
+      domain: "parking",
+      name: "Stadtwerke Bamberg — Parken",
+      coverage: [10.83, 49.85, 10.94, 49.94],
+      bundled: {
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          url: "https://www.stadtwerke-bamberg.de/carparkcounter/api/status",
+          timeoutMs: 10_000,
+        },
+        parse: parseBambergDeBundled,
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      id: "trier-de",
+      stationIdPrefix: "trier:",
+      domain: "parking",
+      name: "Stadtwerke Trier — parken-v2",
+      coverage: [6.6, 49.72, 6.7, 49.78],
+      bundled: {
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          // `www.swt.de` 301s to `service.swt.de`; we hit the redirect target
+          // directly so the data-manager fetcher doesn't have to follow.
+          url: "https://service.swt.de/parken-v2.xml",
+          timeoutMs: 10_000,
+          headers: { "User-Agent": "Mozilla/5.0" },
+        },
+        parse: parseTrierDeBundled,
+        liveTtlSeconds: 1800,
+        staticChangeKey: mobidromStaticChangeKey,
+      },
+    },
+    {
+      id: "potsdam-de",
+      stationIdPrefix: "potsdam:",
+      domain: "parking",
+      name: "Stadtwerke Potsdam — parking CSV",
+      coverage: [12.85, 52.32, 13.2, 52.5],
+      bundled: {
+        // SWP exposes a 5-min refresh cadence on the upstream telemetry; matching
+        // it lets the bbox bbox filter + name-collision dedup converge on stable
+        // rows before the next ingest.
+        cron: "*/5 * * * *",
+        fetch: {
+          type: "http",
+          url: "https://cs1-swp.westeurope.cloudapp.azure.com:8443/parking_csv",
+          timeoutMs: 15_000,
+          headers: { "User-Agent": "Mozilla/5.0" },
+        },
+        parse: parsePotsdamDeBundled,
         liveTtlSeconds: 1800,
         staticChangeKey: mobidromStaticChangeKey,
       },

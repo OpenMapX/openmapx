@@ -1,14 +1,10 @@
-import type { PoiLiveState } from "@openmapx/poi-source-registry";
+import { type PoiLiveState, poiLiveHashKey } from "@openmapx/poi-source-registry";
 import type { PoiIngestStageResult, PoiJobContext } from "../types.js";
 
 const DEFAULT_LIVE_TTL_SECONDS = 600;
 
 function nowIso(ctx: PoiJobContext): string {
   return ctx.now ? ctx.now() : new Date().toISOString();
-}
-
-function liveKey(sourceId: string): string {
-  return `poi:live:${sourceId}`;
 }
 
 function resolveTtl(ctx: PoiJobContext): number {
@@ -45,7 +41,7 @@ export async function run(ctx: PoiJobContext): Promise<PoiIngestStageResult> {
       throw new Error("write-live: no liveState in ctx.state — parse stage must run first");
     }
 
-    const key = liveKey(ctx.source.id);
+    const key = poiLiveHashKey(ctx.source.id);
     const ttl = resolveTtl(ctx);
     const pipeline = ctx.redis.multi();
     // Always DEL the key first so removed entries don't linger as stale

@@ -2,6 +2,20 @@ import type { BBox, PoiSource } from "./types.js";
 
 export * from "./types.js";
 
+/**
+ * Canonical Redis key for the cross-process live-state hash that
+ * `services/data-manager`'s `write-live` stage populates and the
+ * `@openmapx/integration-framework` POI reader reads.
+ *
+ * Format: `poi:live:<sourceId>` — deliberately NOT integration-prefixed
+ * since data-manager has no concept of integration ids, only the source
+ * ids registered here. Both halves of the round-trip MUST use this helper
+ * (or an equivalent literal) to avoid silent key-namespace drift.
+ */
+export function poiLiveHashKey(sourceId: string): string {
+  return `poi:live:${sourceId}`;
+}
+
 const REGISTRY = new Map<string, PoiSource>();
 
 /**

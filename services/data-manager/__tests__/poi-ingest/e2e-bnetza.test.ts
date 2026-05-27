@@ -10,6 +10,7 @@ import type {
   CacheClient,
   DatabaseClient,
   IntegrationContext,
+  LiveStoreClient,
 } from "@openmapx/integration-framework";
 import { createStaticPoiReader } from "@openmapx/integration-framework";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
@@ -56,6 +57,8 @@ function buildIntegrationCtx(sqlExecute: DatabaseClient["execute"]): Integration
     set: async () => undefined,
     del: async () => undefined,
     withCache: async (_k, _t, fn) => fn(),
+  };
+  const liveStore: LiveStoreClient = {
     hmget: async (_k, fields) => fields.map(() => null),
   };
   const noop = () => undefined;
@@ -68,6 +71,7 @@ function buildIntegrationCtx(sqlExecute: DatabaseClient["execute"]): Integration
       post: async () => null,
     } as unknown as IntegrationContext["http"],
     cache,
+    liveStore,
     db: { execute: sqlExecute },
     log: {
       info: () => undefined,

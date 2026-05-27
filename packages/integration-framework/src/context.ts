@@ -29,10 +29,26 @@ export interface CacheClient {
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
   withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T>;
+}
+
+/**
+ * Cross-process hash-store reader for the shared `poi:live:<sourceId>`
+ * keyspace written by services/data-manager.
+ *
+ * Distinct from `CacheClient` because the keys are NOT integration-namespaced
+ * — `data-manager` knows nothing about integration ids, only the source ids
+ * registered in `@openmapx/poi-source-registry`. The host must NOT prefix
+ * the key with `int:<integration>:` or reads will silently miss the writes.
+ *
+ * Currently only `createTwoTierPoiReader` uses this; widen the interface if
+ * other shared Redis structures emerge.
+ */
+export interface LiveStoreClient {
   /**
-   * Bulk read fields from a Redis hash stored at the prefixed key. Returns
-   * one entry per requested field, in the same order; null for missing
-   * fields. JSON-decoded the same way get() decodes its value.
+   * Bulk-read fields from a Redis hash at the literal `key` (no prefixing).
+   * Returns one entry per requested field, in the same order; null for
+   * missing fields. JSON-decoded; values written via Redis `HSET` with a
+   * JSON-stringified payload (data-manager's `write-live` stage) decode cleanly.
    */
   hmget<T = unknown>(key: string, fields: readonly string[]): Promise<(T | null)[]>;
 }
@@ -155,6 +171,12 @@ export interface IntegrationContext {
 
   readonly http: HttpClient;
   readonly cache: CacheClient;
+  /**
+   * Reader for the shared cross-process `poi:live:<sourceId>` keyspace
+   * written by `services/data-manager`. Distinct from `cache` because
+   * it must not be integration-namespaced. See `LiveStoreClient`.
+   */
+  readonly liveStore: LiveStoreClient;
   readonly db?: DatabaseClient;
   readonly log: Logger;
   readonly secrets: SecretsClient;

@@ -347,9 +347,16 @@ function mergeCluster(cluster: ParkingFacility[]): ParkingFacility {
     // Richer info wins for accessibility/EV counts — operator-reported counts
     // are generally higher than equipment-tag sentinels (1).
     disabledSpaces: maxDefined(members.map((m) => m.disabledSpaces)),
+    womenSpaces: maxDefined(members.map((m) => m.womenSpaces)),
     chargingSpaces: maxDefined(members.map((m) => m.chargingSpaces)),
     // Most restrictive height wins — safer for routing taller vehicles.
     maxHeight: minDefined(members.map((m) => m.maxHeight)),
+
+    // Trend is intrinsically realtime telemetry (fill direction is only
+    // meaningful when paired with current occupancy), so we restrict the
+    // fallback to realtime-bearing members. A static-only member's stale
+    // trend must never bleed into the merged facility.
+    trend: pickByPriority(realtimeMembers, (m) => m.trend),
 
     fee,
     feeDescription: pickRichestString(members.map((m) => m.feeDescription)),

@@ -34,8 +34,18 @@ export interface ParkingFacility {
   qualityWarnings?: string[];
 
   disabledSpaces?: number;
+  /** Reserved women's parking spaces (Frauenparkplätze) when the upstream exposes a count. */
+  womenSpaces?: number;
   chargingSpaces?: number;
   maxHeight?: number; // centimeters
+
+  /**
+   * Direction of recent occupancy change. Many German parking guidance
+   * systems (PLS) publish a fill-trend indicator alongside the free-space
+   * count; we surface it so a user comparing two equally-empty garages can
+   * pick the one that's emptying rather than filling.
+   */
+  trend?: "increasing" | "decreasing" | "constant";
 
   fee?: "free" | "paid" | "unknown";
   feeDescription?: string;

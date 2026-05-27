@@ -14,6 +14,7 @@ export type {
   HttpClient,
   HttpClientOptions,
   IntegrationContext,
+  LiveStoreClient,
   Logger,
   MetricsRecorder,
   ProviderCallOutcome,

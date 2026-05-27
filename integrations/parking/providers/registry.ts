@@ -4,13 +4,18 @@ import { fetchApagDetail, searchApag } from "./apag.js";
 import { fetchApagMobidromDetail, searchApagMobidrom } from "./apag-mobidrom.js";
 import { fetchApcoaDetail, searchApcoa } from "./apcoa.js";
 import { fetchAutobahnDeDetail, searchAutobahnDe } from "./autobahn-de.js";
+import { fetchBambergDeDetail, searchBambergDe } from "./bamberg-de.js";
 import { fetchBarcelonaEsDetail, searchBarcelonaEs } from "./barcelona-es.js";
 import { fetchBaselChDetail, searchBaselCh } from "./basel-ch.js";
+import { fetchBielefeldDeDetail, searchBielefeldDe } from "./bielefeld-de.js";
 import { fetchBnlsFrDetail, searchBnlsFr } from "./bnls-fr.js";
+import { fetchBraunschweigDeDetail, searchBraunschweigDe } from "./braunschweig-de.js";
+import { fetchBremenDeDetail, searchBremenDe } from "./bremen-de.js";
 import { fetchBrusselsBeDetail, searchBrusselsBe } from "./brussels-be.js";
 import { fetchCitaLuDetail, searchCitaLu } from "./cita-lu.js";
 import { fetchCopenhagenDkDetail, searchCopenhagenDk } from "./copenhagen-dk.js";
 import { fetchDbBahnParkDetail, searchDbBahnPark } from "./db-bahnpark.js";
+import { fetchDuesseldorfDeDetail, searchDuesseldorfDe } from "./duesseldorf-de.js";
 import { fetchFlorenceItDetail, searchFlorenceIt } from "./florence-it.js";
 import { fetchGhentBeDetail, searchGhentBe } from "./ghent-be.js";
 import { fetchGoldbeckDetail, searchGoldbeck } from "./goldbeck.js";
@@ -27,9 +32,12 @@ import {
 import { fetchOsmParkingElement, searchOsmParking } from "./osm.js";
 import { fetchParkApiV2Detail, searchParkApiV2 } from "./parkapi-v2.js";
 import { fetchParkApiV3Detail, searchParkApiV3 } from "./parkapi-v3.js";
+import { fetchPotsdamDeDetail, searchPotsdamDe } from "./potsdam-de.js";
 import { fetchRdwNlDetail, searchRdwNl } from "./rdw-nl.js";
+import { fetchSalzburgAtDetail, searchSalzburgAt } from "./salzburg-at.js";
 import { fetchSingaporeDetail, searchSingapore } from "./singapore.js";
 import { getParkingSourcePriority } from "./source-priority.js";
+import { fetchTrierDeDetail, searchTrierDe } from "./trier-de.js";
 import { fetchUtmcNewcastleDetail, searchUtmcNewcastle } from "./utmc-newcastle.js";
 import { fetchViennaAtDetail, searchViennaAt } from "./vienna-at.js";
 
@@ -97,6 +105,15 @@ export const PARKING_SOURCE_REGISTRY: ParkingSourceRegistryEntry[] = [
   entry("cita-lu", searchCitaLu, "cita-lu:", fetchCitaLuDetail),
   entry("apcoa", searchApcoa, "apcoa:", fetchApcoaDetail),
   entry("goldbeck", searchGoldbeck, "goldbeck:", fetchGoldbeckDetail),
+  // Direct municipal/operator feeds for individual cities.
+  entry("braunschweig-de", searchBraunschweigDe, "braunschweig:", fetchBraunschweigDeDetail),
+  entry("bremen-de", searchBremenDe, "bremen:", fetchBremenDeDetail),
+  entry("duesseldorf-de", searchDuesseldorfDe, "duesseldorf:", fetchDuesseldorfDeDetail),
+  entry("salzburg-at", searchSalzburgAt, "salzburg:", fetchSalzburgAtDetail),
+  entry("bielefeld-de", searchBielefeldDe, "bielefeld:", fetchBielefeldDeDetail),
+  entry("bamberg-de", searchBambergDe, "bamberg:", fetchBambergDeDetail),
+  entry("trier-de", searchTrierDe, "trier:", fetchTrierDeDetail),
+  entry("potsdam-de", searchPotsdamDe, "potsdam:", fetchPotsdamDeDetail),
   {
     id: "osm",
     priority: getParkingSourcePriority("osm"),

@@ -112,7 +112,7 @@
     {
       "name": "Basel-Stadt",
       "type": "http",
-      "url": "https://data.bs.ch/api/explore/v2.1/catalog/datasets/100014/records?limit=1"
+      "url": "https://data.bs.ch/api/explore/v2.1/catalog/datasets/100014/records?limit=1&order_by=published%20desc"
     },
     {
       "name": "OpenTransportData Switzerland",
@@ -212,6 +212,51 @@
       "name": "NRW Mobidrom (GOLDBECK)",
       "type": "http",
       "url": "https://www.mobilitaetsdaten.nrw/api/systemadapter-mobilithek-exporter/parkplaetze-goldbeck-parking-services.json"
+    },
+    {
+      "name": "Stadt Braunschweig (PULP)",
+      "type": "http",
+      "url": "https://www.braunschweig.de/apps/pulp/result/parkhaeuser.geojson"
+    },
+    {
+      "name": "VMZ Bremen",
+      "type": "http",
+      "url": "https://vmz.bremen.de/geojson/parking.geojson"
+    },
+    {
+      "name": "Stadt Düsseldorf (VT-Manager)",
+      "type": "http",
+      "url": "https://vtmanager.duesseldorf.de/geoserverwfs?request=getfeature&service=wfs&version=1.1.0&typename=Parkhaeuser&outputFormat=application/json&srsname=epsg:4326",
+      "headers": { "User-Agent": "Mozilla/5.0" }
+    },
+    {
+      "name": "Stadt Salzburg (WFS)",
+      "type": "http",
+      "url": "https://data.stadt-salzburg.at/geodaten/wfs?service=WFS&version=1.1.0&request=GetFeature&srsName=urn:x-ogc:def:crs:EPSG:4326&outputFormat=application/json&typeName=ogdsbg:parkplatz",
+      "headers": { "User-Agent": "Mozilla/5.0" }
+    },
+    {
+      "name": "Stadt Bielefeld (WFS)",
+      "type": "http",
+      "url": "https://www.bielefeld01.de/md/WFS/parkplaetze/01?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetCapabilities",
+      "headers": { "User-Agent": "Mozilla/5.0" }
+    },
+    {
+      "name": "Stadtwerke Bamberg (carparkcounter)",
+      "type": "http",
+      "url": "https://www.stadtwerke-bamberg.de/carparkcounter/api/status"
+    },
+    {
+      "name": "Stadtwerke Trier (parken-v2)",
+      "type": "http",
+      "url": "https://service.swt.de/parken-v2.xml",
+      "headers": { "User-Agent": "Mozilla/5.0" }
+    },
+    {
+      "name": "Stadtwerke Potsdam (parking CSV)",
+      "type": "http",
+      "url": "https://cs1-swp.westeurope.cloudapp.azure.com:8443/parking_csv",
+      "headers": { "User-Agent": "Mozilla/5.0" }
     },
     {
       "name": "OpenStreetMap Overpass",
@@ -564,12 +609,13 @@
     {
       "sourceId": "apag",
       "name": "APAG – Aachener Parkhaus",
-      "url": "https://apag.de/",
-      "license": "operator-provided",
-      "licenseUrl": "https://apag.de/impressum/",
+      "url": "https://www.apag.de/",
+      "license": "All Rights Reserved (no published reuse terms)",
+      "licenseUrl": "https://www.apag.de/de/impressum",
+      "attribution": "Source: APAG – Aachener Parkhaus GmbH (apag.de). The same dataset is also published under <a href=\"https://www.govdata.de/dl-de/by-2-0\">Datenlizenz Deutschland Namensnennung 2.0</a> via NRW.Mobidrom; the openly-licensed copy ships as the separate <code>apag-mobidrom</code> source.",
       "commercialUse": "unknown",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://apag.de/datenschutz/",
+      "providerPrivacyUrl": "https://www.apag.de/de/datenschutz",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
@@ -598,6 +644,122 @@
       "commercialUse": "yes",
       "providerCountry": "DE",
       "providerPrivacyUrl": "https://www.mobidrom.nrw/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "braunschweig-de",
+      "name": "Stadt Braunschweig — PULP parking",
+      "url": "https://www.braunschweig.de/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.braunschweig.de/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "bremen-de",
+      "name": "VMZ Bremen — parking catalogue",
+      "url": "https://vmz.bremen.de/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bremen.de/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "duesseldorf-de",
+      "name": "Stadt Düsseldorf — VT-Manager",
+      "url": "https://opendata.duesseldorf.de/",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.duesseldorf.de/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "salzburg-at",
+      "name": "Stadt Salzburg — parkplatz WFS",
+      "url": "https://www.stadt-salzburg.at/open-government-data/",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Datenquelle: Stadt Salzburg – <a href=\"https://www.stadt-salzburg.at/open-government-data/\">data.stadt-salzburg.at</a>",
+      "commercialUse": "yes",
+      "providerCountry": "AT",
+      "providerPrivacyUrl": "https://www.stadt-salzburg.at/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "bielefeld-de",
+      "name": "Stadt Bielefeld — Parkplätze WFS",
+      "url": "https://www.bielefeld.de/open-data",
+      "license": "Datenlizenz Deutschland Namensnennung 2.0",
+      "licenseUrl": "https://www.govdata.de/dl-de/by-2-0",
+      "commercialUse": "yes",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.bielefeld.de/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "bamberg-de",
+      "name": "Stadtwerke Bamberg — Parken",
+      "url": "https://www.stadtwerke-bamberg.de/mobilitaet/parken",
+      "license": "All Rights Reserved (no published reuse terms)",
+      "licenseUrl": "https://www.stadtwerke-bamberg.de/impressum",
+      "attribution": "Source: Stadtwerke Bamberg (stadtwerke-bamberg.de). The operator's impressum states that publication on the internet does not imply consent for reuse; we surface the data on the assumption that factual occupancy counts fall outside copyright protection. Operators republishing OpenMapX should contact Stadtwerke Bamberg for a formal license.",
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.stadtwerke-bamberg.de/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "trier-de",
+      "name": "Stadtwerke Trier — Parken",
+      "url": "https://www.swt.de/seite/aktuell-freie-parkplatze-auf-einen-blick",
+      "license": "All Rights Reserved (no published reuse terms)",
+      "licenseUrl": "https://www.swt.de/seite/impressum",
+      "attribution": "Source: Stadtwerke Trier (swt.de). The XML feed at service.swt.de is publicly accessible without an explicit licence; the operator's impressum reserves all rights to the website's contents. We surface the realtime counts on the assumption that factual occupancy data falls outside copyright protection. Operators republishing OpenMapX should contact SWT for a formal license.",
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.swt.de/seite/datenschutz",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "potsdam-de",
+      "name": "Stadtwerke Potsdam — Parkplätze",
+      "url": "https://www.swp-potsdam.de/",
+      "license": "All Rights Reserved (no published reuse terms)",
+      "licenseUrl": "https://www.swp-potsdam.de/impressum/",
+      "attribution": "Source: Stadtwerke Potsdam GmbH (swp-potsdam.de). The CSV feed is publicly reachable on an Azure-hosted endpoint without an explicit licence; SWP's impressum states that all rights to swp-potsdam.de content remain with Stadtwerke Potsdam GmbH. We surface the data on the assumption that factual occupancy counts fall outside copyright protection. Operators republishing OpenMapX should contact SWP for a formal license.",
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.swp-potsdam.de/impressum/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

@@ -1,6 +1,12 @@
 import type { BBox, PoiLiveState } from "@openmapx/poi-source-registry";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CacheClient, DatabaseClient, IntegrationContext, Logger } from "../context";
+import type {
+  CacheClient,
+  DatabaseClient,
+  IntegrationContext,
+  LiveStoreClient,
+  Logger,
+} from "../context";
 import {
   __resetReaderState,
   createStaticPoiReader,
@@ -40,26 +46,30 @@ function makeLogger(): Logger & { _calls: { warn: unknown[][]; info: unknown[][]
   };
 }
 
-function makeCache(hmgetImpl?: CacheClient["hmget"]): CacheClient {
+function makeCache(): CacheClient {
   const withCache: CacheClient["withCache"] = async <T>(
     _k: string,
     _t: number,
     fn: () => Promise<T>,
   ) => fn();
-  const defaultHmget: CacheClient["hmget"] = async <T>(_k: string, fields: readonly string[]) =>
-    fields.map(() => null as T | null);
   return {
     get: vi.fn(async () => null),
     set: vi.fn(async () => undefined),
     del: vi.fn(async () => undefined),
     withCache,
-    hmget: hmgetImpl ?? defaultHmget,
   };
+}
+
+function makeLiveStore(hmgetImpl?: LiveStoreClient["hmget"]): LiveStoreClient {
+  const defaultHmget: LiveStoreClient["hmget"] = async <T>(_k: string, fields: readonly string[]) =>
+    fields.map(() => null as T | null);
+  return { hmget: hmgetImpl ?? defaultHmget };
 }
 
 interface CtxOverrides {
   db?: DatabaseClient | undefined;
   cache?: CacheClient;
+  liveStore?: LiveStoreClient;
   log?: Logger;
 }
 
@@ -71,6 +81,7 @@ function makeCtx(overrides: CtxOverrides = {}): IntegrationContext {
     config: {},
     http: { get: vi.fn(), post: vi.fn() } as unknown as IntegrationContext["http"],
     cache: overrides.cache ?? makeCache(),
+    liveStore: overrides.liveStore ?? makeLiveStore(),
     db: overrides.db,
     log: overrides.log ?? makeLogger(),
     secrets: { get: vi.fn(async () => null) },
@@ -232,7 +243,10 @@ describe("createTwoTierPoiReader", () => {
             : null,
       ),
     );
-    const ctx = makeCtx({ db: { execute }, cache: makeCache(hmget as CacheClient["hmget"]) });
+    const ctx = makeCtx({
+      db: { execute },
+      liveStore: makeLiveStore(hmget as LiveStoreClient["hmget"]),
+    });
     const reader = createTwoTierPoiReader<Entity>({
       sourceId: "parking-x",
       mapStatic,
@@ -256,7 +270,10 @@ describe("createTwoTierPoiReader", () => {
     const hmget = vi.fn(async () => {
       throw new Error("cache down");
     });
-    const ctx = makeCtx({ db: { execute }, cache: makeCache(hmget as CacheClient["hmget"]) });
+    const ctx = makeCtx({
+      db: { execute },
+      liveStore: makeLiveStore(hmget as LiveStoreClient["hmget"]),
+    });
     const reader = createTwoTierPoiReader<Entity>({
       sourceId: "parking-x",
       mapStatic,
@@ -276,12 +293,12 @@ describe("createTwoTierPoiReader", () => {
     ];
     const { execute } = mockExecute(async () => rows);
     // Simulate the host having stored an unparseable string or wrong shape — host
-    // returns `null` for parse failures per the CacheClient contract; we also
+    // returns `null` for parse failures per the LiveStoreClient contract; we also
     // defensively coerce non-object values to null.
     const hmget = vi.fn(async () => [null, "not-an-object"]);
     const ctx = makeCtx({
       db: { execute },
-      cache: makeCache(hmget as unknown as CacheClient["hmget"]),
+      liveStore: makeLiveStore(hmget as unknown as LiveStoreClient["hmget"]),
     });
     const reader = createTwoTierPoiReader<Entity>({
       sourceId: "parking-x",
@@ -298,7 +315,10 @@ describe("createTwoTierPoiReader", () => {
   it("fetchDetail merges live for a single id", async () => {
     const { execute } = mockExecute(async () => [{ poi_id: "a", payload: { name: "A" } }]);
     const hmget = vi.fn(async () => [{ asOf: "2026-01-01T00:00:00Z", free: 9 }]);
-    const ctx = makeCtx({ db: { execute }, cache: makeCache(hmget as CacheClient["hmget"]) });
+    const ctx = makeCtx({
+      db: { execute },
+      liveStore: makeLiveStore(hmget as LiveStoreClient["hmget"]),
+    });
     const reader = createTwoTierPoiReader<Entity>({
       sourceId: "parking-x",
       mapStatic,
@@ -310,7 +330,10 @@ describe("createTwoTierPoiReader", () => {
   it("two-tier coverage short-circuit also skips cache", async () => {
     const { fn, execute } = mockExecute(async () => []);
     const hmget = vi.fn();
-    const ctx = makeCtx({ db: { execute }, cache: makeCache(hmget as CacheClient["hmget"]) });
+    const ctx = makeCtx({
+      db: { execute },
+      liveStore: makeLiveStore(hmget as LiveStoreClient["hmget"]),
+    });
     const reader = createTwoTierPoiReader<Entity>({
       sourceId: "parking-x",
       mapStatic,

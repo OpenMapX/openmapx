@@ -1,4 +1,4 @@
-import type { BBox, PoiLiveState } from "@openmapx/poi-source-registry";
+import { type BBox, type PoiLiveState, poiLiveHashKey } from "@openmapx/poi-source-registry";
 import type { IntegrationContext } from "./context.js";
 
 const MAX_ROWS_PER_BBOX = 2000;
@@ -225,7 +225,10 @@ export function createTwoTierPoiReader<TResult>(
 ): PoiReader<TResult> {
   assertValidSourceId(opts.sourceId);
   const { sourceId, mapStatic, mergeWithLive, coverage } = opts;
-  const hashKey = `poi:live:${sourceId}`;
+  // Shared Redis hash key with services/data-manager's `write-live` stage —
+  // both sides use `poiLiveHashKey` from @openmapx/poi-source-registry so
+  // they can never drift.
+  const hashKey = poiLiveHashKey(sourceId);
 
   return {
     async search(ctx, bbox) {
@@ -239,7 +242,7 @@ export function createTwoTierPoiReader<TResult>(
 
       let live: (PoiLiveState | null)[] = [];
       try {
-        const raw = await ctx.cache.hmget<unknown>(
+        const raw = await ctx.liveStore.hmget<unknown>(
           hashKey,
           bases.map((b) => b.id),
         );
@@ -257,7 +260,7 @@ export function createTwoTierPoiReader<TResult>(
       const base = mapStatic(row.poi_id, row.payload);
       let liveValue: PoiLiveState | null = null;
       try {
-        const raw = await ctx.cache.hmget<unknown>(hashKey, [poiId]);
+        const raw = await ctx.liveStore.hmget<unknown>(hashKey, [poiId]);
         liveValue = coerceLiveState(raw[0]);
       } catch {
         liveValue = null;

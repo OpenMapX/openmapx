@@ -102,6 +102,9 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     if (facility.state && facility.state !== "unknown") {
       rows.push(["Status", capitalize(facility.state)]);
     }
+    if (facility.trend && facility.trend !== "constant") {
+      rows.push(["Trend", capitalize(facility.trend)]);
+    }
     if (facility.isStale) {
       rows.push(["Data Freshness", "Stale"]);
     }
@@ -123,6 +126,9 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
   }
   if (facility.disabledSpaces) {
     infoRows.push(["Disabled Spaces", facility.disabledSpaces]);
+  }
+  if (facility.womenSpaces) {
+    infoRows.push(["Women's Spaces", facility.womenSpaces]);
   }
   if (facility.chargingSpaces) {
     const label = facility.chargingDetails ?? `${facility.chargingSpaces}`;

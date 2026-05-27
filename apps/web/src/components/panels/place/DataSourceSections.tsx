@@ -180,6 +180,16 @@ const SECTION_TITLE_KEYS: Record<string, string> = {
   Fee: "sectionFee",
   Payment: "sectionPayment",
   Source: "sectionSource",
+  // Webcam + fuel section titles — surfaced verbatim before, leaking English to DE UI.
+  Info: "sectionInfo",
+  Preview: "sectionPreview",
+  "Video Clip": "sectionVideoClip",
+  "Live / Timelapse": "sectionLiveTimelapse",
+  "Live Stream": "sectionLiveStream",
+  Webcam: "sectionWebcam",
+  Unavailable: "sectionUnavailable",
+  "Original URL": "sectionOriginalUrl",
+  "Fuel Prices": "sectionFuelPrices",
 };
 
 /** Map API row labels (left column of key-value tables) to i18n keys. */
@@ -203,16 +213,29 @@ const ROW_LABEL_KEYS: Record<string, string> = {
   Occupancy: "rowOccupancy",
   "Max Height": "rowMaxHeight",
   "Disabled Spaces": "rowDisabledSpaces",
+  "Women's Spaces": "rowWomenSpaces",
   "EV Charging": "rowEvCharging",
   "Park & Ride": "rowParkAndRide",
   Capacity: "rowCapacity",
   Status: "rowStatus",
+  Trend: "rowTrend",
   Access: "rowAccess",
   "Data Freshness": "rowDataFreshness",
   "Nearest Station": "rowNearestStation",
   Source: "rowSource",
+  Sources: "rowSources",
   "Source ID": "rowSourceId",
+  "Source URL": "rowSourceUrl",
   License: "rowLicense",
+  // Fuel column headers — emitted by `integrations/fuel/providers/mapper.ts`
+  // as section.columns (translated via translateStructuredSection below).
+  "Fuel Type": "columnFuelType",
+  "Price (€)": "columnPriceEur",
+  // Trend values surfaced by parking sources (Braunschweig, Düsseldorf,
+  // Salzburg, Bielefeld via PLS feed).
+  Increasing: "trendIncreasing",
+  Decreasing: "trendDecreasing",
+  Constant: "trendConstant",
   // Parking type values
   "Parking Garage": "parkingGarage",
   "Underground Garage": "undergroundGarage",
@@ -279,6 +302,7 @@ const DETAIL_TEXT_KEYS: Record<string, string> = {
   "Realtime free-space count was negative and was clamped to 0.":
     "qualityNegativeFreeSpacesClamped",
   "Yearly pass": "tariffYearlyPass",
+  "This webcam URL appears to be offline or no longer available.": "webcamUrlOffline",
 };
 
 const DURATION_MINUTES_RE = /^(\d+) min$/;
@@ -320,6 +344,14 @@ function translateStructuredSection(
           ] satisfies (string | number)[];
         })
       : section.rows;
+  // Column headers (table sections with explicit `columns`) were previously
+  // surfaced verbatim — fine for English UIs, but leaked through to DE.
+  // Route them through the same key lookup as row labels so e.g.
+  // `["Fuel Type", "Price (€)"]` from the fuel integration becomes
+  // `["Kraftstoffart", "Preis (€)"]` in the DE locale.
+  const translatedColumns = section.columns?.map(
+    (column) => translateDetailText(column, t) ?? column,
+  );
 
   return {
     ...section,
@@ -327,6 +359,7 @@ function translateStructuredSection(
     items: section.items?.map((item) => translateDetailText(item, t) ?? item),
     title: translatedTitle,
     rows: translatedRows,
+    columns: translatedColumns,
   };
 }
 

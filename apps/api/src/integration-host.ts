@@ -10,6 +10,7 @@ import {
   IntegrationEventBus,
   type IntegrationManifest,
   type IntegrationStrings,
+  type LiveStoreClient,
   type LoadedIntegration,
   type Logger,
   PLATFORM_VERSION,
@@ -141,13 +142,6 @@ function createCacheClient(prefix: string): CacheClient {
       if (!redis) return;
       await redis.del(`int:${prefix}:${key}`);
     },
-    async hmget<T>(key: string, fields: readonly string[]): Promise<(T | null)[]> {
-      if (!redis) return fields.map(() => null);
-      if (fields.length === 0) return [];
-      const k = `int:${prefix}:${key}`;
-      const values = await redis.hmget(k, ...fields);
-      return values.map((v) => (v ? (JSON.parse(v) as T) : null));
-    },
     async withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
       if (redis) {
         const k = `int:${prefix}:${key}`;
@@ -165,6 +159,30 @@ function createCacheClient(prefix: string): CacheClient {
     },
   };
 }
+
+/**
+ * Reader for the cross-process `poi:live:<sourceId>` keyspace that
+ * `services/data-manager`'s `write-live` stage populates. The keys are
+ * deliberately NOT integration-namespaced — data-manager has no notion of
+ * integration ids, only the source ids in `@openmapx/poi-source-registry`.
+ * Prefixing here would silently miss every write.
+ *
+ * Process-scoped (one client shared across all integrations); per-key
+ * isolation already happens via `@openmapx/poi-source-registry` ensuring
+ * source ids are globally unique.
+ */
+function createLiveStoreClient(): LiveStoreClient {
+  return {
+    async hmget<T>(key: string, fields: readonly string[]): Promise<(T | null)[]> {
+      if (!redis) return fields.map(() => null);
+      if (fields.length === 0) return [];
+      const values = await redis.hmget(key, ...fields);
+      return values.map((v) => (v ? (JSON.parse(v) as T) : null));
+    },
+  };
+}
+
+const liveStore: LiveStoreClient = createLiveStoreClient();
 
 function createLogger(integrationId: string, fastify: FastifyInstance): Logger {
   return createIntegrationLogger(integrationId, fastify);
@@ -913,6 +931,7 @@ export async function initIntegrations(
       config,
       http,
       cache,
+      liveStore,
       db: integrationDb,
       log,
       secrets: { get: (key: string) => getSecret(id, key) },
@@ -1323,6 +1342,7 @@ export async function reloadIntegrations(): Promise<{
       config,
       http,
       cache,
+      liveStore,
       db: integrationDb,
       log,
       secrets: { get: (key: string) => getSecret(id, key) },

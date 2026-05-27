@@ -2,13 +2,9 @@ import { isLiveTooStale } from "@openmapx/integration-framework";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
-const STATION_ID_PREFIX = "basel:";
-const SOURCE_ID = "basel-ch";
-// Basel's upstream publishes one snapshot per hour (see the dataset's
-// `published` field). A 30-minute staleness window would hide realtime
-// roughly half of every hour even when the feed is healthy; 90 minutes
-// gives a 30-minute grace beyond the upstream cadence.
-const MAX_LIVE_AGE_MS = 90 * 60 * 1000;
+const STATION_ID_PREFIX = "potsdam:";
+const SOURCE_ID = "potsdam-de";
+const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 function asStringOrUndef(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -16,6 +12,10 @@ function asStringOrUndef(value: unknown): string | undefined {
 
 function asNumberOrUndef(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function asBoolOrUndef(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function asParkingType(value: unknown): ParkingType {
@@ -28,15 +28,22 @@ function asParkingType(value: unknown): ParkingType {
   ) {
     return value;
   }
-  return "garage";
+  return "surface";
 }
 
 function asFee(value: unknown): "free" | "paid" | "unknown" {
   if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "paid";
+  return "unknown";
 }
 
-export function mapBaselPayload(poiId: string, payload: unknown): ParkingFacility {
+function asAccess(value: unknown): "public" | "private" | "customers" | "permit" | undefined {
+  if (value === "public" || value === "private" || value === "customers" || value === "permit") {
+    return value;
+  }
+  return undefined;
+}
+
+export function mapPotsdamPayload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
   const coordinates = Array.isArray(p.coordinates)
     ? ([p.coordinates[0] as number, p.coordinates[1] as number] as [number, number])
@@ -49,17 +56,18 @@ export function mapBaselPayload(poiId: string, payload: unknown): ParkingFacilit
     sources: [SOURCE_ID],
     parkingType: asParkingType(p.parkingType),
     capacity: asNumberOrUndef(p.capacity),
-    // The pre-migration impl flagged every record as hasRealtimeData=true even
-    // when `free` was missing, because the feed itself is a live endpoint.
-    // mergeBaselLive sets dataUpdatedAt when an actual freeSpaces shows up.
-    hasRealtimeData: true,
+    hasRealtimeData: false,
     fee: asFee(p.fee),
-    address: asStringOrUndef(p.address),
-    url: asStringOrUndef(p.url),
+    access: asAccess(p.access),
+    operator: asStringOrUndef(p.operator),
+    parkAndRide: asBoolOrUndef(p.parkAndRide),
   };
 }
 
-export function mergeBaselLive(base: ParkingFacility, live: PoiLiveState | null): ParkingFacility {
+export function mergePotsdamLive(
+  base: ParkingFacility,
+  live: PoiLiveState | null,
+): ParkingFacility {
   if (!live) return base;
   const freeSpaces = asNumberOrUndef((live as { freeSpaces?: unknown }).freeSpaces);
   if (freeSpaces == null) return base;
