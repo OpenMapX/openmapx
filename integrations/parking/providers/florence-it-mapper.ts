@@ -1,43 +1,18 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import {
+  asAccess,
+  asFee,
+  asNumberOrUndef,
+  asParkingType,
+  asStringOrUndef,
+} from "./mapper-utils.js";
 
 const STATION_ID_PREFIX = "florence:";
 const SOURCE_ID = "florence-it";
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "garage";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "paid";
-}
-
-function asAccess(value: unknown): "public" | "private" | "customers" | "permit" | undefined {
-  if (value === "public" || value === "private" || value === "customers" || value === "permit") {
-    return value;
-  }
-  return undefined;
-}
 
 export function mapFlorencePayload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
@@ -50,11 +25,11 @@ export function mapFlorencePayload(poiId: string, payload: unknown): ParkingFaci
     name: asStringOrUndef(p.name) ?? "Parking",
     coordinates,
     sources: [SOURCE_ID],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "garage"),
     // Endpoint itself is the live source — hasRealtimeData stays true
     // even when a particular record lacks a current FreeSpot reading.
     hasRealtimeData: true,
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "paid"),
     access: asAccess(p.access),
   };
 }

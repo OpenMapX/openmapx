@@ -1,6 +1,8 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import { asNumberOrUndef, asParkingType, asState, asStringOrUndef } from "./mapper-utils.js";
 
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
@@ -16,32 +18,6 @@ const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 const STATION_ID_PREFIX = "parkapi-v2:";
 
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "unknown";
-}
-
-function asState(value: unknown): "open" | "closed" | "unknown" {
-  if (value === "open" || value === "closed" || value === "unknown") return value;
-  return "unknown";
-}
-
 export function mapParkApiV2Payload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
   const coordinates = Array.isArray(p.coordinates)
@@ -56,10 +32,10 @@ export function mapParkApiV2Payload(poiId: string, payload: unknown): ParkingFac
     name: asStringOrUndef(p.name) ?? "Parking",
     coordinates,
     sources: [sourceLabel],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "unknown"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
-    state: asState(p.state),
+    state: asState(p.state, "unknown"),
     address: asStringOrUndef(p.address),
   };
 }
@@ -80,7 +56,7 @@ export function mergeParkApiV2Live(
     next.realtimeDataUpdatedAt = live.asOf;
   }
   if (stateOverride !== undefined) {
-    next.state = asState(stateOverride);
+    next.state = asState(stateOverride, "unknown");
   }
   return next;
 }

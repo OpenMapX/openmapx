@@ -1,42 +1,16 @@
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
+
+import {
+  asBoolOrUndef,
+  asFee,
+  asNumberOrUndef,
+  asParkingType,
+  asState,
+  asStringOrUndef,
+} from "./mapper-utils.js";
 
 const STATION_ID_PREFIX = "db-bahnpark:";
 const SOURCE_ID = "db-bahnpark";
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asBoolOrUndef(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "unknown";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "unknown";
-}
-
-function asState(value: unknown): "open" | "closed" | "unknown" {
-  if (value === "open" || value === "closed" || value === "unknown") return value;
-  return "unknown";
-}
 
 function asTariffRows(value: unknown): [string, string][] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -65,13 +39,13 @@ export function mapDbBahnParkPayload(poiId: string, payload: unknown): ParkingFa
     name: asStringOrUndef(p.name) ?? `Parking ${poiId}`,
     coordinates,
     sources: [SOURCE_ID],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "unknown"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
     disabledSpaces: asNumberOrUndef(p.disabledSpaces),
     chargingSpaces: asNumberOrUndef(p.chargingSpaces),
     maxHeight: asNumberOrUndef(p.maxHeight),
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "unknown"),
     tariffRows: asTariffRows(p.tariffRows),
     operator: asStringOrUndef(p.operator),
     address: asStringOrUndef(p.address),
@@ -81,6 +55,6 @@ export function mapDbBahnParkPayload(poiId: string, payload: unknown): ParkingFa
     chargingDetails: asStringOrUndef(p.chargingDetails),
     paymentMethods: asStringOrUndef(p.paymentMethods),
     url: asStringOrUndef(p.url),
-    state: asState(p.state),
+    state: asState(p.state, "unknown"),
   };
 }

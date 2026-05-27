@@ -1,37 +1,15 @@
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
+
+import {
+  asBoolOrUndef,
+  asFee,
+  asNumberOrUndef,
+  asParkingType,
+  asStringOrUndef,
+} from "./mapper-utils.js";
 
 const STATION_ID_PREFIX = "rdw:";
 const SOURCE_ID = "rdw-nl";
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asBoolOrUndef(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "unknown";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "unknown";
-}
 
 export function mapRdwNlPayload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
@@ -44,13 +22,13 @@ export function mapRdwNlPayload(poiId: string, payload: unknown): ParkingFacilit
     name: asStringOrUndef(p.name) ?? "Parking",
     coordinates,
     sources: [SOURCE_ID],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "unknown"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
     disabledSpaces: asNumberOrUndef(p.disabledSpaces),
     chargingSpaces: asNumberOrUndef(p.chargingSpaces),
     maxHeight: asNumberOrUndef(p.maxHeight),
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "unknown"),
     parkAndRide: asBoolOrUndef(p.parkAndRide),
   };
 }

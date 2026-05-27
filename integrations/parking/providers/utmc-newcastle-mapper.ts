@@ -1,38 +1,14 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import { asFee, asNumberOrUndef, asParkingType, asStringOrUndef } from "./mapper-utils.js";
 
 const STATION_ID_PREFIX = "utmc:";
 const SOURCE_ID = "utmc-newcastle";
 // UTMC has a 2-min upstream cron; flag as not-realtime after 15 minutes of
 // silence (≈7.5 missed runs) so consumers stop trusting occupancy.
 const MAX_LIVE_AGE_MS = 15 * 60 * 1000;
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "garage";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "unknown";
-}
 
 export function mapState(stateDescription?: string): "open" | "closed" | "unknown" {
   if (!stateDescription) return "unknown";
@@ -66,12 +42,12 @@ export function mapUtmcPayload(poiId: string, payload: unknown): ParkingFacility
     name: asStringOrUndef(p.name) ?? `Car Park ${poiId}`,
     coordinates,
     sources: [SOURCE_ID],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "garage"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
     staticDataUpdatedAt: asStringOrUndef(p.staticDataUpdatedAt),
     dataUpdatedAt: asStringOrUndef(p.staticDataUpdatedAt),
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "unknown"),
     address: asStringOrUndef(p.address),
     state: "unknown",
   };

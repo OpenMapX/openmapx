@@ -1,10 +1,14 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type {
-  ParkingFacility,
-  ParkingSourceAttribution,
-  ParkingType,
-} from "@openmapx/mobility-core/parking";
+import type { ParkingFacility, ParkingSourceAttribution } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import {
+  asAccess,
+  asFee,
+  asNumberOrUndef,
+  asParkingType,
+  asStringOrUndef,
+} from "./mapper-utils.js";
 
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
@@ -26,39 +30,6 @@ const SOURCE_ATTRIBUTION: ParkingSourceAttribution = {
   license: "O-By 1.0",
   url: DATASET_PAGE_URL,
 };
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "unknown";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "unknown";
-}
-
-function asAccess(value: unknown): "public" | "private" | "customers" | "permit" | undefined {
-  if (value === "public" || value === "private" || value === "customers" || value === "permit") {
-    return value;
-  }
-  return undefined;
-}
 
 function asTariffRows(value: unknown): [string, string][] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -94,12 +65,12 @@ export function mapOpenTransportDataChPayload(poiId: string, payload: unknown): 
     sourceName: SOURCE_NAME,
     sourceUrl: DATASET_PAGE_URL,
     sourceAttribution: SOURCE_ATTRIBUTION,
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "unknown"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
     disabledSpaces: asNumberOrUndef(p.disabledSpaces),
     chargingSpaces: asNumberOrUndef(p.chargingSpaces),
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "unknown"),
     feeDescription: asStringOrUndef(p.feeDescription),
     tariffRows: asTariffRows(p.tariffRows),
     access: asAccess(p.access),

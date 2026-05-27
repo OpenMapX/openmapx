@@ -1,36 +1,12 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import { asFee, asNumberOrUndef, asParkingType, asStringOrUndef } from "./mapper-utils.js";
 
 const STATION_ID_PREFIX = "nsw:";
 const SOURCE_ID = "nsw-au";
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "surface";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "free";
-}
 
 export function mapNswAuPayload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
@@ -43,10 +19,10 @@ export function mapNswAuPayload(poiId: string, payload: unknown): ParkingFacilit
     name: asStringOrUndef(p.name) ?? `Car Park ${poiId}`,
     coordinates,
     sources: [SOURCE_ID],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "surface"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "free"),
     parkAndRide: true,
     address: asStringOrUndef(p.address),
   };

@@ -1,6 +1,8 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import { asFee, asNumberOrUndef, asParkingType, asStringOrUndef } from "./mapper-utils.js";
 
 const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
@@ -17,32 +19,6 @@ const MAX_LIVE_AGE_MS = 30 * 60 * 1000;
 
 const STATION_ID_PREFIX = "ndw-truck:";
 const SOURCE_ID = "ndw-truck-nl";
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "surface";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "unknown";
-}
 
 function stateFromSiteStatus(siteStatus: unknown): "open" | "closed" | "unknown" {
   if (typeof siteStatus !== "string") return "unknown";
@@ -62,10 +38,10 @@ export function mapNdwTruckNlPayload(poiId: string, payload: unknown): ParkingFa
     name: asStringOrUndef(p.name) ?? "Parking",
     coordinates,
     sources: [SOURCE_ID],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "surface"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "unknown"),
     state: "unknown",
     chargingSpaces: asNumberOrUndef(p.chargingSpaces),
     chargingDetails: asStringOrUndef(p.chargingDetails),

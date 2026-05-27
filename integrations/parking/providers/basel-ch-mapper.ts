@@ -1,6 +1,8 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import { asFee, asNumberOrUndef, asParkingType, asStringOrUndef } from "./mapper-utils.js";
 
 const STATION_ID_PREFIX = "basel:";
 const SOURCE_ID = "basel-ch";
@@ -9,32 +11,6 @@ const SOURCE_ID = "basel-ch";
 // roughly half of every hour even when the feed is healthy; 90 minutes
 // gives a 30-minute grace beyond the upstream cadence.
 const MAX_LIVE_AGE_MS = 90 * 60 * 1000;
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "garage";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "paid";
-}
 
 export function mapBaselPayload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
@@ -47,13 +23,13 @@ export function mapBaselPayload(poiId: string, payload: unknown): ParkingFacilit
     name: asStringOrUndef(p.name) ?? "Parking",
     coordinates,
     sources: [SOURCE_ID],
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "garage"),
     capacity: asNumberOrUndef(p.capacity),
     // The pre-migration impl flagged every record as hasRealtimeData=true even
     // when `free` was missing, because the feed itself is a live endpoint.
     // mergeBaselLive sets dataUpdatedAt when an actual freeSpaces shows up.
     hasRealtimeData: true,
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "paid"),
     address: asStringOrUndef(p.address),
     url: asStringOrUndef(p.url),
   };

@@ -1,10 +1,8 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type {
-  ParkingFacility,
-  ParkingSourceAttribution,
-  ParkingType,
-} from "@openmapx/mobility-core/parking";
+import type { ParkingFacility, ParkingSourceAttribution } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import { asFee, asNumberOrUndef, asParkingType, asStringOrUndef } from "./mapper-utils.js";
 
 /**
  * Mapper + live-merger for CITA Luxembourg DATEX parking.
@@ -28,32 +26,6 @@ const SOURCE_ATTRIBUTION: ParkingSourceAttribution = {
   license: "CC0 1.0",
   licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
 };
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "surface";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "unknown";
-}
 
 function statusToState(siteStatus: string | null | undefined): ParkingFacility["state"] {
   const normalized = typeof siteStatus === "string" ? siteStatus.toLowerCase() : undefined;
@@ -93,10 +65,10 @@ export function mapCitaLuPayload(poiId: string, payload: unknown): ParkingFacili
     sourceName: SOURCE_NAME,
     sourceUrl: SOURCE_URL,
     sourceAttribution: SOURCE_ATTRIBUTION,
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "surface"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "unknown"),
     state: "unknown",
   };
 }

@@ -1,10 +1,8 @@
 import { isLiveTooStale } from "@openmapx/integration-framework";
-import type {
-  ParkingFacility,
-  ParkingSourceAttribution,
-  ParkingType,
-} from "@openmapx/mobility-core/parking";
+import type { ParkingFacility, ParkingSourceAttribution } from "@openmapx/mobility-core/parking";
 import type { PoiLiveState } from "@openmapx/poi-source-registry";
+
+import { asFee, asNumberOrUndef, asParkingType, asStringOrUndef } from "./mapper-utils.js";
 
 /**
  * Mapper + live-merger for ParkAPI v3 (MobiData BW).
@@ -19,32 +17,6 @@ import type { PoiLiveState } from "@openmapx/poi-source-registry";
 
 const STATION_ID_PREFIX = "parkapi-v3:";
 const REALTIME_STALE_AFTER_MS = 30 * 60 * 1000;
-
-function asStringOrUndef(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function asNumberOrUndef(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asParkingType(value: unknown): ParkingType {
-  if (
-    value === "garage" ||
-    value === "surface" ||
-    value === "underground" ||
-    value === "on-street" ||
-    value === "unknown"
-  ) {
-    return value;
-  }
-  return "unknown";
-}
-
-function asFee(value: unknown): "free" | "paid" | "unknown" {
-  if (value === "free" || value === "paid" || value === "unknown") return value;
-  return "unknown";
-}
 
 function asAttribution(value: unknown): ParkingSourceAttribution | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -86,7 +58,7 @@ export function mapParkApiV3Payload(poiId: string, payload: unknown): ParkingFac
     sourceName: asStringOrUndef(p.sourceName),
     sourceUrl: asStringOrUndef(p.sourceUrl),
     sourceAttribution: asAttribution(p.sourceAttribution),
-    parkingType: asParkingType(p.parkingType),
+    parkingType: asParkingType(p.parkingType, "unknown"),
     capacity: asNumberOrUndef(p.capacity),
     hasRealtimeData: false,
     dataUpdatedAt: staticDataUpdatedAt,
@@ -94,7 +66,7 @@ export function mapParkApiV3Payload(poiId: string, payload: unknown): ParkingFac
     disabledSpaces: asNumberOrUndef(p.disabledSpaces),
     chargingSpaces: asNumberOrUndef(p.chargingSpaces),
     maxHeight: asNumberOrUndef(p.maxHeight),
-    fee: asFee(p.fee),
+    fee: asFee(p.fee, "unknown"),
     feeDescription: asStringOrUndef(p.feeDescription),
     operator: asStringOrUndef(p.operator),
     address: asStringOrUndef(p.address),
