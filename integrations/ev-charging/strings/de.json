@@ -1,6 +1,27 @@
 {
   "name": "E-Ladestationen",
   "description": "Standorte von Elektrofahrzeug-Ladestationen aus amtlichen nationalen Datensätzen, OpenChargeMap, NOBIL und OpenStreetMap",
+  "section": {
+    "connectors": "Anschlüsse",
+    "usage": "Nutzung"
+  },
+  "column": {
+    "power": "Leistung",
+    "current": "Strom",
+    "qty": "Anzahl"
+  },
+  "row": {
+    "cost": "Kosten",
+    "payment": "Zahlung",
+    "membershipRequired": "Mitgliedschaft erforderlich"
+  },
+  "summary": {
+    "connectorsTyped": "{count}× {types}",
+    "connectorsTypedPower": "{count}× {types} · {power} kW",
+    "connectorsCount": "{count, plural, =1 {1 Anschluss} other {# Anschlüsse}}",
+    "connectorsCountPower": "{count, plural, =1 {1 Anschluss} other {# Anschlüsse}} · {power} kW",
+    "powerKw": "{power} kW"
+  },
   "dataSources": [
     {
       "purpose": "Ladestationsstandorte mit Steckerdetails, Leistungsstufen, Verfügbarkeit, zusammengeführten Anbieter-Datensätzen und Datenanbieter-/Lizenzattribution",
