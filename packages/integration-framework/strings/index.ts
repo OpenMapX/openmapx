@@ -13,3 +13,5 @@ export function isI18nToken(value: unknown): value is import("./src/types.js").I
     typeof (value as { $t: unknown }).$t === "string"
   );
 }
+
+export { type ResolveOptions, resolveToken } from "./src/resolver.js";
