@@ -51,7 +51,6 @@ import {
   useDirectionsStore,
   useLayerStore,
   useMapStore,
-  useNearbyPlacesStore,
   usePlaceStore,
   useSavedPlacesStore,
   useSearchStore,
@@ -156,7 +155,6 @@ const APP_STATE_STORES: SubscribableStore[] = [
   useDirectionsStore,
   useLayerStore,
   useMapStore,
-  useNearbyPlacesStore,
   usePlaceStore,
   useSavedPlacesStore,
   useSearchStore,
@@ -348,7 +346,6 @@ function clearPanelState(): void {
   useSearchStore.getState().reset();
   useCategorySearchStore.getState().clearCategory();
   useDataSourceStore.getState().setActiveSource(null);
-  useNearbyPlacesStore.getState().clearNearbyPlaces();
   const saved = useSavedPlacesStore.getState();
   saved.setActiveTab("lists");
   saved.clearSelectedList();
@@ -446,20 +443,6 @@ function applySaved(parsed: ParsedDeepLink["saved"]): void {
   useSidebarStore.getState().openSidebar(PANEL.SAVED);
 }
 
-function applyNearby(parsed: ParsedDeepLink["nearby"]): void {
-  if (!parsed) return;
-  const sourcePlace = createPlace({
-    ...idsFromPrimaryOrCoords(parsed.id, parsed.coords),
-    name: parsed.name,
-    address: parsed.name,
-    coordinates: parsed.coords,
-  });
-  const store = useNearbyPlacesStore.getState();
-  store.setSourcePlace(sourcePlace);
-  if (parsed.radiusMetres) store.setRadiusMetres(clamp(parsed.radiusMetres, 100, 10_000));
-  useSidebarStore.getState().openSidebar(PANEL.NEARBY);
-}
-
 function applyMeasurement(parsed: ParsedDeepLink["measurement"]): void {
   if (!parsed) return;
   const mode = oneOf(parsed.mode, MEASUREMENT_MODES);
@@ -516,7 +499,6 @@ function applyDeepLink(parsed: ParsedDeepLink, map: maplibregl.Map | null): void
   if (parsed.category || parsed.panel === PANEL.CATEGORY) applyCategory(parsed.category);
   if (parsed.dataSource || parsed.panel === PANEL.DATASOURCE) applyDataSource(parsed.dataSource);
   if (parsed.saved || parsed.panel === PANEL.SAVED) applySaved(parsed.saved);
-  if (parsed.nearby || parsed.panel === PANEL.NEARBY) applyNearby(parsed.nearby);
   if (parsed.place) applyPlace(parsed.place, parsed.panel);
   applyMeasurement(parsed.measurement);
   applyTravelTime(parsed.travelTime);
@@ -557,7 +539,6 @@ function encodePanelState(params: URLSearchParams, map: maplibregl.Map | null): 
   const category = useCategorySearchStore.getState();
   const dataSource = useDataSourceStore.getState();
   const saved = useSavedPlacesStore.getState();
-  const nearby = useNearbyPlacesStore.getState();
   const fallbackBbox = mapBounds(map);
 
   if (sidebar.activeSidebarId) params.set("panel", sidebar.activeSidebarId);
@@ -588,14 +569,6 @@ function encodePanelState(params: URLSearchParams, map: maplibregl.Map | null): 
     params.set("panel", PANEL.SAVED);
     params.set("savedTab", saved.activeTab);
     if (saved.selectedListId) params.set("list", saved.selectedListId);
-  }
-
-  if (nearby.sourcePlace) {
-    params.set("panel", PANEL.NEARBY);
-    params.set("near", nearby.sourcePlace.id);
-    params.set("nearAt", formatLngLat(nearby.sourcePlace.coordinates));
-    if (nearby.sourcePlace.name) params.set("nearName", nearby.sourcePlace.name);
-    if (nearby.radiusMetres !== 1000) params.set("radius", String(nearby.radiusMetres));
   }
 }
 

@@ -202,7 +202,6 @@ export const TTL = {
   },
   places: {
     detail: 86400,
-    nearby: 300,
   },
   directions: 3600,
   isochrone: 3600,

@@ -27,7 +27,6 @@ import { MapControls } from "@/components/map/MapControls";
 import { MapFooter } from "@/components/map/MapFooter";
 import { MapLayerHost } from "@/components/map/MapLayerHost";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
-import { NearbyPlaceMarkers } from "@/components/map/NearbyPlaceMarkers";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { StreetViewViewer } from "@/components/map/StreetViewViewer";
@@ -40,6 +39,7 @@ import { PanelHost } from "@/components/panels/PanelHost";
 import { ShareIntentHandler } from "@/components/pwa/ShareIntentHandler";
 import { CategoryChips } from "@/components/search/CategoryChips";
 import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
+import { ExploreSearchBox } from "@/components/search/ExploreSearchBox";
 import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/lib/MapContext";
@@ -130,7 +130,6 @@ export default function HomePage() {
           <TransitItineraryLayer />
           <TransitVehicleLayer />
           <CategoryResultMarkers />
-          <NearbyPlaceMarkers />
           <DataSourceLayer />
           <SavedPlacesLayer />
           {/* All overlay/tool layers loaded dynamically by MapLayerHost */}
@@ -145,6 +144,7 @@ export default function HomePage() {
           <ElevationHoverMarker />
           <HamburgerMenu />
           <SearchBar />
+          <ExploreSearchBox />
           <WeatherWidget />
           <CategoryChips />
           <CategoryFilterBar />

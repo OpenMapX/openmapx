@@ -180,7 +180,6 @@ export {
   useMarineWeather,
 } from "./hooks/useMarineWeather";
 export { useMergedPlace } from "./hooks/useMergedPlace";
-export { useNearbyPlaces } from "./hooks/useNearbyPlaces";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
@@ -233,7 +232,6 @@ export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
 export { useMenuStore } from "./stores/menuStore";
-export { useNearbyPlacesStore } from "./stores/nearbyPlacesStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
 export type { OverlayEntry, OverlayId } from "./stores/overlayRegistry";
@@ -304,6 +302,7 @@ export {
   extractSourcePrefix,
   pickIntegrationForSources,
 } from "./utils/attribution";
+export { bboxAroundPoint } from "./utils/bbox";
 export { withCache } from "./utils/cache-helpers";
 export { applyHoursFilter } from "./utils/categoryFilter";
 // Utils

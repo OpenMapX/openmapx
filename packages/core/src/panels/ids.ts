@@ -4,7 +4,6 @@ export const PANEL = {
   DATASOURCE: "datasource",
   DIRECTIONS: "directions",
   SAVED: "saved",
-  NEARBY: "nearby",
   PLACE_CARD: "place-card",
 } as const;
 

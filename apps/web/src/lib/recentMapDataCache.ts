@@ -14,7 +14,6 @@ export const RECENT_MAP_DATA_CACHE_NAMES = [
 const RECENT_MAP_DATA_QUERY_KEY_ROOTS = new Set([
   "place",
   "weather",
-  "nearby",
   "isochrone",
   "sun-times",
   "directions",

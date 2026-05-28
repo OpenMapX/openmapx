@@ -25,10 +25,6 @@ export const DEEPLINK_PARAMS = new Set([
   "item",
   "savedTab",
   "list",
-  "near",
-  "nearAt",
-  "nearName",
-  "radius",
   "measure",
   "measureUnit",
   "measurePts",
@@ -102,12 +98,6 @@ export interface ParsedDeepLink {
   saved?: {
     tab?: string;
     listId?: string;
-  };
-  nearby?: {
-    id: string;
-    coords: LngLat;
-    name: string;
-    radiusMetres?: number;
   };
   measurement?: {
     mode: string;
@@ -293,8 +283,6 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
 
   const categoryId = params.get("categoryId");
   const sourceId = params.get("source");
-  const nearId = params.get("near");
-  const nearCoords = parseLngLatParam(params.get("nearAt"));
   const measureMode = params.get("measure");
   const isoMode = params.get("iso");
 
@@ -333,15 +321,6 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
         ? {
             tab: params.get("savedTab") ?? undefined,
             listId: params.get("list") ?? undefined,
-          }
-        : undefined,
-    nearby:
-      nearId && nearCoords
-        ? {
-            id: nearId,
-            coords: nearCoords,
-            name: params.get("nearName") ?? "",
-            radiusMetres: parseFinite(params.get("radius")) ?? undefined,
           }
         : undefined,
     measurement: measureMode

@@ -11,9 +11,9 @@ import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
   PANEL,
+  useCategorySearchStore,
   useDirectionsStore,
   useIsSaved,
-  useNearbyPlacesStore,
   usePlaceStore,
   useSession,
   useSidebarStore,
@@ -100,8 +100,8 @@ export function PlaceActionButtons({ place }: Props) {
   };
 
   const handleNearby = () => {
-    useNearbyPlacesStore.getState().setSourcePlace(place);
-    useSidebarStore.getState().openSidebar(PANEL.NEARBY);
+    setSelectedPlace(null);
+    useCategorySearchStore.getState().openExploreBox(place);
   };
 
   const handleShare = async () => {

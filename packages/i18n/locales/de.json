@@ -48,14 +48,8 @@
     "zoomInToSearch": "Näher heranzoomen, um Ergebnisse in diesem Bereich zu sehen.",
     "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen.",
     "emptyStateSignedOut": "Melde dich an, um deine gespeicherten Orte hier zu sehen.",
-    "emptyStateNoLabels": "Deine gespeicherten Orte erscheinen hier."
-  },
-  "nearby": {
-    "title": "In der Nähe",
-    "around": "Rund um {name}",
-    "within": "Innerhalb von {distance}",
-    "distanceAway": "{distance} entfernt",
-    "sourceMissing": "Wählen Sie einen Ort aus, um Orte in der Nähe zu sehen."
+    "emptyStateNoLabels": "Deine gespeicherten Orte erscheinen hier.",
+    "searchNear": "In der Nähe suchen"
   },
   "map": {
     "myLocation": "Mein Standort",

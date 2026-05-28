@@ -1,45 +1,6 @@
-import type * as Core from "@openmapx/core";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-
-const mockSearchByCategory = vi.hoisted(() => vi.fn());
-
-vi.mock("@openmapx/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof Core>();
-  return {
-    ...actual,
-    CATEGORY_FILTERS: {
-      restaurants: [{ key: "amenity", value: "restaurant" }],
-      cafes: [{ key: "amenity", value: "cafe" }],
-      bars: [{ key: "amenity", value: "bar" }],
-      supermarkets: [{ key: "shop", value: "supermarket" }],
-      pharmacies: [{ key: "amenity", value: "pharmacy" }],
-      atms: [{ key: "amenity", value: "atm" }],
-      parks: [{ key: "leisure", value: "park" }],
-      museums: [{ key: "tourism", value: "museum" }],
-      activities: [{ key: "tourism", value: "attraction" }],
-      hotels: [{ key: "tourism", value: "hotel" }],
-      schools: [{ key: "amenity", value: "school" }],
-      hospitals: [{ key: "amenity", value: "hospital" }],
-      libraries: [{ key: "amenity", value: "library" }],
-      cinemas: [{ key: "amenity", value: "cinema" }],
-      gyms: [{ key: "leisure", value: "fitness_centre" }],
-      banks: [{ key: "amenity", value: "bank" }],
-      churches: [{ key: "amenity", value: "place_of_worship" }],
-      post_offices: [{ key: "amenity", value: "post_office" }],
-      parking: [{ key: "amenity", value: "parking" }],
-      fuel: [{ key: "amenity", value: "fuel" }],
-      ev_charging: [{ key: "amenity", value: "charging_station" }],
-      fire_stations: [{ key: "amenity", value: "fire_station" }],
-      police: [{ key: "amenity", value: "police" }],
-      airports: [{ key: "aeroway", value: "aerodrome" }],
-      toilets: [{ key: "amenity", value: "toilets" }],
-      drinking_water: [{ key: "amenity", value: "drinking_water" }],
-    },
-    searchByCategory: mockSearchByCategory,
-  };
-});
 
 // Mock nominatim lookup service
 
@@ -55,11 +16,6 @@ vi.mock("../../../../../integrations/geocoding/place-lookup.js", () => ({
   lookupByNameAndCoords: mockLookupByNameAndCoords,
   lookupByOsmFilters: mockLookupByOsmFilters,
   lookupAddressByCoords: mockLookupAddressByCoords,
-  // /api/places/nearby calls reverseGeocodeCountry to enrich each result's
-  // openingHoursInfo with the correct PH (public holiday) context. Tests
-  // don't exercise PH logic, so return null and the nearby handler treats
-  // country as unknown.
-  reverseGeocodeCountry: vi.fn().mockResolvedValue(null),
 }));
 
 // Mock knowledge service
@@ -111,7 +67,7 @@ vi.mock("../../services/review-links.js", () => ({
 
 vi.mock("../../utils/cache.js", () => ({
   withCache: vi.fn((_key: string, _ttl: number, fn: () => unknown) => fn()),
-  TTL: { places: { detail: 86400, nearby: 300 } },
+  TTL: { places: { detail: 86400 } },
 }));
 
 // App setup
@@ -185,77 +141,6 @@ function qs(params: Record<string, string>): string {
 }
 
 // Tests
-
-describe("GET /places", () => {
-  it("returns 400 when coordinates are missing", async () => {
-    const res = await app.inject({ method: "GET", url: "/places" });
-
-    expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error).toBe("lat and lng query parameters are required");
-    expect(mockSearchByCategory).not.toHaveBeenCalled();
-  });
-
-  it("returns nearby places sorted by distance", async () => {
-    mockSearchByCategory.mockResolvedValue([
-      {
-        id: "osm:node/2",
-        name: "Far Cafe",
-        coordinates: [13.381, 52.516] as [number, number],
-        category: "cafe",
-        address: "Far Street",
-      },
-      {
-        id: "osm:node/1",
-        name: "Near Cafe",
-        coordinates: [13.378, 52.516] as [number, number],
-        category: "cafe",
-        address: "Near Street",
-      },
-      {
-        id: "osm:node/source",
-        name: "Source Place",
-        coordinates: [13.3777, 52.5163] as [number, number],
-        category: "restaurant",
-      },
-    ]);
-
-    const res = await app.inject({
-      method: "GET",
-      url: `/places?${qs({
-        lat: "52.5163",
-        lng: "13.3777",
-        radius: "1000",
-        excludeId: "osm:node/source",
-      })}`,
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body).toEqual([
-      expect.objectContaining({ id: "osm:node/1", name: "Near Cafe" }),
-      expect.objectContaining({ id: "osm:node/2", name: "Far Cafe" }),
-    ]);
-    expect(mockSearchByCategory).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        { key: "amenity", value: "cafe" },
-        { key: "amenity", value: "school" },
-        { key: "amenity", value: "hospital" },
-        { key: "amenity", value: "fire_station" },
-        { key: "amenity", value: "police" },
-        { key: "amenity", value: "place_of_worship" },
-        { key: "aeroway", value: "aerodrome" },
-      ]),
-      expect.objectContaining({
-        south: expect.any(Number),
-        west: expect.any(Number),
-        north: expect.any(Number),
-        east: expect.any(Number),
-      }),
-    );
-    expect(res.headers["cache-control"]).toBe("public, max-age=300");
-  });
-});
 
 describe("GET /places/:id", () => {
   it("returns place with knowledge data for OSM ref", async () => {

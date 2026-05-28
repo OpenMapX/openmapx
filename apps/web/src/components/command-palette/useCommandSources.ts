@@ -16,7 +16,6 @@ import {
   useLayerStore,
   useMapStore,
   useMenuStore,
-  useNearbyPlacesStore,
   usePlaceStore,
   useSearchStore,
   useSession,
@@ -187,8 +186,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
                 primaryScheme: "coordinate",
               });
             })();
-          useNearbyPlacesStore.getState().setSourcePlace(source);
-          useSidebarStore.getState().openSidebar(PANEL.NEARBY);
+          useCategorySearchStore.getState().openExploreBox(source);
         },
       },
       {
