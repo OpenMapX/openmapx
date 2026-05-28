@@ -1,3 +1,4 @@
+import { isI18nToken } from "@openmapx/integration-framework/strings";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
 import { describe, expect, it } from "vitest";
 import { mapParkingToDetail, mapParkingToResult } from "../mapper.js";
@@ -26,7 +27,7 @@ describe("parking mapper", () => {
     );
 
     expect(result.variant).toBe("unknown");
-    expect(result.summary).toBe("Availability stale");
+    expect(result.summary).toEqual({ $t: "summary.stale" });
   });
 
   it("adds freshness, source, license, and quality sections to details", () => {
@@ -50,26 +51,69 @@ describe("parking mapper", () => {
       expect.arrayContaining([
         expect.objectContaining({
           rows: expect.arrayContaining([
-            ["Data Freshness", "Stale"],
-            ["Last Updated", "2026-05-06 11:00:00 UTC"],
+            [{ $t: "row.dataFreshness" }, { $t: "shared.value.stale" }],
+            [{ $t: "shared.row.lastUpdated" }, "2026-05-06 11:00:00 UTC"],
           ]),
-          title: "Availability",
+          title: { $t: "section.availability" },
         }),
         expect.objectContaining({
-          items: ["Realtime availability is older than 30 minutes."],
-          title: "Data Quality",
+          items: [{ $t: "quality.realtimeStale" }],
+          title: { $t: "shared.section.dataQuality" },
         }),
         expect.objectContaining({
           collapsed: true,
           rows: expect.arrayContaining([
-            ["Source", "MobiData BW"],
-            ["Source ID", "bw"],
-            ["License", "dl-de/by-2-0"],
-            ["Last Updated", "2026-05-06 11:00:00 UTC"],
+            [{ $t: "shared.row.source" }, "MobiData BW"],
+            [{ $t: "shared.row.sourceId" }, "bw"],
+            [{ $t: "shared.row.license" }, "dl-de/by-2-0"],
+            [{ $t: "shared.row.lastUpdated" }, "2026-05-06 11:00:00 UTC"],
           ]),
-          title: "Source",
+          title: { $t: "shared.section.source" },
         }),
       ]),
     );
+  });
+
+  it("emits I18nToken for section titles and row labels (no English literals cross the contract)", () => {
+    const facility: ParkingFacility = {
+      id: "test:1",
+      name: "Test",
+      coordinates: [0, 0],
+      sources: ["test"],
+      parkingType: "garage",
+      hasRealtimeData: true,
+      freeSpaces: 12,
+      capacity: 50,
+    };
+    const detail = mapParkingToDetail(facility);
+    for (const section of detail.sections) {
+      expect(
+        isI18nToken(section.title),
+        `section.title should be I18nToken, got: ${JSON.stringify(section.title)}`,
+      ).toBe(true);
+      if (section.rows) {
+        for (const [label] of section.rows) {
+          expect(
+            isI18nToken(label),
+            `row label should be I18nToken, got: ${JSON.stringify(label)}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("emits I18nToken for summary on result cards", () => {
+    const facility: ParkingFacility = {
+      id: "test:1",
+      name: "Test",
+      coordinates: [0, 0],
+      sources: ["test"],
+      parkingType: "garage",
+      hasRealtimeData: true,
+      freeSpaces: 12,
+      capacity: 50,
+    };
+    const result = mapParkingToResult(facility);
+    expect(isI18nToken(result.summary)).toBe(true);
   });
 });

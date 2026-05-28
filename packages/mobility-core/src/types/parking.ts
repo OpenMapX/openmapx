@@ -1,5 +1,16 @@
 export type ParkingType = "garage" | "surface" | "underground" | "on-street" | "unknown";
 
+/**
+ * Structural mirror of `I18nToken` from `@openmapx/integration-framework/strings`,
+ * inlined here to avoid a `mobility-core` → `integration-framework` import cycle.
+ * Provider mappers/parsers populate `tariffRows` with the real `I18nToken`
+ * objects; this type just describes the JSON-serializable shape they carry.
+ */
+export interface I18nTokenLike {
+  $t: string;
+  values?: Record<string, string | number>;
+}
+
 export interface ParkingSourceAttribution {
   name?: string;
   url?: string;
@@ -49,8 +60,13 @@ export interface ParkingFacility {
 
   fee?: "free" | "paid" | "unknown";
   feeDescription?: string;
-  /** Structured pricing rows: [durationLabel, formattedPrice] */
-  tariffRows?: [string, string][];
+  /**
+   * Structured pricing rows: `[durationLabel, formattedPrice]`. The label is
+   * an `I18nToken` emitted by parsers (use `tariff.literal` with a `value`
+   * placeholder for upstream-supplied labels that have no known mapping);
+   * the price is a pre-formatted string (`€2.10`, `CHF 1.50`).
+   */
+  tariffRows?: [I18nTokenLike, string][];
   access?: "public" | "customers" | "private" | "permit";
 
   operator?: string;

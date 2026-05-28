@@ -1,5 +1,17 @@
 /**
  * Maps shared mobility stations and vehicles to DataSource types.
+ *
+ * Labels in the emitted results/details are `I18nToken` values resolved
+ * client-side against the active integration's strings catalog (bike-sharing,
+ * car-sharing, or scooter-sharing). Each consumer integration ships an
+ * identical key namespace under `section.*`, `row.*`, `value.*`, `summary.*`
+ * and `format.*` so the same shared mapper produces locale-correct text in
+ * each context.
+ *
+ * mobility-core does not depend on `@openmapx/integration-framework`; the
+ * I18nToken shape is mirrored via {@link I18nTokenLike} to keep the
+ * dependency graph one-way. The browser-side resolver only checks for `$t`,
+ * so structural compatibility is sufficient.
  */
 
 import type {
@@ -11,6 +23,70 @@ import type {
   PricingPlanEntry,
 } from "@openmapx/core";
 import type { SharedMobilityStation, SharedMobilityVehicle } from "./types/shared-mobility.js";
+
+/**
+ * Structural mirror of `I18nToken` from
+ * `@openmapx/integration-framework/strings`. Inlined here to avoid a
+ * `mobility-core` → `integration-framework` import cycle. The runtime
+ * resolver only checks for the `$t` property.
+ */
+interface I18nTokenLike {
+  $t: string;
+  values?: Record<string, string | number>;
+}
+
+type Translatable = I18nTokenLike | string | number;
+
+function t(key: string, values?: Record<string, string | number>): I18nTokenLike {
+  return values ? { $t: key, values } : { $t: key };
+}
+
+const T = {
+  section: {
+    availability: { $t: "shared.section.availability" } as I18nTokenLike,
+    pricing: { $t: "shared.section.pricing" } as I18nTokenLike,
+    transit: t("section.transit"),
+    vehicleDetails: t("section.vehicleDetails"),
+    vehicleClasses: t("section.vehicleClasses"),
+    vehicleInfo: t("section.vehicleInfo"),
+    book: t("section.book"),
+    apps: t("section.apps"),
+    directions: t("section.directions"),
+    notes: t("section.notes"),
+  },
+  row: {
+    type: { $t: "shared.row.type" } as I18nTokenLike,
+    status: { $t: "shared.row.status" } as I18nTokenLike,
+    capacity: { $t: "shared.row.capacity" } as I18nTokenLike,
+    availableVehicles: t("row.availableVehicles"),
+    emptySlots: t("row.emptySlots"),
+    totalCapacity: t("row.totalCapacity"),
+    pricing: t("row.pricing"),
+    busLines: t("row.busLines"),
+    nearestStops: t("row.nearestStops"),
+    vehicle: t("row.vehicle"),
+    propulsion: t("row.propulsion"),
+    seats: t("row.seats"),
+    features: t("row.features"),
+    co2: t("row.co2"),
+    battery: t("row.battery"),
+    range: t("row.range"),
+    web: t("row.web"),
+    android: t("row.android"),
+    ios: t("row.ios"),
+    iosApp: t("row.iosApp"),
+    androidApp: t("row.androidApp"),
+  },
+  value: {
+    fixedStation: t("value.fixedStation"),
+    freefloatingZone: t("value.freefloatingZone"),
+    zeroEmissions: t("value.zeroEmissions"),
+    reserved: t("value.reserved"),
+    disabled: t("value.disabled"),
+    available: t("value.available"),
+    vehicleFallback: t("value.vehicleFallback"),
+  },
+} as const;
 
 function stationIdentity(station: SharedMobilityStation): OsmIdentity | undefined {
   const identity: OsmIdentity = {};
@@ -47,34 +123,12 @@ function stationVariant(station: SharedMobilityStation): string {
   return "available";
 }
 
-function stationSummary(station: SharedMobilityStation): string {
-  const parts: string[] = [];
-  parts.push(`${station.availableVehicles} available`);
-  if (station.emptySlots !== undefined) {
-    parts.push(`${station.emptySlots} slots`);
-  }
-  if (station.accessMethod) {
-    parts.push(station.accessMethod);
-  }
-  if (station.pricingSummary) {
-    parts.push(station.pricingSummary);
-  }
-  return parts.join(" \u00B7 ");
+function formFactorToken(formFactor: string): I18nTokenLike {
+  return t(`value.formFactor.${formFactor}`);
 }
 
-const ACCESSORY_LABELS: Record<string, string> = {
-  air_conditioning: "AC",
-  cruise_control: "Cruise Control",
-  automatic: "Automatic",
-  manual: "Manual",
-  navigation: "Navigation",
-  doors_3: "3 doors",
-  doors_4: "4 doors",
-  doors_5: "5 doors",
-};
-
-function formatAccessory(acc: string): string {
-  return ACCESSORY_LABELS[acc] ?? acc.replace(/_/g, " ");
+function propulsionToken(propulsion: string): I18nTokenLike {
+  return t(`value.propulsionKind.${propulsion}`);
 }
 
 function brandingFromStation(station: SharedMobilityStation): DataSourceBranding | undefined {
@@ -141,7 +195,7 @@ export function mapStationToResult(station: SharedMobilityStation): DataSourceRe
     source: station.sources[0],
     variant,
     status: variant,
-    summary: stationSummary(station),
+    summary: t("summary.available", { count: station.availableVehicles }),
     operator: station.operator,
     branding: brandingFromStation(station),
     mapContext: mapContextSelection(station.systemId, station.vehicleTypeIds),
@@ -156,41 +210,44 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   const sections: DataSourceDetailSection[] = [];
 
   // Availability table
-  const rows: (string | number)[][] = [["Available Vehicles", station.availableVehicles]];
+  const rows: [I18nTokenLike, Translatable][] = [
+    [T.row.availableVehicles, station.availableVehicles],
+  ];
   if (station.emptySlots !== undefined) {
-    rows.push(["Empty Slots", station.emptySlots]);
+    rows.push([T.row.emptySlots, station.emptySlots]);
   }
   if (station.capacity !== undefined) {
-    rows.push(["Total Capacity", station.capacity]);
+    rows.push([T.row.totalCapacity, station.capacity]);
   }
   if (station.stationType) {
-    rows.push(["Type", station.stationType === "fixed" ? "Fixed Station" : "Free-floating Zone"]);
+    rows.push([
+      T.row.type,
+      station.stationType === "fixed" ? T.value.fixedStation : T.value.freefloatingZone,
+    ]);
   }
   if (station.pricingSummary) {
-    rows.push(["Pricing", station.pricingSummary]);
+    rows.push([T.row.pricing, station.pricingSummary]);
   }
 
   sections.push({
-    title: "Availability",
+    title: T.section.availability,
     type: "table",
-    columns: ["", ""],
     rows,
     sectionIcon: "info",
   });
 
   // Transit info
   if (station.transitInfo?.lines || station.transitInfo?.stops) {
-    const transitRows: (string | number)[][] = [];
+    const transitRows: [I18nTokenLike, Translatable][] = [];
     if (station.transitInfo.lines) {
-      transitRows.push(["Bus Lines", station.transitInfo.lines]);
+      transitRows.push([T.row.busLines, station.transitInfo.lines]);
     }
     if (station.transitInfo.stops) {
-      transitRows.push(["Nearest Stops", station.transitInfo.stops]);
+      transitRows.push([T.row.nearestStops, station.transitInfo.stops]);
     }
     sections.push({
-      title: "Public Transit",
+      title: T.section.transit,
       type: "table",
-      columns: ["", ""],
       rows: transitRows,
       sectionIcon: "directions_bus",
     });
@@ -198,29 +255,41 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Vehicle type details (structured — from GBFS)
   if (station.vehicleTypeDetails && station.vehicleTypeDetails.length > 0) {
-    const vtRows: (string | number)[][] = [];
+    const vtRows: [I18nTokenLike, Translatable | Translatable[]][] = [];
     for (const vt of station.vehicleTypeDetails) {
-      const label =
-        (vt.make && vt.model ? `${vt.make} ${vt.model}` : vt.name) ||
-        (vt.formFactor ? FORM_FACTOR_LABELS[vt.formFactor] : null) ||
-        "Vehicle";
-      const propLabel = vt.propulsion
-        ? (PROPULSION_LABELS[vt.propulsion] ?? vt.propulsion)
-        : undefined;
-      vtRows.push(["Vehicle", label]);
-      if (propLabel) vtRows.push(["Propulsion", propLabel]);
-      if (vt.riderCapacity) vtRows.push(["Seats", vt.riderCapacity]);
+      const labelText: string | undefined =
+        (vt.make && vt.model ? `${vt.make} ${vt.model}` : vt.name) || undefined;
+      const labelValue: Translatable = labelText
+        ? labelText
+        : vt.formFactor
+          ? formFactorToken(vt.formFactor)
+          : T.value.vehicleFallback;
+      vtRows.push([T.row.vehicle, labelValue]);
+      if (vt.propulsion) vtRows.push([T.row.propulsion, propulsionToken(vt.propulsion)]);
+      if (vt.riderCapacity) vtRows.push([T.row.seats, vt.riderCapacity]);
       if (vt.accessories && vt.accessories.length > 0) {
-        vtRows.push(["Features", vt.accessories.map(formatAccessory).join(", ")]);
+        // Emit one token per accessory (resolved against the integration's
+        // value.accessory.* catalog and joined client-side). Unknown enum
+        // values fall back to a readable English string.
+        vtRows.push([
+          T.row.features,
+          vt.accessories.map((accessory) =>
+            Object.hasOwn(ACCESSORY_FALLBACK, accessory)
+              ? t(`value.accessory.${accessory}`)
+              : accessoryFallbackString(accessory),
+          ),
+        ]);
       }
       if (vt.co2PerKm !== undefined) {
-        vtRows.push(["CO₂", vt.co2PerKm === 0 ? "Zero emissions" : `${vt.co2PerKm} g/km`]);
+        vtRows.push([
+          T.row.co2,
+          vt.co2PerKm === 0 ? T.value.zeroEmissions : t("format.co2PerKm", { value: vt.co2PerKm }),
+        ]);
       }
     }
     sections.push({
-      title: "Vehicle Details",
+      title: T.section.vehicleDetails,
       type: "table",
-      columns: ["", ""],
       rows: vtRows,
       sectionIcon: "directions_car",
       collapsed: true,
@@ -228,7 +297,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   } else if (station.vehicleClassNames && station.vehicleClassNames.length > 0) {
     // Fallback: simple vehicle class names (from non-GBFS sources)
     sections.push({
-      title: "Vehicle Classes",
+      title: T.section.vehicleClasses,
       type: "list",
       items: station.vehicleClassNames,
       sectionIcon: "info",
@@ -247,7 +316,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
       free: !p.flatRate && p.perKmRate === undefined && p.perHourRate === undefined,
     }));
     sections.push({
-      title: "Pricing",
+      title: T.section.pricing,
       type: "pricing",
       pricingPlans,
       sectionIcon: "payments",
@@ -257,15 +326,14 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Rental links
   if (station.rentalUris) {
-    const linkRows: (string | number)[][] = [];
-    if (station.rentalUris.web) linkRows.push(["Web", station.rentalUris.web]);
-    if (station.rentalUris.android) linkRows.push(["Android", station.rentalUris.android]);
-    if (station.rentalUris.ios) linkRows.push(["iOS", station.rentalUris.ios]);
+    const linkRows: [I18nTokenLike, Translatable][] = [];
+    if (station.rentalUris.web) linkRows.push([T.row.web, station.rentalUris.web]);
+    if (station.rentalUris.android) linkRows.push([T.row.android, station.rentalUris.android]);
+    if (station.rentalUris.ios) linkRows.push([T.row.ios, station.rentalUris.ios]);
     if (linkRows.length > 0) {
       sections.push({
-        title: "Book",
+        title: T.section.book,
         type: "table",
-        columns: ["", ""],
         rows: linkRows,
         sectionIcon: "open_in_new",
         collapsed: true,
@@ -274,17 +342,16 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   }
 
   if (station.rentalApps) {
-    const appRows: (string | number)[][] = [];
+    const appRows: [I18nTokenLike, Translatable][] = [];
     if (station.rentalApps.ios?.storeUri)
-      appRows.push(["iOS App", station.rentalApps.ios.storeUri]);
+      appRows.push([T.row.iosApp, station.rentalApps.ios.storeUri]);
     if (station.rentalApps.android?.storeUri) {
-      appRows.push(["Android App", station.rentalApps.android.storeUri]);
+      appRows.push([T.row.androidApp, station.rentalApps.android.storeUri]);
     }
     if (appRows.length > 0) {
       sections.push({
-        title: "Apps",
+        title: T.section.apps,
         type: "table",
-        columns: ["", ""],
         rows: appRows,
         sectionIcon: "open_in_new",
         collapsed: true,
@@ -295,7 +362,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   // Location hint
   if (station.locationHint) {
     sections.push({
-      title: "Directions",
+      title: T.section.directions,
       type: "text",
       content: station.locationHint,
       sectionIcon: "info",
@@ -305,7 +372,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   // Operator notes
   if (station.operatorNotes) {
     sections.push({
-      title: "Notes",
+      title: T.section.notes,
       type: "text",
       content: station.operatorNotes,
       sectionIcon: "info",
@@ -322,8 +389,12 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
       }
     : undefined;
 
-  // Access method → usageInfo
-  const usageInfo = station.accessMethod ? { type: `Access: ${station.accessMethod}` } : undefined;
+  // Access method → usageInfo. Emit the `format.accessMethod` ICU token so the
+  // panel renderer resolves it against the integration's catalog (the raw
+  // accessMethod is interpolated as the `method` value).
+  const usageInfo = station.accessMethod
+    ? { type: t("format.accessMethod", { method: station.accessMethod }) }
+    : undefined;
   const branding = brandingFromStation(station);
 
   return {
@@ -358,21 +429,33 @@ function vehicleVariant(vehicle: SharedMobilityVehicle): string {
   return "available";
 }
 
-function vehicleSummary(vehicle: SharedMobilityVehicle): string {
-  const parts: string[] = [];
+function vehicleSummary(vehicle: SharedMobilityVehicle): I18nTokenLike | undefined {
+  // The summary glues battery + range + (optional) text. Compound combos go
+  // through the consuming integration's `summary.batteryRange` template so the
+  // separator/unit are locale-correct; single-piece summaries use the per-unit
+  // `format.*` tokens.
+  if (vehicle.batteryLevel !== undefined && vehicle.rangeMeters !== undefined) {
+    return t("summary.batteryRange", {
+      battery: vehicle.batteryLevel,
+      km: (vehicle.rangeMeters / 1000).toFixed(1),
+    });
+  }
   if (vehicle.batteryLevel !== undefined) {
-    parts.push(`${vehicle.batteryLevel}%`);
+    return t("format.batteryPercent", { value: vehicle.batteryLevel });
   }
   if (vehicle.rangeMeters !== undefined) {
-    const km = (vehicle.rangeMeters / 1000).toFixed(1);
-    parts.push(`${km} km`);
+    return t("format.distanceKm", { value: (vehicle.rangeMeters / 1000).toFixed(1) });
   }
-  return parts.join(" \u00B7 ");
+  return undefined;
+}
+
+function formFactorLabelFallback(formFactor: string): string {
+  return FORM_FACTOR_FALLBACK[formFactor] ?? "Vehicle";
 }
 
 export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceResult {
   const variant = vehicleVariant(vehicle);
-  const formLabel = FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle";
+  const formLabel = formFactorLabelFallback(vehicle.formFactor);
   return {
     id: `${VEHICLE_ID_PREFIX}${vehicle.id}`,
     kind: "vehicle",
@@ -398,45 +481,50 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
 export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
-  const rows: (string | number)[][] = [];
-  rows.push(["Type", FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"]);
+  const rows: [I18nTokenLike, Translatable][] = [];
+  rows.push([T.row.type, formFactorToken(vehicle.formFactor)]);
   if (vehicle.propulsion) {
-    rows.push(["Propulsion", PROPULSION_LABELS[vehicle.propulsion] ?? vehicle.propulsion]);
+    rows.push([T.row.propulsion, propulsionToken(vehicle.propulsion)]);
   }
   if (vehicle.batteryLevel !== undefined) {
-    rows.push(["Battery", `${vehicle.batteryLevel}%`]);
+    rows.push([T.row.battery, t("format.batteryPercent", { value: vehicle.batteryLevel })]);
   }
   if (vehicle.rangeMeters !== undefined) {
-    rows.push(["Range", `${(vehicle.rangeMeters / 1000).toFixed(1)} km`]);
+    rows.push([
+      T.row.range,
+      t("format.distanceKm", { value: (vehicle.rangeMeters / 1000).toFixed(1) }),
+    ]);
   }
   rows.push([
-    "Status",
-    vehicle.isReserved ? "Reserved" : vehicle.isDisabled ? "Disabled" : "Available",
+    T.row.status,
+    vehicle.isReserved
+      ? T.value.reserved
+      : vehicle.isDisabled
+        ? T.value.disabled
+        : T.value.available,
   ]);
 
   sections.push({
-    title: "Vehicle Info",
+    title: T.section.vehicleInfo,
     type: "table",
-    columns: ["", ""],
     rows,
     sectionIcon: "info",
   });
 
   if (vehicle.rentalUris || vehicle.rentalApps) {
-    const linkRows: (string | number)[][] = [];
-    if (vehicle.rentalUris?.web) linkRows.push(["Web", vehicle.rentalUris.web]);
-    if (vehicle.rentalUris?.ios) linkRows.push(["iOS", vehicle.rentalUris.ios]);
-    if (vehicle.rentalUris?.android) linkRows.push(["Android", vehicle.rentalUris.android]);
+    const linkRows: [I18nTokenLike, Translatable][] = [];
+    if (vehicle.rentalUris?.web) linkRows.push([T.row.web, vehicle.rentalUris.web]);
+    if (vehicle.rentalUris?.ios) linkRows.push([T.row.ios, vehicle.rentalUris.ios]);
+    if (vehicle.rentalUris?.android) linkRows.push([T.row.android, vehicle.rentalUris.android]);
     if (vehicle.rentalApps?.ios?.storeUri)
-      linkRows.push(["iOS App", vehicle.rentalApps.ios.storeUri]);
+      linkRows.push([T.row.iosApp, vehicle.rentalApps.ios.storeUri]);
     if (vehicle.rentalApps?.android?.storeUri) {
-      linkRows.push(["Android App", vehicle.rentalApps.android.storeUri]);
+      linkRows.push([T.row.androidApp, vehicle.rentalApps.android.storeUri]);
     }
     if (linkRows.length > 0) {
       sections.push({
-        title: "Book",
+        title: T.section.book,
         type: "table",
-        columns: ["", ""],
         rows: linkRows,
         sectionIcon: "open_in_new",
         collapsed: true,
@@ -445,13 +533,12 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
   }
 
   const branding = brandingFromVehicle(vehicle);
+  const formLabel = formFactorLabelFallback(vehicle.formFactor);
   return {
     id: `${VEHICLE_ID_PREFIX}${vehicle.id}`,
     sources: vehicle.sources,
     identity: vehicleIdentity(vehicle),
-    name: vehicle.operator
-      ? `${vehicle.operator} ${FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"}`
-      : (FORM_FACTOR_LABELS[vehicle.formFactor] ?? "Vehicle"),
+    name: vehicle.operator ? `${vehicle.operator} ${formLabel}` : formLabel,
     coordinates: vehicle.coordinates,
     branding,
     operator:
@@ -466,7 +553,13 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
   };
 }
 
-const FORM_FACTOR_LABELS: Record<string, string> = {
+/**
+ * Fallback English labels for the vehicle `name` (composed with an operator
+ * prefix), used where a token cannot be emitted (the name flows into the OSM
+ * resolver as an identity input). Kept in sync with the `value.formFactor.*`
+ * catalog keys.
+ */
+const FORM_FACTOR_FALLBACK: Record<string, string> = {
   bicycle: "Bicycle",
   cargo_bicycle: "Cargo Bicycle",
   scooter_standing: "E-Scooter",
@@ -476,13 +569,17 @@ const FORM_FACTOR_LABELS: Record<string, string> = {
   other: "Vehicle",
 };
 
-const PROPULSION_LABELS: Record<string, string> = {
-  human: "Human-powered",
-  electric_assist: "Electric Assist",
-  electric: "Electric",
-  combustion: "Combustion",
-  combustion_diesel: "Diesel",
-  hybrid: "Hybrid",
-  plug_in_hybrid: "Plug-in Hybrid",
-  hydrogen_fuel_cell: "Hydrogen",
+const ACCESSORY_FALLBACK: Record<string, string> = {
+  air_conditioning: "AC",
+  cruise_control: "Cruise Control",
+  automatic: "Automatic",
+  manual: "Manual",
+  navigation: "Navigation",
+  doors_3: "3 doors",
+  doors_4: "4 doors",
+  doors_5: "5 doors",
 };
+
+function accessoryFallbackString(accessory: string): string {
+  return ACCESSORY_FALLBACK[accessory] ?? accessory.replace(/_/g, " ");
+}

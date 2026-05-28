@@ -4,6 +4,12 @@ import type {
   DataSourceResult,
   OsmIdentity,
 } from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 
 function facilityIdentity(facility: ParkingFacility): OsmIdentity | undefined {
@@ -11,18 +17,31 @@ function facilityIdentity(facility: ParkingFacility): OsmIdentity | undefined {
   return { operator: facility.operator };
 }
 
-/**
- * All string values emitted here must either:
- * - Be numeric/data (e.g. "126 / 220", "2.10 m") — not translated
- * - Have a matching entry in ROW_LABEL_KEYS on the frontend — translated via i18n
- */
+const PARKING_TYPE_TOKEN: Record<ParkingType, I18nToken> = {
+  garage: token("value.parkingGarage"),
+  underground: token("value.undergroundGarage"),
+  surface: token("value.surfaceLot"),
+  "on-street": token("value.onStreet"),
+  unknown: sharedT.value.unknown,
+};
 
-const PARKING_TYPE_LABELS: Record<ParkingType, string> = {
-  garage: "Parking Garage",
-  underground: "Underground Garage",
-  surface: "Surface Lot",
-  "on-street": "On-Street",
-  unknown: "Parking",
+const TREND_TOKEN: Record<"increasing" | "decreasing" | "constant", I18nToken> = {
+  increasing: token("value.trendIncreasing"),
+  decreasing: token("value.trendDecreasing"),
+  constant: token("value.trendConstant"),
+};
+
+const ACCESS_TOKEN: Record<NonNullable<ParkingFacility["access"]>, I18nToken> = {
+  public: sharedT.value.public,
+  customers: sharedT.value.customers,
+  private: sharedT.value.private,
+  permit: sharedT.value.permit,
+};
+
+const STATE_TOKEN: Record<NonNullable<ParkingFacility["state"]>, I18nToken> = {
+  open: sharedT.value.open,
+  closed: sharedT.value.closed,
+  unknown: sharedT.value.unknown,
 };
 
 function computeVariant(facility: ParkingFacility): string {
@@ -37,16 +56,21 @@ function computeVariant(facility: ParkingFacility): string {
   return "available";
 }
 
-function buildSummary(facility: ParkingFacility): string | undefined {
-  if (facility.state === "closed") return "Closed";
-  if (facility.isStale) return "Availability stale";
+function buildSummary(facility: ParkingFacility): I18nToken {
+  if (facility.state === "closed") return token("summary.closed");
+  if (facility.isStale) return token("summary.stale");
   if (facility.hasRealtimeData && facility.freeSpaces !== undefined) {
-    if (facility.freeSpaces === 0) return "Full";
-    if (facility.capacity) return `${facility.freeSpaces}/${facility.capacity} free`;
-    return `${facility.freeSpaces} free`;
+    if (facility.freeSpaces === 0) return token("summary.full");
+    if (facility.capacity) {
+      return token("summary.spacesOf", {
+        free: facility.freeSpaces,
+        capacity: facility.capacity,
+      });
+    }
+    return token("summary.spaces", { count: facility.freeSpaces });
   }
-  if (facility.capacity) return `${facility.capacity} spaces`;
-  return PARKING_TYPE_LABELS[facility.parkingType];
+  if (facility.capacity) return token("summary.totalSpaces", { count: facility.capacity });
+  return PARKING_TYPE_TOKEN[facility.parkingType];
 }
 
 function buildSortValues(facility: ParkingFacility): Record<string, number> | undefined {
@@ -70,10 +94,6 @@ export function mapParkingToResult(facility: ParkingFacility): DataSourceResult 
   };
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 function formatTimestamp(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const time = Date.parse(value);
@@ -87,101 +107,107 @@ function formatTimestamp(value: string | undefined): string | undefined {
 export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
-  // Availability section (real-time data only)
   if (facility.hasRealtimeData && facility.freeSpaces !== undefined) {
-    const rows: (string | number)[][] = [];
+    const rows: [I18nToken, Translatable][] = [];
     if (facility.capacity) {
-      rows.push(["Free Spaces", `${facility.freeSpaces} / ${facility.capacity}`]);
+      rows.push([token("row.freeSpaces"), `${facility.freeSpaces} / ${facility.capacity}`]);
       const occupancy = Math.round(
         ((facility.capacity - facility.freeSpaces) / facility.capacity) * 100,
       );
-      rows.push(["Occupancy", `${occupancy}%`]);
+      rows.push([token("row.occupancy"), `${occupancy}%`]);
     } else {
-      rows.push(["Free Spaces", facility.freeSpaces]);
+      rows.push([token("row.freeSpaces"), facility.freeSpaces]);
     }
     if (facility.state && facility.state !== "unknown") {
-      rows.push(["Status", capitalize(facility.state)]);
+      rows.push([sharedT.row.status, STATE_TOKEN[facility.state]]);
     }
     if (facility.trend && facility.trend !== "constant") {
-      rows.push(["Trend", capitalize(facility.trend)]);
+      rows.push([token("row.trend"), TREND_TOKEN[facility.trend]]);
     }
     if (facility.isStale) {
-      rows.push(["Data Freshness", "Stale"]);
+      rows.push([token("row.dataFreshness"), sharedT.value.stale]);
     }
     const updatedAt = formatTimestamp(facility.realtimeDataUpdatedAt ?? facility.dataUpdatedAt);
     if (updatedAt) {
-      rows.push(["Last Updated", updatedAt]);
+      rows.push([sharedT.row.lastUpdated, updatedAt]);
     }
-    sections.push({ title: "Availability", type: "table", rows, sectionIcon: "info" });
+    sections.push({
+      title: token("section.availability"),
+      type: "table",
+      rows,
+      sectionIcon: "info",
+    });
   }
 
-  // Facility info
-  const infoRows: (string | number)[][] = [];
-  infoRows.push(["Type", PARKING_TYPE_LABELS[facility.parkingType]]);
+  const infoRows: [I18nToken, Translatable][] = [];
+  infoRows.push([sharedT.row.type, PARKING_TYPE_TOKEN[facility.parkingType]]);
   if (facility.capacity) {
-    infoRows.push(["Capacity", `${facility.capacity}`]);
+    infoRows.push([sharedT.row.capacity, `${facility.capacity}`]);
   }
   if (facility.maxHeight) {
-    infoRows.push(["Max Height", `${(facility.maxHeight / 100).toFixed(2)} m`]);
+    infoRows.push([token("row.maxHeight"), `${(facility.maxHeight / 100).toFixed(2)} m`]);
   }
   if (facility.disabledSpaces) {
-    infoRows.push(["Disabled Spaces", facility.disabledSpaces]);
+    infoRows.push([token("row.disabledSpaces"), facility.disabledSpaces]);
   }
   if (facility.womenSpaces) {
-    infoRows.push(["Women's Spaces", facility.womenSpaces]);
+    infoRows.push([token("row.womenSpaces"), facility.womenSpaces]);
   }
   if (facility.chargingSpaces) {
     const label = facility.chargingDetails ?? `${facility.chargingSpaces}`;
-    infoRows.push(["EV Charging", label]);
+    infoRows.push([token("row.evCharging"), label]);
   }
   if (facility.parkAndRide) {
-    infoRows.push(["Park & Ride", "Yes"]);
+    infoRows.push([token("row.parkAndRide"), sharedT.value.yes]);
   }
   if (facility.nearestStation) {
-    infoRows.push(["Nearest Station", facility.nearestStation]);
+    infoRows.push([token("row.nearestStation"), facility.nearestStation]);
   }
   if (facility.access && facility.access !== "public") {
-    infoRows.push(["Access", capitalize(facility.access)]);
+    infoRows.push([sharedT.row.access, ACCESS_TOKEN[facility.access]]);
   }
   if (infoRows.length > 0) {
-    sections.push({ title: "Facility", type: "table", rows: infoRows, sectionIcon: "info" });
+    sections.push({
+      title: token("section.facility"),
+      type: "table",
+      rows: infoRows,
+      sectionIcon: "info",
+    });
   }
 
-  // Fee info — structured tariff rows (DB BahnPark) or free-text description (v3)
   if (facility.tariffRows && facility.tariffRows.length > 0) {
     sections.push({
-      title: "Pricing",
+      title: sharedT.section.pricing,
       type: "table",
       rows: facility.tariffRows,
       sectionIcon: "payments",
     });
   } else if (facility.feeDescription) {
     sections.push({
-      title: "Pricing",
+      title: sharedT.section.pricing,
       type: "text",
       content: facility.feeDescription,
       sectionIcon: "payments",
     });
   } else if (facility.fee === "free") {
     sections.push({
-      title: "Pricing",
+      title: sharedT.section.pricing,
       type: "text",
-      content: "Free Parking",
+      content: token("value.freeParking"),
       sectionIcon: "payments",
     });
   } else if (facility.fee === "paid") {
     sections.push({
-      title: "Pricing",
+      title: sharedT.section.pricing,
       type: "text",
-      content: "Paid Parking",
+      content: token("value.paidParking"),
       sectionIcon: "payments",
     });
   }
 
-  // Payment methods
   if (facility.paymentMethods) {
     sections.push({
-      title: "Payment",
+      title: sharedT.section.payment,
       type: "text",
       content: facility.paymentMethods,
       sectionIcon: "payments",
@@ -191,28 +217,28 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
 
   if (facility.qualityWarnings && facility.qualityWarnings.length > 0) {
     sections.push({
-      title: "Data Quality",
+      title: sharedT.section.dataQuality,
       type: "list",
-      items: facility.qualityWarnings,
+      items: facility.qualityWarnings.map((w) => mapQualityWarning(w)),
       sectionIcon: "warning",
       collapsed: true,
     });
   }
 
-  const sourceRows: (string | number)[][] = [];
+  const sourceRows: [I18nToken, Translatable][] = [];
   const sourceName =
     facility.sourceAttribution?.contributor ??
     facility.sourceAttribution?.name ??
     facility.sourceName;
-  if (sourceName) sourceRows.push(["Source", sourceName]);
-  if (facility.sourceUid) sourceRows.push(["Source ID", facility.sourceUid]);
+  if (sourceName) sourceRows.push([sharedT.row.source, sourceName]);
+  if (facility.sourceUid) sourceRows.push([sharedT.row.sourceId, facility.sourceUid]);
   const license = facility.sourceAttribution?.license;
-  if (license) sourceRows.push(["License", license]);
+  if (license) sourceRows.push([sharedT.row.license, license]);
   const sourceUpdatedAt = formatTimestamp(facility.dataUpdatedAt);
-  if (sourceUpdatedAt) sourceRows.push(["Last Updated", sourceUpdatedAt]);
+  if (sourceUpdatedAt) sourceRows.push([sharedT.row.lastUpdated, sourceUpdatedAt]);
   if (sourceRows.length > 0) {
     sections.push({
-      title: "Source",
+      title: sharedT.section.source,
       type: "table",
       rows: sourceRows,
       sectionIcon: "info",
@@ -232,4 +258,25 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     sections,
     parkAndRide: facility.parkAndRide ? true : undefined,
   };
+}
+
+/**
+ * Map a known quality-warning string to its token. The mapper inputs are
+ * strings emitted by other parts of the parking pipeline (validators,
+ * clampers); when unknown, pass through as-is. The known set is small and
+ * documented in `quality.*` of the parking strings catalog.
+ */
+function mapQualityWarning(warning: string): I18nToken | string {
+  switch (warning) {
+    case "Realtime availability is older than 30 minutes.":
+      return token("quality.realtimeStale");
+    case "Realtime free-space count exceeded capacity and was clamped.":
+      return token("quality.freeSpacesClamped");
+    case "Realtime free-space count was negative and was clamped to 0.":
+      return token("quality.negativeFreeSpacesClamped");
+    case "EV charging available":
+      return token("quality.evChargingAvailable");
+    default:
+      return warning;
+  }
 }

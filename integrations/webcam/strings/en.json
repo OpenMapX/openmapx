@@ -1,6 +1,46 @@
 {
   "name": "Webcams",
   "description": "Live webcam streams and traffic cameras",
+  "section": {
+    "preview": "Preview",
+    "videoClip": "Video Clip",
+    "liveTimelapse": "Live / Timelapse",
+    "liveStream": "Live Stream",
+    "webcam": "Webcam",
+    "unavailable": "Unavailable",
+    "originalUrl": "Original URL"
+  },
+  "row": {
+    "city": "City",
+    "region": "Region",
+    "country": "Country",
+    "categories": "Categories",
+    "views": "Views",
+    "direction": "Direction",
+    "nearby": "Nearby",
+    "county": "County",
+    "liveStream": "Live Stream",
+    "view": "View",
+    "park": "Park",
+    "state": "State",
+    "tags": "Tags",
+    "npsPage": "NPS Page",
+    "road": "Road",
+    "location": "Location",
+    "url": "URL"
+  },
+  "content": {
+    "urlOffline": "This webcam URL appears to be offline or no longer available."
+  },
+  "summary": {
+    "direction": "Direction: {direction}",
+    "view": "View: {direction}",
+    "place": "{place}",
+    "categories": "{categories}"
+  },
+  "imageAlt": {
+    "webcam": "{name}"
+  },
   "dataSources": [
     {
       "purpose": "Webcam streams worldwide (tourism, weather, traffic)",

@@ -4,6 +4,12 @@ import type {
   DataSourceResult,
   OsmIdentity,
 } from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import type { EvChargingConnector, EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 
 function stationIdentity(station: EvChargingStation): OsmIdentity | undefined {
@@ -40,21 +46,34 @@ function connectorQuantity(connector: EvChargingConnector): number {
   return connector.quantity && connector.quantity > 0 ? connector.quantity : 1;
 }
 
-function buildSummary(station: EvChargingStation): string | undefined {
-  const parts: string[] = [];
+function buildSummary(station: EvChargingStation): I18nToken | undefined {
   const totalQty = station.connectors.reduce((sum, conn) => sum + connectorQuantity(conn), 0);
   const connectorNames = new Set(station.connectors.map((conn) => conn.type).filter(Boolean));
+  const maxPower = getMaxPower(station);
 
   if (totalQty > 0 && connectorNames.size > 0) {
-    parts.push(`${totalQty}x ${Array.from(connectorNames).join(", ")}`);
-  } else if (totalQty > 0) {
-    parts.push(`${totalQty} connectors`);
+    if (maxPower > 0) {
+      return token("summary.connectorsTypedPower", {
+        count: totalQty,
+        types: Array.from(connectorNames).join(", "),
+        power: maxPower,
+      });
+    }
+    return token("summary.connectorsTyped", {
+      count: totalQty,
+      types: Array.from(connectorNames).join(", "),
+    });
   }
-
-  const maxPower = getMaxPower(station);
-  if (maxPower > 0) parts.push(`${maxPower} kW`);
-  if (station.operator?.name) parts.push(station.operator.name);
-  return parts.length > 0 ? parts.join(" · ") : undefined;
+  if (totalQty > 0) {
+    if (maxPower > 0) {
+      return token("summary.connectorsCountPower", { count: totalQty, power: maxPower });
+    }
+    return token("summary.connectorsCount", { count: totalQty });
+  }
+  if (maxPower > 0) {
+    return token("summary.powerKw", { power: maxPower });
+  }
+  return undefined;
 }
 
 export function mapStationToResult(station: EvChargingStation): DataSourceResult {
@@ -87,11 +106,13 @@ function formatTimestamp(value: string | undefined): string | undefined {
     .replace(/\.\d{3}Z$/, " UTC");
 }
 
-function connectorRows(station: EvChargingStation): (string | number)[][] {
+function connectorRows(
+  station: EvChargingStation,
+): [Translatable, Translatable, Translatable, ...Translatable[]][] {
   return [...station.connectors]
     .sort((a, b) => (b.powerKw ?? 0) - (a.powerKw ?? 0))
-    .map((conn) => [
-      conn.type ?? "Unknown",
+    .map((conn): [Translatable, Translatable, Translatable, Translatable, Translatable] => [
+      conn.type ?? sharedT.value.unknown,
       formatPower(conn.powerKw),
       conn.currentType ?? "-",
       connectorQuantity(conn),
@@ -104,33 +125,53 @@ export function mapStationToDetail(station: EvChargingStation): DataSourceDetail
 
   if (station.connectors.length > 0) {
     sections.push({
-      title: "Connectors",
+      title: token("section.connectors"),
       type: "table",
-      columns: ["Type", "Power", "Current", "Qty", "Status"],
+      columns: [
+        sharedT.row.type,
+        token("column.power"),
+        token("column.current"),
+        token("column.qty"),
+        sharedT.row.status,
+      ],
       rows: connectorRows(station),
       sectionIcon: "bolt",
     });
   }
 
-  const usageItems: string[] = [];
-  if (station.usageType) usageItems.push(`Access: ${station.usageType}`);
-  if (station.usageCost) usageItems.push(`Cost: ${station.usageCost}`);
-  if (station.paymentMethods?.length)
-    usageItems.push(`Payment: ${station.paymentMethods.join(", ")}`);
-  if (station.membershipRequired !== undefined) {
-    usageItems.push(`Membership required: ${station.membershipRequired ? "Yes" : "No"}`);
+  const usageRows: [I18nToken, Translatable][] = [];
+  if (station.usageType) usageRows.push([sharedT.row.access, station.usageType]);
+  if (station.usageCost) usageRows.push([token("row.cost"), station.usageCost]);
+  if (station.paymentMethods?.length) {
+    usageRows.push([token("row.payment"), station.paymentMethods.join(", ")]);
   }
-  if (usageItems.length > 0) {
-    sections.push({ title: "Usage", type: "list", items: usageItems, sectionIcon: "payments" });
+  if (station.membershipRequired !== undefined) {
+    usageRows.push([
+      token("row.membershipRequired"),
+      station.membershipRequired ? sharedT.value.yes : sharedT.value.no,
+    ]);
+  }
+  if (usageRows.length > 0) {
+    sections.push({
+      title: token("section.usage"),
+      type: "table",
+      rows: usageRows,
+      sectionIcon: "payments",
+    });
   }
 
   if (station.access) {
-    sections.push({ title: "Access", type: "text", content: station.access, sectionIcon: "info" });
+    sections.push({
+      title: sharedT.section.access,
+      type: "text",
+      content: station.access,
+      sectionIcon: "info",
+    });
   }
 
   if (station.notes?.length) {
     sections.push({
-      title: "Notes",
+      title: sharedT.section.notes,
       type: "list",
       items: station.notes,
       sectionIcon: "info",
@@ -138,14 +179,14 @@ export function mapStationToDetail(station: EvChargingStation): DataSourceDetail
     });
   }
 
-  const sourceRows: (string | number)[][] = [];
-  sourceRows.push(["Sources", station.sources.join(", ")]);
+  const sourceRows: [I18nToken, Translatable][] = [];
+  sourceRows.push([sharedT.row.sources, station.sources.join(", ")]);
   const updated = formatTimestamp(station.updatedAt);
-  if (updated) sourceRows.push(["Last Updated", updated]);
-  if (station.sourceUrl) sourceRows.push(["Source URL", station.sourceUrl]);
+  if (updated) sourceRows.push([sharedT.row.lastUpdated, updated]);
+  if (station.sourceUrl) sourceRows.push([sharedT.row.sourceUrl, station.sourceUrl]);
   if (sourceRows.length > 0) {
     sections.push({
-      title: "Source",
+      title: sharedT.section.source,
       type: "table",
       rows: sourceRows,
       sectionIcon: "info",
@@ -165,7 +206,7 @@ export function mapStationToDetail(station: EvChargingStation): DataSourceDetail
     usageInfo:
       station.usageType || station.usageCost || station.membershipRequired !== undefined
         ? {
-            type: station.usageType ?? "Public",
+            type: station.usageType ?? sharedT.value.public,
             cost: station.usageCost,
             membershipRequired: station.membershipRequired,
           }

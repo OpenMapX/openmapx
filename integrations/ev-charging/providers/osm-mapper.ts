@@ -27,17 +27,6 @@ const FAST_CHARGE_TAGS = new Set([
   "socket:tesla_supercharger",
 ]);
 
-function getConnectorLabels(tags: Record<string, string>): string[] {
-  const labels: string[] = [];
-  for (const [tagKey, label] of Object.entries(SOCKET_TAG_MAP)) {
-    const value = tags[tagKey];
-    if (value && value !== "no" && value !== "0") {
-      labels.push(label);
-    }
-  }
-  return labels;
-}
-
 function inferVariant(tags: Record<string, string>): string {
   // Check if any fast-charge socket tags are present
   for (const tag of FAST_CHARGE_TAGS) {
@@ -73,27 +62,6 @@ function inferStatus(tags: Record<string, string>): EvChargingStation["status"] 
   }
   if (tags.proposed === "yes" || tags.construction === "yes") return "planned";
   return "operational";
-}
-
-function buildOsmSummary(tags: Record<string, string>): string {
-  const parts: string[] = [];
-
-  const connectors = getConnectorLabels(tags);
-  if (connectors.length > 0) {
-    parts.push(connectors.join(", "));
-  }
-
-  const capacity = tags.capacity;
-  if (capacity) {
-    parts.push(`${capacity} points`);
-  }
-
-  const operator = tags.operator || tags.network;
-  if (operator) {
-    parts.push(operator);
-  }
-
-  return parts.join(" \u00B7 ");
 }
 
 function getOutputPower(tags: Record<string, string>, tagKey?: string): number | undefined {
@@ -177,6 +145,5 @@ export function mapOsmToResult(station: OsmChargingStation): DataSourceResult {
   return {
     ...mapStationToResult(mapOsmToStation(station)),
     variant: inferVariant(station.tags),
-    summary: buildOsmSummary(station.tags),
   };
 }

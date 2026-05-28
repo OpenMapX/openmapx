@@ -7,26 +7,11 @@ import {
   asParkingType,
   asState,
   asStringOrUndef,
+  asTariffRows,
 } from "./mapper-utils.js";
 
 const STATION_ID_PREFIX = "db-bahnpark:";
 const SOURCE_ID = "db-bahnpark";
-
-function asTariffRows(value: unknown): [string, string][] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const rows: [string, string][] = [];
-  for (const item of value) {
-    if (
-      Array.isArray(item) &&
-      item.length === 2 &&
-      typeof item[0] === "string" &&
-      typeof item[1] === "string"
-    ) {
-      rows.push([item[0], item[1]]);
-    }
-  }
-  return rows.length > 0 ? rows : undefined;
-}
 
 export function mapDbBahnParkPayload(poiId: string, payload: unknown): ParkingFacility {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;

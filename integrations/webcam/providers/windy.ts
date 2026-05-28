@@ -1,4 +1,15 @@
-import type { BoundingBox, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type {
+  BoundingBox,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+} from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import type { RawWebcam, WebcamVariant, WindyWebcam } from "./types.js";
 
 const WINDY_BASE = "https://api.windy.com/webcams/api/v3";
@@ -78,13 +89,14 @@ function mapWindyToRaw(wc: WindyWebcam): RawWebcam {
 }
 
 export function mapWindyToResult(raw: RawWebcam): DataSourceResult {
+  const categories = raw.categories?.join(", ");
   return {
     id: raw.id,
     name: raw.name,
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.categories?.join(", "),
+    summary: categories ? token("summary.categories", { categories }) : undefined,
   };
 }
 
@@ -125,14 +137,14 @@ export async function getWindyDetail(webcamId: string): Promise<RawWebcam | null
 }
 
 export function mapWindyToDetail(raw: RawWebcam): DataSourceDetail {
-  const sections: DataSourceDetail["sections"] = [];
+  const sections: DataSourceDetailSection[] = [];
 
   if (raw.thumbnailUrl) {
     sections.push({
-      title: "Preview",
+      title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
-      imageAlt: raw.name,
+      imageAlt: token("imageAlt.webcam", { name: raw.name }),
       linkUrl: raw.detailUrl,
       sectionIcon: "videocam",
     });
@@ -140,7 +152,7 @@ export function mapWindyToDetail(raw: RawWebcam): DataSourceDetail {
 
   if (raw.playerEmbedUrl) {
     sections.push({
-      title: "Live / Timelapse",
+      title: token("section.liveTimelapse"),
       type: "embed",
       embedUrl: raw.playerEmbedUrl,
       sectionIcon: "open_in_new",
@@ -148,16 +160,22 @@ export function mapWindyToDetail(raw: RawWebcam): DataSourceDetail {
     });
   }
 
-  const infoRows: [string, string | number][] = [];
-  if (raw.location?.city) infoRows.push(["City", raw.location.city]);
-  if (raw.location?.region) infoRows.push(["Region", raw.location.region]);
-  if (raw.location?.country) infoRows.push(["Country", raw.location.country]);
-  if (raw.categories?.length) infoRows.push(["Categories", raw.categories.join(", ")]);
-  if (raw.viewCount) infoRows.push(["Views", raw.viewCount]);
-  if (raw.lastUpdated) infoRows.push(["Last Updated", new Date(raw.lastUpdated).toLocaleString()]);
+  const infoRows: [I18nToken, Translatable][] = [];
+  if (raw.location?.city) infoRows.push([token("row.city"), raw.location.city]);
+  if (raw.location?.region) infoRows.push([token("row.region"), raw.location.region]);
+  if (raw.location?.country) infoRows.push([token("row.country"), raw.location.country]);
+  if (raw.categories?.length) infoRows.push([token("row.categories"), raw.categories.join(", ")]);
+  if (raw.viewCount) infoRows.push([token("row.views"), raw.viewCount]);
+  if (raw.lastUpdated)
+    infoRows.push([sharedT.row.lastUpdated, new Date(raw.lastUpdated).toLocaleString()]);
 
   if (infoRows.length) {
-    sections.push({ title: "Info", type: "table", rows: infoRows, sectionIcon: "info" });
+    sections.push({
+      title: sharedT.section.info,
+      type: "table",
+      rows: infoRows,
+      sectionIcon: "info",
+    });
   }
 
   return {

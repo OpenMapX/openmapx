@@ -1,5 +1,6 @@
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
-import type { ParkingType } from "@openmapx/mobility-core/parking";
+import { token } from "@openmapx/integration-framework/strings";
+import type { I18nTokenLike, ParkingType } from "@openmapx/mobility-core/parking";
 import type {
   PoiBundledParseFn,
   PoiLiveState,
@@ -164,35 +165,33 @@ function formatChf(cents: number | null | undefined): string | undefined {
   return `CHF ${(cents / 100).toFixed(2)}`;
 }
 
-function formatDuration(minutes: number): string {
+function durationToken(minutes: number): I18nTokenLike {
   if (minutes % 1440 === 0) {
-    const days = minutes / 1440;
-    return days === 1 ? "1 day" : `${days} days`;
+    return token("tariff.durDays", { count: minutes / 1440 });
   }
   if (minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return hours === 1 ? "1 hour" : `${hours} hours`;
+    return token("tariff.durHours", { count: minutes / 60 });
   }
-  return `${minutes} min`;
+  return token("tariff.durMinutes", { count: minutes });
 }
 
 function buildTariffRows(
   properties: SwissParkingFeatureProperties | undefined,
-): [string, string][] | undefined {
+): [I18nTokenLike, string][] | undefined {
   const pricing = properties?.pricingModel;
   if (!pricing) return undefined;
-  const rows: [string, string][] = [];
+  const rows: [I18nTokenLike, string][] = [];
   for (const segment of pricing.priceSegments ?? []) {
-    const label = formatDuration(segment.startingFrom ?? 0);
+    const label = durationToken(segment.startingFrom ?? 0);
     const price = formatChf(segment.price);
     if (price) rows.push([label, price]);
   }
   const dayPrice = formatChf(pricing.maximumDayPrice);
-  if (dayPrice) rows.push(["Max day price", dayPrice]);
+  if (dayPrice) rows.push([token("tariff.maxDayPrice"), dayPrice]);
   const monthly = formatChf(pricing.monthlyTicketPrice);
-  if (monthly) rows.push(["Monthly pass", monthly]);
+  if (monthly) rows.push([token("tariff.monthlyPass"), monthly]);
   const yearly = formatChf(pricing.yearlyTicketPrice);
-  if (yearly) rows.push(["Yearly pass", yearly]);
+  if (yearly) rows.push([token("tariff.yearlyPass"), yearly]);
   return rows.length > 0 ? rows : undefined;
 }
 

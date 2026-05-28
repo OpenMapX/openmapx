@@ -1,0 +1,41 @@
+{
+  "shared": {
+    "section": {
+      "source": "Source",
+      "notes": "Notes",
+      "pricing": "Pricing",
+      "availability": "Availability",
+      "facility": "Facility",
+      "access": "Access",
+      "dataQuality": "Data Quality",
+      "payment": "Payment",
+      "info": "Info"
+    },
+    "row": {
+      "source": "Source",
+      "sources": "Sources",
+      "sourceId": "Source ID",
+      "sourceUrl": "Source URL",
+      "license": "License",
+      "lastUpdated": "Last Updated",
+      "type": "Type",
+      "capacity": "Capacity",
+      "status": "Status",
+      "access": "Access",
+      "address": "Address",
+      "operator": "Operator"
+    },
+    "value": {
+      "yes": "Yes",
+      "no": "No",
+      "open": "Open",
+      "closed": "Closed",
+      "stale": "Stale",
+      "unknown": "Unknown",
+      "customers": "Customers",
+      "private": "Private",
+      "permit": "Permit",
+      "public": "Public"
+    }
+  }
+}

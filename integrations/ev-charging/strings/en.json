@@ -1,6 +1,27 @@
 {
   "name": "EV Charging Stations",
   "description": "Electric vehicle charging station locations and connector details from official national feeds, OpenChargeMap, NOBIL, and OpenStreetMap",
+  "section": {
+    "connectors": "Connectors",
+    "usage": "Usage"
+  },
+  "column": {
+    "power": "Power",
+    "current": "Current",
+    "qty": "Qty"
+  },
+  "row": {
+    "cost": "Cost",
+    "payment": "Payment",
+    "membershipRequired": "Membership required"
+  },
+  "summary": {
+    "connectorsTyped": "{count}x {types}",
+    "connectorsTypedPower": "{count}x {types} · {power} kW",
+    "connectorsCount": "{count, plural, =1 {1 connector} other {# connectors}}",
+    "connectorsCountPower": "{count, plural, =1 {1 connector} other {# connectors}} · {power} kW",
+    "powerKw": "{power} kW"
+  },
   "dataSources": [
     {
       "purpose": "EV charging station locations with connector details, power levels, availability, merged provider records, and data-provider/license attribution",

@@ -24,6 +24,7 @@ import {
   integrationBackendBundlePath,
   integrationFrontendBundlePath,
 } from "@openmapx/integration-framework/installer";
+import { sharedStrings } from "@openmapx/integration-framework/strings";
 import { registerPoiSources as registerPoiSourcesInStore } from "@openmapx/poi-source-registry";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -1059,12 +1060,15 @@ export async function initIntegrations(
 
   // Register the /api/integrations endpoint
   fastify.get("/api/integrations", async () => {
-    return Array.from(integrations.values())
-      .filter((i) => i.enabled)
-      .map((i) => ({
-        ...toIntegrationMeta(i),
-        isBuiltIn: i.isBuiltIn,
-      }));
+    return {
+      integrations: Array.from(integrations.values())
+        .filter((i) => i.enabled)
+        .map((i) => ({
+          ...toIntegrationMeta(i),
+          isBuiltIn: i.isBuiltIn,
+        })),
+      frameworkStrings: sharedStrings,
+    };
   });
 
   // Serve community integration frontend bundles

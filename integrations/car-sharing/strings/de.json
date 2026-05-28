@@ -1,6 +1,85 @@
 {
   "name": "Carsharing",
   "description": "Carsharing-Stationen und Fahrzeugverfügbarkeit",
+  "section": {
+    "transit": "ÖPNV in der Nähe",
+    "vehicleDetails": "Fahrzeugdetails",
+    "vehicleClasses": "Fahrzeugklassen",
+    "vehicleInfo": "Fahrzeuginfo",
+    "book": "Buchen",
+    "apps": "Apps",
+    "directions": "Wegbeschreibung",
+    "notes": "Hinweise"
+  },
+  "row": {
+    "availableVehicles": "Verfügbare Autos",
+    "emptySlots": "Freie Stellplätze",
+    "totalCapacity": "Gesamtkapazität",
+    "busLines": "Buslinien",
+    "nearestStops": "Nächste Haltestellen",
+    "vehicle": "Fahrzeug",
+    "propulsion": "Antrieb",
+    "seats": "Sitzplätze",
+    "features": "Ausstattung",
+    "co2": "CO₂",
+    "battery": "Akku",
+    "range": "Reichweite",
+    "web": "Web",
+    "android": "Android",
+    "ios": "iOS",
+    "iosApp": "iOS-App",
+    "androidApp": "Android-App",
+    "pricing": "Preise"
+  },
+  "value": {
+    "fixedStation": "Feste Station",
+    "freefloatingZone": "Free-Floating-Zone",
+    "zeroEmissions": "Emissionsfrei",
+    "reserved": "Reserviert",
+    "disabled": "Deaktiviert",
+    "available": "Verfügbar",
+    "vehicleFallback": "Fahrzeug",
+    "formFactor": {
+      "bicycle": "Fahrrad",
+      "cargo_bicycle": "Lastenrad",
+      "scooter_standing": "E-Scooter",
+      "scooter_seated": "Sitz-Roller",
+      "car": "Auto",
+      "moped": "Moped",
+      "other": "Fahrzeug"
+    },
+    "propulsionKind": {
+      "human": "Muskelkraft",
+      "electric_assist": "E-Unterstützung",
+      "electric": "Elektrisch",
+      "combustion": "Verbrenner",
+      "combustion_diesel": "Diesel",
+      "hybrid": "Hybrid",
+      "plug_in_hybrid": "Plug-in-Hybrid",
+      "hydrogen_fuel_cell": "Wasserstoff"
+    },
+    "accessory": {
+      "air_conditioning": "Klimaanlage",
+      "cruise_control": "Tempomat",
+      "automatic": "Automatik",
+      "manual": "Schaltgetriebe",
+      "navigation": "Navigation",
+      "doors_3": "3 Türen",
+      "doors_4": "4 Türen",
+      "doors_5": "5 Türen"
+    }
+  },
+  "summary": {
+    "available": "{count, plural, =0 {Keine Autos verfügbar} one {1 Auto verfügbar} other {# Autos verfügbar}}",
+    "slots": "{count, plural, =0 {Keine freien Stellplätze} one {1 freier Stellplatz} other {# freie Stellplätze}}",
+    "batteryRange": "{battery} % · {km} km"
+  },
+  "format": {
+    "batteryPercent": "{value} %",
+    "distanceKm": "{value} km",
+    "co2PerKm": "{value} g/km",
+    "accessMethod": "Zugang: {method}"
+  },
   "dataSources": [
     {
       "purpose": "Stationsbasiertes Carsharing in Deutschland und Belgien",

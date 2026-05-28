@@ -4,6 +4,7 @@ import type {
   DataSourceResult,
   OsmIdentity,
 } from "@openmapx/core";
+import { type I18nToken, type Translatable, token } from "@openmapx/integration-framework/strings";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import opening_hours from "opening_hours";
 
@@ -18,13 +19,13 @@ interface OpeningTime {
   end: string;
 }
 
-const FUEL_LABELS: Record<string, string> = {
-  diesel: "Diesel",
-  e5: "E5 (Super 95)",
-  e10: "E10",
-  sp98: "SP98 (Super 98)",
-  e85: "E85 (Ethanol)",
-  lpg: "LPG (Autogas)",
+const FUEL_TOKEN: Record<string, I18nToken> = {
+  diesel: token("fuel.diesel"),
+  e5: token("fuel.e5"),
+  e10: token("fuel.e10"),
+  sp98: token("fuel.sp98"),
+  e85: token("fuel.e85"),
+  lpg: token("fuel.lpg"),
 };
 
 function extractSourcePrefix(id: string): string {
@@ -41,7 +42,7 @@ const SUMMARY_LABELS: [keyof FuelStation["fuelPrices"], string][] = [
   ["lpg", "LPG"],
 ];
 
-function formatPriceSummary(station: FuelStation): string | undefined {
+function formatPriceSummary(station: FuelStation): I18nToken | undefined {
   const parts: string[] = [];
   for (const [key, label] of SUMMARY_LABELS) {
     const price = station.fuelPrices[key];
@@ -49,7 +50,10 @@ function formatPriceSummary(station: FuelStation): string | undefined {
       parts.push(`${label} ${price.toFixed(3)} \u20AC`);
     }
   }
-  return parts.length > 0 ? parts.join(" \u00B7 ") : undefined;
+  if (parts.length === 0) return undefined;
+  // Summary wraps the locale-agnostic price list (numbers + \u20AC) in a token so
+  // it can be widened to I18nToken-only in Task 4.1 without churn.
+  return token("summary.priceList", { prices: parts.join(" \u00B7 ") });
 }
 
 function openVariant(isOpen: boolean | undefined): string {
@@ -82,9 +86,9 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
 }
 
 function buildFuelPricesTable(station: FuelStation): DataSourceDetailSection | null {
-  const rows: (string | number)[][] = [];
+  const rows: [I18nToken, Translatable][] = [];
 
-  for (const [key, label] of Object.entries(FUEL_LABELS)) {
+  for (const [key, label] of Object.entries(FUEL_TOKEN)) {
     const price = station.fuelPrices[key as keyof typeof station.fuelPrices];
     if (price !== undefined) {
       rows.push([label, `${price.toFixed(3)} \u20AC`]);
@@ -94,9 +98,9 @@ function buildFuelPricesTable(station: FuelStation): DataSourceDetailSection | n
   if (rows.length === 0) return null;
 
   return {
-    title: "Fuel Prices",
+    title: token("section.fuelPrices"),
     type: "table",
-    columns: ["Fuel Type", "Price (\u20AC)"],
+    columns: [token("column.fuelType"), token("column.priceEur")],
     rows,
     sectionIcon: "fuel",
   };

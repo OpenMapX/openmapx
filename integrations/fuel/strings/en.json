@@ -27,5 +27,18 @@
       "dataSent": "Bounding box coordinates",
       "dataReceived": "OSM fuel station nodes with name, operator, address"
     }
-  ]
+  ],
+  "section": { "fuelPrices": "Fuel Prices" },
+  "column": { "fuelType": "Fuel Type", "priceEur": "Price (€)" },
+  "fuel": {
+    "diesel": "Diesel",
+    "e5": "E5 (Super 95)",
+    "e10": "E10",
+    "sp98": "SP98 (Super 98)",
+    "e85": "E85 (Ethanol)",
+    "lpg": "LPG (Autogas)"
+  },
+  "summary": {
+    "priceList": "{prices}"
+  }
 }

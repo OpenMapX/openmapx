@@ -27,5 +27,18 @@
       "dataSent": "Begrenzungsrahmen-Koordinaten",
       "dataReceived": "OSM-Tankstellenknoten mit Name, Betreiber, Adresse"
     }
-  ]
+  ],
+  "section": { "fuelPrices": "Kraftstoffpreise" },
+  "column": { "fuelType": "Kraftstoffart", "priceEur": "Preis (€)" },
+  "fuel": {
+    "diesel": "Diesel",
+    "e5": "E5 (Super 95)",
+    "e10": "E10",
+    "sp98": "SP98 (Super 98)",
+    "e85": "E85 (Ethanol)",
+    "lpg": "LPG (Autogas)"
+  },
+  "summary": {
+    "priceList": "{prices}"
+  }
 }

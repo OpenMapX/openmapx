@@ -1,4 +1,15 @@
-import type { BoundingBox, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type {
+  BoundingBox,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+} from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import { withCache } from "../../cache.js";
 import type { RawWebcam } from "../types.js";
 import { az, fl, ga, id as idaho, la, ma, pa, sc, ut } from "./ibi511.js";
@@ -20,13 +31,14 @@ function getEnabledStates(): StateDotConfig[] {
 }
 
 export function mapDotToResult(raw: RawWebcam): DataSourceResult {
+  const direction = raw.direction ?? raw.location?.region;
   return {
     id: raw.id,
     name: raw.name,
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.direction ?? raw.location?.region ?? undefined,
+    summary: direction ? token("summary.direction", { direction }) : undefined,
   };
 }
 
@@ -59,21 +71,21 @@ export async function getDotDetail(itemId: string): Promise<RawWebcam | null> {
 }
 
 export function mapDotToDetail(raw: RawWebcam): DataSourceDetail {
-  const sections: DataSourceDetail["sections"] = [];
+  const sections: DataSourceDetailSection[] = [];
 
   if (raw.thumbnailUrl) {
     sections.push({
-      title: "Preview",
+      title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
-      imageAlt: raw.name,
+      imageAlt: token("imageAlt.webcam", { name: raw.name }),
       sectionIcon: "videocam",
     });
   }
 
   if (raw.streamUrl) {
     sections.push({
-      title: "Live Stream",
+      title: token("section.liveStream"),
       type: "embed",
       embedUrl: raw.streamUrl,
       embedType: "video",
@@ -82,12 +94,17 @@ export function mapDotToDetail(raw: RawWebcam): DataSourceDetail {
     });
   }
 
-  const infoRows: [string, string][] = [];
-  if (raw.direction) infoRows.push(["Direction", raw.direction]);
-  if (raw.location?.region) infoRows.push(["Road", raw.location.region]);
-  if (raw.location?.city) infoRows.push(["Location", raw.location.city]);
+  const infoRows: [I18nToken, Translatable][] = [];
+  if (raw.direction) infoRows.push([token("row.direction"), raw.direction]);
+  if (raw.location?.region) infoRows.push([token("row.road"), raw.location.region]);
+  if (raw.location?.city) infoRows.push([token("row.location"), raw.location.city]);
   if (infoRows.length) {
-    sections.push({ title: "Info", type: "table", rows: infoRows, sectionIcon: "info" });
+    sections.push({
+      title: sharedT.section.info,
+      type: "table",
+      rows: infoRows,
+      sectionIcon: "info",
+    });
   }
 
   return {

@@ -1,6 +1,7 @@
 import type { BoundingBox, LngLat, OsmFilter } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
+import type { I18nToken, Translatable } from "../../strings/index.js";
 
 export interface DataSourceAttribution {
   text: string;
@@ -104,7 +105,7 @@ export interface DataSourceResult {
   kind?: "station" | "vehicle";
   variant: string;
   status?: string;
-  summary?: string;
+  summary?: I18nToken;
   operator?: string;
   branding?: DataSourceBranding;
   mapContext?: DataSourceMapContextSelection;
@@ -124,16 +125,50 @@ export interface PricingPlanEntry {
 }
 
 export interface DataSourceDetailSection {
-  title: string;
+  title: I18nToken;
   type: "table" | "list" | "text" | "image" | "embed" | "pricing";
-  columns?: string[];
-  rows?: (string | number)[][];
-  items?: string[];
-  content?: string;
+  columns?: I18nToken[];
+  /**
+   * Table rows. Two shapes are accepted, distinguished by cell count:
+   *
+   *  - `[label, value]` 2-tuples for the canonical key/value layout. The
+   *    label (left cell) is `I18nToken`-strict — a raw string here is a
+   *    compile error, which is what keeps un-translated labels off the wire.
+   *    The value (right cell) is `Translatable` (token, raw string, or number),
+   *    because the right column legitimately mixes translated text with
+   *    upstream pass-through: operator addresses, prices, formatted numbers.
+   *    A value may also be a `Translatable[]` — a list of tokens/strings the
+   *    client resolves individually and joins (e.g. a localized list of vehicle
+   *    accessories in a single cell).
+   *  - Wider rows of **3 or more** cells for true multi-column tables driven
+   *    by `columns` headers (e.g. EV connector tables). Each cell is a value;
+   *    the "label" semantics live in the column header rather than the row, so
+   *    cells are unconstrained `Translatable`.
+   *
+   * The ≥3-cell lower bound on the grid form is load-bearing: it prevents a
+   * 2-cell row from satisfying the grid member and thereby smuggling a
+   * raw-string label past the token-strict key/value member. The web renderer
+   * dispatches on `row.length === 2` to pick between label/value and
+   * multi-column rendering.
+   */
+  rows?:
+    | [I18nToken, Translatable | Translatable[]][]
+    | [Translatable, Translatable, Translatable, ...Translatable[]][];
+  /**
+   * User-visible list items. Tokens preferred for fixed vocabulary; raw
+   * `string` passthrough allowed for upstream-provided notes (operator
+   * descriptions, OSM addenda, quality warnings forwarded verbatim).
+   */
+  items?: (I18nToken | string)[];
+  /**
+   * Text-section content. Token for fixed messages, raw `string` passthrough
+   * for upstream-provided narrative (operator descriptions, raw notes).
+   */
+  content?: I18nToken | string;
   /** Image URL for type "image". Rendered as a safe <img> element. */
   imageUrl?: string;
   /** Alt text for image sections. */
-  imageAlt?: string;
+  imageAlt?: I18nToken;
   /** Link URL. For "image" sections, wraps the image in an anchor tag. */
   linkUrl?: string;
   /** Embed URL for type "embed". Rendered as a sandboxed iframe or video element. */
@@ -193,7 +228,7 @@ export interface DataSourceDetail {
   /** Per-record attribution that cannot be expressed statically in the integration manifest. */
   attributions?: DataSourceAttribution[];
   branding?: DataSourceBranding;
-  usageInfo?: { type: string; cost?: string; membershipRequired?: boolean };
+  usageInfo?: { type: Translatable; cost?: Translatable; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
   sections: DataSourceDetailSection[];

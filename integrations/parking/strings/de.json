@@ -1,6 +1,74 @@
 {
   "name": "Parkeinrichtungen",
   "description": "Parkeinrichtungen von DB BahnPark, ParkAPI, RDW, BNLS und OpenStreetMap",
+  "section": {
+    "availability": "Verfügbarkeit",
+    "facility": "Einrichtung",
+    "dataQuality": "Datenqualität",
+    "fee": "Gebühren"
+  },
+  "row": {
+    "freeSpaces": "Freie Plätze",
+    "occupancy": "Auslastung",
+    "trend": "Tendenz",
+    "maxHeight": "Max. Höhe",
+    "disabledSpaces": "Behindertenplätze",
+    "womenSpaces": "Frauenparkplätze",
+    "evCharging": "E-Ladeplätze",
+    "parkAndRide": "Park & Ride",
+    "nearestStation": "Nächster Bahnhof",
+    "dataFreshness": "Datenaktualität"
+  },
+  "value": {
+    "parkingGarage": "Parkhaus",
+    "undergroundGarage": "Tiefgarage",
+    "surfaceLot": "Parkplatz",
+    "onStreet": "Straßenrand",
+    "freeParking": "Kostenloses Parken",
+    "paidParking": "Kostenpflichtig",
+    "trendIncreasing": "Füllt sich",
+    "trendDecreasing": "Leert sich",
+    "trendConstant": "Konstant"
+  },
+  "summary": {
+    "closed": "Geschlossen",
+    "full": "Voll",
+    "stale": "Auslastung veraltet",
+    "spacesOf": "{free}/{capacity} frei",
+    "spaces": "{count} frei",
+    "totalSpaces": "{count} Plätze"
+  },
+  "tariff": {
+    "maxDayPrice": "Tageshöchstpreis",
+    "monthly": "Monatlich",
+    "monthlyResident": "Monatlich (Anwohner)",
+    "monthlyPass": "Monatskarte",
+    "yearlyPass": "Jahreskarte",
+    "dur20min": "20 Min.",
+    "dur30min": "30 Min.",
+    "dur1h": "1 Std.",
+    "dur2h": "2 Std.",
+    "dur3h": "3 Std.",
+    "dur4h": "4 Std.",
+    "dur1day": "1 Tag",
+    "dur1dayPCard": "1 Tag (P-Card)",
+    "dur1week": "1 Woche",
+    "dur1weekPCard": "1 Woche (P-Card)",
+    "dur1month": "1 Monat",
+    "dur1monthPCard": "1 Monat (P-Card)",
+    "dur1monthLong": "1 Monat (Dauerparker)",
+    "dur1monthReserved": "1 Monat (reserviert)",
+    "durMinutes": "{count} Min.",
+    "durHours": "{count, plural, =1 {1 Std.} other {# Std.}}",
+    "durDays": "{count, plural, =1 {1 Tag} other {# Tage}}",
+    "literal": "{value}"
+  },
+  "quality": {
+    "realtimeStale": "Echtzeit-Verfügbarkeit ist älter als 30 Minuten.",
+    "freeSpacesClamped": "Echtzeit-Anzahl freier Plätze überschritt die Kapazität und wurde gekappt.",
+    "negativeFreeSpacesClamped": "Echtzeit-Anzahl freier Plätze war negativ und wurde auf 0 gesetzt.",
+    "evChargingAvailable": "E-Ladeplätze verfügbar"
+  },
   "dataSources": [
     {
       "purpose": "Echtzeit-Parkplatzverfügbarkeit in europäischen Städten",

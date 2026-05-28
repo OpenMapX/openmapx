@@ -1,5 +1,16 @@
-import type { BoundingBox, DataSourceDetail, DataSourceResult } from "@openmapx/core";
+import type {
+  BoundingBox,
+  DataSourceDetail,
+  DataSourceDetailSection,
+  DataSourceResult,
+} from "@openmapx/core";
 import { isPublicUrl, overpassQuerySafe } from "@openmapx/core";
+import {
+  type I18nToken,
+  sharedT,
+  type Translatable,
+  token,
+} from "@openmapx/integration-framework/strings";
 import type { OsmWebcam, RawWebcam } from "./types.js";
 
 /**
@@ -44,7 +55,7 @@ export function mapOsmToResult(raw: RawWebcam): DataSourceResult {
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.direction ? `Direction: ${raw.direction}` : undefined,
+    summary: raw.direction ? token("summary.direction", { direction: raw.direction }) : undefined,
   };
 }
 
@@ -71,40 +82,45 @@ export async function getOsmWebcamNode(nodeId: number): Promise<RawWebcam | null
 }
 
 export async function mapOsmToDetail(raw: RawWebcam): Promise<DataSourceDetail> {
-  const sections: DataSourceDetail["sections"] = [];
+  const sections: DataSourceDetailSection[] = [];
 
   if (raw.thumbnailUrl) {
     const reachable = await checkUrlReachable(raw.thumbnailUrl);
 
     if (reachable) {
       sections.push({
-        title: "Webcam",
+        title: token("section.webcam"),
         type: "image",
         imageUrl: raw.thumbnailUrl,
-        imageAlt: raw.name,
+        imageAlt: token("imageAlt.webcam", { name: raw.name }),
         linkUrl: raw.thumbnailUrl,
         sectionIcon: "videocam",
       });
     } else {
       sections.push({
-        title: "Unavailable",
+        title: token("section.unavailable"),
         type: "text",
-        content: "This webcam URL appears to be offline or no longer available.",
+        content: token("content.urlOffline"),
         sectionIcon: "warning",
       });
       sections.push({
-        title: "Original URL",
+        title: token("section.originalUrl"),
         type: "table",
-        rows: [["URL", raw.thumbnailUrl]],
+        rows: [[token("row.url"), raw.thumbnailUrl]],
         sectionIcon: "info",
       });
     }
   }
 
-  const infoRows: [string, string][] = [];
-  if (raw.direction) infoRows.push(["Direction", raw.direction]);
+  const infoRows: [I18nToken, Translatable][] = [];
+  if (raw.direction) infoRows.push([token("row.direction"), raw.direction]);
   if (infoRows.length) {
-    sections.push({ title: "Info", type: "table", rows: infoRows, sectionIcon: "info" });
+    sections.push({
+      title: sharedT.section.info,
+      type: "table",
+      rows: infoRows,
+      sectionIcon: "info",
+    });
   }
 
   return {

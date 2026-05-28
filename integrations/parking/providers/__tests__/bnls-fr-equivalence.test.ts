@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { BnlsFrRecord, ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
+import { token } from "@openmapx/integration-framework/strings";
+import type {
+  BnlsFrRecord,
+  I18nTokenLike,
+  ParkingFacility,
+  ParkingType,
+} from "@openmapx/mobility-core/parking";
 import { describe, expect, it } from "vitest";
 import { mapBnlsPayload } from "../bnls-fr-mapper.js";
 import { parseBnlsFrStatic } from "../bnls-fr-parser.js";
@@ -15,18 +21,20 @@ const TYPE_MAP: Record<string, ParkingType> = {
   enclos_en_surface: "surface",
 };
 
-function refTariffRows(record: BnlsFrRecord): [string, string][] | undefined {
-  const rows: [string, string][] = [];
-  if (record.cost_1h != null) rows.push(["1h", `€${record.cost_1h.toFixed(2)}`]);
-  if (record.cost_2h != null) rows.push(["2h", `€${record.cost_2h.toFixed(2)}`]);
-  if (record.cost_3h != null) rows.push(["3h", `€${record.cost_3h.toFixed(2)}`]);
-  if (record.cost_4h != null) rows.push(["4h", `€${record.cost_4h.toFixed(2)}`]);
-  if (record.cost_24h != null) rows.push(["24h", `€${record.cost_24h.toFixed(2)}`]);
+function refTariffRows(record: BnlsFrRecord): [I18nTokenLike, string][] | undefined {
+  const rows: [I18nTokenLike, string][] = [];
+  if (record.cost_1h != null) rows.push([token("tariff.dur1h"), `€${record.cost_1h.toFixed(2)}`]);
+  if (record.cost_2h != null) rows.push([token("tariff.dur2h"), `€${record.cost_2h.toFixed(2)}`]);
+  if (record.cost_3h != null) rows.push([token("tariff.dur3h"), `€${record.cost_3h.toFixed(2)}`]);
+  if (record.cost_4h != null) rows.push([token("tariff.dur4h"), `€${record.cost_4h.toFixed(2)}`]);
+  if (record.cost_24h != null) {
+    rows.push([token("tariff.dur1day"), `€${record.cost_24h.toFixed(2)}`]);
+  }
   if (record.resident_sub != null) {
-    rows.push(["Monthly (resident)", `€${record.resident_sub.toFixed(2)}`]);
+    rows.push([token("tariff.monthlyResident"), `€${record.resident_sub.toFixed(2)}`]);
   }
   if (record.non_resident_sub != null) {
-    rows.push(["Monthly", `€${record.non_resident_sub.toFixed(2)}`]);
+    rows.push([token("tariff.monthly"), `€${record.non_resident_sub.toFixed(2)}`]);
   }
   return rows.length > 0 ? rows : undefined;
 }

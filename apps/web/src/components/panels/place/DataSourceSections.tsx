@@ -23,12 +23,14 @@ import {
   pickIntegrationForSources,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import type { Translatable } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
 import { TEAL } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
 import { DataSourceNearbyTransit } from "./DataSourceNearbyTransit";
+import { useDataSourceI18nResolver } from "./useDataSourceI18nResolver.js";
 
 /** Section header config per data source type. */
 const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
@@ -162,204 +164,43 @@ interface Props {
   domain?: string;
 }
 
-/** Map API section titles to i18n keys. */
-const SECTION_TITLE_KEYS: Record<string, string> = {
-  Availability: "sectionAvailability",
-  "Public Transit": "sectionPublicTransit",
-  "Vehicle Details": "sectionVehicleDetails",
-  "Vehicle Classes": "sectionVehicleClasses",
-  Pricing: "sectionPricing",
-  Book: "sectionBook",
-  Directions: "sectionDirections",
-  Notes: "sectionNotes",
-  Connectors: "sectionConnectors",
-  Usage: "sectionUsage",
-  Access: "sectionAccess",
-  Facility: "sectionFacility",
-  "Data Quality": "sectionDataQuality",
-  Fee: "sectionFee",
-  Payment: "sectionPayment",
-  Source: "sectionSource",
-  // Webcam + fuel section titles — surfaced verbatim before, leaking English to DE UI.
-  Info: "sectionInfo",
-  Preview: "sectionPreview",
-  "Video Clip": "sectionVideoClip",
-  "Live / Timelapse": "sectionLiveTimelapse",
-  "Live Stream": "sectionLiveStream",
-  Webcam: "sectionWebcam",
-  Unavailable: "sectionUnavailable",
-  "Original URL": "sectionOriginalUrl",
-  "Fuel Prices": "sectionFuelPrices",
-};
-
-/** Map API row labels (left column of key-value tables) to i18n keys. */
-const ROW_LABEL_KEYS: Record<string, string> = {
-  "Available Vehicles": "rowAvailableVehicles",
-  "Empty Slots": "rowEmptySlots",
-  "Total Capacity": "rowTotalCapacity",
-  Type: "rowType",
-  Pricing: "rowPricing",
-  Vehicle: "rowVehicle",
-  Propulsion: "rowPropulsion",
-  Seats: "rowSeats",
-  Features: "rowFeatures",
-  "CO₂": "rowCo2",
-  "Bus Lines": "rowBusLines",
-  "Nearest Stops": "rowNearestStops",
-  "Fixed Station": "fixedStation",
-  "Free-floating Zone": "freeFloatingZone",
-  "Zero emissions": "zeroEmissions",
-  "Free Spaces": "rowFreeSpaces",
-  Occupancy: "rowOccupancy",
-  "Max Height": "rowMaxHeight",
-  "Disabled Spaces": "rowDisabledSpaces",
-  "Women's Spaces": "rowWomenSpaces",
-  "EV Charging": "rowEvCharging",
-  "Park & Ride": "rowParkAndRide",
-  Capacity: "rowCapacity",
-  Status: "rowStatus",
-  Trend: "rowTrend",
-  Access: "rowAccess",
-  "Data Freshness": "rowDataFreshness",
-  "Nearest Station": "rowNearestStation",
-  Source: "rowSource",
-  Sources: "rowSources",
-  "Source ID": "rowSourceId",
-  "Source URL": "rowSourceUrl",
-  License: "rowLicense",
-  // Fuel column headers — emitted by `integrations/fuel/providers/mapper.ts`
-  // as section.columns (translated via translateStructuredSection below).
-  "Fuel Type": "columnFuelType",
-  "Price (€)": "columnPriceEur",
-  // Trend values surfaced by parking sources (Braunschweig, Düsseldorf,
-  // Salzburg, Bielefeld via PLS feed).
-  Increasing: "trendIncreasing",
-  Decreasing: "trendDecreasing",
-  Constant: "trendConstant",
-  // Parking type values
-  "Parking Garage": "parkingGarage",
-  "Underground Garage": "undergroundGarage",
-  "Surface Lot": "surfaceLot",
-  "On-Street": "onStreet",
-  // Fee values
-  "Free Parking": "freeParking",
-  "Paid Parking": "paidParking",
-  Unknown: "unknownFee",
-  // Parking tariff durations
-  "20 min": "dur20min",
-  "30 min": "dur30min",
-  "1h": "dur1h",
-  "1 day": "dur1day",
-  "1 day (P-Card)": "dur1dayPCard",
-  "1 week": "dur1week",
-  "1 week (P-Card)": "dur1weekPCard",
-  "1 month": "dur1month",
-  "1 month (long-term)": "dur1monthLong",
-  "1 month (reserved)": "dur1monthReserved",
-  // Webcam row labels
-  City: "rowCity",
-  Region: "rowRegion",
-  Country: "rowCountry",
-  Categories: "rowCategories",
-  Views: "rowViews",
-  "Last Updated": "rowLastUpdated",
-  Direction: "rowDirection",
-  Nearby: "rowNearby",
-  County: "rowCounty",
-  "Live Stream": "rowLiveStream",
-  View: "rowView",
-  Park: "rowPark",
-  State: "rowState",
-  Tags: "rowTags",
-  "NPS Page": "rowNpsPage",
-  Road: "rowRoad",
-  Location: "rowLocation",
-  // Common values
-  Yes: "yes",
-  Open: "open",
-  Closed: "closed",
-  Stale: "stale",
-  Customers: "customers",
-  Private: "private",
-  Permit: "permit",
-};
-
-const DETAIL_TEXT_KEYS: Record<string, string> = {
-  "1 day (P-Card)": "dur1dayPCard",
-  "1 month (long-term)": "dur1monthLong",
-  "1 month (reserved)": "dur1monthReserved",
-  "1 week (P-Card)": "dur1weekPCard",
-  "EV Charging Available": "evChargingAvailable",
-  "Free Parking": "freeParking",
-  "Max day price": "tariffMaxDayPrice",
-  Monthly: "tariffMonthly",
-  "Monthly (resident)": "tariffMonthlyResident",
-  "Monthly pass": "tariffMonthlyPass",
-  "Paid Parking": "paidParking",
-  "Realtime availability is older than 30 minutes.": "qualityRealtimeAvailabilityStale",
-  "Realtime free-space count exceeded capacity and was clamped.":
-    "qualityFreeSpacesClampedToCapacity",
-  "Realtime free-space count was negative and was clamped to 0.":
-    "qualityNegativeFreeSpacesClamped",
-  "Yearly pass": "tariffYearlyPass",
-  "This webcam URL appears to be offline or no longer available.": "webcamUrlOffline",
-};
-
-const DURATION_MINUTES_RE = /^(\d+) min$/;
-const DURATION_HOURS_RE = /^(\d+) hours?$/;
-const DURATION_HOURS_SHORT_RE = /^(\d+)h$/;
-const DURATION_DAYS_RE = /^(\d+) days?$/;
-
-function translateDetailText(value: string | undefined, t: ReturnType<typeof useTranslations>) {
-  if (!value) return value;
-  const key = DETAIL_TEXT_KEYS[value] ?? ROW_LABEL_KEYS[value];
-  if (key) return t(key);
-
-  const minutes = value.match(DURATION_MINUTES_RE);
-  if (minutes) return t("durationMinutes", { count: Number(minutes[1]) });
-
-  const hours = value.match(DURATION_HOURS_RE) ?? value.match(DURATION_HOURS_SHORT_RE);
-  if (hours) return t("durationHours", { count: Number(hours[1]) });
-
-  const days = value.match(DURATION_DAYS_RE);
-  if (days) return t("durationDays", { count: Number(days[1]) });
-
-  return value;
-}
-
 function translateStructuredSection(
   section: DataSourceDetailSection,
-  t: ReturnType<typeof useTranslations>,
+  resolveT: (value: Translatable | undefined) => string,
 ): StructuredSection {
-  const titleKey = SECTION_TITLE_KEYS[section.title];
-  const translatedTitle = titleKey ? t(titleKey) : section.title;
-  const translatedRows =
+  const translatedTitle = resolveT(section.title);
+  // A value cell may be a single Translatable or a list of them (e.g. a
+  // localized accessory list); resolve each and join with the locale separator.
+  const resolveCell = (cell: Translatable | Translatable[] | undefined): string | number =>
+    Array.isArray(cell)
+      ? cell.map((entry) => resolveT(entry)).join(", ")
+      : typeof cell === "number"
+        ? cell
+        : resolveT(cell);
+  const translatedRows: (string | number)[][] | undefined =
     section.type === "table" && section.rows?.every((row) => row.length === 2)
-      ? section.rows.map(([label, value]) => {
-          const labelStr = String(label);
-          const valueStr = String(value);
-          return [
-            translateDetailText(labelStr, t) ?? labelStr,
-            translateDetailText(valueStr, t) ?? value,
-          ] satisfies (string | number)[];
-        })
-      : section.rows;
-  // Column headers (table sections with explicit `columns`) were previously
-  // surfaced verbatim — fine for English UIs, but leaked through to DE.
-  // Route them through the same key lookup as row labels so e.g.
-  // `["Fuel Type", "Price (€)"]` from the fuel integration becomes
-  // `["Kraftstoffart", "Preis (€)"]` in the DE locale.
-  const translatedColumns = section.columns?.map(
-    (column) => translateDetailText(column, t) ?? column,
-  );
-
+      ? section.rows.map(([label, value]) => [resolveT(label), resolveCell(value)])
+      : section.rows?.map((row) => row.map((cell) => resolveCell(cell)));
+  const translatedColumns = section.columns?.map((column) => resolveT(column));
+  // Re-build the StructuredSection explicitly (no spread) so the narrowed
+  // resolved field types win over `DataSourceDetailSection`'s wider
+  // `I18nToken | string` slots.
   return {
-    ...section,
-    content: translateDetailText(section.content, t),
-    items: section.items?.map((item) => translateDetailText(item, t) ?? item),
+    id: undefined,
     title: translatedTitle,
-    rows: translatedRows,
+    type: section.type,
     columns: translatedColumns,
+    rows: translatedRows,
+    items: section.items?.map((item) => resolveT(item)),
+    content: section.content === undefined ? undefined : resolveT(section.content),
+    imageUrl: section.imageUrl,
+    imageAlt: section.imageAlt === undefined ? undefined : resolveT(section.imageAlt),
+    linkUrl: section.linkUrl,
+    embedUrl: section.embedUrl,
+    embedType: section.embedType,
+    sectionIcon: section.sectionIcon,
+    pricingPlans: section.pricingPlans,
+    collapsed: section.collapsed,
   };
 }
 
@@ -449,9 +290,12 @@ function DetailAttribution({ attribution }: { attribution: DataSourceAttribution
 
 export function DataSourceSections({ detail, domain }: Props) {
   const t = useTranslations("dataSources");
+  const registry = useIntegrationRegistry();
+  const meta = pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
+  const resolveT = useDataSourceI18nResolver(meta?.id ?? domain);
   const header = resolveSourceHeader(detail, domain);
   const structuredSections = detail.sections.map((section) =>
-    translateStructuredSection(section, t),
+    translateStructuredSection(section, resolveT),
   );
   const operatorLegalName =
     detail.operator?.legalName &&
@@ -516,10 +360,10 @@ export function DataSourceSections({ detail, domain }: Props) {
             <LockOpenIcon />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2">{detail.usageInfo.type}</Typography>
+            <Typography variant="body2">{resolveT(detail.usageInfo.type)}</Typography>
             {detail.usageInfo.cost && (
               <Typography variant="caption" color="text.secondary">
-                {detail.usageInfo.cost}
+                {resolveT(detail.usageInfo.cost)}
               </Typography>
             )}
             {detail.usageInfo.membershipRequired && (
