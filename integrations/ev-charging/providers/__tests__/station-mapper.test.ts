@@ -95,4 +95,32 @@ describe("ev-charging station mapper", () => {
       values: { count: 2, types: "CCS", power: 50 },
     });
   });
+
+  it("resolves source ids to display names via the provided resolver", () => {
+    const names: Record<string, string> = { ocm: "OpenChargeMap", osm: "OpenStreetMap" };
+    const detail = mapStationToDetail(
+      makeStation({ sources: ["ocm", "osm"] }),
+      (id) => names[id] ?? id,
+    );
+    const sourceSection = detail.sections.find(
+      (s) => isI18nToken(s.title) && s.title.$t === "shared.section.source",
+    );
+    const sourcesRow = sourceSection?.rows?.find(
+      ([label]) => isI18nToken(label) && label.$t === "shared.row.sources",
+    );
+    expect(sourcesRow?.[1]).toBe("OpenChargeMap, OpenStreetMap");
+  });
+
+  it("renders payment methods as readable, brand-cased, deduped text", () => {
+    const detail = mapStationToDetail(
+      makeStation({ paymentMethods: ["mastercard", "visa", "apple_pay", "mastercard"] }),
+    );
+    const usageSection = detail.sections.find(
+      (s) => isI18nToken(s.title) && s.title.$t === "section.usage",
+    );
+    const paymentRow = usageSection?.rows?.find(
+      ([label]) => isI18nToken(label) && label.$t === "row.payment",
+    );
+    expect(paymentRow?.[1]).toBe("Mastercard, Visa, Apple Pay");
+  });
 });

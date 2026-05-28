@@ -96,6 +96,33 @@ function formatPower(value: number | undefined): string {
   return value ? `${value} kW` : "-";
 }
 
+// Brand spellings that title-casing alone gets wrong.
+const PAYMENT_BRAND_CASING: Record<string, string> = {
+  paypal: "PayPal",
+  applepay: "Apple Pay",
+  "apple pay": "Apple Pay",
+  googlepay: "Google Pay",
+  "google pay": "Google Pay",
+  nfc: "NFC",
+};
+
+// Payment methods arrive as lowercase tokens (from OSM `payment:*` tags or
+// provider feeds), e.g. "mastercard", "debit cards", "apple_pay". Render them
+// as readable text: brand-cased where known, otherwise title-cased per word.
+function formatPaymentMethods(methods: string[]): string {
+  const seen = new Set<string>();
+  const formatted: string[] = [];
+  for (const raw of methods) {
+    const normalized = raw.trim().toLowerCase().replace(/_/g, " ");
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    formatted.push(
+      PAYMENT_BRAND_CASING[normalized] ?? normalized.replace(/\b\w/g, (char) => char.toUpperCase()),
+    );
+  }
+  return formatted.join(", ");
+}
+
 function formatTimestamp(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const time = Date.parse(value);
@@ -120,7 +147,12 @@ function connectorRows(
     ]);
 }
 
-export function mapStationToDetail(station: EvChargingStation): DataSourceDetail {
+export function mapStationToDetail(
+  station: EvChargingStation,
+  // Resolve a source id to its display name (from the integration manifest's
+  // dataSources). Defaults to the id itself so the mapper stays standalone.
+  resolveSourceName: (id: string) => string = (id) => id,
+): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
   if (station.connectors.length > 0) {
@@ -143,7 +175,7 @@ export function mapStationToDetail(station: EvChargingStation): DataSourceDetail
   if (station.usageType) usageRows.push([sharedT.row.access, station.usageType]);
   if (station.usageCost) usageRows.push([token("row.cost"), station.usageCost]);
   if (station.paymentMethods?.length) {
-    usageRows.push([token("row.payment"), station.paymentMethods.join(", ")]);
+    usageRows.push([token("row.payment"), formatPaymentMethods(station.paymentMethods)]);
   }
   if (station.membershipRequired !== undefined) {
     usageRows.push([
@@ -180,7 +212,7 @@ export function mapStationToDetail(station: EvChargingStation): DataSourceDetail
   }
 
   const sourceRows: [I18nToken, Translatable][] = [];
-  sourceRows.push([sharedT.row.sources, station.sources.join(", ")]);
+  sourceRows.push([sharedT.row.sources, station.sources.map(resolveSourceName).join(", ")]);
   const updated = formatTimestamp(station.updatedAt);
   if (updated) sourceRows.push([sharedT.row.lastUpdated, updated]);
   if (station.sourceUrl) sourceRows.push([sharedT.row.sourceUrl, station.sourceUrl]);

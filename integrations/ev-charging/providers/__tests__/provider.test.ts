@@ -199,7 +199,7 @@ describe("evChargingProvider.getDetail", () => {
     expect(mocks.sourceA.fetchDetail).toHaveBeenCalledWith("source-a:123");
     expect(mocks.sourceA.search).toHaveBeenCalledOnce();
     expect(mocks.sourceB.search).toHaveBeenCalledOnce();
-    expect(mapStationToDetail).toHaveBeenCalledWith(merged);
+    expect(mapStationToDetail).toHaveBeenCalledWith(merged, expect.any(Function));
     expect(result?.sources).toEqual(["source-a", "source-b"]);
   });
 

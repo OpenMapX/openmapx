@@ -25,6 +25,10 @@ import { mapStationToDetail, mapStationToResult } from "./station-mapper.js";
 const attribution = createManifestAttribution();
 export const setManifestDataSources = attribution.set;
 
+// Resolve a source id to its human-readable name from the manifest's
+// dataSources (e.g. "ocm" → "OpenChargeMap"), falling back to the raw id.
+const resolveSourceName = (id: string): string => attribution.bySource(id)?.name ?? id;
+
 // PoiReader-backed sources whose cold-start state should flip
 // `freshness.isStale=true` on the wrapped result. Hardcoded (rather than
 // derived from `declarePoiSources()`) to avoid a circular import with
@@ -113,14 +117,21 @@ class EvChargingProvider implements MobilityDataSourceProvider {
 
   async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
     const cached = this.stationCache.get(itemId);
-    if (cached) return wrapStatic(mapStationToDetail(cached), attributionsForStation(cached));
+    if (cached)
+      return wrapStatic(
+        mapStationToDetail(cached, resolveSourceName),
+        attributionsForStation(cached),
+      );
 
     const primary = await this.fetchByPrefix(itemId);
     if (!primary) return wrapStatic(null, []);
 
     const enriched = await this.enrichStation(primary);
     this.cacheStation(enriched);
-    return wrapStatic(mapStationToDetail(enriched), attributionsForStation(enriched));
+    return wrapStatic(
+      mapStationToDetail(enriched, resolveSourceName),
+      attributionsForStation(enriched),
+    );
   }
 
   private async fetchByPrefix(itemId: string): Promise<EvChargingStation | null> {
