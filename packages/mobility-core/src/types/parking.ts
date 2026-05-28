@@ -62,11 +62,11 @@ export interface ParkingFacility {
   feeDescription?: string;
   /**
    * Structured pricing rows: `[durationLabel, formattedPrice]`. The label is
-   * an `I18nToken` emitted by parsers; the price is a pre-formatted string
-   * (`€2.10`, `CHF 1.50`). Strings are accepted transitionally — Task 4.1 of
-   * the i18n-token rollout tightens this to `[I18nToken, string][]`.
+   * an `I18nToken` emitted by parsers (use `tariff.literal` with a `value`
+   * placeholder for upstream-supplied labels that have no known mapping);
+   * the price is a pre-formatted string (`€2.10`, `CHF 1.50`).
    */
-  tariffRows?: [I18nTokenLike | string, string][];
+  tariffRows?: [I18nTokenLike, string][];
   access?: "public" | "customers" | "private" | "permit";
 
   operator?: string;

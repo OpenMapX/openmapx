@@ -60,7 +60,8 @@
     "dur1monthReserved": "1 month (reserved)",
     "durMinutes": "{count} min",
     "durHours": "{count, plural, =1 {1 hour} other {# hours}}",
-    "durDays": "{count, plural, =1 {1 day} other {# days}}"
+    "durDays": "{count, plural, =1 {1 day} other {# days}}",
+    "literal": "{value}"
   },
   "quality": {
     "realtimeStale": "Realtime availability is older than 30 minutes.",

@@ -31,13 +31,14 @@ function getEnabledStates(): StateDotConfig[] {
 }
 
 export function mapDotToResult(raw: RawWebcam): DataSourceResult {
+  const direction = raw.direction ?? raw.location?.region;
   return {
     id: raw.id,
     name: raw.name,
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.direction ?? raw.location?.region ?? undefined,
+    summary: direction ? token("summary.direction", { direction }) : undefined,
   };
 }
 
@@ -77,7 +78,7 @@ export function mapDotToDetail(raw: RawWebcam): DataSourceDetail {
       title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
-      imageAlt: raw.name,
+      imageAlt: token("imageAlt.webcam", { name: raw.name }),
       sectionIcon: "videocam",
     });
   }

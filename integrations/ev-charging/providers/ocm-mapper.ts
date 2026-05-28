@@ -76,40 +76,6 @@ export function getStatus(poi: OcmPoi): EvChargingStatus {
   return "unknown";
 }
 
-export function buildSummary(poi: OcmPoi): string {
-  const parts: string[] = [];
-
-  // Total connector count
-  const totalQty = poi.Connections?.reduce((sum, c) => sum + (c.Quantity ?? 1), 0) ?? 0;
-
-  // Unique connector type names
-  const connectorNames = new Set<string>();
-  for (const conn of poi.Connections ?? []) {
-    if (conn.ConnectionType?.Title) {
-      connectorNames.add(conn.ConnectionType.Title);
-    }
-  }
-
-  if (totalQty > 0 && connectorNames.size > 0) {
-    parts.push(`${totalQty}x ${Array.from(connectorNames).join(", ")}`);
-  } else if (totalQty > 0) {
-    parts.push(`${totalQty} connectors`);
-  }
-
-  // Max power
-  const maxPower = getMaxPower(poi);
-  if (maxPower > 0) {
-    parts.push(`${maxPower}kW`);
-  }
-
-  // Operator
-  if (poi.OperatorInfo?.Title && !poi.OperatorInfo.IsPrivateIndividual) {
-    parts.push(poi.OperatorInfo.Title);
-  }
-
-  return parts.join(" \u00B7 ");
-}
-
 export function mapOcmToStation(poi: OcmPoi): EvChargingStation {
   const providerAttribution = getOcmProviderAttribution(poi);
 
@@ -163,7 +129,6 @@ export function mapOcmToDetail(poi: OcmPoi): DataSourceDetail {
 export function mapOcmToResult(poi: OcmPoi): DataSourceResult {
   return {
     ...mapStationToResult(mapOcmToStation(poi)),
-    summary: buildSummary(poi),
     variant: getVariant(poi),
   };
 }

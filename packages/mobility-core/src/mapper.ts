@@ -230,7 +230,6 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   sections.push({
     title: T.section.availability,
     type: "table",
-    columns: ["", ""],
     rows,
     sectionIcon: "info",
   });
@@ -247,7 +246,6 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     sections.push({
       title: T.section.transit,
       type: "table",
-      columns: ["", ""],
       rows: transitRows,
       sectionIcon: "directions_bus",
     });
@@ -290,7 +288,6 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     sections.push({
       title: T.section.vehicleDetails,
       type: "table",
-      columns: ["", ""],
       rows: vtRows,
       sectionIcon: "directions_car",
       collapsed: true,
@@ -335,7 +332,6 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
       sections.push({
         title: T.section.book,
         type: "table",
-        columns: ["", ""],
         rows: linkRows,
         sectionIcon: "open_in_new",
         collapsed: true,
@@ -354,7 +350,6 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
       sections.push({
         title: T.section.apps,
         type: "table",
-        columns: ["", ""],
         rows: appRows,
         sectionIcon: "open_in_new",
         collapsed: true,
@@ -432,13 +427,16 @@ function vehicleVariant(vehicle: SharedMobilityVehicle): string {
   return "available";
 }
 
-function vehicleSummary(vehicle: SharedMobilityVehicle): I18nTokenLike | string {
-  // The summary template glues battery + range + (optional) text. The current
-  // catalog ships per-piece format tokens; assemble client-side by emitting
-  // the raw composed string when present. When only one piece exists, emit
-  // the corresponding token so the locale-aware unit is used.
+function vehicleSummary(vehicle: SharedMobilityVehicle): I18nTokenLike | undefined {
+  // The summary glues battery + range + (optional) text. Compound combos go
+  // through the consuming integration's `summary.batteryRange` template so the
+  // separator/unit are locale-correct; single-piece summaries use the per-unit
+  // `format.*` tokens.
   if (vehicle.batteryLevel !== undefined && vehicle.rangeMeters !== undefined) {
-    return `${vehicle.batteryLevel}% · ${(vehicle.rangeMeters / 1000).toFixed(1)} km`;
+    return t("summary.batteryRange", {
+      battery: vehicle.batteryLevel,
+      km: (vehicle.rangeMeters / 1000).toFixed(1),
+    });
   }
   if (vehicle.batteryLevel !== undefined) {
     return t("format.batteryPercent", { value: vehicle.batteryLevel });
@@ -446,7 +444,7 @@ function vehicleSummary(vehicle: SharedMobilityVehicle): I18nTokenLike | string 
   if (vehicle.rangeMeters !== undefined) {
     return t("format.distanceKm", { value: (vehicle.rangeMeters / 1000).toFixed(1) });
   }
-  return "";
+  return undefined;
 }
 
 function formFactorLabelFallback(formFactor: string): string {
@@ -507,7 +505,6 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
   sections.push({
     title: T.section.vehicleInfo,
     type: "table",
-    columns: ["", ""],
     rows,
     sectionIcon: "info",
   });
@@ -526,7 +523,6 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
       sections.push({
         title: T.section.book,
         type: "table",
-        columns: ["", ""],
         rows: linkRows,
         sectionIcon: "open_in_new",
         collapsed: true,

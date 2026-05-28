@@ -105,8 +105,7 @@ export interface DataSourceResult {
   kind?: "station" | "vehicle";
   variant: string;
   status?: string;
-  /** transitional, Task 4.1 tightens to I18nToken-only */
-  summary?: I18nToken | string;
+  summary?: I18nToken;
   operator?: string;
   branding?: DataSourceBranding;
   mapContext?: DataSourceMapContextSelection;
@@ -126,26 +125,40 @@ export interface PricingPlanEntry {
 }
 
 export interface DataSourceDetailSection {
-  /** transitional, Task 4.1 tightens to I18nToken-only */
-  title: I18nToken | string;
+  title: I18nToken;
   type: "table" | "list" | "text" | "image" | "embed" | "pricing";
-  /** transitional, Task 4.1 tightens to I18nToken-only */
-  columns?: (I18nToken | string)[];
+  columns?: I18nToken[];
   /**
-   * Row tuple `[label, ...values]`. Label is an i18n token (or transitional
-   * string). Values are `Translatable` — token, raw string, or number.
+   * Table rows. Two shapes are accepted:
    *
-   * transitional, Task 4.1 tightens label slot to I18nToken-only.
+   *  - `[label, value]` 2-tuples for the canonical key/value layout where
+   *    the left cell is a row label. The label is `I18nToken`-strict; the
+   *    value is `Translatable` (token, raw string, or number — the right
+   *    column legitimately mixes translated text with upstream pass-through:
+   *    operator addresses, prices, formatted numbers).
+   *  - Wider `Translatable[]` rows for true multi-column tables driven by
+   *    `columns` headers (e.g. EV connector tables). Each cell is a value;
+   *    the "label" semantics live in the column header rather than the row.
+   *
+   * The web renderer dispatches on `row.length === 2` to pick between
+   * label/value and multi-column rendering.
    */
-  rows?: (Translatable | number)[][];
-  /** transitional, Task 4.1 tightens to I18nToken-only */
+  rows?: [I18nToken, Translatable][] | Translatable[][];
+  /**
+   * User-visible list items. Tokens preferred for fixed vocabulary; raw
+   * `string` passthrough allowed for upstream-provided notes (operator
+   * descriptions, OSM addenda, quality warnings forwarded verbatim).
+   */
   items?: (I18nToken | string)[];
-  /** transitional, Task 4.1 tightens to I18nToken-only */
+  /**
+   * Text-section content. Token for fixed messages, raw `string` passthrough
+   * for upstream-provided narrative (operator descriptions, raw notes).
+   */
   content?: I18nToken | string;
   /** Image URL for type "image". Rendered as a safe <img> element. */
   imageUrl?: string;
   /** Alt text for image sections. */
-  imageAlt?: string;
+  imageAlt?: I18nToken;
   /** Link URL. For "image" sections, wraps the image in an anchor tag. */
   linkUrl?: string;
   /** Embed URL for type "embed". Rendered as a sandboxed iframe or video element. */

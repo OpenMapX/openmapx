@@ -71,7 +71,8 @@
   },
   "summary": {
     "available": "{count, plural, =0 {No bikes available} one {1 bike available} other {# bikes available}}",
-    "slots": "{count, plural, =0 {No empty slots} one {1 empty slot} other {# empty slots}}"
+    "slots": "{count, plural, =0 {No empty slots} one {1 empty slot} other {# empty slots}}",
+    "batteryRange": "{battery}% · {km} km"
   },
   "format": {
     "batteryPercent": "{value}%",

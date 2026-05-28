@@ -89,13 +89,14 @@ function mapWindyToRaw(wc: WindyWebcam): RawWebcam {
 }
 
 export function mapWindyToResult(raw: RawWebcam): DataSourceResult {
+  const categories = raw.categories?.join(", ");
   return {
     id: raw.id,
     name: raw.name,
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.categories?.join(", "),
+    summary: categories ? token("summary.categories", { categories }) : undefined,
   };
 }
 
@@ -143,7 +144,7 @@ export function mapWindyToDetail(raw: RawWebcam): DataSourceDetail {
       title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
-      imageAlt: raw.name,
+      imageAlt: token("imageAlt.webcam", { name: raw.name }),
       linkUrl: raw.detailUrl,
       sectionIcon: "videocam",
     });

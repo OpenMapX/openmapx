@@ -60,17 +60,19 @@ const DB_BAHNPARK_DURATION_TOKEN: Record<string, I18nTokenLike> = {
   "1monthReservation": token("tariff.dur1monthReserved"),
 };
 
-function buildTariffRows(
-  facility: DbBahnParkFacility,
-): [I18nTokenLike | string, string][] | undefined {
+function buildTariffRows(facility: DbBahnParkFacility): [I18nTokenLike, string][] | undefined {
   const prices = facility.tariff?.prices;
   if (!prices || prices.length === 0) return undefined;
 
-  const rows: [I18nTokenLike | string, string][] = [];
+  const rows: [I18nTokenLike, string][] = [];
   for (const p of prices) {
     if (p.price == null || !p.duration) continue;
     if (p.group?.groupName !== "standard") continue;
-    const label = DB_BAHNPARK_DURATION_TOKEN[p.duration] ?? p.duration;
+    // Known DB-BahnPark duration codes map to typed tokens; unknown codes
+    // fall back to a literal-template token so the raw upstream label is
+    // rendered verbatim without an English leak across the contract.
+    const label =
+      DB_BAHNPARK_DURATION_TOKEN[p.duration] ?? token("tariff.literal", { value: p.duration });
     rows.push([label, `€${p.price.toFixed(2)}`]);
   }
   return rows.length > 0 ? rows : undefined;

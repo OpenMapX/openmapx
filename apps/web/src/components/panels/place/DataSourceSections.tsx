@@ -188,7 +188,7 @@ function translateStructuredSection(
     items: section.items?.map((item) => resolveT(item)),
     content: section.content === undefined ? undefined : resolveT(section.content),
     imageUrl: section.imageUrl,
-    imageAlt: section.imageAlt,
+    imageAlt: section.imageAlt === undefined ? undefined : resolveT(section.imageAlt),
     linkUrl: section.linkUrl,
     embedUrl: section.embedUrl,
     embedType: section.embedType,

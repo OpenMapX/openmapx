@@ -92,7 +92,7 @@ export async function mapOsmToDetail(raw: RawWebcam): Promise<DataSourceDetail> 
         title: token("section.webcam"),
         type: "image",
         imageUrl: raw.thumbnailUrl,
-        imageAlt: raw.name,
+        imageAlt: token("imageAlt.webcam", { name: raw.name }),
         linkUrl: raw.thumbnailUrl,
         sectionIcon: "videocam",
       });

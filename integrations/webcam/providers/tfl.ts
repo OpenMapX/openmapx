@@ -77,7 +77,7 @@ export function mapTflToDetail(raw: RawWebcam): DataSourceDetail {
       title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
-      imageAlt: raw.name,
+      imageAlt: token("imageAlt.webcam", { name: raw.name }),
       sectionIcon: "videocam",
     });
   }

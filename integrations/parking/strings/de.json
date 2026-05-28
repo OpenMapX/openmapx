@@ -60,7 +60,8 @@
     "dur1monthReserved": "1 Monat (reserviert)",
     "durMinutes": "{count} Min.",
     "durHours": "{count, plural, =1 {1 Std.} other {# Std.}}",
-    "durDays": "{count, plural, =1 {1 Tag} other {# Tage}}"
+    "durDays": "{count, plural, =1 {1 Tag} other {# Tage}}",
+    "literal": "{value}"
   },
   "quality": {
     "realtimeStale": "Echtzeit-Verfügbarkeit ist älter als 30 Minuten.",

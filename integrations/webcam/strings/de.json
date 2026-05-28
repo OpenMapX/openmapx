@@ -34,7 +34,12 @@
   },
   "summary": {
     "direction": "Blickrichtung: {direction}",
-    "view": "Ansicht: {direction}"
+    "view": "Ansicht: {direction}",
+    "place": "{place}",
+    "categories": "{categories}"
+  },
+  "imageAlt": {
+    "webcam": "{name}"
   },
   "dataSources": [
     {

@@ -71,7 +71,8 @@
   },
   "summary": {
     "available": "{count, plural, =0 {Keine Fahrräder verfügbar} one {1 Fahrrad verfügbar} other {# Fahrräder verfügbar}}",
-    "slots": "{count, plural, =0 {Keine freien Stellplätze} one {1 freier Stellplatz} other {# freie Stellplätze}}"
+    "slots": "{count, plural, =0 {Keine freien Stellplätze} one {1 freier Stellplatz} other {# freie Stellplätze}}",
+    "batteryRange": "{battery} % · {km} km"
   },
   "format": {
     "batteryPercent": "{value} %",

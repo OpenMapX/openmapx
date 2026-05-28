@@ -347,19 +347,22 @@ describe("mapVehicleToResult", () => {
       expect(result.summary).toEqual({ $t: "format.distanceKm", values: { value: "12.0" } });
     });
 
-    it("joins battery and range with middle dot as a pass-through string", () => {
-      // When both are present the legacy joined format is preserved; tokens
-      // for each piece would require client-side composition which the
-      // single-token result card does not currently support.
+    it("emits the combined battery+range token when both are known", () => {
+      // Compound combos resolve against the consuming integration's
+      // `summary.batteryRange` template so the separator/unit are
+      // locale-correct — no English literal crosses the contract.
       const result = mapVehicleToResult(makeVehicle({ batteryLevel: 80, rangeMeters: 25000 }));
-      expect(result.summary).toBe("80% · 25.0 km");
+      expect(result.summary).toEqual({
+        $t: "summary.batteryRange",
+        values: { battery: 80, km: "25.0" },
+      });
     });
 
-    it("returns empty string when no battery or range", () => {
+    it("returns undefined summary when no battery or range", () => {
       const result = mapVehicleToResult(
         makeVehicle({ batteryLevel: undefined, rangeMeters: undefined }),
       );
-      expect(result.summary).toBe("");
+      expect(result.summary).toBeUndefined();
     });
   });
 });

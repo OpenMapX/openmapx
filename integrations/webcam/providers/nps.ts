@@ -116,13 +116,14 @@ async function fetchAllNps(): Promise<RawWebcam[]> {
 }
 
 export function mapNpsToResult(raw: RawWebcam): DataSourceResult {
+  const city = raw.location?.city;
   return {
     id: raw.id,
     name: raw.name,
     coordinates: raw.coordinates,
     source: raw.source,
     variant: raw.variant,
-    summary: raw.location?.city ?? undefined,
+    summary: city ? token("summary.place", { place: city }) : undefined,
   };
 }
 
@@ -149,7 +150,7 @@ export function mapNpsToDetail(raw: RawWebcam): DataSourceDetail {
       title: token("section.preview"),
       type: "image",
       imageUrl: raw.thumbnailUrl,
-      imageAlt: raw.name,
+      imageAlt: token("imageAlt.webcam", { name: raw.name }),
       linkUrl: raw.detailUrl,
       sectionIcon: "videocam",
     });
