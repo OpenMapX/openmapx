@@ -30,7 +30,7 @@ import { TEAL } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
 import { DataSourceNearbyTransit } from "./DataSourceNearbyTransit";
-import { useDataSourceI18nResolver } from "./useDataSourceI18nResolver.js";
+import { useDataSourceI18nResolver } from "./useDataSourceI18nResolver";
 
 /** Section header config per data source type. */
 const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {

@@ -1,5 +1,5 @@
 import { IntlMessageFormat } from "intl-messageformat";
-import type { I18nToken, LocaleStrings } from "./types.js";
+import type { I18nToken, LocaleStrings } from "./types";
 
 export interface ResolveOptions {
   /** Active locale (e.g. "en", "de"). */

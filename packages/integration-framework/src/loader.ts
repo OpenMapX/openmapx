@@ -1,4 +1,4 @@
-import type { LocaleStrings } from "../strings/index.js";
+import type { LocaleStrings } from "../strings/index";
 import type { CustomHealthCheckFn } from "./context";
 import type { IntegrationManifest } from "./manifest";
 

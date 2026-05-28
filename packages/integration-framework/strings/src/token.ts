@@ -1,6 +1,6 @@
 import deShared from "../locales/de.json" with { type: "json" };
 import enShared from "../locales/en.json" with { type: "json" };
-import type { I18nToken, LocaleStrings } from "./types.js";
+import type { I18nToken, LocaleStrings } from "./types";
 
 /**
  * The framework's shared-vocabulary catalog. Indexed by locale code; each
