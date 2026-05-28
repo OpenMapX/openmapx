@@ -1,6 +1,7 @@
 /**
  * Valhalla multi-modal routing service client (walking, cycling).
- * Default: public FOSSGIS Valhalla instance. Override with VALHALLA_URL env var.
+ * Default: Stadia Maps' hosted Valhalla (requires VALHALLA_API_KEY). Override
+ * the base URL with VALHALLA_URL; self-hosted Valhalla works key-less.
  */
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
@@ -19,11 +20,24 @@ import type {
 // already folds in `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` + legacy
 // `VALHALLA_URL` env aliases via the core config resolver) → hardcoded
 // fallback.
-let VALHALLA_URL = "https://valhalla1.openstreetmap.de";
+let VALHALLA_URL = "https://api.stadiamaps.com";
+let VALHALLA_API_KEY: string | undefined;
 
 /** Update the Valhalla base URL (called from setup() when service registry resolves it). */
 export function setValhallaUrl(url: string): void {
   VALHALLA_URL = url;
+}
+
+/** Set the API key appended to requests (e.g. Stadia Maps); undefined for key-less instances. */
+export function setValhallaApiKey(key: string | undefined): void {
+  VALHALLA_API_KEY = key;
+}
+
+/** Build a Valhalla endpoint URL, appending `api_key` when configured. */
+function endpoint(path: string): string {
+  const url = `${VALHALLA_URL}${path}`;
+  if (!VALHALLA_API_KEY) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(VALHALLA_API_KEY)}`;
 }
 
 const COSTING_MAP: Record<string, string> = {
@@ -257,7 +271,7 @@ export const valhallaService: RoutingProvider = {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
-    const res = await fetch(`${VALHALLA_URL}/route`, {
+    const res = await fetch(endpoint("/route"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -312,7 +326,7 @@ export const valhallaService: RoutingProvider = {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
-    const res = await fetch(`${VALHALLA_URL}/optimized_route`, {
+    const res = await fetch(endpoint("/optimized_route"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -371,7 +385,7 @@ export const valhallaService: RoutingProvider = {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
-    const res = await fetch(`${VALHALLA_URL}/trace_attributes`, {
+    const res = await fetch(endpoint("/trace_attributes"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

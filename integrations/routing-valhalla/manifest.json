@@ -21,33 +21,49 @@
       "endpoint": {
         "type": "string",
         "title": "Valhalla endpoint URL",
-        "description": "Base URL of the Valhalla server. Leave blank to use the public FOSSGIS instance or a self-hosted service resolved via the `valhalla` capability.",
+        "description": "Base URL of the Valhalla server. Defaults to Stadia Maps (https://api.stadiamaps.com), which needs an API key below. Leave blank to use the default, point at a self-hosted service resolved via the `valhalla` capability, or set another Valhalla-compatible host.",
         "format": "url"
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "Valhalla API key",
+        "description": "API key appended as `?api_key=` to requests. Required for Stadia Maps (free non-commercial tier); leave blank for key-less self-hosted instances. Also settable via the VALHALLA_API_KEY env var.",
+        "format": "password"
       }
     }
   },
-  "healthCheck": {
-    "type": "ping",
-    "urlTemplate": "${service:valhalla}/status",
-    "url": "https://valhalla1.openstreetmap.de/status"
-  },
+  "healthCheck": [
+    {
+      "name": "Self-hosted",
+      "type": "ping",
+      "urlTemplate": "${service:valhalla}/status"
+    },
+    {
+      "name": "Stadia Maps",
+      "type": "http",
+      "urlTemplate": "https://api.stadiamaps.com/geocoding/v1/search?text=test&size=1&api_key=${apiKey}",
+      "requiredConfigKeys": ["apiKey"]
+    }
+  ],
   "quality": "built-in",
   "category": "Routing",
   "dataSources": [
     {
       "sourceId": "valhalla",
-      "name": "Valhalla",
-      "url": "https://github.com/valhalla/valhalla",
-      "license": "MIT (software); fair-use demo server",
-      "licenseUrl": "https://github.com/valhalla/valhalla/blob/master/COPYING",
-      "attribution": "<a href=\"https://github.com/valhalla/valhalla\">Valhalla</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
-      "commercialUse": "yes",
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.fossgis.de/datenschutzerkl%C3%A4rung/",
+      "name": "Valhalla (Stadia Maps)",
+      "url": "https://stadiamaps.com/",
+      "license": "MIT (Valhalla routing engine); Stadia Maps",
+      "licenseUrl": "https://stadiamaps.com/terms-of-service/",
+      "attribution": "Routing © <a href=\"https://stadiamaps.com/\">Stadia Maps</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "notes": "Default Valhalla host. Free tier requires an API key (VALHALLA_API_KEY) and is limited to non-commercial / evaluation use; commercial use needs a paid Stadia plan. A self-hosted or other Valhalla-compatible endpoint can be set via VALHALLA_URL (no key).",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://stadiamaps.com/privacy/privacy-policy/",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": true,
+      "dpaUrl": "https://stadiamaps.com/legal/data-processing-addendum/"
     }
   ],
   "requires": [

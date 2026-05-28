@@ -4,14 +4,10 @@
  */
 
 import { encodePolyline } from "@openmapx/core";
-import { serviceUrl } from "./service-registry.js";
+import { valhallaEndpoint } from "../utils/valhalla-endpoint.js";
 
 interface HeightResponse {
   range_height: [number, number][]; // [cumulative_distance_m, elevation_m]
-}
-
-function getValhallaUrl(): string {
-  return serviceUrl("valhalla") ?? process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 }
 
 /** Simplify a coordinate array using Douglas-Peucker to reduce point count. */
@@ -63,8 +59,7 @@ export const elevationService = {
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
-      const valhallaUrl = getValhallaUrl();
-      const res = await fetch(`${valhallaUrl}/height`, {
+      const res = await fetch(valhallaEndpoint("/height"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

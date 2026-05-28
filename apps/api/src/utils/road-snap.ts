@@ -8,6 +8,7 @@
 
 import { USER_AGENT } from "@openmapx/core";
 import { serviceUrl } from "../services/service-registry.js";
+import { valhallaEndpoint } from "./valhalla-endpoint.js";
 
 const TIMEOUT_MS = 10_000;
 const MAX_WAYPOINTS_PER_REQUEST = 100;
@@ -19,10 +20,6 @@ interface MatchResult {
 
 function getOsrmUrl(): string {
   return serviceUrl("osrm") ?? process.env.OSRM_URL ?? "https://router.project-osrm.org";
-}
-
-function getValhallaUrl(): string {
-  return serviceUrl("valhalla") ?? process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
 }
 
 /**
@@ -72,9 +69,8 @@ async function valhallaRoute(coords: [number, number][]): Promise<MatchResult | 
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const valhallaUrl = getValhallaUrl();
   try {
-    const res = await fetch(`${valhallaUrl}/route`, {
+    const res = await fetch(valhallaEndpoint("/route"), {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
       body,

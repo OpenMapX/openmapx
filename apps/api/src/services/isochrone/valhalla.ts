@@ -1,4 +1,4 @@
-import { serviceUrl } from "../service-registry.js";
+import { valhallaEndpoint } from "../../utils/valhalla-endpoint.js";
 import type {
   IsochroneContour,
   IsochroneGeometry,
@@ -35,10 +35,6 @@ function computeGeneralize(maxMinutes: number): number {
   return 200;
 }
 
-function getValhallaUrl(): string {
-  return serviceUrl("valhalla") ?? process.env.VALHALLA_URL ?? "https://valhalla1.openstreetmap.de";
-}
-
 export const valhallaIsochroneProvider: IsochroneProvider = {
   async isochrone(
     origin: [number, number],
@@ -67,10 +63,9 @@ export const valhallaIsochroneProvider: IsochroneProvider = {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
-    const valhallaUrl = getValhallaUrl();
 
     try {
-      const res = await fetch(`${valhallaUrl}/isochrone`, {
+      const res = await fetch(valhallaEndpoint("/isochrone"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

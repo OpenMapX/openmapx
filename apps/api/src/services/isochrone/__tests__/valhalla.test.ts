@@ -265,6 +265,21 @@ describe("valhallaIsochroneProvider", () => {
       expect((options.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
     });
 
+    it("appends api_key to the URL when VALHALLA_API_KEY is set", async () => {
+      const prev = process.env.VALHALLA_API_KEY;
+      process.env.VALHALLA_API_KEY = "test-stadia-key";
+      try {
+        mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
+        const { valhallaIsochroneProvider } = await import("../valhalla.js");
+        await valhallaIsochroneProvider.isochrone(origin, "driving", [10]);
+        const url = mockFetch.mock.calls[0][0] as string;
+        expect(url).toContain("/isochrone?api_key=test-stadia-key");
+      } finally {
+        if (prev === undefined) delete process.env.VALHALLA_API_KEY;
+        else process.env.VALHALLA_API_KEY = prev;
+      }
+    });
+
     it("includes polygons=true and denoise=1 in request body", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeIsochroneResponse([makePolygonFeature(10)])));
 

@@ -1502,36 +1502,36 @@ No external API calls.
 
 ## routing-valhalla
 
-### Valhalla Route API — `https://valhalla1.openstreetmap.de/route`
+### Valhalla Route API — `https://api.stadiamaps.com/route`
 - Data sent: Route waypoint coordinates, travel mode, avoidance options (highways, ferry), unit preference, language
 - Data received: Trip with polyline6-encoded geometry, localized turn-by-turn instructions, distance/duration, elevation profile (30m intervals). Up to 3 alternatives.
 - Purpose: Multi-modal routing (walking, cycling, driving) with elevation profiles and localized instructions
-- License: MIT (software); fair-use demo server policy
-- URL: https://github.com/valhalla/valhalla/blob/master/COPYING
-- Commercial use: Yes (MIT software); demo server has fair-use expectations similar to OSRM
-- Usage limits: Demo server: ~1 req/user/sec, ~100 req/sec total; intended for testing, not production
-- Attribution: Yes — MIT copyright notice (Valhalla contributors, Mapillary AB, Mapzen) + OSM ODbL attribution
-- Privacy: https://www.fossgis.de/datenschutzerkl%C3%A4rung/
-- Country: Germany (FOSSGIS e.V.; same operator as OSRM demo)
+- License: MIT (Valhalla routing engine); Stadia Maps
+- URL: https://stadiamaps.com/terms-of-service/
+- Commercial use: Conditional
+- Usage limits: API key required; per-plan request limits (https://docs.stadiamaps.com/limits/)
+- Attribution: Yes — Routing © Stadia Maps, © OpenStreetMap contributors
+- Privacy: https://stadiamaps.com/privacy/privacy-policy/
+- Country: United States (Stadia Maps, Inc., Delaware; EU endpoints available at api-eu.stadiamaps.com)
 - End-user data exposure: Server-only
-- DPA: Not available (FOSSGIS e.V. demo server, no DPA offered)
-- Coverage: Global (default public instance)
-- Env vars: `VALHALLA_URL` — optional (default: `https://valhalla1.openstreetmap.de`)
+- DPA: Available — https://stadiamaps.com/legal/data-processing-addendum/
+- Coverage: Global (Stadia-hosted Valhalla; or self-hosted via VALHALLA_URL)
+- Env vars: `VALHALLA_URL` — optional (default: `https://api.stadiamaps.com`); `VALHALLA_API_KEY` — required for the Stadia default (free non-commercial tier), omit for key-less self-hosted instances
 - Self-hostable: Yes — Docker image (<https://github.com/nilsnolde/docker-valhalla>); already in project Docker Compose
 
-### Valhalla Optimized Route API — `https://valhalla1.openstreetmap.de/optimized_route`
+### Valhalla Optimized Route API — `https://api.stadiamaps.com/optimized_route`
 - Data sent: Route waypoint coordinates, travel mode, avoidance options (highways, ferry), unit preference, language
 - Data received: Same route structure plus original_index per location giving optimized visit order
 - Purpose: Waypoint optimization for walking/cycling/driving — reorders intermediate stops
-- License: MIT (software); fair-use demo server policy
-- URL: https://github.com/valhalla/valhalla/blob/master/COPYING
-- Commercial use: Yes (MIT)
-- Usage limits: Same demo server fair-use as above
-- Attribution: MIT copyright notice + OSM ODbL
-- Privacy: https://www.fossgis.de/datenschutzerkl%C3%A4rung/
-- Country: Germany (FOSSGIS e.V.)
+- License: MIT (Valhalla routing engine); Stadia Maps
+- URL: https://stadiamaps.com/terms-of-service/
+- Commercial use: Conditional — paid Stadia plan required for commercial use
+- Usage limits: API key required; per-plan request limits (https://docs.stadiamaps.com/limits/)
+- Attribution: Routing © Stadia Maps, © OpenStreetMap contributors
+- Privacy: https://stadiamaps.com/privacy/privacy-policy/
+- Country: United States (Stadia Maps, Inc., Delaware)
 - End-user data exposure: Server-only
-- DPA: Not available
+- DPA: Available — https://stadiamaps.com/legal/data-processing-addendum/
 - Coverage: Global
 - Env vars: `VALHALLA_URL` — optional
 - Self-hostable: Yes
@@ -1684,23 +1684,23 @@ No external API calls.
 
 ## tool-travel-time
 
-### Valhalla Isochrone API — `https://valhalla1.openstreetmap.de/isochrone`
+### Valhalla Isochrone API — `https://api.stadiamaps.com/isochrone`
 
-- License: MIT (software); fair-use demo server
-- URL: https://github.com/valhalla/valhalla/blob/master/COPYING
-- Commercial use: Yes (MIT software); demo server has fair-use expectations
-- Usage limits: Demo server: ~1 req/user/sec, ~100 req/sec total; intended for testing, not production
-- Attribution: Yes — MIT copyright notice (Valhalla contributors, Mapillary AB, Mapzen) + OSM ODbL attribution
-- Privacy: https://www.fossgis.de/datenschutzerkl%C3%A4rung/
-- Country: Germany (FOSSGIS e.V.; operates the demo server)
-- Privacy other: Route requests saved in server logs; IP addresses collected but stated not attributable to individuals; no cookies; GDPR Art. 6(1)(f)
+- License: MIT (Valhalla routing engine); Stadia Maps
+- URL: https://stadiamaps.com/terms-of-service/
+- Commercial use: Conditional
+- Usage limits: API key required; per-plan request limits (https://docs.stadiamaps.com/limits/)
+- Attribution: Yes — Routing © Stadia Maps, © OpenStreetMap contributors
+- Privacy: https://stadiamaps.com/privacy/privacy-policy/
+- Country: United States (Stadia Maps, Inc., Delaware; EU endpoints at api-eu.stadiamaps.com)
+- Privacy other: Stadia states it does not sell data or use tracking cookies and does not store location tied to individuals; EU data-residency endpoints + Standard Contractual Clauses available; GDPR Art. 6(1)(f)
 - Data sent: Center coordinates (latitude, longitude), travel mode, contour time thresholds in minutes
 - Data received: GeoJSON isochrone polygons showing reachable area within specified time/distance thresholds
 - Purpose: Visualize travel time reachability from a point on the map (isochrone polygons)
 - End-user data exposure: Server-only — isochrone requests go through BFF /api/isochrone endpoint
-- DPA: Not available (FOSSGIS e.V. demo server, no DPA offered)
-- Coverage: Global (default public instance)
-- Env vars: `VALHALLA_URL` — optional (default: `https://valhalla1.openstreetmap.de`)
+- DPA: Available — https://stadiamaps.com/legal/data-processing-addendum/
+- Coverage: Global (Stadia-hosted Valhalla; or self-hosted via VALHALLA_URL)
+- Env vars: `VALHALLA_URL` — optional (default: `https://api.stadiamaps.com`); `VALHALLA_API_KEY` — required for the Stadia default (free non-commercial tier), omit for key-less self-hosted instances
 - Self-hostable: Yes — Docker image (<https://github.com/nilsnolde/docker-valhalla>); already in project Docker Compose
 
 ## transit-bvg
