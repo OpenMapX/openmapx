@@ -21,6 +21,7 @@ export function SearchInAreaChip() {
   const t = useTranslations("search");
   const {
     activeCategory,
+    autoRefresh,
     mapMoved: categoryMoved,
     setSearchBbox: setCategorySearchBbox,
     setMapMoved: setCategoryMapMoved,
@@ -42,7 +43,7 @@ export function SearchInAreaChip() {
   const floatingCardOpen = activeCategory !== null && selectedPlace !== null;
 
   // Show when either a category or data source is active and map has moved
-  const showForCategory = activeCategory !== null && categoryMoved;
+  const showForCategory = activeCategory !== null && categoryMoved && !autoRefresh;
   const showForDataSource = activeSource !== null && dsMapMoved && viewportZoom >= activeMinZoom;
 
   if (!showForCategory && !showForDataSource) return null;

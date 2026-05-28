@@ -29,6 +29,7 @@ interface CategorySearchState {
   mode: "category" | "text";
   textQuery: string;
   travelTime: TravelTimeConfig;
+  autoRefresh: boolean;
   setActiveCategory: (id: CategoryId | null) => void;
   setSearchBbox: (bbox: BoundingBox) => void;
   setMapMoved: (moved: boolean) => void;
@@ -38,6 +39,7 @@ interface CategorySearchState {
   closeExploreBox: () => void;
   setExploreText: (query: string) => void;
   setTravelTime: (patch: Partial<TravelTimeConfig>) => void;
+  setAutoRefresh: (autoRefresh: boolean) => void;
   clearCategory: () => void;
 }
 
@@ -51,6 +53,7 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
   mode: "category",
   textQuery: "",
   travelTime: DEFAULT_TRAVEL_TIME,
+  autoRefresh: false,
   setActiveCategory: (activeCategory) => set({ activeCategory, mode: "category", textQuery: "" }),
   setSearchBbox: (searchBbox) => set({ searchBbox }),
   setMapMoved: (mapMoved) => set({ mapMoved }),
@@ -60,6 +63,7 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
   closeExploreBox: () => set({ exploreBoxOpen: false }),
   setExploreText: (textQuery) => set({ mode: "text", textQuery, activeCategory: null }),
   setTravelTime: (patch) => set((s) => ({ travelTime: { ...s.travelTime, ...patch } })),
+  setAutoRefresh: (autoRefresh) => set({ autoRefresh }),
   clearCategory: () => {
     useOpeningHoursStore.getState().reset();
     set({
@@ -72,6 +76,7 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       mode: "category",
       textQuery: "",
       travelTime: DEFAULT_TRAVEL_TIME,
+      autoRefresh: false,
     });
   },
 }));

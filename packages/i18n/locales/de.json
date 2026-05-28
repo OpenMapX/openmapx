@@ -53,7 +53,8 @@
     "searchFreeText": "„{query}“ in der Nähe suchen",
     "travelTime": "Reisezeit",
     "onlyWithinReach": "Nur erreichbarer Bereich",
-    "minutesShort": "{minutes} Min."
+    "minutesShort": "{minutes} Min.",
+    "updateOnMapMove": "Ergebnisse beim Bewegen der Karte aktualisieren"
   },
   "map": {
     "myLocation": "Mein Standort",

@@ -53,7 +53,8 @@
     "searchFreeText": "Search \"{query}\" nearby",
     "travelTime": "Travel time",
     "onlyWithinReach": "Only within reach",
-    "minutesShort": "{minutes} min"
+    "minutesShort": "{minutes} min",
+    "updateOnMapMove": "Update results when moving map"
   },
   "map": {
     "myLocation": "My location",

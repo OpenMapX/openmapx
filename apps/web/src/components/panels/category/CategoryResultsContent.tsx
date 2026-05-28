@@ -5,7 +5,9 @@ import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { CategoryPlace } from "@openmapx/core";
@@ -203,6 +205,8 @@ export function CategoryResultsContent() {
     setHoveredCategoryPlaceId,
   } = useCategorySearchStore();
   const anchor = useCategorySearchStore((s) => s.anchor);
+  const autoRefresh = useCategorySearchStore((s) => s.autoRefresh);
+  const setAutoRefresh = useCategorySearchStore((s) => s.setAutoRefresh);
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
 
@@ -242,17 +246,31 @@ export function CategoryResultsContent() {
     }
   }, [activeCategory, setMapMoved]);
 
-  // Listen for map movement to show "Search in this area"
+  // Map movement: auto-refresh the search when enabled, otherwise show the
+  // manual "Search this area" chip.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !activeCategory) return;
 
-    const onMoveEnd = () => setMapMoved(true);
+    const onMoveEnd = () => {
+      if (autoRefresh) {
+        const b = map.getBounds();
+        setSearchBbox({
+          west: b.getWest(),
+          south: b.getSouth(),
+          east: b.getEast(),
+          north: b.getNorth(),
+        });
+        setMapMoved(false);
+      } else {
+        setMapMoved(true);
+      }
+    };
     map.on("moveend", onMoveEnd);
     return () => {
       map.off("moveend", onMoveEnd);
     };
-  }, [mapRef, mapReady, activeCategory, setMapMoved]);
+  }, [mapRef, mapReady, activeCategory, autoRefresh, setSearchBbox, setMapMoved]);
 
   const handleSelectPlace = (place: CategoryPlace) => {
     flyTo(place.coordinates, 17);
@@ -372,6 +390,29 @@ export function CategoryResultsContent() {
             </Box>
           ))}
         </>
+      )}
+      {activeCategory && (
+        <Box
+          sx={{
+            position: "sticky",
+            bottom: 0,
+            px: 2,
+            py: 0.5,
+            bgcolor: "background.paper",
+            borderTop: "1px solid var(--omx-border)",
+          }}
+        >
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+              />
+            }
+            label={<Typography variant="body2">{ts("updateOnMapMove")}</Typography>}
+          />
+        </Box>
       )}
     </Box>
   );

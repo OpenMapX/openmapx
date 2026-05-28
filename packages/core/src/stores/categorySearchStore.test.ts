@@ -73,4 +73,16 @@ describe("categorySearchStore explore state", () => {
     const tt = useCategorySearchStore.getState().travelTime;
     expect(tt).toEqual({ enabled: false, mode: "walking", minutes: 15, onlyWithinReach: false });
   });
+
+  it("setAutoRefresh toggles autoRefresh", () => {
+    expect(useCategorySearchStore.getState().autoRefresh).toBe(false);
+    useCategorySearchStore.getState().setAutoRefresh(true);
+    expect(useCategorySearchStore.getState().autoRefresh).toBe(true);
+  });
+
+  it("clearCategory resets autoRefresh to false", () => {
+    useCategorySearchStore.getState().setAutoRefresh(true);
+    useCategorySearchStore.getState().clearCategory();
+    expect(useCategorySearchStore.getState().autoRefresh).toBe(false);
+  });
 });
