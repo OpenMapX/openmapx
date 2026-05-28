@@ -141,7 +141,12 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
   }
 
   const infoRows: [I18nToken, Translatable][] = [];
-  infoRows.push([sharedT.row.type, PARKING_TYPE_TOKEN[facility.parkingType]]);
+  // Skip the type row when the upstream feed doesn't classify the facility
+  // (e.g. NRW Mobidrom records with type "OTHER"/null and no keyword in the
+  // name) — a bare "Unknown" is noise, and the section self-hides when empty.
+  if (facility.parkingType !== "unknown") {
+    infoRows.push([sharedT.row.type, PARKING_TYPE_TOKEN[facility.parkingType]]);
+  }
   if (facility.capacity) {
     infoRows.push([sharedT.row.capacity, `${facility.capacity}`]);
   }

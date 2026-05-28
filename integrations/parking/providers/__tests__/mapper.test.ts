@@ -121,6 +121,29 @@ describe("parking mapper", () => {
     }
   });
 
+  it("omits the type row (and an otherwise-empty facility section) when type is unknown", () => {
+    const detail = mapParkingToDetail(makeFacility({ parkingType: "unknown" }));
+    const facilitySection = detail.sections.find(
+      (s) => isI18nToken(s.title) && s.title.$t === "section.facility",
+    );
+    // The facility had no other structured fields, so the section self-hides
+    // rather than rendering a lone "Type: Unknown" row.
+    expect(facilitySection).toBeUndefined();
+  });
+
+  it("keeps the facility section but drops the type row when type is unknown but other fields exist", () => {
+    const detail = mapParkingToDetail(makeFacility({ parkingType: "unknown", capacity: 80 }));
+    const facilitySection = detail.sections.find(
+      (s) => isI18nToken(s.title) && s.title.$t === "section.facility",
+    );
+    expect(facilitySection).toBeDefined();
+    const labels = (facilitySection?.rows ?? []).map(([label]) =>
+      isI18nToken(label) ? label.$t : label,
+    );
+    expect(labels).not.toContain("shared.row.type");
+    expect(labels).toContain("shared.row.capacity");
+  });
+
   it("emits I18nToken for summary on result cards", () => {
     const facility: ParkingFacility = {
       id: "test:1",
