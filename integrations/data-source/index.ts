@@ -86,8 +86,11 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       reply.header("Cache-Control", `public, max-age=${Math.min(detailTtl, 300)}`);
+      // Stamp the producing provider id so the client resolves this detail's
+      // I18nTokens against the right integration catalog. Done on the way out
+      // (not inside the cached producer) so cached entries are stamped too.
       reply.send({
-        data: envelope.data,
+        data: { ...envelope.data, providerId: provider.id },
         attributions: envelope.attributions,
         freshness: envelope.freshness,
       });

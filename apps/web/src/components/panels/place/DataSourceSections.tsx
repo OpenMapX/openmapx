@@ -208,12 +208,14 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
   const tc = useTranslations("common");
   const registry = useIntegrationRegistry();
 
-  // Pick the data-source integration whose dataSources cover the most of
-  // detail.sources. Several integrations declare "osm" as a sourceId, so a
-  // first-match lookup would attribute a parking detail (sources include
-  // apag + nrw-mobidrom-parking + osm) to ev-charging just because that's
-  // the first integration whose dataSources mention "osm".
-  const meta = pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
+  // Resolve the producing integration. The host stamps `providerId`, which is
+  // authoritative; fall back to the source-coverage heuristic only for details
+  // that predate the stamp or come from outside the data-source orchestrator.
+  // The heuristic ties when integrations share a generic sourceId like "osm"
+  // (parking, ev-charging, etc.), so it must not override a known providerId.
+  const meta =
+    (detail.providerId ? registry.get(detail.providerId) : undefined) ??
+    pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
   const html = meta?.dataSources ? buildSourceAttribution(meta.dataSources, detail.sources) : "";
   const detailAttributions = detail.attributions ?? [];
 
@@ -298,7 +300,12 @@ export function DataSourceSections({ detail, domain }: Props) {
   const t = useTranslations("dataSources");
   const registry = useIntegrationRegistry();
   const meta = pickIntegrationForSources(registry.getByDomain("data-source"), detail.sources);
-  const resolveT = useDataSourceI18nResolver(meta?.id ?? domain);
+  // Scope token resolution to the integration that produced the detail. The
+  // host stamps `providerId`; fall back to `domain` (this panel's owning
+  // integration) before `meta` — `meta` is an attribution heuristic that ties
+  // when sources share a generic prefix (e.g. "osm") and can pick an unrelated
+  // integration, leaking raw token keys like `value.undergroundGarage`.
+  const resolveT = useDataSourceI18nResolver(detail.providerId ?? domain ?? meta?.id);
   const header = resolveSourceHeader(detail, domain);
   const structuredSections = detail.sections.map((section) =>
     translateStructuredSection(section, resolveT),

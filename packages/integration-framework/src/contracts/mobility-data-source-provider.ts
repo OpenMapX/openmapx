@@ -213,6 +213,15 @@ export interface OsmIdentity {
 export interface DataSourceDetail {
   id: string;
   sources: string[];
+  /**
+   * Id of the data-source provider that produced this detail (e.g. "parking",
+   * "ev-charging"). Stamped by the host's data-source route so the client can
+   * resolve this detail's `I18nToken`s against the correct integration string
+   * catalog. `sources` is unreliable for this — it lists upstream feeds (often
+   * a generic "osm") that several integrations share, so picking the catalog
+   * by source coverage ties and selects the wrong integration.
+   */
+  providerId?: string;
   name: string;
   coordinates: LngLat;
   /** Identity used by the place resolver to gate OSM snapping. See {@link OsmIdentity}. */
