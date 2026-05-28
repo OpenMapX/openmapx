@@ -42,7 +42,7 @@ export function SavedPlacesContent() {
         onChange={(_, v: number) => setActiveTab(v === 0 ? "lists" : "labeled")}
         sx={{
           minHeight: 48,
-          "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },
+          "& .MuiTabs-list": { justifyContent: "space-evenly" },
           "& .MuiTab-root": {
             textTransform: "none",
             fontSize: 14,

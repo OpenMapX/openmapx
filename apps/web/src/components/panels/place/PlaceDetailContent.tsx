@@ -319,7 +319,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           ...theme.applyStyles("dark", { bgcolor: "background.default" }),
           zIndex: 1,
           minHeight: 48,
-          "& .MuiTabs-flexContainer": { justifyContent: "space-evenly" },
+          "& .MuiTabs-list": { justifyContent: "space-evenly" },
           "& .MuiTab-root": {
             textTransform: "none",
             fontSize: 14,
