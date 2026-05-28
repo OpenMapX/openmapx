@@ -14,12 +14,20 @@ export interface TravelTimeState {
   origin: LngLat | null;
   mode: IsochroneTravelMode;
   selectedMinutes: number[];
+  /** Anchored mode (e.g. Explore): origin is seeded to a place, so the layer
+   * skips click-to-place and the toolbar shows the "only within reach" filter. */
+  anchored: boolean;
+  /** Only meaningful in anchored mode — soft-filters consumer results to the contour. */
+  onlyWithinReach: boolean;
 
   activate: () => void;
+  activateAnchored: (origin: LngLat) => void;
   deactivate: () => void;
   setOrigin: (lngLat: LngLat | null) => void;
   setMode: (mode: IsochroneTravelMode) => void;
   toggleMinutes: (minutes: number) => void;
+  setAnchored: (anchored: boolean) => void;
+  setOnlyWithinReach: (onlyWithinReach: boolean) => void;
 }
 
 export const useTravelTimeStore = create<TravelTimeState>((set) => ({
@@ -27,12 +35,35 @@ export const useTravelTimeStore = create<TravelTimeState>((set) => ({
   origin: null,
   mode: "driving",
   selectedMinutes: [15],
+  anchored: false,
+  onlyWithinReach: false,
 
-  activate: () => set({ isActive: true, origin: null, selectedMinutes: [15] }),
+  activate: () =>
+    set({
+      isActive: true,
+      origin: null,
+      selectedMinutes: [15],
+      anchored: false,
+      onlyWithinReach: false,
+    }),
 
-  deactivate: () => set({ isActive: false, origin: null, selectedMinutes: [] }),
+  activateAnchored: (origin) =>
+    set({ isActive: true, origin, selectedMinutes: [15], anchored: true, onlyWithinReach: false }),
+
+  deactivate: () =>
+    set({
+      isActive: false,
+      origin: null,
+      selectedMinutes: [],
+      anchored: false,
+      onlyWithinReach: false,
+    }),
 
   setOrigin: (origin) => set({ origin }),
+
+  setAnchored: (anchored) => set({ anchored }),
+
+  setOnlyWithinReach: (onlyWithinReach) => set({ onlyWithinReach }),
 
   setMode: (mode) =>
     set((s) => {

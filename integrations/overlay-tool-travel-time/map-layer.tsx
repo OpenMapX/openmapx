@@ -37,6 +37,7 @@ export function TravelTimeLayer() {
   const origin = useTravelTimeStore((s) => s.origin);
   const mode = useTravelTimeStore((s) => s.mode);
   const selectedMinutes = useTravelTimeStore((s) => s.selectedMinutes);
+  const anchored = useTravelTimeStore((s) => s.anchored);
 
   const draggingRef = useRef(false);
 
@@ -195,11 +196,12 @@ export function TravelTimeLayer() {
     });
   }, [mapRef, mapReady, styleVersion, isActive, origin, mode]);
 
-  // Click handler to set origin
+  // Click handler to set origin — disabled in anchored mode (e.g. Explore), where
+  // the origin is the searched place and a global click would hijack marker clicks.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
-    if (!map || !mapReady || !isActive) return;
+    if (!map || !mapReady || !isActive || anchored) return;
 
     const onClick = (e: MapMouseEvent) => {
       const lngLat: LngLat = [e.lngLat.lng, e.lngLat.lat];
@@ -210,7 +212,7 @@ export function TravelTimeLayer() {
     return () => {
       map.off("click", onClick);
     };
-  }, [mapRef, mapReady, styleVersion, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive, anchored]);
 
   // Origin marker drag
   useEffect(() => {
@@ -232,7 +234,7 @@ export function TravelTimeLayer() {
       if (!draggingRef.current) {
         const features = map.queryRenderedFeatures(e.point, { layers: [ORIGIN_LAYER] });
         map.getCanvas().style.cursor =
-          features.length > 0 ? "pointer" : isActive ? "crosshair" : "";
+          features.length > 0 ? "pointer" : isActive && !anchored ? "crosshair" : "";
         return;
       }
       const lngLat: LngLat = [e.lngLat.lng, e.lngLat.lat];
@@ -242,7 +244,7 @@ export function TravelTimeLayer() {
     const onMouseUp = () => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
-      map.getCanvas().style.cursor = "crosshair";
+      map.getCanvas().style.cursor = anchored ? "" : "crosshair";
       map.dragPan.enable();
     };
 
@@ -259,14 +261,14 @@ export function TravelTimeLayer() {
         draggingRef.current = false;
       }
     };
-  }, [mapRef, mapReady, styleVersion, isActive]);
+  }, [mapRef, mapReady, styleVersion, isActive, anchored]);
 
-  // Cursor management
+  // Cursor management — crosshair only when click-to-place is available (not anchored).
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    if (isActive) {
+    if (isActive && !anchored) {
       map.getCanvas().style.cursor = "crosshair";
     } else {
       map.getCanvas().style.cursor = "";
@@ -275,7 +277,7 @@ export function TravelTimeLayer() {
     return () => {
       map.getCanvas().style.cursor = "";
     };
-  }, [mapRef, isActive]);
+  }, [mapRef, isActive, anchored]);
 
   // Keyboard: Escape to deactivate
   useEffect(() => {

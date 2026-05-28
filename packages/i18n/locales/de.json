@@ -1322,6 +1322,7 @@
     "myLocation": "Meinen Standort verwenden",
     "clickToPlace": "Klicke auf die Karte, um den Startpunkt zu setzen",
     "dragToMove": "Marker ziehen zum Verschieben",
-    "close": "Reisezeit schließen"
+    "close": "Reisezeit schließen",
+    "onlyWithinReach": "Nur erreichbarer Bereich"
   }
 }

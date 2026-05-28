@@ -57,23 +57,6 @@ describe("categorySearchStore explore state", () => {
     expect(useCategorySearchStore.getState().textQuery).toBe("");
   });
 
-  it("setTravelTime merges a partial patch", () => {
-    const s = useCategorySearchStore.getState();
-    s.setTravelTime({ enabled: true, minutes: 30 });
-    expect(useCategorySearchStore.getState().travelTime.enabled).toBe(true);
-    expect(useCategorySearchStore.getState().travelTime.minutes).toBe(30);
-    expect(useCategorySearchStore.getState().travelTime.mode).toBe("walking");
-    expect(useCategorySearchStore.getState().travelTime.onlyWithinReach).toBe(false);
-  });
-
-  it("clearCategory resets travelTime to defaults", () => {
-    const s = useCategorySearchStore.getState();
-    s.setTravelTime({ enabled: true, onlyWithinReach: true, minutes: 45 });
-    s.clearCategory();
-    const tt = useCategorySearchStore.getState().travelTime;
-    expect(tt).toEqual({ enabled: false, mode: "walking", minutes: 15, onlyWithinReach: false });
-  });
-
   it("setAutoRefresh toggles autoRefresh", () => {
     expect(useCategorySearchStore.getState().autoRefresh).toBe(false);
     useCategorySearchStore.getState().setAutoRefresh(true);

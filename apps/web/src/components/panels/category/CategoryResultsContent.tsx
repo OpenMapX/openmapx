@@ -5,10 +5,10 @@ import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
+import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import type { CategoryPlace } from "@openmapx/core";
 import {
@@ -292,7 +292,31 @@ export function CategoryResultsContent() {
 
   return (
     <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}>
-      {anchor && <ExploreTravelTimeControl />}
+      {(anchor || activeCategory) && (
+        <Box
+          sx={{
+            px: 2,
+            py: 0.5,
+            borderBottom: "1px solid var(--omx-border)",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {anchor && <ExploreTravelTimeControl />}
+          {activeCategory && (
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                />
+              }
+              label={<Typography variant="body2">{ts("updateOnMapMove")}</Typography>}
+            />
+          )}
+        </Box>
+      )}
       {(isTransitCategory ? transitLoading : isLoading) && (
         <Box sx={{ px: 2, py: 2 }}>
           {[0, 1, 2, 3, 4].map((i) => (
@@ -394,29 +418,6 @@ export function CategoryResultsContent() {
             </Box>
           ))}
         </>
-      )}
-      {activeCategory && (
-        <Box
-          sx={{
-            position: "sticky",
-            bottom: 0,
-            px: 2,
-            py: 0.5,
-            bgcolor: "background.paper",
-            borderTop: "1px solid var(--omx-border)",
-          }}
-        >
-          <FormControlLabel
-            control={
-              <Checkbox
-                size="small"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />
-            }
-            label={<Typography variant="body2">{ts("updateOnMapMove")}</Typography>}
-          />
-        </Box>
       )}
     </Box>
   );

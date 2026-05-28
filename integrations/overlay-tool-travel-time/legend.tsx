@@ -9,8 +9,10 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
+import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
@@ -33,9 +35,12 @@ export function TravelTimeToolbar() {
   const origin = useTravelTimeStore((s) => s.origin);
   const mode = useTravelTimeStore((s) => s.mode);
   const selectedMinutes = useTravelTimeStore((s) => s.selectedMinutes);
+  const anchored = useTravelTimeStore((s) => s.anchored);
+  const onlyWithinReach = useTravelTimeStore((s) => s.onlyWithinReach);
   const setMode = useTravelTimeStore((s) => s.setMode);
   const toggleMinutes = useTravelTimeStore((s) => s.toggleMinutes);
   const setOrigin = useTravelTimeStore((s) => s.setOrigin);
+  const setOnlyWithinReach = useTravelTimeStore((s) => s.setOnlyWithinReach);
   const deactivate = useTravelTimeStore((s) => s.deactivate);
 
   const { isFetching } = useIsochrone({
@@ -147,6 +152,23 @@ export function TravelTimeToolbar() {
           );
         })}
       </Box>
+
+      {anchored && (
+        <>
+          <Divider />
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={onlyWithinReach}
+                onChange={(e) => setOnlyWithinReach(e.target.checked)}
+              />
+            }
+            label={<Typography sx={{ fontSize: 12 }}>{t("onlyWithinReach")}</Typography>}
+            sx={{ m: 0, alignSelf: "flex-start" }}
+          />
+        </>
+      )}
     </Paper>
   );
 }

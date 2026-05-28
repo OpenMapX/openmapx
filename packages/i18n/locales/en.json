@@ -1322,6 +1322,7 @@
     "myLocation": "Use my location",
     "clickToPlace": "Click on the map to set origin",
     "dragToMove": "Drag the marker to move",
-    "close": "Close travel time"
+    "close": "Close travel time",
+    "onlyWithinReach": "Only within reach"
   }
 }
