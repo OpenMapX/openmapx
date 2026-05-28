@@ -55,7 +55,10 @@ function lookupKey(catalog: unknown, key: string): string | undefined {
     if (typeof cur !== "object" || cur === null) return undefined;
     cur = (cur as Record<string, unknown>)[part];
   }
-  return typeof cur === "string" ? cur : undefined;
+  // Treat an empty string as a missing entry so resolution continues down the
+  // fallback chain (active locale → fallback locale → framework → bare key)
+  // rather than rendering a blank label.
+  return typeof cur === "string" && cur !== "" ? cur : undefined;
 }
 
 function format(

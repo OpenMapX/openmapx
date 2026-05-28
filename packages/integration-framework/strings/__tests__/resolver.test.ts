@@ -103,4 +103,16 @@ describe("resolveToken", () => {
     );
     expect(out).toBe("{count, plural, one {x}");
   });
+
+  it("treats an empty-string catalog value as missing and continues the fallback chain", () => {
+    const integration = {
+      en: { row: { freeSpaces: "Free Spaces" } },
+      de: { row: { freeSpaces: "" } },
+    };
+    const out = resolveToken(
+      { $t: "row.freeSpaces" },
+      { locale: "de", fallbackLocale: "en", shared, integration },
+    );
+    expect(out).toBe("Free Spaces");
+  });
 });
