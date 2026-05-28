@@ -15,7 +15,6 @@ import {
   PANEL,
   resolveStopAsPlace,
   useCategorySearchStore,
-  useExploreResults,
   usePlaceStore,
   useSidebarStore,
   useTransitStops,
@@ -26,6 +25,8 @@ import { useEffect, useRef } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { useMap } from "@/lib/MapContext";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
+import { useExploreReachResults } from "@/lib/useExploreReachResults";
+import { ExploreTravelTimeControl } from "./ExploreTravelTimeControl";
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   rail: TrainIcon,
@@ -201,10 +202,12 @@ export function CategoryResultsContent() {
     hoveredCategoryPlaceId,
     setHoveredCategoryPlaceId,
   } = useCategorySearchStore();
+  const anchor = useCategorySearchStore((s) => s.anchor);
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
 
-  const { filtered, isLoading, isError, error, partial, isTransitCategory } = useExploreResults();
+  const { filtered, isLoading, isError, error, partial, isTransitCategory } =
+    useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops, isPending: transitPending } = transitStopsQuery;
   const transitAttributions = useAttributionFromHooks(transitStopsQuery);
@@ -267,6 +270,7 @@ export function CategoryResultsContent() {
 
   return (
     <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}>
+      {anchor && <ExploreTravelTimeControl />}
       {(isTransitCategory ? transitLoading : isLoading) && (
         <Box sx={{ px: 2, py: 2 }}>
           {[0, 1, 2, 3, 4].map((i) => (

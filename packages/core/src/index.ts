@@ -217,6 +217,7 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
+export type { TravelTimeConfig } from "./stores/categorySearchStore";
 // Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export { useCommandPaletteStore } from "./stores/commandPaletteStore";
@@ -403,6 +404,7 @@ export {
   shortenPlusCode,
 } from "./utils/plusCode";
 export { resolvePoiIconPath } from "./utils/poi-icon";
+export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { searchResultToCategoryPlace } from "./utils/searchResultToCategoryPlace";
 export { sectionSlug } from "./utils/sectionSlug";

@@ -8,7 +8,6 @@ import {
   PANEL,
   resolveStopAsPlace,
   useCategorySearchStore,
-  useExploreResults,
   usePlaceStore,
   useSidebarStore,
   useTransitStops,
@@ -19,6 +18,7 @@ import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
+import { useExploreReachResults } from "@/lib/useExploreReachResults";
 
 const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";
@@ -139,7 +139,7 @@ export function CategoryResultMarkers() {
   } = useCategorySearchStore();
   const { setSelectedPlace } = usePlaceStore();
 
-  const { filtered: results, isTransitCategory } = useExploreResults();
+  const { filtered: results, isTransitCategory } = useExploreReachResults();
   const { data: transitStops } = useTransitStops(isTransitCategory ? searchBbox : null);
 
   // Resolve hovered place for the pin marker

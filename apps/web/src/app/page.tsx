@@ -7,6 +7,7 @@ import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
+import { ExploreTravelTimeLayer } from "@/components/map/ExploreTravelTimeLayer";
 import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
 import { CyclingBaseLayer } from "@/components/map/layers/CyclingBaseLayer";
@@ -130,6 +131,7 @@ export default function HomePage() {
           <TransitItineraryLayer />
           <TransitVehicleLayer />
           <CategoryResultMarkers />
+          <ExploreTravelTimeLayer />
           <DataSourceLayer />
           <SavedPlacesLayer />
           {/* All overlay/tool layers loaded dynamically by MapLayerHost */}

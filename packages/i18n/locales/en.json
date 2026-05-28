@@ -50,7 +50,10 @@
     "emptyStateSignedOut": "Sign in to see your saved places here.",
     "emptyStateNoLabels": "Your saved places will appear here.",
     "searchNear": "Search nearby",
-    "searchFreeText": "Search \"{query}\" nearby"
+    "searchFreeText": "Search \"{query}\" nearby",
+    "travelTime": "Travel time",
+    "onlyWithinReach": "Only within reach",
+    "minutesShort": "{minutes} min"
   },
   "map": {
     "myLocation": "My location",

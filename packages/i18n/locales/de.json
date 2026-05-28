@@ -50,7 +50,10 @@
     "emptyStateSignedOut": "Melde dich an, um deine gespeicherten Orte hier zu sehen.",
     "emptyStateNoLabels": "Deine gespeicherten Orte erscheinen hier.",
     "searchNear": "In der Nähe suchen",
-    "searchFreeText": "„{query}“ in der Nähe suchen"
+    "searchFreeText": "„{query}“ in der Nähe suchen",
+    "travelTime": "Reisezeit",
+    "onlyWithinReach": "Nur erreichbarer Bereich",
+    "minutesShort": "{minutes} Min."
   },
   "map": {
     "myLocation": "Mein Standort",
