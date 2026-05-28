@@ -161,6 +161,8 @@ export {
 export { useDebounce, useDebouncedCallback } from "./hooks/useDebounce";
 export { useDirections } from "./hooks/useDirections";
 export { useElevation } from "./hooks/useElevation";
+export { useExploreResults } from "./hooks/useExploreResults";
+export { useExploreTextSearch } from "./hooks/useExploreTextSearch";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
 export { useGeocoding } from "./hooks/useGeocoding";
 export {
@@ -402,6 +404,7 @@ export {
 } from "./utils/plusCode";
 export { resolvePoiIconPath } from "./utils/poi-icon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
+export { searchResultToCategoryPlace } from "./utils/searchResultToCategoryPlace";
 export { sectionSlug } from "./utils/sectionSlug";
 export {
   USER_AGENT,

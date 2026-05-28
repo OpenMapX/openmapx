@@ -114,9 +114,9 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
     const self: GeocodingProviderWithMeta = {
       ...single.provider,
       lastProvider: single.integrationId,
-      async geocode(query, lang) {
+      async geocode(query, lang, proximity) {
         self.lastProvider = single.integrationId;
-        return single.provider.geocode(query, lang);
+        return single.provider.geocode(query, lang, proximity);
       },
       async autocomplete(query, lang) {
         self.lastProvider = single.integrationId;
@@ -133,10 +133,10 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
 
   const self: GeocodingProviderWithMeta = {
     lastProvider: chain[0].integrationId,
-    async geocode(query, lang) {
+    async geocode(query, lang, proximity) {
       for (let i = 0; i < chain.length; i++) {
         try {
-          const results = await chain[i].provider.geocode(query, lang);
+          const results = await chain[i].provider.geocode(query, lang, proximity);
           if (results.length > 0) {
             self.lastProvider = chain[i].integrationId;
             return results;

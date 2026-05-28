@@ -49,7 +49,8 @@
     "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen.",
     "emptyStateSignedOut": "Melde dich an, um deine gespeicherten Orte hier zu sehen.",
     "emptyStateNoLabels": "Deine gespeicherten Orte erscheinen hier.",
-    "searchNear": "In der Nähe suchen"
+    "searchNear": "In der Nähe suchen",
+    "searchFreeText": "„{query}“ in der Nähe suchen"
   },
   "map": {
     "myLocation": "Mein Standort",

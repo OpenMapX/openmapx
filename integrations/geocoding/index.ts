@@ -55,15 +55,25 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const lat = Number.parseFloat(req.query.lat);
+    const lng = Number.parseFloat(req.query.lng);
+    const proximity: [number, number] | undefined =
+      Number.isFinite(lat) && Number.isFinite(lng) ? [lng, lat] : undefined;
+
     const effectiveLang = lang ?? "en";
     const expandedQ = expandSearchQuery(q);
     const normalizedQ = expandedQ.trim().toLowerCase();
+    // ~1 km rounding so nearby anchors share a cache slot; unbiased queries keep a distinct key.
+    const proxKey = proximity ? `${round(proximity[0], 2)},${round(proximity[1], 2)}` : "none";
 
     try {
       const result = await ctx.cache.withCache(
-        hashKey("cache:geocode", { q: normalizedQ, lang: effectiveLang }),
+        hashKey("cache:geocode", { q: normalizedQ, lang: effectiveLang, prox: proxKey }),
         TTL_FORWARD,
-        () => fetchWithVariants(q, (v) => getGeocodingProvider(ctx).geocode(v, effectiveLang)),
+        () =>
+          fetchWithVariants(q, (v) =>
+            getGeocodingProvider(ctx).geocode(v, effectiveLang, proximity),
+          ),
       );
       reply.header("Cache-Control", "public, max-age=86400");
       reply.send(result);

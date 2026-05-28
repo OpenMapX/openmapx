@@ -36,7 +36,7 @@ export interface AutocompleteResult {
 }
 
 export interface GeocodingProvider {
-  geocode(query: string, lang?: string): Promise<SearchResult[]>;
+  geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]>;
   autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]>;
   reverseGeocode(lat: number, lng: number, lang?: string): Promise<ReverseGeocodingResult | null>;
 }

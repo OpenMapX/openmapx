@@ -5,7 +5,12 @@ import type { GeocodingProviderImpl } from "./types.js";
  * https://docs.maptiler.com/cloud/geocoding/
  */
 
-import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import type {
+  AutocompleteResult,
+  LngLat,
+  ReverseGeocodingResult,
+  SearchResult,
+} from "@openmapx/core";
 import { resolvePoiIconPath } from "@openmapx/core";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
@@ -91,8 +96,10 @@ async function fetchMaptilerReverse(
 }
 
 export const maptilerGeocodingService: GeocodingProviderImpl = {
-  async geocode(query: string, lang?: string): Promise<SearchResult[]> {
-    const data = await fetchMaptiler(query, { limit: "10" }, lang);
+  async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
+    const params: Record<string, string> = { limit: "10" };
+    if (proximity) params.proximity = `${proximity[0]},${proximity[1]}`;
+    const data = await fetchMaptiler(query, params, lang);
     return data.features.map((f) => ({
       id: `maptiler:${f.id}`,
       label: f.place_name,

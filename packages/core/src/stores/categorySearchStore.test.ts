@@ -31,4 +31,29 @@ describe("categorySearchStore explore state", () => {
     expect(useCategorySearchStore.getState().exploreBoxOpen).toBe(false);
     expect(useCategorySearchStore.getState().activeCategory).toBeNull();
   });
+
+  it("setExploreText sets text mode and clears the active category", () => {
+    const s = useCategorySearchStore.getState();
+    s.setActiveCategory("restaurants" as never);
+    s.setExploreText("vegan ramen");
+    expect(useCategorySearchStore.getState().mode).toBe("text");
+    expect(useCategorySearchStore.getState().textQuery).toBe("vegan ramen");
+    expect(useCategorySearchStore.getState().activeCategory).toBeNull();
+  });
+
+  it("setActiveCategory resets mode to category", () => {
+    const s = useCategorySearchStore.getState();
+    s.setExploreText("vegan ramen");
+    s.setActiveCategory("restaurants" as never);
+    expect(useCategorySearchStore.getState().mode).toBe("category");
+    expect(useCategorySearchStore.getState().textQuery).toBe("");
+  });
+
+  it("clearCategory resets mode and textQuery", () => {
+    const s = useCategorySearchStore.getState();
+    s.setExploreText("vegan ramen");
+    s.clearCategory();
+    expect(useCategorySearchStore.getState().mode).toBe("category");
+    expect(useCategorySearchStore.getState().textQuery).toBe("");
+  });
 });

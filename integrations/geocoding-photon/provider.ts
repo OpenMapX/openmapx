@@ -6,7 +6,12 @@ import type { GeocodingProviderImpl } from "./types.js";
  * https://photon.komoot.io
  */
 
-import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import type {
+  AutocompleteResult,
+  LngLat,
+  ReverseGeocodingResult,
+  SearchResult,
+} from "@openmapx/core";
 import { resolvePoiIconPath } from "@openmapx/core";
 
 // Populated by setup(ctx); see setPhotonUrl.
@@ -94,8 +99,13 @@ async function fetchPhoton(
 }
 
 export const photonService: GeocodingProviderImpl = {
-  async geocode(query: string, lang?: string): Promise<SearchResult[]> {
-    const data = await fetchPhoton({ q: query, limit: "10", lang: lang ?? "en" }, "/api", lang);
+  async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
+    const params: Record<string, string> = { q: query, limit: "10", lang: lang ?? "en" };
+    if (proximity) {
+      params.lat = String(proximity[1]);
+      params.lon = String(proximity[0]);
+    }
+    const data = await fetchPhoton(params, "/api", lang);
     return data.features.map((f) => ({
       id: makeId(f.properties),
       label: buildLabel(f.properties),

@@ -15,7 +15,7 @@ import {
   PANEL,
   resolveStopAsPlace,
   useCategorySearchStore,
-  useFilteredCategoryResults,
+  useExploreResults,
   usePlaceStore,
   useSidebarStore,
   useTransitStops,
@@ -204,8 +204,7 @@ export function CategoryResultsContent() {
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
 
-  const { filtered, isLoading, isError, error, partial, isTransitCategory } =
-    useFilteredCategoryResults();
+  const { filtered, isLoading, isError, error, partial, isTransitCategory } = useExploreResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops, isPending: transitPending } = transitStopsQuery;
   const transitAttributions = useAttributionFromHooks(transitStopsQuery);

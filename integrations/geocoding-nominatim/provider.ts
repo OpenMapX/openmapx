@@ -9,6 +9,7 @@ import type { GeocodingProviderImpl } from "./types.js";
 
 import {
   type AutocompleteResult,
+  type LngLat,
   type ReverseGeocodingResult,
   resolvePoiIconPath,
   type SearchResult,
@@ -102,8 +103,15 @@ function makeId(r: NominatimResult): string {
 }
 
 export const nominatimService: GeocodingProviderImpl = {
-  async geocode(query: string, lang?: string): Promise<SearchResult[]> {
-    const data = await fetchNominatim({ q: query, limit: "10" }, lang);
+  async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
+    const params: Record<string, string> = { q: query, limit: "10" };
+    if (proximity) {
+      const [lng, lat] = proximity;
+      const d = 0.18;
+      // viewbox is x1,y1,x2,y2 = lon1,lat1,lon2,lat2; without `bounded` it only biases.
+      params.viewbox = `${lng - d},${lat - d},${lng + d},${lat + d}`;
+    }
+    const data = await fetchNominatim(params, lang);
     return data.map((r) => ({
       id: makeId(r),
       label: r.display_name,

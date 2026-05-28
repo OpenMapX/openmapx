@@ -8,7 +8,7 @@ import {
   PANEL,
   resolveStopAsPlace,
   useCategorySearchStore,
-  useFilteredCategoryResults,
+  useExploreResults,
   usePlaceStore,
   useSidebarStore,
   useTransitStops,
@@ -72,6 +72,9 @@ const TRANSIT_LABEL_LAYER_ID = "transit-stops-labels";
 const TRANSIT_BUS_ICON_PATH =
   "M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z";
 
+const TEXT_MARKER_ICON_PATH =
+  "M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z";
+
 const TRANSIT_MODE_ICON_PATHS: Partial<Record<TransportMode, string>> = {
   rail: "M4 15.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V5c0-3.5-3.58-4-8-4s-8 .5-8 4v10.5zm8 1.5c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-7H6V5h12v5z",
   bus: TRANSIT_BUS_ICON_PATH,
@@ -126,11 +129,17 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 
 export function CategoryResultMarkers() {
   const { mapRef, mapReady, styleVersion, flyTo } = useMap();
-  const { activeCategory, searchBbox, hoveredCategoryPlaceId, setHoveredCategoryPlaceId } =
-    useCategorySearchStore();
+  const {
+    activeCategory,
+    mode,
+    textQuery,
+    searchBbox,
+    hoveredCategoryPlaceId,
+    setHoveredCategoryPlaceId,
+  } = useCategorySearchStore();
   const { setSelectedPlace } = usePlaceStore();
 
-  const { filtered: results, isTransitCategory } = useFilteredCategoryResults();
+  const { filtered: results, isTransitCategory } = useExploreResults();
   const { data: transitStops } = useTransitStops(isTransitCategory ? searchBbox : null);
 
   // Resolve hovered place for the pin marker
@@ -161,7 +170,8 @@ export function CategoryResultMarkers() {
         return;
       }
 
-      if (!activeCategory) {
+      const hasContext = mode === "text" ? Boolean(textQuery) : Boolean(activeCategory);
+      if (!hasContext) {
         removeCategoryLayers();
         removeTransitLayers();
         return;
@@ -232,8 +242,9 @@ export function CategoryResultMarkers() {
       }
 
       const def = CATEGORY_DEFINITIONS.find((d) => d.id === activeCategory);
-      const iconPath = def?.iconPath ?? "";
-      const imageId = `category-marker-${activeCategory}`;
+      const iconPath = mode === "text" ? TEXT_MARKER_ICON_PATH : (def?.iconPath ?? "");
+      const imageId =
+        mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
       const geojson = buildGeoJson(results, imageId);
 
       if (map.getSource(SOURCE_ID)) {
@@ -284,7 +295,17 @@ export function CategoryResultMarkers() {
     return () => {
       map.off("styledata", sync);
     };
-  }, [results, activeCategory, isTransitCategory, transitStops, mapReady, styleVersion, mapRef]);
+  }, [
+    results,
+    activeCategory,
+    mode,
+    textQuery,
+    isTransitCategory,
+    transitStops,
+    mapReady,
+    styleVersion,
+    mapRef,
+  ]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -49,7 +49,8 @@
     "partialResults": "Some results may be missing. Zoom in for complete results.",
     "emptyStateSignedOut": "Sign in to see your saved places here.",
     "emptyStateNoLabels": "Your saved places will appear here.",
-    "searchNear": "Search nearby"
+    "searchNear": "Search nearby",
+    "searchFreeText": "Search \"{query}\" nearby"
   },
   "map": {
     "myLocation": "My location",

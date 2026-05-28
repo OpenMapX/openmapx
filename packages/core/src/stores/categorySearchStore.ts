@@ -11,6 +11,8 @@ interface CategorySearchState {
   hoveredCategoryPlaceId: string | null;
   anchor: Place | null;
   exploreBoxOpen: boolean;
+  mode: "category" | "text";
+  textQuery: string;
   setActiveCategory: (id: CategoryId | null) => void;
   setSearchBbox: (bbox: BoundingBox) => void;
   setMapMoved: (moved: boolean) => void;
@@ -18,6 +20,7 @@ interface CategorySearchState {
   setAnchor: (place: Place | null) => void;
   openExploreBox: (anchor: Place) => void;
   closeExploreBox: () => void;
+  setExploreText: (query: string) => void;
   clearCategory: () => void;
 }
 
@@ -28,13 +31,16 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
   hoveredCategoryPlaceId: null,
   anchor: null,
   exploreBoxOpen: false,
-  setActiveCategory: (activeCategory) => set({ activeCategory }),
+  mode: "category",
+  textQuery: "",
+  setActiveCategory: (activeCategory) => set({ activeCategory, mode: "category", textQuery: "" }),
   setSearchBbox: (searchBbox) => set({ searchBbox }),
   setMapMoved: (mapMoved) => set({ mapMoved }),
   setHoveredCategoryPlaceId: (hoveredCategoryPlaceId) => set({ hoveredCategoryPlaceId }),
   setAnchor: (anchor) => set({ anchor }),
   openExploreBox: (anchor) => set({ anchor, exploreBoxOpen: true }),
   closeExploreBox: () => set({ exploreBoxOpen: false }),
+  setExploreText: (textQuery) => set({ mode: "text", textQuery, activeCategory: null }),
   clearCategory: () => {
     useOpeningHoursStore.getState().reset();
     set({
@@ -44,6 +50,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       hoveredCategoryPlaceId: null,
       anchor: null,
       exploreBoxOpen: false,
+      mode: "category",
+      textQuery: "",
     });
   },
 }));
