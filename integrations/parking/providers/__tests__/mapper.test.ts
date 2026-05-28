@@ -30,7 +30,7 @@ describe("parking mapper", () => {
     expect(result.summary).toEqual({ $t: "summary.stale" });
   });
 
-  it("adds freshness, source, license, and quality sections to details", () => {
+  it("adds freshness, source, and quality sections to details", () => {
     const detail = mapParkingToDetail(
       makeFacility({
         capacity: 100,
@@ -65,13 +65,32 @@ describe("parking mapper", () => {
           rows: expect.arrayContaining([
             [{ $t: "shared.row.source" }, "MobiData BW"],
             [{ $t: "shared.row.sourceId" }, "bw"],
-            [{ $t: "shared.row.license" }, "dl-de/by-2-0"],
             [{ $t: "shared.row.lastUpdated" }, "2026-05-06 11:00:00 UTC"],
           ]),
           title: { $t: "shared.section.source" },
         }),
       ]),
     );
+  });
+
+  it("surfaces the per-feed license as a clickable attribution with SPDX-derived URL", () => {
+    const detail = mapParkingToDetail(
+      makeFacility({
+        sourceAttribution: {
+          contributor: "MobiData BW",
+          license: "dl-de/by-2-0",
+        },
+      }),
+    );
+
+    expect(detail.attributions).toEqual([
+      {
+        text: "MobiData BW",
+        url: "",
+        license: "DL-DE-BY-2.0",
+        licenseUrl: "https://www.govdata.de/dl-de/by-2-0",
+      },
+    ]);
   });
 
   it("emits I18nToken for section titles and row labels (no English literals cross the contract)", () => {

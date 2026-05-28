@@ -44,6 +44,10 @@
       "types": "./src/gbfs-provider-base.ts",
       "default": "./src/gbfs-provider-base.ts"
     },
+    "./license": {
+      "types": "./src/license.ts",
+      "default": "./src/license.ts"
+    },
     "./mapper": {
       "types": "./src/mapper.ts",
       "default": "./src/mapper.ts"
@@ -81,6 +85,7 @@
     "@hey-api/client-fetch": "workspace:*",
     "@motis-project/motis-client": "^2.9.2",
     "@openmapx/core": "workspace:^",
-    "@openmapx/mobility-formats": "workspace:^"
+    "@openmapx/mobility-formats": "workspace:^",
+    "spdx-license-list": "^6.11.0"
   }
 }

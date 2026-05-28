@@ -10,6 +10,7 @@ import {
   type Translatable,
   token,
 } from "@openmapx/integration-framework/strings";
+import { resolveLicenseLink } from "@openmapx/mobility-core/license";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 
 function facilityIdentity(facility: ParkingFacility): OsmIdentity | undefined {
@@ -232,8 +233,6 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     facility.sourceName;
   if (sourceName) sourceRows.push([sharedT.row.source, sourceName]);
   if (facility.sourceUid) sourceRows.push([sharedT.row.sourceId, facility.sourceUid]);
-  const license = facility.sourceAttribution?.license;
-  if (license) sourceRows.push([sharedT.row.license, license]);
   const sourceUpdatedAt = formatTimestamp(facility.dataUpdatedAt);
   if (sourceUpdatedAt) sourceRows.push([sharedT.row.lastUpdated, sourceUpdatedAt]);
   if (sourceRows.length > 0) {
@@ -246,6 +245,13 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     });
   }
 
+  // Per-feed license is surfaced as a clickable attribution rather than a
+  // dead text row: resolveLicenseLink normalises the (often verbose) license
+  // label to its SPDX id and derives the canonical license-text URL when the
+  // feed didn't supply an explicit `licenseUrl`. The detail panel's
+  // `DetailAttribution` renders `license` as a link when `licenseUrl` is set.
+  const attributions = buildDetailAttributions(facility);
+
   return {
     id: facility.id,
     sources: facility.sources,
@@ -256,8 +262,32 @@ export function mapParkingToDetail(facility: ParkingFacility): DataSourceDetail 
     operator: facility.operator ? { name: facility.operator, url: facility.url } : undefined,
     openingHours: facility.openingHours,
     sections,
+    attributions,
     parkAndRide: facility.parkAndRide ? true : undefined,
   };
+}
+
+/**
+ * Build the per-feed attribution row for the detail footer. Only emitted when
+ * the facility carries a `sourceAttribution` (aggregators like parkapi-v3,
+ * opentransportdata-ch, cita-lu); single-source feeds rely on the manifest
+ * attribution. The license link is resolved via the shared SPDX helper so
+ * even feeds that only give a license string get a clickable license URL.
+ */
+function buildDetailAttributions(facility: ParkingFacility) {
+  const attr = facility.sourceAttribution;
+  if (!attr) return undefined;
+  const text = attr.contributor ?? attr.name;
+  if (!text) return undefined;
+  const licenseLink = resolveLicenseLink({ license: attr.license, licenseUrl: attr.licenseUrl });
+  return [
+    {
+      text,
+      url: attr.url ?? "",
+      license: licenseLink?.label,
+      licenseUrl: licenseLink?.url,
+    },
+  ];
 }
 
 /**
