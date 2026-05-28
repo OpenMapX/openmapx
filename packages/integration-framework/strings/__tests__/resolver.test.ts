@@ -92,4 +92,15 @@ describe("resolveToken", () => {
     );
     expect(out).toBe("Source");
   });
+
+  it("falls back to the raw template (does not throw) when the ICU template is malformed", () => {
+    const broken = {
+      en: { summary: { broken: "{count, plural, one {x}" } },
+    };
+    const out = resolveToken(
+      { $t: "summary.broken", values: { count: 3 } },
+      { locale: "en", fallbackLocale: "en", shared, integration: broken },
+    );
+    expect(out).toBe("{count, plural, one {x}");
+  });
 });

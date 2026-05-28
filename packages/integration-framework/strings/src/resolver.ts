@@ -66,5 +66,12 @@ function format(
   if (!values) return template;
   // ICU MessageFormat — same engine next-intl uses, so plural/select syntax
   // works identically between server-emitted templates and client-side strings.
-  return new IntlMessageFormat(template, locale).format(values) as string;
+  // A malformed template (unbalanced braces, bad plural syntax) throws on
+  // construction; fall back to the raw template so a single bad catalog entry
+  // degrades to visible-but-unformatted text instead of crashing the render.
+  try {
+    return new IntlMessageFormat(template, locale).format(values) as string;
+  } catch {
+    return template;
+  }
 }
