@@ -156,6 +156,98 @@ for (const [locale, keys] of allLocales) {
 
 if (consistencyOk) console.log("  All locales have matching keys.");
 
+// 1b. Framework + integration strings parity
+//
+// Beyond the apps/web shell strings checked above, we also ship:
+//   - the framework shared catalog at packages/integration-framework/strings/locales/*.json
+//   - per-integration catalogs at integrations/<id>/strings/*.json
+//
+// Each must keep its locale variants key-aligned (currently en + de).
+
+console.log("\n\x1b[1m1b. Framework + integration strings parity\x1b[0m\n");
+
+interface CatalogParityTarget {
+  label: string;
+  dir: string;
+}
+
+const FRAMEWORK_STRINGS_DIR = join(
+  REPO_ROOT,
+  "packages",
+  "integration-framework",
+  "strings",
+  "locales",
+);
+const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
+
+const parityTargets: CatalogParityTarget[] = [{ label: "framework", dir: FRAMEWORK_STRINGS_DIR }];
+try {
+  for (const entry of readdirSync(INTEGRATIONS_DIR).sort()) {
+    const stringsDir = join(INTEGRATIONS_DIR, entry, "strings");
+    try {
+      if (!statSync(stringsDir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    parityTargets.push({ label: entry, dir: stringsDir });
+  }
+} catch {
+  // integrations dir missing — skip
+}
+
+let extraParityOk = true;
+for (const target of parityTargets) {
+  let localeJsonFiles: string[];
+  try {
+    localeJsonFiles = readdirSync(target.dir)
+      .filter((f) => f.endsWith(".json"))
+      .sort();
+  } catch {
+    continue;
+  }
+  if (localeJsonFiles.length < 2) continue;
+
+  const catalogs = new Map<string, Map<string, string>>();
+  for (const file of localeJsonFiles) {
+    const locale = file.replace(".json", "");
+    try {
+      const raw = JSON.parse(readFileSync(join(target.dir, file), "utf-8")) as Record<
+        string,
+        unknown
+      >;
+      catalogs.set(locale, flattenKeys(raw));
+    } catch (err) {
+      error("PARSE", `[${target.label}] ${file}: ${(err as Error).message}`);
+      extraParityOk = false;
+    }
+  }
+
+  const refKeys = catalogs.get(referenceLocale);
+  if (!refKeys) continue;
+
+  for (const [locale, keys] of catalogs) {
+    if (locale === referenceLocale) continue;
+    const missingInLocale = [...refKeys.keys()].filter((k) => !keys.has(k));
+    const extraInLocale = [...keys.keys()].filter((k) => !refKeys.has(k));
+    for (const k of missingInLocale) {
+      error("MISSING", `[${target.label}] ${locale}.json is missing "${k}"`);
+      extraParityOk = false;
+    }
+    for (const k of extraInLocale) {
+      warn(
+        "EXTRA",
+        `[${target.label}] ${locale}.json has extra "${k}" (not in ${referenceLocale}.json)`,
+      );
+      extraParityOk = false;
+    }
+  }
+}
+
+if (extraParityOk)
+  console.log(
+    `  All framework + integration catalogs have matching keys (${parityTargets.length} catalogs).`,
+  );
+
 // 2 & 3. Unused and missing keys
 
 console.log(
