@@ -137,6 +137,9 @@ export interface DataSourceDetailSection {
    *    The value (right cell) is `Translatable` (token, raw string, or number),
    *    because the right column legitimately mixes translated text with
    *    upstream pass-through: operator addresses, prices, formatted numbers.
+   *    A value may also be a `Translatable[]` — a list of tokens/strings the
+   *    client resolves individually and joins (e.g. a localized list of vehicle
+   *    accessories in a single cell).
    *  - Wider rows of **3 or more** cells for true multi-column tables driven
    *    by `columns` headers (e.g. EV connector tables). Each cell is a value;
    *    the "label" semantics live in the column header rather than the row, so
@@ -149,7 +152,7 @@ export interface DataSourceDetailSection {
    * multi-column rendering.
    */
   rows?:
-    | [I18nToken, Translatable][]
+    | [I18nToken, Translatable | Translatable[]][]
     | [Translatable, Translatable, Translatable, ...Translatable[]][];
   /**
    * User-visible list items. Tokens preferred for fixed vocabulary; raw
@@ -225,7 +228,7 @@ export interface DataSourceDetail {
   /** Per-record attribution that cannot be expressed statically in the integration manifest. */
   attributions?: DataSourceAttribution[];
   branding?: DataSourceBranding;
-  usageInfo?: { type: string; cost?: string; membershipRequired?: boolean };
+  usageInfo?: { type: Translatable; cost?: Translatable; membershipRequired?: boolean };
   /** OSM-format opening hours string (e.g., "Mo-Fr 06:00-20:00; Sa-Su 08:00-20:00"). */
   openingHours?: string;
   sections: DataSourceDetailSection[];

@@ -255,7 +255,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Vehicle type details (structured — from GBFS)
   if (station.vehicleTypeDetails && station.vehicleTypeDetails.length > 0) {
-    const vtRows: [I18nTokenLike, Translatable][] = [];
+    const vtRows: [I18nTokenLike, Translatable | Translatable[]][] = [];
     for (const vt of station.vehicleTypeDetails) {
       const labelText: string | undefined =
         (vt.make && vt.model ? `${vt.make} ${vt.model}` : vt.name) || undefined;
@@ -268,17 +268,17 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
       if (vt.propulsion) vtRows.push([T.row.propulsion, propulsionToken(vt.propulsion)]);
       if (vt.riderCapacity) vtRows.push([T.row.seats, vt.riderCapacity]);
       if (vt.accessories && vt.accessories.length > 0) {
-        // Resolver does not currently render token lists inside a comma-joined
-        // string; emit the resolvable tokens individually as a single string
-        // joined client-side would lose i18n. For now, keep accessories as
-        // comma-joined keys client could resolve, but to avoid silent English
-        // leaks we emit a token list joined to a single token via values is
-        // not possible. Fall back to emitting each accessory as its own row
-        // would clutter the table; instead emit the comma-joined raw keys
-        // wrapped in a passthrough string so the user sees raw keys (which
-        // surfaces missing strings) — acceptable per the resolver's
-        // visible-bug doctrine.
-        vtRows.push([T.row.features, vt.accessories.map(accessoryFallbackString).join(", ")]);
+        // Emit one token per accessory (resolved against the integration's
+        // value.accessory.* catalog and joined client-side). Unknown enum
+        // values fall back to a readable English string.
+        vtRows.push([
+          T.row.features,
+          vt.accessories.map((accessory) =>
+            Object.hasOwn(ACCESSORY_FALLBACK, accessory)
+              ? t(`value.accessory.${accessory}`)
+              : accessoryFallbackString(accessory),
+          ),
+        ]);
       }
       if (vt.co2PerKm !== undefined) {
         vtRows.push([
@@ -389,12 +389,12 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
       }
     : undefined;
 
-  // Access method → usageInfo. The label uses the ICU template at
-  // `format.accessMethod` resolved to the integration's catalog; usageInfo.type
-  // is `string`, so we pre-format via an inline ICU fallback marker that the
-  // panel renderer treats as the human label. Pass the raw accessMethod
-  // through unchanged when no template is available.
-  const usageInfo = station.accessMethod ? { type: `Access: ${station.accessMethod}` } : undefined;
+  // Access method → usageInfo. Emit the `format.accessMethod` ICU token so the
+  // panel renderer resolves it against the integration's catalog (the raw
+  // accessMethod is interpolated as the `method` value).
+  const usageInfo = station.accessMethod
+    ? { type: t("format.accessMethod", { method: station.accessMethod }) }
+    : undefined;
   const branding = brandingFromStation(station);
 
   return {
@@ -554,10 +554,10 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
 }
 
 /**
- * Fallback English labels used for fields that are not (yet) emitted as
- * tokens: the vehicle `name` (composed with operator prefix), the
- * `usageInfo.type` text, and accessory comma-join strings inside vehicle
- * details. Kept in sync with the `value.formFactor.*` catalog keys.
+ * Fallback English labels for the vehicle `name` (composed with an operator
+ * prefix), used where a token cannot be emitted (the name flows into the OSM
+ * resolver as an identity input). Kept in sync with the `value.formFactor.*`
+ * catalog keys.
  */
 const FORM_FACTOR_FALLBACK: Record<string, string> = {
   bicycle: "Bicycle",

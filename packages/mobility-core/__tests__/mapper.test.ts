@@ -456,8 +456,29 @@ describe("mapStationToDetail", () => {
       $t: "value.propulsionKind.electric_assist",
     });
     expect(findRow(section, "row.seats")?.[1]).toBe(1);
-    expect(findRow(section, "row.features")?.[1]).toBe("Navigation");
+    // Accessories emit one token per entry (resolved + joined client-side).
+    expect(findRow(section, "row.features")?.[1]).toEqual([{ $t: "value.accessory.navigation" }]);
     expect(findRow(section, "row.co2")?.[1]).toEqual({ $t: "value.zeroEmissions" });
+  });
+
+  it("emits accessory tokens for known enums and English fallback for unknown", () => {
+    const detail = mapStationToDetail(
+      makeStation({
+        vehicleTypeDetails: [
+          {
+            name: "Car",
+            formFactor: "car",
+            accessories: ["air_conditioning", "heated_seats"],
+          },
+        ],
+      }),
+    );
+    const section = findSection(detail.sections, "section.vehicleDetails");
+    // Known enum → catalog token; unknown enum → readable English fallback.
+    expect(findRow(section, "row.features")?.[1]).toEqual([
+      { $t: "value.accessory.air_conditioning" },
+      "heated seats",
+    ]);
   });
 
   it("shows CO2 value in g/km when > 0", () => {
@@ -595,9 +616,11 @@ describe("mapStationToDetail", () => {
       name: "TestBikes",
       url: "https://testbikes.example.com",
     });
-    // usageInfo.type stays an English pass-through during the transitional
-    // phase; tightening to a token follows in Task 4.1.
-    expect(detail.usageInfo).toEqual({ type: "Access: App" });
+    // usageInfo.type emits the format.accessMethod token; the client resolver
+    // interpolates the raw access method against the integration catalog.
+    expect(detail.usageInfo).toEqual({
+      type: { $t: "format.accessMethod", values: { method: "App" } },
+    });
   });
 
   it("omits address when station has no address", () => {

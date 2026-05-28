@@ -206,7 +206,7 @@ export function mapStationToDetail(station: EvChargingStation): DataSourceDetail
     usageInfo:
       station.usageType || station.usageCost || station.membershipRequired !== undefined
         ? {
-            type: station.usageType ?? "Public",
+            type: station.usageType ?? sharedT.value.public,
             cost: station.usageCost,
             membershipRequired: station.membershipRequired,
           }

@@ -169,12 +169,18 @@ function translateStructuredSection(
   resolveT: (value: Translatable | undefined) => string,
 ): StructuredSection {
   const translatedTitle = resolveT(section.title);
+  // A value cell may be a single Translatable or a list of them (e.g. a
+  // localized accessory list); resolve each and join with the locale separator.
+  const resolveCell = (cell: Translatable | Translatable[] | undefined): string | number =>
+    Array.isArray(cell)
+      ? cell.map((entry) => resolveT(entry)).join(", ")
+      : typeof cell === "number"
+        ? cell
+        : resolveT(cell);
   const translatedRows: (string | number)[][] | undefined =
     section.type === "table" && section.rows?.every((row) => row.length === 2)
-      ? section.rows.map(([label, value]) => [resolveT(label), resolveT(value)])
-      : section.rows?.map((row) =>
-          row.map((cell) => (typeof cell === "number" ? cell : resolveT(cell))),
-        );
+      ? section.rows.map(([label, value]) => [resolveT(label), resolveCell(value)])
+      : section.rows?.map((row) => row.map((cell) => resolveCell(cell)));
   const translatedColumns = section.columns?.map((column) => resolveT(column));
   // Re-build the StructuredSection explicitly (no spread) so the narrowed
   // resolved field types win over `DataSourceDetailSection`'s wider
@@ -354,10 +360,10 @@ export function DataSourceSections({ detail, domain }: Props) {
             <LockOpenIcon />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2">{detail.usageInfo.type}</Typography>
+            <Typography variant="body2">{resolveT(detail.usageInfo.type)}</Typography>
             {detail.usageInfo.cost && (
               <Typography variant="caption" color="text.secondary">
-                {detail.usageInfo.cost}
+                {resolveT(detail.usageInfo.cost)}
               </Typography>
             )}
             {detail.usageInfo.membershipRequired && (
