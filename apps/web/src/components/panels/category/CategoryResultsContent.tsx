@@ -22,6 +22,7 @@ import {
   useTransitStops,
 } from "@openmapx/core";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
+import type maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
@@ -252,7 +253,10 @@ export function CategoryResultsContent() {
     const map = mapRef.current;
     if (!map || !mapReady || !activeCategory) return;
 
-    const onMoveEnd = () => {
+    const onMoveEnd = (e: maplibregl.MapLibreEvent) => {
+      // Ignore app-driven camera moves (flyTo on result select, fitBounds on
+      // launch — tagged with `programmatic`). Only react to real user pan/zoom.
+      if ((e as { programmatic?: boolean }).programmatic) return;
       if (autoRefresh) {
         const b = map.getBounds();
         setSearchBbox({

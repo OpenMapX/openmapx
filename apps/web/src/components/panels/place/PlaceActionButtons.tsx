@@ -101,6 +101,9 @@ export function PlaceActionButtons({ place }: Props) {
 
   const handleNearby = () => {
     setSelectedPlace(null);
+    // Close the place-card detail panel so it doesn't linger in the deep-link
+    // URL while the explore box (and subsequent results) take over.
+    useSidebarStore.getState().closeDetail();
     useCategorySearchStore.getState().openExploreBox(place);
   };
 

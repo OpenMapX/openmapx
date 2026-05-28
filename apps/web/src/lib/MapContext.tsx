@@ -29,7 +29,10 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     const pending = pendingFlyTo.current;
     if (pending && mapRef.current) {
       // Use jumpTo (instant) for queued calls — no animation racing with map init
-      mapRef.current.jumpTo({ center: pending.center, zoom: pending.zoom ?? 15 });
+      mapRef.current.jumpTo(
+        { center: pending.center, zoom: pending.zoom ?? 15 },
+        { programmatic: true },
+      );
       pendingFlyTo.current = null;
     }
     setMapReady(true);
@@ -39,9 +42,12 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
     setStyleVersion((v) => v + 1);
   }, []);
 
+  // `{ programmatic: true }` event data marks these as app-driven camera moves
+  // (not user gestures), so map-move listeners (e.g. explore auto-refresh) can
+  // ignore them and only react to real user pan/zoom.
   const flyTo = useCallback((center: [number, number], zoom?: number) => {
     if (mapRef.current) {
-      mapRef.current.flyTo({ center, zoom, duration: 1500 });
+      mapRef.current.flyTo({ center, zoom, duration: 1500 }, { programmatic: true });
     } else {
       // Map not ready yet — queue for when notifyMapReady fires
       pendingFlyTo.current = { center, zoom };
@@ -49,7 +55,7 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fitBounds = useCallback((bounds: [[number, number], [number, number]], padding = 80) => {
-    mapRef.current?.fitBounds(bounds, { padding, duration: 1000 });
+    mapRef.current?.fitBounds(bounds, { padding, duration: 1000 }, { programmatic: true });
   }, []);
 
   const zoomIn = useCallback(() => {

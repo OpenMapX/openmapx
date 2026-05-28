@@ -31,6 +31,7 @@ export function launchExploreFromPlace(
         [bbox.east, bbox.north],
       ],
       { padding: 80, duration: 0 },
+      { programmatic: true },
     );
   }
 
@@ -65,6 +66,7 @@ export function launchExploreTextSearch(
         [bbox.east, bbox.north],
       ],
       { padding: 80, duration: 0 },
+      { programmatic: true },
     );
   }
 
