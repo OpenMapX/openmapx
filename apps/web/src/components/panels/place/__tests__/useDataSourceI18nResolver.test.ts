@@ -33,7 +33,7 @@ vi.mock("@/lib/frameworkStringsContext", () => ({
     }) satisfies LocaleStrings,
 }));
 
-import { useDataSourceI18nResolver } from "../useDataSourceI18nResolver.js";
+import { useDataSourceI18nResolver } from "../useDataSourceI18nResolver";
 
 describe("useDataSourceI18nResolver", () => {
   it("resolves an integration-scoped token via the matching integration", () => {

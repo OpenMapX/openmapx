@@ -1,7 +1,7 @@
 import type { BoundingBox, LngLat, OsmFilter } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
-import type { I18nToken, Translatable } from "../../strings/index.js";
+import type { I18nToken, Translatable } from "../../strings/index";
 
 export interface DataSourceAttribution {
   text: string;
