@@ -76,10 +76,7 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
     }
   }, [integrations, apiBase]);
 
-  const registry = useMemo(
-    () => new IntegrationRegistry(integrations ?? [], frameworkStrings ?? {}),
-    [integrations, frameworkStrings],
-  );
+  const registry = useMemo(() => new IntegrationRegistry(integrations ?? []), [integrations]);
 
   useEffect(() => {
     if (integrations?.length) {
