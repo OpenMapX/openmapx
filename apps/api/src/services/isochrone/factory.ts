@@ -16,7 +16,10 @@ let cached: IsochroneProvider | null = null;
 export function getIsochroneProvider(): IsochroneProvider {
   if (cached) return cached;
 
-  const name = (process.env.ISOCHRONE_PROVIDER ?? "valhalla").trim().toLowerCase();
+  // `|| "valhalla"` (not `??`) so an empty or whitespace-only env var — e.g. a
+  // compose `ISOCHRONE_PROVIDER:` with no value — falls back rather than
+  // throwing "Unknown ISOCHRONE_PROVIDER".
+  const name = (process.env.ISOCHRONE_PROVIDER?.trim() || "valhalla").toLowerCase();
 
   if (!isProviderName(name)) {
     throw new Error(

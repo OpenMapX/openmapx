@@ -22,7 +22,8 @@
       "DATA_MANAGER_AUTH_TOKEN": "${DATA_MANAGER_AUTH_TOKEN:?DATA_MANAGER_AUTH_TOKEN must be set — generate with: openssl rand -hex 32}",
       "MOTIS_DATA_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}/infra/docker/data/motis-data",
       "OSRM_URL": "${OSRM_URL:-https://router.project-osrm.org}",
-      "VALHALLA_URL": "${VALHALLA_URL:-https://valhalla1.openstreetmap.de}",
+      "VALHALLA_URL": "${VALHALLA_URL:-https://api.stadiamaps.com}",
+      "VALHALLA_API_KEY": "${VALHALLA_API_KEY:-}",
       "MOTIS_URL": "${MOTIS_URL:-https://api.transitous.org}",
       "TRANSITOUS_URL": "${TRANSITOUS_URL:-https://api.transitous.org}",
       "NOMINATIM_URL": "${NOMINATIM_URL:-https://nominatim.openstreetmap.org}",
@@ -62,7 +63,7 @@
       "LOG_LEVEL": "${LOG_LEVEL:-info}",
       "OPENMAPX_DISABLE_LOCALHOST_AUTH": "${OPENMAPX_DISABLE_LOCALHOST_AUTH:-}",
       "OPENMAPX_LOCAL_ADMIN_TOKEN": "${OPENMAPX_LOCAL_ADMIN_TOKEN:-}",
-      "ISOCHRONE_PROVIDER": "${ISOCHRONE_PROVIDER:-}",
+      "ISOCHRONE_PROVIDER": "${ISOCHRONE_PROVIDER:-valhalla}",
       "GITHUB_TOKEN": "${GITHUB_TOKEN:-}",
       "STORE_CATALOG_URL": "${STORE_CATALOG_URL:-}"
     },
