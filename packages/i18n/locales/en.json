@@ -50,6 +50,8 @@
     "emptyStateSignedOut": "Sign in to see your saved places here.",
     "emptyStateNoLabels": "Your saved places will appear here.",
     "searchNear": "Search nearby",
+    "searchNearbyName": "Search nearby {name}",
+    "cancelNearby": "Cancel nearby search",
     "searchFreeText": "Search \"{query}\" nearby",
     "travelTime": "Travel time",
     "onlyWithinReach": "Only within reach",

@@ -7,6 +7,7 @@ import { CategoryResultMarkers } from "@/components/map/CategoryResultMarkers";
 import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge";
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
+import { ExploreAnchorMarker } from "@/components/map/ExploreAnchorMarker";
 import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
 import { CyclingBaseLayer } from "@/components/map/layers/CyclingBaseLayer";
@@ -39,7 +40,6 @@ import { PanelHost } from "@/components/panels/PanelHost";
 import { ShareIntentHandler } from "@/components/pwa/ShareIntentHandler";
 import { CategoryChips } from "@/components/search/CategoryChips";
 import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
-import { ExploreSearchBox } from "@/components/search/ExploreSearchBox";
 import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
 import { MapProvider } from "@/lib/MapContext";
@@ -139,12 +139,12 @@ export default function HomePage() {
           <MapStylePoiClickHandler />
           <UserLocationMarker />
           <SelectedPlaceMarker />
+          <ExploreAnchorMarker />
           <SelectedStopInfrastructureLayer />
           <WaypointMarkers />
           <ElevationHoverMarker />
           <HamburgerMenu />
           <SearchBar />
-          <ExploreSearchBox />
           <WeatherWidget />
           <CategoryChips />
           <CategoryFilterBar />

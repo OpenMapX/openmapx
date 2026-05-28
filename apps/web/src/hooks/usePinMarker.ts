@@ -5,12 +5,24 @@ import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
 
+interface PinColor {
+  fill: string;
+  stroke: string;
+}
+
+const PIN_RED: PinColor = { fill: "#EA4335", stroke: "#C5221F" };
+
 /**
- * Renders a red teardrop pin marker on the map at `coords`.
+ * Renders a teardrop pin marker on the map at `coords` (red by default).
  * Pass `null` to remove the marker. Reuses the same marker instance
  * when coords/label change to avoid flickering.
  */
-export function usePinMarker(coords: LngLat | null, label: string, showLabel = true) {
+export function usePinMarker(
+  coords: LngLat | null,
+  label: string,
+  showLabel = true,
+  color: PinColor = PIN_RED,
+) {
   const { mapRef, mapReady } = useMap();
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
@@ -51,7 +63,7 @@ export function usePinMarker(coords: LngLat | null, label: string, showLabel = t
       svgDiv.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="32" viewBox="0 0 27 43">
           <path d="M13.5 0C6.044 0 0 6.044 0 13.5c0 9.219 13.5 29.5 13.5 29.5S27 22.719 27 13.5C27 6.044 20.956 0 13.5 0z"
-                fill="#EA4335" stroke="#C5221F" stroke-width="1"/>
+                fill="${color.fill}" stroke="${color.stroke}" stroke-width="1"/>
           <circle cx="13.5" cy="13.5" r="5.5" fill="white"/>
         </svg>
       `;
@@ -87,5 +99,5 @@ export function usePinMarker(coords: LngLat | null, label: string, showLabel = t
     return () => {
       destroyed = true;
     };
-  }, [coords, label, mapRef, mapReady, showLabel]);
+  }, [coords, label, mapRef, mapReady, showLabel, color]);
 }

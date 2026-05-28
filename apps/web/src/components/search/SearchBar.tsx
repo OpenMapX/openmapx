@@ -5,6 +5,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import HighlightOffIcon from "@mui/icons-material/HighlightOff";
 import MenuIcon from "@mui/icons-material/Menu";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
 import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
@@ -17,7 +18,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
-import type { AutocompleteResult, LngLat } from "@openmapx/core";
+import type { AutocompleteResult, CategoryId, LngLat } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
@@ -63,6 +64,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatarButton } from "@/components/auth/AccountAvatarButton";
 import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
+import { launchExploreFromPlace, launchExploreTextSearch } from "@/lib/launchExplore";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
@@ -151,6 +153,11 @@ export function SearchBar() {
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
+  const anchor = useCategorySearchStore((s) => s.anchor);
+  const exploreBoxOpen = useCategorySearchStore((s) => s.exploreBoxOpen);
+  // Nearby/Explore mode: a place is the anchor. Reuses this search bar, adding a
+  // teal pill and routing selections to the place-anchored category search.
+  const nearbyMode = anchor !== null;
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const setActiveSource = useDataSourceStore((s) => s.setActiveSource);
   const openMenu = useMenuStore((s) => s.open);
@@ -215,6 +222,16 @@ export function SearchBar() {
   useEffect(() => {
     setShortcutPlatform(getPlatform());
   }, []);
+
+  // Entering nearby mode (clicked "Nearby" on a place): clear the query and
+  // focus so the category picker dropdown opens in the reused search bar.
+  useEffect(() => {
+    if (exploreBoxOpen) {
+      setQuery("");
+      setIsFocused(true);
+      inputRef.current?.focus();
+    }
+  }, [exploreBoxOpen, setQuery, setIsFocused]);
 
   const handleBlur = useCallback(() => {
     blurTimeoutRef.current = setTimeout(() => setIsFocused(false), 150);
@@ -438,9 +455,31 @@ export function SearchBar() {
     stopSuggestions,
   ]);
 
+  // Nearby mode: the dropdown shows category suggestions (+ a free-text item)
+  // anchored to the place, mirroring the old ExploreSearchBox picker.
+  const nearbySuggestions = useMemo<AutocompleteResult[]>(() => {
+    if (!nearbyMode) return [];
+    const lower = q.toLowerCase();
+    const cats = CATEGORY_DEFINITIONS.filter(
+      (cat) => cat.showInChipBar && (q === "" || cat.label.toLowerCase().includes(lower)),
+    ).map((cat) => ({
+      id: `nearby-cat-${cat.id}`,
+      label: cat.label,
+      type: "category" as const,
+      iconPath: cat.iconPath,
+      rawCategory: cat.id,
+    }));
+    if (q === "") return cats;
+    return [
+      { id: "nearby-freetext", label: t("searchFreeText", { query: q }), type: "poi" as const },
+      ...cats,
+    ];
+  }, [nearbyMode, q, t]);
+
   if (directionsOpen) return null;
 
-  const showDropdown = isFocused && displaySuggestions.length > 0;
+  const effectiveSuggestions = nearbyMode ? nearbySuggestions : displaySuggestions;
+  const showDropdown = isFocused && effectiveSuggestions.length > 0;
 
   const tryOpenTransitStop = async (coords: LngLat, name: string): Promise<boolean> => {
     try {
@@ -495,7 +534,7 @@ export function SearchBar() {
       setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : count - 1));
     } else if (e.key === "Enter" && highlightedIndex >= 0) {
       e.preventDefault();
-      handleSelect(displaySuggestions[highlightedIndex]);
+      handleSelectAny(effectiveSuggestions[highlightedIndex]);
     } else if (e.key === "Escape") {
       setIsFocused(false);
       setHighlightedIndex(-1);
@@ -504,12 +543,16 @@ export function SearchBar() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    // If user modifies the query while a category/data source is active, clear it
-    if (activeCategory !== null) {
-      clearCategory();
-    }
-    if (activeSource !== null) {
-      setActiveSource(null);
+    // In nearby mode keep the anchor (don't clearCategory — that would drop it);
+    // the nearby dropdown re-filters and a selection relaunches the search.
+    if (!nearbyMode) {
+      // If user modifies the query while a category/data source is active, clear it
+      if (activeCategory !== null) {
+        clearCategory();
+      }
+      if (activeSource !== null) {
+        setActiveSource(null);
+      }
     }
     setQuery(newValue);
   };
@@ -517,6 +560,10 @@ export function SearchBar() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     inputRef.current?.blur();
+    if (nearbyMode) {
+      if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
+      return;
+    }
     if (syntheticResult) {
       handleSelect(syntheticResult);
       return;
@@ -621,8 +668,44 @@ export function SearchBar() {
     }
   };
 
+  // Nearby mode: route a category pick / free-text to the place-anchored search.
+  const handleNearbySelect = (result: AutocompleteResult) => {
+    if (!anchor) return;
+    setIsFocused(false);
+    inputRef.current?.blur();
+    if (result.id === "nearby-freetext") {
+      if (q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
+      return;
+    }
+    const catId = result.rawCategory as CategoryId | undefined;
+    if (catId) launchExploreFromPlace(mapRef.current, anchor, catId, result.label);
+  };
+
+  const handleSelectAny = (result: AutocompleteResult) => {
+    if (nearbyMode) handleNearbySelect(result);
+    else handleSelect(result);
+  };
+
+  // Cancel nearby search (the teal pill's ✕): exit nearby mode and reopen the
+  // place the search was started from.
+  const handleCancelNearby = () => {
+    const place = anchor;
+    clearCategory();
+    setQuery("");
+    setIsFocused(false);
+    if (place) {
+      setSelectedPlace(place);
+      useSidebarStore.getState().openSidebar(PANEL.PLACE);
+    }
+  };
+
   const showSkeleton =
-    isFocused && query.trim().length >= 2 && isFetching && !showDropdown && !syntheticResult;
+    !nearbyMode &&
+    isFocused &&
+    query.trim().length >= 2 &&
+    isFetching &&
+    !showDropdown &&
+    !syntheticResult;
 
   // Mobile: when the search is focused, the bar takes over the full viewport
   // Pure CSS transition — same component,same focus/dropdown state,
@@ -726,7 +809,11 @@ export function SearchBar() {
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={handleBlur}
-              placeholder={t("placeholder")}
+              placeholder={
+                nearbyMode && anchor
+                  ? t("searchNearbyName", { name: anchor.name })
+                  : t("placeholder")
+              }
               inputProps={{ id: SEARCH_INPUT_ID, "aria-label": t("ariaLabel") }}
               sx={{
                 flex: 1,
@@ -763,44 +850,47 @@ export function SearchBar() {
               )
             )}
 
-            <Tooltip title={tCmd("open")} placement="bottom">
-              <Box
-                component="kbd"
-                role="button"
-                tabIndex={0}
-                aria-label={tCmd("open")}
-                onClick={() => useCommandPaletteStore.getState().open()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    useCommandPaletteStore.getState().open();
-                  }
-                }}
-                sx={(theme) => ({
-                  display: { xs: "none", sm: "inline-flex" },
-                  alignItems: "center",
-                  fontFamily: "monospace",
-                  fontSize: 11,
-                  px: 0.75,
-                  py: 0.25,
-                  ml: 0.5,
-                  border: `1px solid ${theme.palette.divider}`,
-                  borderRadius: 1,
-                  color: "text.secondary",
-                  cursor: "pointer",
-                  userSelect: "none",
-                  "&:hover": { bgcolor: "action.hover" },
-                  "&:focus-visible": {
-                    outline: `2px solid ${theme.palette.primary.main}`,
-                    outlineOffset: 1,
-                  },
-                })}
-              >
-                {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
-              </Box>
-            </Tooltip>
+            {!nearbyMode && (
+              <Tooltip title={tCmd("open")} placement="bottom">
+                <Box
+                  component="kbd"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={tCmd("open")}
+                  onClick={() => useCommandPaletteStore.getState().open()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      useCommandPaletteStore.getState().open();
+                    }
+                  }}
+                  sx={(theme) => ({
+                    display: { xs: "none", sm: "inline-flex" },
+                    alignItems: "center",
+                    fontFamily: "monospace",
+                    fontSize: 11,
+                    px: 0.75,
+                    py: 0.25,
+                    ml: 0.5,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 1,
+                    color: "text.secondary",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    "&:hover": { bgcolor: "action.hover" },
+                    "&:focus-visible": {
+                      outline: `2px solid ${theme.palette.primary.main}`,
+                      outlineOffset: 1,
+                    },
+                  })}
+                >
+                  {formatShortcut(PALETTE_SHORTCUT, shortcutPlatform)}
+                </Box>
+              </Tooltip>
+            )}
 
             {!fullScreen &&
+              !nearbyMode &&
               (hasSidePanel ? (
                 <IconButton
                   size="small"
@@ -834,9 +924,50 @@ export function SearchBar() {
               rendered by TopRightControls. Hidden when the search
               has expanded to fullscreen — it's not relevant
               while the user is typing a query. */}
-            {!fullScreen && (
+            {!fullScreen && !nearbyMode && (
               <Box sx={{ display: { xs: "inline-flex", sm: "none" }, ml: 0.25, mr: 0.25 }}>
                 <AccountAvatarButton size={32} />
+              </Box>
+            )}
+
+            {/* Nearby pill — replaces the right-side controls while a place is
+                anchored. The ✕ cancels the nearby search and reopens the place. */}
+            {!fullScreen && nearbyMode && (
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  bgcolor: TEAL,
+                  color: "#fff",
+                  borderRadius: 999,
+                  ml: 1,
+                  mr: 0.5,
+                  pl: 1,
+                  pr: 0.25,
+                  height: 32,
+                  flexShrink: 0,
+                }}
+              >
+                <MyLocationIcon sx={{ fontSize: 18 }} />
+                <Divider
+                  orientation="vertical"
+                  flexItem
+                  sx={{ borderColor: "rgba(255,255,255,0.4)", mx: 0.5, my: 0.75 }}
+                />
+                <Tooltip title={t("cancelNearby")} placement="bottom">
+                  <IconButton
+                    size="small"
+                    onClick={handleCancelNearby}
+                    aria-label={t("cancelNearby")}
+                    sx={{
+                      color: "#fff",
+                      p: 0.25,
+                      "&:hover": { bgcolor: "rgba(255,255,255,0.15)" },
+                    }}
+                  >
+                    <CloseIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
             )}
           </Box>
@@ -856,8 +987,8 @@ export function SearchBar() {
                 }}
               >
                 <AutocompleteDropdown
-                  suggestions={displaySuggestions}
-                  onSelect={handleSelect}
+                  suggestions={effectiveSuggestions}
+                  onSelect={handleSelectAny}
                   highlightedIndex={highlightedIndex}
                 />
                 {geocodingAttribution && (
@@ -916,7 +1047,7 @@ export function SearchBar() {
             bgcolor: "background.paper",
           }}
         >
-          {query.trim().length === 0 ? (
+          {query.trim().length === 0 && !nearbyMode ? (
             <MobileSearchEmptyState
               onSelectPlace={(p) => {
                 setQuery(p.label);
@@ -936,8 +1067,8 @@ export function SearchBar() {
           ) : showDropdown ? (
             <>
               <AutocompleteDropdown
-                suggestions={displaySuggestions}
-                onSelect={handleSelect}
+                suggestions={effectiveSuggestions}
+                onSelect={handleSelectAny}
                 highlightedIndex={highlightedIndex}
               />
               {geocodingAttribution && (

@@ -296,10 +296,11 @@ export function CategoryResultsContent() {
         <Box
           sx={{
             px: 2,
-            py: 0.5,
+            py: 1,
             borderBottom: "1px solid var(--omx-border)",
             display: "flex",
             flexDirection: "column",
+            gap: 0.75,
           }}
         >
           {anchor && <ExploreTravelTimeControl />}
