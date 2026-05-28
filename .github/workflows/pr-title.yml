@@ -5,10 +5,14 @@ on:
     types: [opened, edited, synchronize, reopened]
 
 permissions:
-  # `pull-requests: write` is needed because `wip: true` makes the action
-  # set the PR check to "pending" while the title contains [WIP].
-  # See: https://github.com/amannn/action-semantic-pull-request#wip
+  # `statuses: write` is required because action-semantic-pull-request@v6
+  # reports its result via the commit-statuses API (also used by `wip: true`
+  # to flag [WIP] titles). Without it the action fails with
+  # "Resource not accessible by integration". `pull-requests: write` lets it
+  # read the PR title under `pull_request_target`.
+  # See: https://github.com/amannn/action-semantic-pull-request#permissions
   pull-requests: write
+  statuses: write
 
 jobs:
   validate:
