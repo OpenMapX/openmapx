@@ -176,16 +176,37 @@ export function ConfigSchemaForm({
   }
 
   return (
-    <Stack gap={2.5}>
+    <Stack
+      sx={{
+        gap: 2.5,
+      }}
+    >
       {fields.map((field) => {
         const entry = resolvedConfig[field.key];
         const source: ConfigSource = entry?.source ?? "default";
         const isEnvOverridden = source === "env";
 
         return (
-          <Stack key={field.key} gap={0.5}>
-            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="body2" fontWeight={600}>
+          <Stack
+            key={field.key}
+            sx={{
+              gap: 0.5,
+            }}
+          >
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: "center",
+                gap: 1,
+                flexWrap: "wrap",
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                }}
+              >
                 {field.title}
               </Typography>
               <Tooltip title={`Currently sourced from: ${source}`}>
@@ -206,18 +227,26 @@ export function ConfigSchemaForm({
                 />
               )}
               {entry?.value === field.default && source === "default" && (
-                <Typography variant="caption" color="text.disabled">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.disabled",
+                  }}
+                >
                   (default)
                 </Typography>
               )}
             </Stack>
-
             {field.description && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {field.description}
               </Typography>
             )}
-
             {field.type === "boolean" ? (
               <FormControlLabel
                 control={
@@ -270,7 +299,6 @@ export function ConfigSchemaForm({
           </Stack>
         );
       })}
-
       <Box>
         <Button
           variant="contained"

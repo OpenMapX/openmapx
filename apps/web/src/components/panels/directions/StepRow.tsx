@@ -39,7 +39,12 @@ export function StepRow({
         </Box>
       </Box>
       <Box sx={{ pl: 6, pr: 2, pb: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {formatDuration(duration)} ({dist})
         </Typography>
         <Divider sx={{ mt: 0.5 }} />

@@ -32,8 +32,8 @@ trustPolicy: no-downgrade
 
 overrides:
   "@hey-api/client-fetch": "workspace:*"
-  "react": "19.2.4"
-  "react-dom": "19.2.4"
+  "react": "19.2.6"
+  "react-dom": "19.2.6"
   "@tanstack/react-query": "^5.91.3"
   "protobufjs": ">=7.5.5"
   "uuid": ">=14.0.0"
@@ -52,3 +52,8 @@ overrides:
   # complete. recharts@3.8.1 (the only consumer in apps/web) accepts both ranges.
   "react-redux": "9.3.0"
   "reselect": "5.2.0"
+  # tinyexec switched from trusted-publisher to provenance-attestation at 1.2.x,
+  # which `trustPolicy: no-downgrade` flags as a downgrade. 1.1.2 (trusted-
+  # publisher) satisfies commitlint's `^1.0.0` range, so pin to it until
+  # tinyexec regains trusted-publisher evidence on a newer release.
+  "tinyexec": "1.1.2"

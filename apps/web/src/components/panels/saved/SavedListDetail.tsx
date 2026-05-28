@@ -207,7 +207,13 @@ export function SavedListDetail() {
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {isDefault ? (
-              <Typography variant="h6" fontWeight={600} sx={{ py: 0.5 }}>
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 600,
+                  py: 0.5,
+                }}
+              >
                 {resolveListName(list.name)}
               </Typography>
             ) : (
@@ -241,8 +247,12 @@ export function SavedListDetail() {
                 {editingName && (
                   <Typography
                     variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 0.25, display: "block", textAlign: "right" }}
+                    sx={{
+                      color: "text.secondary",
+                      mt: 0.25,
+                      display: "block",
+                      textAlign: "right",
+                    }}
                   >
                     {nameValue.length}/{NAME_MAX}
                   </Typography>
@@ -257,7 +267,12 @@ export function SavedListDetail() {
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.5 }}>
           {list.isPrivate && <LockIcon sx={{ fontSize: 14, color: "text.secondary" }} />}
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {list.isPrivate ? t("private") : t("shared")}
             {" \u00b7 "}
             {t("places", { count: list.placeCount })}
@@ -300,15 +315,20 @@ export function SavedListDetail() {
           </Button>
         </Box>
       </Box>
-
       <Divider />
-
       {placesLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
           <CircularProgress size={28} sx={{ color: TEAL }} />
         </Box>
       ) : !places || places.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            textAlign: "center",
+            py: 4,
+          }}
+        >
           {t("places", { count: 0 })}
         </Typography>
       ) : (
@@ -334,11 +354,24 @@ export function SavedListDetail() {
                 placeId={place.placeId}
               />
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={500} noWrap>
+                <Typography
+                  variant="body2"
+                  noWrap
+                  sx={{
+                    fontWeight: 500,
+                  }}
+                >
                   {place.name}
                 </Typography>
                 {place.address && (
-                  <Typography variant="caption" color="text.secondary" noWrap display="block">
+                  <Typography
+                    variant="caption"
+                    noWrap
+                    sx={{
+                      color: "text.secondary",
+                      display: "block",
+                    }}
+                  >
                     {place.address}
                   </Typography>
                 )}
@@ -391,7 +424,6 @@ export function SavedListDetail() {
           ))}
         </Box>
       )}
-
       <Menu
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
@@ -416,7 +448,6 @@ export function SavedListDetail() {
           <ListItemText>{t("deleteList")}</ListItemText>
         </MenuItem>
       </Menu>
-
       <Popover
         open={Boolean(iconAnchor)}
         anchorEl={iconAnchor}
@@ -436,7 +467,6 @@ export function SavedListDetail() {
           skinTonePosition="search"
         />
       </Popover>
-
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>{t("delete")}</DialogTitle>
         <DialogContent>

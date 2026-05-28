@@ -63,36 +63,65 @@ function NearbyPlaceCard({
         "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
       }}
     >
-      <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+      <Typography
+        variant="body1"
+        sx={{
+          fontWeight: 600,
+          mb: 0.25,
+        }}
+      >
         {place.name}
       </Typography>
-
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {tn("distanceAway", { distance: formatDistance(distance) })}
         </Typography>
         {label && (
           <>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               ·
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {label}
             </Typography>
           </>
         )}
         {place.address && place.address !== place.name && (
           <>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               ·
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {place.address}
             </Typography>
           </>
         )}
       </Box>
-
       {(() => {
         const hours = place.openingHoursInfo?.status ?? null;
         if (hours) {
@@ -156,10 +185,22 @@ export function NearbyPlacesContent() {
   if (!sourcePlace) {
     return (
       <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" }, px: 2 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 700,
+            mb: 1,
+          }}
+        >
           {tn("title")}
         </Typography>
-        <Typography color="text.secondary">{tn("sourceMissing")}</Typography>
+        <Typography
+          sx={{
+            color: "text.secondary",
+          }}
+        >
+          {tn("sourceMissing")}
+        </Typography>
       </Box>
     );
   }
@@ -167,17 +208,31 @@ export function NearbyPlacesContent() {
   return (
     <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}>
       <Box sx={{ px: 2, pb: 1.5 }}>
-        <Typography variant="h6" fontWeight={700}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           {tn("title")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {tn("around", { name: sourcePlace.name })}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {tn("within", { distance: formatDistance(radiusMetres) })}
         </Typography>
       </Box>
-
       {isLoading && (
         <Box sx={{ px: 2, py: 2 }}>
           {[0, 1, 2, 3, 4].map((i) => (
@@ -188,7 +243,6 @@ export function NearbyPlacesContent() {
           ))}
         </Box>
       )}
-
       {isError && (
         <Box sx={{ px: 2, py: 2 }}>
           <Alert severity="error" variant="outlined">
@@ -196,17 +250,26 @@ export function NearbyPlacesContent() {
           </Alert>
         </Box>
       )}
-
       {!isLoading && !isError && places.length === 0 && (
         <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
-          <Typography color="text.secondary">{ts("noResultsFound")}</Typography>
+          <Typography
+            sx={{
+              color: "text.secondary",
+            }}
+          >
+            {ts("noResultsFound")}
+          </Typography>
         </Box>
       )}
-
       {!isLoading && !isError && places.length > 0 && (
         <>
           <Box sx={{ px: 2, pt: 0.5, pb: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {tc("resultsCount", { count: places.length })}
             </Typography>
           </Box>

@@ -1,7 +1,7 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
@@ -155,10 +155,15 @@ export function MangroveAccountSection() {
           ),
         })}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 1.5,
+        }}
+      >
         {t("mangroveSectionIntro")}
       </Typography>
-
       {needsSetup && (
         <Alert
           severity="info"
@@ -172,7 +177,6 @@ export function MangroveAccountSection() {
           {t("mangroveSetupPrompt")}
         </Alert>
       )}
-
       {!needsSetup && (
         <>
           <Box
@@ -193,7 +197,13 @@ export function MangroveAccountSection() {
               <LockOpenIcon sx={{ color: "warning.main" }} />
             )}
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="caption" color="text.secondary" display="block">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  display: "block",
+                }}
+              >
                 {mode === "encrypted" ? t("mangroveEncryptedBadge") : t("mangroveUnencryptedBadge")}
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -265,7 +275,13 @@ export function MangroveAccountSection() {
                       secondary={new Date(w.createdAt).toLocaleDateString()}
                     />
                     <ListItemSecondaryAction>
-                      <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{
+                          alignItems: "center",
+                        }}
+                      >
                         {w.wrapType === "passphrase" && (
                           <Tooltip title={t("mangroveChangePassphrase")}>
                             <span>
@@ -336,8 +352,11 @@ export function MangroveAccountSection() {
               {needsUnlock && (
                 <Typography
                   variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 1, display: "block" }}
+                  sx={{
+                    color: "text.secondary",
+                    mt: 1,
+                    display: "block",
+                  }}
                 >
                   {t("mangroveMustUnlockForChanges")}
                 </Typography>
@@ -371,17 +390,13 @@ export function MangroveAccountSection() {
           </Stack>
         </>
       )}
-
       <MangroveSetupWizard
         open={setupOpen}
         onClose={() => setSetupOpen(false)}
         onDone={() => state.refetch()}
       />
-
       <MangroveUnlockDialog open={unlockOpen} onClose={() => setUnlockOpen(false)} />
-
       <MangroveExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
-
       {/* Add passphrase dialog */}
       <Dialog
         open={addPassphraseOpen}
@@ -437,7 +452,6 @@ export function MangroveAccountSection() {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Change passphrase dialog */}
       <Dialog
         open={changePassphraseOpen}
@@ -494,7 +508,6 @@ export function MangroveAccountSection() {
           </Button>
         </DialogActions>
       </Dialog>
-
       {/* Regenerate confirmation */}
       <Dialog
         open={regenerateOpen}

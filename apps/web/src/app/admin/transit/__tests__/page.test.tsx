@@ -110,7 +110,11 @@ vi.mock("@/lib/admin/transitHooks", async () => {
     useTransitFeeds: () => ({ data: sampleFeeds, isLoading: false, isError: false }),
     useTransitJobs: () => ({ data: sampleJobs, isLoading: false, isError: false }),
     useTransitJobDetail: () =>
-      ({ data: undefined, isLoading: false, isError: false }) as {
+      ({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+      }) as {
         data: TransitJobDetail | undefined;
         isLoading: boolean;
         isError: boolean;

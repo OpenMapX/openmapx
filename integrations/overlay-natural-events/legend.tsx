@@ -64,7 +64,6 @@ export function NaturalEventLegend() {
           }}
         />
       )}
-
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("naturalEvents")}</Typography>
@@ -76,7 +75,6 @@ export function NaturalEventLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       {/* Time range */}
       <Box sx={{ mb: 1 }}>
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.5 }}>
@@ -98,7 +96,6 @@ export function NaturalEventLegend() {
           ))}
         </ToggleButtonGroup>
       </Box>
-
       {/* Category chips */}
       <Box sx={{ mb: 1 }}>
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.5 }}>
@@ -153,7 +150,6 @@ export function NaturalEventLegend() {
           })}
         </Box>
       </Box>
-
       {/* Event count + last updated */}
       <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
         {eventCount > 0
@@ -162,20 +158,22 @@ export function NaturalEventLegend() {
             ? t("loading")
             : t("noEvents")}
       </Typography>
-
       {lastUpdated && (
         <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.25 }}>
           {t("lastUpdated", { time: relativeTime(Date.now() - lastUpdated) })}
         </Typography>
       )}
-
       {/* Attribution (from manifest dataSources, trusted HTML) */}
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 0.5,
+            display: "block",
+            fontSize: 10.5,
+          }}
         />
       )}
     </Paper>

@@ -89,8 +89,11 @@ export function MapClickFloatingCard() {
             ) : (
               <Typography
                 variant="body2"
-                fontWeight={600}
-                sx={{ lineHeight: 1.3, wordBreak: "break-word" }}
+                sx={{
+                  fontWeight: 600,
+                  lineHeight: 1.3,
+                  wordBreak: "break-word",
+                }}
               >
                 {placeName}
               </Typography>

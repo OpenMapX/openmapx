@@ -48,23 +48,50 @@ export function DetailsView({
           <ArrowBackIcon sx={{ fontSize: 20 }} />
         </IconButton>
         <Box>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("from")}{" "}
-            <Box component="span" fontWeight={600} color="text.primary">
+            <Box
+              component="span"
+              sx={{
+                fontWeight: 600,
+                color: "text.primary",
+              }}
+            >
               {originLabel || t("origin")}
             </Box>
           </Typography>
           <br />
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("to")}{" "}
-            <Box component="span" fontWeight={600} color="text.primary">
+            <Box
+              component="span"
+              sx={{
+                fontWeight: 600,
+                color: "text.primary",
+              }}
+            >
               {destinationLabel || t("destination")}
             </Box>
           </Typography>
           {viaStr && (
             <>
               <br />
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {viaStr}
               </Typography>
             </>
@@ -73,20 +100,38 @@ export function DetailsView({
       </Box>
       <Divider />
       <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography variant="h6" fontWeight={600} color="success.main" component="span">
+        <Typography
+          variant="h6"
+          component="span"
+          sx={{
+            fontWeight: 600,
+            color: "success.main",
+          }}
+        >
           {formatDuration(route.duration)}{" "}
         </Typography>
-        <Typography variant="body1" color="text.secondary" component="span">
+        <Typography
+          variant="body1"
+          component="span"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           ({dist})
         </Typography>
         {route.summary && (
-          <Typography variant="body2" color="text.secondary" display="block">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+            }}
+          >
             {route.summary}
           </Typography>
         )}
       </Box>
       <Divider />
-
       {hasLegs ? (
         <LegByLegView
           route={route}
@@ -97,7 +142,12 @@ export function DetailsView({
       ) : (
         <>
           <Box sx={{ px: 2, py: 1.5 }}>
-            <Typography variant="body2" fontWeight={700}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               {originLabel || t("origin")}
             </Typography>
           </Box>
@@ -112,13 +162,17 @@ export function DetailsView({
             />
           ))}
           <Box sx={{ px: 2, py: 1.5 }}>
-            <Typography variant="body2" fontWeight={700}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               {destinationLabel || t("destination")}
             </Typography>
           </Box>
         </>
       )}
-
       {route.mode !== "transit" && <ElevationProfile route={route} units={units} />}
     </Box>
   );
@@ -188,18 +242,33 @@ function LegByLegView({
                 }}
               />
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={600} noWrap>
+                <Typography
+                  variant="body2"
+                  noWrap
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
                   {fromLabel} → {toLabel}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {formatDuration(leg.duration)} · {legDist}
                 </Typography>
               </Box>
             </Box>
-
             <Collapse in={isExpanded}>
               <Box sx={{ px: 2, py: 1 }}>
-                <Typography variant="body2" fontWeight={700}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 700,
+                  }}
+                >
                   {fromLabel}
                 </Typography>
               </Box>
@@ -214,7 +283,12 @@ function LegByLegView({
                 />
               ))}
               <Box sx={{ px: 2, py: 1 }}>
-                <Typography variant="body2" fontWeight={700}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 700,
+                  }}
+                >
                   {toLabel}
                 </Typography>
               </Box>

@@ -74,11 +74,29 @@ function ServiceRequireRow({
   const installed = services.find((s) => s.id === req.service);
 
   return (
-    <Stack direction="row" spacing={2} alignItems="center">
-      <Typography variant="body2" fontFamily="monospace" sx={{ minWidth: 180 }}>
+    <Stack
+      direction="row"
+      spacing={2}
+      sx={{
+        alignItems: "center",
+      }}
+    >
+      <Typography
+        variant="body2"
+        sx={{
+          fontFamily: "monospace",
+          minWidth: 180,
+        }}
+      >
         {req.service}
         {req.optional && (
-          <Typography component="span" variant="caption" color="text.secondary">
+          <Typography
+            component="span"
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {" "}
             (optional)
           </Typography>
@@ -115,11 +133,29 @@ function CapabilityRequireRow({
   const providers = services.filter((s) => s.provides.includes(req.capability));
 
   return (
-    <Stack direction="row" spacing={2} alignItems="center">
-      <Typography variant="body2" fontFamily="monospace" sx={{ minWidth: 180 }}>
+    <Stack
+      direction="row"
+      spacing={2}
+      sx={{
+        alignItems: "center",
+      }}
+    >
+      <Typography
+        variant="body2"
+        sx={{
+          fontFamily: "monospace",
+          minWidth: 180,
+        }}
+      >
         any {req.capability}
         {req.optional && (
-          <Typography component="span" variant="caption" color="text.secondary">
+          <Typography
+            component="span"
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {" "}
             (optional)
           </Typography>
@@ -160,10 +196,20 @@ export function RequiredServicesPanel({
   return (
     <Card variant="outlined">
       <CardContent>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+        <Typography
+          variant="subtitle2"
+          gutterBottom
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Required Services
         </Typography>
-        <Stack gap={1.5}>
+        <Stack
+          sx={{
+            gap: 1.5,
+          }}
+        >
           {requires.map((r, idx) => {
             const key = r.service ?? r.capability ?? `req-${idx}`;
             if (r.service) {

@@ -11,12 +11,12 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@hey-api/openapi-ts": "^0.96.1",
-    "@scalar/openapi-parser": "^0.25.12",
-    "yaml": "^2.8.3"
+    "@hey-api/openapi-ts": "^0.97.3",
+    "@scalar/openapi-parser": "^0.28.5",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"
   }

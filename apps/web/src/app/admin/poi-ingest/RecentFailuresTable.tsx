@@ -33,12 +33,24 @@ export function RecentFailuresTable({
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700} color="error.main">
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 1.5,
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+            color: "error.main",
+          }}
+        >
           Recent failures ({state.recentFailures.length})
         </Typography>
       </Stack>
-
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -60,10 +72,20 @@ export function RecentFailuresTable({
               >
                 <TableCell>
                   <Stack spacing={0.25}>
-                    <Typography variant="body2" fontFamily="monospace">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontFamily: "monospace",
+                      }}
+                    >
                       {row.sourceId}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {row.domain}
                     </Typography>
                   </Stack>

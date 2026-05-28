@@ -40,7 +40,11 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Ban {user.name}?</DialogTitle>
       <DialogContent>
-        <DialogContentText mb={2}>
+        <DialogContentText
+          sx={{
+            mb: 2,
+          }}
+        >
           The user will be prevented from signing in. You can unban them at any time.
         </DialogContentText>
         <TextField

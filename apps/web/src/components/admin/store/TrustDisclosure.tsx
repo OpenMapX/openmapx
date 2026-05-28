@@ -39,7 +39,14 @@ function DisclosureRow({ icon, label, value, detail, risk }: DisclosureRowProps)
     : "text.disabled";
 
   return (
-    <Stack direction="row" alignItems="flex-start" gap={1.5} py={0.75}>
+    <Stack
+      direction="row"
+      sx={{
+        alignItems: "flex-start",
+        gap: 1.5,
+        py: 0.75,
+      }}
+    >
       <Box
         sx={{
           color,
@@ -51,22 +58,47 @@ function DisclosureRow({ icon, label, value, detail, risk }: DisclosureRowProps)
       >
         {icon}
       </Box>
-      <Box flex={1}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography variant="body2" fontWeight={500} color={color}>
+      <Box
+        sx={{
+          flex: 1,
+        }}
+      >
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Typography
+            variant="body2"
+            color={color}
+            sx={{
+              fontWeight: 500,
+            }}
+          >
             {label}
           </Typography>
           <Typography
             variant="caption"
-            fontWeight={700}
             color={isActive ? color : "text.disabled"}
-            sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}
+            sx={{
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
           >
             {isBool ? (value ? "Yes" : "No") : value}
           </Typography>
         </Stack>
         {detail && isActive && (
-          <Typography variant="caption" color="text.secondary" display="block">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+            }}
+          >
             {detail}
           </Typography>
         )}
@@ -87,15 +119,25 @@ export function TrustDisclosure({ trust }: TrustDisclosureProps) {
   return (
     <Box>
       <Alert severity={highRiskCount >= 2 ? "warning" : "info"} sx={{ mb: 1.5 }} icon={false}>
-        <Typography variant="caption" fontWeight={600}>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           Trust & Risk Disclosure
         </Typography>
-        <Typography variant="caption" display="block" mt={0.25}>
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            mt: 0.25,
+          }}
+        >
           Review what this integration does before installing. Community integrations are not
           audited by the OpenMapX team.
         </Typography>
       </Alert>
-
       <Box
         sx={{
           border: "1px solid",

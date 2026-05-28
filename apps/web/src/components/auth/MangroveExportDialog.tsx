@@ -73,12 +73,17 @@ export function MangroveExportDialog({ open, onClose }: Props) {
       fullWidth
       maxWidth="sm"
       fullScreen={fullScreen}
-      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
+      slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
     >
       <DialogTitle>{t("mangroveExportTitle")}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("mangroveExportHelp")}
           </Typography>
 

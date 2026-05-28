@@ -1,7 +1,7 @@
 "use client";
 
 import CopyrightOutlinedIcon from "@mui/icons-material/CopyrightOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import EditIcon from "@mui/icons-material/Edit";
 import FlagIcon from "@mui/icons-material/Flag";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -83,7 +83,13 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-            <Typography variant="body2" fontWeight={600} noWrap>
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {displayName}
             </Typography>
             {isOwn && (
@@ -99,7 +105,12 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.25 }}>
             {review.stars !== undefined && <StarDisplay value={review.stars} size={14} />}
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {relativeTime(review.createdAt, locale)}
             </Typography>
           </Box>
@@ -108,13 +119,11 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
           <MoreVertIcon sx={{ fontSize: 18 }} />
         </IconButton>
       </Box>
-
       {review.opinion && (
         <Typography variant="body2" sx={{ mb: 1, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
           {review.opinion}
         </Typography>
       )}
-
       {review.images && review.images.length > 0 && (
         <Box
           sx={{
@@ -147,7 +156,6 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
           })}
         </Box>
       )}
-
       <Menu
         anchorEl={menuAnchor}
         open={!!menuAnchor}

@@ -56,7 +56,13 @@ function TransitStopCard({
         "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
       }}
     >
-      <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+      <Typography
+        variant="body1"
+        sx={{
+          fontWeight: 600,
+          mb: 0.25,
+        }}
+      >
         {stop.name}
       </Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
@@ -107,34 +113,58 @@ function CategoryPlaceCard({
         "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
       }}
     >
-      <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+      <Typography
+        variant="body1"
+        sx={{
+          fontWeight: 600,
+          mb: 0.25,
+        }}
+      >
         {place.name}
       </Typography>
-
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
         {tagLabel && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {tagLabel}
           </Typography>
         )}
         {tagLabel && place.address && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             ·
           </Typography>
         )}
         {place.address && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {place.address}
           </Typography>
         )}
       </Box>
-
       {(() => {
         const hours = place.openingHoursInfo?.status ?? null;
         if (hours) {
           if (hours.isUnknown) {
             return (
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {hours.detail}
               </Typography>
             );
@@ -248,7 +278,6 @@ export function CategoryResultsContent() {
           ))}
         </Box>
       )}
-
       {!isTransitCategory && isError && (
         <Box sx={{ px: 2, py: 2 }}>
           <Alert severity={isAreaTooLarge(error) ? "info" : "error"} variant="outlined">
@@ -256,7 +285,6 @@ export function CategoryResultsContent() {
           </Alert>
         </Box>
       )}
-
       {!isTransitCategory && !isError && partial && (
         <Box sx={{ px: 2, pt: 1.5 }}>
           <Alert severity="info" variant="outlined">
@@ -264,19 +292,28 @@ export function CategoryResultsContent() {
           </Alert>
         </Box>
       )}
-
       {/* Transit: empty state */}
       {isTransitCategory && !transitLoading && transitStops && transitStops.length === 0 && (
         <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
-          <Typography color="text.secondary">{ts("noStopsFound")}</Typography>
+          <Typography
+            sx={{
+              color: "text.secondary",
+            }}
+          >
+            {ts("noStopsFound")}
+          </Typography>
         </Box>
       )}
-
       {/* Transit: results list */}
       {isTransitCategory && !transitLoading && transitStops && transitStops.length > 0 && (
         <>
           <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {tc("stopsCount", { count: transitStops.length })}
             </Typography>
           </Box>
@@ -293,19 +330,29 @@ export function CategoryResultsContent() {
           ))}
         </>
       )}
-
       {/* Non-transit: empty state */}
       {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
         <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
-          <Typography color="text.secondary">{ts("noResultsFound")}</Typography>
+          <Typography
+            sx={{
+              color: "text.secondary",
+            }}
+          >
+            {ts("noResultsFound")}
+          </Typography>
         </Box>
       )}
-
       {/* Non-transit: results list */}
       {!isTransitCategory && !isLoading && results && results.length > 0 && (
         <>
           <Box sx={{ px: 2, pt: 1.5, pb: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                flex: 1,
+              }}
+            >
               {tc("resultsCount", { count: results.length })}
             </Typography>
           </Box>

@@ -47,14 +47,23 @@ export default async function LicensesPage() {
       >
         {title}
       </Typography>
-
-      <Typography color="text.secondary" sx={{ mb: 2 }}>
+      <Typography
+        sx={{
+          color: "text.secondary",
+          mb: 2,
+        }}
+      >
         {isGerman
           ? "Diese Seite wird aus den installierten Paket-Metadaten erzeugt und listet die produktiven Open-Source-Abhängigkeiten der Webanwendung, der API, der eingebauten Integrationen sowie installierter Community-Integrationen."
           : "This page is generated from installed package metadata and lists the production open-source dependencies used by the web app, the API, built-in integrations, and installed community integrations."}
       </Typography>
-
-      <Stack direction="row" gap={1} sx={{ mb: 4 }}>
+      <Stack
+        direction="row"
+        sx={{
+          gap: 1,
+          mb: 4,
+        }}
+      >
         <Chip
           size="small"
           label={isGerman ? `${data.totalCount} Abhängigkeiten` : `${data.totalCount} dependencies`}
@@ -71,9 +80,12 @@ export default async function LicensesPage() {
           />
         )}
       </Stack>
-
       {data.groups.length === 0 ? (
-        <Typography color="text.secondary">
+        <Typography
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {isGerman
             ? "Noch keine Lizenzdaten verfügbar. Stellen Sie sicher, dass der prebuild-Schritt der Web-App ausgeführt wurde."
             : "No license data is available yet. Make sure the web app's prebuild step has run."}
@@ -90,11 +102,23 @@ export default async function LicensesPage() {
               {group.label}
             </Typography>
             {group.description && (
-              <Typography color="text.secondary" variant="body2" sx={{ mb: 0.5 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  mb: 0.5,
+                }}
+              >
                 {group.description}
               </Typography>
             )}
-            <Typography color="text.secondary" sx={{ mb: 2 }} variant="body2">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 2,
+              }}
+            >
               {isGerman ? `${group.notices.length} Pakete` : `${group.notices.length} packages`}
             </Typography>
             <TableContainer sx={{ overflowX: "auto" }}>
@@ -145,7 +169,12 @@ export default async function LicensesPage() {
                             {isGerman ? "Projektseite" : "Project"}
                           </Link>
                         ) : (
-                          <Typography variant="body2" color="text.disabled">
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.disabled",
+                            }}
+                          >
                             —
                           </Typography>
                         )}
@@ -166,7 +195,12 @@ export default async function LicensesPage() {
                             closeLabel={isGerman ? "Schließen" : "Close"}
                           />
                         ) : (
-                          <Typography variant="body2" color="text.disabled">
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.disabled",
+                            }}
+                          >
                             —
                           </Typography>
                         )}

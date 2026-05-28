@@ -106,7 +106,6 @@ export function SavedListsTab() {
       >
         {t("newList")}
       </Button>
-
       {lists?.map((list) => (
         <Box
           key={list.id}
@@ -127,12 +126,23 @@ export function SavedListsTab() {
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" fontWeight={500} noWrap>
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{
+                fontWeight: 500,
+              }}
+            >
               {resolveListName(list.name)}
             </Typography>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
               {list.isPrivate && <LockIcon sx={{ fontSize: 14, color: "text.secondary" }} />}
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {list.isPrivate ? t("private") : t("shared")}
                 {" \u00b7 "}
                 {t("places", { count: list.placeCount })}
@@ -145,7 +155,6 @@ export function SavedListsTab() {
           </IconButton>
         </Box>
       ))}
-
       <Menu
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
@@ -160,7 +169,6 @@ export function SavedListsTab() {
           <ListItemText>{t("deleteList")}</ListItemText>
         </MenuItem>
       </Menu>
-
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>{t("delete")}</DialogTitle>
         <DialogContent>

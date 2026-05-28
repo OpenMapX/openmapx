@@ -1,7 +1,7 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -59,11 +59,15 @@ export function OfflineSettingsClient() {
         <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
           {t("offline")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {t("offlineDescription")}
         </Typography>
       </Box>
-
       <Button
         variant="contained"
         startIcon={<AddIcon />}
@@ -72,9 +76,7 @@ export function OfflineSettingsClient() {
       >
         {t("downloadNewArea")}
       </Button>
-
       <AreaList areas={areas} onChange={refresh} />
-
       {adding ? (
         <DownloadAreaDialog
           open={adding}
@@ -96,7 +98,12 @@ function AreaList({ areas, onChange }: { areas: OfflineArea[]; onChange: () => v
   if (areas.length === 0) {
     return (
       <Paper variant="outlined" sx={{ p: 3, textAlign: "center", borderRadius: 2 }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {t("noAreas")}
         </Typography>
       </Paper>
@@ -177,7 +184,12 @@ function AreaSecondary({ area }: { area: OfflineArea }) {
 
   return (
     <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         {status} · {t("tilesProgress", { done: area.tilesDone, total: area.tileCount })} ·{" "}
         {formatBytes(area.sizeBytes)}
       </Typography>
@@ -306,14 +318,24 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
             fullWidth
           />
 
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("moveToSelect")}
           </Typography>
 
           <AreaPickerMap initialCenter={initialCenter} initialZoom={5} onChange={handleMapChange} />
 
           <Box>
-            <Stack direction="row" justifyContent="space-between">
+            <Stack
+              direction="row"
+              sx={{
+                justifyContent: "space-between",
+              }}
+            >
               <Typography variant="body2">{t("minZoom")}</Typography>
               <Typography variant="body2">{t("maxZoom")}</Typography>
             </Stack>
@@ -333,7 +355,12 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
                 { value: 18, label: "18" },
               ]}
             />
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {t("estimatedTiles", { count: tileEstimate.toLocaleString() })} ·{" "}
               {t("estimatedSize", { size: formatBytes(sizeEstimateBytes) })}
               {currentZoom ? ` · z${Math.round(currentZoom)}` : ""}

@@ -1,7 +1,7 @@
 "use client";
 
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import KeyIcon from "@mui/icons-material/Key";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
@@ -198,7 +198,7 @@ export function MangroveSetupWizard({
       fullWidth
       maxWidth="sm"
       fullScreen={fullScreen}
-      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
+      slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
     >
       <DialogTitle>
         {step === "chooseMode"
@@ -214,7 +214,13 @@ export function MangroveSetupWizard({
       <DialogContent dividers>
         {step === "chooseMode" && (
           <>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 2,
+              }}
+            >
               {t("mangroveSetupIntro")}
             </Typography>
 
@@ -292,7 +298,12 @@ export function MangroveSetupWizard({
 
         {step === "importJwk" && (
           <Stack spacing={2}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {t("mangroveImportHelp")}
             </Typography>
             <Alert severity="warning" icon={<WarningAmberIcon />}>
@@ -310,8 +321,8 @@ export function MangroveSetupWizard({
               autoFocus
               fullWidth
               placeholder='{"kty":"EC","crv":"P-256","x":"…","y":"…","d":"…"}'
-              InputProps={{
-                sx: { fontFamily: "monospace", fontSize: 13 },
+              slotProps={{
+                input: { sx: { fontFamily: "monospace", fontSize: 13 } },
               }}
             />
             {importError && <Alert severity="error">{importError}</Alert>}
@@ -361,7 +372,12 @@ export function MangroveSetupWizard({
               <AlertTitle>{t("mangroveUnencryptedWarningTitle")}</AlertTitle>
               {t("mangroveUnencryptedWarningBody")}
             </Alert>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {t("mangroveUnencryptedAck")}
             </Typography>
             {error && <Alert severity="error">{error}</Alert>}
@@ -460,14 +476,22 @@ function ModeCard({
               <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.25 }}>
                 {title}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {subtitle}
               </Typography>
               {disabledHint && (
                 <Typography
                   variant="caption"
-                  color="text.disabled"
-                  sx={{ mt: 0.5, display: "block" }}
+                  sx={{
+                    color: "text.disabled",
+                    mt: 0.5,
+                    display: "block",
+                  }}
                 >
                   {disabledHint}
                 </Typography>

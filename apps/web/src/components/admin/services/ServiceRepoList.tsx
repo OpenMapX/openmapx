@@ -30,32 +30,52 @@ export function ServiceRepoList() {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" mb={3}>
-        <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+            flex: 1,
+          }}
+        >
           Service Repositories
         </Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDialogOpen(true)}>
           Add
         </Button>
       </Stack>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 2,
+        }}
+      >
         Community service repositories are Git URLs that contain service manifests. Services from
         community repos are not reviewed by OpenMapX.
       </Typography>
-
       {isLoading && (
-        <Box display="flex" justifyContent="center" py={4}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            py: 4,
+          }}
+        >
           <CircularProgress />
         </Box>
       )}
-
       {isError && (
         <Alert severity="error" sx={{ mb: 2 }}>
           Failed to load service repositories.
         </Alert>
       )}
-
       {!isLoading && !isError && (
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
@@ -71,7 +91,14 @@ export function ServiceRepoList() {
               {(data?.repos ?? []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4}>
-                    <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        py: 2,
+                        textAlign: "center",
+                      }}
+                    >
                       No repositories registered. Click "Add" to register a community service repo.
                     </Typography>
                   </TableCell>
@@ -82,25 +109,44 @@ export function ServiceRepoList() {
                     <TableCell>
                       <Typography
                         variant="body2"
-                        fontFamily="monospace"
                         noWrap
-                        sx={{ maxWidth: 400 }}
+                        sx={{
+                          fontFamily: "monospace",
+                          maxWidth: 400,
+                        }}
                       >
                         {r.url}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {r.lastFetchedAt ? new Date(r.lastFetchedAt).toLocaleString() : "—"}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" fontFamily="monospace" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontFamily: "monospace",
+                          color: "text.secondary",
+                        }}
+                      >
                         {r.lastSha?.slice(0, 8) ?? "—"}
                       </Typography>
                     </TableCell>
                     <TableCell align="right">
-                      <Stack direction="row" justifyContent="flex-end" gap={0.5}>
+                      <Stack
+                        direction="row"
+                        sx={{
+                          justifyContent: "flex-end",
+                          gap: 0.5,
+                        }}
+                      >
                         <Tooltip title="Pull latest changes">
                           <IconButton
                             size="small"
@@ -129,7 +175,6 @@ export function ServiceRepoList() {
           </Table>
         </TableContainer>
       )}
-
       <AddRepoDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </Box>
   );

@@ -118,10 +118,21 @@ export function SavedLabeledTab() {
           >
             <Box sx={{ display: "flex", alignItems: "center", flexShrink: 0 }}>{icon}</Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" fontWeight={500}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 500,
+                }}
+              >
                 {t(key)}
               </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {dbLabel?.address ?? t("notSet")}
               </Typography>
             </Box>
@@ -137,7 +148,6 @@ export function SavedLabeledTab() {
           </Box>
         );
       })}
-
       {customLabels?.map((label) => (
         <Box
           key={label.id}
@@ -157,10 +167,21 @@ export function SavedLabeledTab() {
             <FlagIcon sx={{ color: TEAL }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" fontWeight={500}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 500,
+              }}
+            >
               {label.label}
             </Typography>
-            <Typography variant="caption" color="text.secondary" noWrap>
+            <Typography
+              variant="caption"
+              noWrap
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {label.address ?? t("notSet")}
             </Typography>
           </Box>
@@ -169,7 +190,6 @@ export function SavedLabeledTab() {
           </IconButton>
         </Box>
       ))}
-
       <Menu
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}

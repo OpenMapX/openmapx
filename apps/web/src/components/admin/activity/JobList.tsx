@@ -82,11 +82,22 @@ function JobRow({ job }: { job: AdminJob }) {
           </IconButton>
         </TableCell>
         <TableCell>
-          <Typography variant="body2" fontWeight={500}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 500,
+            }}
+          >
             {formatJobType(job.type)}
           </Typography>
           {job.payload && Object.keys(job.payload).length > 0 && (
-            <Typography variant="caption" color="text.secondary" display="block">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                display: "block",
+              }}
+            >
               {Object.entries(job.payload)
                 .map(([k, v]) => `${k}: ${v}`)
                 .join(", ")}
@@ -101,7 +112,12 @@ function JobRow({ job }: { job: AdminJob }) {
         </TableCell>
         <TableCell>
           <Tooltip title={new Date(job.createdAt).toLocaleString()}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {formatRelativeTime(job.createdAt)}
             </Typography>
           </Tooltip>
@@ -120,7 +136,11 @@ function JobRow({ job }: { job: AdminJob }) {
           })}
         >
           <Collapse in={expanded} unmountOnExit>
-            <Box py={1.5}>
+            <Box
+              sx={{
+                py: 1.5,
+              }}
+            >
               <JobDetail jobId={job.id} />
             </Box>
           </Collapse>
@@ -155,8 +175,18 @@ export function JobList() {
   });
 
   return (
-    <Stack gap={2}>
-      <Stack direction="row" alignItems="center" gap={1}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 1,
+        }}
+      >
         <ToggleButtonGroup
           size="small"
           value={statusFilter}
@@ -190,7 +220,6 @@ export function JobList() {
           </IconButton>
         </Tooltip>
       </Stack>
-
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -208,7 +237,12 @@ export function JobList() {
             <TableBody>
               <TableRow>
                 <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                  <Typography color="text.secondary" variant="body2">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     No jobs found
                   </Typography>
                 </TableCell>

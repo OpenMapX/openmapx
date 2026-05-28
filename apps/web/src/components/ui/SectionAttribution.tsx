@@ -37,9 +37,12 @@ export function SectionAttribution({ name, url, license, licenseUrl }: SectionAt
   return (
     <Typography
       variant="caption"
-      color="text.secondary"
       component="div"
-      sx={{ mt: 0.5, display: "block" }}
+      sx={{
+        color: "text.secondary",
+        mt: 0.5,
+        display: "block",
+      }}
     >
       {tc("data")}: © {maybeLink(name, url)}
       {license && <> ({maybeLink(license, licenseUrl)})</>}

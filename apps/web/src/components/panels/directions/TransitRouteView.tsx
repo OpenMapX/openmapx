@@ -84,7 +84,14 @@ function TransitLiveBadge({ tripId }: { tripId: string }) {
       }}
     >
       <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: "#4caf50", flexShrink: 0 }} />
-      <Typography variant="caption" fontWeight={600} sx={{ color: TEAL, fontSize: 10 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 600,
+          color: TEAL,
+          fontSize: 10,
+        }}
+      >
         {tc("live")}
       </Typography>
     </Box>
@@ -126,8 +133,12 @@ function LiveStopTime({
       {hasDelay && (
         <Typography
           variant="caption"
-          fontWeight={600}
-          sx={{ display: "block", color: "error.main", fontSize: "0.7rem" }}
+          sx={{
+            fontWeight: 600,
+            display: "block",
+            color: "error.main",
+            fontSize: "0.7rem",
+          }}
         >
           +{delayMin}m
         </Typography>
@@ -173,12 +184,21 @@ function TransitEmissionsBadge({
       />
       <Typography
         variant="caption"
-        fontWeight={600}
-        sx={{ color: isLowest ? TEAL : "text.secondary", fontSize: 10.5 }}
+        sx={{
+          fontWeight: 600,
+          color: isLowest ? TEAL : "text.secondary",
+          fontSize: 10.5,
+        }}
       >
         {isLowest ? t("lowestCo2") : t("co2Emissions")}
       </Typography>
-      <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10.5 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 600,
+          fontSize: 10.5,
+        }}
+      >
         {emission}
       </Typography>
     </Box>
@@ -234,7 +254,12 @@ export function TransitItineraryCard({
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
           <DirectionsTransitIcon sx={{ fontSize: 18, color: active ? TEAL : "text.disabled" }} />
-          <Typography variant="body2" fontWeight={600}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             {startTime} – {endTime}
           </Typography>
         </Box>
@@ -246,12 +271,17 @@ export function TransitItineraryCard({
               />
             </Tooltip>
           )}
-          <Typography variant="body2" fontWeight={600} color={active ? TEAL : "text.primary"}>
+          <Typography
+            variant="body2"
+            color={active ? TEAL : "text.primary"}
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             {formatDuration(itinerary.duration)}
           </Typography>
         </Box>
       </Box>
-
       {/* Leg summary + fare */}
       <Box
         sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 0.75 }}
@@ -288,19 +318,23 @@ export function TransitItineraryCard({
           </Typography>
         )}
       </Box>
-
       {metaBits.length > 0 && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            mt: 0.5,
+            display: "block",
+          }}
+        >
           {metaBits.join(" · ")}
         </Typography>
       )}
-
       {itinerary.co2Grams !== undefined && (
         <Box sx={{ mt: metaBits.length > 0 ? 0.75 : 0.5 }}>
           <TransitEmissionsBadge co2Grams={itinerary.co2Grams} isLowest={isLowestCo2} />
         </Box>
       )}
-
       {active && (
         <Box sx={{ mt: 0.5, ml: -1.5 }}>
           <Typography

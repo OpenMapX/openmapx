@@ -107,8 +107,10 @@ export function AutocompleteDropdown({
             <ListItemText
               primary={s.label}
               secondary={s.sublabel}
-              primaryTypographyProps={{ fontSize: 14, fontWeight: 400 }}
-              secondaryTypographyProps={{ fontSize: 12 }}
+              slotProps={{
+                primary: { sx: { fontSize: 14, fontWeight: 400 } },
+                secondary: { sx: { fontSize: 12 } },
+              }}
             />
           </ListItemButton>
         </li>

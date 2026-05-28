@@ -62,7 +62,6 @@ export function SatelliteLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       {/* Layer picker */}
       <Box sx={{ mb: 1.5 }}>
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.5 }}>
@@ -91,7 +90,6 @@ export function SatelliteLegend() {
           ))}
         </Box>
       </Box>
-
       {/* Date controls */}
       <Box sx={{ mb: 1.5 }}>
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.5 }}>{t("date")}</Typography>
@@ -131,7 +129,6 @@ export function SatelliteLegend() {
           />
         </Box>
       </Box>
-
       {/* Colorbar legend (data layers only) */}
       {layerCap?.legend && (
         <Box sx={{ mb: 1.5 }}>
@@ -143,7 +140,6 @@ export function SatelliteLegend() {
           />
         </Box>
       )}
-
       {/* Opacity slider */}
       <Box sx={{ mb: 1 }}>
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.25 }}>
@@ -159,14 +155,15 @@ export function SatelliteLegend() {
           sx={{ py: 0.5 }}
         />
       </Box>
-
       {/* Attribution (from manifest dataSources — trusted, not user-generated) */}
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 1 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 1,
+          }}
         />
       )}
     </Paper>

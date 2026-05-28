@@ -42,7 +42,13 @@ function Bar({
 }) {
   const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
   return (
-    <Stack direction="row" alignItems="center" spacing={1.5}>
+    <Stack
+      direction="row"
+      spacing={1.5}
+      sx={{
+        alignItems: "center",
+      }}
+    >
       <Typography
         variant="caption"
         sx={{
@@ -82,21 +88,44 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 1.5,
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Feeds breakdown
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Chip size="small" variant="outlined" label={`${state.feedCount} total`} />
       </Stack>
-
       <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              mb: 1,
+            }}
+          >
             By region
           </Typography>
           {regionEntries.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               No feeds yet.
             </Typography>
           ) : (
@@ -108,11 +137,23 @@ export function FeedsBreakdownChart({ state }: { state: TransitStateSummary }) {
           )}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              mb: 1,
+            }}
+          >
             By status
           </Typography>
           {statusEntries.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               No feeds yet.
             </Typography>
           ) : (

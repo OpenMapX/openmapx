@@ -88,10 +88,17 @@ export function PoiSourceTable({
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={1.5}
-        alignItems={{ sm: "center" }}
-        mb={1.5}
+        sx={{
+          alignItems: { sm: "center" },
+          mb: 1.5,
+        }}
       >
-        <Typography variant="subtitle1" fontWeight={700}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Sources ({data?.length ?? 0})
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -126,9 +133,14 @@ export function PoiSourceTable({
           ))}
         </TextField>
       </Stack>
-
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={3}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            py: 3,
+          }}
+        >
           <CircularProgress size={22} />
         </Box>
       ) : isError ? (
@@ -136,7 +148,12 @@ export function PoiSourceTable({
           Failed to load sources.
         </Typography>
       ) : !data || data.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           No sources match the current filter.
         </Typography>
       ) : (
@@ -169,21 +186,43 @@ export function PoiSourceTable({
                   >
                     <TableCell>
                       <Stack spacing={0.25}>
-                        <Typography variant="body2" fontFamily="monospace">
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: "monospace",
+                          }}
+                        >
                           {row.sourceId}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.secondary",
+                          }}
+                        >
                           {row.name}
                         </Typography>
                       </Stack>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="caption" fontFamily="monospace">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontFamily: "monospace",
+                        }}
+                      >
                         {row.domain}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        useFlexGap
+                        sx={{
+                          flexWrap: "wrap",
+                        }}
+                      >
                         {row.kinds.map((k) => (
                           <Chip
                             key={k}
@@ -221,7 +260,13 @@ export function PoiSourceTable({
                       <Typography variant="caption">{formatTime(row.lastLiveIngestAt)}</Typography>
                     </TableCell>
                     <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                      <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{
+                          justifyContent: "flex-end",
+                        }}
+                      >
                         <Tooltip title={isBundled ? "Bundled source — full sync" : "Sync now"}>
                           <span>
                             <Button

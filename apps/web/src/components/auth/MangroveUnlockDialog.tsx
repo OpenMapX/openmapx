@@ -64,7 +64,13 @@ export function MangroveUnlockDialog({ open, onClose, onUnlocked, rpId }: Props)
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>{t("mangroveUnlockTitle")}</DialogTitle>
       <DialogContent dividers>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 2,
+          }}
+        >
           {t("mangroveUnlockIntro")}
         </Typography>
 
@@ -85,7 +91,12 @@ export function MangroveUnlockDialog({ open, onClose, onUnlocked, rpId }: Props)
 
         {hasPassphrase && hasWebAuthn && (
           <Divider sx={{ my: 2 }}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {tc("or")}
             </Typography>
           </Divider>

@@ -401,7 +401,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
       maxWidth="sm"
       fullWidth
       fullScreen={fullScreen}
-      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
+      slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
     >
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <PersonIcon />
@@ -412,7 +412,6 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-
       <DialogContent dividers>
         {message && (
           <Alert severity={message.type} sx={{ mb: 2 }}>
@@ -459,7 +458,13 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
         </Typography>
         {!changingEmail ? (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 3 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                flex: 1,
+              }}
+            >
               {user.email}
             </Typography>
             <Button size="small" startIcon={<EditIcon />} onClick={() => setChangingEmail(true)}>
@@ -624,7 +629,13 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           <Box sx={{ mb: 3 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
               <SecurityIcon fontSize="small" color="success" />
-              <Typography variant="body2" color="success.main" sx={{ flex: 1 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "success.main",
+                  flex: 1,
+                }}
+              >
                 {t("twoFAEnabled")}
               </Typography>
             </Box>
@@ -797,7 +808,13 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
           </Box>
         ) : !showTwoFactorSetup ? (
           <Box sx={{ mb: 3 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mb: 1.5,
+              }}
+            >
               {t("twoFADescription")}
             </Typography>
             <Button
@@ -863,8 +880,12 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                 </Box>
                 <Typography
                   variant="caption"
-                  color="text.secondary"
-                  sx={{ display: "block", mb: 2, wordBreak: "break-all" }}
+                  sx={{
+                    color: "text.secondary",
+                    display: "block",
+                    mb: 2,
+                    wordBreak: "break-all",
+                  }}
                 >
                   {t("orEnterManually", { uri: totpSetupUri })}
                 </Typography>
@@ -1054,7 +1075,13 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
             ))}
           </List>
         ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mb: 1,
+            }}
+          >
             {t("noPasskeys")}
           </Typography>
         )}

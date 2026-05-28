@@ -24,10 +24,15 @@ export default function PrivacyContent({
       <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 1 }}>
         Privacy Policy
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 4,
+        }}
+      >
         Last updated: April 2026
       </Typography>
-
       <Section title="1. Controller and Contact">
         <Typography>
           The controller responsible for data processing on this website within the meaning of the
@@ -43,7 +48,6 @@ export default function PrivacyContent({
           Email: <Link href={`mailto:${email}`}>{email}</Link>
         </Typography>
       </Section>
-
       <Section title="2. Overview of Data Processing">
         <Typography>
           OpenMapX is an open-data mapping platform. We are committed to minimizing the personal
@@ -79,7 +83,6 @@ export default function PrivacyContent({
           </li>
         </ul>
       </Section>
-
       <Section title="3. Hosting and Server Logs">
         <Typography>
           When you visit OpenMapX, your browser automatically transmits certain technical data to
@@ -114,7 +117,6 @@ export default function PrivacyContent({
           is in place. Hetzner&apos;s data centers are located in Germany and Finland (EU).
         </Typography>
       </Section>
-
       <Section title="4. Geolocation Data">
         <Typography>
           OpenMapX may request your device&apos;s location only when you explicitly click the
@@ -140,7 +142,6 @@ export default function PrivacyContent({
           prompt).
         </Typography>
       </Section>
-
       <Section title="5. User Accounts">
         <Typography>
           You can use OpenMapX without creating an account. If you choose to register, we process:
@@ -245,7 +246,6 @@ export default function PrivacyContent({
           synchronization) cannot be provided.
         </Typography>
       </Section>
-
       <Section title="6. Reviews (Mangrove Open Reviews Standard)">
         <Typography>
           OpenMapX integrates the{" "}
@@ -324,7 +324,6 @@ export default function PrivacyContent({
           the decentralized design of the system.
         </Typography>
       </Section>
-
       <Section title="7. Third-Party Services and Data Transfers">
         <Typography>
           To provide its mapping features, OpenMapX sends requests to various third-party APIs. When
@@ -469,7 +468,6 @@ export default function PrivacyContent({
           interest in providing the mapping service you are using).
         </Typography>
       </Section>
-
       <Section title="8. Cookies and Local Storage">
         <Typography>
           OpenMapX uses first-party storage mechanisms only. Storage that is necessary for the
@@ -539,7 +537,6 @@ export default function PrivacyContent({
           first-party setting rather than a tracking banner.
         </Typography>
       </Section>
-
       <Section title="9. Server-Side Caching and Databases">
         <Typography>
           To improve performance and reduce load on third-party APIs, our server caches API
@@ -555,7 +552,6 @@ export default function PrivacyContent({
           database schemas. None of this data constitutes personal data of end users.
         </Typography>
       </Section>
-
       <Section title="10. Email Communication">
         <Typography>If you register an account, we may send transactional emails for:</Typography>
         <ul>
@@ -576,7 +572,6 @@ export default function PrivacyContent({
           requested).
         </Typography>
       </Section>
-
       <Section title="11. Your Rights Under the GDPR">
         <Typography>You have the following rights regarding your personal data:</Typography>
         <ul>
@@ -636,7 +631,6 @@ export default function PrivacyContent({
           .
         </Typography>
       </Section>
-
       <Section title="12. Data Retention">
         <Typography>We retain personal data only as long as necessary:</Typography>
         <ul>
@@ -683,7 +677,6 @@ export default function PrivacyContent({
           </li>
         </ul>
       </Section>
-
       <Section title="13. Security">
         <Typography>
           We implement appropriate technical and organizational measures to protect your data,
@@ -701,7 +694,6 @@ export default function PrivacyContent({
           choosing one of the encrypted modes and never sharing your passphrase.
         </Typography>
       </Section>
-
       <Section title="14. Children's Privacy">
         <Typography>
           OpenMapX is not directed at children under the age of 16. We do not knowingly collect
@@ -709,7 +701,6 @@ export default function PrivacyContent({
           data, please contact us so we can delete it.
         </Typography>
       </Section>
-
       <Section title="15. Changes to This Policy">
         <Typography>
           We may update this privacy policy from time to time. The current version is always

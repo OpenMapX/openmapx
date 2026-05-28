@@ -6,6 +6,6 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "geo-tz": "^8.1.6"
+    "geo-tz": "^8.1.7"
   }
 }

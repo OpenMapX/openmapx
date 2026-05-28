@@ -200,10 +200,20 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
             }
             label={
               <Stack spacing={0.5}>
-                <Typography variant="body2" fontWeight={600}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
                   {t("rememberRecentMapData")}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {t("rememberRecentMapDataDescription")}
                 </Typography>
               </Stack>
@@ -227,7 +237,12 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
 
         <Stack spacing={1}>
           {info?.rows.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               —
             </Typography>
           ) : (
@@ -235,11 +250,18 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
               <Stack
                 key={row.label}
                 direction="row"
-                justifyContent="space-between"
-                sx={{ py: 0.5 }}
+                sx={{
+                  justifyContent: "space-between",
+                  py: 0.5,
+                }}
               >
                 <Typography variant="body2">{row.label}</Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {formatBytes(row.bytes)}
                 </Typography>
               </Stack>

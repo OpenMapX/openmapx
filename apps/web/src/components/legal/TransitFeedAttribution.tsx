@@ -46,7 +46,12 @@ export function TransitFeedAttribution({ feeds, labels }: TransitFeedAttribution
         <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
           {labels.heading}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {labels.fallback}
         </Typography>
       </Box>
@@ -69,7 +74,13 @@ export function TransitFeedAttribution({ feeds, labels }: TransitFeedAttribution
       <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
         {labels.heading}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 2,
+        }}
+      >
         {labels.description
           .replace("{count}", String(feeds.length))
           .replace("{countries}", String(totalCountries))}
@@ -85,7 +96,13 @@ export function TransitFeedAttribution({ feeds, labels }: TransitFeedAttribution
             <Typography variant="body2" sx={{ fontWeight: 500 }}>
               {country}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                ml: 1,
+              }}
+            >
               ({countryFeeds.length} {labels.feeds})
             </Typography>
           </AccordionSummary>

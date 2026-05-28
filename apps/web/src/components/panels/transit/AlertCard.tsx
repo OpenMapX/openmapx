@@ -1,6 +1,6 @@
 "use client";
 
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import Box from "@mui/material/Box";
@@ -95,21 +95,25 @@ export function AlertCard({ alert, compact = false, expandable = true }: AlertCa
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
           variant={compact ? "caption" : "body2"}
-          fontWeight={600}
-          sx={{ color: config.color, lineHeight: 1.4 }}
+          sx={{
+            fontWeight: 600,
+            color: config.color,
+            lineHeight: 1.4,
+          }}
         >
           {alert.title}
         </Typography>
         {!compact && alert.description && (
           <Typography
             variant="caption"
-            color="text.secondary"
             onClick={expandable ? () => setDescExpanded((e) => !e) : undefined}
             sx={{
+              color: "text.secondary",
               display: "block",
               mt: 0.25,
               lineHeight: 1.4,
               cursor: expandable ? "pointer" : "default",
+
               ...(!descExpanded &&
                 expandable && {
                   display: "-webkit-box",

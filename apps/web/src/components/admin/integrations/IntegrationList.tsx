@@ -57,14 +57,24 @@ type QualityFilter = "all" | "built-in" | "community";
 function HealthCell({ integration }: { integration: IntegrationSummary }) {
   if (!integration.hasHealthCheck) {
     return (
-      <Typography variant="body2" color="text.disabled">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.disabled",
+        }}
+      >
         N/A
       </Typography>
     );
   }
   if (!integration.health) {
     return (
-      <Typography variant="body2" color="text.disabled">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.disabled",
+        }}
+      >
         —
       </Typography>
     );
@@ -80,7 +90,13 @@ function HealthCell({ integration }: { integration: IntegrationSummary }) {
     );
   }
   return (
-    <Typography variant="body2" color="success.main" fontWeight={500}>
+    <Typography
+      variant="body2"
+      sx={{
+        color: "success.main",
+        fontWeight: 500,
+      }}
+    >
       {integration.health.responseTime != null ? `${integration.health.responseTime}ms` : "Up"}
     </Typography>
   );
@@ -213,9 +229,18 @@ export function IntegrationList() {
 
   if (isLoading) {
     return (
-      <Stack gap={2}>
+      <Stack
+        sx={{
+          gap: 2,
+        }}
+      >
         <Skeleton variant="text" width={200} height={40} />
-        <Stack direction="row" gap={1}>
+        <Stack
+          direction="row"
+          sx={{
+            gap: 1,
+          }}
+        >
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} variant="rounded" width={100} height={24} />
           ))}
@@ -233,18 +258,35 @@ export function IntegrationList() {
   }
 
   return (
-    <Stack gap={3}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
       <Stack
         direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={1}
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1,
+        }}
       >
-        <Typography variant="h5" fontWeight={700}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Integrations
         </Typography>
-        <Stack direction="row" gap={0.75} flexWrap="wrap">
+        <Stack
+          direction="row"
+          sx={{
+            gap: 0.75,
+            flexWrap: "wrap",
+          }}
+        >
           <Chip label={`${integrations.length} total`} size="small" variant="outlined" />
           <Chip
             label={`${counts.enabled} enabled`}
@@ -271,8 +313,14 @@ export function IntegrationList() {
           )}
         </Stack>
       </Stack>
-
-      <Stack direction="row" gap={1.5} flexWrap="wrap" alignItems="center">
+      <Stack
+        direction="row"
+        sx={{
+          gap: 1.5,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
         <TextField
           size="small"
           placeholder="Search by name, id, domain…"
@@ -350,7 +398,14 @@ export function IntegrationList() {
           </Button>
         )}
 
-        <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ ml: { sm: "auto" } }}>
+        <Stack
+          direction="row"
+          sx={{
+            gap: 1.5,
+            flexWrap: "wrap",
+            ml: { sm: "auto" },
+          }}
+        >
           <Button
             component={Link}
             href="/admin/integrations/bulk"
@@ -382,7 +437,6 @@ export function IntegrationList() {
           </Button>
         </Stack>
       </Stack>
-
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">
           <TableHead>
@@ -400,7 +454,14 @@ export function IntegrationList() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7}>
-                  <Typography variant="body2" color="text.secondary" align="center" py={3}>
+                  <Typography
+                    variant="body2"
+                    align="center"
+                    sx={{
+                      color: "text.secondary",
+                      py: 3,
+                    }}
+                  >
                     No integrations match your filters
                   </Typography>
                 </TableCell>
@@ -417,31 +478,54 @@ export function IntegrationList() {
                   />
                 </TableCell>
                 <TableCell>
-                  <Stack gap={0.25}>
+                  <Stack
+                    sx={{
+                      gap: 0.25,
+                    }}
+                  >
                     <Typography
                       component={Link}
                       href={`/admin/integrations/${integration.id}`}
                       variant="body2"
-                      fontWeight={600}
-                      lineHeight={1.2}
-                      sx={{ textDecoration: "none", color: "primary.main" }}
+                      sx={{
+                        fontWeight: 600,
+                        lineHeight: 1.2,
+                        textDecoration: "none",
+                        color: "primary.main",
+                      }}
                     >
                       {integration.name}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {integration.id}
                     </Typography>
                   </Stack>
                 </TableCell>
                 <TableCell>
-                  <Stack direction="row" gap={0.5} flexWrap="wrap">
+                  <Stack
+                    direction="row"
+                    sx={{
+                      gap: 0.5,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     {integration.domains.map((d) => (
                       <DomainChip key={d} domain={d} />
                     ))}
                   </Stack>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {integration.version ?? "—"}
                   </Typography>
                 </TableCell>

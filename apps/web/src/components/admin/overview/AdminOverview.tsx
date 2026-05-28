@@ -1,8 +1,8 @@
 "use client";
 
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
 import DnsIcon from "@mui/icons-material/Dns";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import ExtensionIcon from "@mui/icons-material/Extension";
 import GroupIcon from "@mui/icons-material/Group";
 import KeyIcon from "@mui/icons-material/Key";
@@ -96,9 +96,21 @@ function StatCard({
     <Card variant="outlined">
       <CardActionArea component={Link} href={href} sx={{ height: "100%" }}>
         <CardContent>
-          <Stack direction="row" alignItems="center" gap={1} mb={1.5}>
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "center",
+              gap: 1,
+              mb: 1.5,
+            }}
+          >
             <Box sx={{ color: "primary.main" }}>{icon}</Box>
-            <Typography variant="subtitle2" color="text.secondary">
+            <Typography
+              variant="subtitle2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {title}
             </Typography>
           </Stack>
@@ -219,8 +231,17 @@ export function AdminOverview() {
 
   if (isLoading) {
     return (
-      <Stack gap={3}>
-        <Typography variant="h5" fontWeight={700}>
+      <Stack
+        sx={{
+          gap: 3,
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Overview
         </Typography>
         <Grid container spacing={2}>
@@ -245,28 +266,37 @@ export function AdminOverview() {
   );
 
   return (
-    <Stack gap={3}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
       {/* Header */}
       <Stack
         direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={1}
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1,
+        }}
       >
-        <Typography variant="h5" fontWeight={700}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Overview
         </Typography>
         <HealthBadge status={data.systemHealth.status} />
       </Stack>
-
       {/* Summary cards */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard title="System Health" icon={<CheckCircleOutlineIcon />} href="/admin/status">
             <Typography
               variant="h4"
-              fontWeight={700}
               color={
                 data.systemHealth.status === "pass"
                   ? "success.main"
@@ -274,10 +304,18 @@ export function AdminOverview() {
                     ? "warning.main"
                     : "error.main"
               }
+              sx={{
+                fontWeight: 700,
+              }}
             >
               {data.systemHealth.status === "pass" ? "OK" : data.systemHealth.unhealthyCount}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {data.systemHealth.status === "pass"
                 ? "All systems operational"
                 : `${data.systemHealth.unhealthyCount} unhealthy`}
@@ -287,10 +325,22 @@ export function AdminOverview() {
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard title="Users" icon={<GroupIcon />} href="/admin/users">
-            <Typography variant="h4" fontWeight={700}>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               {data.users.total}
             </Typography>
-            <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+                flexWrap: "wrap",
+                mt: 0.5,
+              }}
+            >
               <Chip
                 label={`${data.users.active24h} active`}
                 size="small"
@@ -311,10 +361,22 @@ export function AdminOverview() {
 
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <StatCard title="Integrations" icon={<ExtensionIcon />} href="/admin/integrations">
-            <Typography variant="h4" fontWeight={700}>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               {data.integrations.total}
             </Typography>
-            <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+                flexWrap: "wrap",
+                mt: 0.5,
+              }}
+            >
               <Chip
                 label={`${data.integrations.enabled} enabled`}
                 size="small"
@@ -344,10 +406,22 @@ export function AdminOverview() {
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           {data.services ? (
             <StatCard title="Services" icon={<DnsIcon />} href="/admin/services">
-              <Typography variant="h4" fontWeight={700}>
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 700,
+                }}
+              >
                 {data.services.running}
               </Typography>
-              <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 0.5,
+                  flexWrap: "wrap",
+                  mt: 0.5,
+                }}
+              >
                 <Chip
                   label={`${data.services.running} running`}
                   size="small"
@@ -367,10 +441,21 @@ export function AdminOverview() {
             </StatCard>
           ) : (
             <StatCard title="Services" icon={<DnsIcon />} href="/admin/status">
-              <Typography variant="h4" fontWeight={700} color="text.secondary">
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 700,
+                  color: "text.secondary",
+                }}
+              >
                 N/A
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 Cloud deployment
               </Typography>
             </StatCard>
@@ -381,12 +466,21 @@ export function AdminOverview() {
           <StatCard title="Credentials" icon={<KeyIcon />} href="/admin/integrations">
             <Typography
               variant="h4"
-              fontWeight={700}
               color={totalMissingCredentials > 0 ? "warning.main" : "success.main"}
+              sx={{
+                fontWeight: 700,
+              }}
             >
               {totalMissingCredentials}
             </Typography>
-            <Stack direction="row" gap={0.5} flexWrap="wrap" mt={0.5}>
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+                flexWrap: "wrap",
+                mt: 0.5,
+              }}
+            >
               <Chip
                 label={`${credentials.length} integration${credentials.length === 1 ? "" : "s"}`}
                 size="small"
@@ -406,14 +500,23 @@ export function AdminOverview() {
           </StatCard>
         </Grid>
       </Grid>
-
       {/* Attention list */}
       {data.attention.length > 0 && (
         <Box>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          <Typography
+            variant="subtitle1"
+            gutterBottom
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             Needs Attention
           </Typography>
-          <Stack gap={1}>
+          <Stack
+            sx={{
+              gap: 1,
+            }}
+          >
             {(attentionExpanded
               ? data.attention
               : data.attention.slice(0, COLLAPSED_LIST_LIMIT)
@@ -446,16 +549,20 @@ export function AdminOverview() {
           </Stack>
         </Box>
       )}
-
       {credentialsOverview.isError && (
         <Alert severity="error" variant="outlined">
           Failed to load credentials summary.
         </Alert>
       )}
-
       {credentials.length > 0 && (
         <Box>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          <Typography
+            variant="subtitle1"
+            gutterBottom
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             Credentials Overview
           </Typography>
           {!credentialsOverview.data?.secretsConfigured && (
@@ -469,7 +576,11 @@ export function AdminOverview() {
               No missing integration credentials detected.
             </Alert>
           ) : (
-            <Stack gap={1}>
+            <Stack
+              sx={{
+                gap: 1,
+              }}
+            >
               {(credentialsExpanded
                 ? missingCredentialIntegrations
                 : missingCredentialIntegrations.slice(0, COLLAPSED_LIST_LIMIT)
@@ -508,13 +619,24 @@ export function AdminOverview() {
           )}
         </Box>
       )}
-
       {/* Quick actions */}
       <Box>
-        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+        <Typography
+          variant="subtitle1"
+          gutterBottom
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           Quick Actions
         </Typography>
-        <Stack direction="row" gap={1} flexWrap="wrap">
+        <Stack
+          direction="row"
+          sx={{
+            gap: 1,
+            flexWrap: "wrap",
+          }}
+        >
           <Button
             variant="outlined"
             size="small"
@@ -535,35 +657,54 @@ export function AdminOverview() {
           </Button>
         </Stack>
       </Box>
-
       <Divider />
-
       {/* Bottom row: Recent Activity + Active Jobs */}
       <Grid container spacing={3}>
         {/* Recent Activity */}
         <Grid size={{ xs: 12, md: 7 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          <Typography
+            variant="subtitle1"
+            gutterBottom
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             Recent Activity
           </Typography>
           {data.recentActivity.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               No recent activity.
             </Typography>
           ) : (
-            <Stack gap={0.5}>
+            <Stack
+              sx={{
+                gap: 0.5,
+              }}
+            >
               {data.recentActivity.map((entry) => (
                 <Stack
                   key={entry.id}
                   direction="row"
-                  alignItems="center"
-                  gap={1}
-                  py={0.5}
-                  sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+                  sx={{
+                    alignItems: "center",
+                    gap: 1,
+                    py: 0.5,
+                    borderBottom: "1px solid",
+                    borderColor: "divider",
+                  }}
                 >
                   <Typography
                     variant="caption"
-                    color="text.secondary"
-                    sx={{ minWidth: 120, fontFamily: "monospace" }}
+                    sx={{
+                      color: "text.secondary",
+                      minWidth: 120,
+                      fontFamily: "monospace",
+                    }}
                   >
                     {new Date(entry.createdAt).toLocaleString(undefined, {
                       month: "short",
@@ -581,9 +722,11 @@ export function AdminOverview() {
                   {entry.targetId && (
                     <Typography
                       variant="caption"
-                      color="text.secondary"
                       noWrap
-                      sx={{ maxWidth: 200 }}
+                      sx={{
+                        color: "text.secondary",
+                        maxWidth: 200,
+                      }}
                     >
                       {entry.targetId}
                     </Typography>
@@ -599,23 +742,41 @@ export function AdminOverview() {
 
         {/* Active Jobs */}
         <Grid size={{ xs: 12, md: 5 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          <Typography
+            variant="subtitle1"
+            gutterBottom
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             Jobs
           </Typography>
           {data.activeJobs.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               No recent jobs.
             </Typography>
           ) : (
-            <Stack gap={0.5}>
+            <Stack
+              sx={{
+                gap: 0.5,
+              }}
+            >
               {data.activeJobs.map((job) => (
                 <Stack
                   key={job.id}
                   direction="row"
-                  alignItems="center"
-                  gap={1}
-                  py={0.5}
-                  sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+                  sx={{
+                    alignItems: "center",
+                    gap: 1,
+                    py: 0.5,
+                    borderBottom: "1px solid",
+                    borderColor: "divider",
+                  }}
                 >
                   <Chip
                     label={job.status}
@@ -632,7 +793,12 @@ export function AdminOverview() {
                       <CircularProgress size={16} variant="determinate" value={job.progress} />
                     </Tooltip>
                   )}
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {new Date(job.finishedAt ?? job.createdAt).toLocaleTimeString(undefined, {
                       hour: "2-digit",
                       minute: "2-digit",

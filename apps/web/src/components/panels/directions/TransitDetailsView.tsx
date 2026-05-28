@@ -147,29 +147,62 @@ export function TransitDetailsView({
           <ArrowBackIcon sx={{ fontSize: 20 }} />
         </IconButton>
         <Box>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("from")}{" "}
-            <Box component="span" fontWeight={600} color="text.primary">
+            <Box
+              component="span"
+              sx={{
+                fontWeight: 600,
+                color: "text.primary",
+              }}
+            >
               {originLabel || t("origin")}
             </Box>
           </Typography>
           <br />
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("to")}{" "}
-            <Box component="span" fontWeight={600} color="text.primary">
+            <Box
+              component="span"
+              sx={{
+                fontWeight: 600,
+                color: "text.primary",
+              }}
+            >
               {destinationLabel || t("destination")}
             </Box>
           </Typography>
         </Box>
       </Box>
       <Divider />
-
       {/* Summary */}
       <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography variant="h6" fontWeight={600} component="span">
+        <Typography
+          variant="h6"
+          component="span"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           {startTime} – {endTime}{" "}
         </Typography>
-        <Typography variant="body1" color="text.secondary" component="span">
+        <Typography
+          variant="body1"
+          component="span"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           ({formatDuration(itinerary.duration)})
         </Typography>
         {/* Leg badges summary */}
@@ -183,7 +216,14 @@ export function TransitDetailsView({
           ))}
         </Box>
         {summaryBits.length > 0 && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              mt: 0.75,
+              display: "block",
+            }}
+          >
             {summaryBits.join(" · ")}
           </Typography>
         )}
@@ -194,7 +234,6 @@ export function TransitDetailsView({
         )}
       </Box>
       <Divider />
-
       {/* Timeline */}
       <Box sx={{ pl: 1, pr: 2, py: 1 }}>
         {itinerary.legs.map((leg, i) => {
@@ -254,12 +293,16 @@ export function TransitDetailsView({
                     handleStopClick(leg.from.name, leg.from.lat, leg.from.lng, leg.from.stopId)
                   }
                 >
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                    }}
+                  >
                     {leg.from.name}
                   </Typography>
                 </Box>
               </Box>
-
               {/* Leg details */}
               <Box sx={{ display: "flex", gap: 1.5, py: 0.25 }}>
                 <Box sx={{ width: 40, flexShrink: 0 }} />
@@ -292,7 +335,12 @@ export function TransitDetailsView({
                   {isWalk ? (
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                       <DirectionsWalkIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {t("walkDuration", { duration: formatDuration(Math.round(duration) * 60) })}
                       </Typography>
                     </Box>
@@ -352,8 +400,11 @@ export function TransitDetailsView({
                       </Box>
                       <Typography
                         variant="caption"
-                        color="text.secondary"
-                        sx={{ mt: 0.25, display: "block" }}
+                        sx={{
+                          color: "text.secondary",
+                          mt: 0.25,
+                          display: "block",
+                        }}
                       >
                         {t("transitDuration", {
                           duration: formatDuration(Math.round(duration) * 60),
@@ -376,7 +427,6 @@ export function TransitDetailsView({
                   )}
                 </Box>
               </Box>
-
               {/* Arrival point (only for last leg) */}
               {i === itinerary.legs.length - 1 && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
@@ -408,7 +458,12 @@ export function TransitDetailsView({
                       handleStopClick(leg.to.name, leg.to.lat, leg.to.lng, leg.to.stopId)
                     }
                   >
-                    <Typography variant="body2" fontWeight={600}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
                       {leg.to.name}
                     </Typography>
                   </Box>
@@ -418,7 +473,6 @@ export function TransitDetailsView({
           );
         })}
       </Box>
-
       {/* Fare */}
       {(() => {
         const fareSummary = extractFareSummary(itinerary.fare);
@@ -434,10 +488,21 @@ export function TransitDetailsView({
             <Box sx={{ px: 2, py: 1.5 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <ConfirmationNumberOutlinedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
-                <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                    flex: 1,
+                  }}
+                >
                   {t("fare")}
                 </Typography>
-                <Typography variant="body2" fontWeight={600}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
                   {t("fareApprox", {
                     amount: formatFare(fareSummary.amount, fareSummary.currency, locale),
                   })}
@@ -447,10 +512,20 @@ export function TransitDetailsView({
                 <Box sx={{ mt: 0.75, display: "flex", flexDirection: "column", gap: 0.25 }}>
                   {fareSummary.byCategory.map((cat) => (
                     <Box key={cat.name} sx={{ display: "flex", justifyContent: "space-between" }}>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {cat.name}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {formatFare(cat.amount, fareSummary.currency, locale)}
                       </Typography>
                     </Box>
@@ -460,8 +535,11 @@ export function TransitDetailsView({
               {mediaNames.length > 0 && (
                 <Typography
                   variant="caption"
-                  color="text.disabled"
-                  sx={{ mt: 0.5, display: "block" }}
+                  sx={{
+                    color: "text.disabled",
+                    mt: 0.5,
+                    display: "block",
+                  }}
                 >
                   {mediaNames.join(", ")}
                 </Typography>
@@ -470,7 +548,6 @@ export function TransitDetailsView({
           </>
         );
       })()}
-
       {/* Data source attribution */}
       <AttributionStrip
         attributions={attributions ?? []}

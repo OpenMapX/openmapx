@@ -147,11 +147,16 @@ export function DataSourceNearbyTransit({
       <Divider sx={{ mb: 1.5 }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
         <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />
-        <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 600,
+            color: "text.primary",
+          }}
+        >
           {t("dataSources.sectionNearbyTransit")}
         </Typography>
       </Box>
-
       <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
         {rows.map(({ stop, distance }) => {
           const mode = primaryMode(stop.modes);
@@ -190,8 +195,11 @@ export function DataSourceNearbyTransit({
               </Typography>
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}
+                sx={{
+                  color: "text.secondary",
+                  flexShrink: 0,
+                  fontVariantNumeric: "tabular-nums",
+                }}
               >
                 {formatDistance(distance)}
               </Typography>

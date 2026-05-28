@@ -32,13 +32,7 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <Dialog
-      open={open}
-      onClose={loading ? undefined : onCancel}
-      maxWidth="xs"
-      fullWidth
-      disableEscapeKeyDown={loading}
-    >
+    <Dialog open={open} onClose={loading ? undefined : onCancel} maxWidth="xs" fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <DialogContentText>{message}</DialogContentText>

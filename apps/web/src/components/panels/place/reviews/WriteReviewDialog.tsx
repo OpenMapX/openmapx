@@ -192,7 +192,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
       fullWidth
       maxWidth="sm"
       fullScreen={fullScreen}
-      PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
+      slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
       aria-labelledby="write-review-title"
     >
       <DialogTitle
@@ -226,9 +226,12 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
         {publishingAsName && fingerprint && (
           <Typography
             variant="caption"
-            color="text.secondary"
-            display="block"
-            sx={{ mb: 2, lineHeight: 1.5 }}
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              mb: 2,
+              lineHeight: 1.5,
+            }}
           >
             {t.rich("publishingAs", {
               name: publishingAsName,
@@ -273,7 +276,7 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
           rows={5}
           fullWidth
           helperText={t("reviewCharsLeft", { n: charsLeft })}
-          FormHelperTextProps={{ sx: { textAlign: "right" } }}
+          slotProps={{ formHelperText: { sx: { textAlign: "right" } } }}
           sx={{ mb: 2 }}
         />
 
@@ -369,7 +372,14 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
         </Box>
 
         <Box sx={{ mb: 1.5 }}>
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              mb: 0.5,
+            }}
+          >
             {t("contentLicense")}
           </Typography>
           <Stack direction="row" spacing={1}>
@@ -402,7 +412,12 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
               "& .MuiCheckbox-root": { p: 0, mt: "1px" },
             }}
             label={
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {t.rich("affiliationNotice", {
                   placeName: subject.name,
                   i: (chunks) => <em>{chunks}</em>,
@@ -425,7 +440,12 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
               "& .MuiCheckbox-root": { p: 0, mt: "1px" },
             }}
             label={
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {t.rich("termsAgreement", {
                   terms: (chunks) => (
                     <Box
@@ -458,7 +478,12 @@ export function WriteReviewDialog({ open, onClose, subject, initial }: Props) {
               "& .MuiCheckbox-root": { p: 0, mt: "1px" },
             }}
             label={
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {t.rich("privacyLicenseAgreement", {
                   license: (chunks) => (
                     <Box

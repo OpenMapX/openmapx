@@ -1,7 +1,7 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
 import DeleteIcon from "@mui/icons-material/Delete";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
@@ -149,7 +149,12 @@ function AddSourceDialog({ open, onClose }: { open: boolean; onClose: () => void
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Add Catalog Source</DialogTitle>
       <DialogContent>
-        <Stack gap={2} pt={1}>
+        <Stack
+          sx={{
+            gap: 2,
+            pt: 1,
+          }}
+        >
           <TextField
             label="Label"
             placeholder="My Company Integrations"
@@ -218,9 +223,24 @@ function SourcesTab() {
   const sources = data?.sources ?? [];
 
   return (
-    <Stack gap={2}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Typography variant="body2" color="text.secondary">
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Catalog sources define where integrations are discovered from. The default source is
           always included.
         </Typography>
@@ -233,7 +253,6 @@ function SourcesTab() {
           Add Source
         </Button>
       </Stack>
-
       {isLoading ? (
         <CircularProgress size={24} sx={{ mx: "auto", my: 4 }} />
       ) : (
@@ -252,9 +271,20 @@ function SourcesTab() {
                 {sources.map((src) => (
                   <TableRow key={src.url} hover>
                     <TableCell>
-                      <Stack direction="row" alignItems="center" gap={0.5}>
+                      <Stack
+                        direction="row"
+                        sx={{
+                          alignItems: "center",
+                          gap: 0.5,
+                        }}
+                      >
                         {src.isDefault && <StarIcon sx={{ fontSize: 14, color: "warning.main" }} />}
-                        <Typography variant="body2" fontWeight={src.isDefault ? 600 : 400}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: src.isDefault ? 600 : 400,
+                          }}
+                        >
                           {src.label}
                         </Typography>
                       </Stack>
@@ -262,10 +292,13 @@ function SourcesTab() {
                     <TableCell>
                       <Typography
                         variant="caption"
-                        fontFamily="monospace"
-                        color="text.secondary"
                         noWrap
-                        sx={{ maxWidth: 360, display: "block" }}
+                        sx={{
+                          fontFamily: "monospace",
+                          color: "text.secondary",
+                          maxWidth: 360,
+                          display: "block",
+                        }}
                       >
                         {src.url}
                       </Typography>
@@ -297,7 +330,13 @@ function SourcesTab() {
                 {sources.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4} align="center">
-                      <Typography variant="body2" color="text.secondary" py={2}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                          py: 2,
+                        }}
+                      >
                         No catalog sources configured.
                       </Typography>
                     </TableCell>
@@ -308,7 +347,6 @@ function SourcesTab() {
           </TableContainer>
         </Paper>
       )}
-
       <AddSourceDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </Stack>
   );
@@ -348,9 +386,25 @@ function InstalledTab({
 
   if (!data?.integrations.length) {
     return (
-      <Box py={8} textAlign="center">
-        <Typography color="text.secondary">No community integrations installed.</Typography>
-        <Typography variant="caption" color="text.secondary">
+      <Box
+        sx={{
+          py: 8,
+          textAlign: "center",
+        }}
+      >
+        <Typography
+          sx={{
+            color: "text.secondary",
+          }}
+        >
+          No community integrations installed.
+        </Typography>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Browse the catalog to install your first community integration.
         </Typography>
       </Box>
@@ -373,7 +427,13 @@ function InstalledTab({
           {data.integrations.map((inst) => (
             <TableRow key={inst.id} hover>
               <TableCell>
-                <Stack direction="row" alignItems="center" gap={1}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
                   {inst.catalogEntry ? (
                     <Button
                       size="small"
@@ -384,7 +444,12 @@ function InstalledTab({
                       {inst.catalogEntry.name}
                     </Button>
                   ) : (
-                    <Typography variant="body2" fontWeight={600}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
                       {inst.id}
                     </Typography>
                   )}
@@ -398,7 +463,14 @@ function InstalledTab({
                   )}
                 </Stack>
                 {inst.catalogEntry && (
-                  <Stack direction="row" gap={0.5} mt={0.5} flexWrap="wrap">
+                  <Stack
+                    direction="row"
+                    sx={{
+                      gap: 0.5,
+                      mt: 0.5,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     {inst.catalogEntry.domains.map((d) => (
                       <DomainChip key={d} domain={d} />
                     ))}
@@ -406,22 +478,43 @@ function InstalledTab({
                 )}
               </TableCell>
               <TableCell>
-                <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    fontFamily: "monospace",
+                  }}
+                >
                   {inst.sourceType}
                 </Typography>
               </TableCell>
               <TableCell>
-                <Typography variant="body2" fontFamily="monospace">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                  }}
+                >
                   {inst.installedVersion}
                 </Typography>
                 {inst.hasUpdate && inst.catalogEntry && (
-                  <Typography variant="caption" color="warning.main">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "warning.main",
+                    }}
+                  >
                     → {inst.catalogEntry.version}
                   </Typography>
                 )}
               </TableCell>
               <TableCell>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {new Date(inst.installedAt).toLocaleDateString()}
                 </Typography>
               </TableCell>
@@ -537,21 +630,40 @@ export function StorePage() {
       {/* Page header */}
       <Stack
         direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={3}
-        flexWrap="wrap"
-        gap={1}
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 3,
+          flexWrap: "wrap",
+          gap: 1,
+        }}
       >
         <Box>
-          <Typography variant="h5" fontWeight={700}>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             Community Store
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Browse, install, and manage community integrations
           </Typography>
           {updatesQuery.data && (
-            <Stack direction="row" gap={0.75} mt={1} flexWrap="wrap">
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.75,
+                mt: 1,
+                flexWrap: "wrap",
+              }}
+            >
               <Chip
                 size="small"
                 variant="outlined"
@@ -576,7 +688,12 @@ export function StorePage() {
             </Stack>
           )}
         </Box>
-        <Stack direction="row" gap={1}>
+        <Stack
+          direction="row"
+          sx={{
+            gap: 1,
+          }}
+        >
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
@@ -596,7 +713,6 @@ export function StorePage() {
           </Button>
         </Stack>
       </Stack>
-
       {/* Tabs: Browse / Installed */}
       <Tabs
         value={mainTab}
@@ -606,7 +722,13 @@ export function StorePage() {
         <Tab label="Browse" />
         <Tab
           label={
-            <Stack direction="row" alignItems="center" gap={0.75}>
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: "center",
+                gap: 0.75,
+              }}
+            >
               Installed
               {installedCount > 0 && (
                 <Chip label={installedCount} size="small" sx={{ height: 18, fontSize: "0.7rem" }} />
@@ -624,12 +746,19 @@ export function StorePage() {
         />
         <Tab label="Sources" />
       </Tabs>
-
       {/* Browse tab */}
       {mainTab === 0 && (
         <>
           {/* Filters */}
-          <Stack direction="row" gap={1.5} mb={2} flexWrap="wrap" alignItems="center">
+          <Stack
+            direction="row"
+            sx={{
+              gap: 1.5,
+              mb: 2,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
             <TextField
               placeholder="Search integrations…"
               value={search}
@@ -678,14 +807,26 @@ export function StorePage() {
               </Select>
             </FormControl>
             {catalogQuery.data && (
-              <Typography variant="caption" color="text.secondary" ml="auto">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  ml: "auto",
+                }}
+              >
                 {catalogQuery.data.total} integration{catalogQuery.data.total !== 1 ? "s" : ""}
               </Typography>
             )}
           </Stack>
 
           {catalogQuery.isLoading && (
-            <Box display="flex" justifyContent="center" py={8}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                py: 8,
+              }}
+            >
               <CircularProgress />
             </Box>
           )}
@@ -697,8 +838,19 @@ export function StorePage() {
           )}
 
           {catalogQuery.data?.entries.length === 0 && !catalogQuery.isLoading && (
-            <Box py={8} textAlign="center">
-              <Typography color="text.secondary">No integrations found.</Typography>
+            <Box
+              sx={{
+                py: 8,
+                textAlign: "center",
+              }}
+            >
+              <Typography
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                No integrations found.
+              </Typography>
               {(search || domain || quality) && (
                 <Button
                   size="small"
@@ -726,12 +878,17 @@ export function StorePage() {
           )}
         </>
       )}
-
       {/* Installed tab */}
       {mainTab === 1 && (
         <>
           {installedQuery.isLoading && (
-            <Box display="flex" justifyContent="center" py={8}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                py: 8,
+              }}
+            >
               <CircularProgress />
             </Box>
           )}
@@ -743,17 +900,14 @@ export function StorePage() {
           )}
         </>
       )}
-
       {/* Sources tab */}
       {mainTab === 2 && <SourcesTab />}
-
       {/* Detail drawer */}
       <StoreDetailDrawer
         entry={selectedEntry}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
       />
-
       {/* Install from URL dialog */}
       <InstallFromUrlDialog
         open={installUrlOpen}

@@ -24,10 +24,15 @@ export default function PrivacyContentDe({
       <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 1 }}>
         Datenschutzerkl&auml;rung
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 4,
+        }}
+      >
         Zuletzt aktualisiert: April 2026
       </Typography>
-
       <Section title="1. Verantwortlicher und Kontakt">
         <Typography>
           Der Verantwortliche f&uuml;r die Datenverarbeitung auf dieser Website im Sinne der
@@ -43,7 +48,6 @@ export default function PrivacyContentDe({
           E-Mail: <Link href={`mailto:${email}`}>{email}</Link>
         </Typography>
       </Section>
-
       <Section title="2. &Uuml;bersicht der Datenverarbeitung">
         <Typography>
           OpenMapX ist eine Open-Data-Kartenplattform. Wir sind bestrebt, die Verarbeitung
@@ -82,7 +86,6 @@ export default function PrivacyContentDe({
           </li>
         </ul>
       </Section>
-
       <Section title="3. Hosting und Server-Protokolle">
         <Typography>
           Beim Besuch von OpenMapX &uuml;bermittelt Ihr Browser automatisch bestimmte technische
@@ -119,7 +122,6 @@ export default function PrivacyContentDe({
           Hetzner befinden sich in Deutschland und Finnland (EU).
         </Typography>
       </Section>
-
       <Section title="4. Standortdaten">
         <Typography>
           OpenMapX fordert den Standort Ihres Ger&auml;ts nur an, wenn Sie ausdr&uuml;cklich auf die
@@ -148,7 +150,6 @@ export default function PrivacyContentDe({
           Einwilligung &uuml;ber die Browser-Berechtigungsabfrage).
         </Typography>
       </Section>
-
       <Section title="5. Benutzerkonten">
         <Typography>
           Sie k&ouml;nnen OpenMapX ohne Erstellung eines Kontos nutzen. Wenn Sie sich registrieren,
@@ -266,7 +267,6 @@ export default function PrivacyContentDe({
           bereitgestellt werden.
         </Typography>
       </Section>
-
       <Section title="6. Bewertungen (Mangrove Open Reviews Standard)">
         <Typography>
           OpenMapX bindet das dezentrale Bewertungsnetzwerk{" "}
@@ -355,7 +355,6 @@ export default function PrivacyContentDe({
           dezentralen Designs des Systems nicht einseitig zur&uuml;ckgezogen werden.
         </Typography>
       </Section>
-
       <Section title="7. Drittanbieter-Dienste und Daten&uuml;bermittlungen">
         <Typography>
           Um seine Kartenfunktionen bereitzustellen, sendet OpenMapX Anfragen an verschiedene
@@ -511,7 +510,6 @@ export default function PrivacyContentDe({
           Kartendienstes).
         </Typography>
       </Section>
-
       <Section title="8. Cookies und lokaler Speicher">
         <Typography>
           OpenMapX verwendet ausschlie&szlig;lich First-Party-Speichermechanismen. Speicher, der
@@ -591,7 +589,6 @@ export default function PrivacyContentDe({
           First-Party-Einstellung gesteuert, nicht &uuml;ber ein Tracking-Banner.
         </Typography>
       </Section>
-
       <Section title="9. Serverseitiges Caching und Datenbanken">
         <Typography>
           Um die Leistung zu verbessern und die Last auf Drittanbieter-APIs zu reduzieren, speichert
@@ -609,7 +606,6 @@ export default function PrivacyContentDe({
           gespeichert. Diese Daten stellen keine personenbezogenen Daten von Endnutzern dar.
         </Typography>
       </Section>
-
       <Section title="10. E-Mail-Kommunikation">
         <Typography>
           Wenn Sie ein Konto registrieren, k&ouml;nnen wir transaktionale E-Mails senden f&uuml;r:
@@ -632,7 +628,6 @@ export default function PrivacyContentDe({
           (Vertragserf&uuml;llung / Bereitstellung des von Ihnen angeforderten Dienstes).
         </Typography>
       </Section>
-
       <Section title="11. Ihre Rechte nach der DSGVO">
         <Typography>
           Sie haben folgende Rechte bez&uuml;glich Ihrer personenbezogenen Daten:
@@ -698,7 +693,6 @@ export default function PrivacyContentDe({
           .
         </Typography>
       </Section>
-
       <Section title="12. Datenspeicherung">
         <Typography>Wir speichern personenbezogene Daten nur so lange wie n&ouml;tig:</Typography>
         <ul>
@@ -750,7 +744,6 @@ export default function PrivacyContentDe({
           </li>
         </ul>
       </Section>
-
       <Section title="13. Sicherheit">
         <Typography>
           Wir setzen angemessene technische und organisatorische Ma&szlig;nahmen zum Schutz Ihrer
@@ -774,7 +767,6 @@ export default function PrivacyContentDe({
           und Ihre Passphrase niemals weiterzugeben.
         </Typography>
       </Section>
-
       <Section title="14. Datenschutz von Kindern">
         <Typography>
           OpenMapX richtet sich nicht an Kinder unter 16&nbsp;Jahren. Wir erheben wissentlich keine
@@ -783,7 +775,6 @@ export default function PrivacyContentDe({
           k&ouml;nnen.
         </Typography>
       </Section>
-
       <Section title="15. &Auml;nderungen dieser Erkl&auml;rung">
         <Typography>
           Wir k&ouml;nnen diese Datenschutzerkl&auml;rung von Zeit zu Zeit aktualisieren. Die

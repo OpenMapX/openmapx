@@ -55,7 +55,6 @@ export function AirQualityLegend() {
           }}
         />
       )}
-
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("airQualityIndex")}</Typography>
         <Switch
@@ -66,7 +65,6 @@ export function AirQualityLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5 }}>
         {AQI_LEVEL_KEYS.map((level) => (
           <Box
@@ -82,14 +80,15 @@ export function AirQualityLegend() {
           </Box>
         ))}
       </Box>
-
       {/* Attribution (from manifest dataSources, trusted static config) */}
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 1 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 1,
+          }}
         />
       )}
     </Paper>

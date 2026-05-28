@@ -63,10 +63,8 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
         {nextHigh && <NextEventBlock label={t("nextHigh")} event={nextHigh} t={t} />}
         {nextLow && <NextEventBlock label={t("nextLow")} event={nextLow} t={t} />}
       </Box>
-
       {/* Met readings — wind / temp / pressure */}
       {data.met && <MetBlock met={data.met} t={t} />}
-
       {/* Inline 24h SVG chart */}
       {data.curve && data.curve.length > 1 && (
         <TideChart
@@ -77,7 +75,6 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
           t={t}
         />
       )}
-
       {/* Today + tomorrow schedule */}
       {eventsToday.length > 0 && (
         <DaySection title={t("todayTitle")} events={eventsToday} now={now} t={t} />
@@ -85,17 +82,22 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
       {eventsTomorrow.length > 0 && (
         <DaySection title={t("tomorrowTitle")} events={eventsTomorrow} now={now} t={t} />
       )}
-
       {/* Station label — hide the "(0.0 km)" suffix when the place IS the
           station (e.g. clicking a station marker directly), since the distance
           would round to zero and just adds noise. 50 m feels like a sensible
           threshold for "you're standing on the station". */}
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+          mt: 0.75,
+          display: "block",
+        }}
+      >
         {data.station.distanceKm < 0.05
           ? t("stationLabelHere", { name: data.station.name })
           : t("stationLabel", { name: data.station.name, distance: data.station.distanceKm })}
       </Typography>
-
       {/* Disclaimer */}
       <Box
         sx={{
@@ -109,10 +111,16 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
         <InfoOutlinedIcon sx={{ fontSize: 14 }} />
         <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
       </Box>
-
       {/* Attribution — sourced from the integration manifest, same pattern as PlaceAirportInfo. */}
       {attributionSource && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            mt: 0.5,
+            display: "block",
+          }}
+        >
           {t("attribution")}: ©{" "}
           <Link
             href={attributionSource.url}

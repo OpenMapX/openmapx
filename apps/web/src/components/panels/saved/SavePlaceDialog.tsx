@@ -136,8 +136,8 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      PaperProps={{
-        sx: { borderRadius: "12px" },
+      slotProps={{
+        paper: { sx: { borderRadius: "12px" } },
       }}
     >
       <DialogTitle sx={{ fontWeight: 600, pb: 1 }}>{t("saveTo")}</DialogTitle>
@@ -172,7 +172,12 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
                   tabIndex={-1}
                 />
                 {resolveListIcon(list.icon, 20)}
-                <Typography variant="body2" fontWeight={500}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 500,
+                  }}
+                >
                   {resolveListName(list.name)}
                 </Typography>
               </Box>

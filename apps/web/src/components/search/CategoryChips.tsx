@@ -128,11 +128,13 @@ export function CategoryChips() {
       cursor: "pointer",
       userSelect: "none",
       flexShrink: 0,
+
       "& .MuiChip-icon": {
         color: "inherit",
         ml: "10px",
         mr: "-4px",
       },
+
       "&&:hover": {
         bgcolor: isActive ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
       },

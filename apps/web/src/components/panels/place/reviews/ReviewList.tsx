@@ -63,7 +63,12 @@ export function ReviewList({
   if (!sorted.length) {
     return (
       <Box sx={{ py: 6, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {t("noReviewsYet")}
         </Typography>
       </Box>

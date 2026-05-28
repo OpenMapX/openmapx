@@ -59,8 +59,10 @@ export function CommandPaletteRow({ command, selected, onRun, showGroupChip = fa
       <ListItemText
         primary={command.label}
         secondary={command.sublabel}
-        primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
-        secondaryTypographyProps={{ fontSize: 12 }}
+        slotProps={{
+          primary: { sx: { fontSize: 14, fontWeight: 500 } },
+          secondary: { sx: { fontSize: 12 } },
+        }}
       />
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, ml: 1 }}>
         {isActive && (

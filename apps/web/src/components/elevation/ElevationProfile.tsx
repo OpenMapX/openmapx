@@ -70,7 +70,13 @@ export function ElevationProfile({ route, units }: ElevationProfileProps) {
         }}
       >
         <TerrainIcon sx={{ fontSize: 18, color: TEAL }} />
-        <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 500,
+            flex: 1,
+          }}
+        >
           {t("title")}
         </Typography>
         {hasData && !expanded && <ElevationStats stats={profile.stats} units={units} compact />}

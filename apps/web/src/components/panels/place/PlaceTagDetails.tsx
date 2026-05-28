@@ -667,7 +667,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (indoor) {
     gridItems.push(
       <DetailItem key="indoor" icon={<MeetingRoomIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {indoor === "yes" ? t("indoor") : t("outdoor")}
         </Typography>
       </DetailItem>,
@@ -677,7 +682,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (level) {
     gridItems.push(
       <DetailItem key="level" icon={<StairsIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {t("level")} {level}
         </Typography>
       </DetailItem>,
@@ -696,7 +706,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
           )
         }
       >
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {locked === "yes" ? t("locked") : t("unlocked")}
         </Typography>
       </DetailItem>,
@@ -706,7 +721,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (capacity) {
     gridItems.push(
       <DetailItem key="capacity" icon={<GroupIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {t("capacity")} {capacity}
         </Typography>
       </DetailItem>,
@@ -718,7 +738,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
     const display = !Number.isNaN(n) && n <= 7 ? "★".repeat(n) : `${stars} ★`;
     gridItems.push(
       <DetailItem key="stars" icon={<StarIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {display}
         </Typography>
       </DetailItem>,
@@ -728,7 +753,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (ele) {
     gridItems.push(
       <DetailItem key="ele" icon={<LandscapeIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {ele} m
         </Typography>
       </DetailItem>,
@@ -738,7 +768,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (surface) {
     gridItems.push(
       <DetailItem key="surface" icon={<TerrainIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {capitalize(surface.replace(/_/g, " "))}
         </Typography>
       </DetailItem>,
@@ -748,7 +783,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (height) {
     gridItems.push(
       <DetailItem key="height" icon={<HeightIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {height} m
         </Typography>
       </DetailItem>,
@@ -758,7 +798,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (buildingLevels) {
     gridItems.push(
       <DetailItem key="building:levels" icon={<ApartmentIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {buildingLevels} {t("floors")}
         </Typography>
       </DetailItem>,
@@ -844,7 +889,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
     if (labelKey) {
       gridItems.push(
         <DetailItem key="takeaway" icon={<TakeoutDiningIcon sx={{ fontSize: 20 }} />}>
-          <Typography variant="body2" color="text.primary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.primary",
+            }}
+          >
             {t(labelKey)}
           </Typography>
         </DetailItem>,
@@ -904,7 +954,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
     const twKey = toiletsWheelchair ? twLabels[toiletsWheelchair] : null;
     gridItems.push(
       <DetailItem key="toilets" icon={<WcIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {t("toilets")}
           {twKey && (
             <Typography
@@ -952,7 +1007,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (startDate) {
     gridItems.push(
       <DetailItem key="start_date" icon={<EventIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {startDate}
         </Typography>
       </DetailItem>,
@@ -969,7 +1029,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
     const labelKey = heritageLabels[heritage];
     gridItems.push(
       <DetailItem key="heritage" icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {labelKey ? t(labelKey) : t("heritageYes")}
         </Typography>
       </DetailItem>,
@@ -979,7 +1044,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (minAge) {
     gridItems.push(
       <DetailItem key="min_age" icon={<GroupIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {t("minAge", { age: minAge })}
         </Typography>
       </DetailItem>,
@@ -990,7 +1060,13 @@ export function PlaceTagDetails({ osmTags }: Props) {
   if (manufacturer && model) {
     gridItems.push(
       <DetailItem key="mfg" icon={<PrecisionManufacturingIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary" noWrap>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {manufacturer} · {model}
         </Typography>
       </DetailItem>,
@@ -998,7 +1074,13 @@ export function PlaceTagDetails({ osmTags }: Props) {
   } else if (manufacturer || model) {
     gridItems.push(
       <DetailItem key="mfg" icon={<PrecisionManufacturingIcon sx={{ fontSize: 20 }} />}>
-        <Typography variant="body2" color="text.primary" noWrap>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {manufacturer ?? model}
         </Typography>
       </DetailItem>,
@@ -1027,7 +1109,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
                     {operator}
                   </Link>
                 ) : (
-                  <Typography variant="body2" color="text.primary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.primary",
+                    }}
+                  >
                     {operator}
                   </Typography>
                 )}
@@ -1056,7 +1143,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
                     {label}
                   </Link>
                 ) : (
-                  <Typography variant="body2" color="text.primary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.primary",
+                    }}
+                  >
                     {label}
                   </Typography>
                 )}
@@ -1092,7 +1184,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
         {/* Access */}
         {access && (
           <DetailItem icon={ac?.icon ?? <LockOpenIcon sx={{ fontSize: 20 }} />}>
-            <Typography variant="body2" color="text.primary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
               {ac ? t(ac.labelKey) : capitalize(access)}
             </Typography>
           </DetailItem>
@@ -1109,7 +1206,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
               )
             }
           >
-            <Typography variant="body2" color="text.primary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
               {fee === "no" ? t("feeNo") : charge ? `${t("feeYes")} · ${charge}` : t("feeYes")}
             </Typography>
           </DetailItem>
@@ -1118,7 +1220,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
         {/* Cuisine */}
         {cuisine && (
           <DetailItem icon={<RestaurantIcon sx={{ fontSize: 20 }} />}>
-            <Typography variant="body2" color="text.primary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
               {formatList(cuisine)}
             </Typography>
           </DetailItem>
@@ -1127,7 +1234,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
         {/* Religion + Denomination */}
         {religion && (
           <DetailItem icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
-            <Typography variant="body2" color="text.primary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
               {denomination
                 ? `${capitalize(religion)} · ${capitalize(denomination)}`
                 : capitalize(religion)}
@@ -1136,7 +1248,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
         )}
         {denomination && !religion && (
           <DetailItem icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
-            <Typography variant="body2" color="text.primary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
               {capitalize(denomination)}
             </Typography>
           </DetailItem>
@@ -1163,11 +1280,23 @@ export function PlaceTagDetails({ osmTags }: Props) {
               <NotesIcon sx={{ fontSize: 20 }} />
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="caption" color="text.secondary" fontWeight={600}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  fontWeight: 600,
+                }}
+              >
                 {entry.label}
               </Typography>
               {entry.defaultValue && (
-                <Typography variant="body2" color="text.primary" sx={{ mt: 0.25 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.primary",
+                    mt: 0.25,
+                  }}
+                >
                   <Linkified text={entry.defaultValue} color={TEAL} />
                 </Typography>
               )}
@@ -1179,7 +1308,12 @@ export function PlaceTagDetails({ osmTags }: Props) {
                   >
                     {flag}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     <Linkified text={value} color={TEAL} />
                   </Typography>
                 </Box>

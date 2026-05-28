@@ -113,7 +113,13 @@ function TagItem({ tagKey, value }: { tagKey: string; value: string }) {
       >
         {label}
         {!isYes && !isNo && (
-          <Typography component="span" variant="body2" color="text.secondary">
+          <Typography
+            component="span"
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {" · "}
             {value}
           </Typography>
@@ -192,7 +198,14 @@ function ExternalRefRow({ ref }: { ref: ExternalRef }) {
         "&:hover .copy-btn": { opacity: 1 },
       }}
     >
-      <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, minWidth: 92 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+          flexShrink: 0,
+          minWidth: 92,
+        }}
+      >
         {ref.label}
       </Typography>
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -218,8 +231,11 @@ function ExternalRefRow({ ref }: { ref: ExternalRef }) {
             </Link>
             <Typography
               variant="caption"
-              color="text.secondary"
-              sx={{ display: "block", wordBreak: "break-all" }}
+              sx={{
+                color: "text.secondary",
+                display: "block",
+                wordBreak: "break-all",
+              }}
             >
               {ref.value}
             </Typography>
@@ -284,7 +300,12 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
         }}
       >
         <InfoOutlinedIcon sx={{ fontSize: 40, opacity: 0.35 }} />
-        <Typography variant="body2" fontWeight={500}>
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: 500,
+          }}
+        >
           {t("noAdditionalInfo")}
         </Typography>
         <Typography variant="caption" align="center">
@@ -302,7 +323,12 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
       {/* Description — Wikipedia extract preferred, Wikidata description as fallback */}
       {hasDescription && (
         <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {infoDescription}
           </Typography>
           {(() => {
@@ -321,22 +347,31 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
             return (
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
                 // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
                 dangerouslySetInnerHTML={{ __html: `${t("source")}: ${parts.join(", ")}` }}
+                sx={{
+                  color: "text.secondary",
+                  mt: 0.5,
+                  display: "block",
+                  fontSize: 10.5,
+                }}
               />
             );
           })()}
         </Box>
       )}
-
       {/* Wikidata facts */}
       {hasFacts && (
         <>
           {hasDescription && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {t("aboutThisPlace")}
             </Typography>
             <Box
@@ -348,7 +383,12 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
             >
               {place.facts?.map(({ label, value }) => (
                 <Box key={label} sx={{ display: "flex", flexDirection: "column", mb: 0.75 }}>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {label}
                   </Typography>
                   <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
@@ -366,23 +406,32 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
                 return (
                   <Typography
                     variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
                     // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
                     dangerouslySetInnerHTML={{ __html: `${t("source")}: ${html}` }}
+                    sx={{
+                      color: "text.secondary",
+                      mt: 0.5,
+                      display: "block",
+                      fontSize: 10.5,
+                    }}
                   />
                 );
               })()}
           </Box>
         </>
       )}
-
       {/* OSM attribute groups */}
       {osmGroups.map((group, idx) => (
         <Box key={group.labelKey}>
           {(idx === 0 ? showDividerBeforeOsm : true) && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {t(group.labelKey)}
             </Typography>
             <Box
@@ -399,13 +448,18 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
           </Box>
         </Box>
       ))}
-
       {/* External references */}
       {hasExternalRefs && (
         <>
           {(hasDescription || hasFacts || osmGroups.length > 0) && <Divider />}
           <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {t("externalReferences")}
             </Typography>
             <Box sx={{ display: "flex", flexDirection: "column" }}>

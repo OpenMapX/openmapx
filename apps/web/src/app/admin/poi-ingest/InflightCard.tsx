@@ -15,16 +15,32 @@ export function InflightCard({ state }: { state: PoiIngestStateSummary }) {
   const inflight = state.inflight;
   return (
     <Paper variant="outlined" sx={{ p: 2, height: "100%" }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 1.5,
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Inflight ingests
         </Typography>
         <Box sx={{ flex: 1 }} />
         {inflight.length > 0 && <CircularProgress size={16} />}
       </Stack>
-
       {inflight.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           No ingests running.
         </Typography>
       ) : (
@@ -40,15 +56,37 @@ export function InflightCard({ state }: { state: PoiIngestStateSummary }) {
                 bgcolor: "action.hover",
               }}
             >
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="body2" fontFamily="monospace" sx={{ flex: 1 }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{
+                  alignItems: "center",
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                    flex: 1,
+                  }}
+                >
                   {job.sourceId}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {job.kind}
                 </Typography>
               </Stack>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 started {formatTime(job.startedAt)}
               </Typography>
             </Box>

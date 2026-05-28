@@ -863,16 +863,16 @@ export function SearchBar() {
                 {geocodingAttribution && (
                   <Typography
                     variant="caption"
-                    color="text.secondary"
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
+                    dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
                     sx={{
+                      color: "text.secondary",
                       display: "block",
                       p: 0.5,
                       textAlign: "center",
                       fontSize: 10.5,
                       "& a": { color: "text.secondary", textDecoration: "underline" },
                     }}
-                    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
-                    dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
                   />
                 )}
               </Box>
@@ -899,7 +899,6 @@ export function SearchBar() {
           )}
         </Paper>
       </Box>
-
       {/* Fullscreen results panel — only mounted on mobile while the bar
         is focused. Sits on top of the white backdrop, below the bar (with
         a small breathing gap), and fills the rest of the viewport. Empty
@@ -944,16 +943,16 @@ export function SearchBar() {
               {geocodingAttribution && (
                 <Typography
                   variant="caption"
-                  color="text.secondary"
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
+                  dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
                   sx={{
+                    color: "text.secondary",
                     display: "block",
                     p: 1,
                     textAlign: "center",
                     fontSize: 10.5,
                     "& a": { color: "text.secondary", textDecoration: "underline" },
                   }}
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
-                  dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
                 />
               )}
             </>

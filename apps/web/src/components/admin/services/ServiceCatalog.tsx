@@ -78,13 +78,24 @@ function StatusChip({ status }: { status: ServiceStatus }) {
 function ProvidesCell({ provides }: { provides: string[] }) {
   if (!provides.length) {
     return (
-      <Typography variant="body2" color="text.disabled">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.disabled",
+        }}
+      >
         —
       </Typography>
     );
   }
   return (
-    <Stack direction="row" gap={0.5} flexWrap="wrap">
+    <Stack
+      direction="row"
+      sx={{
+        gap: 0.5,
+        flexWrap: "wrap",
+      }}
+    >
       {provides.slice(0, 3).map((p) => (
         <Chip
           key={p}
@@ -119,7 +130,11 @@ function SkeletonRows() {
             <Skeleton width={24} height={18} />
           </TableCell>
           <TableCell>
-            <Stack gap={0.5}>
+            <Stack
+              sx={{
+                gap: 0.5,
+              }}
+            >
               <Skeleton width={120} height={18} />
               <Skeleton width={80} height={14} />
             </Stack>
@@ -335,13 +350,31 @@ export function ServiceCatalog() {
   };
 
   return (
-    <Stack gap={2}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack gap={1.5}>
-          <Typography variant="subtitle1" fontWeight={700}>
+        <Stack
+          sx={{
+            gap: 1.5,
+          }}
+        >
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             Service Selection
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Manage persisted service roots from <code>service-selection.json</code>. Effective
             services include dependencies of selected roots.
           </Typography>
@@ -359,7 +392,11 @@ export function ServiceCatalog() {
           ) : selectionQuery.isError ? (
             <Alert severity="error">Failed to load service selection</Alert>
           ) : (
-            <Stack gap={1.25}>
+            <Stack
+              sx={{
+                gap: 1.25,
+              }}
+            >
               <TextField
                 label="Selected root service IDs"
                 size="small"
@@ -368,7 +405,14 @@ export function ServiceCatalog() {
                 placeholder="app-api, valhalla, osrm"
                 disabled={selectionQuery.data?.source === "env" || saveSelectionMutation.isPending}
               />
-              <Stack direction="row" gap={0.75} flexWrap="wrap" alignItems="center">
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 0.75,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
                 <Chip
                   label={`Requested: ${selectionQuery.data?.requestedIds.length ?? 0}`}
                   size="small"
@@ -417,11 +461,26 @@ export function ServiceCatalog() {
           )}
         </Stack>
       </Paper>
-
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack gap={1.25}>
-          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-            <Typography variant="subtitle1" fontWeight={700}>
+        <Stack
+          sx={{
+            gap: 1.25,
+          }}
+        >
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "center",
+              gap: 1,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography
+              variant="subtitle1"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               Bulk Actions
             </Typography>
             <Chip label={`${selectedIds.size} selected`} size="small" variant="outlined" />
@@ -436,7 +495,13 @@ export function ServiceCatalog() {
             </Button>
           </Stack>
 
-          <Stack direction={{ xs: "column", sm: "row" }} gap={1} alignItems={{ sm: "center" }}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            sx={{
+              gap: 1,
+              alignItems: { sm: "center" },
+            }}
+          >
             <TextField
               size="small"
               label="Build region"
@@ -457,7 +522,13 @@ export function ServiceCatalog() {
             />
           </Stack>
 
-          <Stack direction="row" gap={0.75} flexWrap="wrap">
+          <Stack
+            direction="row"
+            sx={{
+              gap: 0.75,
+              flexWrap: "wrap",
+            }}
+          >
             <Button
               size="small"
               variant="outlined"
@@ -513,21 +584,38 @@ export function ServiceCatalog() {
           </Stack>
         </Stack>
       </Paper>
-
       <Stack
         direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={1}
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1,
+        }}
       >
-        <Stack direction="row" alignItems="center" gap={1}>
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
           <StorageIcon sx={{ color: "text.secondary" }} />
-          <Typography variant="h6" fontWeight={700}>
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             Service Catalog
           </Typography>
           {!isLoading && summary && (
-            <Stack direction="row" gap={0.5}>
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+              }}
+            >
               <Chip
                 label={`${summary.total} total`}
                 size="small"
@@ -553,8 +641,13 @@ export function ServiceCatalog() {
         </Stack>
         {isLoading && <CircularProgress size={20} />}
       </Stack>
-
-      <Stack direction="row" gap={1.5} flexWrap="wrap">
+      <Stack
+        direction="row"
+        sx={{
+          gap: 1.5,
+          flexWrap: "wrap",
+        }}
+      >
         <TextField
           size="small"
           placeholder="Search by name, ID, or capability…"
@@ -584,7 +677,6 @@ export function ServiceCatalog() {
           </Select>
         </FormControl>
       </Stack>
-
       {isError && (
         <Alert
           severity="error"
@@ -601,7 +693,6 @@ export function ServiceCatalog() {
           Failed to load services. The backend may not be running yet.
         </Alert>
       )}
-
       <Paper variant="outlined">
         <TableContainer>
           <Table size="small">
@@ -628,8 +719,18 @@ export function ServiceCatalog() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6}>
-                    <Box py={3} textAlign="center">
-                      <Typography variant="body2" color="text.secondary">
+                    <Box
+                      sx={{
+                        py: 3,
+                        textAlign: "center",
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {services.length === 0
                           ? "No services registered yet."
                           : "No services match the current filters."}
@@ -648,23 +749,41 @@ export function ServiceCatalog() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Stack gap={0.25}>
+                      <Stack
+                        sx={{
+                          gap: 0.25,
+                        }}
+                      >
                         <Typography
                           component={Link}
                           href={`/admin/services/${svc.id}`}
                           variant="body2"
-                          fontWeight={600}
-                          sx={{ textDecoration: "none", color: "primary.main" }}
+                          sx={{
+                            fontWeight: 600,
+                            textDecoration: "none",
+                            color: "primary.main",
+                          }}
                         >
                           {svc.name}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.secondary",
+                            fontFamily: "monospace",
+                          }}
+                        >
                           {svc.id}
                         </Typography>
                       </Stack>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" fontFamily="monospace">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontFamily: "monospace",
+                        }}
+                      >
                         {svc.version}
                       </Typography>
                     </TableCell>
@@ -684,9 +803,13 @@ export function ServiceCatalog() {
           </Table>
         </TableContainer>
       </Paper>
-
       {!isLoading && !isError && filtered.length > 0 && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Showing {filtered.length} of {services.length} services
         </Typography>
       )}

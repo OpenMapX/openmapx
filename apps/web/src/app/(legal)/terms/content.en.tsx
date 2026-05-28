@@ -27,10 +27,15 @@ export default function TermsContent({
       <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 1 }}>
         Terms of Service
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 4,
+        }}
+      >
         Last updated: April 2026
       </Typography>
-
       <Section title="1. Scope and Provider">
         <Typography>
           These Terms of Service (&quot;Terms&quot;) govern your use of OpenMapX, an open-data
@@ -50,7 +55,6 @@ export default function TermsContent({
           not use the service.
         </Typography>
       </Section>
-
       <Section title="2. Description of the Service">
         <Typography>
           OpenMapX is a free, open-data mapping service that provides map viewing, address search,
@@ -63,7 +67,6 @@ export default function TermsContent({
           open-data sources and third-party APIs as listed in Section 11 below.
         </Typography>
       </Section>
-
       <Section title="3. Availability and Changes">
         <Typography>
           OpenMapX is provided on an &quot;as is&quot; and &quot;as available&quot; basis. We strive
@@ -76,7 +79,6 @@ export default function TermsContent({
           unavailable if upstream providers change their APIs, terms, or availability.
         </Typography>
       </Section>
-
       <Section title="4. User Accounts">
         <Typography>
           Account creation is optional. You can use most features of OpenMapX without an account. If
@@ -112,7 +114,6 @@ export default function TermsContent({
           We reserve the right to suspend or terminate accounts that violate these Terms.
         </Typography>
       </Section>
-
       <Section title="5. Acceptable Use">
         <Typography>You agree not to:</Typography>
         <ul>
@@ -178,7 +179,6 @@ export default function TermsContent({
           </li>
         </ul>
       </Section>
-
       <Section title="6. Accuracy and No Warranty">
         <Typography>
           OpenMapX aggregates data from third-party sources. While we strive for accuracy, we make
@@ -260,7 +260,6 @@ export default function TermsContent({
           unaffected.
         </Typography>
       </Section>
-
       <Section title="7. Limitation of Liability">
         <Typography>The operator&apos;s liability is governed as follows:</Typography>
         <ul>
@@ -298,7 +297,6 @@ export default function TermsContent({
           does not guarantee the accuracy, completeness, or timeliness of any data displayed.
         </Typography>
       </Section>
-
       <Section title="8. Intellectual Property">
         <Typography>
           The OpenMapX application code, design, and branding are the property of the operator. The
@@ -314,14 +312,12 @@ export default function TermsContent({
           is governed by Section&nbsp;10 below.
         </Typography>
       </Section>
-
       <Section title="9. Privacy">
         <Typography>
           Your use of OpenMapX is also governed by our <Link href="/privacy">Privacy Policy</Link>,
           which describes how we collect, use, and protect your data.
         </Typography>
       </Section>
-
       <Section title="10. User-Generated Content (Reviews)">
         <Typography>
           OpenMapX integrates the{" "}
@@ -405,7 +401,6 @@ export default function TermsContent({
           </li>
         </ul>
       </Section>
-
       <Section title="11. Data Sources and Attribution" id="data-sources">
         <Typography>
           OpenMapX is built on open data. We gratefully acknowledge the following data sources and
@@ -444,7 +439,6 @@ export default function TermsContent({
           }}
         />
       </Section>
-
       <Section title="12. Third-Party Terms">
         <Typography>
           Your use of data displayed through OpenMapX may be subject to the terms and conditions of
@@ -454,7 +448,6 @@ export default function TermsContent({
           attribution and share-alike for derivative databases.
         </Typography>
       </Section>
-
       <Section title="13. Severability">
         <Typography>
           If any provision of these Terms is found to be invalid or unenforceable, the remaining
@@ -462,7 +455,6 @@ export default function TermsContent({
           replaced by a valid provision that most closely reflects the original intent.
         </Typography>
       </Section>
-
       <Section title="14. Governing Law and Jurisdiction">
         <Typography>
           These Terms are governed by the laws of the Federal Republic of Germany, excluding the UN
@@ -473,7 +465,6 @@ export default function TermsContent({
           consumer protection laws provide otherwise.
         </Typography>
       </Section>
-
       <Section title="15. Changes to These Terms">
         <Typography>
           We reserve the right to update these Terms at any time. The current version is always
@@ -484,14 +475,12 @@ export default function TermsContent({
           your agreement with the revised Terms.
         </Typography>
       </Section>
-
       <Section title="16. Language">
         <Typography>
           These Terms are available in German and English. In case of discrepancies between the two
           versions, the German version shall prevail.
         </Typography>
       </Section>
-
       <Section title="17. Contact">
         <Typography>
           If you have questions about these Terms, please contact us at{" "}

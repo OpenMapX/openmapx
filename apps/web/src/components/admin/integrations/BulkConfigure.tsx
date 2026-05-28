@@ -128,18 +128,35 @@ export function BulkConfigure() {
   const unconfiguredCount = sortedIntegrations.filter((i) => !i.configured).length;
 
   return (
-    <Stack gap={2}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
       <Stack
         direction="row"
-        alignItems={{ xs: "flex-start", sm: "center" }}
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={1}
+        sx={{
+          alignItems: { xs: "flex-start", sm: "center" },
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1,
+        }}
       >
-        <Typography variant="h5" fontWeight={700}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Bulk Configure Integrations
         </Typography>
-        <Stack direction="row" gap={0.75} flexWrap="wrap">
+        <Stack
+          direction="row"
+          sx={{
+            gap: 0.75,
+            flexWrap: "wrap",
+          }}
+        >
           <Chip label={`${sortedIntegrations.length} total`} size="small" variant="outlined" />
           {unconfiguredCount > 0 && (
             <Chip
@@ -151,24 +168,25 @@ export function BulkConfigure() {
           )}
         </Stack>
       </Stack>
-
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         Configure all integrations on a single page — each panel exposes the same form fields and
         credentials as its per-integration page. The env-var catalogue at the bottom lists every
         override key ready to paste into <code>infra/docker/.env</code>.
       </Typography>
-
       {integrationsQuery.isLoading && <Skeleton variant="rounded" height={200} />}
       {integrationsQuery.isError && (
         <Alert severity="error" variant="outlined">
           Failed to load integrations.
         </Alert>
       )}
-
       {sortedIntegrations.map((entry) => (
         <IntegrationAccordion key={entry.id} entry={entry} />
       ))}
-
       <EnvVarReferenceSection
         loading={envVarsQuery.isLoading}
         error={envVarsQuery.isError}
@@ -215,9 +233,29 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
       variant="outlined"
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap" flex={1}>
-          <Typography fontWeight={600}>{entry.name}</Typography>
-          <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1.5,
+            flexWrap: "wrap",
+            flex: 1,
+          }}
+        >
+          <Typography
+            sx={{
+              fontWeight: 600,
+            }}
+          >
+            {entry.name}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              fontFamily: "monospace",
+            }}
+          >
             {entry.id}
           </Typography>
           {!entry.configured && (
@@ -270,10 +308,20 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
   }
 
   return (
-    <Stack gap={2.5}>
+    <Stack
+      sx={{
+        gap: 2.5,
+      }}
+    >
       {showConfig && (
         <Box>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+          <Typography
+            variant="subtitle2"
+            gutterBottom
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Configuration
           </Typography>
           <ConfigSchemaForm
@@ -283,11 +331,16 @@ function IntegrationPanel({ data }: { data: IntegrationDetail }) {
           />
         </Box>
       )}
-
       {secretCredentials.length > 0 && (
         <Box>
           {showConfig && <Divider sx={{ my: 1 }} />}
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+          <Typography
+            variant="subtitle2"
+            gutterBottom
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Credentials
           </Typography>
           <CredentialsTable
@@ -353,14 +406,31 @@ function CredentialsTable({
             {credentials.map((cred) => (
               <TableRow key={cred.key}>
                 <TableCell>
-                  <Stack direction="row" alignItems="center" gap={0.75}>
+                  <Stack
+                    direction="row"
+                    sx={{
+                      alignItems: "center",
+                      gap: 0.75,
+                    }}
+                  >
                     <KeyIcon fontSize="small" sx={{ color: "text.secondary" }} />
-                    <Typography variant="body2" fontWeight={600}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
                       {cred.title}
                     </Typography>
                   </Stack>
                   {cred.description && (
-                    <Typography variant="caption" color="text.secondary" pl={2.5}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        pl: 2.5,
+                      }}
+                    >
                       {cred.description}
                     </Typography>
                   )}
@@ -377,7 +447,13 @@ function CredentialsTable({
                   />
                 </TableCell>
                 <TableCell align="right">
-                  <Stack direction="row" justifyContent="flex-end" gap={0.5}>
+                  <Stack
+                    direction="row"
+                    sx={{
+                      justifyContent: "flex-end",
+                      gap: 0.5,
+                    }}
+                  >
                     <Button
                       size="small"
                       variant="outlined"
@@ -405,7 +481,6 @@ function CredentialsTable({
           </TableBody>
         </Table>
       </TableContainer>
-
       {dialogField && (
         <SetCredentialDialog
           open={true}
@@ -464,9 +539,21 @@ function EnvVarReferenceSection({
 
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
-      <Stack direction="row" alignItems="center" gap={1} mb={1} flexWrap="wrap">
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 1,
+          mb: 1,
+          flexWrap: "wrap",
+        }}
+      >
         <Typography variant="h6">Environment Variables</Typography>
-        <Box flex={1} />
+        <Box
+          sx={{
+            flex: 1,
+          }}
+        />
         <Button
           size="small"
           variant="outlined"
@@ -495,29 +582,56 @@ function EnvVarReferenceSection({
           Copy all
         </Button>
       </Stack>
-      <Typography variant="body2" color="text.secondary" gutterBottom>
+      <Typography
+        variant="body2"
+        gutterBottom
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         Every integration field can be set via host env using the pattern{" "}
         <code>INTEGRATION_&lt;ID&gt;_&lt;KEY&gt;</code>. Env always wins over admin-stored values.
         Paste any subset of the lines below into <code>infra/docker/.env</code> and fill in the
         right-hand side.
       </Typography>
-
       {loading && <Skeleton variant="rounded" height={200} sx={{ mt: 1 }} />}
       {error && (
         <Alert severity="error" variant="outlined" sx={{ mt: 1 }}>
           Failed to load env-var catalogue.
         </Alert>
       )}
-
       {!loading && !error && (
-        <Stack gap={2} mt={2}>
+        <Stack
+          sx={{
+            gap: 2,
+            mt: 2,
+          }}
+        >
           {integrations.map((entry) => (
             <Box key={entry.id}>
-              <Stack direction="row" alignItems="center" gap={1} mb={0.5}>
-                <Typography variant="body2" fontWeight={600}>
+              <Stack
+                direction="row"
+                sx={{
+                  alignItems: "center",
+                  gap: 1,
+                  mb: 0.5,
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
                   {entry.name}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    fontFamily: "monospace",
+                  }}
+                >
                   {entry.id}
                 </Typography>
                 {!entry.enabled && <Chip label="disabled" size="small" variant="outlined" />}

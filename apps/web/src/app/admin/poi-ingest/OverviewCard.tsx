@@ -25,19 +25,42 @@ export function OverviewCard({ state }: { state: PoiIngestStateSummary }) {
     <Paper variant="outlined" sx={{ p: 2, height: "100%" }}>
       <Stack spacing={2}>
         <Box>
-          <Typography variant="overline" color="text.secondary">
+          <Typography
+            variant="overline"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Sources
           </Typography>
-          <Typography variant="h4" fontWeight={700}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             {state.sourcesCount.toLocaleString()}
           </Typography>
         </Box>
 
         <Box>
-          <Typography variant="subtitle2" fontWeight={700} mb={0.5}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 700,
+              mb: 0.5,
+            }}
+          >
             By status
           </Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{
+              flexWrap: "wrap",
+            }}
+          >
             {statuses.map(({ key, count }) => (
               <Chip
                 key={key}
@@ -51,15 +74,33 @@ export function OverviewCard({ state }: { state: PoiIngestStateSummary }) {
         </Box>
 
         <Box>
-          <Typography variant="subtitle2" fontWeight={700} mb={0.5}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 700,
+              mb: 0.5,
+            }}
+          >
             By domain
           </Typography>
           {domains.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               No sources registered.
             </Typography>
           ) : (
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{
+                flexWrap: "wrap",
+              }}
+            >
               {domains.map(([domain, count]) => (
                 <Chip key={domain} size="small" variant="outlined" label={`${domain} · ${count}`} />
               ))}

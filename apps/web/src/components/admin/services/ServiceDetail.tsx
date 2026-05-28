@@ -47,8 +47,21 @@ function statusLabel(status: ServiceStatus): string {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === "") return null;
   return (
-    <Stack direction="row" gap={1} alignItems="flex-start">
-      <Typography variant="body2" color="text.secondary" sx={{ minWidth: 130, flexShrink: 0 }}>
+    <Stack
+      direction="row"
+      sx={{
+        gap: 1,
+        alignItems: "flex-start",
+      }}
+    >
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          minWidth: 130,
+          flexShrink: 0,
+        }}
+      >
         {label}
       </Typography>
       <Box>
@@ -62,17 +75,36 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
   const { manifest } = data;
 
   return (
-    <Stack gap={3}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
       <Card variant="outlined">
         <CardContent>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+          <Typography
+            variant="subtitle2"
+            gutterBottom
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Manifest
           </Typography>
-          <Stack gap={1}>
+          <Stack
+            sx={{
+              gap: 1,
+            }}
+          >
             <MetaRow
               label="ID"
               value={
-                <Typography variant="body2" fontFamily="monospace">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                  }}
+                >
                   {manifest.id}
                 </Typography>
               }
@@ -82,11 +114,20 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
             <MetaRow label="License" value={manifest.license} />
             <MetaRow label="Platform" value={manifest.platform} />
             {manifest.homepage && (
-              <Stack direction="row" gap={1} alignItems="center">
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 1,
+                  alignItems: "center",
+                }}
+              >
                 <Typography
                   variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 130, flexShrink: 0 }}
+                  sx={{
+                    color: "text.secondary",
+                    minWidth: 130,
+                    flexShrink: 0,
+                  }}
                 >
                   Homepage
                 </Typography>
@@ -107,7 +148,13 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
             <MetaRow
               label="Directory"
               value={
-                <Typography variant="body2" fontFamily="monospace" sx={{ wordBreak: "break-all" }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                    wordBreak: "break-all",
+                  }}
+                >
                   {data.directory}
                 </Typography>
               }
@@ -115,25 +162,41 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
           </Stack>
         </CardContent>
       </Card>
-
       {manifest.description && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Description
             </Typography>
             <Typography variant="body2">{manifest.description}</Typography>
           </CardContent>
         </Card>
       )}
-
       {manifest.provides && manifest.provides.length > 0 && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Provides
             </Typography>
-            <Stack direction="row" gap={0.5} flexWrap="wrap">
+            <Stack
+              direction="row"
+              sx={{
+                gap: 0.5,
+                flexWrap: "wrap",
+              }}
+            >
               {manifest.provides.map((p) => (
                 <Chip
                   key={p}
@@ -147,23 +210,44 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
           </CardContent>
         </Card>
       )}
-
       {manifest.consumes && manifest.consumes.length > 0 && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Consumes
             </Typography>
-            <Stack gap={0.75}>
+            <Stack
+              sx={{
+                gap: 0.75,
+              }}
+            >
               {manifest.consumes.map((c) => (
-                <Stack key={`${c.type}::${c.mountAt}`} direction="row" gap={1} alignItems="center">
+                <Stack
+                  key={`${c.type}::${c.mountAt}`}
+                  direction="row"
+                  sx={{
+                    gap: 1,
+                    alignItems: "center",
+                  }}
+                >
                   <Chip
                     label={c.type}
                     size="small"
                     variant="outlined"
                     sx={{ fontFamily: "monospace", fontSize: "0.7rem" }}
                   />
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     mounted at <code style={{ fontFamily: "monospace" }}>{c.mountAt}</code>
                     {c.targetFilename ? ` · as ${c.targetFilename}` : ""}
                     {c.readOnly ? " · read-only" : ""}
@@ -175,32 +259,65 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
           </CardContent>
         </Card>
       )}
-
       {manifest.envVars && manifest.envVars.length > 0 && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Environment Variables
             </Typography>
-            <Stack gap={0.75}>
+            <Stack
+              sx={{
+                gap: 0.75,
+              }}
+            >
               {manifest.envVars.map((v) => (
-                <Stack key={v.name} direction="row" gap={1} alignItems="flex-start">
+                <Stack
+                  key={v.name}
+                  direction="row"
+                  sx={{
+                    gap: 1,
+                    alignItems: "flex-start",
+                  }}
+                >
                   <Typography
                     variant="body2"
-                    fontFamily="monospace"
-                    fontWeight={500}
-                    sx={{ minWidth: 200, flexShrink: 0 }}
+                    sx={{
+                      fontFamily: "monospace",
+                      fontWeight: 500,
+                      minWidth: 200,
+                      flexShrink: 0,
+                    }}
                   >
                     {v.name}
                   </Typography>
-                  <Stack gap={0.25}>
+                  <Stack
+                    sx={{
+                      gap: 0.25,
+                    }}
+                  >
                     {v.description && (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {v.description}
                       </Typography>
                     )}
                     {v.default !== undefined && (
-                      <Typography variant="caption" color="text.disabled">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.disabled",
+                        }}
+                      >
                         default: <code style={{ fontFamily: "monospace" }}>{v.default}</code>
                       </Typography>
                     )}
@@ -218,24 +335,44 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
           </CardContent>
         </Card>
       )}
-
       {manifest.exposure && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Exposure
             </Typography>
-            <Stack gap={1}>
+            <Stack
+              sx={{
+                gap: 1,
+              }}
+            >
               {manifest.exposure.hostPorts && manifest.exposure.hostPorts.length > 0 && (
-                <Stack gap={0.5}>
-                  <Typography variant="caption" color="text.secondary">
+                <Stack
+                  sx={{
+                    gap: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Host Ports
                   </Typography>
                   {manifest.exposure.hostPorts.map((p) => (
                     <Typography
                       key={`${p.host}:${p.container}`}
                       variant="body2"
-                      fontFamily="monospace"
+                      sx={{
+                        fontFamily: "monospace",
+                      }}
                     >
                       {p.host}:{p.container}/{p.protocol ?? "tcp"}
                     </Typography>
@@ -243,12 +380,26 @@ function OverviewTab({ data }: { data: ServiceDetailData }) {
                 </Stack>
               )}
               {manifest.exposure.proxy?.enabled && (
-                <Stack gap={0.5}>
-                  <Typography variant="caption" color="text.secondary">
+                <Stack
+                  sx={{
+                    gap: 0.5,
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Reverse Proxy
                   </Typography>
                   {manifest.exposure.proxy.pathPrefix && (
-                    <Typography variant="body2" fontFamily="monospace">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontFamily: "monospace",
+                      }}
+                    >
                       Path: {manifest.exposure.proxy.pathPrefix}
                     </Typography>
                   )}
@@ -282,7 +433,13 @@ function ConfigTab({ data }: { data: ServiceDetailData }) {
   return (
     <Card variant="outlined">
       <CardContent>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+        <Typography
+          variant="subtitle2"
+          gutterBottom
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Configuration
         </Typography>
         <ServiceConfigForm
@@ -310,7 +467,13 @@ function ManifestTab({ data }: { data: ServiceDetailData }) {
   return (
     <Card variant="outlined">
       <CardContent>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+        <Typography
+          variant="subtitle2"
+          gutterBottom
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Raw Manifest (service.json)
         </Typography>
         <Box
@@ -352,7 +515,13 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" py={8}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          py: 8,
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -393,17 +562,39 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
   }
 
   return (
-    <Stack gap={3}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
       <Stack
         direction="row"
-        alignItems="flex-start"
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={1.5}
+        sx={{
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1.5,
+        }}
       >
-        <Stack gap={1}>
-          <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
-            <Typography variant="h5" fontWeight={700}>
+        <Stack
+          sx={{
+            gap: 1,
+          }}
+        >
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "center",
+              gap: 1.5,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               {manifest.name}
             </Typography>
             <StatusBadge quality={manifest.quality} />
@@ -426,17 +617,35 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
               />
             )}
           </Stack>
-          <Typography variant="body2" color="text.secondary" fontFamily="monospace">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              fontFamily: "monospace",
+            }}
+          >
             {manifest.id} · v{manifest.version}
           </Typography>
           {manifest.description && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {manifest.description}
             </Typography>
           )}
         </Stack>
 
-        <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
+        <Stack
+          direction="row"
+          sx={{
+            gap: 1,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <Tooltip title="Recreate this service from the latest rendered compose and hardlink plan.">
             <span>
               <Button
@@ -493,9 +702,7 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
           </Button>
         </Stack>
       </Stack>
-
       <Divider />
-
       <Box>
         <Tabs
           value={tab}
@@ -512,8 +719,17 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
         {tab === 0 && <OverviewTab data={data} />}
         {tab === 1 && <ConfigTab data={data} />}
         {tab === 2 && (
-          <Box py={2}>
-            <Typography variant="body2" color="text.secondary">
+          <Box
+            sx={{
+              py: 2,
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Click "Logs" or switch to this tab to open the live log stream.
             </Typography>
             <Button
@@ -529,7 +745,6 @@ export function ServiceDetail({ id }: ServiceDetailProps) {
         )}
         {tab === 3 && <ManifestTab data={data} />}
       </Box>
-
       <ServiceLogsDrawer
         open={logsOpen}
         onClose={() => setLogsOpen(false)}

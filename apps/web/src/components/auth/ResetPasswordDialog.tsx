@@ -88,7 +88,7 @@ function ResetPasswordDialogInner() {
       onClose={handleClose}
       maxWidth="xs"
       fullWidth
-      PaperProps={{ sx: { borderRadius: "12px", p: 0 } }}
+      slotProps={{ paper: { sx: { borderRadius: "12px", p: 0 } } }}
     >
       <DialogContent sx={{ px: 5, py: 4 }}>
         <Box sx={{ textAlign: "center", mb: 3 }}>

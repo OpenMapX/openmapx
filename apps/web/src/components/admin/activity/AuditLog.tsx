@@ -236,8 +236,19 @@ export function AuditLog() {
   const hasFilters = !!actionFilter || !!targetTypeFilter || !!targetSearch;
 
   return (
-    <Stack gap={2}>
-      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel>Action</InputLabel>
           <Select
@@ -306,7 +317,6 @@ export function AuditLog() {
           </IconButton>
         </Tooltip>
       </Stack>
-
       <TableContainer>
         <Table size="small">
           <TableHead>
@@ -324,7 +334,12 @@ export function AuditLog() {
             <TableBody>
               <TableRow>
                 <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                  <Typography color="text.secondary" variant="body2">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     No audit events found
                   </Typography>
                 </TableCell>
@@ -341,18 +356,34 @@ export function AuditLog() {
                     {entry.targetId ? (
                       <Stack>
                         {entry.targetType && (
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "text.secondary",
+                            }}
+                          >
                             {entry.targetType}
                           </Typography>
                         )}
-                        <Typography variant="body2" fontFamily="monospace" fontSize="0.75rem">
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: "monospace",
+                            fontSize: "0.75rem",
+                          }}
+                        >
                           {entry.targetId.length > 32
                             ? `${entry.targetId.slice(0, 16)}…${entry.targetId.slice(-8)}`
                             : entry.targetId}
                         </Typography>
                       </Stack>
                     ) : (
-                      <Typography variant="body2" color="text.disabled">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.disabled",
+                        }}
+                      >
                         —
                       </Typography>
                     )}
@@ -365,8 +396,10 @@ export function AuditLog() {
                       <Tooltip title={JSON.stringify(entry.details, null, 2)}>
                         <Typography
                           variant="caption"
-                          color="text.secondary"
-                          sx={{ cursor: "default" }}
+                          sx={{
+                            color: "text.secondary",
+                            cursor: "default",
+                          }}
                         >
                           {Object.entries(entry.details)
                             .slice(0, 2)
@@ -376,14 +409,24 @@ export function AuditLog() {
                         </Typography>
                       </Tooltip>
                     ) : (
-                      <Typography variant="caption" color="text.disabled">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.disabled",
+                        }}
+                      >
                         —
                       </Typography>
                     )}
                   </TableCell>
                   <TableCell>
                     <Tooltip title={new Date(entry.createdAt).toLocaleString()}>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {formatRelativeTime(entry.createdAt)}
                       </Typography>
                     </Tooltip>

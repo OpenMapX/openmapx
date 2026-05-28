@@ -108,7 +108,15 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
           <IconButton onClick={onClose} sx={{ color: "#fff" }} aria-label={tc("close")}>
             <ArrowBackIcon />
           </IconButton>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ color: "#fff", flex: 1 }} noWrap>
+          <Typography
+            variant="subtitle1"
+            noWrap
+            sx={{
+              fontWeight: 600,
+              color: "#fff",
+              flex: 1,
+            }}
+          >
             {placeName}
           </Typography>
           <IconButton onClick={onClose} sx={{ color: "#fff" }} aria-label={tc("close")}>

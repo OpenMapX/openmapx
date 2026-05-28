@@ -64,9 +64,12 @@ function ActionButton({ icon, label, filled = false, onClick }: ActionButtonProp
       </Box>
       <Typography
         variant="caption"
-        fontWeight={500}
         align="center"
-        sx={{ color: TEAL, lineHeight: 1.3 }}
+        sx={{
+          fontWeight: 500,
+          color: TEAL,
+          lineHeight: 1.3,
+        }}
       >
         {label}
       </Typography>

@@ -87,7 +87,14 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
           {breadcrumbs.map((crumb, i) => {
             const isLast = i === breadcrumbs.length - 1;
             return isLast ? (
-              <Typography key={crumb.href} variant="body2" color="text.primary" fontWeight={600}>
+              <Typography
+                key={crumb.href}
+                variant="body2"
+                sx={{
+                  color: "text.primary",
+                  fontWeight: 600,
+                }}
+              >
                 {crumb.label}
               </Typography>
             ) : (
@@ -96,8 +103,11 @@ export function AdminTopBar({ user, sidebarOpen, onToggleSidebar }: AdminTopBarP
                 variant="body2"
                 component={Link}
                 href={crumb.href}
-                color="text.secondary"
-                sx={{ textDecoration: "none", "&:hover": { textDecoration: "underline" } }}
+                sx={{
+                  color: "text.secondary",
+                  textDecoration: "none",
+                  "&:hover": { textDecoration: "underline" },
+                }}
               >
                 {crumb.label}
               </Typography>

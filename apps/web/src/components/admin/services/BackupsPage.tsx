@@ -165,14 +165,34 @@ export function BackupsPage() {
   );
 
   return (
-    <Stack gap={2.5}>
-      <Stack direction="row" alignItems="center" spacing={1.5}>
+    <Stack
+      sx={{
+        gap: 2.5,
+      }}
+    >
+      <Stack
+        direction="row"
+        spacing={1.5}
+        sx={{
+          alignItems: "center",
+        }}
+      >
         <HistoryIcon color="primary" />
         <Box>
-          <Typography variant="h5" fontWeight={700}>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             Backups
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Create, restore, and delete service-volume backups
           </Typography>
         </Box>
@@ -185,9 +205,14 @@ export function BackupsPage() {
           </span>
         </Tooltip>
       </Stack>
-
       <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1.5}
+          sx={{
+            alignItems: { sm: "center" },
+          }}
+        >
           <TextField
             label="Backup name (optional)"
             size="small"
@@ -208,19 +233,29 @@ export function BackupsPage() {
             Open Activity
           </Button>
         </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            mt: 1,
+            display: "block",
+          }}
+        >
           Allowed: letters, numbers, dot, dash, underscore.
         </Typography>
       </Paper>
-
       {isLoading && (
-        <Box py={6} display="flex" justifyContent="center">
+        <Box
+          sx={{
+            py: 6,
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
           <CircularProgress />
         </Box>
       )}
-
       {isError && <Alert severity="error">Failed to load backups.</Alert>}
-
       {!!data?.warnings.length && (
         <Alert severity="warning">
           {data.warnings.map((warning) => (
@@ -230,7 +265,6 @@ export function BackupsPage() {
           ))}
         </Alert>
       )}
-
       {!isLoading && !isError && (
         <Paper variant="outlined">
           <TableContainer>
@@ -250,7 +284,14 @@ export function BackupsPage() {
                 {sortedBackups.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7}>
-                      <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                          py: 2,
+                          textAlign: "center",
+                        }}
+                      >
                         No backups found yet.
                       </Typography>
                     </TableCell>
@@ -259,8 +300,21 @@ export function BackupsPage() {
                   sortedBackups.map((backup) => (
                     <TableRow key={backup.name} hover>
                       <TableCell>
-                        <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-                          <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
+                        <Stack
+                          direction="row"
+                          sx={{
+                            alignItems: "center",
+                            gap: 1,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontFamily: "monospace",
+                              fontWeight: 600,
+                            }}
+                          >
                             {backup.name}
                           </Typography>
                           {backup.corrupt && (
@@ -285,7 +339,13 @@ export function BackupsPage() {
                       <TableCell>{backup.corrupt ? "—" : backup.volumes}</TableCell>
                       <TableCell>{backup.corrupt ? "—" : formatBytes(backup.totalBytes)}</TableCell>
                       <TableCell align="right">
-                        <Stack direction="row" justifyContent="flex-end" spacing={0.5}>
+                        <Stack
+                          direction="row"
+                          spacing={0.5}
+                          sx={{
+                            justifyContent: "flex-end",
+                          }}
+                        >
                           <Tooltip
                             title={
                               backup.corrupt
@@ -330,11 +390,15 @@ export function BackupsPage() {
           </TableContainer>
         </Paper>
       )}
-
       <Dialog open={!!restoreTarget} onClose={() => setRestoreTarget(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Restore Backup</DialogTitle>
         <DialogContent>
-          <Stack gap={2} pt={0.5}>
+          <Stack
+            sx={{
+              gap: 2,
+              pt: 0.5,
+            }}
+          >
             <Alert severity="warning">
               Restoring overwrites current service data for selected targets.
             </Alert>
@@ -389,7 +453,6 @@ export function BackupsPage() {
           </Button>
         </DialogActions>
       </Dialog>
-
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
         <DialogTitle>Delete Backup</DialogTitle>
         <DialogContent>

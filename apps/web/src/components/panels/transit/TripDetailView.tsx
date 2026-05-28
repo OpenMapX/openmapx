@@ -70,7 +70,14 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               color={departure.route.color}
               mode={departure.route.mode}
             />
-            <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ flex: 1 }}>
+            <Typography
+              variant="subtitle1"
+              noWrap
+              sx={{
+                fontWeight: 600,
+                flex: 1,
+              }}
+            >
               {departure.headsign}
             </Typography>
             {departure.occupancy && (
@@ -94,31 +101,46 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               {formatTime(departure.scheduledAt, locale)}
             </Typography>
             {isDelayed && !isCanceled && departure.expectedAt && (
-              <Typography variant="body2" fontWeight={600} color="error.main">
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  color: "error.main",
+                }}
+              >
                 {formatTime(departure.expectedAt, locale)}
               </Typography>
             )}
             {isCanceled && (
-              <Typography variant="caption" color="error.main" fontWeight={600}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "error.main",
+                  fontWeight: 600,
+                }}
+              >
                 {t("canceled")}
               </Typography>
             )}
             {departure.platform && (
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 · {t("platform")} {departure.platform}
               </Typography>
             )}
           </Box>
         </Box>
       </Box>
-
       {/* Route alerts */}
       {alerts && alerts.length > 0 && (
         <Box sx={{ px: 2, pt: 1.5 }}>
           <AlertsBanner alerts={alerts} />
         </Box>
       )}
-
       {/* Trip remarks (all of them — list view shows only the top one) */}
       {departure.remarks && departure.remarks.length > 0 && (
         <Box sx={{ px: 2, pt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
@@ -128,7 +150,6 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
           ))}
         </Box>
       )}
-
       {(serviceInfo || formationDetails) && (
         <Box sx={{ px: 2, pt: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
           {serviceInfo && (
@@ -145,7 +166,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
             >
               {serviceInfo.operatorName && (
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {t("operator")}
                   </Typography>
                   <Typography variant="body2">{serviceInfo.operatorName}</Typography>
@@ -153,7 +179,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               )}
               {serviceInfo.trainNumber && (
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {t("trainNumber")}
                   </Typography>
                   <Typography variant="body2">{serviceInfo.trainNumber}</Typography>
@@ -161,7 +192,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               )}
               {serviceInfo.operatorParticipantRef && (
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {t("operatorCode")}
                   </Typography>
                   <Typography variant="body2">{serviceInfo.operatorParticipantRef}</Typography>
@@ -169,7 +205,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               )}
               {serviceInfo.occupancySource === "opentransportdata.swiss/occupancy-forecast" && (
                 <Box>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {t("occupancy")}
                   </Typography>
                   <Typography variant="body2">{t("occupancyForecast")}</Typography>
@@ -200,7 +241,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
               >
                 {formationDetails.shortFormation && (
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {t("formationShort")}
                     </Typography>
                     <Typography variant="body2">{formationDetails.shortFormation}</Typography>
@@ -208,7 +254,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 )}
                 {formationDetails.vehicleCount != null && (
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {t("vehicleCount")}
                     </Typography>
                     <Typography variant="body2">{formationDetails.vehicleCount}</Typography>
@@ -216,7 +267,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 )}
                 {formationDetails.seats != null && (
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {t("seats")}
                     </Typography>
                     <Typography variant="body2">{formationDetails.seats}</Typography>
@@ -224,7 +280,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 )}
                 {formationDetails.operatorCode && (
                   <Box>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {t("operatorCode")}
                     </Typography>
                     <Typography variant="body2">{formationDetails.operatorCode}</Typography>
@@ -246,11 +307,21 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                         gap: 0.5,
                       }}
                     >
-                      <Typography variant="body2" fontWeight={600}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontWeight: 600,
+                        }}
+                      >
                         {vehicle.typeCode || vehicle.typeName || t("vehicle")}{" "}
                         {vehicle.order != null ? `#${vehicle.order}` : ""}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {[
                           vehicle.seatsFirstClass != null
                             ? `${vehicle.seatsFirstClass} ${t("firstClassSeats")}`
@@ -279,7 +350,6 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
           )}
         </Box>
       )}
-
       {/* Stop sequence */}
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="subtitle2" gutterBottom>
@@ -291,7 +361,13 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
           </Box>
         ) : isError ? (
           <Box sx={{ textAlign: "center", py: 2 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="body2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {t("couldNotLoadStops")}
             </Typography>
             <Button
@@ -382,8 +458,12 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                     {delayMin > 0 && !isCanceledStop && (
                       <Typography
                         variant="caption"
-                        color="error.main"
-                        sx={{ display: "block", fontSize: "0.6rem", fontWeight: 600 }}
+                        sx={{
+                          color: "error.main",
+                          display: "block",
+                          fontSize: "0.6rem",
+                          fontWeight: 600,
+                        }}
                       >
                         +{delayMin} min
                       </Typography>
@@ -400,7 +480,13 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                     </Typography>
                   </Box>
                   {stop.platform && (
-                    <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.disabled",
+                        flexShrink: 0,
+                      }}
+                    >
                       {t("platform")} {stop.platform}
                     </Typography>
                   )}
@@ -420,12 +506,16 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
             })}
           </Box>
         ) : (
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {departure.tripId ? t("stopDetailsLater") : t("stopSequenceNotAvailable")}
           </Typography>
         )}
       </Box>
-
       {/* Attribution */}
       <AttributionStrip
         attributions={mergedAttributions}

@@ -88,7 +88,13 @@ export function AccountMenu({ anchorEl, onClose, user, onOpenSettings }: Account
           <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
             {user.name}
           </Typography>
-          <Typography variant="caption" color="text.secondary" noWrap>
+          <Typography
+            variant="caption"
+            noWrap
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {user.email}
           </Typography>
         </Box>

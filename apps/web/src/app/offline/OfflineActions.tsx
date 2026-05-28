@@ -17,7 +17,13 @@ export function OfflineActions({
   // that serves the precached `/` from app-shell-v1. Offline, the RSC fetch
   // hangs and these buttons would be useless.
   return (
-    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="center">
+    <Stack
+      direction={{ xs: "column", sm: "row" }}
+      spacing={1.5}
+      sx={{
+        justifyContent: "center",
+      }}
+    >
       <Button variant="contained" onClick={() => window.location.reload()}>
         {retryLabel}
       </Button>

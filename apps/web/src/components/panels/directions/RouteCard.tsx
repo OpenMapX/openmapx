@@ -61,27 +61,43 @@ export function RouteCard({
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <Typography
             variant="body2"
-            fontWeight={600}
-            color="text.primary"
             noWrap
-            sx={{ flex: 1, mr: 1 }}
+            sx={{
+              fontWeight: 600,
+              color: "text.primary",
+              flex: 1,
+              mr: 1,
+            }}
           >
             {route.summary ?? t("bestRoute")}
           </Typography>
           <Typography
             variant="body2"
-            fontWeight={600}
             color={active ? TEAL : "text.primary"}
-            sx={{ flexShrink: 0 }}
+            sx={{
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
           >
             {formatDuration(route.duration)}
           </Typography>
         </Box>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {dist}
         </Typography>
         {active && index === 0 && (
-          <Typography variant="caption" color="text.secondary" display="block">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+            }}
+          >
             {t("fastestRoute")}
           </Typography>
         )}

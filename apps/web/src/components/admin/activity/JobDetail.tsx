@@ -88,22 +88,44 @@ export function JobDetail({ jobId }: { jobId: string }) {
 
   if (isLoading || !data) {
     return (
-      <Box display="flex" justifyContent="center" py={2}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          py: 2,
+        }}
+      >
         <CircularProgress size={20} />
       </Box>
     );
   }
 
   return (
-    <Stack gap={1.5}>
-      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+    <Stack
+      sx={{
+        gap: 1.5,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
         <JobStatusChip status={data.status} />
         {data.progress != null && data.status === "running" && (
           <Box sx={{ flexGrow: 1, maxWidth: 200 }}>
             <LinearProgress variant="determinate" value={data.progress} />
           </Box>
         )}
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Duration: {formatDuration(data.startedAt, data.finishedAt)}
         </Typography>
         {isActive(data.status) && (
@@ -119,7 +141,6 @@ export function JobDetail({ jobId }: { jobId: string }) {
           </Button>
         )}
       </Stack>
-
       {data.error && (
         <Box
           sx={{
@@ -131,12 +152,17 @@ export function JobDetail({ jobId }: { jobId: string }) {
             py: 1,
           }}
         >
-          <Typography variant="caption" color="error.main" fontFamily="monospace">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "error.main",
+              fontFamily: "monospace",
+            }}
+          >
             {data.error}
           </Typography>
         </Box>
       )}
-
       <Box
         sx={{
           bgcolor: "grey.900",
@@ -150,7 +176,12 @@ export function JobDetail({ jobId }: { jobId: string }) {
         }}
       >
         {data.logs.length === 0 ? (
-          <Typography variant="caption" color="grey.500">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "grey.500",
+            }}
+          >
             {isActive(data.status) ? "Waiting for output..." : "No log output"}
           </Typography>
         ) : (
@@ -166,10 +197,15 @@ export function JobDetail({ jobId }: { jobId: string }) {
         )}
         <div ref={logEndRef} />
       </Box>
-
       {data.result && Object.keys(data.result).length > 0 && (
         <Box>
-          <Typography variant="caption" color="text.secondary" fontWeight={600}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              fontWeight: 600,
+            }}
+          >
             Result
           </Typography>
           <Box

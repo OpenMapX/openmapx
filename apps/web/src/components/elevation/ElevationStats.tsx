@@ -28,7 +28,13 @@ function StatItem({ icon, value, color }: StatItemProps) {
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
       <Box sx={{ display: "flex", color: color ?? "text.secondary", fontSize: 14 }}>{icon}</Box>
-      <Typography variant="caption" fontWeight={500} color="text.primary">
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 500,
+          color: "text.primary",
+        }}
+      >
         {value}
       </Typography>
     </Box>
@@ -58,8 +64,11 @@ export function ElevationStats({ stats, units, compact = false }: ElevationStats
             icon={
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ fontSize: 10, fontWeight: 700 }}
+                sx={{
+                  color: "text.secondary",
+                  fontSize: 10,
+                  fontWeight: 700,
+                }}
               >
                 %
               </Typography>

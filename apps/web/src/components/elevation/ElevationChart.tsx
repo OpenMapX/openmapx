@@ -82,13 +82,31 @@ function CustomTooltip({
         boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
       }}
     >
-      <Typography variant="caption" fontWeight={600} display="block">
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 600,
+          display: "block",
+        }}
+      >
         {elev}
       </Typography>
-      <Typography variant="caption" color="text.secondary" display="block">
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+          display: "block",
+        }}
+      >
         {dist}
       </Typography>
-      <Typography variant="caption" display="block" sx={{ color: gradeToColor(Math.abs(grade)) }}>
+      <Typography
+        variant="caption"
+        sx={{
+          display: "block",
+          color: gradeToColor(Math.abs(grade)),
+        }}
+      >
         {grade >= 0 ? "+" : ""}
         {grade.toFixed(1)}%
       </Typography>

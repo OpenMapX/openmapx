@@ -80,10 +80,17 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={1.5}
-        alignItems={{ sm: "center" }}
-        mb={1.5}
+        sx={{
+          alignItems: { sm: "center" },
+          mb: 1.5,
+        }}
       >
-        <Typography variant="subtitle1" fontWeight={700}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Feed state ({data?.total ?? 0})
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -124,9 +131,14 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
           ))}
         </TextField>
       </Stack>
-
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={3}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            py: 3,
+          }}
+        >
           <CircularProgress size={22} />
         </Box>
       ) : isError ? (
@@ -134,7 +146,12 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
           Failed to load feeds.
         </Typography>
       ) : !data || data.feeds.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           No feeds match the current filter.
         </Typography>
       ) : (
@@ -155,14 +172,25 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                 {data.feeds.map((feed) => (
                   <TableRow key={feed.id} hover>
                     <TableCell>
-                      <Typography variant="caption" fontFamily="monospace">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontFamily: "monospace",
+                        }}
+                      >
                         {feed.region}
                       </Typography>
                     </TableCell>
                     <TableCell>
                       <Stack spacing={0.25}>
                         <Typography variant="body2">{feed.name}</Typography>
-                        <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.secondary",
+                            fontFamily: "monospace",
+                          }}
+                        >
                           {feed.id}
                         </Typography>
                       </Stack>
@@ -198,7 +226,13 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
           </TableContainer>
 
           {totalPages > 1 && (
-            <Stack direction="row" justifyContent="flex-end" mt={1.5}>
+            <Stack
+              direction="row"
+              sx={{
+                justifyContent: "flex-end",
+                mt: 1.5,
+              }}
+            >
               <Pagination
                 size="small"
                 count={totalPages}

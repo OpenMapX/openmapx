@@ -220,7 +220,13 @@ function InfrastructureBlock({
       <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
         <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: 0.25 }}>{icon}</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={600} sx={{ mb: 0.75 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+              mb: 0.75,
+            }}
+          >
             {title}
           </Typography>
           {children}
@@ -254,11 +260,23 @@ function StopAreaRow({
       }}
     >
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="body2" fontWeight={500} noWrap>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{
+            fontWeight: 500,
+          }}
+        >
           {stop.name}
         </Typography>
         {secondaryLabel && (
-          <Typography variant="caption" color="text.secondary" display="block">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+            }}
+          >
             {secondaryLabel}
           </Typography>
         )}
@@ -451,7 +469,13 @@ export function StopInfrastructureSection({
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
           <TrainIcon sx={{ fontSize: 20, color: TEAL }} />
-          <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 600,
+              color: "text.primary",
+            }}
+          >
             {t("stationDetails")}
           </Typography>
         </Box>
@@ -471,7 +495,6 @@ export function StopInfrastructureSection({
           </Button>
         )}
       </Box>
-
       {stationSummary && (
         <Box sx={{ px: 2, pb: 1 }}>
           <Box
@@ -483,19 +506,22 @@ export function StopInfrastructureSection({
               border: "1px solid rgba(15, 157, 88, 0.16)",
             }}
           >
-            <Typography variant="body2" fontWeight={600}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {stationSummary}
             </Typography>
           </Box>
         </Box>
       )}
-
       {structuredSections.find((section) => section.id === "area") && (
         <StructuredSections
           sections={structuredSections.filter((section) => section.id === "area")}
         />
       )}
-
       {relatedStops.length > 0 && (
         <InfrastructureBlock
           icon={<AccountTreeIcon />}
@@ -515,7 +541,6 @@ export function StopInfrastructureSection({
           ))}
         </InfrastructureBlock>
       )}
-
       {data.platforms.length > 0 && (
         <InfrastructureBlock icon={<TrainIcon />} title={t("platforms")}>
           {Array.from(groupedPlatforms.entries()).map(([parentStopId, platforms]) => {
@@ -523,7 +548,13 @@ export function StopInfrastructureSection({
             return (
               <Box key={parentStopId} sx={{ "&:not(:last-child)": { mb: 1.5 } }}>
                 {groupedPlatforms.size > 1 && parentStop && (
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      fontWeight: 600,
+                    }}
+                  >
                     {parentStop.name}
                   </Typography>
                 )}
@@ -556,13 +587,25 @@ export function StopInfrastructureSection({
                       }}
                     >
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={500} noWrap>
+                        <Typography
+                          variant="body2"
+                          noWrap
+                          sx={{
+                            fontWeight: 500,
+                          }}
+                        >
                           {platform.publicCode
                             ? `${t("platform")} ${platform.publicCode}`
                             : (platform.privateCode ?? platform.name)}
                         </Typography>
                         {detailBits.length > 0 && (
-                          <Typography variant="caption" color="text.secondary" display="block">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "text.secondary",
+                              display: "block",
+                            }}
+                          >
                             {detailBits.join(" · ")}
                           </Typography>
                         )}
@@ -622,7 +665,6 @@ export function StopInfrastructureSection({
           })}
         </InfrastructureBlock>
       )}
-
       {data.parking.length > 0 && (
         <InfrastructureBlock icon={<LocalParkingIcon />} title={t("parking")}>
           {data.parking.map((parking) => {
@@ -655,11 +697,23 @@ export function StopInfrastructureSection({
                 }}
               >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={500} noWrap>
+                  <Typography
+                    variant="body2"
+                    noWrap
+                    sx={{
+                      fontWeight: 500,
+                    }}
+                  >
                     {parking.name}
                   </Typography>
                   {detailBits.length > 0 && (
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        display: "block",
+                      }}
+                    >
                       {detailBits.join(" · ")}
                     </Typography>
                   )}
@@ -709,7 +763,6 @@ export function StopInfrastructureSection({
           })}
         </InfrastructureBlock>
       )}
-
       {data.fareZones.length > 0 && (
         <InfrastructureBlock icon={<TrainIcon />} title={t("fareZones")}>
           {fareZoneExplanation && (
@@ -723,10 +776,21 @@ export function StopInfrastructureSection({
                 border: "1px solid rgba(217, 119, 6, 0.16)",
               }}
             >
-              <Typography variant="body2" fontWeight={500}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 500,
+                }}
+              >
                 {fareZoneExplanation.summary}
               </Typography>
-              <Typography variant="caption" color="text.secondary" display="block">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  display: "block",
+                }}
+              >
                 {fareZoneExplanation.note}
               </Typography>
             </Box>
@@ -746,16 +810,34 @@ export function StopInfrastructureSection({
                 }}
               >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={500} noWrap>
+                  <Typography
+                    variant="body2"
+                    noWrap
+                    sx={{
+                      fontWeight: 500,
+                    }}
+                  >
                     {zone.name}
                   </Typography>
                   {fareZoneSummaryBits(zone) && (
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        display: "block",
+                      }}
+                    >
                       {fareZoneSummaryBits(zone)}
                     </Typography>
                   )}
                   {zone.isDeprecatedTariffZone && (
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        display: "block",
+                      }}
+                    >
                       {t("deprecatedFareZone")}
                     </Typography>
                   )}
@@ -786,7 +868,6 @@ export function StopInfrastructureSection({
           })}
         </InfrastructureBlock>
       )}
-
       <StructuredSections
         sections={structuredSections.filter(
           (section) => section.id !== "area" && section.id !== "platforms",

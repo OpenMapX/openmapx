@@ -88,8 +88,12 @@ export function AttributionStrip({
       {label && isPanelHeader && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ fontSize, fontWeight: 500, mr: 0.5 }}
+          sx={{
+            color: "text.secondary",
+            fontSize,
+            fontWeight: 500,
+            mr: 0.5,
+          }}
         >
           {label}
         </Typography>

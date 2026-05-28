@@ -62,7 +62,6 @@ export function HikingTrailsLegend() {
           }}
         />
       )}
-
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("trailDifficulty")}</Typography>
         <Switch
@@ -73,7 +72,6 @@ export function HikingTrailsLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5 }}>
         {GRADES.map((key) => {
           const grade = SAC_GRADES[key];
@@ -104,7 +102,6 @@ export function HikingTrailsLegend() {
           );
         })}
       </Box>
-
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5, mt: 0.75 }}>
         {SHELTER_ITEMS.map((s) => (
           <Box key={s.labelKey} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
@@ -123,13 +120,14 @@ export function HikingTrailsLegend() {
           </Box>
         ))}
       </Box>
-
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 1 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 1,
+          }}
         />
       )}
     </Paper>

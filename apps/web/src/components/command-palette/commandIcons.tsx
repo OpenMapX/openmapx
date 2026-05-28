@@ -4,7 +4,7 @@ import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExploreIcon from "@mui/icons-material/Explore";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutlined";
 import LayersIcon from "@mui/icons-material/Layers";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import LinkIcon from "@mui/icons-material/Link";
@@ -35,7 +35,13 @@ const ICONS: Record<string, ReactNode> = {
   menu: <MenuIcon fontSize="small" />,
   category: <RestaurantIcon fontSize="small" />,
   search: <SearchIcon fontSize="small" />,
-  share: <LinkIcon fontSize="small" />,
+  share: (
+    <LinkIcon
+      sx={{
+        fontSize: "small",
+      }}
+    />
+  ),
   theme: <LightModeIcon fontSize="small" />,
   language: <TranslateIcon fontSize="small" />,
   "my-location": <MyLocationIcon fontSize="small" />,

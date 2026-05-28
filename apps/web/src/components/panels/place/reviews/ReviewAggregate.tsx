@@ -81,8 +81,11 @@ export function ReviewAggregate({ aggregate, reviews, isLoading }: Props) {
               />
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ width: 24, textAlign: "right" }}
+                sx={{
+                  color: "text.secondary",
+                  width: 24,
+                  textAlign: "right",
+                }}
               >
                 {bucket}
               </Typography>
@@ -91,13 +94,24 @@ export function ReviewAggregate({ aggregate, reviews, isLoading }: Props) {
         })}
       </Box>
       <Box sx={{ textAlign: "center", flexShrink: 0 }}>
-        <Typography variant="h3" fontWeight={300} lineHeight={1}>
+        <Typography
+          variant="h3"
+          sx={{
+            fontWeight: 300,
+            lineHeight: 1,
+          }}
+        >
           {stars.toFixed(1)}
         </Typography>
         <Box sx={{ my: 0.5 }}>
           <StarDisplay value={stars} size={20} />
         </Box>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {t("reviewsCount", { count })}
         </Typography>
       </Box>

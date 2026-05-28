@@ -149,8 +149,19 @@ export function AppLogViewer() {
   const sources = data?.sources ?? [];
 
   return (
-    <Stack gap={2}>
-      <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
         <FormControl size="small" sx={{ minWidth: 100 }}>
           <InputLabel>Level</InputLabel>
           <Select
@@ -225,7 +236,6 @@ export function AppLogViewer() {
           </IconButton>
         </Tooltip>
       </Stack>
-
       <Box
         sx={{
           bgcolor: "grey.900",
@@ -238,14 +248,30 @@ export function AppLogViewer() {
         }}
       >
         {isLoading ? (
-          <Stack gap={0.5} p={1}>
+          <Stack
+            sx={{
+              gap: 0.5,
+              p: 1,
+            }}
+          >
             {[1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} variant="text" height={20} sx={{ bgcolor: "grey.800" }} />
             ))}
           </Stack>
         ) : !data?.entries.length ? (
-          <Box py={6} textAlign="center">
-            <Typography color="grey.600" variant="body2" fontFamily="monospace">
+          <Box
+            sx={{
+              py: 6,
+              textAlign: "center",
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                color: "grey.600",
+                fontFamily: "monospace",
+              }}
+            >
               No log entries match the current filters
             </Typography>
           </Box>

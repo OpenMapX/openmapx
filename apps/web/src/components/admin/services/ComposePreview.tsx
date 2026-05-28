@@ -57,7 +57,13 @@ export function ComposePreview() {
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" py={6}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          py: 6,
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -69,14 +75,33 @@ export function ComposePreview() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
+      <Typography
+        variant="h5"
+        sx={{
+          fontWeight: 700,
+          mb: 2,
+        }}
+      >
         Generated docker-compose preview
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 2,
+        }}
+      >
         This is the docker-compose YAML that would be written to disk for the currently enabled
         services. It is regenerated on each request.
       </Typography>
-      <Stack direction="row" spacing={1} mb={2} flexWrap="wrap">
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          mb: 2,
+          flexWrap: "wrap",
+        }}
+      >
         <Button
           variant="contained"
           onClick={() => composeUp.mutate()}

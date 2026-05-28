@@ -44,21 +44,30 @@ export function PlaceAirportInfo({ airport }: Props) {
   return (
     <Box>
       <Divider sx={{ mx: 2, my: 1 }} />
-
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
         <Box sx={{ color: TEAL, display: "flex" }}>
           <FlightTakeoffIcon sx={{ fontSize: 20 }} />
         </Box>
-        <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 600,
+            color: "text.primary",
+          }}
+        >
           {t("section")}
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {translateAirportType(airport.type, t)}
         </Typography>
       </Box>
-
       {/* Identifiers */}
       <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", px: 2, pt: 0.5, pb: 1 }}>
         {airport.iata && <CodeChip label={t("iata")} value={airport.iata} tone="primary" />}
@@ -69,7 +78,6 @@ export function PlaceAirportInfo({ airport }: Props) {
           <CodeChip label={t("icao")} value={airport.ident} tone="secondary" />
         )}
       </Box>
-
       {/* Key facts grid */}
       <Box
         sx={{
@@ -97,7 +105,6 @@ export function PlaceAirportInfo({ airport }: Props) {
         />
         {airport.municipality && <FactCell label={t("country")} value={formatLocation(airport)} />}
       </Box>
-
       {/* Links row */}
       {(airport.homeLink || airport.wikipediaLink) && (
         <Box
@@ -120,7 +127,6 @@ export function PlaceAirportInfo({ airport }: Props) {
           </LinkRow>
         </Box>
       )}
-
       {/* Runways */}
       {hasRunways && (
         <>
@@ -136,7 +142,6 @@ export function PlaceAirportInfo({ airport }: Props) {
           </Box>
         </>
       )}
-
       {/* Frequencies */}
       {hasFrequencies && (
         <>
@@ -162,7 +167,6 @@ export function PlaceAirportInfo({ airport }: Props) {
           </Box>
         </>
       )}
-
       {/* Navaids */}
       {hasNavaids && (
         <>
@@ -184,7 +188,6 @@ export function PlaceAirportInfo({ airport }: Props) {
           </Box>
         </>
       )}
-
       {/* Disclaimer */}
       <Box
         sx={{
@@ -200,11 +203,15 @@ export function PlaceAirportInfo({ airport }: Props) {
         <InfoOutlinedIcon sx={{ fontSize: 14 }} />
         <Typography variant="caption">{t("informationalDisclaimer")}</Typography>
       </Box>
-
       {/* Attribution — sourced from the integration manifest, same pattern as PlaceSunTimes. */}
       {attributionSource && (
         <Box sx={{ px: 2, pt: 0, pb: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("attribution")}: ©{" "}
             <Link
               href={attributionSource.url}
@@ -314,7 +321,12 @@ function CodeChip({
 function FactCell({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <Typography variant="caption" color="text.secondary">
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         {label}
       </Typography>
       <Typography
@@ -392,11 +404,21 @@ function RunwayRow({
         {runway.ident}
       </Box>
       <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Typography variant="body2" color="text.primary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.primary",
+          }}
+        >
           {formatRunwayDimensions(runway, t)}
         </Typography>
         {surfaceLabel && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {surfaceLabel}
           </Typography>
         )}
@@ -430,13 +452,13 @@ function FrequencyRow({ freq, typeLabel }: { freq: AirportFrequencyInfo; typeLab
       </Box>
       <Typography
         variant="caption"
-        color="text.secondary"
+        title={freq.description ?? undefined}
         sx={{
+          color: "text.secondary",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
         }}
-        title={freq.description ?? undefined}
       >
         {freq.description ?? "—"}
       </Typography>
@@ -482,8 +504,12 @@ function NavaidRow({
       </Box>
       <Typography
         variant="caption"
-        color="text.secondary"
-        sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        sx={{
+          color: "text.secondary",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
       >
         {[navaid.name, navaid.type].filter(Boolean).join(" · ")}
       </Typography>

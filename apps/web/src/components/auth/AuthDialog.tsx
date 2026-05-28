@@ -232,7 +232,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
       maxWidth="xs"
       fullWidth
       fullScreen={fullScreen}
-      PaperProps={{ sx: [mobileFullScreenDialogPaperSx, { p: 0 }] }}
+      slotProps={{ paper: { sx: [mobileFullScreenDialogPaperSx, { p: 0 }] } }}
     >
       {fullScreen && (
         <IconButton
@@ -257,7 +257,12 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                     ? t("signIn")
                     : t("createAccount")}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {mode === "2fa"
               ? t("enterCodeFromApp")
               : mode === "forgot-password"
@@ -517,7 +522,12 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
             </Box>
 
             <Divider sx={{ my: 2 }}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {tc("or")}
               </Typography>
             </Divider>
@@ -565,8 +575,14 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
             {oauthProviders.length > 0 && (
               <Typography
                 variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mt: -0.5, mb: 1.5, textAlign: "center", lineHeight: 1.35 }}
+                sx={{
+                  color: "text.secondary",
+                  display: "block",
+                  mt: -0.5,
+                  mb: 1.5,
+                  textAlign: "center",
+                  lineHeight: 1.35,
+                }}
               >
                 {t("oauthDirectDisclosure")}
               </Typography>
@@ -574,7 +590,12 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
 
             {/* Toggle sign-in / sign-up */}
             <Box sx={{ textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {mode === "sign-in" ? t("noAccount") : t("haveAccount")}{" "}
                 <Link
                   component="button"

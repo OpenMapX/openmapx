@@ -221,7 +221,13 @@ function AttributionFooter({ detail }: { detail: DataSourceDetail }) {
 
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
-      <Typography variant="caption" color="text.secondary" component="div">
+      <Typography
+        variant="caption"
+        component="div"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         {tc("data")}:{" "}
         {html && (
           <Box
@@ -307,15 +313,19 @@ export function DataSourceSections({ detail, domain }: Props) {
   return (
     <Box>
       <Divider sx={{ mx: 2, my: 1 }} />
-
       {/* Section header — like Transit section */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, px: 2, pt: 1.5, pb: 0.5 }}>
         <Box sx={{ color: TEAL, display: "flex" }}>{header.icon}</Box>
-        <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 600,
+            color: "text.primary",
+          }}
+        >
           {header.titleKey ? t(header.titleKey) : header.titleFallback}
         </Typography>
       </Box>
-
       {/* Operator */}
       {detail.operator && (
         <Box sx={{ display: "flex", gap: 2, alignItems: "center", py: 1.25, px: 2 }}>
@@ -334,25 +344,37 @@ export function DataSourceSections({ detail, domain }: Props) {
                 rel="noopener noreferrer"
                 underline="hover"
                 variant="body2"
-                color="text.primary"
-                sx={{ fontWeight: 600 }}
+                sx={{
+                  color: "text.primary",
+                  fontWeight: 600,
+                }}
               >
                 {detail.operator.name}
               </Link>
             ) : (
-              <Typography variant="body2" fontWeight={600}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                }}
+              >
                 {detail.operator.name}
               </Typography>
             )}
             {operatorLegalName && (
-              <Typography variant="caption" color="text.secondary" display="block">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  display: "block",
+                }}
+              >
                 {operatorLegalName}
               </Typography>
             )}
           </Box>
         </Box>
       )}
-
       {/* Usage info */}
       {detail.usageInfo && (
         <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start", py: 1.25, px: 2 }}>
@@ -362,19 +384,29 @@ export function DataSourceSections({ detail, domain }: Props) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="body2">{resolveT(detail.usageInfo.type)}</Typography>
             {detail.usageInfo.cost && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {resolveT(detail.usageInfo.cost)}
               </Typography>
             )}
             {detail.usageInfo.membershipRequired && (
-              <Typography variant="caption" color="text.secondary" display="block">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  display: "block",
+                }}
+              >
                 {t("membershipRequiredLabel")}
               </Typography>
             )}
           </Box>
         </Box>
       )}
-
       {/* Dynamic sections (connectors, etc.) */}
       {structuredSections.length > 0 && (
         <StructuredSections
@@ -388,10 +420,8 @@ export function DataSourceSections({ detail, domain }: Props) {
           }}
         />
       )}
-
       {/* Park+Ride: list nearby transit lines. Silent when no routes found. */}
       {detail.parkAndRide && <DataSourceNearbyTransit coordinates={detail.coordinates} />}
-
       {/* Attribution footer */}
       <Divider sx={{ mx: 2 }} />
       <AttributionFooter detail={detail} />

@@ -181,7 +181,11 @@ export function ServiceConfigForm({
   }
 
   return (
-    <Stack gap={2.5}>
+    <Stack
+      sx={{
+        gap: 2.5,
+      }}
+    >
       {error && (
         <Alert severity="error" variant="outlined" onClose={() => setError(null)}>
           {error}
@@ -197,7 +201,6 @@ export function ServiceConfigForm({
           Configuration saved and service (re)start queued.
         </Alert>
       )}
-
       {envPrefix && (
         <Alert severity="info" variant="outlined" sx={{ py: 0.5 }}>
           <Typography variant="caption">
@@ -212,7 +215,6 @@ export function ServiceConfigForm({
           </Typography>
         </Alert>
       )}
-
       {fields.map((field) => {
         const entry = resolvedConfig[field.key];
         const source: ServiceConfigSource = entry?.source ?? "default";
@@ -220,9 +222,26 @@ export function ServiceConfigForm({
         const displayValue = isEnvOverridden ? entry?.value : values[field.key];
 
         return (
-          <Stack key={field.key} gap={0.5}>
-            <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="body2" fontWeight={600}>
+          <Stack
+            key={field.key}
+            sx={{
+              gap: 0.5,
+            }}
+          >
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: "center",
+                gap: 1,
+                flexWrap: "wrap",
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                }}
+              >
                 {field.title}
               </Typography>
               <Tooltip title={`Currently sourced from: ${source}`}>
@@ -243,13 +262,16 @@ export function ServiceConfigForm({
                 />
               )}
             </Stack>
-
             {field.description && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {field.description}
               </Typography>
             )}
-
             {field.type === "boolean" ? (
               <FormControlLabel
                 control={
@@ -302,8 +324,12 @@ export function ServiceConfigForm({
           </Stack>
         );
       })}
-
-      <Stack direction="row" gap={1}>
+      <Stack
+        direction="row"
+        sx={{
+          gap: 1,
+        }}
+      >
         <Button
           variant="outlined"
           size="small"

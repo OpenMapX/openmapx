@@ -116,8 +116,21 @@ const SOURCE_COLOR: Record<string, "default" | "primary" | "secondary" | "succes
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === "") return null;
   return (
-    <Stack direction="row" gap={1} alignItems="flex-start">
-      <Typography variant="body2" color="text.secondary" sx={{ minWidth: 110, flexShrink: 0 }}>
+    <Stack
+      direction="row"
+      sx={{
+        gap: 1,
+        alignItems: "flex-start",
+      }}
+    >
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          minWidth: 110,
+          flexShrink: 0,
+        }}
+      >
         {label}
       </Typography>
       <Box>
@@ -129,17 +142,36 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 function OverviewTab({ data }: { data: IntegrationDetailData }) {
   return (
-    <Stack gap={3}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
       <Card variant="outlined">
         <CardContent>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+          <Typography
+            variant="subtitle2"
+            gutterBottom
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Manifest
           </Typography>
-          <Stack gap={1}>
+          <Stack
+            sx={{
+              gap: 1,
+            }}
+          >
             <MetaRow
               label="ID"
               value={
-                <Typography variant="body2" fontFamily="monospace">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                  }}
+                >
                   {data.id}
                 </Typography>
               }
@@ -148,11 +180,20 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
             <MetaRow label="Author" value={data.author} />
             <MetaRow label="License" value={data.license} />
             {data.documentation && (
-              <Stack direction="row" gap={1} alignItems="center">
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 1,
+                  alignItems: "center",
+                }}
+              >
                 <Typography
                   variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 110, flexShrink: 0 }}
+                  sx={{
+                    color: "text.secondary",
+                    minWidth: 110,
+                    flexShrink: 0,
+                  }}
                 >
                   Documentation
                 </Typography>
@@ -167,26 +208,50 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                 </Link>
               </Stack>
             )}
-            <Stack direction="row" gap={1} alignItems="flex-start">
+            <Stack
+              direction="row"
+              sx={{
+                gap: 1,
+                alignItems: "flex-start",
+              }}
+            >
               <Typography
                 variant="body2"
-                color="text.secondary"
-                sx={{ minWidth: 110, flexShrink: 0 }}
+                sx={{
+                  color: "text.secondary",
+                  minWidth: 110,
+                  flexShrink: 0,
+                }}
               >
                 Domains
               </Typography>
-              <Stack direction="row" gap={0.5} flexWrap="wrap">
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 0.5,
+                  flexWrap: "wrap",
+                }}
+              >
                 {data.domains.map((d) => (
                   <DomainChip key={d} domain={d} />
                 ))}
               </Stack>
             </Stack>
             {data.description && (
-              <Stack direction="row" gap={1} alignItems="flex-start">
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 1,
+                  alignItems: "flex-start",
+                }}
+              >
                 <Typography
                   variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 110, flexShrink: 0 }}
+                  sx={{
+                    color: "text.secondary",
+                    minWidth: 110,
+                    flexShrink: 0,
+                  }}
                 >
                   Description
                 </Typography>
@@ -196,16 +261,32 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
           </Stack>
         </CardContent>
       </Card>
-
       {data.dependencies.length > 0 && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Dependencies
             </Typography>
-            <Stack gap={0.75}>
+            <Stack
+              sx={{
+                gap: 0.75,
+              }}
+            >
               {data.dependencyStatus.map((dep) => (
-                <Stack key={dep.id} direction="row" alignItems="center" gap={1}>
+                <Stack
+                  key={dep.id}
+                  direction="row"
+                  sx={{
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
                   {dep.loaded ? (
                     <CheckCircleIcon
                       fontSize="small"
@@ -214,10 +295,20 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                   ) : (
                     <ErrorIcon fontSize="small" color="error" />
                   )}
-                  <Typography variant="body2" fontFamily="monospace">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: "monospace",
+                    }}
+                  >
                     {dep.id}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {dep.loaded
                       ? dep.enabled
                         ? "loaded, enabled"
@@ -230,36 +321,77 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
           </CardContent>
         </Card>
       )}
-
       {data.requires.length > 0 && (
         <RequiredServicesPanel integrationId={data.id} requires={data.requires} />
       )}
-
       {(data.infrastructure?.dataRequirements?.length || data.infrastructure?.planetScale) && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Infrastructure Requirements
             </Typography>
-            <Stack gap={0.75}>
+            <Stack
+              sx={{
+                gap: 0.75,
+              }}
+            >
               {data.infrastructure?.dataRequirements?.map((req) => (
-                <Stack key={req} direction="row" alignItems="center" gap={1}>
+                <Stack
+                  key={req}
+                  direction="row"
+                  sx={{
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
                   <CheckCircleIcon fontSize="small" sx={{ color: "text.disabled" }} />
-                  <Typography variant="body2" fontFamily="monospace">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: "monospace",
+                    }}
+                  >
                     {req}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     data requirement
                   </Typography>
                 </Stack>
               ))}
               {data.infrastructure?.planetScale && (
-                <Stack direction="row" alignItems="center" gap={1}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
                   <CheckCircleIcon fontSize="small" sx={{ color: "warning.main" }} />
-                  <Typography variant="body2" fontFamily="monospace">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: "monospace",
+                    }}
+                  >
                     planet-scale
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     may require large resources
                   </Typography>
                 </Stack>
@@ -284,15 +416,30 @@ function ConfigTab({
   const entries = Object.entries(data.resolvedConfig);
 
   return (
-    <Stack gap={3}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
       {/* Raw resolved config table */}
       <Card variant="outlined">
         <CardContent>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+          <Typography
+            variant="subtitle2"
+            gutterBottom
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Resolved Values
           </Typography>
           {entries.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               No configuration keys found.
             </Typography>
           ) : (
@@ -309,15 +456,23 @@ function ConfigTab({
                   {entries.map(([key, { value, source }]) => (
                     <TableRow key={key}>
                       <TableCell>
-                        <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: "monospace",
+                            fontWeight: 500,
+                          }}
+                        >
                           {key}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography
                           variant="body2"
-                          fontFamily="monospace"
                           color={value === "***" ? "text.disabled" : "text.primary"}
+                          sx={{
+                            fontFamily: "monospace",
+                          }}
                         >
                           {String(value)}
                         </Typography>
@@ -339,12 +494,17 @@ function ConfigTab({
           )}
         </CardContent>
       </Card>
-
       {/* Editable config form */}
       {data.manifest.configSchema && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Edit Configuration
             </Typography>
             <ConfigSchemaForm
@@ -434,18 +594,27 @@ function CredentialsTab({
   }
 
   return (
-    <Stack gap={2}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
       {!data.secretsConfigured && secretCredentials.length > 0 && (
         <Alert severity="warning" variant="outlined">
           Vault not configured — secrets cannot be stored. Set <code>OPENMAPX_SECRETS_KEY</code>{" "}
           (generate with <code>openssl rand -hex 32</code>) to enable the credential vault.
         </Alert>
       )}
-
       {secretCredentials.length > 0 && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Secret Credentials
             </Typography>
             <TableContainer>
@@ -462,13 +631,28 @@ function CredentialsTab({
                   {secretCredentials.map((cred) => (
                     <TableRow key={cred.key}>
                       <TableCell>
-                        <Stack gap={0.25}>
-                          <Stack direction="row" alignItems="center" gap={0.75}>
+                        <Stack
+                          sx={{
+                            gap: 0.25,
+                          }}
+                        >
+                          <Stack
+                            direction="row"
+                            sx={{
+                              alignItems: "center",
+                              gap: 0.75,
+                            }}
+                          >
                             <KeyIcon
                               fontSize="small"
                               sx={{ color: "text.secondary", fontSize: "0.95rem" }}
                             />
-                            <Typography variant="body2" fontWeight={600}>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontWeight: 600,
+                              }}
+                            >
                               {cred.title}
                             </Typography>
                             {cred.sharedSecretName && (
@@ -481,7 +665,13 @@ function CredentialsTab({
                             )}
                           </Stack>
                           {cred.description && (
-                            <Typography variant="caption" color="text.secondary" pl={2.5}>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: "text.secondary",
+                                pl: 2.5,
+                              }}
+                            >
                               {cred.description}
                             </Typography>
                           )}
@@ -493,18 +683,34 @@ function CredentialsTab({
                       <TableCell>
                         {cred.updatedAt ? (
                           <Tooltip title={cred.updatedBy ? `by ${cred.updatedBy}` : ""}>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: "text.secondary",
+                              }}
+                            >
                               {new Date(cred.updatedAt).toLocaleDateString()}
                             </Typography>
                           </Tooltip>
                         ) : (
-                          <Typography variant="caption" color="text.disabled">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "text.disabled",
+                            }}
+                          >
                             —
                           </Typography>
                         )}
                       </TableCell>
                       <TableCell align="right">
-                        <Stack direction="row" justifyContent="flex-end" gap={0.5}>
+                        <Stack
+                          direction="row"
+                          sx={{
+                            justifyContent: "flex-end",
+                            gap: 0.5,
+                          }}
+                        >
                           <Button
                             size="small"
                             variant="outlined"
@@ -535,11 +741,16 @@ function CredentialsTab({
           </CardContent>
         </Card>
       )}
-
       {legacyEnvVars.length > 0 && (
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Environment Variables
             </Typography>
             <TableContainer>
@@ -557,12 +768,27 @@ function CredentialsTab({
                     return (
                       <TableRow key={entry.key}>
                         <TableCell>
-                          <Stack gap={0.25}>
-                            <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
+                          <Stack
+                            sx={{
+                              gap: 0.25,
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontFamily: "monospace",
+                                fontWeight: 500,
+                              }}
+                            >
                               {entry.key}
                             </Typography>
                             {entry.description && (
-                              <Typography variant="caption" color="text.secondary">
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: "text.secondary",
+                                }}
+                              >
                                 {entry.description}
                               </Typography>
                             )}
@@ -578,23 +804,44 @@ function CredentialsTab({
                           />
                         </TableCell>
                         <TableCell>
-                          <Stack direction="row" alignItems="center" gap={0.75}>
+                          <Stack
+                            direction="row"
+                            sx={{
+                              alignItems: "center",
+                              gap: 0.75,
+                            }}
+                          >
                             {isSet ? (
                               <>
                                 <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
-                                <Typography variant="body2" color="success.main">
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    color: "success.main",
+                                  }}
+                                >
                                   Set
                                 </Typography>
                               </>
                             ) : entry.required ? (
                               <>
                                 <ErrorIcon fontSize="small" color="error" />
-                                <Typography variant="body2" color="error.main">
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    color: "error.main",
+                                  }}
+                                >
                                   Not set
                                 </Typography>
                               </>
                             ) : (
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  color: "text.secondary",
+                                }}
+                              >
                                 Using default
                               </Typography>
                             )}
@@ -609,7 +856,6 @@ function CredentialsTab({
           </CardContent>
         </Card>
       )}
-
       {dialogField && (
         <SetCredentialDialog
           open={!!dialogField}
@@ -654,7 +900,11 @@ function HealthTab({
   const health = data.health;
 
   return (
-    <Stack gap={2}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
       {!data.hasHealthCheck ? (
         <Alert severity="info" variant="outlined">
           This integration does not declare a health check.
@@ -662,8 +912,20 @@ function HealthTab({
       ) : (
         <Card variant="outlined">
           <CardContent>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-              <Typography variant="subtitle2" color="text.secondary">
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: "center",
+                justifyContent: "space-between",
+                mb: 2,
+              }}
+            >
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 Latest Health Status
               </Typography>
               <Button
@@ -679,8 +941,18 @@ function HealthTab({
               </Button>
             </Stack>
             {health ? (
-              <Stack gap={1}>
-                <Stack direction="row" alignItems="center" gap={1}>
+              <Stack
+                sx={{
+                  gap: 1,
+                }}
+              >
+                <Stack
+                  direction="row"
+                  sx={{
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
                   <IntegrationStatusDot
                     enabled={data.enabled}
                     configured={data.configured}
@@ -688,7 +960,12 @@ function HealthTab({
                     hasHealthCheck={data.hasHealthCheck}
                     size={14}
                   />
-                  <Typography variant="body1" fontWeight={600}>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      fontWeight: 600,
+                    }}
+                  >
                     {health.status === "up"
                       ? "Healthy"
                       : health.status === "down"
@@ -697,7 +974,12 @@ function HealthTab({
                   </Typography>
                 </Stack>
                 {health.responseTime != null && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Response time: {health.responseTime}ms
                   </Typography>
                 )}
@@ -708,7 +990,12 @@ function HealthTab({
                 )}
               </Stack>
             ) : (
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 No health data available yet. Run a check to populate.
               </Typography>
             )}
@@ -730,17 +1017,43 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
   }
 
   return (
-    <Stack gap={1.5}>
+    <Stack
+      sx={{
+        gap: 1.5,
+      }}
+    >
       {sources.map((ds) => (
         <Card key={ds.name} variant="outlined">
           <CardContent>
-            <Stack gap={1}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
-                <Typography variant="subtitle2" fontWeight={600}>
+            <Stack
+              sx={{
+                gap: 1,
+              }}
+            >
+              <Stack
+                direction="row"
+                sx={{
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 1,
+                }}
+              >
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
                   {ds.name}
                 </Typography>
                 <Link href={ds.url} target="_blank" rel="noopener noreferrer">
-                  <Stack direction="row" alignItems="center" gap={0.5}>
+                  <Stack
+                    direction="row"
+                    sx={{
+                      alignItems: "center",
+                      gap: 0.5,
+                    }}
+                  >
                     <OpenInNewIcon fontSize="small" />
                     <Typography variant="body2">{ds.url}</Typography>
                   </Stack>
@@ -762,11 +1075,28 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
               {ds.endUserExposure && (
                 <MetaRow label="End-user exposure" value={ds.endUserExposure} />
               )}
-              <Stack direction="row" gap={1} alignItems="center">
-                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 110 }}>
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 1,
+                  alignItems: "center",
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    minWidth: 110,
+                  }}
+                >
                   Flags
                 </Typography>
-                <Stack direction="row" gap={0.5}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    gap: 0.5,
+                  }}
+                >
                   <Chip
                     label="Personal data"
                     size="small"
@@ -787,8 +1117,20 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                   />
                 </Stack>
               </Stack>
-              <Stack direction="row" gap={1} alignItems="center">
-                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 110 }}>
+              <Stack
+                direction="row"
+                sx={{
+                  gap: 1,
+                  alignItems: "center",
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    minWidth: 110,
+                  }}
+                >
                   Privacy URL
                 </Typography>
                 {ds.providerPrivacyUrl.startsWith("http") ? (
@@ -802,7 +1144,12 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                     Privacy policy <OpenInNewIcon sx={{ fontSize: "0.85rem" }} />
                   </Link>
                 ) : (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {ds.providerPrivacyUrl}
                   </Typography>
                 )}
@@ -882,7 +1229,13 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" py={8}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          py: 8,
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -895,16 +1248,32 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
   const isBusy = toggleMutation.isPending || reloadMutation.isPending;
 
   return (
-    <Stack gap={3}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
       <Stack
         direction="row"
-        alignItems="flex-start"
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={1.5}
+        sx={{
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1.5,
+        }}
       >
-        <Stack gap={1}>
-          <Stack direction="row" alignItems="center" gap={1.5}>
+        <Stack
+          sx={{
+            gap: 1,
+          }}
+        >
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "center",
+              gap: 1.5,
+            }}
+          >
             <IntegrationStatusDot
               enabled={data.enabled}
               configured={data.configured}
@@ -912,23 +1281,46 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               hasHealthCheck={data.hasHealthCheck}
               size={14}
             />
-            <Typography variant="h5" fontWeight={700}>
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               {data.name}
             </Typography>
             <StatusBadge quality={data.quality} />
           </Stack>
-          <Stack direction="row" gap={0.5} flexWrap="wrap">
+          <Stack
+            direction="row"
+            sx={{
+              gap: 0.5,
+              flexWrap: "wrap",
+            }}
+          >
             {data.domains.map((d) => (
               <DomainChip key={d} domain={d} />
             ))}
           </Stack>
           {data.description && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {data.description}
             </Typography>
           )}
         </Stack>
-        <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
+        <Stack
+          direction="row"
+          sx={{
+            gap: 1,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <Button
             size="small"
             variant={data.enabled ? "outlined" : "contained"}
@@ -959,9 +1351,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
           </Button>
         </Stack>
       </Stack>
-
       <Divider />
-
       <Box>
         <Tabs
           value={tab}

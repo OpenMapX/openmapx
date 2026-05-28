@@ -55,7 +55,6 @@ export function WinterSportsLegend() {
           }}
         />
       )}
-
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("pisteDifficulty")}</Typography>
         <Switch
@@ -66,7 +65,6 @@ export function WinterSportsLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       <Box sx={{ display: "flex", flexDirection: "row", gap: 1.5 }}>
         {DIFFICULTY_ITEMS.map((d) => (
           <Box
@@ -90,14 +88,17 @@ export function WinterSportsLegend() {
           </Box>
         ))}
       </Box>
-
       {/* Attribution (from manifest dataSources, trusted HTML) */}
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 0.75, display: "block", fontSize: 10.5 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 0.75,
+            display: "block",
+            fontSize: 10.5,
+          }}
         />
       )}
     </Paper>

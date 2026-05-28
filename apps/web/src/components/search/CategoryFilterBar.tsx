@@ -247,7 +247,6 @@ export function CategoryFilterBar() {
           "&&:hover": { bgcolor: isFiltered ? "var(--omx-teal-hover)" : "grey.300" },
         }}
       />
-
       <Popover
         open={Boolean(anchorEl)}
         anchorEl={anchorEl}
@@ -283,7 +282,12 @@ export function CategoryFilterBar() {
                   size="small"
                   sx={radioSx}
                 />
-                <Typography variant="body2" fontSize={15}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontSize: 15,
+                  }}
+                >
                   {opt.label}
                 </Typography>
               </Box>
@@ -304,7 +308,12 @@ export function CategoryFilterBar() {
                 size="small"
                 sx={radioSx}
               />
-              <Typography variant="body2" fontSize={15}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontSize: 15,
+                }}
+              >
                 {t("openAt")}
               </Typography>
             </Box>

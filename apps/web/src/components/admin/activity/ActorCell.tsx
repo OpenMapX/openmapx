@@ -24,7 +24,13 @@ interface ActorCellProps {
 export function ActorCell({ actorId, actor }: ActorCellProps) {
   if (!actorId) {
     return (
-      <Typography variant="caption" color="text.secondary" fontStyle="italic">
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+          fontStyle: "italic",
+        }}
+      >
         system
       </Typography>
     );
@@ -34,11 +40,21 @@ export function ActorCell({ actorId, actor }: ActorCellProps) {
     return (
       <Tooltip title={actor.id}>
         <Stack>
-          <Typography variant="body2" fontWeight={500}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 500,
+            }}
+          >
             {actor.name || actor.email}
           </Typography>
           {actor.name && (
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {actor.email}
             </Typography>
           )}
@@ -50,7 +66,13 @@ export function ActorCell({ actorId, actor }: ActorCellProps) {
   // User row no longer exists — show truncated id with a hint.
   return (
     <Tooltip title={`${actorId} (user no longer exists)`}>
-      <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+          fontFamily: "monospace",
+        }}
+      >
         {`${actorId.slice(0, 12)}…`}
       </Typography>
     </Tooltip>

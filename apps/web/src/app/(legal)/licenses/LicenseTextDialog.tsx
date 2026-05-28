@@ -38,7 +38,14 @@ export function LicenseTextDialog({ license, text, triggerLabel, dialogTitle, cl
           <Typography component="span" sx={{ fontWeight: 600 }}>
             {dialogTitle}
           </Typography>
-          <Typography component="span" color="text.secondary" sx={{ ml: 1, fontSize: 14 }}>
+          <Typography
+            component="span"
+            sx={{
+              color: "text.secondary",
+              ml: 1,
+              fontSize: 14,
+            }}
+          >
             ({license})
           </Typography>
           <IconButton

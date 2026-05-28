@@ -93,9 +93,12 @@ export function RouteOptions() {
         <Box sx={{ flex: 1 }}>
           <Typography
             variant="caption"
-            fontWeight={600}
-            color="text.secondary"
-            sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}
+            sx={{
+              fontWeight: 600,
+              color: "text.secondary",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
           >
             {t("avoid")}
           </Typography>
@@ -106,9 +109,12 @@ export function RouteOptions() {
         <Box sx={{ flex: 1 }}>
           <Typography
             variant="caption"
-            fontWeight={600}
-            color="text.secondary"
-            sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}
+            sx={{
+              fontWeight: 600,
+              color: "text.secondary",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
           >
             {t("distance")}
           </Typography>

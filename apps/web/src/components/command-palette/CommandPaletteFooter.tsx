@@ -55,7 +55,12 @@ function FooterHint({ kbd, label }: { kbd: string[]; label: string }) {
           {k}
         </Typography>
       ))}
-      <Typography variant="caption" color="text.secondary">
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         {label}
       </Typography>
     </Box>

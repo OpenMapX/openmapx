@@ -45,7 +45,7 @@ function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
         <Switch
           checked={active}
           onChange={() => toggleOverlay(entry.overlayId)}
-          inputProps={{ "aria-label": t("toggleOverlay", { layer: t(entry.labelKey) }) }}
+          slotProps={{ input: { "aria-label": t("toggleOverlay", { layer: t(entry.labelKey) }) } }}
           size="small"
         />
       }
@@ -71,7 +71,7 @@ function GlobeSwitchRow() {
         <Switch
           checked={globeView}
           onChange={(e) => setGlobeView(e.target.checked)}
-          inputProps={{ "aria-label": t("globeView") }}
+          slotProps={{ input: { "aria-label": t("globeView") } }}
           size="small"
         />
       }

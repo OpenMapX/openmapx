@@ -78,16 +78,27 @@ export function InstallFromUrlDialog({ open, onClose, onSuccess }: InstallFromUr
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
           Install from artifact URL
           <IconButton size="small" onClick={handleClose}>
             <CloseIcon />
           </IconButton>
         </Box>
       </DialogTitle>
-
       <DialogContent>
-        <Typography variant="body2" color="text.secondary" mb={2}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 2,
+          }}
+        >
           Install a community integration from a prebuilt <code>.tar.gz</code> artifact built with
           the OpenMapX CLI (<code>pnpm openmapx integrations package</code>). Source installs from
           Git are a developer workflow — use the CLI on a checked-out repo.
@@ -136,7 +147,6 @@ export function InstallFromUrlDialog({ open, onClose, onSuccess }: InstallFromUr
           </Alert>
         )}
       </DialogContent>
-
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={handleClose} disabled={mutation.isPending}>
           Cancel

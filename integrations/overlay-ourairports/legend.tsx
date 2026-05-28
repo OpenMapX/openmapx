@@ -63,7 +63,6 @@ export function AirportsOverlayLegend() {
           }}
         />
       )}
-
       <Box
         sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.75 }}
       >
@@ -76,7 +75,6 @@ export function AirportsOverlayLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>
           <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.3 }}>
@@ -142,12 +140,15 @@ export function AirportsOverlayLegend() {
           </Box>
         </Box>
       </Box>
-
       {attributionSource && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 1, display: "block", fontSize: 10 }}
+          sx={{
+            color: "text.secondary",
+            mt: 1,
+            display: "block",
+            fontSize: 10,
+          }}
         >
           ©{" "}
           <Link

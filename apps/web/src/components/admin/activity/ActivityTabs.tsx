@@ -14,10 +14,15 @@ export function ActivityTabs() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} mb={2}>
+      <Typography
+        variant="h5"
+        sx={{
+          fontWeight: 700,
+          mb: 2,
+        }}
+      >
         Activity
       </Typography>
-
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v as number)}
@@ -27,7 +32,6 @@ export function ActivityTabs() {
         <Tab label="Audit Log" />
         <Tab label="Application Logs" />
       </Tabs>
-
       {tab === 0 && <JobList />}
       {tab === 1 && <AuditLog />}
       {tab === 2 && <AppLogViewer />}

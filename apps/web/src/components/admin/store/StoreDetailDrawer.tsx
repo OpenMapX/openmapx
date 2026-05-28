@@ -1,7 +1,7 @@
 "use client";
 
 import CloseIcon from "@mui/icons-material/Close";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import Alert from "@mui/material/Alert";
@@ -165,7 +165,7 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
         anchor="right"
         open={open}
         onClose={onClose}
-        PaperProps={{ sx: { width: { xs: "100vw", sm: 520 } } }}
+        slotProps={{ paper: { sx: { width: { xs: "100vw", sm: 520 } } } }}
       >
         {/* Header */}
         <Box
@@ -178,14 +178,38 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
             borderColor: "divider",
           }}
         >
-          <Box flex={1} mr={1}>
-            <Stack direction="row" alignItems="center" gap={1} mb={0.25} flexWrap="wrap">
-              <Typography variant="h6" fontWeight={700} lineHeight={1.3}>
+          <Box
+            sx={{
+              flex: 1,
+              mr: 1,
+            }}
+          >
+            <Stack
+              direction="row"
+              sx={{
+                alignItems: "center",
+                gap: 1,
+                mb: 0.25,
+                flexWrap: "wrap",
+              }}
+            >
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                  lineHeight: 1.3,
+                }}
+              >
                 {d?.name ?? "Loading..."}
               </Typography>
               {d?.quality && <StatusBadge quality={d.quality} />}
             </Stack>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               by {d?.author} · v{d?.version}
             </Typography>
           </Box>
@@ -195,7 +219,13 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
         </Box>
 
         {isLoading && (
-          <Box display="flex" justifyContent="center" p={4}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              p: 4,
+            }}
+          >
             <CircularProgress size={32} />
           </Box>
         )}
@@ -214,20 +244,32 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
 
             <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
               {tab === 0 && (
-                <Stack gap={2}>
+                <Stack
+                  sx={{
+                    gap: 2,
+                  }}
+                >
                   <Typography variant="body2">{d.description}</Typography>
 
                   <Box>
                     <Typography
                       variant="caption"
-                      color="text.secondary"
-                      fontWeight={600}
-                      display="block"
-                      mb={0.5}
+                      sx={{
+                        color: "text.secondary",
+                        fontWeight: 600,
+                        display: "block",
+                        mb: 0.5,
+                      }}
                     >
                       DOMAINS
                     </Typography>
-                    <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                    <Stack
+                      direction="row"
+                      sx={{
+                        flexWrap: "wrap",
+                        gap: 0.5,
+                      }}
+                    >
                       {d.domains.map((dom) => (
                         <DomainChip key={dom} domain={dom} size="medium" />
                       ))}
@@ -237,44 +279,110 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
                   <Box>
                     <Typography
                       variant="caption"
-                      color="text.secondary"
-                      fontWeight={600}
-                      display="block"
-                      mb={0.5}
+                      sx={{
+                        color: "text.secondary",
+                        fontWeight: 600,
+                        display: "block",
+                        mb: 0.5,
+                      }}
                     >
                       DETAILS
                     </Typography>
-                    <Stack gap={0.5}>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="body2" color="text.secondary">
+                    <Stack
+                      sx={{
+                        gap: 0.5,
+                      }}
+                    >
+                      <Stack
+                        direction="row"
+                        sx={{
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "text.secondary",
+                          }}
+                        >
                           Version
                         </Typography>
-                        <Typography variant="body2" fontWeight={500}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 500,
+                          }}
+                        >
                           {d.version}
                         </Typography>
                       </Stack>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="body2" color="text.secondary">
+                      <Stack
+                        direction="row"
+                        sx={{
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "text.secondary",
+                          }}
+                        >
                           Min. platform
                         </Typography>
-                        <Typography variant="body2" fontWeight={500}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 500,
+                          }}
+                        >
                           {d.minPlatform || "—"}
                         </Typography>
                       </Stack>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="body2" color="text.secondary">
+                      <Stack
+                        direction="row"
+                        sx={{
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: "text.secondary",
+                          }}
+                        >
                           Last updated
                         </Typography>
-                        <Typography variant="body2" fontWeight={500}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 500,
+                          }}
+                        >
                           {new Date(d.lastUpdated).toLocaleDateString()}
                         </Typography>
                       </Stack>
                       {(detail as DetailResponse | undefined)?.installedAt && (
-                        <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2" color="text.secondary">
+                        <Stack
+                          direction="row"
+                          sx={{
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.secondary",
+                            }}
+                          >
                             Installed
                           </Typography>
-                          <Typography variant="body2" fontWeight={500}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 500,
+                            }}
+                          >
                             {new Date(
                               (detail as DetailResponse).installedAt as string,
                             ).toLocaleDateString()}
@@ -293,7 +401,13 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
 
                   <Box>
                     <Link href={d.repository} target="_blank" rel="noopener noreferrer">
-                      <Stack direction="row" alignItems="center" gap={0.5}>
+                      <Stack
+                        direction="row"
+                        sx={{
+                          alignItems: "center",
+                          gap: 0.5,
+                        }}
+                      >
                         <Typography variant="body2">View repository</Typography>
                         <OpenInNewIcon sx={{ fontSize: "0.9rem" }} />
                       </Stack>
@@ -310,14 +424,27 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
             <Divider />
 
             {/* Action bar */}
-            <Box p={2}>
+            <Box
+              sx={{
+                p: 2,
+              }}
+            >
               {confirmRemove ? (
-                <Stack gap={1}>
+                <Stack
+                  sx={{
+                    gap: 1,
+                  }}
+                >
                   <Alert severity="warning" icon={false}>
                     Remove <strong>{d.name}</strong>? This will delete the integration files and
                     reload the integration host.
                   </Alert>
-                  <Stack direction="row" gap={1}>
+                  <Stack
+                    direction="row"
+                    sx={{
+                      gap: 1,
+                    }}
+                  >
                     <Button
                       fullWidth
                       variant="contained"
@@ -338,7 +465,12 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
                   </Stack>
                 </Stack>
               ) : (
-                <Stack direction="row" gap={1}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    gap: 1,
+                  }}
+                >
                   {!d.installed && (
                     <Button
                       fullWidth
@@ -385,7 +517,6 @@ export function StoreDetailDrawer({ entry, open, onClose }: StoreDetailDrawerPro
           </>
         )}
       </Drawer>
-
       <Snackbar
         open={!!toast}
         autoHideDuration={5000}

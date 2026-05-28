@@ -15,7 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlined";
 import SwapVertIcon from "@mui/icons-material/SwapVert";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
@@ -122,7 +122,6 @@ export function WaypointList({
           </IconButton>
         </Box>
       </Box>
-
       {/* Add stop button */}
       {canAddMore && (
         <Box
@@ -143,13 +142,16 @@ export function WaypointList({
           <Typography variant="body2">{t("addStop")}</Typography>
         </Box>
       )}
-
       {/* Transit multi-stop warning */}
       {isTransitMode && waypoints.length > 2 && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ display: "block", mt: 0.5, px: 3 }}
+          sx={{
+            color: "text.secondary",
+            display: "block",
+            mt: 0.5,
+            px: 3,
+          }}
         >
           {t("multiStopTransitUnavailable")}
         </Typography>

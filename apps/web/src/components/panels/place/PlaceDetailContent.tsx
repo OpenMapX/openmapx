@@ -175,7 +175,15 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
             pb: 1,
           }}
         >
-          <Typography variant="h6" fontWeight={600} sx={{ flex: 1, minWidth: 0, pr: 1 }}>
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 600,
+              flex: 1,
+              minWidth: 0,
+              pr: 1,
+            }}
+          >
             {place.name}
           </Typography>
           {onClose && (
@@ -216,7 +224,6 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           onViewPhotos={() => setGalleryOpen(true)}
         />
       ) : null}
-
       {/* Photo gallery modal */}
       <PlacePhotoGallery
         open={galleryOpen}
@@ -226,7 +233,6 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         lat={place.coordinates[1]}
         lng={place.coordinates[0]}
       />
-
       {/* Name / rating / category */}
       <Box
         sx={{
@@ -258,16 +264,33 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           </IconButton>
         )}
 
-        <Typography variant="h6" fontWeight={600} gutterBottom sx={{ pr: onClose ? 4 : 0 }}>
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{
+            fontWeight: 600,
+            pr: onClose ? 4 : 0,
+          }}
+        >
           {place.name}
         </Typography>
         {headerReviewStats && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
-            <Typography variant="body2" fontWeight={600}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {headerReviewStats.rating.toFixed(1)}
             </Typography>
             <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               ({headerReviewStats.count.toLocaleString(locale)})
             </Typography>
           </Box>
@@ -280,7 +303,6 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           />
         )}
       </Box>
-
       {/* Tabs */}
       <Tabs
         value={tab}
@@ -327,7 +349,6 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         <Tab label={t("reviews")} />
         <Tab label={t("info")} />
       </Tabs>
-
       {tab === 0 && (
         <PlaceOverviewTab
           place={place}

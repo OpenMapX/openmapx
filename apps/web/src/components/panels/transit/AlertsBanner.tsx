@@ -49,7 +49,12 @@ export function AlertsBanner({ alerts }: AlertsBannerProps) {
           ) : (
             <ExpandMoreIcon sx={{ fontSize: 16 }} />
           )}
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {expanded ? t("showLess") : t("moreAlerts", { count: sorted.length - 2 })}
           </Typography>
         </Box>

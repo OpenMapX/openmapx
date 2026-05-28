@@ -283,7 +283,12 @@ export function PlaceOverviewTab({
                 <Box key={sl.id} sx={{ display: "flex", gap: 1.5, alignItems: "center", py: 1 }}>
                   <Box sx={{ flexShrink: 0, display: "flex" }}>{resolveListIcon(sl.icon)}</Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {tSaved("savedIn", { list: resolveListName(sl.name) })}
                     </Typography>
                   </Box>
@@ -304,7 +309,13 @@ export function PlaceOverviewTab({
                 sx={{ display: "flex", gap: 1.5, alignItems: "center", py: 1, cursor: "pointer" }}
               >
                 <Box sx={{ flexShrink: 0, display: "flex" }}>{resolveListIcon("bookmark")}</Box>
-                <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    flex: 1,
+                  }}
+                >
                   {savedInLists.length === 2
                     ? tSaved("savedInTwo", {
                         list1: resolveListName(savedInLists[0].name),
@@ -362,7 +373,12 @@ export function PlaceOverviewTab({
             copyValue={place.address}
             copyLabel={t("copyAddress")}
           >
-            <Typography variant="body2" color="text.primary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
               {place.address}
             </Typography>
           </DetailRow>
@@ -383,7 +399,12 @@ export function PlaceOverviewTab({
               {shortCodeDisplay ?? plusCode}
             </Link>
             {shortCodeDisplay && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {plusCode}
               </Typography>
             )}
@@ -406,13 +427,21 @@ export function PlaceOverviewTab({
                     <Typography
                       variant="body2"
                       component="span"
-                      fontWeight={500}
                       color={hours.isOpen ? "success.main" : "error.main"}
+                      sx={{
+                        fontWeight: 500,
+                      }}
                     >
                       {hours.isOpen ? tc("open") : tc("closed")}
                     </Typography>
                     {hours.detail && (
-                      <Typography variant="body2" component="span" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        component="span"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {" · "}
                         {hours.detail}
                       </Typography>
@@ -425,16 +454,21 @@ export function PlaceOverviewTab({
                     <Box key={day} sx={{ display: "flex", gap: 2, py: 0.4 }}>
                       <Typography
                         variant="body2"
-                        fontWeight={isToday ? 600 : 400}
                         color={isToday ? "text.primary" : "text.secondary"}
-                        sx={{ width: 96, flexShrink: 0 }}
+                        sx={{
+                          fontWeight: isToday ? 600 : 400,
+                          width: 96,
+                          flexShrink: 0,
+                        }}
                       >
                         {day}
                       </Typography>
                       <Typography
                         variant="body2"
-                        fontWeight={isToday ? 600 : 400}
                         color={isToday ? "text.primary" : "text.secondary"}
+                        sx={{
+                          fontWeight: isToday ? 600 : 400,
+                        }}
                       >
                         {h}
                       </Typography>
@@ -445,7 +479,13 @@ export function PlaceOverviewTab({
             ) : (
               <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
                 {hours.isUnknown ? (
-                  <Typography variant="body2" component="span" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    component="span"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {hours.detail}
                   </Typography>
                 ) : (
@@ -453,13 +493,21 @@ export function PlaceOverviewTab({
                     <Typography
                       variant="body2"
                       component="span"
-                      fontWeight={500}
                       color={hours.isOpen ? "success.main" : "error.main"}
+                      sx={{
+                        fontWeight: 500,
+                      }}
                     >
                       {hours.isOpen ? tc("open") : tc("closed")}
                     </Typography>
                     {hours.detail && (
-                      <Typography variant="body2" component="span" color="text.secondary">
+                      <Typography
+                        variant="body2"
+                        component="span"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         {" · "}
                         {hours.detail}
                       </Typography>
@@ -569,15 +617,30 @@ export function PlaceOverviewTab({
             </Box>
             {existingLabel ? (
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <Typography variant="body2" color="text.primary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.primary",
+                  }}
+                >
                   {tSaved("label")}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {existingLabel.label.charAt(0).toUpperCase() + existingLabel.label.slice(1)}
                 </Typography>
               </Box>
             ) : (
-              <Typography variant="body2" color="text.primary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.primary",
+                }}
+              >
                 {tSaved("addLabel")}
               </Typography>
             )}
@@ -589,7 +652,12 @@ export function PlaceOverviewTab({
             expanded={weatherExpanded}
             onToggle={() => setWeatherExpanded((v) => !v)}
             label={
-              <Typography variant="body2" color="text.primary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.primary",
+                }}
+              >
                 {tWeather("currentWeather")}
               </Typography>
             }
@@ -607,7 +675,12 @@ export function PlaceOverviewTab({
             expanded={sunTimesExpanded}
             onToggle={() => setSunTimesExpanded((v) => !v)}
             label={
-              <Typography variant="body2" color="text.primary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.primary",
+                }}
+              >
                 {tSun("sunriseSunset")}
               </Typography>
             }
@@ -626,7 +699,12 @@ export function PlaceOverviewTab({
               expanded={tidesExpanded}
               onToggle={() => setTidesExpanded((v) => !v)}
               label={
-                <Typography variant="body2" color="text.primary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.primary",
+                  }}
+                >
                   {tTides("section")}
                 </Typography>
               }
@@ -642,7 +720,12 @@ export function PlaceOverviewTab({
               expanded={marineExpanded}
               onToggle={() => setMarineExpanded((v) => !v)}
               label={
-                <Typography variant="body2" color="text.primary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.primary",
+                  }}
+                >
                   {tMarine("section")}
                 </Typography>
               }
@@ -652,7 +735,6 @@ export function PlaceOverviewTab({
           )}
         </Box>
       </Box>
-
       {/* Add label dialog */}
       <Dialog
         open={labelDialogOpen}
@@ -712,7 +794,6 @@ export function PlaceOverviewTab({
           </Button>
         </DialogActions>
       </Dialog>
-
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
       {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
       {place.osmTags && Object.keys(place.osmTags).length > 0 && (

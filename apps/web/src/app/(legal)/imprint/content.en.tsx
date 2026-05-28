@@ -11,11 +11,15 @@ export default function ImprintContent() {
       <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 3 }}>
         Legal Notice (Impressum)
       </Typography>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 4,
+        }}
+      >
         Information pursuant to Section 5 of the German Digitale-Dienste-Gesetz (DDG).
       </Typography>
-
       <Section title="Provider">
         <Typography>
           {name}
@@ -27,7 +31,6 @@ export default function ImprintContent() {
           {country}
         </Typography>
       </Section>
-
       <Section title="Contact">
         <Typography>
           Email: <Link href={`mailto:${email}`}>{email}</Link>
@@ -39,7 +42,6 @@ export default function ImprintContent() {
           )}
         </Typography>
       </Section>
-
       <Section title="Responsible for Content">
         <Typography>
           Responsible for content pursuant to Section 18 (2) of the Medienstaatsvertrag (MStV):
@@ -52,7 +54,6 @@ export default function ImprintContent() {
           {postalCode} {city}
         </Typography>
       </Section>
-
       <Section title="Consumer Dispute Resolution">
         <Typography>
           As a business with fewer than 11 employees, we are exempt from the information
@@ -60,7 +61,6 @@ export default function ImprintContent() {
           participate in dispute resolution proceedings before a consumer arbitration board.
         </Typography>
       </Section>
-
       <Section title="Liability for Content">
         <Typography>
           As a service provider, we are responsible for our own content on these pages in accordance
@@ -75,7 +75,6 @@ export default function ImprintContent() {
           aware of such infringements, we will remove this content immediately.
         </Typography>
       </Section>
-
       <Section title="Liability for Links">
         <Typography>
           Our website contains links to external third-party websites over whose content we have no
@@ -90,7 +89,6 @@ export default function ImprintContent() {
           will remove such links immediately.
         </Typography>
       </Section>
-
       <Section title="Copyright">
         <Typography>
           The content and works created by the site operators on these pages are subject to German
@@ -106,7 +104,6 @@ export default function ImprintContent() {
           immediately.
         </Typography>
       </Section>
-
       <Section title="Map Data and Third-Party Attributions">
         <Typography>
           OpenMapX uses open data from various sources. Detailed attribution information for all

@@ -52,18 +52,40 @@ export function ProviderHealthTable() {
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 1.5,
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Provider health
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Sliding-window failure rate · EMA latency · cooldown state
         </Typography>
       </Stack>
-
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={3}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            py: 3,
+          }}
+        >
           <CircularProgress size={22} />
         </Box>
       ) : isError ? (
@@ -71,7 +93,12 @@ export function ProviderHealthTable() {
           Failed to load provider health.
         </Typography>
       ) : !data || data.providers.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           No providers recorded yet. Health tracking populates on the first request to each
           provider.
         </Typography>
@@ -96,15 +123,20 @@ export function ProviderHealthTable() {
                   <TableRow key={p.id} hover>
                     <TableCell>
                       <Stack spacing={0.25}>
-                        <Typography variant="body2" fontFamily="monospace">
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: "monospace",
+                          }}
+                        >
                           {p.id}
                         </Typography>
                         {p.lastFailureReason && (
                           <Tooltip title={p.lastFailureReason}>
                             <Typography
                               variant="caption"
-                              color="text.secondary"
                               sx={{
+                                color: "text.secondary",
                                 maxWidth: 240,
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",

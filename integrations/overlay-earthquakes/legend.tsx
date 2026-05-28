@@ -88,7 +88,6 @@ export function EarthquakeLegend() {
           }}
         />
       )}
-
       <Box
         sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.75 }}
       >
@@ -101,7 +100,6 @@ export function EarthquakeLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>
           <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.3 }}>
@@ -190,7 +188,6 @@ export function EarthquakeLegend() {
           />
         </Box>
       </Box>
-
       <Box sx={{ display: "flex", gap: 2, mt: 0.75, alignItems: "flex-start" }}>
         <Box>
           <Typography sx={{ fontSize: 10, color: "text.secondary", mb: 0.3 }}>
@@ -276,7 +273,6 @@ export function EarthquakeLegend() {
           </Box>
         </Box>
       </Box>
-
       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
         {lastUpdated &&
           t("lastUpdated", {
@@ -289,9 +285,11 @@ export function EarthquakeLegend() {
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 0.5 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 0.5,
+          }}
         />
       )}
     </Paper>

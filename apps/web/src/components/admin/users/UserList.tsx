@@ -316,15 +316,26 @@ export function UserList() {
   };
 
   return (
-    <Stack gap={2}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
       <Stack
         direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        flexWrap="wrap"
-        gap={1}
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 1,
+        }}
       >
-        <Typography variant="h5" fontWeight={700}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Users
         </Typography>
         <Button
@@ -336,8 +347,13 @@ export function UserList() {
           Create User
         </Button>
       </Stack>
-
-      <Stack direction={{ xs: "column", sm: "row" }} gap={1} alignItems={{ sm: "center" }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        sx={{
+          gap: 1,
+          alignItems: { sm: "center" },
+        }}
+      >
         <TextField
           size="small"
           placeholder="Search by email"
@@ -364,7 +380,6 @@ export function UserList() {
           <ToggleButton value="admins">Admins</ToggleButton>
         </ToggleButtonGroup>
       </Stack>
-
       <Paper variant="outlined" sx={{ overflow: "hidden" }}>
         <TableContainer>
           <Table size="small" stickyHeader>
@@ -411,7 +426,12 @@ export function UserList() {
                 {users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                      <Typography color="text.secondary" variant="body2">
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: "text.secondary",
+                        }}
+                      >
                         No users found
                       </Typography>
                     </TableCell>
@@ -433,7 +453,13 @@ export function UserList() {
                           </Avatar>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2" fontWeight={500} component="div">
+                          <Typography
+                            variant="body2"
+                            component="div"
+                            sx={{
+                              fontWeight: 500,
+                            }}
+                          >
                             {user.name}
                             {isSelf && (
                               <Chip
@@ -445,7 +471,13 @@ export function UserList() {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Stack direction="row" alignItems="center" gap={0.5}>
+                          <Stack
+                            direction="row"
+                            sx={{
+                              alignItems: "center",
+                              gap: 0.5,
+                            }}
+                          >
                             <Typography variant="body2">{user.email}</Typography>
                             {user.emailVerified && (
                               <Tooltip title="Email verified">
@@ -480,7 +512,12 @@ export function UserList() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: "text.secondary",
+                            }}
+                          >
                             {new Date(user.createdAt).toLocaleDateString()}
                           </Typography>
                         </TableCell>
@@ -513,7 +550,6 @@ export function UserList() {
           }}
         />
       </Paper>
-
       <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       {banTarget && <BanUserDialog user={banTarget} onClose={() => setBanTarget(null)} />}
     </Stack>

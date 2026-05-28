@@ -27,10 +27,15 @@ export default function TermsContentDe({
       <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 1 }}>
         Nutzungsbedingungen
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 4,
+        }}
+      >
         Zuletzt aktualisiert: April 2026
       </Typography>
-
       <Section title="1. Geltungsbereich und Anbieter">
         <Typography>
           Diese Nutzungsbedingungen (&quot;Bedingungen&quot;) regeln Ihre Nutzung von OpenMapX,
@@ -50,7 +55,6 @@ export default function TermsContentDe({
           Wenn Sie nicht einverstanden sind, nutzen Sie den Dienst bitte nicht.
         </Typography>
       </Section>
-
       <Section title="2. Beschreibung des Dienstes">
         <Typography>
           OpenMapX ist ein kostenloser Open-Data-Kartendienst, der Kartenansicht, Adresssuche,
@@ -64,7 +68,6 @@ export default function TermsContentDe({
           Datenquellen und Drittanbieter-APIs wie in Abschnitt&nbsp;11 aufgef&uuml;hrt.
         </Typography>
       </Section>
-
       <Section title="3. Verf&uuml;gbarkeit und &Auml;nderungen">
         <Typography>
           OpenMapX wird auf einer &quot;Ist-Zustand&quot;- und &quot;Wie-verf&uuml;gbar&quot;-Basis
@@ -79,7 +82,6 @@ export default function TermsContentDe({
           oder Verf&uuml;gbarkeit &auml;ndern.
         </Typography>
       </Section>
-
       <Section title="4. Benutzerkonten">
         <Typography>
           Die Kontoerstellung ist optional. Sie k&ouml;nnen die meisten Funktionen von OpenMapX ohne
@@ -117,7 +119,6 @@ export default function TermsContentDe({
           sperren oder zu l&ouml;schen.
         </Typography>
       </Section>
-
       <Section title="5. Zul&auml;ssige Nutzung">
         <Typography>Sie verpflichten sich, Folgendes zu unterlassen:</Typography>
         <ul>
@@ -189,7 +190,6 @@ export default function TermsContentDe({
           </li>
         </ul>
       </Section>
-
       <Section title="6. Genauigkeit und Gew&auml;hrleistungsausschluss">
         <Typography>
           OpenMapX aggregiert Daten aus Drittanbieterquellen. Obwohl wir um Genauigkeit bem&uuml;ht
@@ -277,7 +277,6 @@ export default function TermsContentDe({
           Richtigkeit der angezeigten Daten. Ihre gesetzlichen Rechte bleiben unber&uuml;hrt.
         </Typography>
       </Section>
-
       <Section title="7. Haftungsbeschr&auml;nkung">
         <Typography>Die Haftung des Betreibers bestimmt sich wie folgt:</Typography>
         <ul>
@@ -318,7 +317,6 @@ export default function TermsContentDe({
           Vollst&auml;ndigkeit oder Aktualit&auml;t der angezeigten Daten.
         </Typography>
       </Section>
-
       <Section title="8. Geistiges Eigentum">
         <Typography>
           Der OpenMapX-Anwendungscode, das Design und die Marke sind Eigentum des Betreibers. Die
@@ -337,7 +335,6 @@ export default function TermsContentDe({
           Abschnitt&nbsp;10.
         </Typography>
       </Section>
-
       <Section title="9. Datenschutz">
         <Typography>
           Ihre Nutzung von OpenMapX unterliegt auch unserer{" "}
@@ -345,7 +342,6 @@ export default function TermsContentDe({
           erheben, verwenden und sch&uuml;tzen.
         </Typography>
       </Section>
-
       <Section title="10. Nutzergenerierte Inhalte (Bewertungen)">
         <Typography>
           OpenMapX bindet den{" "}
@@ -446,7 +442,6 @@ export default function TermsContentDe({
           </li>
         </ul>
       </Section>
-
       <Section title="11. Datenquellen und Quellenangaben" id="data-sources">
         <Typography>
           OpenMapX basiert auf offenen Daten. Wir danken den folgenden Datenquellen und ihren
@@ -485,7 +480,6 @@ export default function TermsContentDe({
           }}
         />
       </Section>
-
       <Section title="12. Drittanbieter-Bedingungen">
         <Typography>
           Ihre Nutzung der &uuml;ber OpenMapX angezeigten Daten kann den Nutzungsbedingungen der
@@ -496,7 +490,6 @@ export default function TermsContentDe({
           abgeleitete Datenbanken erfordert.
         </Typography>
       </Section>
-
       <Section title="13. Salvatorische Klausel">
         <Typography>
           Sollte eine Bestimmung dieser Bedingungen f&uuml;r unwirksam oder undurchsetzbar befunden
@@ -505,7 +498,6 @@ export default function TermsContentDe({
           urspr&uuml;nglichen Absicht am n&auml;chsten kommt.
         </Typography>
       </Section>
-
       <Section title="14. Anwendbares Recht und Gerichtsstand">
         <Typography>
           Diese Bedingungen unterliegen dem Recht der Bundesrepublik Deutschland unter Ausschluss
@@ -516,7 +508,6 @@ export default function TermsContentDe({
           Verbraucherschutzgesetze etwas anderes vorsehen.
         </Typography>
       </Section>
-
       <Section title="15. &Auml;nderungen dieser Bedingungen">
         <Typography>
           Wir behalten uns das Recht vor, diese Bedingungen jederzeit zu aktualisieren. Die aktuelle
@@ -528,14 +519,12 @@ export default function TermsContentDe({
           mitgeteilten Inkrafttretungsdatum gilt als Zustimmung zu den ge&auml;nderten Bedingungen.
         </Typography>
       </Section>
-
       <Section title="16. Sprache">
         <Typography>
           Diese Bedingungen sind in deutscher und englischer Sprache verf&uuml;gbar. Bei
           Abweichungen zwischen den beiden Fassungen hat die deutsche Fassung Vorrang.
         </Typography>
       </Section>
-
       <Section title="17. Kontakt">
         <Typography>
           Wenn Sie Fragen zu diesen Bedingungen haben, kontaktieren Sie uns bitte unter{" "}

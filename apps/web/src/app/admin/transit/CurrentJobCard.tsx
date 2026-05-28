@@ -53,7 +53,13 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" py={1.5}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          py: 1.5,
+        }}
+      >
         <CircularProgress size={20} />
       </Box>
     );
@@ -65,7 +71,14 @@ function RunningJobDetail({ jobId }: { jobId: string }) {
   return (
     <Stack spacing={1.25}>
       <LinearProgress />
-      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+      <Stack
+        direction="row"
+        spacing={2}
+        useFlexGap
+        sx={{
+          flexWrap: "wrap",
+        }}
+      >
         <Chip
           label={`Job ${jobId.slice(0, 8)}`}
           size="small"
@@ -116,13 +129,25 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 1.5,
+        }}
+      >
         {inflight ? (
           <RefreshIcon color="primary" fontSize="small" />
         ) : (
           <PlayArrowIcon color="action" fontSize="small" />
         )}
-        <Typography variant="subtitle1" fontWeight={700}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           {inflight ? "Sync in progress" : "Pipeline idle"}
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -149,24 +174,45 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           </Stack>
         )}
       </Stack>
-
       {inflight ? (
         <Stack spacing={1}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Started {formatTime(inflight.startedAt)} · {durationSecs(inflight.startedAt)}s elapsed
           </Typography>
           <RunningJobDetail jobId={inflight.jobId} />
         </Stack>
       ) : (
-        <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap>
+        <Stack
+          direction="row"
+          spacing={3}
+          useFlexGap
+          sx={{
+            flexWrap: "wrap",
+          }}
+        >
           <Box>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Last sync
             </Typography>
             <Typography variant="body2">{formatTime(state.lastSyncAt)}</Typography>
           </Box>
           <Box>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Last status
             </Typography>
             <Chip
@@ -177,14 +223,18 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
             />
           </Box>
           <Box>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Total feeds tracked
             </Typography>
             <Typography variant="body2">{state.feedCount}</Typography>
           </Box>
         </Stack>
       )}
-
       {state.lastSyncStatus === "failed" && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
           Last sync run failed. Inspect the job detail below for the failing stage.

@@ -2,7 +2,7 @@
 
 import DownloadIcon from "@mui/icons-material/Download";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import MailOutlineIcon from "@mui/icons-material/MailOutline";
+import MailOutlineIcon from "@mui/icons-material/MailOutlined";
 import SaveIcon from "@mui/icons-material/Save";
 import UploadIcon from "@mui/icons-material/Upload";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -172,11 +172,27 @@ function SettingField({
       unknown
     >;
     return (
-      <Stack gap={1}>
-        <Typography variant="caption" color="text.secondary" fontWeight={500}>
+      <Stack
+        sx={{
+          gap: 1,
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            fontWeight: 500,
+          }}
+        >
           {setting.label}
         </Typography>
-        <Stack direction="row" gap={1} flexWrap="wrap">
+        <Stack
+          direction="row"
+          sx={{
+            gap: 1,
+            flexWrap: "wrap",
+          }}
+        >
           {Object.entries(obj).map(([k, v]) => (
             <TextField
               key={k}
@@ -308,8 +324,20 @@ function SettingsGroupPanel({
       }}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Stack direction="row" alignItems="center" gap={1}>
-          <Typography fontWeight={600}>{group.label}</Typography>
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
+          <Typography
+            sx={{
+              fontWeight: 600,
+            }}
+          >
+            {group.label}
+          </Typography>
           {hasEnvOverrides && (
             <Chip
               label="env overrides"
@@ -322,24 +350,60 @@ function SettingsGroupPanel({
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
-        <Stack gap={2.5}>
+        <Stack
+          sx={{
+            gap: 2.5,
+          }}
+        >
           {groupBySubgroup(visibleSettings).map((section) => (
-            <Stack key={section.subgroup ?? "__"} gap={1.25}>
+            <Stack
+              key={section.subgroup ?? "__"}
+              sx={{
+                gap: 1.25,
+              }}
+            >
               {section.subgroup && SUBGROUP_META[section.subgroup] && (
-                <Stack gap={0.25}>
-                  <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                <Stack
+                  sx={{
+                    gap: 0.25,
+                  }}
+                >
+                  <Typography
+                    variant="overline"
+                    sx={{
+                      color: "text.secondary",
+                      lineHeight: 1.2,
+                    }}
+                  >
                     {SUBGROUP_META[section.subgroup].label}
                   </Typography>
                   {SUBGROUP_META[section.subgroup].description && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {SUBGROUP_META[section.subgroup].description}
                     </Typography>
                   )}
                 </Stack>
               )}
               {section.settings.map((s) => (
-                <Stack key={s.key} gap={0.5}>
-                  <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+                <Stack
+                  key={s.key}
+                  sx={{
+                    gap: 0.5,
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    sx={{
+                      alignItems: "center",
+                      gap: 1,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <SettingField
                       setting={s}
                       value={localValues[s.key]}
@@ -348,7 +412,13 @@ function SettingsGroupPanel({
                     {s.envOverride && s.envVar && <EnvOverrideBadge envVar={s.envVar} />}
                   </Stack>
                   {s.source === "database" && !s.envOverride && (
-                    <Typography variant="caption" color="text.secondary" sx={{ pl: 0.5 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                        pl: 0.5,
+                      }}
+                    >
                       Source: database
                     </Typography>
                   )}
@@ -357,7 +427,14 @@ function SettingsGroupPanel({
             </Stack>
           ))}
 
-          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "center",
+              gap: 1,
+              flexWrap: "wrap",
+            }}
+          >
             <Button
               variant="contained"
               size="small"
@@ -484,14 +561,32 @@ function ExportImportSection({
 
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
-      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+      <Typography
+        variant="subtitle1"
+        gutterBottom
+        sx={{
+          fontWeight: 600,
+        }}
+      >
         Export / Import
       </Typography>
-      <Typography variant="body2" color="text.secondary" mb={2}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 2,
+        }}
+      >
         Export settings as JSON for backup or migration. Secrets and env-overridden values are
         excluded.
       </Typography>
-      <Stack direction="row" gap={1} flexWrap="wrap">
+      <Stack
+        direction="row"
+        sx={{
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
         <Button variant="outlined" startIcon={<DownloadIcon />} size="small" onClick={doExport}>
           Export Settings
         </Button>
@@ -595,7 +690,11 @@ export function SystemSettings() {
 
   if (isLoading) {
     return (
-      <Stack gap={2}>
+      <Stack
+        sx={{
+          gap: 2,
+        }}
+      >
         {[1, 2, 3, 4].map((i) => (
           <Skeleton key={i} variant="rounded" height={56} />
         ))}
@@ -608,11 +707,19 @@ export function SystemSettings() {
   }
 
   return (
-    <Stack gap={2}>
-      <Typography variant="h5" fontWeight={700}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Typography
+        variant="h5"
+        sx={{
+          fontWeight: 700,
+        }}
+      >
         Settings
       </Typography>
-
       {data.groups.map((group) => (
         <SettingsGroupPanel
           key={group.id}
@@ -621,9 +728,7 @@ export function SystemSettings() {
           extra={group.id === "email" ? <TestEmailSection onMsg={showToast} /> : undefined}
         />
       ))}
-
       <ExportImportSection onMsg={showToast} />
-
       <Snackbar
         open={!!toast}
         autoHideDuration={4000}

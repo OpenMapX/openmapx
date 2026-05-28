@@ -73,7 +73,6 @@ export function WildfireLegend() {
           }}
         />
       )}
-
       <Box
         sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.75 }}
       >
@@ -86,7 +85,6 @@ export function WildfireLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>
           <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.3 }}>
@@ -152,7 +150,6 @@ export function WildfireLegend() {
           />
         </Box>
       </Box>
-
       <Box sx={{ display: "flex", gap: 2, mt: 0.75, alignItems: "flex-start" }}>
         <Box>
           <Typography sx={{ fontSize: 10, color: "text.secondary", mb: 0.3 }}>
@@ -216,7 +213,6 @@ export function WildfireLegend() {
           </Box>
         </Box>
       </Box>
-
       <Typography sx={{ fontSize: 10.5, color: "text.secondary", mt: 0.75 }}>
         {lastUpdated &&
           t("lastUpdated", {
@@ -230,9 +226,11 @@ export function WildfireLegend() {
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 0.5 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 0.5,
+          }}
         />
       )}
     </Paper>

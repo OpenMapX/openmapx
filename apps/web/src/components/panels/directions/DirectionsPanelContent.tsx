@@ -439,7 +439,6 @@ export function DirectionsPanelContent() {
           <CloseIcon sx={{ fontSize: 22 }} />
         </IconButton>
       </Box>
-
       {/* Waypoint list with drag-and-drop */}
       <WaypointList
         waypoints={waypoints}
@@ -455,7 +454,6 @@ export function DirectionsPanelContent() {
         isTransitMode={isTransitMode}
         t={t}
       />
-
       {/* Divider + content below */}
       <Box sx={{ position: "relative" }}>
         <Divider />
@@ -538,8 +536,10 @@ export function DirectionsPanelContent() {
               />
               <Typography
                 variant="body2"
-                fontWeight={500}
                 color={transitTimeMode !== "now" ? TEAL : "text.primary"}
+                sx={{
+                  fontWeight: 500,
+                }}
               >
                 {transitTimeMode === "now"
                   ? t("departNow")
@@ -605,8 +605,10 @@ export function DirectionsPanelContent() {
                 >
                   <Typography
                     variant="caption"
-                    fontWeight={500}
                     color={transitTimeMode === m ? "#fff" : "text.primary"}
+                    sx={{
+                      fontWeight: 500,
+                    }}
                   >
                     {m === "now" ? t("departNow") : m === "depart" ? t("departAt") : t("arriveBy")}
                   </Typography>
@@ -662,7 +664,12 @@ export function DirectionsPanelContent() {
         {/* Route results */}
         {!allWaypointsFilled ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {t("chooseOrigin")}
             </Typography>
           </Box>
@@ -673,13 +680,23 @@ export function DirectionsPanelContent() {
             </Box>
           ) : transitError ? (
             <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="error.main">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "error.main",
+                }}
+              >
                 {t("transitNotAvailable")}
               </Typography>
             </Box>
           ) : transitItineraries.length === 0 ? (
             <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {t("noRoutesFound")}
               </Typography>
             </Box>
@@ -728,7 +745,12 @@ export function DirectionsPanelContent() {
           </Box>
         ) : isError ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-            <Typography variant="body2" color="error.main">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "error.main",
+              }}
+            >
               {t("noRoutesFound")}
             </Typography>
           </Box>
@@ -750,10 +772,21 @@ export function DirectionsPanelContent() {
                 <Box
                   sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}
                 >
-                  <Typography variant="body2" fontWeight={600} color="text.primary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      color: "text.primary",
+                    }}
+                  >
                     {formatDuration(data.routes[0].duration)}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {units === "imperial"
                       ? `${(data.routes[0].distance / 1609.34).toFixed(1)} mi`
                       : formatDistance(data.routes[0].distance)}
@@ -769,11 +802,13 @@ export function DirectionsPanelContent() {
                           // biome-ignore lint/suspicious/noArrayIndexKey: legs have no stable id
                           key={i}
                           variant="caption"
-                          color="text.secondary"
-                          display="block"
-                          sx={{ lineHeight: 1.6 }}
+                          sx={{
+                            color: "text.secondary",
+                            display: "block",
+                            lineHeight: 1.6,
+                          }}
                         >
-                          {fromLabel} → {toLabel}
+                          {fromLabel}→ {toLabel}
                           {" · "}
                           {formatDuration(leg.duration)}
                           {" · "}
@@ -859,7 +894,6 @@ export function DirectionsPanelContent() {
           </Box>
         )}
       </Box>
-
       <Snackbar
         open={snackbar !== null}
         autoHideDuration={3000}

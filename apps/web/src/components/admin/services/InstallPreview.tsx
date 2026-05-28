@@ -32,8 +32,19 @@ export function InstallPreview({ services }: { services: RepoPreviewService[] })
           s.proxyEnabled;
         return (
           <Paper key={s.slug} sx={{ p: 2 }}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="subtitle1" fontWeight={500}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                alignItems: "center",
+              }}
+            >
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 500,
+                }}
+              >
                 {s.name}
               </Typography>
               <Chip size="small" label={`v${s.version}`} variant="outlined" />
@@ -44,11 +55,16 @@ export function InstallPreview({ services }: { services: RepoPreviewService[] })
               />
             </Stack>
             {s.description && (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  mt: 0.5,
+                }}
+              >
                 {s.description}
               </Typography>
             )}
-
             {s.validationErrors.length > 0 && (
               <Alert severity="error" sx={{ mt: 2 }}>
                 <strong>Invalid manifest — cannot install:</strong>
@@ -59,7 +75,6 @@ export function InstallPreview({ services }: { services: RepoPreviewService[] })
                 </ul>
               </Alert>
             )}
-
             {risky && s.validationErrors.length === 0 && (
               <Alert severity="warning" sx={{ mt: 2 }}>
                 This community service requests elevated access. Review before installing:
@@ -98,7 +113,6 @@ export function InstallPreview({ services }: { services: RepoPreviewService[] })
                 </ul>
               </Alert>
             )}
-
             {s.provides.length > 0 && (
               <Stack direction="row" spacing={0.5} sx={{ mt: 1.5 }}>
                 {s.provides.map((p) => (

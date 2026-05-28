@@ -106,8 +106,18 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
   });
 
   return (
-    <Stack gap={3}>
-      <Stack direction="row" alignItems="center" gap={2}>
+    <Stack
+      sx={{
+        gap: 3,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 2,
+        }}
+      >
         <Avatar
           src={avatarSrc}
           sx={{ width: 56, height: 56, fontSize: 20, bgcolor: "primary.main" }}
@@ -115,18 +125,31 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
           {!user.image && getInitials(user.name, user.email)}
         </Avatar>
         <Box>
-          <Typography variant="h6" fontWeight={600}>
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             {user.name}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {user.email}
           </Typography>
         </Box>
       </Stack>
-
       <Divider />
-
-      <Stack gap={2} maxWidth={480}>
+      <Stack
+        sx={{
+          gap: 2,
+          maxWidth: 480,
+        }}
+      >
         <TextField
           label="Full Name"
           value={name}
@@ -165,14 +188,22 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
           </Button>
         )}
       </Stack>
-
       <Divider />
-
       <Box>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+        <Typography
+          variant="subtitle2"
+          gutterBottom
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Read-only
         </Typography>
-        <Stack gap={0.5}>
+        <Stack
+          sx={{
+            gap: 0.5,
+          }}
+        >
           <Typography variant="body2">
             <strong>ID:</strong> {user.id}
           </Typography>
@@ -205,10 +236,14 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
           )}
         </Stack>
       </Box>
-
       <Divider />
-
-      <Stack direction="row" gap={1} flexWrap="wrap">
+      <Stack
+        direction="row"
+        sx={{
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
         {!isSelf && (
           <Button
             startIcon={<SupervisorAccountIcon />}
@@ -256,7 +291,6 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
           </Button>
         )}
       </Stack>
-
       {banOpen && <BanUserDialog user={user} onClose={() => setBanOpen(false)} />}
       <ConfirmDialog
         open={deleteOpen}
@@ -296,8 +330,17 @@ function SessionsTab({ userId }: { userId: string }) {
   if (isLoading) return <CircularProgress size={24} sx={{ mt: 2 }} />;
 
   return (
-    <Stack gap={2}>
-      <Stack direction="row" justifyContent="flex-end">
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          justifyContent: "flex-end",
+        }}
+      >
         <Button
           variant="outlined"
           size="small"
@@ -324,7 +367,13 @@ function SessionsTab({ userId }: { userId: string }) {
               {(data ?? []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} align="center">
-                    <Typography variant="body2" color="text.secondary" py={2}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        py: 2,
+                      }}
+                    >
                       No active sessions
                     </Typography>
                   </TableCell>
@@ -375,13 +424,31 @@ function SessionsTab({ userId }: { userId: string }) {
 
 function AccountsTab() {
   return (
-    <Stack gap={2}>
-      <Typography variant="body2" color="text.secondary">
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         Linked OAuth accounts and passkeys are managed by the user via Account Settings.
       </Typography>
       <Paper variant="outlined">
-        <Box p={2}>
-          <Typography variant="body2" color="text.secondary">
+        <Box
+          sx={{
+            p: 2,
+          }}
+        >
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             No account linking data available at this API surface. Users can manage their linked
             accounts from their own account settings.
           </Typography>
@@ -409,7 +476,13 @@ export function UserDetail({ userId }: { userId: string }) {
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" py={6}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          py: 6,
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -421,7 +494,12 @@ export function UserDetail({ userId }: { userId: string }) {
         <Button component={Link} href="/admin/users" startIcon={<ArrowBackIcon />} size="small">
           Back to Users
         </Button>
-        <Typography mt={2} color="text.secondary">
+        <Typography
+          sx={{
+            mt: 2,
+            color: "text.secondary",
+          }}
+        >
           User not found.
         </Typography>
       </Box>
@@ -431,16 +509,30 @@ export function UserDetail({ userId }: { userId: string }) {
   const isSelf = userData.id === currentUserId;
 
   return (
-    <Stack gap={2}>
-      <Stack direction="row" alignItems="center" gap={1}>
+    <Stack
+      sx={{
+        gap: 2,
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          gap: 1,
+        }}
+      >
         <IconButton component={Link} href="/admin/users" size="small">
           <ArrowBackIcon fontSize="small" />
         </IconButton>
-        <Typography variant="h5" fontWeight={700}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           User Detail
         </Typography>
       </Stack>
-
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           <Tab label="Profile" />
@@ -448,7 +540,6 @@ export function UserDetail({ userId }: { userId: string }) {
           <Tab label="Accounts" />
         </Tabs>
       </Box>
-
       <Box>
         {tab === 0 && <ProfileTab user={userData} isSelf={isSelf} />}
         {tab === 1 && <SessionsTab userId={userId} />}

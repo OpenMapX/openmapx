@@ -2,7 +2,7 @@
 
 import StarIcon from "@mui/icons-material/Star";
 import StarHalfIcon from "@mui/icons-material/StarHalf";
-import StarOutlineIcon from "@mui/icons-material/StarOutline";
+import StarOutlineIcon from "@mui/icons-material/StarOutlined";
 import Box from "@mui/material/Box";
 
 interface Props {

@@ -135,7 +135,6 @@ export function NauticalLegend() {
           }}
         />
       )}
-
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.6 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("title")}</Typography>
         <Switch
@@ -146,7 +145,6 @@ export function NauticalLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       <Typography
         sx={{
           fontSize: 10.5,
@@ -158,7 +156,6 @@ export function NauticalLegend() {
       >
         {t("subLayersLabel")}
       </Typography>
-
       <Box sx={{ opacity: layerVisible ? 1 : 0.5, transition: "opacity 120ms" }}>
         <SubLayerRow
           icon={<SailingIcon sx={{ fontSize: 18 }} />}
@@ -277,13 +274,17 @@ export function NauticalLegend() {
           </Box>
         )}
       </Box>
-
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 1, display: "block", fontSize: 10, lineHeight: 1.4 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 1,
+            display: "block",
+            fontSize: 10,
+            lineHeight: 1.4,
+          }}
         />
       )}
     </Paper>

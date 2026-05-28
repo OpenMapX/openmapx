@@ -27,12 +27,29 @@ export function PoiIngestPage() {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Box>
-          <Typography variant="h5" fontWeight={700}>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             POI ingest pipeline
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             EV charging · parking · per-source PostGIS ingest
           </Typography>
         </Box>
@@ -50,19 +67,22 @@ export function PoiIngestPage() {
           </IconButton>
         </Tooltip>
       </Stack>
-
       {isLoading && (
-        <Box display="flex" justifyContent="center" py={6}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            py: 6,
+          }}
+        >
           <CircularProgress />
         </Box>
       )}
-
       {isError && (
         <Alert severity="error">
           Failed to load POI ingest state. Check the BFF + data-manager logs.
         </Alert>
       )}
-
       {state && (
         <Stack spacing={3}>
           {driftMismatch && (
@@ -92,7 +112,6 @@ export function PoiIngestPage() {
           <PoiSourceTable state={state} onSelect={setSelectedId} />
         </Stack>
       )}
-
       <SourceDetailDrawer sourceId={selectedId} onClose={() => setSelectedId(null)} />
     </Box>
   );

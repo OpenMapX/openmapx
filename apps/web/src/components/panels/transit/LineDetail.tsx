@@ -116,31 +116,38 @@ export function LineDetail({
               mode={route.mode}
               size="medium"
             />
-            <Typography variant="subtitle1" fontWeight={600} noWrap>
+            <Typography
+              variant="subtitle1"
+              noWrap
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {route.longName}
             </Typography>
           </Box>
         ) : null}
       </Box>
-
       {/* Operator */}
       {route?.operatorName && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ px: 2, pt: 1, display: "block" }}
+          sx={{
+            color: "text.secondary",
+            px: 2,
+            pt: 1,
+            display: "block",
+          }}
         >
           {route.operatorName}
         </Typography>
       )}
-
       {/* Alerts */}
       {alerts && alerts.length > 0 && (
         <Box sx={{ px: 2, pt: 1 }}>
           <AlertsBanner alerts={alerts} />
         </Box>
       )}
-
       {/* Stop sequence */}
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography variant="subtitle2" gutterBottom>
@@ -208,13 +215,20 @@ export function LineDetail({
                   />
                   <Typography
                     variant="body2"
-                    fontWeight={isCurrent ? 700 : 400}
                     color={isCurrent ? "text.primary" : "text.secondary"}
+                    sx={{
+                      fontWeight: isCurrent ? 700 : 400,
+                    }}
                   >
                     {s.name}
                   </Typography>
                   {s.platformCode && (
-                    <Typography variant="caption" color="text.disabled">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.disabled",
+                      }}
+                    >
                       {t("platform")} {s.platformCode}
                     </Typography>
                   )}
@@ -223,12 +237,16 @@ export function LineDetail({
             })}
           </Box>
         ) : (
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t("stopDataNotAvailable")}
           </Typography>
         )}
       </Box>
-
       {/* Attribution */}
       <AttributionStrip
         attributions={mergedAttributions}

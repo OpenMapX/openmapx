@@ -102,7 +102,13 @@ function ConnectorRow({ row }: { row: (string | number)[] }) {
         <Typography variant="body2" noWrap>
           {type}
         </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>
+        <Typography
+          variant="caption"
+          noWrap
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {power}
           {current ? ` · ${current}` : ""}
           {qty && Number(qty) > 1 ? ` · ${qty}x` : ""}
@@ -154,7 +160,13 @@ function KeyValueRow({ row }: { row: (string | number)[] }) {
         "&:not(:last-child)": { borderBottom: 1, borderColor: "divider" },
       }}
     >
-      <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          flexShrink: 0,
+        }}
+      >
         {label}
       </Typography>
       {isLink ? (
@@ -177,8 +189,12 @@ function KeyValueRow({ row }: { row: (string | number)[] }) {
       ) : (
         <Typography
           variant="body2"
-          fontWeight={500}
-          sx={{ ml: 1, minWidth: 0, textAlign: "right" }}
+          sx={{
+            fontWeight: 500,
+            ml: 1,
+            minWidth: 0,
+            textAlign: "right",
+          }}
         >
           <FormattedValue value={value} />
         </Typography>
@@ -197,10 +213,20 @@ function PricingPlanRow({ label, value }: { label: string; value: string }) {
         "&:not(:last-child)": { borderBottom: 1, borderColor: "divider" },
       }}
     >
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         {label}
       </Typography>
-      <Typography variant="body2" fontWeight={500}>
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 500,
+        }}
+      >
         {value}
       </Typography>
     </Box>
@@ -232,7 +258,13 @@ function PricingPlansSection({
           <Box key={planKey}>
             {i > 0 && <Divider sx={{ my: 1 }} />}
             {showName && (
-              <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  mb: 0.5,
+                }}
+              >
                 {name}
               </Typography>
             )}
@@ -332,10 +364,22 @@ function ExternalMediaEmbed({ section }: { section: StructuredSection }) {
       >
         <Box sx={{ maxWidth: 300 }}>
           <VideocamIcon sx={{ fontSize: 24, color: "text.secondary", mb: 0.5 }} />
-          <Typography variant="body2" fontWeight={600}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             {t("externalMediaTitle")}
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              mt: 0.5,
+            }}
+          >
             {t("externalMediaBody")}
           </Typography>
           <Button
@@ -477,7 +521,12 @@ function StructuredSectionCard({
             }}
             onClick={collapsed ? () => setExpanded((value) => !value) : undefined}
           >
-            <Typography variant="body2" fontWeight={600}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+              }}
+            >
               {section.title}
             </Typography>
             {collapsed && (

@@ -32,9 +32,9 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
-    "intl-messageformat": "^11.2.3",
+    "intl-messageformat": "^11.2.7",
     "js-yaml": "^4.1.1",
-    "zod": "^4.4.1"
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "esbuild": "^0.28.0",
@@ -48,8 +48,8 @@
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.6.0",
-    "@types/react": "^19.2.14",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
     "esbuild": "^0.28.0",
     "react": "^19.0.0",
     "typescript": "^5.9.3",

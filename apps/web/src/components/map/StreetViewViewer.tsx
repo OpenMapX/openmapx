@@ -36,7 +36,13 @@ function StreetViewLoadGate() {
         <Typography variant="body2" sx={{ mb: 1.5 }}>
           {t("mapillaryNoticeBody")}
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 1.5,
+          }}
+        >
           {t("mapillaryNoticeData")}
         </Typography>
         <Link href={MAPILLARY_PRIVACY_URL} target="_blank" rel="noopener noreferrer">

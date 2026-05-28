@@ -12,7 +12,7 @@ import type { SystemStyleObject } from "@mui/system/styleFunctionSx";
  *   const fullScreen = useFullScreenOnMobile();
  *   <Dialog
  *     fullScreen={fullScreen}
- *     PaperProps={{ sx: mobileFullScreenDialogPaperSx }}
+ *     slotProps={{ paper: { sx: mobileFullScreenDialogPaperSx } }}
  *   />
  *
  * The shared paper sx squares off the corners on mobile and vertically

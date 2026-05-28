@@ -31,9 +31,9 @@ export function LegAlerts({ routeId }: LegAlertsProps) {
         <>
           <Typography
             variant="caption"
-            color="text.secondary"
             onClick={() => setExpanded((e) => !e)}
             sx={{
+              color: "text.secondary",
               cursor: "pointer",
               fontSize: "0.65rem",
               pl: 0.75,

@@ -4,15 +4,15 @@ import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import BlockIcon from "@mui/icons-material/Block";
 import CancelIcon from "@mui/icons-material/Cancel";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import SortIcon from "@mui/icons-material/Sort";
-import Autocomplete from "@mui/material/Autocomplete";
+import Autocomplete, { type AutocompleteRenderValueGetItemProps } from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -434,7 +434,13 @@ export function DataSourceFilterContent() {
                 gap: 1,
               }}
             >
-              <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  flex: 1,
+                }}
+              >
                 {tc("resultsCount", { count: filteredResults.length })}
               </Typography>
 
@@ -526,11 +532,23 @@ export function DataSourceFilterContent() {
                       />
                     )}
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body1" fontWeight={600} sx={{ mb: 0.25 }}>
+                      <Typography
+                        variant="body1"
+                        sx={{
+                          fontWeight: 600,
+                          mb: 0.25,
+                        }}
+                      >
                         {result.name}
                       </Typography>
                       {shouldShowOperatorCaption(result) && (
-                        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.25 }}>
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.secondary",
+                            mb: 0.25,
+                          }}
+                        >
                           {result.operator}
                         </Typography>
                       )}
@@ -538,7 +556,12 @@ export function DataSourceFilterContent() {
                         sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}
                       >
                         {result.summary && (
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: "text.secondary",
+                            }}
+                          >
                             <FormattedSummary
                               text={
                                 isI18nToken(result.summary)
@@ -590,7 +613,6 @@ export function DataSourceFilterContent() {
           </Box>
         )}
       </Box>
-
       {/* Status footer */}
       {(belowMinZoom ||
         showLoading ||
@@ -601,13 +623,23 @@ export function DataSourceFilterContent() {
           <Divider />
           <Box sx={{ px: 2, py: 1.5, textAlign: "center" }}>
             {belowMinZoom ? (
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {t("zoomInToSee")}
               </Typography>
             ) : showLoading ? (
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 1 }}>
                 <CircularProgress size={16} />
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {tc("loading")}
                 </Typography>
               </Box>
@@ -616,7 +648,12 @@ export function DataSourceFilterContent() {
                 {t("failedToLoadData")}
               </Typography>
             ) : (
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {tc("stationsInView", { count: filteredResults.length })}
               </Typography>
             )}
@@ -652,7 +689,13 @@ function ConnectorTypeSection({
 
   return (
     <Box sx={{ mb: 2 }}>
-      <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 600,
+          mb: 1,
+        }}
+      >
         {filterDef.label}
       </Typography>
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
@@ -677,7 +720,6 @@ function ConnectorTypeSection({
           );
         })}
       </Box>
-
       {otherOptions.length > 0 && (
         <>
           <Box
@@ -765,7 +807,13 @@ function ChipFilterSection({
 
   return (
     <Box sx={{ mb: 2 }}>
-      <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 600,
+          mb: 1,
+        }}
+      >
         {translateDataSourceLabel(filterDef.label, t)}
       </Typography>
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
@@ -851,7 +899,13 @@ function AccessTypeSection({
 
   return (
     <Box sx={{ mb: 2 }}>
-      <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 600,
+          mb: 0.5,
+        }}
+      >
         {filterDef.label}
       </Typography>
       <List dense disablePadding>
@@ -885,10 +939,14 @@ function AccessTypeSection({
               </ListItemIcon>
               <ListItemText
                 primary={group.label}
-                primaryTypographyProps={{
-                  variant: "body2",
-                  fontWeight: allSelected ? 600 : 400,
-                  color: allSelected ? TEAL : "text.primary",
+                slotProps={{
+                  primary: {
+                    variant: "body2",
+                    sx: {
+                      fontWeight: allSelected ? 600 : 400,
+                      color: allSelected ? TEAL : "text.primary",
+                    },
+                  },
                 }}
               />
               {group.optionLabels.length > 1 && (
@@ -934,7 +992,13 @@ function StatusSection({
 
   return (
     <Box sx={{ mb: 2 }}>
-      <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 600,
+          mb: 0.5,
+        }}
+      >
         {filterDef.label}
       </Typography>
       <List dense disablePadding>
@@ -961,10 +1025,14 @@ function StatusSection({
               <ListItemIcon sx={{ minWidth: 32 }}>{group.icon}</ListItemIcon>
               <ListItemText
                 primary={group.label}
-                primaryTypographyProps={{
-                  variant: "body2",
-                  fontWeight: allSelected ? 600 : 400,
-                  color: allSelected ? TEAL : "text.primary",
+                slotProps={{
+                  primary: {
+                    variant: "body2",
+                    sx: {
+                      fontWeight: allSelected ? 600 : 400,
+                      color: allSelected ? TEAL : "text.primary",
+                    },
+                  },
                 }}
               />
               {group.optionLabels.length > 1 && (
@@ -994,7 +1062,13 @@ function OperatorSection({
   const t = useTranslations("dataSources");
   return (
     <Box sx={{ mb: 2 }}>
-      <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 600,
+          mb: 1,
+        }}
+      >
         {t("operator")}
       </Typography>
       <Autocomplete
@@ -1013,9 +1087,9 @@ function OperatorSection({
             size="small"
           />
         )}
-        renderTags={(value, getTagProps) =>
+        renderValue={(value: string[], getItemProps: AutocompleteRenderValueGetItemProps<true>) =>
           value.map((option, index) => {
-            const { key, ...rest } = getTagProps({ index });
+            const { key, ...rest } = getItemProps({ index });
             return (
               <Chip
                 key={key}

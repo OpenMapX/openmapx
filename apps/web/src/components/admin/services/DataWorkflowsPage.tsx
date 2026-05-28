@@ -4,7 +4,7 @@ import BuildIcon from "@mui/icons-material/Build";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import StorageIcon from "@mui/icons-material/Storage";
 import Alert from "@mui/material/Alert";
@@ -186,10 +186,20 @@ function OperationCard({
       <CardContent>
         <Stack spacing={1.5}>
           <Box>
-            <Typography variant="subtitle2" fontWeight={700}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 700,
+              }}
+            >
               {title}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {description}
             </Typography>
           </Box>
@@ -244,9 +254,21 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
         <BuildIcon color="primary" />
-        <Typography variant="h6" fontWeight={600}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           Data Operations
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -254,11 +276,15 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
           Open Activity
         </Button>
       </Stack>
-
-      <Typography variant="body2" color="text.secondary" mb={2}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 2,
+        }}
+      >
         Queue CLI-backed data jobs from the GUI. All operations stream logs via Admin jobs.
       </Typography>
-
       {lastJobId && (
         <Alert
           severity="info"
@@ -272,7 +298,6 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
           Last queued job: <code>{lastJobId}</code>
         </Alert>
       )}
-
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
           <OperationCard
@@ -496,7 +521,6 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
           </OperationCard>
         </Grid>
       </Grid>
-
       <Dialog
         open={cleanDialogOpen}
         onClose={() => setCleanDialogOpen(false)}
@@ -505,7 +529,12 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
       >
         <DialogTitle>Confirm Data Cleanup</DialogTitle>
         <DialogContent>
-          <Stack gap={1.5} pt={0.5}>
+          <Stack
+            sx={{
+              gap: 1.5,
+              pt: 0.5,
+            }}
+          >
             <Alert severity="warning">
               This operation removes local data files and may require full rebuilds.
             </Alert>
@@ -538,27 +567,60 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
 function OsmSection({ osm }: { osm: OsmInfo }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
         <StorageIcon color="primary" />
-        <Typography variant="h6" fontWeight={600}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           OSM Planet Data
         </Typography>
       </Stack>
-
       {osm.found ? (
         <Stack spacing={1}>
-          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+          <Stack
+            direction="row"
+            spacing={2}
+            useFlexGap
+            sx={{
+              flexWrap: "wrap",
+            }}
+          >
             <Box>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 File
               </Typography>
-              <Typography variant="body2" fontFamily="monospace">
+              <Typography
+                variant="body2"
+                sx={{
+                  fontFamily: "monospace",
+                }}
+              >
                 {osm.filename}
               </Typography>
             </Box>
             {osm.region && (
               <Box>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Region
                 </Typography>
                 <Typography variant="body2">{osm.region}</Typography>
@@ -566,7 +628,12 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
             )}
             {osm.sizeBytes && (
               <Box>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Size
                 </Typography>
                 <Typography variant="body2">{formatBytes(osm.sizeBytes)}</Typography>
@@ -574,7 +641,12 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
             )}
             {osm.modifiedAt && (
               <Box>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Downloaded
                 </Typography>
                 <Typography variant="body2">{formatDate(osm.modifiedAt)}</Typography>
@@ -601,38 +673,78 @@ function OsmSection({ osm }: { osm: OsmInfo }) {
 function BuildsSection({ builds }: { builds: BuildStatus[] }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
         <BuildIcon color="primary" />
-        <Typography variant="h6" fontWeight={600}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           Service Build Inventory
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Read-only view of which services have populated their data dirs
         </Typography>
       </Stack>
-
       <Grid container spacing={2}>
         {builds.map((b) => (
           <Grid key={b.target} size={{ xs: 12, sm: 6, md: 4 }}>
             <Card variant="outlined">
               <CardContent sx={{ pb: "12px !important" }}>
-                <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{
+                    alignItems: "center",
+                    mb: 1,
+                  }}
+                >
                   {b.built ? (
                     <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
                   ) : (
                     <HelpOutlineIcon fontSize="small" sx={{ color: "text.disabled" }} />
                   )}
-                  <Typography variant="body2" fontWeight={600}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                    }}
+                  >
                     {BUILD_LABELS[b.target] ?? b.target}
                   </Typography>
                 </Stack>
                 {b.builtAt && (
-                  <Typography variant="caption" color="text.secondary" display="block">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      display: "block",
+                    }}
+                  >
                     Built {formatDate(b.builtAt)}
                   </Typography>
                 )}
                 {!b.built && (
-                  <Typography variant="caption" color="text.secondary" display="block">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                      display: "block",
+                    }}
+                  >
                     Not built
                   </Typography>
                 )}
@@ -641,7 +753,6 @@ function BuildsSection({ builds }: { builds: BuildStatus[] }) {
           </Grid>
         ))}
       </Grid>
-
       <Alert severity="info" sx={{ mt: 2 }}>
         Each service builds its own indexes/graphs on first start. Trigger rebuilds from the service
         catalog or queue data update/build operations.
@@ -773,9 +884,21 @@ function GtfsSection({
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
         <FileDownloadIcon color="primary" />
-        <Typography variant="h6" fontWeight={600}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           GTFS Feeds
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -801,12 +924,16 @@ function GtfsSection({
           Import feed
         </Button>
       </Stack>
-
       <Dialog open={importOpen} onClose={() => setImportOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Import GTFS feed</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Paste the URL of a GTFS .zip. The importer will stream the archive, parse the CSVs,
               and load them into a dedicated `gtfs_&lt;slug&gt;` Postgres schema. Slug is
               auto-derived from the URL filename if you leave it blank.
@@ -858,7 +985,6 @@ function GtfsSection({
           </Button>
         </DialogActions>
       </Dialog>
-
       {(() => {
         const rows = buildUnifiedRows(feeds, motisArchives);
         if (rows.length === 0) {
@@ -875,7 +1001,14 @@ function GtfsSection({
         }
         return (
           <>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                display: "block",
+                mb: 1,
+              }}
+            >
               <strong>MOTIS</strong> = raw GTFS zip on disk consumed by the MOTIS engine at startup
               (transit routing). <strong>Postgres</strong> = imported into a dedicated schema for
               SQL-based stop/route lookups (place panel, transit-gtfs-local provider). The same
@@ -921,8 +1054,10 @@ function GtfsSection({
                             <Typography variant="body2">{displayName}</Typography>
                             <Typography
                               variant="caption"
-                              color="text.secondary"
-                              fontFamily="monospace"
+                              sx={{
+                                color: "text.secondary",
+                                fontFamily: "monospace",
+                              }}
                             >
                               {pg ? `g-${pg.slug}` : row.key}
                               {motis ? ` · ${formatBytes(motis.sizeBytes)}` : ""}
@@ -931,8 +1066,8 @@ function GtfsSection({
                               <Tooltip title={originUrl}>
                                 <Typography
                                   variant="caption"
-                                  color="text.secondary"
                                   sx={{
+                                    color: "text.secondary",
                                     maxWidth: 280,
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
@@ -974,8 +1109,10 @@ function GtfsSection({
                               (status === "importing" || status === "downloading") && (
                                 <Typography
                                   variant="caption"
-                                  color="text.secondary"
-                                  sx={{ pl: 0.25 }}
+                                  sx={{
+                                    color: "text.secondary",
+                                    pl: 0.25,
+                                  }}
                                 >
                                   {pg.currentStage}
                                 </Typography>
@@ -1005,7 +1142,13 @@ function GtfsSection({
                         <TableCell>{renderExpiryCell(pg?.serviceEndDate)}</TableCell>
                         <TableCell>{updatedIso ? formatDate(updatedIso) : "—"}</TableCell>
                         <TableCell align="right">
-                          <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                          <Stack
+                            direction="row"
+                            spacing={0.5}
+                            sx={{
+                              justifyContent: "flex-end",
+                            }}
+                          >
                             {!pg && motis && (
                               <Tooltip title="Promote this MOTIS-fetched archive into Postgres (no re-download — apps/api reads the local zip directly)">
                                 <span>
@@ -1044,7 +1187,6 @@ function GtfsSection({
           </>
         );
       })()}
-
       <Snackbar
         open={!!toast}
         autoHideDuration={4000}
@@ -1067,20 +1209,38 @@ function motisProxyModeColor(
 function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
         <StorageIcon color="primary" />
-        <Typography variant="h6" fontWeight={600}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 600,
+          }}
+        >
           MOTIS Transitous Parity
         </Typography>
       </Stack>
-
       {!status.configFound ? (
         <Alert severity="warning">
           No MOTIS config found yet. Queue GTFS/OSM operations and build MOTIS data.
         </Alert>
       ) : (
         <Stack spacing={1.5}>
-          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+          <Stack
+            direction="row"
+            spacing={2}
+            useFlexGap
+            sx={{
+              flexWrap: "wrap",
+            }}
+          >
             <Chip label={`${status.datasetCount} schedule dataset(s)`} size="small" />
             <Chip label={`${status.realtimeFeedCount} realtime feed(s)`} size="small" />
             <Chip label={`${status.gbfsFeedCount} GBFS feed(s)`} size="small" />
@@ -1091,7 +1251,12 @@ function MotisTransitousSection({ status }: { status: MotisTransitousStatus }) {
               size="small"
             />
           </Stack>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Proxy artifacts: config {status.feedProxyConfigFound ? "present" : "missing"} · vars{" "}
             {status.feedProxyVarsFound ? "present" : "missing"} · {status.feedProxyFeedCount} mapped
             feed endpoint(s)
@@ -1129,7 +1294,13 @@ export function DataWorkflowsPage() {
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" py={6}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          py: 6,
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -1141,12 +1312,29 @@ export function DataWorkflowsPage() {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Box>
-          <Typography variant="h5" fontWeight={700}>
+          <Typography
+            variant="h5"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             Data &amp; Feed Workflows
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Manage OSM data, GTFS feeds, builds, and long-running data jobs
           </Typography>
         </Box>
@@ -1160,7 +1348,6 @@ export function DataWorkflowsPage() {
           ← Services
         </Button>
       </Stack>
-
       <Stack spacing={3}>
         <DataOperationsSection apiUrl={apiUrl} />
         <OsmSection osm={data.osm} />

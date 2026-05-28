@@ -61,21 +61,41 @@ export function StoreCard({ entry, onSelect, onInstall }: StoreCardProps) {
     >
       <CardActionArea onClick={() => onSelect(entry)} sx={{ flex: 1, alignItems: "flex-start" }}>
         <CardContent sx={{ pb: 1 }}>
-          <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={0.5}>
-            <Typography variant="subtitle2" fontWeight={700} lineHeight={1.3}>
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              mb: 0.5,
+            }}
+          >
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 700,
+                lineHeight: 1.3,
+              }}
+            >
               {entry.name}
             </Typography>
             <StatusBadge quality={entry.quality} />
           </Stack>
 
-          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              mb: 1,
+            }}
+          >
             by {entry.author}
           </Typography>
 
           <Typography
             variant="body2"
-            color="text.secondary"
             sx={{
+              color: "text.secondary",
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
@@ -87,22 +107,52 @@ export function StoreCard({ entry, onSelect, onInstall }: StoreCardProps) {
             {entry.description}
           </Typography>
 
-          <Stack direction="row" flexWrap="wrap" gap={0.5} mb={1.5}>
+          <Stack
+            direction="row"
+            sx={{
+              flexWrap: "wrap",
+              gap: 0.5,
+              mb: 1.5,
+            }}
+          >
             {entry.domains.map((d) => (
               <DomainChip key={d} domain={d} />
             ))}
           </Stack>
 
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography variant="caption" color="text.secondary">
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               v{entry.version}
             </Typography>
 
             {!entry.compatible && (
               <Tooltip title={`Requires platform ≥ ${entry.minPlatform}`}>
-                <Box display="flex" alignItems="center" gap={0.5} color="warning.main">
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.5,
+                    color: "warning.main",
+                  }}
+                >
                   <WarningAmberIcon sx={{ fontSize: "0.9rem" }} />
-                  <Typography variant="caption" color="warning.main">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "warning.main",
+                    }}
+                  >
                     Incompatible
                   </Typography>
                 </Box>
@@ -111,8 +161,12 @@ export function StoreCard({ entry, onSelect, onInstall }: StoreCardProps) {
           </Stack>
         </CardContent>
       </CardActionArea>
-
-      <Box px={2} pb={2}>
+      <Box
+        sx={{
+          px: 2,
+          pb: 2,
+        }}
+      >
         {entry.installed && !entry.hasUpdate && (
           <Button
             fullWidth

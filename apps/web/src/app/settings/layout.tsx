@@ -33,7 +33,13 @@ export default async function SettingsLayout({ children }: { children: React.Rea
         }}
       >
         <Container maxWidth="md" sx={{ py: 1.5 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Stack
+            direction="row"
+            spacing={1.5}
+            sx={{
+              alignItems: "center",
+            }}
+          >
             <Link href="/" aria-label={t("back")} style={{ display: "inline-flex" }}>
               <IconButton size="small" component="span">
                 <ArrowBackIcon />

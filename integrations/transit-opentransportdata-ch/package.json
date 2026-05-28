@@ -8,6 +8,6 @@
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.3"
   }
 }

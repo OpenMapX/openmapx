@@ -106,10 +106,20 @@ export function PlaceDeparturesView({
           <ArrowBackIcon sx={{ fontSize: 20 }} />
         </IconButton>
         <Box>
-          <Typography variant="subtitle2" fontWeight={600}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             {place.name}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {modeFilter
               ? `${MODE_LABEL_KEYS[modeFilter] ? t(MODE_LABEL_KEYS[modeFilter] as string) : modeFilter} ${t(tab)}`
               : t(tab)}
@@ -139,7 +149,6 @@ export function PlaceDeparturesView({
         variant="panel-header"
         label={tc("dataSources")}
       />
-
       {/* Scrollable list area — on desktop this is the only thing that scrolls */}
       <Box sx={{ flex: 1, overflowY: { xs: "visible", sm: "auto" } }}>
         {isLoading ? (
@@ -175,7 +184,12 @@ export function PlaceDeparturesView({
         ) : (
           /* Empty state */
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {modeFilter
                 ? t("noDeparturesMode", {
                     mode: MODE_LABEL_KEYS[modeFilter]

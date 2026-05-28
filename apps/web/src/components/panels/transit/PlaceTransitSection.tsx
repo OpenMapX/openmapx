@@ -126,21 +126,24 @@ export function PlaceTransitSection({
   return (
     <Box sx={{ px: 2, py: 1 }}>
       <Divider sx={{ mb: 1.5 }} />
-
       {/* Section header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1.25 }}>
         <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />
-        <Typography variant="subtitle2" fontWeight={600} color="text.primary">
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 600,
+            color: "text.primary",
+          }}
+        >
           {t("transit")}
         </Typography>
       </Box>
-
       {alerts && alerts.length > 0 && (
         <Box sx={{ mb: 1.25 }}>
           <AlertsBanner alerts={alerts} />
         </Box>
       )}
-
       {/* Routes grouped by mode */}
       {Array.from(grouped.entries()).map(([mode, modeRoutes]) => {
         const Icon = MODE_ICONS[mode] ?? DirectionsBusIcon;
@@ -168,9 +171,12 @@ export function PlaceTransitSection({
               <Icon sx={{ fontSize: 16, color: "text.secondary" }} />
               <Typography
                 variant="caption"
-                color="text.secondary"
-                fontWeight={500}
-                sx={{ flex: 1, textAlign: "left" }}
+                sx={{
+                  color: "text.secondary",
+                  fontWeight: 500,
+                  flex: 1,
+                  textAlign: "left",
+                }}
               >
                 {label}
               </Typography>
@@ -221,11 +227,16 @@ export function PlaceTransitSection({
           </Box>
         );
       })}
-
       {/* Departures preview */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 1.25, mb: 0.5 }}>
         <ScheduleIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-        <Typography variant="caption" color="text.secondary" fontWeight={500}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            fontWeight: 500,
+          }}
+        >
           {t("nextDepartures")}
         </Typography>
       </Box>
@@ -250,11 +261,17 @@ export function PlaceTransitSection({
           ))}
         </Box>
       ) : !depsLoading && departures ? (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            mt: 0.5,
+            display: "block",
+          }}
+        >
           {t("noDeparturesInNext60")}
         </Typography>
       ) : null}
-
       {/* Facilities */}
       {facilities && facilities.length > 0 && (
         <>
@@ -264,7 +281,6 @@ export function PlaceTransitSection({
           </Box>
         </>
       )}
-
       {/* Open departures button */}
       <Button
         variant="outlined"

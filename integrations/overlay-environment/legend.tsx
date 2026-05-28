@@ -100,7 +100,6 @@ export function EnvironmentLegend() {
           }}
         />
       )}
-
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("environmentalSensors")}</Typography>
@@ -112,7 +111,6 @@ export function EnvironmentLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       {/* Sensor type chips */}
       <Box
         sx={{
@@ -137,7 +135,6 @@ export function EnvironmentLegend() {
           />
         ))}
       </Box>
-
       {/* Gradient bar */}
       <Box sx={{ mb: 0.75 }}>
         <Box
@@ -155,7 +152,6 @@ export function EnvironmentLegend() {
           ))}
         </Box>
       </Box>
-
       {/* Station count */}
       <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
         {stationCount > 0
@@ -164,14 +160,17 @@ export function EnvironmentLegend() {
             ? t("loading")
             : t("noStations")}
       </Typography>
-
       {/* Attribution (from manifest dataSources, trusted HTML) */}
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 0.5,
+            display: "block",
+            fontSize: 10.5,
+          }}
         />
       )}
     </Paper>

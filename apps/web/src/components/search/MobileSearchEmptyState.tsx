@@ -46,7 +46,12 @@ export function MobileSearchEmptyState({ onSelectPlace }: Props) {
   if (!isSignedIn) {
     return (
       <Box sx={{ p: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {t("emptyStateSignedOut")}
         </Typography>
       </Box>
@@ -72,7 +77,12 @@ export function MobileSearchEmptyState({ onSelectPlace }: Props) {
   if (!labels || labels.length === 0) {
     return (
       <Box sx={{ p: 3, textAlign: "center" }}>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           {t("emptyStateNoLabels")}
         </Typography>
       </Box>
@@ -105,7 +115,13 @@ export function MobileSearchEmptyState({ onSelectPlace }: Props) {
             <Typography variant="body1" sx={{ fontWeight: 500 }} noWrap>
               {renderLabel(place.label)}
             </Typography>
-            <Typography variant="body2" color="text.secondary" noWrap>
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {place.address ?? place.name}
             </Typography>
           </Box>

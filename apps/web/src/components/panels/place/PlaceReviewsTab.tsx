@@ -127,7 +127,6 @@ export function PlaceReviewsTab({ place }: Props) {
         reviews={reviewsQuery.data}
         isLoading={aggregateQuery.isLoading}
       />
-
       {/* Write / edit CTA — logged-out users get the same button but it
           opens the auth dialog instead of starting the gated review flow. */}
       <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
@@ -147,7 +146,6 @@ export function PlaceReviewsTab({ place }: Props) {
           {ownReview ? t("editReview") : t("writeReview")}
         </Button>
       </Box>
-
       <ReviewList
         reviews={reviewsQuery.data}
         isLoading={reviewsQuery.isLoading}
@@ -156,11 +154,17 @@ export function PlaceReviewsTab({ place }: Props) {
         onDelete={(r) => gatedAction({ kind: "delete", review: r })}
         onReport={(r) => gatedAction({ kind: "report", review: r })}
       />
-
       {links.length > 0 && (
         <>
           <Divider sx={{ mt: 2, mb: 1.5 }} />
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              mb: 0.5,
+              display: "block",
+            }}
+          >
             {t("findReviewsOn")}
           </Typography>
           {links.map((link) => (
@@ -192,21 +196,22 @@ export function PlaceReviewsTab({ place }: Props) {
           ))}
         </>
       )}
-
       {attributionHtml && (
         <>
           <Divider sx={{ mt: 2, mb: 1 }} />
           <Typography
             variant="caption"
-            color="text.secondary"
             align="center"
-            sx={{ display: "block", "& a": { color: "text.secondary" } }}
             // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
             dangerouslySetInnerHTML={{ __html: attributionHtml }}
+            sx={{
+              color: "text.secondary",
+              display: "block",
+              "& a": { color: "text.secondary" },
+            }}
           />
         </>
       )}
-
       <WriteReviewDialog
         open={writeOpen}
         onClose={() => {
@@ -227,7 +232,6 @@ export function PlaceReviewsTab({ place }: Props) {
       {reportReview && (
         <ReportAbuseDialog open onClose={() => setReportReview(null)} review={reportReview} />
       )}
-
       <MangroveSetupWizard
         open={setupOpen}
         onClose={() => {

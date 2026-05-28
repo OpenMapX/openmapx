@@ -78,13 +78,17 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos }: Pro
             }}
           >
             <CollectionsIcon sx={{ fontSize: 18 }} />
-            <Typography variant="body2" fontWeight={500}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 500,
+              }}
+            >
               {tp("viewPhotos")}
             </Typography>
           </Box>
         )}
       </ButtonBase>
-
       {/* Attribution badge */}
       <Box
         onClick={(e) => e.stopPropagation()}
@@ -104,7 +108,6 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos }: Pro
       >
         <PhotoAttribution photo={photo} color="rgba(255,255,255,0.85)" />
       </Box>
-
       {/* Close button */}
       {onClose && (
         <IconButton

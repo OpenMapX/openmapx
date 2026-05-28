@@ -93,15 +93,24 @@ export function StopBoardView({
           <ArrowBackIcon sx={{ fontSize: 20 }} />
         </IconButton>
         <Box>
-          <Typography variant="subtitle2" fontWeight={600}>
+          <Typography
+            variant="subtitle2"
+            sx={{
+              fontWeight: 600,
+            }}
+          >
             {title}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {t(tab)}
           </Typography>
         </Box>
       </Box>
-
       {hasArrivals && (
         <Box sx={{ px: 1.5, pt: 1, pb: 1 }}>
           <ToggleButtonGroup
@@ -120,13 +129,11 @@ export function StopBoardView({
           </ToggleButtonGroup>
         </Box>
       )}
-
       <AttributionStrip
         attributions={mergedAttributions}
         variant="panel-header"
         label={tc("dataSources")}
       />
-
       <Box sx={{ flex: 1, overflowY: { xs: "visible", sm: "auto" } }}>
         {alerts && alerts.length > 0 && (
           <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
@@ -163,7 +170,12 @@ export function StopBoardView({
           </Box>
         ) : (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {t("noDeparturesGeneric", { tab: t(tab) })}
             </Typography>
           </Box>

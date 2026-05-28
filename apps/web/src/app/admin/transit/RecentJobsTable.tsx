@@ -61,11 +61,24 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
       anchor="right"
       open
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: "100%", sm: 480 } } }}
+      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 480 } } } }}
     >
       <Box sx={{ p: 2 }}>
-        <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-          <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            alignItems: "center",
+            mb: 1.5,
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 700,
+              flex: 1,
+            }}
+          >
             Job detail
           </Typography>
           <IconButton size="small" onClick={onClose}>
@@ -74,16 +87,24 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
         </Stack>
         <Typography
           variant="caption"
-          color="text.secondary"
-          fontFamily="monospace"
-          display="block"
-          mb={2}
+          sx={{
+            color: "text.secondary",
+            fontFamily: "monospace",
+            display: "block",
+            mb: 2,
+          }}
         >
           {jobId}
         </Typography>
 
         {isLoading && (
-          <Box display="flex" justifyContent="center" py={4}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              py: 4,
+            }}
+          >
             <CircularProgress size={24} />
           </Box>
         )}
@@ -94,7 +115,14 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
         )}
         {data && (
           <Stack spacing={2}>
-            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            <Stack
+              direction="row"
+              spacing={2}
+              useFlexGap
+              sx={{
+                flexWrap: "wrap",
+              }}
+            >
               <Chip
                 size="small"
                 label={data.status}
@@ -121,11 +149,22 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
             </Stack>
 
             <Box>
-              <Typography variant="subtitle2" fontWeight={700} mb={1}>
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: 700,
+                  mb: 1,
+                }}
+              >
                 Stages ({data.stages.length})
               </Typography>
               {data.stages.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   No stage records yet.
                 </Typography>
               ) : (
@@ -145,7 +184,12 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
                             <Stack spacing={0.25}>
                               <Typography variant="body2">{stage.stage}</Typography>
                               {stage.message && (
-                                <Typography variant="caption" color="text.secondary">
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "text.secondary",
+                                  }}
+                                >
                                   {stage.message}
                                 </Typography>
                               )}
@@ -189,18 +233,40 @@ export function RecentJobsTable() {
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 1.5,
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           Recent jobs
         </Typography>
         <Box sx={{ flex: 1 }} />
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           showing up to 20 most recent
         </Typography>
       </Stack>
-
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={3}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            py: 3,
+          }}
+        >
           <CircularProgress size={22} />
         </Box>
       ) : isError ? (
@@ -208,7 +274,12 @@ export function RecentJobsTable() {
           Failed to load jobs.
         </Typography>
       ) : data && data.jobs.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           No jobs recorded yet.
         </Typography>
       ) : (
@@ -233,7 +304,12 @@ export function RecentJobsTable() {
                   onClick={() => setOpenJobId(job.id)}
                 >
                   <TableCell>
-                    <Typography variant="caption" fontFamily="monospace">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontFamily: "monospace",
+                      }}
+                    >
                       {job.id.slice(0, 8)}…
                     </Typography>
                   </TableCell>
@@ -248,7 +324,12 @@ export function RecentJobsTable() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       {job.triggeredBy ?? "—"}
                     </Typography>
                   </TableCell>
@@ -261,7 +342,6 @@ export function RecentJobsTable() {
           </Table>
         </TableContainer>
       )}
-
       {openJobId && <JobDetailDrawer jobId={openJobId} onClose={() => setOpenJobId(null)} />}
     </Paper>
   );

@@ -11,11 +11,15 @@ export default function ImprintContentDe() {
       <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 3 }}>
         Impressum
       </Typography>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 4,
+        }}
+      >
         Angaben gem&auml;&szlig; &sect; 5 Digitale-Dienste-Gesetz (DDG).
       </Typography>
-
       <Section title="Anbieter">
         <Typography>
           {name}
@@ -27,7 +31,6 @@ export default function ImprintContentDe() {
           {country}
         </Typography>
       </Section>
-
       <Section title="Kontakt">
         <Typography>
           E-Mail: <Link href={`mailto:${email}`}>{email}</Link>
@@ -39,7 +42,6 @@ export default function ImprintContentDe() {
           )}
         </Typography>
       </Section>
-
       <Section title="Verantwortlich f&uuml;r den Inhalt">
         <Typography>
           Verantwortlich f&uuml;r den Inhalt gem&auml;&szlig; &sect; 18 Abs. 2 Medienstaatsvertrag
@@ -53,7 +55,6 @@ export default function ImprintContentDe() {
           {postalCode} {city}
         </Typography>
       </Section>
-
       <Section title="Verbraucherstreitbeilegung">
         <Typography>
           Als Unternehmen mit weniger als 11 Besch&auml;ftigten sind wir von den
@@ -62,7 +63,6 @@ export default function ImprintContentDe() {
           Verbraucherschlichtungsstelle teilzunehmen.
         </Typography>
       </Section>
-
       <Section title="Haftung f&uuml;r Inhalte">
         <Typography>
           Als Diensteanbieter sind wir gem&auml;&szlig; &sect; 7 Abs. 1 DDG f&uuml;r eigene Inhalte
@@ -79,7 +79,6 @@ export default function ImprintContentDe() {
           entfernen.
         </Typography>
       </Section>
-
       <Section title="Haftung f&uuml;r Links">
         <Typography>
           Unser Angebot enth&auml;lt Links zu externen Websites Dritter, auf deren Inhalte wir
@@ -96,7 +95,6 @@ export default function ImprintContentDe() {
           Rechtsverletzungen werden wir derartige Links umgehend entfernen.
         </Typography>
       </Section>
-
       <Section title="Urheberrecht">
         <Typography>
           Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen
@@ -113,7 +111,6 @@ export default function ImprintContentDe() {
           werden wir derartige Inhalte umgehend entfernen.
         </Typography>
       </Section>
-
       <Section title="Kartendaten und Drittanbieter-Zuordnungen">
         <Typography>
           OpenMapX nutzt offene Daten aus verschiedenen Quellen. Detaillierte Quellenangaben

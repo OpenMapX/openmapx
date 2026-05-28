@@ -61,7 +61,12 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
   if (!hasStops) {
     return (
       <Box sx={{ mt: 0.5 }}>
-        <Typography variant="caption" color="text.disabled">
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.disabled",
+          }}
+        >
           {label}
         </Typography>
       </Box>
@@ -89,7 +94,6 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
         )}
         <Typography variant="caption">{label}</Typography>
       </Box>
-
       <Collapse in={expanded}>
         <Box sx={{ mt: 0.25, mb: 0.25 }}>
           {intermediateStops.map((stop, i) => {
@@ -128,8 +132,12 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
                   {delayMin > 0 && !stop.canceled && (
                     <Typography
                       variant="caption"
-                      color="error.main"
-                      sx={{ display: "block", fontSize: "0.6rem", fontWeight: 600 }}
+                      sx={{
+                        color: "error.main",
+                        display: "block",
+                        fontSize: "0.6rem",
+                        fontWeight: 600,
+                      }}
                     >
                       +{delayMin}m
                     </Typography>

@@ -44,9 +44,11 @@ export function DepartureRow({
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             variant="body2"
-            fontWeight={500}
             noWrap
-            sx={{ textDecoration: isCanceled ? "line-through" : "none" }}
+            sx={{
+              fontWeight: 500,
+              textDecoration: isCanceled ? "line-through" : "none",
+            }}
           >
             {departure.headsign}
           </Typography>
@@ -57,7 +59,12 @@ export function DepartureRow({
               mode={departure.route.mode}
             />
             {showPlatform && departure.platform && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 {t("platform")} {departure.platform}
               </Typography>
             )}
@@ -78,8 +85,8 @@ export function DepartureRow({
         <Box sx={{ textAlign: "right", flexShrink: 0 }}>
           <Typography
             variant="body2"
-            fontWeight={500}
             sx={{
+              fontWeight: 500,
               textDecoration: isCanceled || isDelayed ? "line-through" : "none",
               color: isCanceled ? "text.disabled" : "text.primary",
             }}
@@ -87,12 +94,24 @@ export function DepartureRow({
             {formatTime(departure.scheduledAt, locale)}
           </Typography>
           {isDelayed && !isCanceled && departure.expectedAt && (
-            <Typography variant="body2" fontWeight={600} color="error.main">
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                color: "error.main",
+              }}
+            >
               {formatTime(departure.expectedAt, locale)}
             </Typography>
           )}
           {isCanceled && (
-            <Typography variant="caption" color="error.main" fontWeight={600}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "error.main",
+                fontWeight: 600,
+              }}
+            >
               {t("canceled")}
             </Typography>
           )}

@@ -89,9 +89,19 @@ export function SetCredentialDialog({
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Set Credential — {title}</DialogTitle>
       <DialogContent>
-        <Stack gap={2} pt={1}>
+        <Stack
+          sx={{
+            gap: 2,
+            pt: 1,
+          }}
+        >
           {description && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {description}
             </Typography>
           )}

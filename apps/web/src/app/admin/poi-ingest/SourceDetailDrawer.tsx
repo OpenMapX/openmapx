@@ -58,7 +58,12 @@ function ScheduleSection({ detail }: { detail: PoiSourceDetail }) {
   const present = entries.filter(([, spec]) => spec);
   if (present.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         No schedules declared.
       </Typography>
     );
@@ -66,9 +71,21 @@ function ScheduleSection({ detail }: { detail: PoiSourceDetail }) {
   return (
     <Stack spacing={0.75}>
       {present.map(([kind, spec]) => (
-        <Stack key={kind} direction="row" spacing={1.5} alignItems="center">
+        <Stack
+          key={kind}
+          direction="row"
+          spacing={1.5}
+          sx={{
+            alignItems: "center",
+          }}
+        >
           <Chip size="small" variant="outlined" label={kind} sx={{ minWidth: 72 }} />
-          <Typography variant="body2" fontFamily="monospace">
+          <Typography
+            variant="body2"
+            sx={{
+              fontFamily: "monospace",
+            }}
+          >
             {spec?.cron ?? "—"}
           </Typography>
         </Stack>
@@ -81,7 +98,12 @@ function FeedStateSection({ detail }: { detail: PoiSourceDetail }) {
   const feedState = detail.feedState;
   if (!feedState) {
     return (
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         No ingest has run yet.
       </Typography>
     );
@@ -89,8 +111,20 @@ function FeedStateSection({ detail }: { detail: PoiSourceDetail }) {
   const hashShort = feedState.lastStaticHash ? feedState.lastStaticHash.slice(0, 12) : "—";
   return (
     <Stack spacing={1}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Typography variant="body2" color="text.secondary" sx={{ minWidth: 160 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+        }}
+      >
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            minWidth: 160,
+          }}
+        >
           Status
         </Typography>
         <Chip
@@ -101,19 +135,35 @@ function FeedStateSection({ detail }: { detail: PoiSourceDetail }) {
         />
       </Stack>
       <Stack direction="row" spacing={1}>
-        <Typography variant="body2" color="text.secondary" sx={{ minWidth: 160 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            minWidth: 160,
+          }}
+        >
           Last static ingest
         </Typography>
         <Box>
           <Typography variant="body2">{formatTime(feedState.lastStaticIngestAt)}</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {feedState.lastStaticRowCount === null
               ? "— rows"
               : `${feedState.lastStaticRowCount.toLocaleString()} rows`}
             {" · "}
             {feedState.lastStaticHash ? (
               <Tooltip title={feedState.lastStaticHash}>
-                <Box component="span" fontFamily="monospace">
+                <Box
+                  component="span"
+                  sx={{
+                    fontFamily: "monospace",
+                  }}
+                >
                   {hashShort}
                 </Box>
               </Tooltip>
@@ -124,23 +174,51 @@ function FeedStateSection({ detail }: { detail: PoiSourceDetail }) {
         </Box>
       </Stack>
       <Stack direction="row" spacing={1}>
-        <Typography variant="body2" color="text.secondary" sx={{ minWidth: 160 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            minWidth: 160,
+          }}
+        >
           Last live ingest
         </Typography>
         <Box>
           <Typography variant="body2">{formatTime(feedState.lastLiveIngestAt)}</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             {feedState.lastLiveRowCount === null
               ? "— rows"
               : `${feedState.lastLiveRowCount.toLocaleString()} rows`}
           </Typography>
         </Box>
       </Stack>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Typography variant="body2" color="text.secondary" sx={{ minWidth: 160 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+        }}
+      >
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            minWidth: 160,
+          }}
+        >
           Consecutive failures
         </Typography>
-        <Typography variant="body2" fontWeight={feedState.consecutiveFailures > 0 ? 700 : 400}>
+        <Typography
+          variant="body2"
+          sx={{
+            fontWeight: feedState.consecutiveFailures > 0 ? 700 : 400,
+          }}
+        >
           {feedState.consecutiveFailures}
         </Typography>
       </Stack>
@@ -153,7 +231,14 @@ function LastErrorSection({ detail }: { detail: PoiSourceDetail }) {
   if (!err) return null;
   return (
     <Box>
-      <Typography variant="subtitle2" fontWeight={700} mb={0.75} color="error.main">
+      <Typography
+        variant="subtitle2"
+        sx={{
+          fontWeight: 700,
+          mb: 0.75,
+          color: "error.main",
+        }}
+      >
         Last error
       </Typography>
       <Alert severity="error" variant="outlined" sx={{ mb: 1 }}>
@@ -190,7 +275,12 @@ function LastErrorSection({ detail }: { detail: PoiSourceDetail }) {
 function RecentJobsSection({ detail }: { detail: PoiSourceDetail }) {
   if (detail.recentJobs.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         No jobs recorded yet.
       </Typography>
     );
@@ -213,7 +303,12 @@ function RecentJobsSection({ detail }: { detail: PoiSourceDetail }) {
             <TableRow key={job.jobId} hover>
               <TableCell>
                 <Tooltip title={job.jobId}>
-                  <Typography variant="caption" fontFamily="monospace">
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontFamily: "monospace",
+                    }}
+                  >
                     {job.jobId.slice(0, 8)}…
                   </Typography>
                 </Tooltip>
@@ -274,17 +369,35 @@ export function SourceDetailDrawerBody({
 
   return (
     <Box sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-        <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 700,
+            flex: 1,
+          }}
+        >
           Source detail
         </Typography>
         <IconButton size="small" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </Stack>
-
       {isLoading && (
-        <Box display="flex" justifyContent="center" py={4}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            py: 4,
+          }}
+        >
           <CircularProgress size={24} />
         </Box>
       )}
@@ -292,24 +405,53 @@ export function SourceDetailDrawerBody({
       {data && (
         <Stack spacing={2.5}>
           <Box>
-            <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
               <Typography variant="h6">{data.source.name}</Typography>
               <Chip size="small" variant="outlined" label={data.source.domain} />
             </Stack>
-            <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                fontFamily: "monospace",
+              }}
+            >
               {data.source.id}
             </Typography>
           </Box>
 
           <Stack spacing={0.5}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               {data.source.coverage
                 ? `Coverage bbox: [${data.source.coverage.join(", ")}]`
                 : "Global (no coverage bbox)"}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Station ID prefix:{" "}
-              <Box component="span" fontFamily="monospace">
+              <Box
+                component="span"
+                sx={{
+                  fontFamily: "monospace",
+                }}
+              >
                 {data.source.stationIdPrefix}
               </Box>
             </Typography>
@@ -318,7 +460,13 @@ export function SourceDetailDrawerBody({
           <Divider />
 
           <Box>
-            <Typography variant="subtitle2" fontWeight={700} mb={1}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 700,
+                mb: 1,
+              }}
+            >
               Schedule
             </Typography>
             <ScheduleSection detail={data} />
@@ -327,7 +475,13 @@ export function SourceDetailDrawerBody({
           <Divider />
 
           <Box>
-            <Typography variant="subtitle2" fontWeight={700} mb={1}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 700,
+                mb: 1,
+              }}
+            >
               Current state
             </Typography>
             <FeedStateSection detail={data} />
@@ -338,7 +492,13 @@ export function SourceDetailDrawerBody({
           <Divider />
 
           <Box>
-            <Typography variant="subtitle2" fontWeight={700} mb={1}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 700,
+                mb: 1,
+              }}
+            >
               Recent jobs ({data.recentJobs.length})
             </Typography>
             <RecentJobsSection detail={data} />
@@ -347,10 +507,23 @@ export function SourceDetailDrawerBody({
           <Divider />
 
           <Box>
-            <Typography variant="subtitle2" fontWeight={700} mb={1}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 700,
+                mb: 1,
+              }}
+            >
               Actions
             </Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{
+                flexWrap: "wrap",
+              }}
+            >
               <Button
                 variant="contained"
                 size="small"
@@ -409,7 +582,7 @@ export function SourceDetailDrawer({
       anchor="right"
       open={sourceId !== null}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: "100%", sm: 600 } } }}
+      slotProps={{ paper: { sx: { width: { xs: "100%", sm: 600 } } } }}
     >
       {sourceId !== null && <SourceDetailDrawerBody sourceId={sourceId} onClose={onClose} />}
     </Drawer>

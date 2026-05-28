@@ -238,8 +238,12 @@ export function PlaceHarborFacilities({ harbourId, lat, lng, name, category }: P
         {attributionSource && (
           <Typography
             variant="caption"
-            color="text.secondary"
-            sx={{ mt: 1, display: "block", fontSize: 10 }}
+            sx={{
+              color: "text.secondary",
+              mt: 1,
+              display: "block",
+              fontSize: 10,
+            }}
           >
             ©{" "}
             <Link

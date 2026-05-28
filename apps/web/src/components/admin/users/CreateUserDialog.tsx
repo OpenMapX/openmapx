@@ -59,7 +59,12 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Create User</DialogTitle>
       <DialogContent>
-        <Stack gap={2} pt={1}>
+        <Stack
+          sx={{
+            gap: 2,
+            pt: 1,
+          }}
+        >
           <TextField
             label="Full Name"
             value={name}

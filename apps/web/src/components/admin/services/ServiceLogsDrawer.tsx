@@ -117,26 +117,41 @@ export function ServiceLogsDrawer({
       anchor="right"
       open={open}
       onClose={handleClose}
-      PaperProps={{
-        sx: {
-          width: { xs: "100vw", sm: 640, md: 720 },
-          display: "flex",
-          flexDirection: "column",
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: "100vw", sm: 640, md: 720 },
+            display: "flex",
+            flexDirection: "column",
+          },
         },
       }}
     >
       <Stack
         direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        px={2}
-        py={1.5}
-        borderBottom={1}
-        borderColor="divider"
-        flexShrink={0}
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          px: 2,
+          py: 1.5,
+          borderBottom: 1,
+          borderColor: "divider",
+          flexShrink: 0,
+        }}
       >
-        <Stack direction="row" alignItems="center" gap={1}>
-          <Typography variant="subtitle1" fontWeight={700}>
+        <Stack
+          direction="row"
+          sx={{
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+            }}
+          >
             Logs — {serviceName}
           </Typography>
           {streaming && (
@@ -161,7 +176,6 @@ export function ServiceLogsDrawer({
           <CloseIcon fontSize="small" />
         </IconButton>
       </Stack>
-
       <Box
         sx={{
           flex: 1,
@@ -171,19 +185,38 @@ export function ServiceLogsDrawer({
         }}
       >
         {error && (
-          <Typography variant="body2" color="error.light" fontFamily="monospace" sx={{ mb: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "error.light",
+              fontFamily: "monospace",
+              mb: 1,
+            }}
+          >
             Error: {error}
           </Typography>
         )}
 
         {lines.length === 0 && !streaming && !error && (
-          <Typography variant="body2" color="text.secondary" fontFamily="monospace">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              fontFamily: "monospace",
+            }}
+          >
             No log output available.
           </Typography>
         )}
 
         {lines.length === 0 && streaming && (
-          <Typography variant="body2" color="text.secondary" fontFamily="monospace">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              fontFamily: "monospace",
+            }}
+          >
             Waiting for log output…
           </Typography>
         )}

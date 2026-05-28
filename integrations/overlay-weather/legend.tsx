@@ -97,7 +97,6 @@ export function WeatherLegend() {
           }}
         />
       )}
-
       {/* Header: title with location + toggle */}
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
         <Typography
@@ -120,7 +119,6 @@ export function WeatherLegend() {
           sx={{ ml: 2 }}
         />
       </Box>
-
       {/* Current weather conditions */}
       {currentWeather ? (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
@@ -155,7 +153,6 @@ export function WeatherLegend() {
           {t("noData")}
         </Typography>
       ) : null}
-
       {/* Sub-layer chips — hidden when only one option available */}
       {availableSubLayers.length > 1 && (
         <Box
@@ -182,7 +179,6 @@ export function WeatherLegend() {
           ))}
         </Box>
       )}
-
       {/* Radar time slider + play button */}
       {showRadarControls && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -237,21 +233,21 @@ export function WeatherLegend() {
           </Typography>
         </Box>
       )}
-
       {/* Radar unavailable message */}
       {activeSubLayer === "radar" && radarUnavailable && (
         <Typography sx={{ fontSize: 12, color: "error.main", mb: 0.75 }}>
           {t("radarUnavailable")}
         </Typography>
       )}
-
       {/* Attribution (from manifest dataSources -- trusted, not user-generated) */}
       {attributionHtml && (
         <Typography
           variant="caption"
-          color="text.secondary"
-          sx={{ mt: 1 }}
           dangerouslySetInnerHTML={{ __html: attributionHtml }}
+          sx={{
+            color: "text.secondary",
+            mt: 1,
+          }}
         />
       )}
     </Paper>

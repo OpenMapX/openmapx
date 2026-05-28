@@ -172,9 +172,10 @@ function NavLink({
         <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
         <ListItemText
           primary={item.label}
-          primaryTypographyProps={{
-            fontSize: 14,
-            fontWeight: active || sectionActive ? 600 : 400,
+          slotProps={{
+            primary: {
+              sx: { fontSize: 14, fontWeight: active || sectionActive ? 600 : 400 },
+            },
           }}
         />
       </ListItemButton>
@@ -206,7 +207,7 @@ function SubNavLink({ item, active }: { item: SubItem; active: boolean }) {
         <ListItemIcon sx={{ minWidth: 30 }}>{item.icon}</ListItemIcon>
         <ListItemText
           primary={item.label}
-          primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 600 : 400 }}
+          slotProps={{ primary: { sx: { fontSize: 13, fontWeight: active ? 600 : 400 } } }}
         />
       </ListItemButton>
     </ListItem>
@@ -233,7 +234,14 @@ export function AdminSidebar({ open, onClose, selfHosted = false }: AdminSidebar
   const drawerContent = (
     <>
       <Toolbar sx={{ px: 2, minHeight: `${TOPBAR_HEIGHT}px !important` }}>
-        <Typography variant="subtitle2" fontWeight={700} color="text.secondary" noWrap>
+        <Typography
+          variant="subtitle2"
+          noWrap
+          sx={{
+            fontWeight: 700,
+            color: "text.secondary",
+          }}
+        >
           OpenMapX Admin
         </Typography>
       </Toolbar>
