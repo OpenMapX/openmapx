@@ -506,53 +506,59 @@ function StructuredSectionCard({
 
   return (
     <Box sx={{ px: 2, py: 1.25 }}>
-      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-        <Box sx={{ color: TEAL, flexShrink: 0, display: "flex", mt: 0.25 }}>
-          {renderSectionIcon(section.sectionIcon)}
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+      {/* Header row — icon, title and chevron share one center-aligned row so
+          the title sits vertically in line with the icon. */}
+      <Box
+        sx={{
+          display: "flex",
+          gap: 2,
+          alignItems: "center",
+          justifyContent: "space-between",
+          ...(collapsed ? { cursor: "pointer" } : {}),
+        }}
+        onClick={collapsed ? () => setExpanded((value) => !value) : undefined}
+      >
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center", minWidth: 0, flex: 1 }}>
           <Box
             sx={{
+              color: TEAL,
+              flexShrink: 0,
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              mb: expanded ? 0.5 : 0,
-              ...(collapsed ? { cursor: "pointer" } : {}),
+              justifyContent: "center",
+              width: 24,
             }}
-            onClick={collapsed ? () => setExpanded((value) => !value) : undefined}
           >
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 600,
-              }}
-            >
-              {section.title}
-            </Typography>
-            {collapsed && (
-              <IconButton size="small" sx={{ ml: 0.5, p: 0 }}>
-                <ExpandMoreIcon
-                  sx={{
-                    fontSize: 18,
-                    transform: expanded ? "rotate(180deg)" : "none",
-                    transition: "transform 0.2s",
-                  }}
-                />
-              </IconButton>
-            )}
+            {renderSectionIcon(section.sectionIcon)}
           </Box>
-          {collapsed ? (
-            <Collapse
-              in={expanded}
-              mountOnEnter={deferCollapsedContent}
-              unmountOnExit={deferCollapsedContent}
-            >
-              <SectionContent section={section} pricingLabels={pricingLabels} />
-            </Collapse>
-          ) : (
-            <SectionContent section={section} pricingLabels={pricingLabels} />
-          )}
+          <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0 }}>
+            {section.title}
+          </Typography>
         </Box>
+        {collapsed && (
+          <IconButton size="small" sx={{ ml: 0.5, p: 0, flexShrink: 0 }}>
+            <ExpandMoreIcon
+              sx={{
+                fontSize: 18,
+                transform: expanded ? "rotate(180deg)" : "none",
+                transition: "transform 0.2s",
+              }}
+            />
+          </IconButton>
+        )}
+      </Box>
+      {/* Body — indented to align under the title (icon width 24 + gap 16). */}
+      <Box sx={{ pl: 5, mt: expanded ? 0.5 : 0, minWidth: 0 }}>
+        {collapsed ? (
+          <Collapse
+            in={expanded}
+            mountOnEnter={deferCollapsedContent}
+            unmountOnExit={deferCollapsedContent}
+          >
+            <SectionContent section={section} pricingLabels={pricingLabels} />
+          </Collapse>
+        ) : (
+          <SectionContent section={section} pricingLabels={pricingLabels} />
+        )}
       </Box>
     </Box>
   );
