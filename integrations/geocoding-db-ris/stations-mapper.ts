@@ -116,7 +116,11 @@ interface StationDetailSection {
   title: I18nToken;
   type: "table" | "list";
   collapsed?: boolean;
-  rows?: Translatable[][];
+  // Mirrors the framework contract: 2-cell rows are token-label-strict;
+  // 3+-cell grids carry their labels in column headers, so cells are free.
+  rows?:
+    | [I18nToken, Translatable][]
+    | [Translatable, Translatable, Translatable, ...Translatable[]][];
   items?: (I18nToken | string)[];
 }
 
@@ -126,9 +130,12 @@ const TRAVELER_TYPE_TOKEN: Record<string, I18nToken> = {
   MOBILITY_RESTRICTED: token("value.travelerMobilityRestricted"),
 };
 
-function travelerTypeLabel(type: string | undefined): Translatable {
+function travelerTypeLabel(type: string | undefined): I18nToken {
   if (!type) return TRAVELER_TYPE_TOKEN.COMMUTER;
-  return TRAVELER_TYPE_TOKEN[type] ?? type;
+  // Unknown DB enum values pass through as a literal token so the row label
+  // stays I18nToken-typed (no raw string crosses the contract) while still
+  // surfacing the raw value.
+  return TRAVELER_TYPE_TOKEN[type] ?? token("value.travelerLiteral", { type });
 }
 
 export function buildStationDetail(
@@ -142,7 +149,7 @@ export function buildStationDetail(
     sections.push({
       title: token("section.platforms"),
       type: "table",
-      rows: platforms.map((p) => [
+      rows: platforms.map((p): [Translatable, Translatable, Translatable, Translatable] => [
         p.name,
         p.length ? token("value.metersValue", { count: p.length }) : "-",
         p.height ? token("value.centimetersValue", { count: p.height }) : "-",
@@ -156,7 +163,7 @@ export function buildStationDetail(
       title: token("section.transferTimes"),
       type: "table",
       collapsed: true,
-      rows: connectingTimes.map((ct) => [
+      rows: connectingTimes.map((ct): [I18nToken, Translatable] => [
         travelerTypeLabel(ct.type),
         ct.defaultDuration ? token("value.minutesValue", { count: ct.defaultDuration }) : "-",
       ]),

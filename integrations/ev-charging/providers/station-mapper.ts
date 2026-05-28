@@ -106,10 +106,12 @@ function formatTimestamp(value: string | undefined): string | undefined {
     .replace(/\.\d{3}Z$/, " UTC");
 }
 
-function connectorRows(station: EvChargingStation): Translatable[][] {
+function connectorRows(
+  station: EvChargingStation,
+): [Translatable, Translatable, Translatable, ...Translatable[]][] {
   return [...station.connectors]
     .sort((a, b) => (b.powerKw ?? 0) - (a.powerKw ?? 0))
-    .map((conn) => [
+    .map((conn): [Translatable, Translatable, Translatable, Translatable, Translatable] => [
       conn.type ?? sharedT.value.unknown,
       formatPower(conn.powerKw),
       conn.currentType ?? "-",

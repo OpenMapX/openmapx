@@ -129,21 +129,28 @@ export interface DataSourceDetailSection {
   type: "table" | "list" | "text" | "image" | "embed" | "pricing";
   columns?: I18nToken[];
   /**
-   * Table rows. Two shapes are accepted:
+   * Table rows. Two shapes are accepted, distinguished by cell count:
    *
-   *  - `[label, value]` 2-tuples for the canonical key/value layout where
-   *    the left cell is a row label. The label is `I18nToken`-strict; the
-   *    value is `Translatable` (token, raw string, or number — the right
-   *    column legitimately mixes translated text with upstream pass-through:
-   *    operator addresses, prices, formatted numbers).
-   *  - Wider `Translatable[]` rows for true multi-column tables driven by
-   *    `columns` headers (e.g. EV connector tables). Each cell is a value;
-   *    the "label" semantics live in the column header rather than the row.
+   *  - `[label, value]` 2-tuples for the canonical key/value layout. The
+   *    label (left cell) is `I18nToken`-strict — a raw string here is a
+   *    compile error, which is what keeps un-translated labels off the wire.
+   *    The value (right cell) is `Translatable` (token, raw string, or number),
+   *    because the right column legitimately mixes translated text with
+   *    upstream pass-through: operator addresses, prices, formatted numbers.
+   *  - Wider rows of **3 or more** cells for true multi-column tables driven
+   *    by `columns` headers (e.g. EV connector tables). Each cell is a value;
+   *    the "label" semantics live in the column header rather than the row, so
+   *    cells are unconstrained `Translatable`.
    *
-   * The web renderer dispatches on `row.length === 2` to pick between
-   * label/value and multi-column rendering.
+   * The ≥3-cell lower bound on the grid form is load-bearing: it prevents a
+   * 2-cell row from satisfying the grid member and thereby smuggling a
+   * raw-string label past the token-strict key/value member. The web renderer
+   * dispatches on `row.length === 2` to pick between label/value and
+   * multi-column rendering.
    */
-  rows?: [I18nToken, Translatable][] | Translatable[][];
+  rows?:
+    | [I18nToken, Translatable][]
+    | [Translatable, Translatable, Translatable, ...Translatable[]][];
   /**
    * User-visible list items. Tokens preferred for fixed vocabulary; raw
    * `string` passthrough allowed for upstream-provided notes (operator

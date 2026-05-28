@@ -210,7 +210,9 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   const sections: DataSourceDetailSection[] = [];
 
   // Availability table
-  const rows: (Translatable | number)[][] = [[T.row.availableVehicles, station.availableVehicles]];
+  const rows: [I18nTokenLike, Translatable][] = [
+    [T.row.availableVehicles, station.availableVehicles],
+  ];
   if (station.emptySlots !== undefined) {
     rows.push([T.row.emptySlots, station.emptySlots]);
   }
@@ -236,7 +238,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Transit info
   if (station.transitInfo?.lines || station.transitInfo?.stops) {
-    const transitRows: (Translatable | number)[][] = [];
+    const transitRows: [I18nTokenLike, Translatable][] = [];
     if (station.transitInfo.lines) {
       transitRows.push([T.row.busLines, station.transitInfo.lines]);
     }
@@ -253,7 +255,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Vehicle type details (structured — from GBFS)
   if (station.vehicleTypeDetails && station.vehicleTypeDetails.length > 0) {
-    const vtRows: (Translatable | number)[][] = [];
+    const vtRows: [I18nTokenLike, Translatable][] = [];
     for (const vt of station.vehicleTypeDetails) {
       const labelText: string | undefined =
         (vt.make && vt.model ? `${vt.make} ${vt.model}` : vt.name) || undefined;
@@ -324,7 +326,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Rental links
   if (station.rentalUris) {
-    const linkRows: (Translatable | number)[][] = [];
+    const linkRows: [I18nTokenLike, Translatable][] = [];
     if (station.rentalUris.web) linkRows.push([T.row.web, station.rentalUris.web]);
     if (station.rentalUris.android) linkRows.push([T.row.android, station.rentalUris.android]);
     if (station.rentalUris.ios) linkRows.push([T.row.ios, station.rentalUris.ios]);
@@ -340,7 +342,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   }
 
   if (station.rentalApps) {
-    const appRows: (Translatable | number)[][] = [];
+    const appRows: [I18nTokenLike, Translatable][] = [];
     if (station.rentalApps.ios?.storeUri)
       appRows.push([T.row.iosApp, station.rentalApps.ios.storeUri]);
     if (station.rentalApps.android?.storeUri) {
@@ -479,7 +481,7 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
 export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
-  const rows: (Translatable | number)[][] = [];
+  const rows: [I18nTokenLike, Translatable][] = [];
   rows.push([T.row.type, formFactorToken(vehicle.formFactor)]);
   if (vehicle.propulsion) {
     rows.push([T.row.propulsion, propulsionToken(vehicle.propulsion)]);
@@ -510,7 +512,7 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
   });
 
   if (vehicle.rentalUris || vehicle.rentalApps) {
-    const linkRows: (Translatable | number)[][] = [];
+    const linkRows: [I18nTokenLike, Translatable][] = [];
     if (vehicle.rentalUris?.web) linkRows.push([T.row.web, vehicle.rentalUris.web]);
     if (vehicle.rentalUris?.ios) linkRows.push([T.row.ios, vehicle.rentalUris.ios]);
     if (vehicle.rentalUris?.android) linkRows.push([T.row.android, vehicle.rentalUris.android]);

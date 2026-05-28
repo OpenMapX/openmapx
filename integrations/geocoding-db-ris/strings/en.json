@@ -10,6 +10,7 @@
     "travelerStandard": "Standard",
     "travelerOccasional": "Occasional",
     "travelerMobilityRestricted": "Mobility-restricted",
+    "travelerLiteral": "{type}",
     "stepFree": "Step-free",
     "metersValue": "{count} m",
     "centimetersValue": "{count} cm",
