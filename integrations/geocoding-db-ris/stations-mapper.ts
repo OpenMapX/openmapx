@@ -113,7 +113,7 @@ export interface StationDetail {
 }
 
 interface StationDetailSection {
-  title: I18nToken | string;
+  title: I18nToken;
   type: "table" | "list";
   collapsed?: boolean;
   rows?: Translatable[][];
