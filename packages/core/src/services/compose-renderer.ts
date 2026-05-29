@@ -591,7 +591,20 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
 
   const composeDoc = {
     services: composeServices,
-    networks: { openmapx: { driver: "bridge" } },
+    networks: {
+      openmapx: {
+        driver: "bridge",
+        // Dual-stack so containers get IPv6 addresses and published ports
+        // (Traefik's 80/443) are reachable over IPv6 on the host. The explicit
+        // ULA subnet avoids depending on the daemon's IPv6 default-address-pools
+        // (not configured out of the box), which would otherwise fail network
+        // creation on engines without the auto-ULA behaviour. Host-side IPv6
+        // publishing additionally requires the daemon's `ip6tables` to be on
+        // (default in Docker Engine 27+).
+        enable_ipv6: true,
+        ipam: { config: [{ subnet: "fd4d:5058::/64" }] },
+      },
+    },
     ...(Object.keys(namedVolumes).length ? { volumes: namedVolumes } : {}),
   };
 

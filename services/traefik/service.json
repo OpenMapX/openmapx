@@ -24,7 +24,11 @@
     { "source": "config/dynamic", "target": "/etc/traefik/dynamic", "readOnly": true }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 80, "host": 80 }, { "container": 443, "host": 443 }]
+    "hostPorts": [
+      { "container": 80, "host": 80 },
+      { "container": 443, "host": 443 },
+      { "container": 443, "host": 443, "protocol": "udp" }
+    ]
   },
   "ui": { "category": "infrastructure" }
 }

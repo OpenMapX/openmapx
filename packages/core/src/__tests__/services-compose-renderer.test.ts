@@ -52,6 +52,21 @@ describe("renderServiceSnippet", () => {
     expect(snippet.ports).toEqual(["127.0.0.1:8080:80/tcp"]);
   });
 
+  it("renders a UDP host port mapping (HTTP/3 / QUIC)", () => {
+    const snippet = renderServiceSnippet(
+      svc("alpha", {
+        exposure: {
+          hostPorts: [
+            { container: 443, host: 443 },
+            { container: 443, host: 443, protocol: "udp" },
+          ],
+        },
+      }),
+      {},
+    );
+    expect(snippet.ports).toEqual(["443:443", "443:443/udp"]);
+  });
+
   it("renders Traefik labels when exposure.proxy.enabled", () => {
     const snippet = renderServiceSnippet(
       svc("alpha", {
@@ -306,7 +321,13 @@ describe("renderCompose", () => {
     expect(parsed.services).toBeDefined();
     expect((parsed.services as Record<string, unknown>).alpha).toBeDefined();
     expect((parsed.services as Record<string, unknown>).beta).toBeDefined();
-    expect(parsed.networks).toEqual({ openmapx: { driver: "bridge" } });
+    expect(parsed.networks).toEqual({
+      openmapx: {
+        driver: "bridge",
+        enable_ipv6: true,
+        ipam: { config: [{ subnet: "fd4d:5058::/64" }] },
+      },
+    });
     expect(parsed.volumes).toEqual({ "openmapx-alpha-data": null });
   });
 

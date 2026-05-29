@@ -17,6 +17,12 @@ entryPoints:
 
   websecure:
     address: ":443"
+    # HTTP/3 (QUIC) over UDP/443. `advertisedPort` is the port announced to
+    # clients in the Alt-Svc header; it must match the published UDP host port
+    # (see services/traefik/service.json `exposure.hostPorts`). Clients still
+    # negotiate over TCP/443 first, then upgrade to QUIC.
+    http3:
+      advertisedPort: 443
     http:
       tls:
         certResolver: letsencrypt
