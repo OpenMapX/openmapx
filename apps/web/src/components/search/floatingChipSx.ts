@@ -6,13 +6,14 @@ import { TEAL } from "@/lib/theme";
  * (category chips, the category filter bar toggles, the opening-times chip).
  *
  * Two variants exist because the rows diverge in a few precise ways:
- *  - `category` (CategoryChips): scrollable row, so chips get `flexShrink: 0`
- *    and the inactive hover uses the theme-aware `--omx-chip-hover`.
+ *  - `category` (CategoryChips): scrollable row, so chips get `flexShrink: 0`.
  *  - `toggle` (CategoryFilterBar): the row wrapper has `pointerEvents: "none"`
- *    so each chip re-enables `pointerEvents: "auto"`, adds label right-padding,
- *    and uses `grey.300` for the inactive hover.
+ *    so each chip re-enables `pointerEvents: "auto"` and adds label
+ *    right-padding.
  *
- * The shared core (sizing, colors, icon styling, active hover) is identical.
+ * The shared core (sizing, colors, icon styling, hover) is identical — both
+ * use the theme-aware `--omx-chip-hover` so the inactive hover stays dark in
+ * dark mode.
  */
 export function floatingChipSx(active: boolean, variant: "category" | "toggle"): SxProps<Theme> {
   const base = {
@@ -43,7 +44,7 @@ export function floatingChipSx(active: boolean, variant: "category" | "toggle"):
     ...base,
     pointerEvents: "auto",
     "& .MuiChip-label": { pr: "10px" },
-    "&&:hover": { bgcolor: active ? "var(--omx-teal-hover)" : "grey.300" },
+    "&&:hover": { bgcolor: active ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)" },
   };
 }
 
