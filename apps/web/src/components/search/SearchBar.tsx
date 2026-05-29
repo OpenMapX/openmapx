@@ -578,7 +578,10 @@ export function SearchBar() {
     const first = geocodeData?.[0];
     const isTransit = Boolean(first?.rawCategory && isTransitRawCategory(first.rawCategory));
     if (first && (first.type !== "poi" || isTransit)) {
-      flyTo(first.coordinates, 15);
+      // Area results (cities/regions/countries) are framed by PlaceBoundaryLayer,
+      // which fits the map to the admin boundary — flying to a fixed zoom first
+      // would just cause a zoom-in-then-out jump.
+      if (first.type !== "region") flyTo(first.coordinates, 15);
       const firstPlace = createPlace({
         ...idsFromPrimaryOrCoords(first.id, first.coordinates),
         name: first.label,
@@ -655,7 +658,9 @@ export function SearchBar() {
     setIsFocused(false);
     if (result.coordinates) {
       const coords = result.coordinates;
-      flyTo(coords, 15);
+      // Area results are framed by PlaceBoundaryLayer (fit to admin boundary);
+      // skip the fixed-zoom fly to avoid a zoom-in-then-out jump.
+      if (result.type !== "region") flyTo(coords, 15);
       const suggestionPlace = createPlace({
         ...idsFromPrimaryOrCoords(result.id, coords),
         name: result.label,

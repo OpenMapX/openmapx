@@ -257,7 +257,7 @@ export type {
   ElevationStats,
 } from "./types/elevation";
 // Types that originated in integration stores but are used by core utilities
-export type { BBox, BoundingBox, LngLat, UnitSystem } from "./types/geometry";
+export type { AreaGeometry, BBox, BoundingBox, LngLat, UnitSystem } from "./types/geometry";
 export type {
   HikingFeatureCollection,
   HikingTrailDetail,

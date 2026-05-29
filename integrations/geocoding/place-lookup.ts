@@ -5,6 +5,8 @@
  */
 
 import {
+  type AreaGeometry,
+  type BBox,
   createPlace,
   haversineMeters,
   type OsmFilter,
@@ -283,6 +285,61 @@ export async function lookupByOsmRef(
   const data = await fetchNominatim<NominatimDetailResult[]>(url, lang);
   if (!data[0]) throw new Error(`Nominatim found no result for ${prefix}${osmId}`);
   return toPlace(data[0], originalId);
+}
+
+interface NominatimBoundaryResult {
+  osm_type: string;
+  osm_id: number;
+  /** [minlat, maxlat, minlon, maxlon] as strings. */
+  boundingbox?: [string, string, string, string];
+  geojson?: { type: string; coordinates: unknown };
+}
+
+/**
+ * Fetch the administrative-boundary outline for an OSM element via Nominatim
+ * `/lookup?polygon_geojson=1`. Returns the boundary polygon plus its extent,
+ * or null when the element has no area geometry (e.g. a point/way that isn't a
+ * boundary, or Nominatim is unreachable).
+ *
+ * `osmRef` is the canonical `${osm_type}/${osm_id}` string carried on
+ * `place.ids.osm`. `polygon_threshold` applies a small Douglas-Peucker
+ * simplification (~50 m) to keep city/region payloads reasonable.
+ */
+export async function fetchOsmBoundary(
+  osmRef: string,
+  lang?: string,
+): Promise<{ boundary: AreaGeometry; boundingBox?: BBox } | null> {
+  const [osmType, osmId] = osmRef.split("/");
+  const prefix = OSM_TYPE_PREFIX[osmType];
+  if (!prefix || !osmId) return null;
+
+  const url = new URL(`${NOMINATIM_URL}/lookup`);
+  url.searchParams.set("osm_ids", `${prefix}${osmId}`);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("polygon_geojson", "1");
+  url.searchParams.set("polygon_threshold", "0.0005");
+
+  try {
+    const data = await fetchNominatim<NominatimBoundaryResult[]>(url, lang);
+    const result = data[0];
+    const geojson = result?.geojson;
+    if (!geojson || (geojson.type !== "Polygon" && geojson.type !== "MultiPolygon")) {
+      return null;
+    }
+    const boundary = geojson as AreaGeometry;
+
+    let boundingBox: BBox | undefined;
+    if (result.boundingbox?.length === 4) {
+      const [south, north, west, east] = result.boundingbox.map(Number);
+      if ([south, north, west, east].every(Number.isFinite)) {
+        boundingBox = [west, south, east, north];
+      }
+    }
+
+    return { boundary, boundingBox };
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -13,6 +13,7 @@ import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
 import { CyclingBaseLayer } from "@/components/map/layers/CyclingBaseLayer";
 import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
+import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { SavedPlacesLayer } from "@/components/map/layers/SavedPlacesLayer";
@@ -124,6 +125,7 @@ export default function HomePage() {
           />
           <CyclingBaseLayer />
           {/* Core layers (not integration-managed) */}
+          <PlaceBoundaryLayer />
           <RouteLayer />
           <TransitRouteLayer />
           <VehicleLiveLayer />

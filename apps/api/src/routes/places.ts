@@ -1,4 +1,8 @@
-import { lookupByCoords, lookupByNameAndCoords } from "@integrations/geocoding/place-lookup";
+import {
+  fetchOsmBoundary,
+  lookupByCoords,
+  lookupByNameAndCoords,
+} from "@integrations/geocoding/place-lookup";
 import {
   deduplicatePhotos,
   getPhotoProviders,
@@ -106,6 +110,16 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     ...knowledge
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
+
+  // For administrative areas (cities, regions, countries), fetch the real OSM
+  // boundary outline so the client can draw a dashed border and fit the map to
+  // the whole area — mirroring Google Maps' city highlight. Gated on the
+  // `boundary=administrative` OSM tag so we never pull polygons for POIs.
+  const adminBoundary =
+    enriched.osmTags?.boundary === "administrative" && enriched.ids?.osm
+      ? await fetchOsmBoundary(enriched.ids.osm, lang)
+      : null;
+
   if (enriched.openingHours && !enriched.openingHoursInfo) {
     enriched.openingHoursInfo = buildOpeningHoursInfo(enriched.openingHours, {
       lat: enriched.coordinates[1],
@@ -135,6 +149,8 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     reviewLinks: buildReviewLinks(enriched),
     rating: reviewStats?.stars,
     reviewCount: reviewStats?.count,
+    boundary: adminBoundary?.boundary,
+    boundingBox: adminBoundary?.boundingBox,
   };
 }
 

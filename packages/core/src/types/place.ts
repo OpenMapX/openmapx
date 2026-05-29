@@ -1,5 +1,5 @@
 import type { DataSourceDetail } from "@openmapx/integration-framework";
-import type { LngLat } from "./geometry";
+import type { AreaGeometry, BBox, LngLat } from "./geometry";
 import type { Identified, Ids } from "./identified";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
 
@@ -133,4 +133,15 @@ export interface Place extends Identified {
   dataSourceDetail?: DataSourceDetail;
   /** OurAirports-derived structured airport detail (matched by IATA/ICAO from osmTags). */
   airport?: AirportInfo;
+  /**
+   * Administrative-boundary outline (Polygon/MultiPolygon, lng/lat coordinates)
+   * for places that are admin areas (cities, regions, countries). Drawn on the
+   * map as a dashed border, mirroring Google Maps' city highlight.
+   */
+  boundary?: AreaGeometry;
+  /**
+   * [west, south, east, north] extent of {@link boundary} — used to fit the map
+   * to the whole area instead of zooming to the centre point.
+   */
+  boundingBox?: BBox;
 }
