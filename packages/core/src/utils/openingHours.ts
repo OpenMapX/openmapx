@@ -5,6 +5,7 @@
 
 import type { nominatim_object } from "opening_hours";
 import opening_hours from "opening_hours";
+import tzLookup from "tz-lookup";
 import type {
   DaySchedule,
   LocationContext,
@@ -40,6 +41,51 @@ function buildNominatim(loc?: LocationContext): nominatim_object | undefined {
       state: loc.state ?? "",
     },
   };
+}
+
+/**
+ * "Now" expressed in the place's local wall-clock, encoded so that the
+ * `opening_hours` library — which reads a Date's *local* fields (getHours/
+ * getDay) — sees the place's time rather than the server's.
+ *
+ * The server runs in UTC, but we don't rely on that: the returned Date's local
+ * fields equal the place's wall-clock regardless of the runtime timezone,
+ * because we add back the runtime's own offset. All downstream Dates the
+ * library derives from this value (next-change, intervals) stay in the same
+ * frame, so `fmt()` and day comparisons remain internally consistent.
+ *
+ * Falls back to the real `new Date()` when the timezone can't be resolved.
+ */
+function placeNow(location?: LocationContext): Date {
+  const real = new Date();
+  if (!location) return real;
+  let tz: string;
+  try {
+    tz = tzLookup(location.lat, location.lon);
+  } catch {
+    return real; // coordinates outside the tz dataset (e.g. open ocean)
+  }
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(real);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const hour = get("hour") % 24; // Intl can emit "24" at midnight
+  const wallClockUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    hour,
+    get("minute"),
+    get("second"),
+  );
+  return new Date(wallClockUtc + real.getTimezoneOffset() * 60_000);
 }
 
 function fmt(d: Date): string {
@@ -106,7 +152,7 @@ export function parseOpeningHours(
 
   try {
     const oh = new opening_hours(raw, buildNominatim(location));
-    const now = new Date();
+    const now = placeNow(location);
     const isOpen = oh.getState(now);
     const isUnknown = oh.getUnknown(now);
     const comment = oh.getComment(now);
@@ -276,7 +322,7 @@ export function buildOpeningHoursInfo(
   try {
     const oh = new opening_hours(raw, buildNominatim(location));
     always = oh.getState() && oh.getNextChange() === undefined;
-    weekBitmap = buildWeekBitmap(oh, new Date());
+    weekBitmap = buildWeekBitmap(oh, placeNow(location));
   } catch {
     // Leave defaults — status already reflects the parse failure.
   }
