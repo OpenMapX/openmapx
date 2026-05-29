@@ -415,6 +415,8 @@ export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { searchResultToCategoryPlace } from "./utils/searchResultToCategoryPlace";
 export { sectionSlug } from "./utils/sectionSlug";
+export type { TideExtremaOptions, TideExtreme, TideSample } from "./utils/tideExtrema";
+export { despikeSeries, findTideExtrema } from "./utils/tideExtrema";
 export {
   USER_AGENT,
   USER_AGENT_ADMIN,

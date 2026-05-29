@@ -1,4 +1,10 @@
-import { createPlace, type Place, USER_AGENT } from "@openmapx/core";
+import {
+  createPlace,
+  despikeSeries,
+  findTideExtrema,
+  type Place,
+  USER_AGENT,
+} from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 
@@ -147,35 +153,18 @@ async function fetchMeasurements(uuid: string): Promise<PegelMeasurement[]> {
   return raw.filter((_, i) => i % 15 === 0);
 }
 
+/**
+ * Derive H/L events from the water-level series (cm). Uses the shared
+ * hysteresis detector so sensor noise / flat plateaus don't produce spurious
+ * extrema. Threshold: 5 cm or 12 % of the observed range, whichever is larger.
+ */
 function deriveExtrema(curve: Array<{ time: string; valueCm: number }>): TideEvent[] {
-  if (curve.length < 5) return [];
-  const events: TideEvent[] = [];
-  const W = 3;
-  for (let i = W; i < curve.length - W; i++) {
-    const v = curve[i].valueCm;
-    let isHigh = true;
-    let isLow = true;
-    for (let j = i - W; j <= i + W; j++) {
-      if (j === i) continue;
-      if (curve[j].valueCm > v) isHigh = false;
-      if (curve[j].valueCm < v) isLow = false;
-      if (!isHigh && !isLow) break;
-    }
-    if (isHigh) {
-      events.push({
-        time: curve[i].time,
-        type: "H",
-        valueFt: Math.round(v * CM_TO_FT * 100) / 100,
-      });
-    } else if (isLow) {
-      events.push({
-        time: curve[i].time,
-        type: "L",
-        valueFt: Math.round(v * CM_TO_FT * 100) / 100,
-      });
-    }
-  }
-  return events;
+  const samples = curve.map((p) => ({ time: p.time, value: p.valueCm }));
+  return findTideExtrema(samples, { minDelta: 5, relativeDelta: 0.12 }).map((e) => ({
+    time: e.time,
+    type: e.type,
+    valueFt: Math.round(e.value * CM_TO_FT * 100) / 100,
+  }));
 }
 
 async function buildTidesResponse(
@@ -191,10 +180,12 @@ async function buildTidesResponse(
   const obs = await fetchMeasurements(station.uuid);
   if (obs.length === 0) return null;
 
-  const curveRaw = obs.map((p) => ({
-    time: reformatPegelTime(p.timestamp),
-    valueCm: p.value,
-  }));
+  // Drop spike/sentinel outliers (>25 cm from the local median) before plotting
+  // or deriving extrema — one bad reading corrupts the range, threshold and events.
+  const curveRaw = despikeSeries(
+    obs.map((p) => ({ time: reformatPegelTime(p.timestamp), value: p.value })),
+    25,
+  ).map((p) => ({ time: p.time, valueCm: p.value }));
   const curve = curveRaw.map((p) => ({
     time: p.time,
     valueFt: Math.round(p.valueCm * CM_TO_FT * 100) / 100,

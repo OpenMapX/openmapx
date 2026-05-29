@@ -1,4 +1,10 @@
-import { createPlace, type Place, USER_AGENT } from "@openmapx/core";
+import {
+  createPlace,
+  despikeSeries,
+  findTideExtrema,
+  type Place,
+  USER_AGENT,
+} from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 
@@ -168,38 +174,17 @@ async function fetchObservations(stationCode: string): Promise<IocDataPoint[]> {
   return best.sort((a, b) => a.stime.localeCompare(b.stime));
 }
 
-/** Detect local extrema in a sorted observation series to derive past H/L events. */
+/**
+ * Derive past H/L events from the observation series (metres). Uses the shared
+ * hysteresis detector so sensor noise / flat plateaus don't produce spurious
+ * extrema. Threshold: 3 cm or 12 % of the observed range, whichever is larger.
+ */
 function deriveExtrema(curve: Array<{ time: string; value: number }>): TideEvent[] {
-  if (curve.length < 5) return [];
-  const events: TideEvent[] = [];
-  // Use a small window to skip noise; events must be a strict local max/min
-  // over ±2 samples (~10–60 min depending on station's XMtInt).
-  const W = 2;
-  for (let i = W; i < curve.length - W; i++) {
-    const v = curve[i].value;
-    let isHigh = true;
-    let isLow = true;
-    for (let j = i - W; j <= i + W; j++) {
-      if (j === i) continue;
-      if (curve[j].value > v) isHigh = false;
-      if (curve[j].value < v) isLow = false;
-      if (!isHigh && !isLow) break;
-    }
-    if (isHigh) {
-      events.push({
-        time: curve[i].time,
-        type: "H",
-        valueFt: Math.round(v * M_TO_FT * 100) / 100,
-      });
-    } else if (isLow) {
-      events.push({
-        time: curve[i].time,
-        type: "L",
-        valueFt: Math.round(v * M_TO_FT * 100) / 100,
-      });
-    }
-  }
-  return events;
+  return findTideExtrema(curve, { minDelta: 0.03, relativeDelta: 0.12 }).map((e) => ({
+    time: e.time,
+    type: e.type,
+    valueFt: Math.round(e.value * M_TO_FT * 100) / 100,
+  }));
 }
 
 async function buildTidesResponse(
@@ -215,10 +200,14 @@ async function buildTidesResponse(
   const obs = await fetchObservations(station.code);
   if (obs.length === 0) return null;
 
-  const curveRaw = obs.map((p) => ({
-    time: reformatIocTime(p.stime),
-    value: p.slevel,
-  }));
+  // IOC raw gauge data carries occasional spikes / sentinels (e.g. an exact
+  // -1.0 m glitch); drop them before plotting or deriving extrema, since one
+  // outlier corrupts the range, threshold and event list. 0.25 m is far beyond
+  // any real tide change over the ~15 s sampling interval.
+  const curveRaw = despikeSeries(
+    obs.map((p) => ({ time: reformatIocTime(p.stime), value: p.slevel })),
+    0.25,
+  );
   const curve = curveRaw.map((p) => ({
     time: p.time,
     valueFt: Math.round(p.value * M_TO_FT * 100) / 100,
