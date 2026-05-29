@@ -193,6 +193,8 @@ export interface CategoryPlaceResult {
   website?: string;
   openingHours?: string;
   isOpen?: boolean;
+  /** Curated subset of OSM tags surfaced for client-side facet filters (see FILTERABLE_TAG_KEYS). */
+  osmTags?: Record<string, string>;
   fuelPrices?: { e5?: number; e10?: number; diesel?: number };
   fuelPricesUpdatedAt?: string;
   fuelAttribution?: { label: string; url: string };
@@ -230,6 +232,32 @@ function buildPresetQuery(tags: Record<string, string>, bbox: BoundingBox): stri
     "\n  ",
   );
   return `[out:json][timeout:15];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+}
+
+// OSM tag keys surfaced on results for client-side facet filters (wheelchair,
+// the food/drink facets, etc.). Kept to a small allowlist so the payload stays
+// lean — add a key here when introducing a new facet filter (see CATEGORY_FACETS).
+const FILTERABLE_TAG_KEYS = [
+  "wheelchair",
+  "outdoor_seating",
+  "takeaway",
+  "delivery",
+  "internet_access",
+  "diet:vegetarian",
+  "diet:vegan",
+  "diet:halal",
+  "diet:kosher",
+  "diet:gluten_free",
+  "cuisine",
+] as const;
+
+function pickFilterableTags(tags: Record<string, string>): Record<string, string> | undefined {
+  const picked: Record<string, string> = {};
+  for (const key of FILTERABLE_TAG_KEYS) {
+    const value = tags[key];
+    if (value) picked[key] = value;
+  }
+  return Object.keys(picked).length > 0 ? picked : undefined;
 }
 
 function formatAddress(tags: Record<string, string>): string | undefined {
@@ -298,6 +326,7 @@ function mapOverpassElements(elements: readonly OverpassElement[]): CategoryPlac
       phone: tags.phone ?? tags["contact:phone"] ?? undefined,
       website: tags.website ?? tags["contact:website"] ?? undefined,
       openingHours: tags.opening_hours ?? undefined,
+      osmTags: pickFilterableTags(tags),
     });
   }
   return results;

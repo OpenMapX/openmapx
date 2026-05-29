@@ -217,6 +217,7 @@ export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
 // Panel system
 export type { PanelDefinition, PanelLayer } from "./panels/types";
 export { configureStorage, getStorage, type StorageAdapter } from "./platform";
+export { useCategoryFacetStore } from "./stores/categoryFacetStore";
 // Core stores (platform-level, stay in packages/core)
 export { useCategorySearchStore } from "./stores/categorySearchStore";
 export { useCommandPaletteStore } from "./stores/commandPaletteStore";
@@ -306,6 +307,13 @@ export {
 } from "./utils/attribution";
 export { bboxAroundPoint } from "./utils/bbox";
 export { withCache } from "./utils/cache-helpers";
+export type { CategoryFacet, FacetPlacement, FacetType } from "./utils/categoryFacets";
+export {
+  applyFacetFilters,
+  CATEGORY_FACETS,
+  cuisineOptions,
+  facetsForCategory,
+} from "./utils/categoryFacets";
 export { applyHoursFilter } from "./utils/categoryFilter";
 // Utils
 export {

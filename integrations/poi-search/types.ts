@@ -73,6 +73,9 @@ export interface CategoryDefinition {
   iconPath: string;
   /** Whether this category supports the opening hours filter chip. */
   supportsHoursFilter?: boolean;
+  /** Whether this category supports the food/drink facet filters (outdoor
+   *  seating, takeaway, delivery, Wi-Fi, diet, cuisine) in the Filters panel. */
+  supportsFoodFilters?: boolean;
 }
 
 export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
@@ -81,6 +84,7 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     label: "Restaurants",
     showInChipBar: true,
     supportsHoursFilter: true,
+    supportsFoodFilters: true,
     iconPath:
       "M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4",
   },
@@ -134,6 +138,7 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     label: "Cafes",
     showInChipBar: false,
     supportsHoursFilter: true,
+    supportsFoodFilters: true,
     iconPath:
       "M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.9 2-2V5c0-1.11-.89-2-2-2m0 5h-2V5h2zM4 19h16v2H4z",
   },
@@ -142,6 +147,7 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     label: "Bars & Pubs",
     showInChipBar: false,
     supportsHoursFilter: true,
+    supportsFoodFilters: true,
     iconPath:
       "M19 9h-1.56c.35-.59.56-1.27.56-2 0-2.21-1.79-4-4-4-.34 0-.66.05-.98.13-.82-.68-1.86-1.11-3.02-1.11-1.89 0-3.51 1.11-4.27 2.71C4.15 5.26 3 6.74 3 8.5c0 1.86 1.28 3.41 3 3.86V21h11v-2h2c1.1 0 2-.9 2-2v-6c0-1.1-.9-2-2-2M7 10.5c-1.1 0-2-.9-2-2 0-.85.55-1.6 1.37-1.88l.8-.27.36-.76C8 4.62 8.94 4.02 10 4.02c.79 0 1.39.35 1.74.65l.78.65S13.16 5 13.99 5c1.1 0 2 .9 2 2h-3C9.67 7 9.15 10.5 7 10.5M19 17h-2v-6h2z",
   },
@@ -296,6 +302,7 @@ export const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     id: "bakeries",
     label: "Bakeries",
     showInChipBar: false,
+    supportsFoodFilters: true,
     iconPath:
       "M20.5 17.5c.4 0 .75-.23.92-.58L23 13l-1.93-3.96c-.17-.35-.52-.54-.89-.54H15c-.55 0-1 .45-1 1v2h-2V9.5l6.5-1V5l-6.5 1V3h-2v3.13L4 7.5v3h-.5c-.55 0-1 .45-1 1V19h16v-1.5zm-4-5h4l1 2.5-1 2.5h-4v-5zm-2 5H4v-6h10.5v6z",
   },
@@ -466,6 +473,8 @@ export interface CategoryPlace {
   isOpen?: boolean;
   /** Server-precomputed status/bitmap; absent when `openingHours` is missing. */
   openingHoursInfo?: OpeningHoursInfo;
+  /** Curated OSM tags for client-side facet filters (e.g. `wheelchair`). */
+  osmTags?: Record<string, string>;
 }
 
 export interface CategorySearchResponse {
@@ -476,6 +485,11 @@ export interface CategorySearchResponse {
 /** Set of category IDs that support the opening hours filter chip, derived from CATEGORY_DEFINITIONS. */
 export const HOURS_FILTER_CATEGORY_IDS: ReadonlySet<string> = new Set(
   CATEGORY_DEFINITIONS.filter((c) => c.supportsHoursFilter).map((c) => c.id),
+);
+
+/** Set of category IDs that support the food/drink facet filters (Filters panel). */
+export const FOOD_FILTER_CATEGORY_IDS: ReadonlySet<string> = new Set(
+  CATEGORY_DEFINITIONS.filter((c) => c.supportsFoodFilters).map((c) => c.id),
 );
 
 /** Converts a CategoryPlace to a Place, using name as address fallback.
@@ -500,6 +514,7 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
     openingHours: place.openingHours,
     isOpen: place.isOpen,
     openingHoursInfo: place.openingHoursInfo,
+    osmTags: place.osmTags,
   });
 }
 

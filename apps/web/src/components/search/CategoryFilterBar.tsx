@@ -1,7 +1,10 @@
 "use client";
 
+import AccessibleIcon from "@mui/icons-material/Accessible";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import TuneIcon from "@mui/icons-material/Tune";
+import Badge from "@mui/material/Badge";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -9,17 +12,23 @@ import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
 import Popover from "@mui/material/Popover";
 import Radio from "@mui/material/Radio";
+import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import type { OpeningHoursFilter } from "@openmapx/core";
 import {
+  facetsForCategory,
+  cuisineOptions as getCuisineOptions,
   HOURS_FILTER_CATEGORY_IDS,
+  useCategoryFacetStore,
   useCategorySearchStore,
   useDataSourceStore,
+  useFilteredCategoryResults,
   useOpeningHoursStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TEAL } from "@/lib/theme";
+import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 
 // Display order: Mon–Sun; JS day indices
 const DAYS: { key: string; idx: number }[] = [
@@ -56,6 +65,26 @@ const HOUR_OPTIONS: { value: number | null }[] = [
   { value: null },
   ...Array.from({ length: 24 }, (_, h) => ({ value: h })),
 ];
+
+// Shared styling for the standalone toggle chips (fuel "Open now",
+// wheelchair). The opening-times chip reuses the same look inline since it
+// also carries a dropdown affordance.
+const toggleChipSx = (active: boolean): SxProps<Theme> => ({
+  pointerEvents: "auto",
+  height: 36,
+  borderRadius: "18px",
+  fontWeight: 500,
+  fontSize: 13,
+  bgcolor: active ? TEAL : "background.paper",
+  color: active ? "#fff" : "text.primary",
+  borderColor: active ? TEAL : "var(--omx-border)",
+  boxShadow: active ? "none" : "0 1px 3px var(--omx-shadow-soft)",
+  cursor: "pointer",
+  userSelect: "none",
+  "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
+  "& .MuiChip-label": { pr: "10px" },
+  "&&:hover": { bgcolor: active ? "var(--omx-teal-hover)" : "grey.300" },
+});
 
 function PickerButton({
   label,
@@ -99,9 +128,23 @@ export function CategoryFilterBar() {
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
   const { openingHoursFilter, openAtDay, openAtHour, setOpeningHoursFilter, setOpenAtFilter } =
     useOpeningHoursStore();
+  const facetSelections = useCategoryFacetStore((s) => s.selections);
+  const toggleFacet = useCategoryFacetStore((s) => s.toggleFacet);
   const activeSource = useDataSourceStore((s) => s.activeSource);
+  const { rawResults } = useFilteredCategoryResults();
+
+  const panelFacets = useMemo(
+    () => facetsForCategory(activeCategory).filter((f) => f.placement === "panel"),
+    [activeCategory],
+  );
+  const cuisineOpts = useMemo(() => getCuisineOptions(rawResults ?? []), [rawResults]);
+  const activePanelCount = panelFacets.filter(
+    (f) => (facetSelections[f.id]?.length ?? 0) > 0,
+  ).length;
+  const wheelchairOn = (facetSelections.wheelchairAccessible?.length ?? 0) > 0;
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [panelAnchorEl, setPanelAnchorEl] = useState<HTMLElement | null>(null);
   // Pending state — committed only on Apply
   const [pendingMode, setPendingMode] = useState<OpeningHoursFilter>(openingHoursFilter);
   const [pendingDay, setPendingDay] = useState<number | null>(openAtDay);
@@ -147,22 +190,7 @@ export function CategoryFilterBar() {
           label={t("openNow")}
           onClick={() => setOpeningHoursFilter(isFiltered ? "any" : "open_now")}
           variant={isFiltered ? "filled" : "outlined"}
-          sx={{
-            pointerEvents: "auto",
-            height: 36,
-            borderRadius: "18px",
-            fontWeight: 500,
-            fontSize: 13,
-            bgcolor: isFiltered ? TEAL : "background.paper",
-            color: isFiltered ? "#fff" : "text.primary",
-            borderColor: isFiltered ? TEAL : "var(--omx-border)",
-            boxShadow: isFiltered ? "none" : "0 1px 3px var(--omx-shadow-soft)",
-            cursor: "pointer",
-            userSelect: "none",
-            "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
-            "& .MuiChip-label": { pr: "10px" },
-            "&&:hover": { bgcolor: isFiltered ? "var(--omx-teal-hover)" : "grey.300" },
-          }}
+          sx={toggleChipSx(isFiltered)}
         />
       </Box>
     );
@@ -205,6 +233,8 @@ export function CategoryFilterBar() {
         zIndex: 10,
         display: "flex",
         alignItems: "center",
+        gap: 1,
+        flexWrap: "wrap",
         px: { xs: 1, sm: 0 },
         py: "2px",
         pointerEvents: "none",
@@ -394,6 +424,46 @@ export function CategoryFilterBar() {
           </Box>
         </Paper>
       </Popover>
+      <Chip
+        icon={
+          <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
+            <AccessibleIcon sx={{ fontSize: 16 }} />
+          </Box>
+        }
+        label={t("wheelchairAccessible")}
+        onClick={() => toggleFacet("wheelchairAccessible")}
+        variant={wheelchairOn ? "filled" : "outlined"}
+        sx={toggleChipSx(wheelchairOn)}
+      />
+      {panelFacets.length > 0 && (
+        <>
+          <Chip
+            icon={
+              <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
+                <TuneIcon sx={{ fontSize: 16 }} />
+              </Box>
+            }
+            label={
+              <Badge
+                badgeContent={activePanelCount}
+                color="primary"
+                sx={{ "& .MuiBadge-badge": { right: -10, top: 2, bgcolor: TEAL } }}
+              >
+                {t("filters")}
+              </Badge>
+            }
+            onClick={(e) => setPanelAnchorEl(e.currentTarget)}
+            variant={activePanelCount > 0 ? "filled" : "outlined"}
+            sx={toggleChipSx(activePanelCount > 0)}
+          />
+          <CategoryFiltersPanel
+            anchorEl={panelAnchorEl}
+            onClose={() => setPanelAnchorEl(null)}
+            facets={panelFacets}
+            cuisineOptions={cuisineOpts}
+          />
+        </>
+      )}
     </Box>
   );
 }
