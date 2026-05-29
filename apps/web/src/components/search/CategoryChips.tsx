@@ -35,6 +35,7 @@ function SvgIcon({ path, size = 16 }: { path: string; size?: number }) {
 
 export function CategoryChips() {
   const { activeCategory, setActiveCategory, clearCategory } = useCategorySearchStore();
+  const textSearchActive = useCategorySearchStore((s) => s.mode === "text");
   const { setQuery } = useSearchStore();
   const { isOpen: directionsOpen } = useDirectionsStore();
   const zoom = useMapStore((s) => s.zoom);
@@ -105,7 +106,7 @@ export function CategoryChips() {
     return () => el.removeEventListener("scroll", updateScrollState);
   }, [updateScrollState]);
 
-  const hidden = directionsOpen || activeCategory || activeSource;
+  const hidden = directionsOpen || activeCategory || activeSource || textSearchActive;
   const zoomedOut = zoom < 9;
 
   if (hidden) return null;

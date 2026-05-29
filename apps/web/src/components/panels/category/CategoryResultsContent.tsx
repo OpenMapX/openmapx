@@ -206,8 +206,12 @@ export function CategoryResultsContent() {
     setHoveredCategoryPlaceId,
   } = useCategorySearchStore();
   const anchor = useCategorySearchStore((s) => s.anchor);
+  const mode = useCategorySearchStore((s) => s.mode);
   const autoRefresh = useCategorySearchStore((s) => s.autoRefresh);
   const setAutoRefresh = useCategorySearchStore((s) => s.setAutoRefresh);
+  // Viewport text search (top search bar, no anchor) behaves like a category:
+  // panning offers "search this area" + the auto-refresh toggle.
+  const isViewportText = mode === "text" && anchor === null;
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
 
@@ -251,7 +255,7 @@ export function CategoryResultsContent() {
   // manual "Search this area" chip.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady || !activeCategory) return;
+    if (!map || !mapReady || (!activeCategory && !isViewportText)) return;
 
     const onMoveEnd = (e: maplibregl.MapLibreEvent) => {
       // Ignore app-driven camera moves (flyTo on result select, fitBounds on
@@ -274,7 +278,7 @@ export function CategoryResultsContent() {
     return () => {
       map.off("moveend", onMoveEnd);
     };
-  }, [mapRef, mapReady, activeCategory, autoRefresh, setSearchBbox, setMapMoved]);
+  }, [mapRef, mapReady, activeCategory, isViewportText, autoRefresh, setSearchBbox, setMapMoved]);
 
   const handleSelectPlace = (place: CategoryPlace) => {
     flyTo(place.coordinates, 17);
@@ -292,7 +296,7 @@ export function CategoryResultsContent() {
 
   return (
     <Box sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}>
-      {(anchor || activeCategory) && (
+      {(anchor || activeCategory || isViewportText) && (
         <Box
           sx={{
             px: 2,
@@ -304,7 +308,7 @@ export function CategoryResultsContent() {
           }}
         >
           {anchor && <ExploreTravelTimeControl />}
-          {activeCategory && (
+          {(activeCategory || isViewportText) && (
             <FormControlLabel
               control={
                 <Switch

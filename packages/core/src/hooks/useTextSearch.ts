@@ -1,0 +1,60 @@
+import type { CategorySearchResponse } from "@integrations/poi-search/types";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { apiClient } from "../api/client";
+import { API_ENDPOINTS } from "../api/endpoints";
+import { useCategoryFacetStore } from "../stores/categoryFacetStore";
+import { useCategorySearchStore } from "../stores/categorySearchStore";
+import { useOpeningHoursStore } from "../stores/openingHoursStore";
+import { applyFacetFilters, detectDominantCategory } from "../utils/categoryFacets";
+import { applyHoursFilter } from "../utils/categoryFilter";
+
+/**
+ * Free-text POI search scoped to the active `searchBbox`. Mirrors
+ * `useFilteredCategoryResults`: returns the raw Overpass results plus the
+ * hours/facet-filtered list, and infers the dominant category so the filter
+ * bar can show the right facets. Only fetches in text mode.
+ */
+export function useTextSearchResults(lang?: string) {
+  const mode = useCategorySearchStore((s) => s.mode);
+  const textQuery = useCategorySearchStore((s) => s.textQuery);
+  const searchBbox = useCategorySearchStore((s) => s.searchBbox);
+  const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
+  const openAtDay = useOpeningHoursStore((s) => s.openAtDay);
+  const openAtHour = useOpeningHoursStore((s) => s.openAtHour);
+  const facetSelections = useCategoryFacetStore((s) => s.selections);
+
+  const enabled = mode === "text" && textQuery.trim().length >= 2 && searchBbox !== null;
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["text-search", textQuery, searchBbox, lang],
+    queryFn: () => {
+      const bbox = searchBbox;
+      if (!bbox) return { results: [], partial: false } satisfies CategorySearchResponse;
+      return apiClient.get<CategorySearchResponse>(API_ENDPOINTS.textSearch, {
+        q: textQuery,
+        south: String(bbox.south),
+        west: String(bbox.west),
+        north: String(bbox.north),
+        east: String(bbox.east),
+        ...(lang && { lang }),
+      });
+    },
+    enabled,
+    staleTime: 60_000,
+  });
+
+  const rawResults = data?.results;
+  const partial = data?.partial ?? false;
+  const dominantCategory = useMemo(
+    () => (rawResults ? detectDominantCategory(rawResults) : null),
+    [rawResults],
+  );
+  const filtered = useMemo(() => {
+    if (!rawResults) return rawResults;
+    const byHours = applyHoursFilter(rawResults, openingHoursFilter, openAtDay, openAtHour);
+    return applyFacetFilters(byHours, facetSelections);
+  }, [rawResults, openingHoursFilter, openAtDay, openAtHour, facetSelections]);
+
+  return { rawResults, filtered, isLoading, isError, error, partial, dominantCategory };
+}

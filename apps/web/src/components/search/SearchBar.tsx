@@ -64,7 +64,11 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatarButton } from "@/components/auth/AccountAvatarButton";
 import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
-import { launchExploreFromPlace, launchExploreTextSearch } from "@/lib/launchExplore";
+import {
+  launchExploreFromPlace,
+  launchExploreTextSearch,
+  launchTextSearch,
+} from "@/lib/launchExplore";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
@@ -568,8 +572,12 @@ export function SearchBar() {
       handleSelect(syntheticResult);
       return;
     }
+    // A precise location match (address/street/region) or a transit stop
+    // navigates straight to that place, like Google. A named-POI query (or no
+    // geocode match) opens the viewport-scoped text results panel instead.
     const first = geocodeData?.[0];
-    if (first) {
+    const isTransit = Boolean(first?.rawCategory && isTransitRawCategory(first.rawCategory));
+    if (first && (first.type !== "poi" || isTransit)) {
       flyTo(first.coordinates, 15);
       const firstPlace = createPlace({
         ...idsFromPrimaryOrCoords(first.id, first.coordinates),
@@ -579,7 +587,7 @@ export function SearchBar() {
         category: first.type,
         rawCategory: first.rawCategory,
       });
-      if (first.rawCategory && isTransitRawCategory(first.rawCategory)) {
+      if (isTransit) {
         void tryOpenTransitStop(first.coordinates, first.label).then((found) => {
           if (!found) {
             setSelectedPlace(firstPlace);
@@ -590,6 +598,10 @@ export function SearchBar() {
         setSelectedPlace(firstPlace);
         useSidebarStore.getState().openSidebar(PANEL.PLACE);
       }
+      return;
+    }
+    if (q.trim().length > 0) {
+      launchTextSearch(mapRef.current, q);
     }
   };
 

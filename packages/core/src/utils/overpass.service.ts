@@ -355,3 +355,38 @@ export async function searchByOsmTags(
   const data = await overpassQuery(query);
   return mapOverpassElements(data.elements);
 }
+
+// POI tag keys a free-text name search is scoped to, so we match named places
+// (shops, venues, …) rather than streets, boundaries or address-only nodes.
+const TEXT_SEARCH_KEYS = ["amenity", "shop", "tourism", "leisure", "office", "healthcare"] as const;
+
+/** Escape regex metacharacters + the quote so the user's text matches literally inside `~"..."`. */
+function escapeOverpassRegex(value: string): string {
+  return value.replace(/[\\.*+?()[\]{}^$|"]/g, "\\$&");
+}
+
+function buildTextQuery(query: string, bbox: BoundingBox): string {
+  const { south, west, north, east } = bbox;
+  const bboxStr = `${south},${west},${north},${east}`;
+  const escaped = escapeOverpassRegex(query.trim());
+  const lines = TEXT_SEARCH_KEYS.flatMap((key) => [
+    `node["name"~"${escaped}",i]["${key}"](${bboxStr});`,
+    `way["name"~"${escaped}",i]["${key}"](${bboxStr});`,
+  ]).join("\n  ");
+  return `[out:json][timeout:25];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+}
+
+/**
+ * Free-text POI search: matches OSM features whose `name` contains `query`
+ * (case-insensitive) within the bbox, scoped to {@link TEXT_SEARCH_KEYS}.
+ * Returns the same rich shape as {@link searchByCategory} so the results panel
+ * and facet filters work identically for text and category searches.
+ */
+export async function searchByText(
+  query: string,
+  bbox: BoundingBox,
+): Promise<CategoryPlaceResult[]> {
+  if (query.trim().length === 0) return [];
+  const data = await overpassQuery(buildTextQuery(query, bbox));
+  return mapOverpassElements(data.elements);
+}

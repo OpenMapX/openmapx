@@ -162,7 +162,6 @@ export { useDebounce, useDebouncedCallback } from "./hooks/useDebounce";
 export { useDirections } from "./hooks/useDirections";
 export { useElevation } from "./hooks/useElevation";
 export { useExploreResults } from "./hooks/useExploreResults";
-export { useExploreTextSearch } from "./hooks/useExploreTextSearch";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
 export { useGeocoding } from "./hooks/useGeocoding";
 export {
@@ -396,7 +395,12 @@ export type {
   PolygonGeometry,
 } from "./utils/overpass/types";
 export type { OsmFilter } from "./utils/overpass.service";
-export { CATEGORY_FILTERS, searchByCategory, searchByOsmTags } from "./utils/overpass.service";
+export {
+  CATEGORY_FILTERS,
+  searchByCategory,
+  searchByOsmTags,
+  searchByText,
+} from "./utils/overpass.service";
 export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
@@ -413,7 +417,6 @@ export {
 export { resolvePoiIconPath } from "./utils/poi-icon";
 export { pointInIsochroneGeometry } from "./utils/pointInPolygon";
 export { decodePolyline, encodePolyline } from "./utils/polyline";
-export { searchResultToCategoryPlace } from "./utils/searchResultToCategoryPlace";
 export { sectionSlug } from "./utils/sectionSlug";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./utils/tideExtrema";
 export { despikeSeries, findTideExtrema } from "./utils/tideExtrema";

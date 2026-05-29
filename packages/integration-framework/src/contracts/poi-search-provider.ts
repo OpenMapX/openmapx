@@ -32,5 +32,12 @@ export interface PoiSearchProvider {
       osmTags?: Record<string, string>;
     },
   ): Promise<PoiSearchResult[]>;
+  /** Free-text name search within a bbox. Optional — only providers backed by a
+   *  general-purpose source (e.g. Overpass) implement it. */
+  searchText?(
+    query: string,
+    bbox: BoundingBox,
+    options?: { lang?: string },
+  ): Promise<PoiSearchResult[]>;
   getDetail?(poiId: string): Promise<Place | null>;
 }

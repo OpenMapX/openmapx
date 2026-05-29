@@ -3,6 +3,7 @@ import {
   FOOD_FILTER_CATEGORY_IDS,
   HOURS_FILTER_CATEGORY_IDS,
 } from "@integrations/poi-search/types";
+import { CATEGORY_FILTERS } from "./overpass.service";
 
 export type FacetType = "toggle" | "multi";
 export type FacetPlacement = "inline" | "panel";
@@ -171,4 +172,40 @@ export function cuisineOptions(results: readonly CategoryPlace[]): string[] {
     for (const v of tagValues(p.osmTags?.cuisine)) set.add(v);
   }
   return [...set].sort();
+}
+
+// Reverse lookup: OSM tag value (e.g. "fast_food") → the first category id whose
+// CATEGORY_FILTERS list claims it. Lets a free-text search reuse a category's
+// facet config. Built once at module load.
+const VALUE_TO_CATEGORY: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const [categoryId, filters] of Object.entries(CATEGORY_FILTERS)) {
+    for (const f of filters) {
+      if (!(f.value in map)) map[f.value] = categoryId;
+    }
+  }
+  return map;
+})();
+
+/**
+ * Infer the dominant category of a result set by majority of OSM category
+ * values, so a free-text search can reuse that category's facet filters (e.g.
+ * "McDonald's" → mostly fast_food → "restaurants"). Returns null when no
+ * results map to a known category.
+ */
+export function detectDominantCategory(results: readonly CategoryPlace[]): string | null {
+  const counts = new Map<string, number>();
+  for (const p of results) {
+    const id = p.category ? VALUE_TO_CATEGORY[p.category] : undefined;
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [id, count] of counts) {
+    if (count > bestCount) {
+      bestCount = count;
+      best = id;
+    }
+  }
+  return best;
 }

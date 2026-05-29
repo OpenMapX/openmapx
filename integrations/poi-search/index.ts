@@ -56,6 +56,55 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
+  ctx.registerRoute("GET", "/text", async (req, reply) => {
+    const { q, south, west, north, east, lang } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      reply.send({ results: [], partial: false });
+      return;
+    }
+
+    const bbox = {
+      south: Number.parseFloat(south),
+      west: Number.parseFloat(west),
+      north: Number.parseFloat(north),
+      east: Number.parseFloat(east),
+    };
+    for (const [key, val] of Object.entries(bbox)) {
+      if (!Number.isFinite(val)) {
+        reply.status(400).send({ error: `Invalid bbox parameter: ${key}` });
+        return;
+      }
+    }
+
+    const bboxRounded = {
+      east: round(bbox.east, 2),
+      north: round(bbox.north, 2),
+      south: round(bbox.south, 2),
+      west: round(bbox.west, 2),
+    };
+    const cacheKey = `text:${q.trim().toLowerCase()}:${bboxRounded.south},${bboxRounded.west},${bboxRounded.north},${bboxRounded.east}`;
+
+    try {
+      const result = await ctx.cache.withCache(cacheKey, 300, () =>
+        orchestrator.searchText(q, bbox, { lang }),
+      );
+      reply.header("Cache-Control", "public, max-age=300");
+      reply.send(result);
+    } catch (err) {
+      if (err instanceof OverpassTimeoutError) {
+        reply.status(422).send({ error: "area_too_large" });
+        return;
+      }
+      const e = err as { statusCode?: number; message: string };
+      if (e.statusCode === 400) {
+        reply.status(400).send({ error: e.message });
+        return;
+      }
+      throw err;
+    }
+  });
+
   ctx.registerRoute("GET", "/preset-suggest", async (req, reply) => {
     const { q, lang, limit } = req.query as { q?: string; lang?: string; limit?: string };
 

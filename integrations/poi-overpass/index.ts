@@ -3,6 +3,7 @@ import {
   CATEGORY_FILTERS,
   searchByCategory,
   searchByOsmTags,
+  searchByText,
   setOverpassUrl,
 } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
@@ -30,6 +31,9 @@ const overpassProvider: PoiSearchProvider = {
     const filters = CATEGORY_FILTERS[category];
     if (!filters || filters.length === 0) return [];
     return searchByCategory(filters, bbox);
+  },
+  async searchText(query: string, bbox: BoundingBox): Promise<PoiSearchResult[]> {
+    return searchByText(query, bbox);
   },
 };
 

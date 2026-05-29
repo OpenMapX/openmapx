@@ -22,7 +22,7 @@ import {
   useCategoryFacetStore,
   useCategorySearchStore,
   useDataSourceStore,
-  useFilteredCategoryResults,
+  useExploreResults,
   useOpeningHoursStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -131,11 +131,15 @@ export function CategoryFilterBar() {
   const facetSelections = useCategoryFacetStore((s) => s.selections);
   const toggleFacet = useCategoryFacetStore((s) => s.toggleFacet);
   const activeSource = useDataSourceStore((s) => s.activeSource);
-  const { rawResults } = useFilteredCategoryResults();
+  const { rawResults, dominantCategory } = useExploreResults();
+  // In text mode there is no active category chip — reuse the facets of the
+  // category that the results predominantly belong to (e.g. "McDonald's" →
+  // restaurants), so a text search shows the same filters as that category.
+  const effectiveCategory = activeCategory ?? dominantCategory;
 
   const panelFacets = useMemo(
-    () => facetsForCategory(activeCategory).filter((f) => f.placement === "panel"),
-    [activeCategory],
+    () => facetsForCategory(effectiveCategory).filter((f) => f.placement === "panel"),
+    [effectiveCategory],
   );
   const cuisineOpts = useMemo(() => getCuisineOptions(rawResults ?? []), [rawResults]);
   const activePanelCount = panelFacets.filter(
@@ -196,7 +200,7 @@ export function CategoryFilterBar() {
     );
   }
 
-  if (!activeCategory || !HOURS_FILTER_CATEGORY_IDS.has(activeCategory)) return null;
+  if (!effectiveCategory || !HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory)) return null;
 
   const isFiltered = openingHoursFilter !== "any";
   const label = chipLabel(openingHoursFilter, openAtDay, openAtHour, t);

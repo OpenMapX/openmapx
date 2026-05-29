@@ -89,5 +89,41 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     }
   }
 
-  return { search, getProviders };
+  async function searchText(
+    query: unknown,
+    bbox: BoundingBox,
+    options?: { lang?: string },
+  ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+    if (typeof query !== "string" || query.trim().length === 0) {
+      throw Object.assign(new Error("Missing or empty query"), { statusCode: 400 });
+    }
+    const provider = getProviders().find((p) => typeof p.searchText === "function");
+    if (!provider?.searchText) {
+      throw Object.assign(new Error("No text-search provider available"), { statusCode: 400 });
+    }
+
+    let currentBbox = bbox;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const results = await provider.searchText(query, currentBbox, { lang: options?.lang });
+        for (const r of results) {
+          if (r.openingHours && !r.openingHoursInfo) {
+            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
+              lat: r.coordinates[1],
+              lon: r.coordinates[0],
+            });
+          }
+        }
+        return { results, partial: attempt > 0 };
+      } catch (err) {
+        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
+          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  return { search, searchText, getProviders };
 }

@@ -26,6 +26,9 @@ export function SearchInAreaChip() {
     setSearchBbox: setCategorySearchBbox,
     setMapMoved: setCategoryMapMoved,
   } = useCategorySearchStore();
+  const mode = useCategorySearchStore((s) => s.mode);
+  const anchor = useCategorySearchStore((s) => s.anchor);
+  const isViewportText = mode === "text" && anchor === null;
   const { selectedPlace } = usePlaceStore();
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const dsMapMoved = useDataSourceStore((s) => s.mapMoved);
@@ -40,10 +43,12 @@ export function SearchInAreaChip() {
     return sourcesData.sources.find((s) => s.id === activeSource)?.minZoom ?? 0;
   }, [activeSource, sourcesData]);
 
-  const floatingCardOpen = activeCategory !== null && selectedPlace !== null;
+  const floatingCardOpen = (activeCategory !== null || isViewportText) && selectedPlace !== null;
 
-  // Show when either a category or data source is active and map has moved
-  const showForCategory = activeCategory !== null && categoryMoved && !autoRefresh;
+  // Show when a category search, a viewport text search, or a data source is
+  // active and the map has moved.
+  const showForCategory =
+    (activeCategory !== null || isViewportText) && categoryMoved && !autoRefresh;
   const showForDataSource = activeSource !== null && dsMapMoved && viewportZoom >= activeMinZoom;
 
   if (!showForCategory && !showForDataSource) return null;
