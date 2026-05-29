@@ -5,7 +5,6 @@ import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
 import Switch from "@mui/material/Switch";
@@ -26,6 +25,7 @@ import type maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { useMap } from "@/lib/MapContext";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
@@ -45,37 +45,15 @@ function TransitStopCard({
   onSelect: (stop: TransitStop) => void;
 }) {
   return (
-    <Box
-      component="button"
-      type="button"
-      onClick={() => onSelect(stop)}
-      sx={{
-        width: "100%",
-        textAlign: "left",
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        px: 2,
-        py: 1.5,
-        "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
-      }}
-    >
-      <Typography
-        variant="body1"
-        sx={{
-          fontWeight: 600,
-          mb: 0.25,
-        }}
-      >
-        {stop.name}
-      </Typography>
+    <ResultListItem onClick={() => onSelect(stop)} hoverBg="rgba(0,0,0,0.06)">
+      <ResultItemName>{stop.name}</ResultItemName>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
         {Array.from(new Set(stop.modes)).map((m) => {
           const Icon = TRANSIT_MODE_ICONS[m] ?? DirectionsBusIcon;
           return <Icon key={m} sx={{ fontSize: 16, color: "text.secondary" }} />;
         })}
       </Box>
-    </Box>
+    </ResultListItem>
   );
 }
 
@@ -99,33 +77,14 @@ function CategoryPlaceCard({
     : undefined;
 
   return (
-    <Box
-      component="button"
-      type="button"
+    <ResultListItem
       onClick={() => onSelect(place)}
       onMouseEnter={() => onHover(place.id)}
       onMouseLeave={onHoverEnd}
-      sx={{
-        width: "100%",
-        textAlign: "left",
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        px: 2,
-        py: 1.5,
-        bgcolor: isHovered ? "rgba(0,0,0,0.06)" : "transparent",
-        "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
-      }}
+      selected={isHovered}
+      hoverBg="rgba(0,0,0,0.06)"
     >
-      <Typography
-        variant="body1"
-        sx={{
-          fontWeight: 600,
-          mb: 0.25,
-        }}
-      >
-        {place.name}
-      </Typography>
+      <ResultItemName>{place.name}</ResultItemName>
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
         {tagLabel && (
           <Typography
@@ -190,7 +149,7 @@ function CategoryPlaceCard({
         }
         return null;
       })()}
-    </Box>
+    </ResultListItem>
   );
 }
 
@@ -376,12 +335,11 @@ export function CategoryResultsContent() {
             variant="inline"
             label={tc("dataSources")}
           />
-          {transitStops.map((stop, i) => (
-            <Box key={stop.id}>
-              {i > 0 && <Divider sx={{ mx: 2 }} />}
-              <TransitStopCard stop={stop} onSelect={handleSelectStop} />
-            </Box>
-          ))}
+          <ResultList
+            items={transitStops}
+            getKey={(stop) => stop.id}
+            renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
+          />
         </>
       )}
       {/* Non-transit: empty state */}
@@ -410,9 +368,10 @@ export function CategoryResultsContent() {
               {tc("resultsCount", { count: results.length })}
             </Typography>
           </Box>
-          {results.map((place, i) => (
-            <Box key={place.id}>
-              {i > 0 && <Divider sx={{ mx: 2 }} />}
+          <ResultList
+            items={results}
+            getKey={(place) => place.id}
+            renderItem={(place) => (
               <CategoryPlaceCard
                 place={place}
                 isHovered={hoveredCategoryPlaceId === place.id}
@@ -420,8 +379,8 @@ export function CategoryResultsContent() {
                 onHover={setHoveredCategoryPlaceId}
                 onHoverEnd={() => setHoveredCategoryPlaceId(null)}
               />
-            </Box>
-          ))}
+            )}
+          />
         </>
       )}
     </Box>

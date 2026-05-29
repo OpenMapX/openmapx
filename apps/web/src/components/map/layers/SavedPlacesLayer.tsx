@@ -1,9 +1,9 @@
 "use client";
 
 import { PANEL, useSavedListPlaces, useSavedPlacesStore, useSidebarStore } from "@openmapx/core";
-import type { GeoJSONSource } from "maplibre-gl";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
+import { removeLayerAndSource, upsertGeoJsonSource } from "./layerStyleUtils";
 
 const SOURCE_ID = "saved-places-source";
 const LAYER_ID = "saved-places-layer";
@@ -33,11 +33,9 @@ export function SavedPlacesLayer() {
       })),
     };
 
-    const existing = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-    if (existing) {
-      existing.setData(geojson);
-    } else {
-      map.addSource(SOURCE_ID, { type: "geojson", data: geojson });
+    const created = !map.getSource(SOURCE_ID);
+    upsertGeoJsonSource(map, SOURCE_ID, geojson);
+    if (created) {
       map.addLayer({
         id: LAYER_ID,
         type: "circle",
@@ -52,12 +50,7 @@ export function SavedPlacesLayer() {
     }
 
     return () => {
-      try {
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      } catch {
-        // Source may already be torn down during style change
-      }
+      removeLayerAndSource(map, LAYER_ID, SOURCE_ID);
     };
   }, [mapRef, mapReady, styleVersion, places]);
 
@@ -66,12 +59,7 @@ export function SavedPlacesLayer() {
     if (isPanelOpen && selectedListId) return;
     const map = mapRef.current;
     if (!map) return;
-    try {
-      if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-    } catch {
-      // Ignore cleanup errors
-    }
+    removeLayerAndSource(map, LAYER_ID, SOURCE_ID);
   }, [mapRef, isPanelOpen, selectedListId]);
 
   return null;

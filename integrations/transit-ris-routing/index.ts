@@ -1,18 +1,11 @@
-import {
-  createManifestAttribution,
-  type IntegrationContext,
-} from "@openmapx/integration-framework";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { withAttribution } from "@openmapx/mobility-core/result";
+import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as ris from "./provider.js";
 import { setRisCredentials } from "./ris-client.js";
 
-const attribution = createManifestAttribution();
-const wrapRT = <T>(data: T) =>
-  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+const { attribution, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  init(ctx);
   setRisCredentials({
     clientId: ctx.config.clientId as string | undefined,
     apiKey: ctx.config.apiKey as string | undefined,

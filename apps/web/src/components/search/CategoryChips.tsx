@@ -16,7 +16,7 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TEAL } from "@/lib/theme";
+import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 
 function SvgIcon({ path, size = 16 }: { path: string; size?: number }) {
   return (
@@ -116,30 +116,7 @@ export function CategoryChips() {
   const leftStop = canScrollLeft ? `black ${FADE}px` : "black 0px";
   const mask = `linear-gradient(to right, ${leftEdge}, ${leftStop}, black calc(100% - ${FADE}px), transparent)`;
 
-  const chipSx = (isActive: boolean) =>
-    ({
-      height: 36,
-      borderRadius: "18px",
-      fontWeight: 500,
-      fontSize: 13,
-      bgcolor: isActive ? TEAL : "background.paper",
-      color: isActive ? "#fff" : "text.primary",
-      borderColor: isActive ? TEAL : "var(--omx-border)",
-      boxShadow: isActive ? "none" : "0 1px 3px var(--omx-shadow-soft)",
-      cursor: "pointer",
-      userSelect: "none",
-      flexShrink: 0,
-
-      "& .MuiChip-icon": {
-        color: "inherit",
-        ml: "10px",
-        mr: "-4px",
-      },
-
-      "&&:hover": {
-        bgcolor: isActive ? "var(--omx-teal-hover)" : "var(--omx-chip-hover)",
-      },
-    }) as const;
+  const chipSx = (isActive: boolean) => floatingChipSx(isActive, "category");
 
   const chipIcon = (iconPath: string | undefined): React.ReactElement | undefined =>
     iconPath ? (
@@ -152,24 +129,13 @@ export function CategoryChips() {
     <Box
       ref={scrollRef}
       sx={{
-        position: "absolute",
-        top: {
-          xs: "calc(72px + var(--omx-safe-top))",
-          sm: "calc(18px + var(--omx-safe-top))",
-        },
-        left: { xs: "var(--omx-safe-left)", sm: "calc(420px + var(--omx-safe-left))" },
-        right: { xs: "var(--omx-safe-right)", sm: "calc(108px + var(--omx-safe-right))" },
-        zIndex: 10,
-        display: "flex",
-        alignItems: "center",
-        px: { xs: 1, sm: 0 },
+        ...floatingToolbarSx,
         overflowX: "auto",
         overflowY: "hidden",
         scrollbarWidth: "none",
         "&::-webkit-scrollbar": { display: "none" },
         maskImage: mask,
         WebkitMaskImage: mask,
-        py: "2px",
         opacity: zoomedOut ? 0 : 1,
         pointerEvents: zoomedOut ? "none" : "auto",
         transition: "opacity 0.2s ease",

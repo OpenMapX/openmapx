@@ -19,6 +19,7 @@
  * authoritative tide-prediction harmonics; EMODnet outranks IOC because it
  * normalises its data through national QC pipelines.
  */
+import { fetchJson, haversineKm } from "@openmapx/core";
 import type { CacheClient, Logger } from "@openmapx/integration-framework";
 
 export type TideNetwork = "noaa" | "ca-iwls" | "kartverket" | "pegel" | "emodnet" | "ioc";
@@ -53,30 +54,13 @@ const NETWORK_RANK: Record<TideNetwork, number> = {
 const CATALOG_TTL = 7 * 24 * 60 * 60; // 7d
 const FETCH_TIMEOUT_MS = 20_000;
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 async function fetchJsonWithTimeout<T>(url: string, ua: string): Promise<T | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
-      headers: { "User-Agent": ua, Accept: "application/json" },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return fetchJson<T>(url, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    nullOnError: true,
+    userAgent: ua,
+    headers: { Accept: "application/json" },
+  });
 }
 
 // -------- IOC Sea Level Station Monitoring (UNESCO) ----------------------

@@ -1,4 +1,4 @@
-import type { GeocodingProviderImpl } from "./types.js";
+import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 /**
  * Photon geocoding client (by Komoot).
  * Backed by OSM data. No API key required.
@@ -12,7 +12,7 @@ import type {
   ReverseGeocodingResult,
   SearchResult,
 } from "@openmapx/core";
-import { resolvePoiIconPath } from "@openmapx/core";
+import { fetchJson, resolvePoiIconPath } from "@openmapx/core";
 
 // Populated by setup(ctx); see setPhotonUrl.
 let PHOTON_URL = "https://photon.komoot.io";
@@ -84,18 +84,12 @@ async function fetchPhoton(
   const url = new URL(`${PHOTON_URL}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4_000);
-  try {
-    const res = await fetch(url.toString(), {
-      headers: { "Accept-Language": lang ?? "en" },
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`Photon error ${res.status}`);
-    return res.json() as Promise<PhotonResponse>;
-  } finally {
-    clearTimeout(timer);
-  }
+  return fetchJson<PhotonResponse>(url.toString(), {
+    timeoutMs: 4_000,
+    userAgent: null,
+    headers: { "Accept-Language": lang ?? "en" },
+    errorMessage: ({ status }) => `Photon error ${status}`,
+  });
 }
 
 export const photonService: GeocodingProviderImpl = {

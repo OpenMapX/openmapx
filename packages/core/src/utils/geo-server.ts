@@ -66,3 +66,8 @@ export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: 
     Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
 }
+
+/** Great-circle distance between two lat/lng points, in kilometres. */
+export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  return haversineMeters(lat1, lng1, lat2, lng2) / 1000;
+}

@@ -1,6 +1,5 @@
-import { createPlace, type Place, USER_AGENT } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import { registerPlaceResolver } from "@openmapx/place-ids";
+import { fetchJson as coreFetchJson, createPlace, type Place } from "@openmapx/core";
+import { createTidesIntegration, type IntegrationContext } from "@openmapx/integration-framework";
 
 /**
  * Canadian tide-prediction + observation knowledge integration. Wraps the
@@ -13,6 +12,13 @@ import { registerPlaceResolver } from "@openmapx/place-ids";
  * converted from meters (the IWLS unit) to feet for parity with NOAA.
  *
  * Free + commercial use under Open Government Licence — Canada 2.0.
+ *
+ * The place-resolver + `/tides` route shell (nearest-station lookup, per-day
+ * `nearest:` cache, `{ notFound: true }` sentinel, `Cache-Control`) lives in
+ * the shared `createTidesIntegration` factory. Canada additionally feeds the
+ * factory an `onWarmNearestHit` hook so warm fast-path hits re-fetch the live
+ * `currentLevel` (bypassing `buildTidesResponse`'s canonical 5-min `obs:`
+ * refresh would otherwise pin a stale level for the full TIDES_TTL).
  */
 const IWLS_BASE = "https://api-iwls.dfo-mpo.gc.ca/api/v1";
 const FETCH_TIMEOUT_MS = 15_000;
@@ -80,16 +86,6 @@ interface TidesResponse {
   met?: never;
 }
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 function normalizeIwlsTimestamp(iso: string): string {
   // IWLS returns ISO-8601 UTC like "2026-05-18T03:20:00Z". Keep the `T` and
   // trailing `Z` so the place panel's parser can detect the UTC marker and
@@ -101,24 +97,12 @@ function normalizeIwlsTimestamp(iso: string): string {
   return `${m[1]}Z`;
 }
 
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
-
 async function fetchJson<T>(url: string): Promise<T | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return coreFetchJson<T>(url, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    nullOnError: true,
+    headers: { Accept: "application/json" },
+  });
 }
 
 async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
@@ -150,22 +134,6 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
     });
   await ctx.cache.set("catalog", stations, CATALOG_TTL);
   return stations;
-}
-
-function findNearest(
-  stations: CachedStation[],
-  lat: number,
-  lng: number,
-  maxKm = MAX_STATION_DISTANCE_KM,
-): { station: CachedStation; distanceKm: number } | null {
-  let best: { station: CachedStation; distanceKm: number } | null = null;
-  for (const s of stations) {
-    const d = haversineKm(lat, lng, s.lat, s.lng);
-    if (d <= maxKm && (!best || d < best.distanceKm)) {
-      best = { station: s, distanceKm: d };
-    }
-  }
-  return best;
 }
 
 async function fetchHiloEvents(stationId: string): Promise<TideEvent[]> {
@@ -305,100 +273,39 @@ async function buildTidesResponse(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  registerPlaceResolver("ca-iwls", async (value, resolveCtx) => {
-    const id = value.split(":")[0].trim();
-    if (!id) return null;
-    const stations = await loadStations(ctx);
-    const station = stations.find((s) => s.id === id || s.code === id);
-    if (!station) return null;
-    const place: Place = createPlace({
-      primaryScheme: "ca-iwls",
-      ids: { "ca-iwls": station.id },
-      name: station.name,
-      address: "",
-      countryCode: "ca",
-      coordinates: [station.lng, station.lat],
-      category: "Tide Station",
-      rawCategory: "marine/tide_station",
-    });
-    void resolveCtx;
-    return place;
-  });
-
-  ctx.registerRoute("GET", "/tides", async (req, reply) => {
-    const stationParam = req.query.station;
-    let resolvedStation: CachedStation | null = null;
-    let distanceKm = 0;
-
-    if (stationParam) {
-      const stations = await loadStations(ctx);
-      const found = stations.find((s) => s.id === stationParam || s.code === stationParam);
-      if (!found) {
-        reply.status(404).send({ message: "Unknown station" });
-        return;
+  createTidesIntegration<CachedStation, TidesResponse>(ctx, {
+    scheme: "ca-iwls",
+    loadStations,
+    findStationById: (stations, id) => stations.find((s) => s.id === id || s.code === id),
+    createPlace: (station, resolveCtx): Place => {
+      const place: Place = createPlace({
+        primaryScheme: "ca-iwls",
+        ids: { "ca-iwls": station.id },
+        name: station.name,
+        address: "",
+        countryCode: "ca",
+        coordinates: [station.lng, station.lat],
+        category: "Tide Station",
+        rawCategory: "marine/tide_station",
+      });
+      void resolveCtx;
+      return place;
+    },
+    buildTidesResponse,
+    maxStationDistanceKm: MAX_STATION_DISTANCE_KM,
+    nearestCacheTtl: TIDES_TTL,
+    cacheControlMaxAge: 3600,
+    unavailableMessage: "Tide predictions unavailable",
+    onWarmNearestHit: async (hookCtx, cached) => {
+      // The `nearest:` fast path bypasses `buildTidesResponse`, so its
+      // canonical 5-min `obs:` refresh is skipped. Re-fetch the current
+      // water level here so warm hits don't pin a stale `currentLevel`
+      // for the full 6-hour TIDES_TTL. We treat the previously-cached
+      // `currentLevel` as proof the station supports WLO; stations that
+      // had no obs at build time stay live-free.
+      if (cached.currentLevel !== undefined) {
+        cached.currentLevel = await refreshCurrentLevel(hookCtx, cached.station.id, true);
       }
-      resolvedStation = found;
-    } else {
-      const lat = Number.parseFloat(req.query.lat ?? "");
-      const lng = Number.parseFloat(req.query.lng ?? "");
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        reply.status(400).send({ message: "Invalid coordinates" });
-        return;
-      }
-
-      // Cache key MUST include the UTC date — events carry calendar dates and
-      // a 6-hour TTL straddling midnight UTC would otherwise serve yesterday's
-      // events under today's labels. Matches the NOAA integration's pattern.
-      const dayKey = new Date().toISOString().slice(0, 10);
-      const cacheKey = `nearest:${round4(lat)},${round4(lng)}:${dayKey}`;
-      const cached = await ctx.cache.get<TidesResponse | { notFound: true }>(cacheKey);
-      if (cached) {
-        if ("notFound" in cached) {
-          reply.status(204).send(null);
-          return;
-        }
-        // The `nearest:` fast path bypasses `buildTidesResponse`, so its
-        // canonical 5-min `obs:` refresh is skipped. Re-fetch the current
-        // water level here so warm hits don't pin a stale `currentLevel`
-        // for the full 6-hour TIDES_TTL. We treat the previously-cached
-        // `currentLevel` as proof the station supports WLO; stations that
-        // had no obs at build time stay live-free.
-        if (cached.currentLevel !== undefined) {
-          cached.currentLevel = await refreshCurrentLevel(ctx, cached.station.id, true);
-        }
-        reply.header("Cache-Control", "public, max-age=3600");
-        reply.send(cached);
-        return;
-      }
-
-      const stations = await loadStations(ctx);
-      const nearest = findNearest(stations, lat, lng);
-      if (!nearest) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, TIDES_TTL);
-        reply.status(204).send(null);
-        return;
-      }
-      resolvedStation = nearest.station;
-      distanceKm = nearest.distanceKm;
-
-      const result = await buildTidesResponse(ctx, resolvedStation, distanceKm);
-      if (!result) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, TIDES_TTL);
-        reply.status(204).send(null);
-        return;
-      }
-      await ctx.cache.set(cacheKey, result, TIDES_TTL);
-      reply.header("Cache-Control", "public, max-age=3600");
-      reply.send(result);
-      return;
-    }
-
-    const result = await buildTidesResponse(ctx, resolvedStation, distanceKm);
-    if (!result) {
-      reply.status(502).send({ message: "Tide predictions unavailable" });
-      return;
-    }
-    reply.header("Cache-Control", "public, max-age=3600");
-    reply.send(result);
+    },
   });
 }

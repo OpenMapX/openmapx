@@ -1,12 +1,11 @@
 import {
+  fetchJson as coreFetchJson,
   createPlace,
   despikeSeries,
   findTideExtrema,
   type Place,
-  USER_AGENT,
 } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
-import { registerPlaceResolver } from "@openmapx/place-ids";
+import { createTidesIntegration, type IntegrationContext } from "@openmapx/integration-framework";
 
 /**
  * Global tide-gauge observation knowledge integration. Wraps the IOC Sea
@@ -23,6 +22,11 @@ import { registerPlaceResolver } from "@openmapx/place-ids";
  *
  * Units: m by default; converted to feet for parity with NOAA. Free +
  * commercial use under UNESCO-IOC public-data policy.
+ *
+ * The place-resolver + `/tides` route shell (nearest-station lookup, per-day
+ * `nearest:` cache, `{ notFound: true }` sentinel, `Cache-Control`) lives in
+ * the shared `createTidesIntegration` factory; everything below is the
+ * IOC-specific catalog/observation handling.
  */
 const BASE = "http://www.ioc-sealevelmonitoring.org/service.php";
 const FETCH_TIMEOUT_MS = 15_000;
@@ -71,20 +75,6 @@ interface TidesResponse {
   currentLevel?: { time: string; valueFt: number };
 }
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
-}
-
 function reformatIocTime(stime: string): string {
   // IOC publishes `stime` in UTC without a TZ marker (e.g. "2026-05-17 22:30:00").
   // Convert to ISO-8601 with `Z` so the place-panel parser detects UTC and
@@ -97,19 +87,11 @@ function reformatIocTime(stime: string): string {
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return coreFetchJson<T>(url, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    nullOnError: true,
+    headers: { Accept: "application/json" },
+  });
 }
 
 async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
@@ -138,20 +120,6 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   }
   await ctx.cache.set("catalog", stations, CATALOG_TTL);
   return stations;
-}
-
-function findNearest(
-  stations: CachedStation[],
-  lat: number,
-  lng: number,
-  maxKm = MAX_STATION_DISTANCE_KM,
-): { station: CachedStation; distanceKm: number } | null {
-  let best: { station: CachedStation; distanceKm: number } | null = null;
-  for (const s of stations) {
-    const d = haversineKm(lat, lng, s.lat, s.lng);
-    if (d <= maxKm && (!best || d < best.distanceKm)) best = { station: s, distanceKm: d };
-  }
-  return best;
 }
 
 async function fetchObservations(stationCode: string): Promise<IocDataPoint[]> {
@@ -240,89 +208,24 @@ async function buildTidesResponse(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  registerPlaceResolver("ioc", async (value) => {
-    const id = value.split(":")[0].trim();
-    if (!id) return null;
-    const stations = await loadStations(ctx);
-    const station = stations.find((s) => s.code === id);
-    if (!station) return null;
-    const place: Place = createPlace({
-      primaryScheme: "ioc",
-      ids: { ioc: station.code },
-      name: station.name,
-      address: "",
-      coordinates: [station.lng, station.lat],
-      category: "Tide Station",
-      rawCategory: "marine/tide_station",
-    });
-    return place;
-  });
-
-  ctx.registerRoute("GET", "/tides", async (req, reply) => {
-    const stationParam = req.query.station;
-    let resolvedStation: CachedStation | null = null;
-    let distanceKm = 0;
-
-    if (stationParam) {
-      const stations = await loadStations(ctx);
-      const found = stations.find((s) => s.code === stationParam);
-      if (!found) {
-        reply.status(404).send({ message: "Unknown station" });
-        return;
-      }
-      resolvedStation = found;
-    } else {
-      const lat = Number.parseFloat(req.query.lat ?? "");
-      const lng = Number.parseFloat(req.query.lng ?? "");
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        reply.status(400).send({ message: "Invalid coordinates" });
-        return;
-      }
-
-      // Include the UTC date — events are bucketed today/tomorrow on the
-      // client, so a cached response that spans midnight UTC would land
-      // yesterday's events under today's label until the TTL expires.
-      const dayKey = new Date().toISOString().slice(0, 10);
-      const cacheKey = `nearest:${round4(lat)},${round4(lng)}:${dayKey}`;
-      const cached = await ctx.cache.get<TidesResponse | { notFound: true }>(cacheKey);
-      if (cached) {
-        if ("notFound" in cached) {
-          reply.status(204).send(null);
-          return;
-        }
-        reply.header("Cache-Control", "public, max-age=1800");
-        reply.send(cached);
-        return;
-      }
-
-      const stations = await loadStations(ctx);
-      const nearest = findNearest(stations, lat, lng);
-      if (!nearest) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, TIDES_TTL);
-        reply.status(204).send(null);
-        return;
-      }
-      resolvedStation = nearest.station;
-      distanceKm = nearest.distanceKm;
-
-      const result = await buildTidesResponse(ctx, resolvedStation, distanceKm);
-      if (!result) {
-        await ctx.cache.set(cacheKey, { notFound: true } as const, TIDES_TTL);
-        reply.status(204).send(null);
-        return;
-      }
-      await ctx.cache.set(cacheKey, result, TIDES_TTL);
-      reply.header("Cache-Control", "public, max-age=1800");
-      reply.send(result);
-      return;
-    }
-
-    const result = await buildTidesResponse(ctx, resolvedStation, distanceKm);
-    if (!result) {
-      reply.status(502).send({ message: "Observations unavailable" });
-      return;
-    }
-    reply.header("Cache-Control", "public, max-age=1800");
-    reply.send(result);
+  createTidesIntegration<CachedStation, TidesResponse>(ctx, {
+    scheme: "ioc",
+    loadStations,
+    findStationById: (stations, id) => stations.find((s) => s.code === id),
+    createPlace: (station): Place =>
+      createPlace({
+        primaryScheme: "ioc",
+        ids: { ioc: station.code },
+        name: station.name,
+        address: "",
+        coordinates: [station.lng, station.lat],
+        category: "Tide Station",
+        rawCategory: "marine/tide_station",
+      }),
+    buildTidesResponse,
+    maxStationDistanceKm: MAX_STATION_DISTANCE_KM,
+    nearestCacheTtl: TIDES_TTL,
+    cacheControlMaxAge: 1800,
+    unavailableMessage: "Observations unavailable",
   });
 }

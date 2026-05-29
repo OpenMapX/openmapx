@@ -1,20 +1,12 @@
-import {
-  createManifestAttribution,
-  type IntegrationContext,
-} from "@openmapx/integration-framework";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { withAttribution } from "@openmapx/mobility-core/result";
+import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as entur from "./provider.js";
 
 const NORWAY_BBOX: [number, number, number, number] = [4.0, 57.0, 32.0, 71.5];
 
-const attribution = createManifestAttribution();
-const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
-const wrapRT = <T>(data: T) =>
-  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  init(ctx);
   entur.setEnturTransitConfig({
     geocoderEndpoint: ctx.config.geocoderEndpoint as string | undefined,
     journeyPlannerEndpoint: ctx.config.journeyPlannerEndpoint as string | undefined,

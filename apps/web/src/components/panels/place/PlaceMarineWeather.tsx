@@ -3,9 +3,9 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import type { DouglasSeaState, MarineHourlyPoint, MarineWeatherResponse } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
+import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 /**
  * Sea-conditions widget for coastal place panels. Mounted by
@@ -16,10 +16,10 @@ import { SectionAttribution } from "@/components/ui/SectionAttribution";
  */
 export function PlaceMarineWeatherContent({ data }: { data: MarineWeatherResponse }) {
   const t = useTranslations("marineWeather");
-  const registry = useIntegrationRegistry();
-  const attributionSource = registry
-    .get("knowledge-marine-weather")
-    ?.dataSources?.find((ds) => ds.sourceId === "open-meteo-marine");
+  const attributionSource = useDataSourceAttribution(
+    "knowledge-marine-weather",
+    "open-meteo-marine",
+  );
 
   const { current, hourly } = data;
 

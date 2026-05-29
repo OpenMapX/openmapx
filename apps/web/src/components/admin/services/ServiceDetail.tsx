@@ -20,7 +20,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import NextLink from "next/link";
 import { useState } from "react";
-import type { ServiceDetail as ServiceDetailData, ServiceStatus } from "@/hooks/useServices";
+import type { ServiceDetail as ServiceDetailData } from "@/hooks/useServices";
 import {
   useServiceAction,
   useServiceConfig,
@@ -29,47 +29,10 @@ import {
 } from "@/hooks/useServices";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
+import { MetaRow } from "../shared/MetaRow";
+import { statusColor, statusLabel } from "../shared/ServiceStatusChip";
 import { ServiceConfigForm } from "./ServiceConfigForm";
 import { ServiceLogsDrawer } from "./ServiceLogsDrawer";
-
-function statusColor(status: ServiceStatus): "success" | "warning" | "error" | "default" {
-  if (status === "running") return "success";
-  if (status === "restarting") return "warning";
-  if (status === "exited") return "error";
-  return "default";
-}
-
-function statusLabel(status: ServiceStatus): string {
-  if (status === "not-running") return "Not running";
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
-  if (value === null || value === undefined || value === "") return null;
-  return (
-    <Stack
-      direction="row"
-      sx={{
-        gap: 1,
-        alignItems: "flex-start",
-      }}
-    >
-      <Typography
-        variant="body2"
-        sx={{
-          color: "text.secondary",
-          minWidth: 130,
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </Typography>
-      <Box>
-        {typeof value === "string" ? <Typography variant="body2">{value}</Typography> : value}
-      </Box>
-    </Stack>
-  );
-}
 
 function OverviewTab({ data }: { data: ServiceDetailData }) {
   const { manifest } = data;

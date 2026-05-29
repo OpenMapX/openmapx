@@ -1,17 +1,11 @@
 import { setOverpassUrl } from "@openmapx/core";
-import {
-  createManifestAttribution,
-  type IntegrationContext,
-} from "@openmapx/integration-framework";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { withAttribution } from "@openmapx/mobility-core/result";
+import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as overpass from "./provider.js";
 
-const attribution = createManifestAttribution();
-const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
+const { attribution, wrap, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  init(ctx);
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
 

@@ -1,5 +1,6 @@
 import type { PlacePhoto } from "@openmapx/core";
-import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
+import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-framework";
+import { createBboxPhotoProvider } from "@openmapx/integration-photos/bbox-provider";
 
 interface MapillaryImageResponse {
   data: Array<{
@@ -19,41 +20,28 @@ export function setMapillaryAccessToken(value: string | undefined): void {
   accessToken = value && value.length > 0 ? value : undefined;
 }
 
-export const mapillaryPhotoProvider: PhotoProvider = {
+const baseProvider = createBboxPhotoProvider<MapillaryImageResponse>({
   id: "mapillary",
   name: "Mapillary",
-
-  async search(query: PhotoQuery): Promise<PlacePhoto[]> {
-    const token = accessToken;
-    if (!token) return [];
-
+  deltaDeg: 0.003, // ~330m
+  buildUrl(bbox, query) {
     const limit = query.limit ?? 6;
-    const delta = 0.003; // ~330m
-    const west = query.lng - delta;
-    const south = query.lat - delta;
-    const east = query.lng + delta;
-    const north = query.lat + delta;
-
     const url = new URL("https://graph.mapillary.com/images");
-    url.searchParams.set("bbox", `${west},${south},${east},${north}`);
+    url.searchParams.set("bbox", `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`);
     url.searchParams.set(
       "fields",
       "id,geometry,thumb_1024_url,thumb_256_url,captured_at,creator,is_pano",
     );
     url.searchParams.set("is_pano", "false");
     url.searchParams.set("limit", String(Math.min(limit * 2, 20)));
-    url.searchParams.set("access_token", token);
-
-    let res: Response;
-    try {
-      res = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) });
-    } catch {
-      return [];
-    }
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as MapillaryImageResponse;
+    // accessToken is guaranteed non-empty: search() short-circuits when unset.
+    url.searchParams.set("access_token", accessToken as string);
+    return url.toString();
+  },
+  parse(data, query) {
     if (!data.data?.length) return [];
+
+    const limit = query.limit ?? 6;
 
     // Sort by distance to the query point, pick closest
     const cosLat = Math.cos((query.lat * Math.PI) / 180);
@@ -84,5 +72,15 @@ export const mapillaryPhotoProvider: PhotoProvider = {
         coordinates: [imgLng, imgLat],
       };
     });
+  },
+});
+
+export const mapillaryPhotoProvider: PhotoProvider = {
+  id: baseProvider.id,
+  name: baseProvider.name,
+  async search(query: PhotoQuery): Promise<PlacePhoto[]> {
+    // No token → no request (preserves original short-circuit before bbox/fetch).
+    if (!accessToken) return [];
+    return baseProvider.search(query);
   },
 };

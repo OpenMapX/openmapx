@@ -1,4 +1,8 @@
-import type { BoundingBox, DataSourceAttribution } from "@openmapx/core";
+import {
+  type BoundingBox,
+  type DataSourceAttribution,
+  haversineMeters as haversineMetersCore,
+} from "@openmapx/core";
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
 
 export function cleanString(value: unknown): string | undefined {
@@ -58,18 +62,10 @@ export function bboxCenter(bbox: BoundingBox): [number, number] {
   return [(bbox.west + bbox.east) / 2, (bbox.south + bbox.north) / 2];
 }
 
-const EARTH_M = 6_371_000;
-
 export function haversineMeters(a: [number, number], b: [number, number]): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
   const [lng1, lat1] = a;
   const [lng2, lat2] = b;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const s1 = Math.sin(dLat / 2);
-  const s2 = Math.sin(dLng / 2);
-  const h = s1 * s1 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * s2 * s2;
-  return 2 * EARTH_M * Math.asin(Math.min(1, Math.sqrt(h)));
+  return haversineMetersCore(lat1, lng1, lat2, lng2);
 }
 
 export function splitList(value: string | undefined): string[] {

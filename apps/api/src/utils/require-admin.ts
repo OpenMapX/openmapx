@@ -1,7 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { auth } from "../auth";
+import { safeEqual } from "./safe-equal.js";
 
 export type AdminSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 
@@ -43,13 +43,6 @@ function socketPeerAddress(request: FastifyRequest): string | undefined {
  * headers, so requiring this header blocks localhost CSRF via `<form action>`.
  */
 const LOCAL_ADMIN_TOKEN_HEADER = "x-openmapx-local-admin";
-
-function safeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
-}
 
 function getLocalAdminToken(): string | null {
   const token = process.env.OPENMAPX_LOCAL_ADMIN_TOKEN?.trim();

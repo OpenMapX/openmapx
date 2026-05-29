@@ -13,12 +13,13 @@ import {
   useTransitStops,
 } from "@openmapx/core";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
-import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
+import { upsertGeoJsonSource } from "./layers/layerStyleUtils";
 
 const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";
@@ -188,11 +189,7 @@ export function CategoryResultMarkers() {
 
         const geojson = buildTransitGeoJson(transitStops);
 
-        if (map.getSource(TRANSIT_SOURCE_ID)) {
-          (map.getSource(TRANSIT_SOURCE_ID) as GeoJSONSource).setData(geojson);
-        } else {
-          map.addSource(TRANSIT_SOURCE_ID, { type: "geojson", data: geojson });
-        }
+        upsertGeoJsonSource(map, TRANSIT_SOURCE_ID, geojson);
 
         // Load marker images for all unique modes, then add layers
         const uniqueModes = Array.from(new Set(transitStops.flatMap((s) => s.modes)));
@@ -247,11 +244,7 @@ export function CategoryResultMarkers() {
         mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
       const geojson = buildGeoJson(results, imageId);
 
-      if (map.getSource(SOURCE_ID)) {
-        (map.getSource(SOURCE_ID) as GeoJSONSource).setData(geojson);
-      } else {
-        map.addSource(SOURCE_ID, { type: "geojson", data: geojson });
-      }
+      upsertGeoJsonSource(map, SOURCE_ID, geojson);
 
       // Load image then add layers (image may already be cached)
       void loadMarkerImage(map, imageId, iconPath).then(() => {

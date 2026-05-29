@@ -2,13 +2,11 @@
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
-import LinearProgress from "@mui/material/LinearProgress";
-import Paper from "@mui/material/Paper";
-import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { buildIntegrationAttribution } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { type EnvironmentSensorType, useEnvironmentStore } from "./store";
 
 interface GradientDef {
@@ -70,47 +68,22 @@ export function EnvironmentLegend() {
   const setSensorType = useEnvironmentStore((s) => s.setSensorType);
   const stationCount = useEnvironmentStore((s) => s.stationCount);
 
-  if (!panelOpen) return null;
-
   const gradient = GRADIENTS[sensorType];
   const gradientCss = `linear-gradient(to right, ${gradient.colors.join(", ")})`;
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        overflow: "hidden",
-        maxWidth: { xs: "90vw", sm: 420 },
-        minWidth: 260,
-      }}
+    <OverlayLegend
+      title={t("environmentalSensors")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={loading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
+      headerSx={{ mb: 0.5 }}
+      attributionSx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
     >
-      {loading && (
-        <LinearProgress
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            borderRadius: "12px 12px 0 0",
-          }}
-        />
-      )}
-      {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("environmentalSensors")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       {/* Sensor type chips */}
       <Box
         sx={{
@@ -160,19 +133,6 @@ export function EnvironmentLegend() {
             ? t("loading")
             : t("noStations")}
       </Typography>
-      {/* Attribution (from manifest dataSources, trusted HTML) */}
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
-          sx={{
-            color: "text.secondary",
-            mt: 0.5,
-            display: "block",
-            fontSize: 10.5,
-          }}
-        />
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }

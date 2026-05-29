@@ -1,18 +1,10 @@
-import {
-  createManifestAttribution,
-  type IntegrationContext,
-} from "@openmapx/integration-framework";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { withAttribution } from "@openmapx/mobility-core/result";
+import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as dbVendo from "./provider.js";
 
-const attribution = createManifestAttribution();
-const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
-const wrapRT = <T>(data: T) =>
-  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  init(ctx);
   dbVendo.setDbVendoUserAgent(ctx.config.userAgent as string | undefined);
   ctx.registerTransitProvider({
     id: "transit-db-vendo",

@@ -4,11 +4,10 @@
  * https://github.com/ubahnverleih/WoBike/blob/master/Link.md
  */
 
-import { type BoundingBox, type LngLat, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, fetchJson, type LngLat } from "@openmapx/core";
 import type { SharedMobilityVehicle } from "./types.js";
 
 const LINK_URL = "https://vehicles.linkyour.city/reservation-api/local-vehicles/";
-const HEADERS = { "User-Agent": USER_AGENT };
 const FETCH_TIMEOUT_MS = 8_000;
 
 interface LinkVehicle {
@@ -30,39 +29,34 @@ export async function searchLink(bbox: BoundingBox): Promise<SharedMobilityVehic
   url.searchParams.set("latitude", String(centerLat));
   url.searchParams.set("longitude", String(centerLng));
 
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url.toString(), { headers: HEADERS, signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return [];
-    const data = (await res.json()) as LinkVehicle[] | { data: LinkVehicle[] };
-    const vehicles = Array.isArray(data) ? data : (data.data ?? []);
+  const data = await fetchJson<LinkVehicle[] | { data: LinkVehicle[] }>(url.toString(), {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    nullOnError: true,
+  });
+  if (!data) return [];
+  const vehicles = Array.isArray(data) ? data : (data.data ?? []);
 
-    return vehicles
-      .filter(
-        (v) =>
-          v.latitude &&
-          v.longitude &&
-          v.latitude >= bbox.south &&
-          v.latitude <= bbox.north &&
-          v.longitude >= bbox.west &&
-          v.longitude <= bbox.east,
-      )
-      .map(
-        (v): SharedMobilityVehicle => ({
-          id: `link/${v.id}`,
-          coordinates: [v.longitude, v.latitude] as LngLat,
-          formFactor: "scooter_standing",
-          propulsion: "electric",
-          batteryLevel: v.battery_level != null ? Math.round(v.battery_level) : undefined,
-          isReserved: false,
-          isDisabled: false,
-          operator: "Link",
-          sources: ["link"],
-        }),
-      );
-  } catch {
-    return [];
-  }
+  return vehicles
+    .filter(
+      (v) =>
+        v.latitude &&
+        v.longitude &&
+        v.latitude >= bbox.south &&
+        v.latitude <= bbox.north &&
+        v.longitude >= bbox.west &&
+        v.longitude <= bbox.east,
+    )
+    .map(
+      (v): SharedMobilityVehicle => ({
+        id: `link/${v.id}`,
+        coordinates: [v.longitude, v.latitude] as LngLat,
+        formFactor: "scooter_standing",
+        propulsion: "electric",
+        batteryLevel: v.battery_level != null ? Math.round(v.battery_level) : undefined,
+        isReserved: false,
+        isDisabled: false,
+        operator: "Link",
+        sources: ["link"],
+      }),
+    );
 }

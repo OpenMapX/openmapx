@@ -1,20 +1,12 @@
-import {
-  createManifestAttribution,
-  type IntegrationContext,
-} from "@openmapx/integration-framework";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { withAttribution } from "@openmapx/mobility-core/result";
+import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as swiss from "./provider.js";
 
 const SWITZERLAND_BBOX: [number, number, number, number] = [5.96, 45.82, 10.49, 47.81];
 
-const attribution = createManifestAttribution();
-const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
-const wrapRT = <T>(data: T) =>
-  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  init(ctx);
   swiss.setOpenTransportDataChConfig({
     apiKey: ctx.config.apiKey as string | undefined,
     cache: ctx.cache,

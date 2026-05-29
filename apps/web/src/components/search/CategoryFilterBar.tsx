@@ -29,6 +29,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { TEAL } from "@/lib/theme";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
+import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 
 // Display order: Mon–Sun; JS day indices
 const DAYS: { key: string; idx: number }[] = [
@@ -67,24 +68,9 @@ const HOUR_OPTIONS: { value: number | null }[] = [
 ];
 
 // Shared styling for the standalone toggle chips (fuel "Open now",
-// wheelchair). The opening-times chip reuses the same look inline since it
-// also carries a dropdown affordance.
-const toggleChipSx = (active: boolean): SxProps<Theme> => ({
-  pointerEvents: "auto",
-  height: 36,
-  borderRadius: "18px",
-  fontWeight: 500,
-  fontSize: 13,
-  bgcolor: active ? TEAL : "background.paper",
-  color: active ? "#fff" : "text.primary",
-  borderColor: active ? TEAL : "var(--omx-border)",
-  boxShadow: active ? "none" : "0 1px 3px var(--omx-shadow-soft)",
-  cursor: "pointer",
-  userSelect: "none",
-  "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
-  "& .MuiChip-label": { pr: "10px" },
-  "&&:hover": { bgcolor: active ? "var(--omx-teal-hover)" : "grey.300" },
-});
+// wheelchair). The opening-times chip reuses the same look since it also
+// carries a dropdown affordance.
+const toggleChipSx = (active: boolean): SxProps<Theme> => floatingChipSx(active, "toggle");
 
 function PickerButton({
   label,
@@ -168,23 +154,7 @@ export function CategoryFilterBar() {
   if (activeSource === "fuel") {
     const isFiltered = openingHoursFilter === "open_now";
     return (
-      <Box
-        sx={{
-          position: "absolute",
-          top: {
-            xs: "calc(72px + var(--omx-safe-top))",
-            sm: "calc(18px + var(--omx-safe-top))",
-          },
-          left: { xs: "var(--omx-safe-left)", sm: "calc(420px + var(--omx-safe-left))" },
-          right: { xs: "var(--omx-safe-right)", sm: "calc(108px + var(--omx-safe-right))" },
-          zIndex: 10,
-          display: "flex",
-          alignItems: "center",
-          px: { xs: 1, sm: 0 },
-          py: "2px",
-          pointerEvents: "none",
-        }}
-      >
+      <Box sx={{ ...floatingToolbarSx, pointerEvents: "none" }}>
         <Chip
           icon={
             <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
@@ -225,25 +195,7 @@ export function CategoryFilterBar() {
   const radioSx = { color: TEAL, "&.Mui-checked": { color: TEAL }, p: 0.5 };
 
   return (
-    <Box
-      sx={{
-        position: "absolute",
-        top: {
-          xs: "calc(72px + var(--omx-safe-top))",
-          sm: "calc(18px + var(--omx-safe-top))",
-        },
-        left: { xs: "var(--omx-safe-left)", sm: "calc(420px + var(--omx-safe-left))" },
-        right: { xs: "var(--omx-safe-right)", sm: "calc(108px + var(--omx-safe-right))" },
-        zIndex: 10,
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-        flexWrap: "wrap",
-        px: { xs: 1, sm: 0 },
-        py: "2px",
-        pointerEvents: "none",
-      }}
-    >
+    <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
       <Chip
         icon={
           <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
@@ -264,22 +216,7 @@ export function CategoryFilterBar() {
         }
         onClick={(e) => setAnchorEl(e.currentTarget)}
         variant={isFiltered ? "filled" : "outlined"}
-        sx={{
-          pointerEvents: "auto",
-          height: 36,
-          borderRadius: "18px",
-          fontWeight: 500,
-          fontSize: 13,
-          bgcolor: isFiltered ? TEAL : "background.paper",
-          color: isFiltered ? "#fff" : "text.primary",
-          borderColor: isFiltered ? TEAL : "var(--omx-border)",
-          boxShadow: isFiltered ? "none" : "0 1px 3px var(--omx-shadow-soft)",
-          cursor: "pointer",
-          userSelect: "none",
-          "& .MuiChip-icon": { color: "inherit", ml: "10px", mr: "-4px" },
-          "& .MuiChip-label": { pr: "10px" },
-          "&&:hover": { bgcolor: isFiltered ? "var(--omx-teal-hover)" : "grey.300" },
-        }}
+        sx={toggleChipSx(isFiltered)}
       />
       <Popover
         open={Boolean(anchorEl)}

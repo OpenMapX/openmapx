@@ -1,4 +1,4 @@
-import type { PlacePhoto } from "@openmapx/core";
+import { fetchJson, type PlacePhoto } from "@openmapx/core";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
 
 /**
@@ -84,15 +84,12 @@ export const flickrPhotoProvider: PhotoProvider = {
     url.searchParams.set("content_types", "0");
     url.searchParams.set("media", "photos");
 
-    let res: Response;
-    try {
-      res = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) });
-    } catch {
-      return [];
-    }
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as FlickrResponse;
+    const data = await fetchJson<FlickrResponse>(url.toString(), {
+      timeoutMs: 5000,
+      userAgent: null,
+      nullOnError: true,
+    });
+    if (!data) return [];
     const photos = data.photos?.photo;
     if (!photos?.length) return [];
 

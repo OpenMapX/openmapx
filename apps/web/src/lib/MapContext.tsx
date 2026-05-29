@@ -3,7 +3,7 @@
 import type maplibregl from "maplibre-gl";
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 
-interface MapContextValue {
+export interface MapContextValue {
   mapRef: React.RefObject<maplibregl.Map | null>;
   mapReady: boolean;
   /** Increments on each style.load — layer components should include this in effect deps to re-attach after style swap. */

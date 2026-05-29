@@ -35,6 +35,7 @@ import NextLink from "next/link";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
+import { MetaRow } from "../shared/MetaRow";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { DomainChip } from "./DomainChip";
 import { IntegrationStatusDot } from "./IntegrationStatusDot";
@@ -113,33 +114,6 @@ const SOURCE_COLOR: Record<string, "default" | "primary" | "secondary" | "succes
   env: "success",
 };
 
-function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
-  if (value === null || value === undefined || value === "") return null;
-  return (
-    <Stack
-      direction="row"
-      sx={{
-        gap: 1,
-        alignItems: "flex-start",
-      }}
-    >
-      <Typography
-        variant="body2"
-        sx={{
-          color: "text.secondary",
-          minWidth: 110,
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </Typography>
-      <Box>
-        {typeof value === "string" ? <Typography variant="body2">{value}</Typography> : value}
-      </Box>
-    </Stack>
-  );
-}
-
 function OverviewTab({ data }: { data: IntegrationDetailData }) {
   return (
     <Stack
@@ -165,6 +139,7 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
           >
             <MetaRow
               label="ID"
+              labelWidth={110}
               value={
                 <Typography
                   variant="body2"
@@ -176,9 +151,9 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
                 </Typography>
               }
             />
-            <MetaRow label="Version" value={data.version} />
-            <MetaRow label="Author" value={data.author} />
-            <MetaRow label="License" value={data.license} />
+            <MetaRow label="Version" labelWidth={110} value={data.version} />
+            <MetaRow label="Author" labelWidth={110} value={data.author} />
+            <MetaRow label="License" labelWidth={110} value={data.license} />
             {data.documentation && (
               <Stack
                 direction="row"
@@ -1059,7 +1034,7 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                   </Stack>
                 </Link>
               </Stack>
-              <MetaRow label="License" value={ds.license} />
+              <MetaRow label="License" labelWidth={110} value={ds.license} />
               {ds.licenseUrl && (
                 <Link
                   href={ds.licenseUrl}
@@ -1070,10 +1045,12 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                   License details
                 </Link>
               )}
-              {ds.commercialUse && <MetaRow label="Commercial use" value={ds.commercialUse} />}
-              <MetaRow label="Provider country" value={ds.providerCountry} />
+              {ds.commercialUse && (
+                <MetaRow label="Commercial use" labelWidth={110} value={ds.commercialUse} />
+              )}
+              <MetaRow label="Provider country" labelWidth={110} value={ds.providerCountry} />
               {ds.endUserExposure && (
-                <MetaRow label="End-user exposure" value={ds.endUserExposure} />
+                <MetaRow label="End-user exposure" labelWidth={110} value={ds.endUserExposure} />
               )}
               <Stack
                 direction="row"

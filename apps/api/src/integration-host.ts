@@ -724,6 +724,185 @@ function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
   return false;
 }
 
+/**
+ * Builds the per-integration `DatabaseClient` when the manifest requires
+ * postgis (via `requires:` or the legacy `infrastructure.services`); returns
+ * `undefined` otherwise. Shared by cold start and reload.
+ */
+function buildIntegrationDb(manifest: IntegrationManifest, raw: unknown): IntegrationContext["db"] {
+  const rawInfra = (raw as Record<string, unknown>).infrastructure as
+    | { services?: string[] }
+    | undefined;
+  const needsDb =
+    manifest.requires?.some((r) => r.service === "postgis") ||
+    rawInfra?.services?.includes("postgres");
+  if (!needsDb) return undefined;
+  return {
+    async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
+      const result = params
+        ? await pgClient.unsafe(query, params as never[])
+        : await pgClient.unsafe(query);
+      return result as T;
+    },
+  };
+}
+
+/**
+ * Emits advisory warnings for required/enum config keys that violate the
+ * manifest's `configSchema`. Never blocks load. Shared by cold start and reload.
+ */
+function warnInvalidConfig(
+  manifest: IntegrationManifest,
+  config: Record<string, unknown>,
+  id: string,
+  warn: (msg: string) => void,
+): void {
+  const configSchema = manifest.configSchema as Record<string, unknown> | undefined;
+  if (!configSchema?.properties) return;
+  const props = configSchema.properties as Record<
+    string,
+    { type?: string; enum?: unknown[]; required?: boolean }
+  >;
+  for (const [key, def] of Object.entries(props)) {
+    if (def.required && config[key] === undefined) {
+      warn(`Integration ${id}: missing required config key "${key}"`);
+    }
+    if (def.enum && config[key] !== undefined && !def.enum.includes(config[key])) {
+      warn(
+        `Integration ${id}: config "${key}" value "${config[key]}" not in allowed values: ${def.enum.join(", ")}`,
+      );
+    }
+  }
+}
+
+/**
+ * Assembles the `IntegrationContext` passed to an integration's `setup()`.
+ * The register* methods, event-bus wiring, and shutdown handling are identical
+ * for cold start (`initIntegrations`) and reload (`reloadIntegrations`); only
+ * the resolved `requiresMap`, per-integration clients, and target `integration`
+ * record differ, so the caller supplies those.
+ */
+function buildIntegrationContext(args: {
+  id: string;
+  manifest: IntegrationManifest;
+  config: Record<string, unknown>;
+  log: Logger;
+  http: HttpClient;
+  cache: CacheClient;
+  db: IntegrationContext["db"];
+  requiresMap: ReturnType<typeof resolveRequiresForIntegration>;
+  providers: Map<string, unknown[]>;
+  shutdownHandlers: Array<() => Promise<void>>;
+  integration: LoadedIntegration;
+}): IntegrationContext {
+  const { id, manifest, config, log, http, cache, db, requiresMap, providers, shutdownHandlers } =
+    args;
+  const { integration } = args;
+  return {
+    id,
+    manifest,
+    config,
+    http,
+    cache,
+    liveStore,
+    db,
+    log,
+    secrets: { get: (key: string) => getSecret(id, key) },
+    attributionIndex: getAttributionIndex() ?? undefined,
+    providerHealth: getProviderHealth() ?? undefined,
+    metricsRecorder: getMetricsRecorder(),
+    getRequiredService(key: string) {
+      return requiresMap.get(key) ?? null;
+    },
+    registerTransitProvider(provider) {
+      const existing = providers.get("transit") ?? [];
+      existing.push(provider);
+      providers.set("transit", existing);
+    },
+    registerRealtimeProvider(provider) {
+      const existing = providers.get("live-transit") ?? [];
+      existing.push(provider);
+      providers.set("live-transit", existing);
+    },
+    registerMobilityDataSource(provider) {
+      const existing = providers.get("data-source") ?? [];
+      existing.push(provider);
+      providers.set("data-source", existing);
+    },
+    registerWeatherProvider(provider) {
+      const existing = providers.get("weather") ?? [];
+      existing.push(provider);
+      providers.set("weather", existing);
+    },
+    registerGeocodingProvider(provider) {
+      const existing = providers.get("geocoding") ?? [];
+      existing.push(provider);
+      providers.set("geocoding", existing);
+    },
+    registerRoutingProvider(provider) {
+      const existing = providers.get("routing") ?? [];
+      existing.push(provider);
+      providers.set("routing", existing);
+    },
+    registerPhotoProvider(provider) {
+      const existing = providers.get("photos") ?? [];
+      existing.push(provider);
+      providers.set("photos", existing);
+    },
+    registerReviewProvider(provider) {
+      const existing = providers.get("reviews") ?? [];
+      existing.push(provider);
+      providers.set("reviews", existing);
+    },
+    registerPoiSearchProvider(provider) {
+      const existing = providers.get("poi-search") ?? [];
+      existing.push(provider);
+      providers.set("poi-search", existing);
+    },
+    registerKnowledgeProvider(provider) {
+      const existing = providers.get("knowledge") ?? [];
+      existing.push(provider);
+      providers.set("knowledge", existing);
+    },
+    registerGtfsCatalogProvider(provider) {
+      const existing = providers.get("gtfs-catalog") ?? [];
+      existing.push(provider);
+      providers.set("gtfs-catalog", existing);
+    },
+    registerPoiSources(sources) {
+      // Forward to the shared @openmapx/poi-source-registry store. The
+      // wrapper logger tags warnings with the integration id so cross-
+      // integration id collisions are traceable. `log` is the per-
+      // integration Logger built earlier in this ctx builder.
+      registerPoiSourcesInStore(sources, {
+        warn: (msg: string, ...rest: unknown[]) => log.warn(`[poi-sources] ${msg}`, ...rest),
+      });
+    },
+    registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
+      registerIntegrationRoute(id, method, path, handler, options);
+    },
+    registerHealthCheck(fn: CustomHealthCheckFn) {
+      integration.customHealthCheck = fn;
+    },
+    emit(event: string, data: unknown) {
+      eventBus.emit({
+        type: event,
+        integrationId: id,
+        ...(typeof data === "object" && data !== null ? data : {}),
+      } as never);
+    },
+    on(event: string, handler: (data: unknown) => void) {
+      return eventBus.on(event as never, handler as never);
+    },
+    onShutdown(cleanup: () => Promise<void>) {
+      shutdownHandlers.push(cleanup);
+    },
+    getIntegrationsByDomain(domain: string) {
+      return getIntegrationsByDomain(domain);
+    },
+  };
+}
+
 export async function initIntegrations(
   // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
   fastify: FastifyInstance<any, any, any, any>,
@@ -849,25 +1028,7 @@ export async function initIntegrations(
     }
 
     const config = injectRuntimeConfig(await resolveConfig(manifest, directory));
-
-    // Validate config against configSchema if present
-    const configSchema = manifest.configSchema as Record<string, unknown> | undefined;
-    if (configSchema?.properties) {
-      const props = configSchema.properties as Record<
-        string,
-        { type?: string; enum?: unknown[]; required?: boolean }
-      >;
-      for (const [key, def] of Object.entries(props)) {
-        if (def.required && config[key] === undefined) {
-          fastify.log.warn(`Integration ${id}: missing required config key "${key}"`);
-        }
-        if (def.enum && config[key] !== undefined && !def.enum.includes(config[key])) {
-          fastify.log.warn(
-            `Integration ${id}: config "${key}" value "${config[key]}" not in allowed values: ${def.enum.join(", ")}`,
-          );
-        }
-      }
-    }
+    warnInvalidConfig(manifest, config, id, (msg) => fastify.log.warn(msg));
 
     const log = createLogger(id, fastify);
     const http = createHttpClient(log);
@@ -894,25 +1055,7 @@ export async function initIntegrations(
       continue;
     }
 
-    // Determine if this integration needs a DB connection.
-    // Support both the new requires: approach and the legacy infrastructure.services approach
-    // (legacy removed from schema but may still be in unprocessed manifests as unknown fields).
-    const rawInfra = (raw as Record<string, unknown>).infrastructure as
-      | { services?: string[] }
-      | undefined;
-    const needsDb =
-      manifest.requires?.some((r) => r.service === "postgis") ||
-      rawInfra?.services?.includes("postgres");
-    const integrationDb = needsDb
-      ? {
-          async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
-            const result = params
-              ? await pgClient.unsafe(query, params as never[])
-              : await pgClient.unsafe(query);
-            return result as T;
-          },
-        }
-      : undefined;
+    const integrationDb = buildIntegrationDb(manifest, raw);
 
     const requiresMap = resolveRequiresForIntegration({
       manifestId: id,
@@ -926,109 +1069,19 @@ export async function initIntegrations(
         ),
     });
 
-    const ctx: IntegrationContext = {
+    const ctx = buildIntegrationContext({
       id,
       manifest,
       config,
+      log,
       http,
       cache,
-      liveStore,
       db: integrationDb,
-      log,
-      secrets: { get: (key: string) => getSecret(id, key) },
-      attributionIndex: getAttributionIndex() ?? undefined,
-      providerHealth: getProviderHealth() ?? undefined,
-      metricsRecorder: getMetricsRecorder(),
-      getRequiredService(key: string) {
-        return requiresMap.get(key) ?? null;
-      },
-      registerTransitProvider(provider) {
-        const existing = providers.get("transit") ?? [];
-        existing.push(provider);
-        providers.set("transit", existing);
-      },
-      registerRealtimeProvider(provider) {
-        const existing = providers.get("live-transit") ?? [];
-        existing.push(provider);
-        providers.set("live-transit", existing);
-      },
-      registerMobilityDataSource(provider) {
-        const existing = providers.get("data-source") ?? [];
-        existing.push(provider);
-        providers.set("data-source", existing);
-      },
-      registerWeatherProvider(provider) {
-        const existing = providers.get("weather") ?? [];
-        existing.push(provider);
-        providers.set("weather", existing);
-      },
-      registerGeocodingProvider(provider) {
-        const existing = providers.get("geocoding") ?? [];
-        existing.push(provider);
-        providers.set("geocoding", existing);
-      },
-      registerRoutingProvider(provider) {
-        const existing = providers.get("routing") ?? [];
-        existing.push(provider);
-        providers.set("routing", existing);
-      },
-      registerPhotoProvider(provider) {
-        const existing = providers.get("photos") ?? [];
-        existing.push(provider);
-        providers.set("photos", existing);
-      },
-      registerReviewProvider(provider) {
-        const existing = providers.get("reviews") ?? [];
-        existing.push(provider);
-        providers.set("reviews", existing);
-      },
-      registerPoiSearchProvider(provider) {
-        const existing = providers.get("poi-search") ?? [];
-        existing.push(provider);
-        providers.set("poi-search", existing);
-      },
-      registerKnowledgeProvider(provider) {
-        const existing = providers.get("knowledge") ?? [];
-        existing.push(provider);
-        providers.set("knowledge", existing);
-      },
-      registerGtfsCatalogProvider(provider) {
-        const existing = providers.get("gtfs-catalog") ?? [];
-        existing.push(provider);
-        providers.set("gtfs-catalog", existing);
-      },
-      registerPoiSources(sources) {
-        // Forward to the shared @openmapx/poi-source-registry store. The
-        // wrapper logger tags warnings with the integration id so cross-
-        // integration id collisions are traceable. `log` is the per-
-        // integration Logger built earlier in this ctx builder.
-        registerPoiSourcesInStore(sources, {
-          warn: (msg: string, ...args: unknown[]) => log.warn(`[poi-sources] ${msg}`, ...args),
-        });
-      },
-      registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
-        registerIntegrationRoute(id, method, path, handler, options);
-      },
-      registerHealthCheck(fn: CustomHealthCheckFn) {
-        integration.customHealthCheck = fn;
-      },
-      emit(event: string, data: unknown) {
-        eventBus.emit({
-          type: event,
-          integrationId: id,
-          ...(typeof data === "object" && data !== null ? data : {}),
-        } as never);
-      },
-      on(event: string, handler: (data: unknown) => void) {
-        return eventBus.on(event as never, handler as never);
-      },
-      onShutdown(cleanup: () => Promise<void>) {
-        shutdownHandlers.push(cleanup);
-      },
-      getIntegrationsByDomain(domain: string) {
-        return getIntegrationsByDomain(domain);
-      },
-    };
+      requiresMap,
+      providers,
+      shutdownHandlers,
+      integration,
+    });
 
     // Try to load the integration's setup function
     try {
@@ -1255,7 +1308,10 @@ export async function reloadIntegrations(): Promise<{
     const manifest = raw as IntegrationManifest;
     const id = manifest.id;
 
-    if (integrations.has(id)) continue;
+    if (integrations.has(id)) {
+      _fastify.log.warn(`Skipping duplicate integration: ${id}`);
+      continue;
+    }
 
     if (!isBuiltIn && manifest.platform) {
       if (!satisfiesPlatformVersion(manifest.platform)) {
@@ -1273,24 +1329,7 @@ export async function reloadIntegrations(): Promise<{
     const shutdownHandlers: Array<() => Promise<void>> = [];
     const providers = new Map<string, unknown[]>();
 
-    // Validate config against configSchema if present
-    const reloadConfigSchema = manifest.configSchema as Record<string, unknown> | undefined;
-    if (reloadConfigSchema?.properties) {
-      const props = reloadConfigSchema.properties as Record<
-        string,
-        { type?: string; enum?: unknown[]; required?: boolean }
-      >;
-      for (const [key, def] of Object.entries(props)) {
-        if (def.required && config[key] === undefined) {
-          _fastify.log.warn(`Integration ${id}: missing required config key "${key}"`);
-        }
-        if (def.enum && config[key] !== undefined && !def.enum.includes(config[key])) {
-          _fastify.log.warn(
-            `Integration ${id}: config "${key}" value "${config[key]}" not in allowed values: ${def.enum.join(", ")}`,
-          );
-        }
-      }
-    }
+    warnInvalidConfig(manifest, config, id, (msg) => _fastify?.log.warn(msg));
 
     const integration: LoadedIntegration = {
       id,
@@ -1310,22 +1349,7 @@ export async function reloadIntegrations(): Promise<{
       continue;
     }
 
-    const reloadRawInfra = (raw as Record<string, unknown>).infrastructure as
-      | { services?: string[] }
-      | undefined;
-    const needsDb =
-      manifest.requires?.some((r) => r.service === "postgis") ||
-      reloadRawInfra?.services?.includes("postgres");
-    const integrationDb = needsDb
-      ? {
-          async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
-            const result = params
-              ? await pgClient.unsafe(query, params as never[])
-              : await pgClient.unsafe(query);
-            return result as T;
-          },
-        }
-      : undefined;
+    const integrationDb = buildIntegrationDb(manifest, raw);
 
     const fastifyForReload = _fastify;
     const reloadRequiresMap = resolveRequiresForIntegration({
@@ -1340,109 +1364,19 @@ export async function reloadIntegrations(): Promise<{
         ),
     });
 
-    const ctx: IntegrationContext = {
+    const ctx = buildIntegrationContext({
       id,
       manifest,
       config,
+      log,
       http,
       cache,
-      liveStore,
       db: integrationDb,
-      log,
-      secrets: { get: (key: string) => getSecret(id, key) },
-      attributionIndex: getAttributionIndex() ?? undefined,
-      providerHealth: getProviderHealth() ?? undefined,
-      metricsRecorder: getMetricsRecorder(),
-      getRequiredService(key: string) {
-        return reloadRequiresMap.get(key) ?? null;
-      },
-      registerTransitProvider(provider) {
-        const existing = providers.get("transit") ?? [];
-        existing.push(provider);
-        providers.set("transit", existing);
-      },
-      registerRealtimeProvider(provider) {
-        const existing = providers.get("live-transit") ?? [];
-        existing.push(provider);
-        providers.set("live-transit", existing);
-      },
-      registerMobilityDataSource(provider) {
-        const existing = providers.get("data-source") ?? [];
-        existing.push(provider);
-        providers.set("data-source", existing);
-      },
-      registerWeatherProvider(provider) {
-        const existing = providers.get("weather") ?? [];
-        existing.push(provider);
-        providers.set("weather", existing);
-      },
-      registerGeocodingProvider(provider) {
-        const existing = providers.get("geocoding") ?? [];
-        existing.push(provider);
-        providers.set("geocoding", existing);
-      },
-      registerRoutingProvider(provider) {
-        const existing = providers.get("routing") ?? [];
-        existing.push(provider);
-        providers.set("routing", existing);
-      },
-      registerPhotoProvider(provider) {
-        const existing = providers.get("photos") ?? [];
-        existing.push(provider);
-        providers.set("photos", existing);
-      },
-      registerReviewProvider(provider) {
-        const existing = providers.get("reviews") ?? [];
-        existing.push(provider);
-        providers.set("reviews", existing);
-      },
-      registerPoiSearchProvider(provider) {
-        const existing = providers.get("poi-search") ?? [];
-        existing.push(provider);
-        providers.set("poi-search", existing);
-      },
-      registerKnowledgeProvider(provider) {
-        const existing = providers.get("knowledge") ?? [];
-        existing.push(provider);
-        providers.set("knowledge", existing);
-      },
-      registerGtfsCatalogProvider(provider) {
-        const existing = providers.get("gtfs-catalog") ?? [];
-        existing.push(provider);
-        providers.set("gtfs-catalog", existing);
-      },
-      registerPoiSources(sources) {
-        // Forward to the shared @openmapx/poi-source-registry store. The
-        // wrapper logger tags warnings with the integration id so cross-
-        // integration id collisions are traceable. `log` is the per-
-        // integration Logger built earlier in this ctx builder.
-        registerPoiSourcesInStore(sources, {
-          warn: (msg: string, ...args: unknown[]) => log.warn(`[poi-sources] ${msg}`, ...args),
-        });
-      },
-      registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions) {
-        registerIntegrationRoute(id, method, path, handler, options);
-      },
-      registerHealthCheck(fn: CustomHealthCheckFn) {
-        integration.customHealthCheck = fn;
-      },
-      emit(event: string, data: unknown) {
-        eventBus.emit({
-          type: event,
-          integrationId: id,
-          ...(typeof data === "object" && data !== null ? data : {}),
-        } as never);
-      },
-      on(event: string, handler: (data: unknown) => void) {
-        return eventBus.on(event as never, handler as never);
-      },
-      onShutdown(cleanup: () => Promise<void>) {
-        shutdownHandlers.push(cleanup);
-      },
-      getIntegrationsByDomain(domain: string) {
-        return getIntegrationsByDomain(domain);
-      },
-    };
+      requiresMap: reloadRequiresMap,
+      providers,
+      shutdownHandlers,
+      integration,
+    });
 
     try {
       const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
@@ -1463,6 +1397,11 @@ export async function reloadIntegrations(): Promise<{
       _fastify.log.error(err, `Failed to reload integration ${id}`);
       integration.enabled = false;
       integrations.set(id, integration);
+      eventBus.emit({
+        type: "integration.error",
+        integrationId: id,
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
     }
   }
 

@@ -5,7 +5,12 @@
  * https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de
  */
 
-import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import {
+  type BoundingBox,
+  bboxContains,
+  fetchJson as coreFetchJson,
+  type LngLat,
+} from "@openmapx/core";
 import type {
   GbfsV23FreeBikeStatus,
   GbfsV23StationInformation,
@@ -51,24 +56,15 @@ async function fetchJson<T>(
   url: string,
   creds: { clientId: string; apiKey: string },
 ): Promise<T | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept: "application/json",
-        "DB-Client-ID": creds.clientId,
-        "DB-Api-Key": creds.apiKey,
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return coreFetchJson<T>(url, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    nullOnError: true,
+    headers: {
+      Accept: "application/json",
+      "DB-Client-ID": creds.clientId,
+      "DB-Api-Key": creds.apiKey,
+    },
+  });
 }
 
 type RawStationStatus = GbfsV23StationStatus["data"]["stations"][number];

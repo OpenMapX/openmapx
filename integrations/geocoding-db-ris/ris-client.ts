@@ -5,6 +5,8 @@
  * Auth docs: https://developers.deutschebahn.com
  */
 
+import { fetchJson } from "@openmapx/core";
+
 const BASE_URLS = {
   stations: "https://apis.deutschebahn.com/db/apis/ris-stations/v1",
   routing: "https://apis.deutschebahn.com/db/apis/ris-routing/v2",
@@ -45,14 +47,13 @@ export async function risGet<T>(api: RisApi, path: string, timeoutMs = 6_000): P
   if (!creds) throw new Error("DB RIS credentials not configured");
 
   const url = `${BASE_URLS[api]}${path}`;
-  const res = await fetch(url, {
+  return fetchJson<T>(url, {
+    timeoutMs,
+    userAgent: null,
     headers: buildHeaders(creds),
-    signal: AbortSignal.timeout(timeoutMs),
+    errorMessage: ({ status, statusText }) =>
+      `RIS ${api} GET ${path} failed: ${status} ${statusText}`,
   });
-  if (!res.ok) {
-    throw new Error(`RIS ${api} GET ${path} failed: ${res.status} ${res.statusText}`);
-  }
-  return res.json() as Promise<T>;
 }
 
 export async function risPost<T>(
@@ -65,14 +66,12 @@ export async function risPost<T>(
   if (!creds) throw new Error("DB RIS credentials not configured");
 
   const url = `${BASE_URLS[api]}${path}`;
-  const res = await fetch(url, {
-    method: "POST",
+  return fetchJson<T>(url, {
+    timeoutMs,
+    userAgent: null,
     headers: { ...buildHeaders(creds), "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
+    init: { method: "POST", body: JSON.stringify(body) },
+    errorMessage: ({ status, statusText }) =>
+      `RIS ${api} POST ${path} failed: ${status} ${statusText}`,
   });
-  if (!res.ok) {
-    throw new Error(`RIS ${api} POST ${path} failed: ${res.status} ${res.statusText}`);
-  }
-  return res.json() as Promise<T>;
 }

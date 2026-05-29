@@ -4,12 +4,11 @@
  * https://github.com/ubahnverleih/WoBike/blob/master/Cambio.md
  */
 
-import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
 const CAMBIO_BASE = "https://cwapi.cambio-carsharing.com/pub";
-const HEADERS = { "User-Agent": USER_AGENT };
 const FETCH_TIMEOUT_MS = 8_000;
 
 /** Cambio regions with approximate center coordinates for bbox matching. */
@@ -63,15 +62,9 @@ async function fetchRegionStations(
   bbox: BoundingBox,
 ): Promise<SharedMobilityStation[]> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(`${CAMBIO_BASE}/${region.code}/stations`, {
-      headers: HEADERS,
-      signal: controller.signal,
+    const stations = await fetchJson<CambioStation[]>(`${CAMBIO_BASE}/${region.code}/stations`, {
+      timeoutMs: FETCH_TIMEOUT_MS,
     });
-    clearTimeout(timer);
-    if (!res.ok) return [];
-    const stations = (await res.json()) as CambioStation[];
 
     return stations
       .filter(

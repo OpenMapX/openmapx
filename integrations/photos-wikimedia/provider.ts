@@ -1,16 +1,11 @@
 import {
   type CommonsPage,
   fetchCommonsMetadata,
+  fetchJson,
   type PlacePhoto,
   parseCommonsPage,
-  USER_AGENT,
 } from "@openmapx/core";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
-
-const HEADERS = {
-  "User-Agent": USER_AGENT,
-  Accept: "application/json",
-};
 
 /** Max original file size in bytes (50 MB). Filters out satellite/aerial imagery. */
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -76,18 +71,11 @@ async function searchByTags(
   url.searchParams.set("iiurlwidth", "800");
   url.searchParams.set("format", "json");
 
-  let res: Response;
-  try {
-    res = await fetch(url.toString(), {
-      headers: HEADERS,
-      signal: AbortSignal.timeout(4000),
-    });
-  } catch {
-    return [];
-  }
-  if (!res.ok) return [];
-
-  const data = (await res.json()) as { query?: { pages?: Record<string, CommonsPage> } };
+  const data = await fetchJson<{ query?: { pages?: Record<string, CommonsPage> } }>(
+    url.toString(),
+    { timeoutMs: 4000, nullOnError: true, headers: { Accept: "application/json" } },
+  );
+  if (!data) return [];
   const photos: PlacePhoto[] = [];
   for (const page of Object.values(data.query?.pages ?? {})) {
     const photo = parseCommonsPage(page);
@@ -113,18 +101,11 @@ async function searchByGeo(query: PhotoQuery): Promise<PlacePhoto[]> {
   url.searchParams.set("iiurlwidth", "800");
   url.searchParams.set("format", "json");
 
-  let res: Response;
-  try {
-    res = await fetch(url.toString(), {
-      headers: HEADERS,
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    return [];
-  }
-  if (!res.ok) return [];
-
-  const data = (await res.json()) as { query?: { pages?: Record<string, CommonsPage> } };
+  const data = await fetchJson<{ query?: { pages?: Record<string, CommonsPage> } }>(
+    url.toString(),
+    { timeoutMs: 5000, nullOnError: true, headers: { Accept: "application/json" } },
+  );
+  if (!data) return [];
   const pages = data.query?.pages;
   if (!pages) return [];
 

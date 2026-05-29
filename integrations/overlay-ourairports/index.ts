@@ -122,42 +122,36 @@ export function setup(ctx: IntegrationContext): void {
       limit,
     ].join(":");
 
-    const cached = await ctx.cache.get<AirportFeatureCollection>(cacheKey);
-    if (cached) {
-      reply.header("Cache-Control", "public, max-age=3600");
-      reply.send(cached);
-      return;
-    }
+    const collection = await ctx.cache.withCache(cacheKey, CACHE_TTL_SECONDS, async () => {
+      const records = await queryAirportsInBbox(ctx.log, {
+        ...bbox,
+        types,
+        scheduledOnly,
+        limit,
+      });
 
-    const records = await queryAirportsInBbox(ctx.log, {
-      ...bbox,
-      types,
-      scheduledOnly,
-      limit,
+      const featureCollection: AirportFeatureCollection = {
+        type: "FeatureCollection",
+        features: records.map((r) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [r.lng, r.lat] },
+          properties: {
+            id: r.id,
+            ident: r.ident,
+            name: r.name,
+            type: r.type,
+            iata: r.iata,
+            icao: r.icao,
+            scheduledService: r.scheduledService,
+            elevationFt: r.elevationFt,
+            municipality: r.municipality,
+            isoCountry: r.isoCountry,
+            rank: TYPE_RANK[r.type] ?? 99,
+          },
+        })),
+      };
+      return featureCollection;
     });
-
-    const collection: AirportFeatureCollection = {
-      type: "FeatureCollection",
-      features: records.map((r) => ({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [r.lng, r.lat] },
-        properties: {
-          id: r.id,
-          ident: r.ident,
-          name: r.name,
-          type: r.type,
-          iata: r.iata,
-          icao: r.icao,
-          scheduledService: r.scheduledService,
-          elevationFt: r.elevationFt,
-          municipality: r.municipality,
-          isoCountry: r.isoCountry,
-          rank: TYPE_RANK[r.type] ?? 99,
-        },
-      })),
-    };
-
-    await ctx.cache.set(cacheKey, collection, CACHE_TTL_SECONDS);
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(collection);
   });

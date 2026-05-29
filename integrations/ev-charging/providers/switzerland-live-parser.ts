@@ -1,3 +1,4 @@
+import { fetchJson } from "@openmapx/core";
 import type { EvChargingStatus } from "@openmapx/mobility-core/ev-charging";
 import type { PoiLiveParseFn, PoiLiveState } from "@openmapx/poi-source-registry";
 
@@ -63,11 +64,11 @@ async function fetchDataFeed(): Promise<SwissEvseDataFeedShape> {
   if (!fetcher) {
     throw new Error("switzerland-live-parser: globalThis.fetch is not available");
   }
-  const res = await fetcher(SWISS_OICP_DATA_URL, { signal: AbortSignal.timeout(20_000) });
-  if (!res.ok) {
-    throw new Error(`switzerland-live-parser: data feed fetch failed HTTP ${res.status}`);
-  }
-  return (await res.json()) as SwissEvseDataFeedShape;
+  return fetchJson<SwissEvseDataFeedShape>(SWISS_OICP_DATA_URL, {
+    timeoutMs: 20_000,
+    userAgent: null,
+    errorMessage: ({ status }) => `switzerland-live-parser: data feed fetch failed HTTP ${status}`,
+  });
 }
 
 export const parseSwissOicpLive: PoiLiveParseFn = async (buffer, ctx) => {

@@ -6,14 +6,13 @@
  * provider attribution.
  */
 
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson, USER_AGENT } from "@openmapx/core";
 import type { MangroveWireReviewsResponse, MangroveWireSubject } from "./types.js";
 
 export const MANGROVE_API_URL = "https://api.mangrove.reviews";
 export const MANGROVE_UPLOAD_URL = "https://upload.mangrove.reviews";
 export const MANGROVE_FILES_URL = "https://files.mangrove.reviews";
 
-const JSON_HEADERS = { Accept: "application/json", "User-Agent": USER_AGENT };
 const FETCH_TIMEOUT_MS = 8_000;
 
 export async function mangroveGetReviews(
@@ -36,22 +35,20 @@ export async function mangroveGetReviews(
     url.searchParams.set("latest_edits_only", String(opts.latestEditsOnly));
   }
 
-  const res = await fetch(url.toString(), {
-    headers: JSON_HEADERS,
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  return fetchJson<MangroveWireReviewsResponse>(url.toString(), {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    headers: { Accept: "application/json" },
+    errorMessage: ({ status, statusText }) => `Mangrove getReviews failed: ${status} ${statusText}`,
   });
-  if (!res.ok) throw new Error(`Mangrove getReviews failed: ${res.status} ${res.statusText}`);
-  return (await res.json()) as MangroveWireReviewsResponse;
 }
 
 export async function mangroveGetSubject(sub: string): Promise<MangroveWireSubject> {
   const url = new URL(`${MANGROVE_API_URL}/subject/${encodeURIComponent(sub)}`);
-  const res = await fetch(url.toString(), {
-    headers: JSON_HEADERS,
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  return fetchJson<MangroveWireSubject>(url.toString(), {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    headers: { Accept: "application/json" },
+    errorMessage: ({ status, statusText }) => `Mangrove getSubject failed: ${status} ${statusText}`,
   });
-  if (!res.ok) throw new Error(`Mangrove getSubject failed: ${res.status} ${res.statusText}`);
-  return (await res.json()) as MangroveWireSubject;
 }
 
 /**

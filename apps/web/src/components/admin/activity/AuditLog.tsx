@@ -23,6 +23,7 @@ import Typography from "@mui/material/Typography";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { relativeTimeFromIso } from "@/lib/formatTime";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { ActorCell } from "./ActorCell";
 
@@ -189,14 +190,6 @@ function ActionChip({ action }: { action: string }) {
       variant="outlined"
     />
   );
-}
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60000) return "just now";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 export function AuditLog() {
@@ -427,7 +420,7 @@ export function AuditLog() {
                           color: "text.secondary",
                         }}
                       >
-                        {formatRelativeTime(entry.createdAt)}
+                        {relativeTimeFromIso(entry.createdAt)}
                       </Typography>
                     </Tooltip>
                   </TableCell>

@@ -2,8 +2,6 @@
 
 import Box from "@mui/material/Box";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import LinearProgress from "@mui/material/LinearProgress";
-import Paper from "@mui/material/Paper";
 import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
@@ -11,6 +9,7 @@ import Typography from "@mui/material/Typography";
 import { buildIntegrationAttribution } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { useWildfireStore } from "./store";
 
 const DAY_RANGES = [1, 2, 3] as const;
@@ -47,44 +46,19 @@ export function WildfireLegend() {
   const setSource = useWildfireStore((s) => s.setSource);
   const setShowHeatmap = useWildfireStore((s) => s.setShowHeatmap);
 
-  if (!panelOpen) return null;
-
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        overflow: "hidden",
-        maxWidth: "calc(100vw - 24px)",
-      }}
+    <OverlayLegend
+      title={t("wildfires")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={loading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ maxWidth: "calc(100vw - 24px)" }}
+      headerSx={{ mb: 0.75 }}
+      attributionSx={{ mt: 0.5 }}
     >
-      {loading && (
-        <LinearProgress
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            borderRadius: "12px 12px 0 0",
-          }}
-        />
-      )}
-      <Box
-        sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.75 }}
-      >
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("wildfires")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
         <Box>
           <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.3 }}>
@@ -222,17 +196,6 @@ export function WildfireLegend() {
             }),
           })}
       </Typography>
-      {/* Attribution (from manifest dataSources, trusted) */}
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
-          sx={{
-            color: "text.secondary",
-            mt: 0.5,
-          }}
-        />
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }

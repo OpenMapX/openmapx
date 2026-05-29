@@ -1,27 +1,24 @@
-export type IsochroneTravelMode = "driving" | "walking" | "cycling";
+// The isochrone data types are the canonical contract from
+// `@openmapx/integration-framework`; re-exported here so the existing
+// `services/isochrone/*` + route imports keep resolving. `IsochroneProvider`
+// is the apps/api-internal provider contract (not part of the framework).
+import type {
+  IsochroneContour,
+  IsochroneGeometry,
+  IsochroneMultiPolygon,
+  IsochronePolygon,
+  IsochroneResult,
+  IsochroneTravelMode,
+} from "@openmapx/integration-framework";
 
-export interface IsochronePolygon {
-  type: "Polygon";
-  coordinates: number[][][];
-}
-
-export interface IsochroneMultiPolygon {
-  type: "MultiPolygon";
-  coordinates: number[][][][];
-}
-
-export type IsochroneGeometry = IsochronePolygon | IsochroneMultiPolygon;
-
-export interface IsochroneContour {
-  time: number;
-  geometry: IsochroneGeometry;
-}
-
-export interface IsochroneResult {
-  origin: [number, number];
-  mode: IsochroneTravelMode;
-  contours: IsochroneContour[];
-}
+export type {
+  IsochroneContour,
+  IsochroneGeometry,
+  IsochroneMultiPolygon,
+  IsochronePolygon,
+  IsochroneResult,
+  IsochroneTravelMode,
+};
 
 export interface IsochroneProvider {
   isochrone(

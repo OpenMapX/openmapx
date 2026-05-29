@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import { bboxToMercator } from "./coord-transform";
 
 const BASE_URL = "https://hiking.waymarkedtrails.org/api/v1";
@@ -53,12 +53,10 @@ function mapSummary(r: WaymarkedSearchResult): TrailSummary {
 
 export async function searchTrails(query: string, limit = 20): Promise<TrailSummary[]> {
   const url = `${BASE_URL}/list/search?query=${encodeURIComponent(query)}&limit=${limit}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(10_000),
+  const data = await fetchJson<{ results: WaymarkedSearchResult[] }>(url, {
+    timeoutMs: 10_000,
+    errorMessage: ({ status }) => `Waymarked Trails search returned ${status}`,
   });
-  if (!res.ok) throw new Error(`Waymarked Trails search returned ${res.status}`);
-  const data = (await res.json()) as { results: WaymarkedSearchResult[] };
   return (data.results ?? []).map(mapSummary);
 }
 
@@ -72,23 +70,19 @@ export async function trailsByArea(
   const [mx1, my1, mx2, my2] = bboxToMercator(south, west, north, east);
   const bbox = `${mx1},${my1},${mx2},${my2}`;
   const url = `${BASE_URL}/list/by_area?bbox=${bbox}&limit=${limit}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(10_000),
+  const data = await fetchJson<{ results: WaymarkedSearchResult[] }>(url, {
+    timeoutMs: 10_000,
+    errorMessage: ({ status }) => `Waymarked Trails by_area returned ${status}`,
   });
-  if (!res.ok) throw new Error(`Waymarked Trails by_area returned ${res.status}`);
-  const data = (await res.json()) as { results: WaymarkedSearchResult[] };
   return (data.results ?? []).map(mapSummary);
 }
 
 export async function trailDetail(id: number): Promise<TrailDetail> {
   const url = `${BASE_URL}/details/relation/${id}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    signal: AbortSignal.timeout(10_000),
+  const r = await fetchJson<WaymarkedDetailResult>(url, {
+    timeoutMs: 10_000,
+    errorMessage: ({ status }) => `Waymarked Trails detail returned ${status}`,
   });
-  if (!res.ok) throw new Error(`Waymarked Trails detail returned ${res.status}`);
-  const r = (await res.json()) as WaymarkedDetailResult;
   return {
     ...mapSummary(r),
     operator: r.operator,

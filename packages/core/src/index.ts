@@ -320,7 +320,7 @@ export {
   fetchCommonsMetadata,
   parseCommonsPage,
 } from "./utils/commons-metadata";
-export { haversineDistance, lngLatToString, roundCoord } from "./utils/coordinates";
+export { haversineDistance } from "./utils/coordinates";
 export { applyClientSideFilters, splitFilters } from "./utils/dataSourceFilters";
 export {
   buildElevationProfile,
@@ -336,6 +336,7 @@ export {
   isValidFeedSlug,
   normalizeFeedSlug,
 } from "./utils/feed-slug";
+export { DEFAULT_FETCH_TIMEOUT_MS, type FetchJsonOptions, fetchJson } from "./utils/fetchJson";
 export {
   type FetchWithRedirectsOptions,
   fetchWithRedirects,
@@ -355,10 +356,10 @@ export {
   normalizeRemarks,
   productToMode,
 } from "./utils/fptf";
-export { boundingBoxFromPoints, isPointInBBox } from "./utils/geo";
 export {
   bboxContains,
   diceSimilarity,
+  haversineKm,
   haversineMeters,
   mergeAttributions,
 } from "./utils/geo-server";

@@ -16,9 +16,10 @@ import type {
   AirportRunwayInfo,
   AirportType,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { TEAL } from "@/lib/theme";
+import { SectionLabel } from "../shared/SectionLabel";
+import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 const FT_TO_M = 0.3048;
 
@@ -28,7 +29,6 @@ interface Props {
 
 export function PlaceAirportInfo({ airport }: Props) {
   const t = useTranslations("airport");
-  const registry = useIntegrationRegistry();
   const hasRunways = (airport.runways?.length ?? 0) > 0;
   const hasFrequencies = (airport.frequencies?.length ?? 0) > 0;
   const hasNavaids = (airport.navaids?.length ?? 0) > 0;
@@ -37,9 +37,7 @@ export function PlaceAirportInfo({ airport }: Props) {
   // Source attribution is pulled from the integration manifest rather than
   // hardcoded so a name/license/URL update in `manifest.json` flows through
   // every airport panel automatically.
-  const attributionSource = registry
-    .get("knowledge-ourairports")
-    ?.dataSources?.find((ds) => ds.sourceId === "ourairports");
+  const attributionSource = useDataSourceAttribution("knowledge-ourairports", "ourairports");
 
   return (
     <Box>
@@ -251,17 +249,7 @@ export function PlaceAirportInfo({ airport }: Props) {
 function SectionHeader({ title }: { title: string }) {
   return (
     <Box sx={{ px: 2, pt: 0.5 }}>
-      <Typography
-        variant="caption"
-        sx={{
-          color: "text.secondary",
-          fontWeight: 600,
-          letterSpacing: 0.4,
-          textTransform: "uppercase",
-        }}
-      >
-        {title}
-      </Typography>
+      <SectionLabel>{title}</SectionLabel>
     </Box>
   );
 }

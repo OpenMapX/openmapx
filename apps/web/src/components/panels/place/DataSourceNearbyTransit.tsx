@@ -15,6 +15,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
 import {
+  formatDistance,
   haversineMeters,
   PANEL,
   resolveStopAsPlace,
@@ -57,11 +58,6 @@ function primaryMode(modes: TransportMode[]): TransportMode | undefined {
     if (modes.includes(m)) return m;
   }
   return modes[0];
-}
-
-function formatDistance(meters: number): string {
-  if (meters < 1000) return `${Math.round(meters)} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
 }
 
 interface DataSourceNearbyTransitProps {

@@ -1,12 +1,10 @@
 "use client";
 
 import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
-import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { MODE_COLORS, useRouteAlerts, useVehicleJourney } from "@openmapx/core";
@@ -17,6 +15,7 @@ import { formatTime } from "@/lib/formatTime";
 import { TEAL } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
+import { PanelDetailHeader } from "../shared/PanelDetailHeader";
 import { AlertsBanner } from "./AlertsBanner";
 import { RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
@@ -48,21 +47,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
   return (
     <Box>
       {/* Header */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          px: 1,
-          pt: clearSearchBar ? { xs: 1.5, sm: "72px" } : 1.5,
-          pb: 1.5,
-          borderBottom: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <IconButton size="small" onClick={onBack} aria-label={tc("back")}>
-          <ArrowBackIcon />
-        </IconButton>
+      <PanelDetailHeader onBack={onBack} clearSearchBar={clearSearchBar}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
             <RouteBadge
@@ -134,7 +119,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
             )}
           </Box>
         </Box>
-      </Box>
+      </PanelDetailHeader>
       {/* Route alerts */}
       {alerts && alerts.length > 0 && (
         <Box sx={{ px: 2, pt: 1.5 }}>

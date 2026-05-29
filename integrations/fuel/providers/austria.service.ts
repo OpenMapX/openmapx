@@ -1,4 +1,4 @@
-import type { BoundingBox } from "@openmapx/core";
+import { type BoundingBox, haversineKm } from "@openmapx/core";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
 
@@ -6,16 +6,6 @@ import type { FuelPriceProvider } from "./price-provider";
 const AUSTRIA = { minLat: 46.4, maxLat: 49.0, minLng: 9.5, maxLng: 17.2 };
 const MAX_RADIUS_KM = 50;
 const BASE_URL = "https://api.e-control.at/sprit/1.0/search/gas-stations/by-address";
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 interface AustriaPrice {
   fuelType: string;

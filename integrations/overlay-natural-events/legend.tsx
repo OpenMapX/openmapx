@@ -2,15 +2,13 @@
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
-import LinearProgress from "@mui/material/LinearProgress";
-import Paper from "@mui/material/Paper";
-import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { buildIntegrationAttribution, relativeTime } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { OverlayLegend } from "@/components/map/OverlayLegend";
 import { CATEGORY_COLORS } from "./map-layer";
 import { ALL_CATEGORIES, useNaturalEventStore } from "./store";
 
@@ -37,44 +35,19 @@ export function NaturalEventLegend() {
   const eventCount = useNaturalEventStore((s) => s.eventCount);
   const lastUpdated = useNaturalEventStore((s) => s.lastUpdated);
 
-  if (!panelOpen) return null;
-
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        position: "relative",
-        px: 2,
-        py: 1.5,
-        borderRadius: "12px",
-        overflow: "hidden",
-        maxWidth: { xs: "90vw", sm: 420 },
-        minWidth: 260,
-      }}
+    <OverlayLegend
+      title={t("naturalEvents")}
+      panelOpen={panelOpen}
+      layerVisible={layerVisible}
+      loading={loading}
+      setLayerVisible={setLayerVisible}
+      toggleAriaLabel={t("toggleOverlay")}
+      attributionHtml={attributionHtml}
+      paperSx={{ maxWidth: { xs: "90vw", sm: 420 }, minWidth: 260 }}
+      headerSx={{ mb: 0.5 }}
+      attributionSx={{ mt: 0.5, display: "block", fontSize: 10.5 }}
     >
-      {loading && (
-        <LinearProgress
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            borderRadius: "12px 12px 0 0",
-          }}
-        />
-      )}
-      {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("naturalEvents")}</Typography>
-        <Switch
-          size="small"
-          checked={layerVisible}
-          onChange={(e) => setLayerVisible(e.target.checked)}
-          inputProps={{ "aria-label": t("toggleOverlay") }}
-          sx={{ ml: 2 }}
-        />
-      </Box>
       {/* Time range */}
       <Box sx={{ mb: 1 }}>
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.5 }}>
@@ -163,19 +136,6 @@ export function NaturalEventLegend() {
           {t("lastUpdated", { time: relativeTime(Date.now() - lastUpdated) })}
         </Typography>
       )}
-      {/* Attribution (from manifest dataSources, trusted HTML) */}
-      {attributionHtml && (
-        <Typography
-          variant="caption"
-          dangerouslySetInnerHTML={{ __html: attributionHtml }}
-          sx={{
-            color: "text.secondary",
-            mt: 0.5,
-            display: "block",
-            fontSize: 10.5,
-          }}
-        />
-      )}
-    </Paper>
+    </OverlayLegend>
   );
 }

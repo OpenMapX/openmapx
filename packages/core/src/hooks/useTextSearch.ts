@@ -3,11 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
-import { useCategoryFacetStore } from "../stores/categoryFacetStore";
 import { useCategorySearchStore } from "../stores/categorySearchStore";
-import { useOpeningHoursStore } from "../stores/openingHoursStore";
-import { applyFacetFilters, detectDominantCategory } from "../utils/categoryFacets";
-import { applyHoursFilter } from "../utils/categoryFilter";
+import { detectDominantCategory } from "../utils/categoryFacets";
+import { useExploreFilters } from "./useExploreFilters";
 
 /**
  * Free-text POI search scoped to the active `searchBbox`. Mirrors
@@ -19,10 +17,6 @@ export function useTextSearchResults(lang?: string) {
   const mode = useCategorySearchStore((s) => s.mode);
   const textQuery = useCategorySearchStore((s) => s.textQuery);
   const searchBbox = useCategorySearchStore((s) => s.searchBbox);
-  const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
-  const openAtDay = useOpeningHoursStore((s) => s.openAtDay);
-  const openAtHour = useOpeningHoursStore((s) => s.openAtHour);
-  const facetSelections = useCategoryFacetStore((s) => s.selections);
 
   const enabled = mode === "text" && textQuery.trim().length >= 2 && searchBbox !== null;
 
@@ -50,11 +44,7 @@ export function useTextSearchResults(lang?: string) {
     () => (rawResults ? detectDominantCategory(rawResults) : null),
     [rawResults],
   );
-  const filtered = useMemo(() => {
-    if (!rawResults) return rawResults;
-    const byHours = applyHoursFilter(rawResults, openingHoursFilter, openAtDay, openAtHour);
-    return applyFacetFilters(byHours, facetSelections);
-  }, [rawResults, openingHoursFilter, openAtDay, openAtHour, facetSelections]);
+  const filtered = useExploreFilters(rawResults);
 
   return { rawResults, filtered, isLoading, isError, error, partial, dominantCategory };
 }

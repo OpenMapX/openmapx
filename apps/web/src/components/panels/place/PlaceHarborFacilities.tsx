@@ -12,11 +12,11 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 interface HarborFacility {
   osmId: string;
@@ -111,14 +111,11 @@ function summarizeFacilityTags(
 
 export function PlaceHarborFacilities({ harbourId, lat, lng, name, category }: Props) {
   const t = useTranslations("nautical");
-  const registry = useIntegrationRegistry();
   const env = useEnv();
   const [data, setData] = useState<HarborDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const attributionSource = registry
-    .get("overlay-nautical")
-    ?.dataSources?.find((ds) => ds.sourceId === "openseamap");
+  const attributionSource = useDataSourceAttribution("overlay-nautical", "openseamap");
 
   useEffect(() => {
     let cancelled = false;

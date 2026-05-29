@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 
 const BASE = "https://marine-api.open-meteo.com/v1/marine";
@@ -169,23 +169,13 @@ function buildCurrent(hourly: MarineHourlyPoint[]): MarineCurrent | null {
 }
 
 async function fetchMarine(lat: number, lng: number): Promise<OpenMeteoMarineResponse | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const url =
-      `${BASE}?latitude=${round2(lat)}&longitude=${round2(lng)}` +
-      `&hourly=${HOURLY_FIELDS}&forecast_days=3&timezone=auto`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as OpenMeteoMarineResponse;
-  } catch {
-    clearTimeout(timer);
-    return null;
-  }
+  const url =
+    `${BASE}?latitude=${round2(lat)}&longitude=${round2(lng)}` +
+    `&hourly=${HOURLY_FIELDS}&forecast_days=3&timezone=auto`;
+  return fetchJson<OpenMeteoMarineResponse>(url, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    nullOnError: true,
+  });
 }
 
 export function setup(ctx: IntegrationContext): void {

@@ -38,6 +38,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { formatBytes } from "@/lib/storageFormat";
 import { useAdminToast } from "../shared/AdminToast";
 
 interface OsmInfo {
@@ -106,13 +107,6 @@ interface DataResponse {
 interface DataActionResponse {
   ok: boolean;
   jobId: string;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
 function formatDate(iso: string): string {

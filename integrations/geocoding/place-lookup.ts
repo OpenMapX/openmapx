@@ -6,6 +6,7 @@
 
 import {
   createPlace,
+  haversineMeters,
   type OsmFilter,
   type OsmIdentity,
   type OverpassNode,
@@ -284,18 +285,6 @@ export async function lookupByOsmRef(
   return toPlace(data[0], originalId);
 }
 
-/** Haversine distance in metres between two lat/lng points. */
-function distanceMetres(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6_371_000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 /**
  * Reverse-geocode by coordinates to find the nearest OSM element.
  * Returns a Place with address, opening hours, phone, etc. from the closest
@@ -446,7 +435,7 @@ export async function lookupByNameAndCoords(
   const best = results
     .map((r) => ({
       r,
-      dist: distanceMetres(lat, lng, Number.parseFloat(r.lat), Number.parseFloat(r.lon)),
+      dist: haversineMeters(lat, lng, Number.parseFloat(r.lat), Number.parseFloat(r.lon)),
     }))
     .sort((a, b) => a.dist - b.dist)[0];
 
@@ -532,7 +521,7 @@ async function lookupNearestHouseNumber(
         }
         return {
           hn: el.tags?.["addr:housenumber"],
-          dist: distanceMetres(lat, lng, elLat, elLon),
+          dist: haversineMeters(lat, lng, elLat, elLon),
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null && !!c.hn)
@@ -602,7 +591,7 @@ export async function lookupByOsmFilters(
         } else {
           return null;
         }
-        return { el, elLat, elLon, dist: distanceMetres(lat, lng, elLat, elLon) };
+        return { el, elLat, elLon, dist: haversineMeters(lat, lng, elLat, elLon) };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null)
       .filter((c) => c.dist <= OVERPASS_MAX_DISTANCE_M)

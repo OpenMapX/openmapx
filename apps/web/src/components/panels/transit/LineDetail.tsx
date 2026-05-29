@@ -1,8 +1,6 @@
 "use client";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
@@ -19,6 +17,7 @@ import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { PRIMARY_BLUE } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
+import { PanelDetailHeader } from "../shared/PanelDetailHeader";
 import { AlertsBanner } from "./AlertsBanner";
 import { RouteBadge } from "./RouteBadge";
 
@@ -90,21 +89,7 @@ export function LineDetail({
   return (
     <Box>
       {/* Header */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          px: 1,
-          pt: clearSearchBar ? { xs: 1.5, sm: "72px" } : 1.5,
-          pb: 1.5,
-          borderBottom: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <IconButton size="small" onClick={onBack} aria-label={tc("back")}>
-          <ArrowBackIcon />
-        </IconButton>
+      <PanelDetailHeader onBack={onBack} clearSearchBar={clearSearchBar}>
         {routeLoading && !routeHint ? (
           <Skeleton width={120} height={28} />
         ) : route ? (
@@ -127,7 +112,7 @@ export function LineDetail({
             </Typography>
           </Box>
         ) : null}
-      </Box>
+      </PanelDetailHeader>
       {/* Operator */}
       {route?.operatorName && (
         <Typography

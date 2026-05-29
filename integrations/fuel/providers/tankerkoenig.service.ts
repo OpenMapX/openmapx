@@ -1,4 +1,4 @@
-import type { BoundingBox } from "@openmapx/core";
+import { type BoundingBox, haversineKm } from "@openmapx/core";
 import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import type { FuelPriceProvider } from "./price-provider";
@@ -7,16 +7,6 @@ import type { FuelPriceProvider } from "./price-provider";
 const GERMANY = { minLat: 47.0, maxLat: 55.5, minLng: 5.5, maxLng: 15.5 };
 const TANKERKOENIG_URL = "https://creativecommons.tankerkoenig.de/json/list.php";
 const MAX_RADIUS_KM = 25;
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 interface TankerkoenigStation {
   id: string;

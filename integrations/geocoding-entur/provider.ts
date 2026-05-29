@@ -1,13 +1,14 @@
 import {
   type AutocompleteResult,
   createPlace,
+  fetchJson,
   type Place,
   type ReverseGeocodingResult,
   resolvePoiIconPath,
   type SearchResult,
 } from "@openmapx/core";
+import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
-import type { GeocodingProviderImpl } from "./types.js";
 
 type EnturMultiModal = "parent" | "child" | "all";
 
@@ -409,18 +410,12 @@ async function fetchEntur(
     }
   }
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "ET-Client-Name": clientName,
-    },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  return fetchJson<EnturFeatureCollection>(url.toString(), {
+    timeoutMs: REQUEST_TIMEOUT_MS,
+    userAgent: null,
+    headers: { "ET-Client-Name": clientName },
+    errorMessage: ({ status }) => `Entur geocoding error ${status}`,
   });
-
-  if (!response.ok) {
-    throw new Error(`Entur geocoding error ${response.status}`);
-  }
-
-  return response.json() as Promise<EnturFeatureCollection>;
 }
 
 async function fetchEnturAutocomplete(

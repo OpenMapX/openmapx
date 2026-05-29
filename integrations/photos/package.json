@@ -17,6 +17,10 @@
     "./orchestrator": {
       "types": "./orchestrator.ts",
       "default": "./orchestrator.ts"
+    },
+    "./bbox-provider": {
+      "types": "./bbox-provider.ts",
+      "default": "./bbox-provider.ts"
     }
   },
   "dependencies": {

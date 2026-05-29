@@ -29,11 +29,12 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { ServiceQuality, ServiceStatus, ServiceSummary } from "@/hooks/useServices";
+import type { ServiceQuality, ServiceSummary } from "@/hooks/useServices";
 import { useServicesList } from "@/hooks/useServices";
 import { useEnv } from "@/lib/EnvProvider";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
+import { ServiceStatusChip } from "../shared/ServiceStatusChip";
 
 type QualityFilter = "all" | ServiceQuality;
 
@@ -49,30 +50,6 @@ interface ServiceSelectionSummary {
   envVarName: string;
   envVarValue: string | null;
   selectionFilePath: string;
-}
-
-function statusColor(status: ServiceStatus): "success" | "warning" | "error" | "default" {
-  if (status === "running") return "success";
-  if (status === "restarting") return "warning";
-  if (status === "exited") return "error";
-  return "default";
-}
-
-function statusLabel(status: ServiceStatus): string {
-  if (status === "not-running") return "Not running";
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-function StatusChip({ status }: { status: ServiceStatus }) {
-  return (
-    <Chip
-      label={statusLabel(status)}
-      size="small"
-      color={statusColor(status)}
-      variant={status === "running" ? "filled" : "outlined"}
-      sx={{ fontSize: "0.7rem" }}
-    />
-  );
 }
 
 function ProvidesCell({ provides }: { provides: string[] }) {
@@ -794,7 +771,7 @@ export function ServiceCatalog() {
                       <ProvidesCell provides={svc.provides} />
                     </TableCell>
                     <TableCell>
-                      <StatusChip status={svc.status} />
+                      <ServiceStatusChip status={svc.status} />
                     </TableCell>
                   </TableRow>
                 ))

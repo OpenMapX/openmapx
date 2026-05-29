@@ -1,5 +1,6 @@
 import {
   fetchCommonsMetadata,
+  fetchJson,
   type KnowledgeProvider,
   type KnowledgeResult,
   type PlaceFact,
@@ -153,20 +154,13 @@ export const wikidataSource: KnowledgeProvider = {
       const encodedTitle = encodeURIComponent(wikiTitle.replace(/ /g, "_"));
       result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodedTitle}`;
 
-      try {
-        const wpRes = await fetch(
-          `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
-          { headers: HEADERS, signal: AbortSignal.timeout(3000) },
-        );
-        if (wpRes.ok) {
-          const wpData = (await wpRes.json()) as { extract?: string };
-          if (wpData.extract) {
-            result.wikipediaExtract = wpData.extract;
-            result.wikipediaExtractSource = ["knowledge-wikidata", "knowledge-wikipedia"];
-          }
-        }
-      } catch {
-        // Wikipedia extract unavailable
+      const wpData = await fetchJson<{ extract?: string }>(
+        `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
+        { timeoutMs: 3000, headers: { Accept: "application/json" }, nullOnError: true },
+      );
+      if (wpData?.extract) {
+        result.wikipediaExtract = wpData.extract;
+        result.wikipediaExtractSource = ["knowledge-wikidata", "knowledge-wikipedia"];
       }
     }
 
@@ -240,31 +234,27 @@ export const wikidataSource: KnowledgeProvider = {
     // Batch-resolve item labels in a single extra API call
     if (itemsToResolve.length > 0) {
       const allIds = [...new Set(itemsToResolve.flatMap((i) => i.ids))];
-      try {
-        const labelUrl = new URL("https://www.wikidata.org/w/api.php");
-        labelUrl.searchParams.set("action", "wbgetentities");
-        labelUrl.searchParams.set("ids", allIds.join("|"));
-        labelUrl.searchParams.set("props", "labels");
-        labelUrl.searchParams.set("languages", effectiveLang);
-        labelUrl.searchParams.set("format", "json");
+      const labelUrl = new URL("https://www.wikidata.org/w/api.php");
+      labelUrl.searchParams.set("action", "wbgetentities");
+      labelUrl.searchParams.set("ids", allIds.join("|"));
+      labelUrl.searchParams.set("props", "labels");
+      labelUrl.searchParams.set("languages", effectiveLang);
+      labelUrl.searchParams.set("format", "json");
 
-        const labelRes = await fetch(labelUrl.toString(), {
-          headers: HEADERS,
-          signal: AbortSignal.timeout(3000),
-        });
-        if (labelRes.ok) {
-          const labelData = (await labelRes.json()) as {
-            entities?: Record<string, { labels?: Record<string, { value: string }> }>;
-          };
-          for (const { label, ids } of itemsToResolve) {
-            const resolved = ids
-              .map((id) => labelData.entities?.[id]?.labels?.[effectiveLang]?.value)
-              .filter(Boolean) as string[];
-            if (resolved.length) facts.push({ label, value: resolved.join(", ") });
-          }
+      const labelData = await fetchJson<{
+        entities?: Record<string, { labels?: Record<string, { value: string }> }>;
+      }>(labelUrl.toString(), {
+        timeoutMs: 3000,
+        headers: { Accept: "application/json" },
+        nullOnError: true,
+      });
+      if (labelData) {
+        for (const { label, ids } of itemsToResolve) {
+          const resolved = ids
+            .map((id) => labelData.entities?.[id]?.labels?.[effectiveLang]?.value)
+            .filter(Boolean) as string[];
+          if (resolved.length) facts.push({ label, value: resolved.join(", ") });
         }
-      } catch {
-        // Label resolution failed — silently skip item facts
       }
     }
 

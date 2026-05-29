@@ -31,6 +31,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/place-ids": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
     "intl-messageformat": "^11.2.7",
     "js-yaml": "^4.1.1",

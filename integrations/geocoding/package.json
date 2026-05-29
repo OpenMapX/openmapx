@@ -14,6 +14,10 @@
       "types": "./types.ts",
       "default": "./types.ts"
     },
+    "./endpoint": {
+      "types": "./endpoint.ts",
+      "default": "./endpoint.ts"
+    },
     "./format-address": {
       "types": "./format-address.ts",
       "default": "./format-address.ts"

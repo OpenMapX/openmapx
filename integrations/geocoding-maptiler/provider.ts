@@ -1,4 +1,4 @@
-import type { GeocodingProviderImpl } from "./types.js";
+import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 /**
  * MapTiler Geocoding API client.
  * Requires MAPTILER_KEY env var.

@@ -1,17 +1,11 @@
-import {
-  createManifestAttribution,
-  type IntegrationContext,
-} from "@openmapx/integration-framework";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { withAttribution } from "@openmapx/mobility-core/result";
+import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import type { GtfsDeps } from "./gtfs-local.js";
 import * as gtfsLocal from "./gtfs-local.js";
 
-const attribution = createManifestAttribution();
-const wrap = <T>(data: T) => withAttribution(data, attribution.all(), freshnessNow());
+const { attribution, wrap, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  init(ctx);
   // Inject GTFS manager and queries from app config
   const gtfsDeps = ctx.config.gtfsDeps as GtfsDeps | undefined;
   if (gtfsDeps) {

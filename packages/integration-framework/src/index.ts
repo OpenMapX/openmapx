@@ -152,3 +152,9 @@ export {
   type FallbackChainOptions,
   type MergeAllOptions,
 } from "./strategies";
+export {
+  createTidesIntegration,
+  type TideStationBase,
+  type TidesIntegrationConfig,
+} from "./tides-integration-factory";
+export { defineTransitProvider, type TransitProviderScaffold } from "./transit-provider-factory";

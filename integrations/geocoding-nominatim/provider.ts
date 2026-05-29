@@ -1,5 +1,5 @@
 import { formatAddress } from "@openmapx/integration-geocoding/format-address";
-import type { GeocodingProviderImpl } from "./types.js";
+import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 /**
  * Nominatim geocoding client.
  * Uses the public OSM instance by default; override with NOMINATIM_URL.

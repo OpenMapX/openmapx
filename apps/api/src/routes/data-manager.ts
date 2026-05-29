@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { and, asc, count, desc, eq } from "drizzle-orm";
@@ -7,6 +6,7 @@ import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
 import { getProviderHealth } from "../services/provider-health/registry.js";
 import { requireAdmin } from "../utils/require-admin.js";
+import { safeEqual } from "../utils/safe-equal.js";
 
 /**
  * `/api/data-manager/transit/*` — operator-facing surface for the self-hosted
@@ -29,13 +29,6 @@ interface AuthResult {
   kind: "session" | "token" | "denied";
   userId?: string;
   reason?: string;
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return timingSafeEqual(aBuf, bBuf);
 }
 
 function extractBearerToken(req: FastifyRequest): string | null {

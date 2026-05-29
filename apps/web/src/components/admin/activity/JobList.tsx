@@ -22,6 +22,7 @@ import Typography from "@mui/material/Typography";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { relativeTimeFromIso } from "@/lib/formatTime";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { ActorCell } from "./ActorCell";
 import { JobDetail } from "./JobDetail";
@@ -52,14 +53,6 @@ const STATUS_FILTER_QUERY: Record<StatusFilter, string | undefined> = {
 
 function formatJobType(type: string): string {
   return type.replace(/\./g, " › ").replace(/_/g, " ");
-}
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60000) return "just now";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 function JobRow({ job }: { job: AdminJob }) {
@@ -118,7 +111,7 @@ function JobRow({ job }: { job: AdminJob }) {
                 color: "text.secondary",
               }}
             >
-              {formatRelativeTime(job.createdAt)}
+              {relativeTimeFromIso(job.createdAt)}
             </Typography>
           </Tooltip>
         </TableCell>

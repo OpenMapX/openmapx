@@ -92,31 +92,24 @@ export function setup(ctx: IntegrationContext): void {
         : SEARCH_DEFAULT_LIMIT;
 
     const cacheKey = `search:${limit}:${q.toLowerCase()}`;
-    const cached = await ctx.cache.get<{ matches: SearchHit[] }>(cacheKey);
-    if (cached) {
-      reply.header("Cache-Control", "public, max-age=3600");
-      reply.send(cached);
-      return;
-    }
-
-    const records = await searchAirports(ctx.log, q, limit);
-    const matches: SearchHit[] = records.map((r) => ({
-      id: r.id,
-      ident: r.ident,
-      name: r.name,
-      type: r.type,
-      iata: r.iata,
-      icao: r.icao,
-      lat: r.lat,
-      lng: r.lng,
-      municipality: r.municipality,
-      isoCountry: r.isoCountry,
-      scheduledService: r.scheduledService,
-    }));
-
-    const payload = { matches };
     // Cache 1h — daily refresh of the catalog dominates any stale data risk.
-    await ctx.cache.set(cacheKey, payload, 60 * 60);
+    const payload = await ctx.cache.withCache(cacheKey, 60 * 60, async () => {
+      const records = await searchAirports(ctx.log, q, limit);
+      const matches: SearchHit[] = records.map((r) => ({
+        id: r.id,
+        ident: r.ident,
+        name: r.name,
+        type: r.type,
+        iata: r.iata,
+        icao: r.icao,
+        lat: r.lat,
+        lng: r.lng,
+        municipality: r.municipality,
+        isoCountry: r.isoCountry,
+        scheduledService: r.scheduledService,
+      }));
+      return { matches };
+    });
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(payload);
   });

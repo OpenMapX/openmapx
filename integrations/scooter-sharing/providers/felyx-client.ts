@@ -4,11 +4,10 @@
  * https://github.com/ubahnverleih/WoBike/blob/master/Felyx.md
  */
 
-import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
+import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import type { SharedMobilityVehicle } from "./types.js";
 
 const FELYX_URL = "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/map/cars/";
-const HEADERS = { "User-Agent": USER_AGENT };
 const FETCH_TIMEOUT_MS = 8_000;
 
 interface FelyxVehicle {
@@ -26,12 +25,7 @@ interface FelyxVehicle {
  */
 export async function searchFelyx(bbox: BoundingBox): Promise<SharedMobilityVehicle[]> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(FELYX_URL, { headers: HEADERS, signal: controller.signal });
-    clearTimeout(timer);
-    if (!res.ok) return [];
-    const vehicles = (await res.json()) as FelyxVehicle[];
+    const vehicles = await fetchJson<FelyxVehicle[]>(FELYX_URL, { timeoutMs: FETCH_TIMEOUT_MS });
 
     return vehicles
       .filter((v) => v.lat && v.lng && bboxContains(bbox, v.lat, v.lng))

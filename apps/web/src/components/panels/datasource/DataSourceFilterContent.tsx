@@ -45,6 +45,7 @@ import { isI18nToken } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
+import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { TEAL } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
@@ -487,12 +488,11 @@ export function DataSourceFilterContent() {
                 </IconButton>
               )}
             </Box>
-            {sortedResults.map((result, i) => (
-              <Box key={result.id}>
-                {i > 0 && <Divider sx={{ mx: 2 }} />}
-                <Box
-                  component="button"
-                  type="button"
+            <ResultList
+              items={sortedResults}
+              getKey={(result) => result.id}
+              renderItem={(result) => (
+                <ResultListItem
                   onClick={() => {
                     if (!activeSource) return;
                     selectItem(activeSource, result.id);
@@ -511,17 +511,8 @@ export function DataSourceFilterContent() {
                   }}
                   onMouseEnter={() => setHoveredItemId(result.id)}
                   onMouseLeave={onHoverEnd}
-                  sx={{
-                    width: "100%",
-                    textAlign: "left",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    px: 2,
-                    py: 1.5,
-                    bgcolor: hoveredItemId === result.id ? "var(--omx-hover-bg)" : "transparent",
-                    "&:hover": { bgcolor: "var(--omx-hover-bg)" },
-                  }}
+                  selected={hoveredItemId === result.id}
+                  hoverBg="var(--omx-hover-bg)"
                 >
                   <Box sx={{ display: "flex", gap: 1.25, alignItems: "flex-start" }}>
                     {result.branding && (
@@ -532,15 +523,7 @@ export function DataSourceFilterContent() {
                       />
                     )}
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography
-                        variant="body1"
-                        sx={{
-                          fontWeight: 600,
-                          mb: 0.25,
-                        }}
-                      >
-                        {result.name}
-                      </Typography>
+                      <ResultItemName>{result.name}</ResultItemName>
                       {shouldShowOperatorCaption(result) && (
                         <Typography
                           variant="caption"
@@ -607,9 +590,9 @@ export function DataSourceFilterContent() {
                       </Box>
                     </Box>
                   </Box>
-                </Box>
-              </Box>
-            ))}
+                </ResultListItem>
+              )}
+            />
           </Box>
         )}
       </Box>

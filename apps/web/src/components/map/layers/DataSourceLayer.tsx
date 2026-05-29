@@ -25,7 +25,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { isI18nToken, type Translatable } from "@openmapx/integration-framework/strings";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type maplibregl from "maplibre-gl";
-import type { GeoJSONSource, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
@@ -36,7 +36,7 @@ import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
-import { getFirstSymbolLayerId } from "./layerStyleUtils";
+import { getFirstSymbolLayerId, upsertGeoJsonSource } from "./layerStyleUtils";
 import { useLayerReanchor } from "./useLayerReanchor";
 
 function sourceId(dsId: string) {
@@ -431,26 +431,12 @@ export function DataSourceLayer() {
         imageId,
       );
 
-      if (map.getSource(sid)) {
-        (map.getSource(sid) as GeoJSONSource).setData(geojson);
-      } else {
-        map.addSource(sid, {
-          type: "geojson",
-          data: geojson,
-        });
-      }
+      upsertGeoJsonSource(map, sid, geojson);
 
       const beforeLayer = getFirstSymbolLayerId(map);
       const mapContextData = mapContext?.geojson;
       if (mapContextData && mapContextData.features.length > 0) {
-        if (map.getSource(mapContextSid)) {
-          (map.getSource(mapContextSid) as GeoJSONSource).setData(mapContextData);
-        } else {
-          map.addSource(mapContextSid, {
-            type: "geojson",
-            data: mapContextData,
-          });
-        }
+        upsertGeoJsonSource(map, mapContextSid, mapContextData);
 
         if (!map.getLayer(mapContextFillLid)) {
           map.addLayer(

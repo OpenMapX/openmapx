@@ -10,6 +10,7 @@ import {
   modeColor,
   transitVehicleIconExpression,
 } from "@/lib/transitMarkers";
+import { removeLayerAndSource } from "./layerStyleUtils";
 
 const SOURCE_ID = "transit-vehicle-positions-source";
 const LAYER_ID = "transit-vehicle-positions-layer";
@@ -307,24 +308,12 @@ export function TransitVehicleLayer() {
     if (!map) return;
 
     if (transitLegs.length === 0) {
-      try {
-        if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      } catch {
-        /* race */
-      }
+      removeLayerAndSource(map, [LABEL_LAYER_ID, LAYER_ID], SOURCE_ID);
       featuresRef.current.clear();
     }
 
     return () => {
-      try {
-        if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      } catch {
-        /* race */
-      }
+      removeLayerAndSource(map, [LABEL_LAYER_ID, LAYER_ID], SOURCE_ID);
       featuresRef.current.clear();
     };
   }, [mapRef, transitLegs]);

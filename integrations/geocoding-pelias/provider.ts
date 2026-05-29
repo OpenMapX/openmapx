@@ -1,11 +1,16 @@
-import type { GeocodingProviderImpl } from "./types.js";
+import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 /**
  * Pelias geocoding client (self-hosted).
  * Set PELIAS_URL to your Pelias instance (e.g. http://localhost:4300).
  * https://github.com/pelias/pelias
  */
 
-import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import {
+  type AutocompleteResult,
+  fetchJson,
+  type ReverseGeocodingResult,
+  type SearchResult,
+} from "@openmapx/core";
 
 // Populated by setup(ctx); see setPeliasUrl.
 let PELIAS_URL = "http://localhost:4300";
@@ -78,15 +83,11 @@ async function fetchPelias(path: string, params: Record<string, string>): Promis
   const url = new URL(`${PELIAS_URL}${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4_000);
-  try {
-    const res = await fetch(url.toString(), { signal: controller.signal });
-    if (!res.ok) throw new Error(`Pelias error ${res.status}: ${url.toString()}`);
-    return res.json() as Promise<PeliasResponse>;
-  } finally {
-    clearTimeout(timer);
-  }
+  return fetchJson<PeliasResponse>(url.toString(), {
+    timeoutMs: 4_000,
+    userAgent: null,
+    errorMessage: ({ status }) => `Pelias error ${status}: ${url.toString()}`,
+  });
 }
 
 export const peliasService: GeocodingProviderImpl = {

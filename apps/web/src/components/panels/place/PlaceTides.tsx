@@ -13,8 +13,9 @@ import type {
   TidesResponse,
   WaterLevelObservation,
 } from "@openmapx/core";
-import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
+import { SectionLabel } from "../shared/SectionLabel";
+import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 /**
  * Presentation-only tide content. Mounted inside an `ExpandableDetailRow`
@@ -24,15 +25,15 @@ import { useTranslations } from "next-intl";
  */
 export function PlaceTidesContent({ data }: { data: TidesResponse }) {
   const t = useTranslations("tides");
-  const registry = useIntegrationRegistry();
   // Attribution must reflect the provider that actually answered: NOAA covers
   // US coasts, but Canada/Norway/Pegelonline/IOC each have their own license
   // terms and crediting NOAA for their data is wrong. `useTides` stamps the
   // winning provider onto the response so the panel can pull the matching
   // manifest entry here.
-  const attributionSource = registry
-    .get(data.provider.integrationId)
-    ?.dataSources?.find((ds) => ds.sourceId === data.provider.sourceId);
+  const attributionSource = useDataSourceAttribution(
+    data.provider.integrationId,
+    data.provider.sourceId,
+  );
 
   const now = Date.now();
   const enriched = data.events.map((e) => ({ ...e, parsed: parseLocalTime(e.time) }));
@@ -196,17 +197,7 @@ function DaySection({
 }) {
   return (
     <Box sx={{ mt: 0.75 }}>
-      <Typography
-        variant="caption"
-        sx={{
-          color: "text.secondary",
-          fontWeight: 600,
-          letterSpacing: 0.4,
-          textTransform: "uppercase",
-        }}
-      >
-        {title}
-      </Typography>
+      <SectionLabel>{title}</SectionLabel>
       <Box
         sx={{
           display: "grid",

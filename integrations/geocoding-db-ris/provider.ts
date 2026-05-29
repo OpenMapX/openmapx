@@ -6,6 +6,7 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 import { isRisConfigured, risGet } from "./ris-client.js";
 import {
   buildStationDetail,
@@ -20,7 +21,6 @@ import type {
   RisStopPlace,
   RisStopPlacesResponse,
 } from "./stations-types.js";
-import type { GeocodingProviderImpl } from "./types.js";
 
 async function searchStopPlaces(query: string, limit = 6): Promise<RisStopPlace[]> {
   const encoded = encodeURIComponent(query);

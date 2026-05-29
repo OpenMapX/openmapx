@@ -1,17 +1,10 @@
-import {
-  createManifestAttribution,
-  type IntegrationContext,
-} from "@openmapx/integration-framework";
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { withAttribution } from "@openmapx/mobility-core/result";
+import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import { isOtpAvailable, plan, setOtpUrl } from "./provider.js";
 
-const attribution = createManifestAttribution();
-const wrapRT = <T>(data: T) =>
-  withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+const { attribution, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  init(ctx);
   // Resolve OTP URL from the service registry if available.
   const resolved = ctx.getRequiredService("otp");
   const url =
