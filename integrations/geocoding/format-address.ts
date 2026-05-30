@@ -76,3 +76,26 @@ export function formatAddress(
 ): string {
   return runFormatter(components, { appendCountry: options.appendCountry ?? true }).join(", ");
 }
+
+/**
+ * Format just the street line — "Kinderhauser Straße 40" (DE) or
+ * "40 Main Street" (US). House-number/street order is country-dependent, so we
+ * reuse the formatter rather than concatenating by hand. Returns "" when there
+ * is no street to render.
+ *
+ * Used to derive a display name for address-type places (buildings, house
+ * numbers) that have no POI name of their own — without this, Nominatim's
+ * `display_name` leads with the bare house number in DE/AT/CH ("40, …"), so a
+ * naive `display_name.split(",")[0]` yields just "40".
+ */
+export function formatStreetLine(components: AddressComponents): string {
+  if (!components.road) return "";
+  return runFormatter(
+    {
+      road: components.road,
+      house_number: components.house_number,
+      country_code: components.country_code,
+    },
+    { appendCountry: false },
+  ).join(", ");
+}

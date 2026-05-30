@@ -1,4 +1,4 @@
-import { formatAddress } from "@openmapx/integration-geocoding/format-address";
+import { formatAddress, formatStreetLine } from "@openmapx/integration-geocoding/format-address";
 import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 /**
  * Nominatim geocoding client.
@@ -31,9 +31,16 @@ interface NominatimResult {
   lat: string;
   lon: string;
   display_name: string;
+  /** Empty for unnamed address/building features; a POI name otherwise. */
+  name?: string;
   class: string;
   type: string;
   importance: number;
+  address?: {
+    road?: string;
+    house_number?: string;
+    country_code?: string;
+  };
 }
 
 function mapType(cls: string, type: string): SearchResult["type"] {
@@ -169,7 +176,13 @@ export const nominatimService: GeocodingProviderImpl = {
   async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
     const data = await fetchNominatim({ q: query, limit: "6", dedupe: "1" }, lang);
     return data.map((r) => {
-      const short = r.display_name.split(",")[0].trim();
+      // Unnamed address/building features lead display_name with the bare house
+      // number in DE/AT/CH, so derive a proper street line ("Kinderhauser
+      // Straße 40") instead of splitting off "40".
+      const short =
+        r.name?.trim() ||
+        (r.address && formatStreetLine(r.address)) ||
+        r.display_name.split(",")[0].trim();
       return {
         id: makeId(r),
         label: short,

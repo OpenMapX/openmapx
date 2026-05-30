@@ -19,7 +19,7 @@ import {
   parseId,
   USER_AGENT,
 } from "@openmapx/core";
-import { formatAddress } from "./format-address.js";
+import { formatAddress, formatStreetLine } from "./format-address.js";
 import { resolveOsmLabel } from "./osm-label.js";
 
 function normalizeIdValue(s: string | undefined): string {
@@ -230,7 +230,10 @@ function toPlace(r: NominatimDetailResult, id: string): Place {
   }
 
   const address = formatAddress(r.address) || r.display_name;
-  const name = r.name?.trim() || r.display_name.split(",")[0].trim();
+  // Address-type places (buildings/house numbers) have no POI name. Derive a
+  // proper street line ("Kinderhauser Straße 40") instead of falling back to
+  // display_name's first segment, which is the bare house number in DE/AT/CH.
+  const name = r.name?.trim() || formatStreetLine(r.address) || r.display_name.split(",")[0].trim();
   const city = r.address.city ?? r.address.town ?? r.address.village ?? r.address.county;
 
   return createPlace({

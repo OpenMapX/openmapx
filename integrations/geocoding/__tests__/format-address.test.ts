@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAddress } from "../format-address.js";
+import { formatAddress, formatStreetLine } from "../format-address.js";
 
 // Guards the @fragaria/address-formatter integration (v7): country-aware
 // templates put the house number before/after the street depending on
@@ -35,5 +35,33 @@ describe("formatAddress", () => {
 
   it("returns an empty string for empty components", () => {
     expect(formatAddress({})).toBe("");
+  });
+});
+
+// Derives the display name for unnamed address/building features. Nominatim's
+// display_name leads with the bare house number in DE/AT/CH, so a naive
+// first-segment split yields just "40"; formatStreetLine must rebuild the
+// country-ordered street line instead.
+describe("formatStreetLine", () => {
+  it("puts the house number after the street for German addresses", () => {
+    expect(
+      formatStreetLine({ road: "Kinderhauser Straße", house_number: "40", country_code: "de" }),
+    ).toBe("Kinderhauser Straße 40");
+  });
+
+  it("puts the house number before the street for US addresses", () => {
+    expect(formatStreetLine({ road: "Market St", house_number: "1", country_code: "us" })).toBe(
+      "1 Market St",
+    );
+  });
+
+  it("returns just the street when there is no house number", () => {
+    expect(formatStreetLine({ road: "Kinderhauser Straße", country_code: "de" })).toBe(
+      "Kinderhauser Straße",
+    );
+  });
+
+  it("returns an empty string when there is no street", () => {
+    expect(formatStreetLine({ house_number: "40", country_code: "de" })).toBe("");
   });
 });
