@@ -1,6 +1,11 @@
 import type { LngLat } from "@openmapx/core";
 
-export type TravelMode = "driving" | "walking" | "cycling" | "transit";
+// "transit" and "flying" are planned/handled outside the ground-routing
+// engines: transit goes through the transit plan endpoint, and "flying" is a
+// UI-only mode that deep-links to external flight search (no engine routes air
+// legs — see docs/plans/flights-in-directions.md). The routing route handlers
+// reject both via `parseTravelMode`'s allow-list.
+export type TravelMode = "driving" | "walking" | "cycling" | "transit" | "flying";
 
 export interface Waypoint {
   id: string;

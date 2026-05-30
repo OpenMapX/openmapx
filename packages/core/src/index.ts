@@ -76,6 +76,7 @@ export {
   ApiClient,
   type ApiClientConfig,
   apiClient,
+  apiUrl,
   configureApiClient,
   proxyImageUrl,
 } from "./api/client";
@@ -163,6 +164,7 @@ export { useDirections } from "./hooks/useDirections";
 export { useElevation } from "./hooks/useElevation";
 export { useExploreResults } from "./hooks/useExploreResults";
 export { useFilteredCategoryResults } from "./hooks/useFilteredCategoryResults";
+export { useFlightProviders } from "./hooks/useFlightProviders";
 export { useGeocoding } from "./hooks/useGeocoding";
 export {
   useHikingArea,
@@ -181,6 +183,7 @@ export {
   useMarineWeather,
 } from "./hooks/useMarineWeather";
 export { useMergedPlace } from "./hooks/useMergedPlace";
+export { type NearestAirportHit, useNearestAirports } from "./hooks/useNearestAirports";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
@@ -229,6 +232,7 @@ export {
 export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
+export { type FlightEndpoint, useFlightStore } from "./stores/flightStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
@@ -256,6 +260,12 @@ export type {
   ElevationProfile,
   ElevationStats,
 } from "./types/elevation";
+export type {
+  CabinClass,
+  FlightProviderCapabilities,
+  FlightProviderInfo,
+  FlightSearchParams,
+} from "./types/flights";
 // Types that originated in integration stores but are used by core utilities
 export type { AreaGeometry, BBox, BoundingBox, LngLat, UnitSystem } from "./types/geometry";
 export type {
@@ -341,6 +351,7 @@ export {
   type FetchWithRedirectsOptions,
   fetchWithRedirects,
 } from "./utils/fetchWithRedirects";
+export { buildFlightOpenUrl } from "./utils/flightLink";
 export { escapeHtml, formatTime, relativeTime, sanitizeUrl } from "./utils/format";
 export {
   formatArea,
@@ -368,6 +379,7 @@ export {
   makeSyntheticStopPlace,
   resolveStopAsPlace,
 } from "./utils/geocodeStopAsPlace";
+export { estimateFlightMinutes, greatCircleArc } from "./utils/greatCircle";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
 export { isOpenAtBitmap, isOpenAtSlot } from "./utils/openingHoursClient";
 export { otpMode } from "./utils/otp";

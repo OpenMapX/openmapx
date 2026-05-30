@@ -39,7 +39,9 @@ export function RouteLayer() {
   const allFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
 
   const { data } = useDirections({
-    waypoints: mode === "transit" ? [] : allFilled ? routeWaypoints : [],
+    // Transit uses the transit-plan endpoint and flights deep-link out — neither
+    // routes through the ground engines, so skip the directions query for both.
+    waypoints: mode === "transit" || mode === "flying" ? [] : allFilled ? routeWaypoints : [],
     mode,
     avoidHighways,
     avoidTolls,
@@ -138,7 +140,7 @@ export function RouteLayer() {
     if (!raw || raw.type !== "geojson") return;
     const source = raw as GeoJSONSource;
 
-    if (mode === "transit") {
+    if (mode === "transit" || mode === "flying") {
       source.setData({ type: "FeatureCollection", features: [] });
       return;
     }

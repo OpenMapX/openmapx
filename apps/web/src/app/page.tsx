@@ -12,6 +12,7 @@ import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
 import { CyclingBaseLayer } from "@/components/map/layers/CyclingBaseLayer";
 import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
+import { FlightArcLayer } from "@/components/map/layers/FlightArcLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
@@ -127,6 +128,7 @@ export default function HomePage() {
           {/* Core layers (not integration-managed) */}
           <PlaceBoundaryLayer />
           <RouteLayer />
+          <FlightArcLayer />
           <TransitRouteLayer />
           <VehicleLiveLayer />
           <TransitItineraryLayer />

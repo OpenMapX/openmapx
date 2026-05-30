@@ -22,12 +22,7 @@ const MODES: { mode: TravelMode; icon: ReactNode; labelKey: string; disabled?: b
   },
   { mode: "walking", icon: <DirectionsWalkIcon sx={{ fontSize: 22 }} />, labelKey: "walking" },
   { mode: "cycling", icon: <DirectionsBikeIcon sx={{ fontSize: 22 }} />, labelKey: "cycling" },
-  {
-    mode: "flying" as TravelMode,
-    icon: <FlightIcon sx={{ fontSize: 22 }} />,
-    labelKey: "flights",
-    disabled: true,
-  },
+  { mode: "flying", icon: <FlightIcon sx={{ fontSize: 22 }} />, labelKey: "flights" },
 ];
 
 function ModeButton({

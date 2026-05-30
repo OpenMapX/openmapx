@@ -1,0 +1,119 @@
+{
+  "id": "flights",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["flight-search"],
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultProvider": {
+        "type": "string",
+        "title": "Default flight search engine",
+        "description": "Which external flight-search engine is pre-selected in the directions panel.",
+        "enum": ["skyscanner", "google", "kayak", "kiwi", "momondo", "skiplagged"],
+        "default": "skyscanner"
+      },
+      "skyscannerMediaPartnerId": {
+        "type": "string",
+        "title": "Skyscanner Affiliate (Impact) mediaPartnerId",
+        "description": "Optional. When set, Skyscanner links use the affiliate referral schema so commissions are tracked. Leave empty to deep-link via the plain consumer URL (no account required)."
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "skyscanner",
+      "name": "Skyscanner",
+      "url": "https://www.skyscanner.net/",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://www.skyscanner.net/media/terms-of-service",
+      "commercialUse": "conditional",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://www.skyscanner.net/privacy-policy",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "google-flights",
+      "name": "Google Flights",
+      "url": "https://www.google.com/travel/flights",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://policies.google.com/terms",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://policies.google.com/privacy",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "kayak",
+      "name": "KAYAK",
+      "url": "https://www.kayak.com/flights",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://www.kayak.com/terms",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.kayak.com/privacy",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "kiwi",
+      "name": "Kiwi.com",
+      "url": "https://www.kiwi.com/",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://www.kiwi.com/en/pages/content/legal",
+      "commercialUse": "conditional",
+      "providerCountry": "CZ",
+      "providerPrivacyUrl": "https://www.kiwi.com/en/pages/content/privacy",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "momondo",
+      "name": "momondo",
+      "url": "https://www.momondo.com/",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://www.momondo.com/terms",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.momondo.com/privacy",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "skiplagged",
+      "name": "Skiplagged",
+      "url": "https://skiplagged.com/",
+      "license": "Proprietary (deep-link only)",
+      "licenseUrl": "https://skiplagged.com/tos",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://skiplagged.com/privacy",
+      "endUserExposure": "direct",
+      "personalData": true,
+      "cookies": true,
+      "dpaAvailable": false
+    }
+  ]
+}

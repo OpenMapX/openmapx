@@ -125,6 +125,22 @@ export class ApiClient {
 export const apiClient = new ApiClient();
 
 /**
+ * Build the absolute URL for an API path + query params without fetching it.
+ * Useful for links the browser navigates to directly (e.g. `window.open` of a
+ * redirect endpoint), where a `fetch` would defeat the purpose.
+ */
+export function apiUrl(path: string, params?: Record<string, string>): string {
+  const cfg = getConfig();
+  const url = new URL(path, cfg.baseUrl);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+  }
+  return url.toString();
+}
+
+/**
  * Rewrite an image URL to go through the backend image proxy.
  * This prevents leaking the user's IP address to external image hosts.
  */

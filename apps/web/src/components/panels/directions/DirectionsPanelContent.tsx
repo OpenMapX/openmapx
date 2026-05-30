@@ -33,6 +33,7 @@ import { useLocale, useTranslations } from "next-intl";
 import type { ChangeEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
+import { FlightPanel } from "@/components/panels/directions/FlightPanel";
 import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
@@ -107,6 +108,7 @@ export function DirectionsPanelContent() {
   }, [waypoints]);
 
   const isTransitMode = mode === "transit";
+  const isFlightMode = mode === "flying";
 
   // Collect all non-null coords for the route query
   const routeWaypoints = useMemo(
@@ -120,7 +122,7 @@ export function DirectionsPanelContent() {
   const allWaypointsFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
 
   const { data, isLoading, isError } = useDirections({
-    waypoints: isTransitMode ? [] : allWaypointsFilled ? routeWaypoints : [],
+    waypoints: isTransitMode || isFlightMode ? [] : allWaypointsFilled ? routeWaypoints : [],
     mode,
     avoidHighways,
     avoidTolls,
@@ -332,7 +334,7 @@ export function DirectionsPanelContent() {
   ]);
 
   const hasMultipleStops = waypoints.length > 2;
-  const showOptimize = hasMultipleStops && allWaypointsFilled && !isTransitMode;
+  const showOptimize = hasMultipleStops && allWaypointsFilled && !isTransitMode && !isFlightMode;
   const lowestCo2Grams = useMemo(() => {
     const values = transitItineraries
       .map((itinerary) => itinerary.co2Grams)
@@ -503,75 +505,78 @@ export function DirectionsPanelContent() {
           </Box>
         )}
 
-        {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit) */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: isTransitMode ? "space-between" : "flex-end",
-            px: 2,
-            py: 1,
-          }}
-        >
-          {isTransitMode && (
-            <Box
-              onClick={() => setTimePickerOpen((v) => !v)}
-              sx={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.75,
-                px: 1.75,
-                py: 0.75,
-                borderRadius: "12px",
-                bgcolor: transitTimeMode !== "now" ? `${TEAL}18` : "action.hover",
-                cursor: "pointer",
-                "&:hover": {
-                  bgcolor: transitTimeMode !== "now" ? `${TEAL}28` : "action.selected",
-                },
-                transition: "background-color 0.15s",
-              }}
-            >
-              <ScheduleIcon
-                sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
-              />
-              <Typography
-                variant="body2"
-                color={transitTimeMode !== "now" ? TEAL : "text.primary"}
+        {/* Leave now / Depart at / Arrive by (transit only) + Options (non-transit).
+            Flight mode renders its own form below, so this row is hidden. */}
+        {!isFlightMode && (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: isTransitMode ? "space-between" : "flex-end",
+              px: 2,
+              py: 1,
+            }}
+          >
+            {isTransitMode && (
+              <Box
+                onClick={() => setTimePickerOpen((v) => !v)}
                 sx={{
-                  fontWeight: 500,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0.75,
+                  px: 1.75,
+                  py: 0.75,
+                  borderRadius: "12px",
+                  bgcolor: transitTimeMode !== "now" ? `${TEAL}18` : "action.hover",
+                  cursor: "pointer",
+                  "&:hover": {
+                    bgcolor: transitTimeMode !== "now" ? `${TEAL}28` : "action.selected",
+                  },
+                  transition: "background-color 0.15s",
                 }}
               >
-                {transitTimeMode === "now"
-                  ? t("departNow")
-                  : transitTimeMode === "depart"
-                    ? `${t("departAt")} ${transitDepartureTime instanceof Date ? transitDepartureTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`
-                    : `${t("arriveBy")} ${transitArrivalTime instanceof Date ? transitArrivalTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`}
-              </Typography>
-              <ExpandMoreIcon
-                sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
-              />
-            </Box>
-          )}
+                <ScheduleIcon
+                  sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
+                />
+                <Typography
+                  variant="body2"
+                  color={transitTimeMode !== "now" ? TEAL : "text.primary"}
+                  sx={{
+                    fontWeight: 500,
+                  }}
+                >
+                  {transitTimeMode === "now"
+                    ? t("departNow")
+                    : transitTimeMode === "depart"
+                      ? `${t("departAt")} ${transitDepartureTime instanceof Date ? transitDepartureTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`
+                      : `${t("arriveBy")} ${transitArrivalTime instanceof Date ? transitArrivalTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`}
+                </Typography>
+                <ExpandMoreIcon
+                  sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}
+                />
+              </Box>
+            )}
 
-          {!isTransitMode && (
-            <Typography
-              variant="body2"
-              sx={{
-                color: TEAL,
-                cursor: "pointer",
-                fontWeight: 500,
-                px: 1.5,
-                py: 0.75,
-                borderRadius: 99,
-                "&:hover": { bgcolor: `${TEAL}18` },
-                transition: "background-color 0.15s",
-              }}
-              onClick={() => setShowOptions((v) => !v)}
-            >
-              {t("options")}
-            </Typography>
-          )}
-        </Box>
+            {!isTransitMode && (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: TEAL,
+                  cursor: "pointer",
+                  fontWeight: 500,
+                  px: 1.5,
+                  py: 0.75,
+                  borderRadius: 99,
+                  "&:hover": { bgcolor: `${TEAL}18` },
+                  transition: "background-color 0.15s",
+                }}
+                onClick={() => setShowOptions((v) => !v)}
+              >
+                {t("options")}
+              </Typography>
+            )}
+          </Box>
+        )}
 
         {/* Transit time picker dropdown */}
         {isTransitMode && timePickerOpen && (
@@ -662,7 +667,9 @@ export function DirectionsPanelContent() {
         <Divider />
 
         {/* Route results */}
-        {!allWaypointsFilled ? (
+        {isFlightMode ? (
+          <FlightPanel />
+        ) : !allWaypointsFilled ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography
               variant="body2"

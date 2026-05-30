@@ -440,6 +440,12 @@ importers:
         specifier: workspace:^
         version: link:../../packages/poi-source-registry
 
+  integrations/flights:
+    dependencies:
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+
   integrations/fuel:
     dependencies:
       '@openmapx/core':

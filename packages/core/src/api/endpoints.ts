@@ -6,6 +6,9 @@ export const API_ENDPOINTS = {
   directions: "/api/integrations/routing/directions",
   directionsOptimize: "/api/integrations/routing/directions/optimize",
   routingMatch: "/api/integrations/routing/match",
+  flights: "/api/integrations/flights", // used as `${base}/${provider}/open`
+  flightProviders: "/api/integrations/flights/providers",
+  airportNearest: "/api/integrations/knowledge-ourairports/nearest",
   elevation: "/api/elevation",
   isochrone: "/api/isochrone",
   places: "/api/places",

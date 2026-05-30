@@ -1,6 +1,12 @@
 import { type AirportType, createPlace, type Place } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { lookupAirportRecord, searchAirports } from "@openmapx/ourairports-data";
+import {
+  type AirportRecord,
+  haversineKm,
+  lookupAirportRecord,
+  queryAirportsInBbox,
+  searchAirports,
+} from "@openmapx/ourairports-data";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { startBackgroundLoad, stopBackgroundLoad } from "./data.js";
 import { createOurAirportsSource } from "./provider.js";
@@ -8,6 +14,8 @@ import { createOurAirportsSource } from "./provider.js";
 const SEARCH_MIN_LEN = 2;
 const SEARCH_MAX_LIMIT = 20;
 const SEARCH_DEFAULT_LIMIT = 8;
+const NEAREST_DEFAULT_LIMIT = 5;
+const NEAREST_MAX_LIMIT = 10;
 
 interface SearchHit {
   id: number;
@@ -21,6 +29,69 @@ interface SearchHit {
   municipality?: string;
   isoCountry?: string;
   scheduledService: boolean;
+}
+
+interface NearestHit extends SearchHit {
+  /** Great-circle distance from the query point, in kilometres (rounded). */
+  distanceKm: number;
+}
+
+function recordToHit(r: AirportRecord): SearchHit {
+  return {
+    id: r.id,
+    ident: r.ident,
+    name: r.name,
+    type: r.type,
+    iata: r.iata,
+    icao: r.icao,
+    lat: r.lat,
+    lng: r.lng,
+    municipality: r.municipality,
+    isoCountry: r.isoCountry,
+    scheduledService: r.scheduledService,
+  };
+}
+
+/**
+ * Resolve the nearest IATA-coded airports to a coordinate, preferring
+ * scheduled-service large/medium airports. Used by the flights feature to
+ * prefill the origin/destination airport for a directions endpoint. Searches
+ * progressively wider bounding boxes and relaxes the filters only if nothing
+ * suitable is found nearby, then re-sorts the candidates by true great-circle
+ * distance (bbox query returns importance-ordered, not distance-ordered).
+ */
+async function findNearestAirports(
+  ctx: IntegrationContext,
+  lat: number,
+  lng: number,
+  limit: number,
+): Promise<NearestHit[]> {
+  const attempts: Array<{ deg: number; types: AirportType[]; scheduledOnly: boolean }> = [
+    { deg: 2, types: ["large_airport", "medium_airport"], scheduledOnly: true },
+    { deg: 5, types: ["large_airport", "medium_airport"], scheduledOnly: true },
+    { deg: 12, types: ["large_airport", "medium_airport"], scheduledOnly: true },
+    { deg: 12, types: ["large_airport", "medium_airport", "small_airport"], scheduledOnly: false },
+  ];
+
+  for (const attempt of attempts) {
+    const recs = await queryAirportsInBbox(ctx.log, {
+      west: lng - attempt.deg,
+      east: lng + attempt.deg,
+      south: lat - attempt.deg,
+      north: lat + attempt.deg,
+      types: attempt.types,
+      scheduledOnly: attempt.scheduledOnly,
+      limit: 300,
+    });
+    const withIata = recs.filter((r) => r.iata);
+    if (withIata.length === 0) continue;
+    return withIata
+      .map((r) => ({ ...recordToHit(r), distanceKm: haversineKm(lat, lng, r.lat, r.lng) }))
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, limit)
+      .map((hit) => ({ ...hit, distanceKm: Math.round(hit.distanceKm) }));
+  }
+  return [];
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -108,6 +179,31 @@ export function setup(ctx: IntegrationContext): void {
         isoCountry: r.isoCountry,
         scheduledService: r.scheduledService,
       }));
+      return { matches };
+    });
+    reply.header("Cache-Control", "public, max-age=3600");
+    reply.send(payload);
+  });
+
+  // GET /nearest?lat=&lng=&limit= → nearest IATA airports to a coordinate,
+  // closest first, preferring scheduled-service airports. Powers the flights
+  // feature's automatic origin/destination airport prefill.
+  ctx.registerRoute("GET", "/nearest", async (req, reply) => {
+    const lat = Number.parseFloat(req.query.lat ?? "");
+    const lng = Number.parseFloat(req.query.lng ?? "");
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90) {
+      reply.status(400).send({ error: "lat and lng must be valid coordinates" });
+      return;
+    }
+    const parsedLimit = Number.parseInt(req.query.limit ?? "", 10);
+    const limit =
+      Number.isFinite(parsedLimit) && parsedLimit > 0
+        ? Math.min(parsedLimit, NEAREST_MAX_LIMIT)
+        : NEAREST_DEFAULT_LIMIT;
+
+    const cacheKey = `nearest:${limit}:${lat.toFixed(2)}:${lng.toFixed(2)}`;
+    const payload = await ctx.cache.withCache(cacheKey, 60 * 60, async () => {
+      const matches = await findNearestAirports(ctx, lat, lng, limit);
       return { matches };
     });
     reply.header("Cache-Control", "public, max-age=3600");
