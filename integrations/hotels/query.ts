@@ -22,7 +22,10 @@ function parseCount(raw: string | undefined, min: number, max: number): number |
 
 function parseDate(raw: string | undefined): string | undefined {
   const v = (raw ?? "").trim();
-  return DATE_RE.test(v) ? v : undefined;
+  if (!DATE_RE.test(v)) return undefined;
+  // Reject format-valid but impossible dates (2026-13-99, 2026-02-31) by round-tripping.
+  const d = new Date(`${v}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? undefined : v;
 }
 
 /**

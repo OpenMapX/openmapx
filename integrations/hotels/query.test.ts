@@ -37,5 +37,11 @@ describe("parseHotelQuery", () => {
       expect(r.query.adults).toBeUndefined(); // 0 is invalid
       expect(r.query.rooms).toBe(8); // clamped to max
     }
+    const r2 = parseHotelQuery({ name: "X", checkIn: "2026-13-99", checkOut: "2026-02-31" });
+    expect(r2.ok).toBe(true);
+    if (r2.ok) {
+      expect(r2.query.checkIn).toBeUndefined();
+      expect(r2.query.checkOut).toBeUndefined();
+    }
   });
 });

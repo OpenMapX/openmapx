@@ -59,4 +59,11 @@ describe("hotel providers", () => {
   it("no country known ⇒ every provider passes the filter", () => {
     for (const p of HOTEL_PROVIDERS) expect(providerServes(p, undefined)).toBe(true);
   });
+
+  it("hrs: city branch builds a city path; no city falls back to homepage", () => {
+    expect(getHotelProvider("hrs")!.build(q, {})).toBe("https://www.hrs.de/hotel/Berlin/");
+    expect(getHotelProvider("hrs")!.build({ ...q, city: undefined }, {})).toBe(
+      "https://www.hrs.de/",
+    );
+  });
 });

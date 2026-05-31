@@ -3,11 +3,6 @@ import type { HotelProvider, HotelProviderConfig, HotelQuery } from "./types.js"
 
 const enc = encodeURIComponent;
 
-/** `name` (+ city), URL-encoded — the OTA free-text destination term. */
-function term(q: HotelQuery): string {
-  return enc([q.name, q.city].filter(Boolean).join(" ").trim());
-}
-
 const adults = (q: HotelQuery) => q.adults ?? 2;
 const rooms = (q: HotelQuery) => q.rooms ?? 1;
 
@@ -123,7 +118,7 @@ const SPECS: readonly ProviderSpec[] = [
     regions: ["de", "at", "ch"],
     // HRS exposes no stable name-search deep link; the city landing page is the
     // best addressable target (the user then refines). Falls back to homepage.
-    build: (q) => (q.city ? `https://www.hrs.de/hotel/${term(q)}/` : "https://www.hrs.de/"),
+    build: (q) => (q.city ? `https://www.hrs.de/hotel/${enc(q.city)}/` : "https://www.hrs.de/"),
   },
 ];
 
