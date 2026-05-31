@@ -1,6 +1,7 @@
 // integrations/hotels/index.ts
 import { bareDomain, type HotelProviderInfo } from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { fetchOfficialBookingUrl } from "./official.js";
 import { getHotelProvider, HOTEL_PROVIDERS, providerServes } from "./providers.js";
 import { parseHotelQuery } from "./query.js";
 import type { HotelProviderConfig } from "./types.js";
@@ -26,6 +27,9 @@ export function setup(ctx: IntegrationContext): void {
     bookingAid: typeof ctx.config.bookingAid === "string" ? ctx.config.bookingAid : undefined,
   };
 
+  /** Booking-engine link is stable; cache the resolved (dated) URL a day. */
+  const OFFICIAL_TTL = 24 * 60 * 60;
+
   ctx.registerRoute("GET", "/providers", async (req, reply) => {
     const country = (req.query.country ?? "").trim().toLowerCase() || undefined;
     const providers: HotelProviderInfo[] = HOTEL_PROVIDERS.filter((p) =>
@@ -39,6 +43,38 @@ export function setup(ctx: IntegrationContext): void {
     }));
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send({ providers });
+  });
+
+  ctx.registerRoute("GET", "/official", async (req, reply) => {
+    const website = (req.query.website ?? "").trim();
+    if (!website) {
+      reply.status(204).send({});
+      return;
+    }
+    const parsed = parseHotelQuery(req.query); // requires name; client always has it
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    const q = parsed.query;
+    const key = `hotels:official:${website}:${q.checkIn ?? ""}:${q.checkOut ?? ""}:${q.adults ?? 2}:${q.rooms ?? 1}`;
+    try {
+      const url = await ctx.cache.withCache(key, OFFICIAL_TTL, () =>
+        fetchOfficialBookingUrl(
+          website,
+          { checkIn: q.checkIn, checkOut: q.checkOut, adults: q.adults, rooms: q.rooms },
+          ctx.log,
+        ),
+      );
+      if (!url) {
+        reply.status(204).send({});
+        return;
+      }
+      reply.header("Cache-Control", "public, max-age=86400");
+      reply.send({ url });
+    } catch {
+      reply.status(204).send({});
+    }
   });
 
   ctx.registerRoute("GET", "/:provider/open", async (req, reply) => {

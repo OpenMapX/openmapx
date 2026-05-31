@@ -187,6 +187,7 @@ export {
 } from "./hooks/useMarineWeather";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { type NearestAirportHit, useNearestAirports } from "./hooks/useNearestAirports";
+export { useOfficialBookingUrl } from "./hooks/useOfficialBookingUrl";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";

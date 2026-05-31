@@ -11,6 +11,7 @@ import {
   type HotelProviderInfo,
   type Place,
   useHotelSearchStore,
+  useOfficialBookingUrl,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
@@ -85,6 +86,11 @@ export function HotelCompareList({
   const t = useTranslations("place");
   const { checkIn, checkOut, adults, rooms } = useHotelSearchStore();
 
+  const { data: officialUrl } = useOfficialBookingUrl(
+    { name: place.name, website: place.website, checkIn, checkOut, adults, rooms },
+    Boolean(place.website),
+  );
+
   const openProvider = (id: string) => {
     const [lng, lat] = place.coordinates;
     const url = buildHotelOpenUrl(id, {
@@ -103,7 +109,8 @@ export function HotelCompareList({
   };
 
   const openOfficial = () => {
-    if (place.website) window.open(place.website, "_blank", "noopener,noreferrer");
+    const dest = officialUrl ?? place.website;
+    if (dest) window.open(dest, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -113,7 +120,7 @@ export function HotelCompareList({
           onClick={openOfficial}
           mark={<VerifiedIcon sx={{ fontSize: 28, color: TEAL, flexShrink: 0 }} />}
           primary={place.name}
-          secondary={t("officialSite")}
+          secondary={officialUrl ? t("officialSiteDated") : t("officialSite")}
         />
       )}
       {providers.map((p) => (
