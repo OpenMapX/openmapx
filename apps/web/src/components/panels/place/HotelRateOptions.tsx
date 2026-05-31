@@ -4,8 +4,8 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useHotelSearchStore } from "@openmapx/core";
-import { useTranslations } from "next-intl";
-import type { ChangeEvent } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { type ChangeEvent, useMemo } from "react";
 import { TEAL } from "@/lib/theme";
 
 /** Curated currency choices (extensible; the effective currency is prepended if missing). */
@@ -73,6 +73,7 @@ export function HotelRateOptions({
   placeCountry?: string;
 }) {
   const t = useTranslations("place");
+  const locale = useLocale();
   const { currency, guestNationality, setCurrency, setGuestNationality } = useHotelSearchStore();
 
   const effCurrency = currency || defaultCurrency;
@@ -83,7 +84,7 @@ export function HotelRateOptions({
   const nationChoices = NATIONALITIES.includes(effNationality)
     ? NATIONALITIES
     : [effNationality, ...NATIONALITIES];
-  const regionNames = new Intl.DisplayNames(undefined, { type: "region" });
+  const regionNames = useMemo(() => new Intl.DisplayNames(locale, { type: "region" }), [locale]);
 
   return (
     <Box sx={{ display: "flex", gap: 1 }}>

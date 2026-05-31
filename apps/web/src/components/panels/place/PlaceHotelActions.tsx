@@ -66,7 +66,7 @@ export function PlaceHotelActions({
       adults,
       rooms,
       currency: currency || config?.defaultCurrency,
-      guestNationality: guestNationality || place.countryCode?.toUpperCase(),
+      guestNationality: guestNationality || countryCode?.toUpperCase(),
     },
     lodging && liveEnabled,
   );
@@ -120,7 +120,7 @@ export function PlaceHotelActions({
               <Box sx={{ mt: 1.25 }}>
                 <HotelRateOptions
                   defaultCurrency={config.defaultCurrency}
-                  placeCountry={place.countryCode}
+                  placeCountry={countryCode}
                 />
               </Box>
             )}

@@ -48,7 +48,7 @@ export function PlaceHotelPricesTab({ place }: { place: Place }) {
       adults,
       rooms,
       currency: currency || config?.defaultCurrency,
-      guestNationality: guestNationality || place.countryCode?.toUpperCase(),
+      guestNationality: guestNationality || countryCode?.toUpperCase(),
     },
     liveEnabled,
   );
@@ -60,10 +60,7 @@ export function PlaceHotelPricesTab({ place }: { place: Place }) {
       </Typography>
       {offers?.best && <HotelPriceBadge offer={offers.best} />}
       {liveEnabled && config && (
-        <HotelRateOptions
-          defaultCurrency={config.defaultCurrency}
-          placeCountry={place.countryCode}
-        />
+        <HotelRateOptions defaultCurrency={config.defaultCurrency} placeCountry={countryCode} />
       )}
       <HotelSearchControls />
       <Box>
