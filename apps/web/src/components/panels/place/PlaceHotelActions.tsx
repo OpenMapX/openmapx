@@ -12,12 +12,17 @@ import {
   isLodging,
   type Place,
   useCountryFromCoordinates,
+  useHotelConfig,
+  useHotelOffers,
   useHotelProviders,
+  useHotelSearchStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
 import { TEAL } from "@/lib/theme";
 import { HotelCompareList } from "./HotelCompareList";
+import { HotelPriceBadge } from "./HotelPriceBadge";
+import { HotelRateOptions } from "./HotelRateOptions";
 import { HotelSearchControls } from "./HotelSearchControls";
 
 /**
@@ -46,6 +51,25 @@ export function PlaceHotelActions({
   );
   const countryCode = place.countryCode ?? resolvedCountry ?? undefined;
   const { data: providersData } = useHotelProviders(countryCode, lodging);
+
+  const { data: config } = useHotelConfig(lodging);
+  const liveEnabled = config?.liveEnabled ?? false;
+  const { checkIn, checkOut, adults, rooms, currency, guestNationality } = useHotelSearchStore();
+  const { data: offers } = useHotelOffers(
+    {
+      name: place.name,
+      lat: place.coordinates[1],
+      lng: place.coordinates[0],
+      countryCode,
+      checkIn,
+      checkOut,
+      adults,
+      rooms,
+      currency: currency || config?.defaultCurrency,
+      guestNationality: guestNationality || place.countryCode?.toUpperCase(),
+    },
+    lodging && liveEnabled,
+  );
 
   const [open, setOpen] = useState(false);
   const dialogTitleId = useId();
@@ -89,8 +113,17 @@ export function PlaceHotelActions({
               <CloseIcon sx={{ fontSize: 20 }} />
             </IconButton>
           </Box>
+          {offers?.best && <HotelPriceBadge offer={offers.best} />}
           <Box sx={{ mb: 2 }}>
             <HotelSearchControls />
+            {liveEnabled && config && (
+              <Box sx={{ mt: 1.25 }}>
+                <HotelRateOptions
+                  defaultCurrency={config.defaultCurrency}
+                  placeCountry={place.countryCode}
+                />
+              </Box>
+            )}
           </Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
             {t("allOptions")}
