@@ -3,7 +3,7 @@ import { assertResolvesToPublicIp } from "@openmapx/core/server";
 import type { Logger } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 5000;
-const MAX_BYTES = 1_500_000;
+const MAX_BYTES = 800_000;
 const MAX_REDIRECTS = 5;
 const USER_AGENT = "OpenMapX/1.0 (+https://openmapx.org)";
 
@@ -112,13 +112,24 @@ function findReserveTarget(
 }
 
 function extractReserveActionUrl(html: string, base: string, dates: BookingDates): string | null {
-  const scriptRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  let m: RegExpExecArray | null;
-  // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop
-  while ((m = scriptRe.exec(html)) !== null) {
+  // Scan <script type="application/ld+json"> blocks with indexOf rather than a
+  // lazy-quantifier regex (`[\s\S]*?</script>`), which can backtrack badly on a
+  // hostile/un-closed block — this parses untrusted third-party HTML server-side.
+  let offset = 0;
+  while (offset < html.length) {
+    const open = html.indexOf("<script", offset);
+    if (open === -1) break;
+    const tagEnd = html.indexOf(">", open);
+    if (tagEnd === -1) break;
+    const openTag = html.slice(open, tagEnd).toLowerCase();
+    offset = tagEnd + 1;
+    if (!openTag.includes("application/ld+json")) continue;
+    const close = html.indexOf("</script", tagEnd + 1);
+    const body = close === -1 ? html.slice(tagEnd + 1) : html.slice(tagEnd + 1, close);
+    offset = close === -1 ? html.length : close + 1;
     let data: unknown;
     try {
-      data = JSON.parse(m[1].trim());
+      data = JSON.parse(body.trim());
     } catch {
       continue;
     }
