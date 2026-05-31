@@ -91,25 +91,21 @@ function Stepper({
  */
 export function HotelSearchControls() {
   const t = useTranslations("place");
-  const {
-    checkIn,
-    checkOut,
-    adults,
-    rooms,
-    setCheckIn,
-    setCheckOut,
-    setAdults,
-    setRooms,
-    ensureDefaults,
-  } = useHotelSearchStore();
+  const { checkIn, checkOut, adults, rooms, setCheckIn, setCheckOut, setAdults, setRooms } =
+    useHotelSearchStore();
 
-  // Initialise default dates on first mount (today → tomorrow).
+  // Initialise default dates once on mount. Call via getState() so the effect
+  // does not subscribe to the store / re-fire on later state changes and
+  // overwrite a user edit (the codebase's idiom for one-shot init calls).
   useEffect(() => {
-    ensureDefaults();
-  }, [ensureDefaults]);
+    useHotelSearchStore.getState().ensureDefaults();
+  }, []);
 
-  // Local "today" floor for the date pickers.
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // "Today" floor for the date pickers, computed in LOCAL time to match the
+  // store's defaultHotelDates/ymd. (toISOString() is UTC, which would set min to
+  // tomorrow for evening users in the Americas and reject the local-today default.)
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
