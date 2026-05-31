@@ -36,6 +36,26 @@ export interface LiteHotelCandidate {
   lng: number;
 }
 
+/**
+ * Distribute `adults` total guests across `rooms` rooms (one LiteAPI
+ * `occupancies` entry per room, ≥1 adult each). Our UI models `adults` as the
+ * total guest count (like Booking.com's `group_adults`), so we split it rather
+ * than repeating it per room.
+ */
+export function buildOccupancies(
+  adults: number,
+  rooms: number,
+): Array<{ adults: number; children: number[] }> {
+  const r = Math.max(1, rooms);
+  const total = Math.max(r, adults); // ensure ≥1 adult per room
+  const base = Math.floor(total / r);
+  const extra = total % r;
+  return Array.from({ length: r }, (_, i) => ({
+    adults: base + (i < extra ? 1 : 0),
+    children: [],
+  }));
+}
+
 /** Number of nights between two `YYYY-MM-DD` dates (min 1; never NaN/0). */
 export function nights(checkIn?: string, checkOut?: string): number {
   if (!checkIn || !checkOut) return 1;
@@ -181,7 +201,7 @@ async function fetchRatesForHotel(
       checkout: q.checkOut,
       currency: opts.currency,
       guestNationality: opts.guestNationality.toUpperCase(),
-      occupancies: [{ adults: q.adults ?? 2, children: [] }],
+      occupancies: buildOccupancies(q.adults ?? 2, q.rooms ?? 1),
     }),
   });
   if (!res.ok) return { data: [] };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeRatesResponse, pickBestHotel } from "./liteapi.js";
+import { buildOccupancies, normalizeRatesResponse, pickBestHotel } from "./liteapi.js";
 import type { HotelQuery } from "./types.js";
 
 const q: HotelQuery = {
@@ -59,6 +59,30 @@ const sample = {
     },
   ],
 };
+
+describe("buildOccupancies", () => {
+  it("single room keeps all guests", () => {
+    expect(buildOccupancies(2, 1)).toEqual([{ adults: 2, children: [] }]);
+  });
+  it("splits total guests evenly across rooms", () => {
+    expect(buildOccupancies(4, 2)).toEqual([
+      { adults: 2, children: [] },
+      { adults: 2, children: [] },
+    ]);
+  });
+  it("distributes the remainder to the first rooms", () => {
+    expect(buildOccupancies(3, 2)).toEqual([
+      { adults: 2, children: [] },
+      { adults: 1, children: [] },
+    ]);
+  });
+  it("guarantees at least one adult per room", () => {
+    expect(buildOccupancies(1, 2)).toEqual([
+      { adults: 1, children: [] },
+      { adults: 1, children: [] },
+    ]);
+  });
+});
 
 describe("normalizeRatesResponse", () => {
   it("picks the lowest total and computes nightly-from over the stay", () => {

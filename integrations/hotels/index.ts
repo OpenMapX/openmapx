@@ -57,7 +57,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/config", async (_req, reply) => {
-    reply.header("Cache-Control", "public, max-age=3600");
+    reply.header("Cache-Control", "public, max-age=60");
     reply.send({ liveEnabled: ratesProvider !== null, defaultCurrency: liteApiCurrency });
   });
 
