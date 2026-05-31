@@ -28,6 +28,8 @@ export interface HotelQuery {
   adults?: number;
   /** Number of rooms (1–8). */
   rooms?: number;
+  /** OSM `wikidata=Q…` tag for the hotel, used to resolve exact OTA ids. */
+  wikidata?: string;
 }
 
 /** Host-supplied configuration passed to every provider's build(). */
