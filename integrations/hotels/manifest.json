@@ -24,14 +24,14 @@
       },
       "liteApiKey": {
         "type": "string",
-        "title": "LiteAPI key (live prices)",
-        "description": "Optional. When set, the hotel panel shows a live lowest nightly rate from LiteAPI (https://liteapi.travel). Leave empty to ship deep-link comparison only.",
+        "title": "LiteAPI key (live prices — not yet active)",
+        "description": "Reserved for the upcoming live-prices feature (LiteAPI, https://liteapi.travel). Has no effect in this version, which ships deep-link price comparison only; setting it now does nothing until live prices are enabled.",
         "x-openmapx-secret": true
       },
       "liteApiCurrency": {
         "type": "string",
-        "title": "LiteAPI rate currency",
-        "description": "ISO-4217 currency for LiteAPI rate requests (e.g. EUR, USD).",
+        "title": "LiteAPI rate currency (not yet active)",
+        "description": "ISO-4217 currency for the upcoming LiteAPI live-prices feature (e.g. EUR, USD). No effect in this version.",
         "default": "EUR"
       }
     }
