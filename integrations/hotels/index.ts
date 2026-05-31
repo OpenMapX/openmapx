@@ -1,21 +1,27 @@
 // integrations/hotels/index.ts
 import { bareDomain, type HotelProviderInfo } from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { buildExactDeepLink, type IdResolverDeps, resolveOtaHotelId } from "./idResolver.js";
 import { fetchOfficialBookingUrl } from "./official.js";
 import { createLiteApiProvider } from "./provider.js";
 import { getHotelProvider, HOTEL_PROVIDERS, providerServes } from "./providers.js";
 import { parseHotelQuery } from "./query.js";
+import { TYPEAHEAD_RESOLVERS } from "./typeahead.js";
 import type { HotelProviderConfig } from "./types.js";
+import { resolveWikidataOtaIds } from "./wikidata.js";
 
 /**
- * Hotels integration. Tier 1 exposes deep-link builders for external hotel OTAs
- * so a lodging place panel can hand the user off to the OTA's search pre-filled
- * with the hotel name, dates, and occupancy. No live data is fetched in Tier 1.
- * (Tier 2 adds GET /offers for a live lowest rate via LiteAPI.) See
- * docs/plans/hotel-prices-and-booking.md.
+ * Hotels integration. Tier 1 hands a lodging place panel off to external hotel
+ * OTAs pre-filled with the hotel name, dates, and occupancy. `/resolve` and the
+ * exact `/:provider/open` redirect make live (cached) Wikidata + Trip.com
+ * typeahead lookups to find an OTA's internal hotel id, so id-only OTAs link to
+ * the exact hotel (Booking stays a universal search). (Tier 2 adds GET /offers
+ * for a live lowest rate via LiteAPI.) See docs/plans/hotel-prices-and-booking.md.
  *
  * Routes (under `/api/integrations/hotels`):
  *   GET /providers?country=de  → OTAs serving that country (or all)
+ *   GET /resolve               → OTAs we can deep-link THIS hotel (exact for
+ *                                id-only OTAs, always for Booking)
  *   GET /:provider/open        → 302 redirect to the pre-filled OTA search
  *   GET /:provider/url         → { url } (same link as JSON, for previews/tests)
  */
@@ -27,6 +33,39 @@ export function setup(ctx: IntegrationContext): void {
         : undefined,
     bookingAid: typeof ctx.config.bookingAid === "string" ? ctx.config.bookingAid : undefined,
   };
+
+  const enableTypeaheadResolvers =
+    typeof ctx.config.enableTypeaheadResolvers === "boolean"
+      ? ctx.config.enableTypeaheadResolvers
+      : true;
+  /** Injected resolver deps (CacheClient structurally satisfies IdResolverCache). */
+  const resolverDeps: IdResolverDeps = {
+    wikidata: (qid) => resolveWikidataOtaIds(qid),
+    typeahead: TYPEAHEAD_RESOLVERS,
+    cache: ctx.cache,
+    typeaheadEnabled: enableTypeaheadResolvers,
+  };
+  /**
+   * Resolve an OTA's exact hotel id, degrading to null on ANY failure (a Redis
+   * cache error, etc.) so a resolver hiccup omits the row / 404s rather than
+   * 500-ing the request — mirrors the /offers route's defensive try/catch.
+   */
+  const safeResolve = async (id: string, q: Parameters<typeof resolveOtaHotelId>[1]) => {
+    try {
+      return await resolveOtaHotelId(id, q, resolverDeps);
+    } catch (err) {
+      ctx.log.debug?.(`[hotels] id resolve failed for ${id}: ${(err as Error).message}`);
+      return null;
+    }
+  };
+
+  const toInfo = (p: (typeof HOTEL_PROVIDERS)[number]): HotelProviderInfo => ({
+    id: p.id,
+    name: p.name,
+    domain: bareDomain(p.homepage),
+    homepage: p.homepage,
+    color: p.color,
+  });
 
   const liteApiKey = typeof ctx.config.liteApiKey === "string" ? ctx.config.liteApiKey : undefined;
   const liteApiCurrency =
@@ -45,14 +84,37 @@ export function setup(ctx: IntegrationContext): void {
     const country = (req.query.country ?? "").trim().toLowerCase() || undefined;
     const providers: HotelProviderInfo[] = HOTEL_PROVIDERS.filter((p) =>
       providerServes(p, country),
-    ).map((p) => ({
-      id: p.id,
-      name: p.name,
-      domain: bareDomain(p.homepage),
-      homepage: p.homepage,
-      color: p.color,
-    }));
+    ).map(toInfo);
     reply.header("Cache-Control", "public, max-age=3600");
+    reply.send({ providers });
+  });
+
+  // Hotel-aware: for THIS hotel, return only the providers we can deep-link —
+  // exact for id-only OTAs (Wikidata/typeahead resolved), always for Booking.
+  ctx.registerRoute("GET", "/resolve", async (req, reply) => {
+    const parsed = parseHotelQuery(req.query);
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    const q = parsed.query;
+    const providers: HotelProviderInfo[] = [];
+    // Sequential on purpose: resolveOtaHotelId shares one cached Wikidata fetch
+    // per hotel across OTAs, so resolving in series keeps that to a SINGLE
+    // upstream request (resolving concurrently would race four cold cache reads
+    // into four Wikidata fetches). The warm-cache cost is a few Redis GETs.
+    for (const p of HOTEL_PROVIDERS) {
+      if (!providerServes(p, q.countryCode)) continue;
+      if (!p.exactOnly) {
+        providers.push(toInfo(p)); // Booking: universal search always works
+        continue;
+      }
+      const resolved = await safeResolve(p.id, q);
+      if (resolved && buildExactDeepLink(p.id, resolved.id, q, providerConfig)) {
+        providers.push(toInfo(p));
+      }
+    }
+    reply.header("Cache-Control", "private, max-age=600");
     reply.send({ providers });
   });
 
@@ -147,7 +209,19 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: parsed.error });
       return;
     }
-    reply.header("Location", provider.build(parsed.query, providerConfig));
+    const q = parsed.query;
+    if (provider.exactOnly) {
+      const resolved = await safeResolve(provider.id, q);
+      const url = resolved && buildExactDeepLink(provider.id, resolved.id, q, providerConfig);
+      if (!url) {
+        reply.status(404).send({ error: "No exact hotel match for this provider" });
+        return;
+      }
+      reply.header("Location", url);
+      reply.status(302).send({});
+      return;
+    }
+    reply.header("Location", provider.build(q, providerConfig));
     reply.status(302).send({});
   });
 

@@ -46,8 +46,22 @@ export function parseHotelQuery(q: Record<string, string>): ParseResult {
   const checkOut = parseDate(q.checkOut);
   const adults = parseCount(q.adults, 1, 16);
   const rooms = parseCount(q.rooms, 1, 8);
+  const wikidataRaw = (q.wikidata ?? "").trim();
+  const wikidata = /^Q\d+$/.test(wikidataRaw) ? wikidataRaw : undefined;
   return {
     ok: true,
-    query: { name, city, countryCode, lat, lng, address, checkIn, checkOut, adults, rooms },
+    query: {
+      name,
+      city,
+      countryCode,
+      lat,
+      lng,
+      address,
+      checkIn,
+      checkOut,
+      adults,
+      rooms,
+      wikidata,
+    },
   };
 }

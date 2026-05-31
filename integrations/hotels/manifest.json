@@ -33,6 +33,12 @@
         "title": "LiteAPI default rate currency",
         "description": "ISO-4217 currency used to preset the rate controls and request LiteAPI rates (e.g. EUR, USD). Users can change the currency per request in the panel. Only used when a LiteAPI key is set.",
         "default": "EUR"
+      },
+      "enableTypeaheadResolvers": {
+        "type": "boolean",
+        "title": "Enable typeahead hotel-id resolvers",
+        "description": "When on (default), id-only OTAs may resolve an exact-hotel link via the OTA's own typeahead endpoint (currently Trip.com only) in addition to the always-on Wikidata source. Turn off to use only the clean Wikidata ids.",
+        "default": true
       }
     }
   },
@@ -87,16 +93,6 @@
       "commercialUse": "conditional",
       "providerCountry": "SG",
       "providerPrivacyUrl": "https://pages.trip.com/privacy/privacy-en-xx.html",
-      "endUserExposure": "direct"
-    },
-    {
-      "sourceId": "hrs",
-      "name": "HRS",
-      "url": "https://www.hrs.de/",
-      "license": "Proprietary (deep-link only)",
-      "commercialUse": "conditional",
-      "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.hrs.de/datenschutz/",
       "endUserExposure": "direct"
     },
     {

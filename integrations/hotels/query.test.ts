@@ -44,4 +44,11 @@ describe("parseHotelQuery", () => {
       expect(r2.query.checkOut).toBeUndefined();
     }
   });
+
+  it("accepts a valid wikidata qid and rejects a malformed one", () => {
+    const ok = parseHotelQuery({ name: "X", wikidata: "Q12231151" });
+    expect(ok.ok && ok.query.wikidata).toBe("Q12231151");
+    const bad = parseHotelQuery({ name: "X", wikidata: "12231151" });
+    expect(bad.ok && bad.query.wikidata).toBeUndefined();
+  });
 });

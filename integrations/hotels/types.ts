@@ -53,6 +53,9 @@ export interface HotelProvider {
   regions: readonly string[] | "*";
   /** Build the pre-filled OTA search URL for `query`. */
   build(query: HotelQuery, config: HotelProviderConfig): string;
+  /** True for OTAs that only deep-link by their internal hotel id: the compare
+   *  list shows them only when an exact id resolves (no city/search fallback). */
+  exactOnly?: boolean;
 }
 
 // The serialisable `/providers` response shape (HotelProviderInfo) is imported

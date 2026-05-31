@@ -13,6 +13,7 @@ interface ProviderSpec {
   color: string;
   regions: readonly string[] | "*";
   build: (q: HotelQuery) => string;
+  exactOnly?: boolean;
 }
 
 /**
@@ -48,6 +49,7 @@ const SPECS: readonly ProviderSpec[] = [
     homepage: "https://www.expedia.com/",
     color: "#FFC72C",
     regions: "*",
+    exactOnly: true,
     build: (q) => {
       const params = new URLSearchParams({
         destination: [q.name, q.city].filter(Boolean).join(", "),
@@ -65,6 +67,7 @@ const SPECS: readonly ProviderSpec[] = [
     homepage: "https://www.hotels.com/",
     color: "#D32F2F",
     regions: "*",
+    exactOnly: true,
     build: (q) => {
       const params = new URLSearchParams({
         destination: [q.name, q.city].filter(Boolean).join(", "),
@@ -82,6 +85,7 @@ const SPECS: readonly ProviderSpec[] = [
     homepage: "https://www.agoda.com/",
     color: "#5C26FF",
     regions: "*",
+    exactOnly: true,
     build: (q) => {
       const params = new URLSearchParams({
         q: [q.name, q.city].filter(Boolean).join(" "),
@@ -99,6 +103,7 @@ const SPECS: readonly ProviderSpec[] = [
     homepage: "https://www.trip.com/",
     color: "#287DFA",
     regions: "*",
+    exactOnly: true,
     build: (q) => {
       const params = new URLSearchParams({
         keyword: [q.name, q.city].filter(Boolean).join(" "),
@@ -109,16 +114,6 @@ const SPECS: readonly ProviderSpec[] = [
       if (q.checkOut) params.set("checkout", q.checkOut);
       return `https://www.trip.com/hotels/list?${params.toString()}`;
     },
-  },
-  {
-    id: "hrs",
-    name: "HRS",
-    homepage: "https://www.hrs.de/",
-    color: "#E2001A",
-    regions: ["de", "at", "ch"],
-    // HRS exposes no stable name-search deep link; the city landing page is the
-    // best addressable target (the user then refines). Falls back to homepage.
-    build: (q) => (q.city ? `https://www.hrs.de/hotel/${enc(q.city)}/` : "https://www.hrs.de/"),
   },
 ];
 
@@ -139,6 +134,7 @@ export const HOTEL_PROVIDERS: readonly HotelProvider[] = SPECS.map((spec) => ({
   homepage: spec.homepage,
   color: spec.color,
   regions: spec.regions,
+  exactOnly: spec.exactOnly,
   build(query: HotelQuery, config: HotelProviderConfig): string {
     let url = spec.build(query);
     if (spec.id === "booking" && config.bookingAid?.trim()) {

@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { getHotelProvider, HOTEL_PROVIDERS, providerServes } from "./providers.js";
 import type { HotelQuery } from "./types.js";
 
+function throwMissing(id: string): never {
+  throw new Error(`missing provider ${id}`);
+}
+
 const q: HotelQuery = {
   name: "Hotel Motel One Berlin",
   city: "Berlin",
@@ -50,20 +54,19 @@ describe("hotel providers", () => {
     expect(url).toContain(encodeURIComponent("https://www.expedia.com/Hotel-Search"));
   });
 
-  it("region filter: HRS serves de but not us; booking is global", () => {
-    expect(providerServes(getHotelProvider("hrs")!, "de")).toBe(true);
-    expect(providerServes(getHotelProvider("hrs")!, "us")).toBe(false);
-    expect(providerServes(getHotelProvider("booking")!, "us")).toBe(true);
+  it("booking is global; hrs is removed", () => {
+    expect(providerServes(getHotelProvider("booking") ?? throwMissing("booking"), "us")).toBe(true);
+    expect(getHotelProvider("hrs")).toBeUndefined();
   });
 
   it("no country known ⇒ every provider passes the filter", () => {
     for (const p of HOTEL_PROVIDERS) expect(providerServes(p, undefined)).toBe(true);
   });
 
-  it("hrs: city branch builds a city path; no city falls back to homepage", () => {
-    expect(getHotelProvider("hrs")!.build(q, {})).toBe("https://www.hrs.de/hotel/Berlin/");
-    expect(getHotelProvider("hrs")!.build({ ...q, city: undefined }, {})).toBe(
-      "https://www.hrs.de/",
-    );
+  it("id-only OTAs are flagged exactOnly; booking is not", () => {
+    for (const id of ["expedia", "hotelscom", "agoda", "tripcom"]) {
+      expect(getHotelProvider(id)?.exactOnly).toBe(true);
+    }
+    expect(getHotelProvider("booking")?.exactOnly).toBeFalsy();
   });
 });
