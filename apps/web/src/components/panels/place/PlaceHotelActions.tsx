@@ -55,6 +55,10 @@ export function PlaceHotelActions({
   const { data: config } = useHotelConfig(lodging);
   const liveEnabled = config?.liveEnabled ?? false;
   const { checkIn, checkOut, adults, rooms, currency, guestNationality } = useHotelSearchStore();
+  const [open, setOpen] = useState(false);
+  // Only fetch the live rate once the compare dialog is open — the badge lives
+  // inside it, so an unopened panel shouldn't spend a (paid) LiteAPI lookup. The
+  // Prices tab fetches eagerly via its own hook; the sticky store shares the cache.
   const { data: offers } = useHotelOffers(
     {
       name: place.name,
@@ -68,10 +72,9 @@ export function PlaceHotelActions({
       currency: currency || config?.defaultCurrency,
       guestNationality: guestNationality || countryCode?.toUpperCase(),
     },
-    lodging && liveEnabled,
+    lodging && liveEnabled && open,
   );
 
-  const [open, setOpen] = useState(false);
   const dialogTitleId = useId();
 
   if (!lodging) return null;
