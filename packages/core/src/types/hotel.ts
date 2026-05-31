@@ -27,6 +27,16 @@ export interface HotelSearchParams {
   adults?: number;
   /** Number of rooms. */
   rooms?: number;
+  /** ISO-4217 currency for live (Tier 2) rates, e.g. "EUR". */
+  currency?: string;
+  /** ISO-3166-1 alpha-2 guest nationality for live rates, e.g. "DE". */
+  guestNationality?: string;
+}
+
+/** Tier 2 client config: whether live prices are on + the currency to preset. */
+export interface HotelConfig {
+  liveEnabled: boolean;
+  defaultCurrency: string;
 }
 
 /** One live rate (Tier 2 — LiteAPI). */

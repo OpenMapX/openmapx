@@ -175,6 +175,8 @@ export {
   useHikingSearch,
   useHikingShelters,
 } from "./hooks/useHikingTrails";
+export { useHotelConfig } from "./hooks/useHotelConfig";
+export { useHotelOffers } from "./hooks/useHotelOffers";
 export { useHotelProviders } from "./hooks/useHotelProviders";
 export { useIntegrationOverlayActive } from "./hooks/useIntegrationOverlay";
 export { useIsochrone } from "./hooks/useIsochrone";
@@ -286,6 +288,7 @@ export type {
 } from "./types/hiking";
 export { SAC_GRADES } from "./types/hiking";
 export type {
+  HotelConfig,
   HotelOffer,
   HotelOffersResponse,
   HotelProviderInfo,

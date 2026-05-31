@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
   hotelProviders: "/api/integrations/hotels/providers",
   hotelOfficial: "/api/integrations/hotels/official",
   hotelOffers: "/api/integrations/hotels/offers",
+  hotelConfig: "/api/integrations/hotels/config",
   elevation: "/api/elevation",
   isochrone: "/api/isochrone",
   places: "/api/places",

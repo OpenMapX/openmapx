@@ -25,10 +25,14 @@ interface HotelSearchState {
   checkOut: string;
   adults: number;
   rooms: number;
+  currency: string;
+  guestNationality: string;
   setCheckIn: (v: string) => void;
   setCheckOut: (v: string) => void;
   setAdults: (v: number) => void;
   setRooms: (v: number) => void;
+  setCurrency: (v: string) => void;
+  setGuestNationality: (v: string) => void;
   /** Initialise dates once if empty; never overwrites user edits. */
   ensureDefaults: () => void;
 }
@@ -38,6 +42,8 @@ export const useHotelSearchStore = create<HotelSearchState>((set, get) => ({
   checkOut: "",
   adults: 2,
   rooms: 1,
+  currency: "",
+  guestNationality: "",
   // Setting check-in pushes check-out to the next day if it would otherwise be
   // on/before check-in — enforced in the store so EVERY consumer (the deep-link
   // builders, useHotelOffers) is safe, not just the date input's onChange.
@@ -50,6 +56,8 @@ export const useHotelSearchStore = create<HotelSearchState>((set, get) => ({
   setCheckOut: (v) => set((s) => (s.checkIn && v && v <= s.checkIn ? {} : { checkOut: v })),
   setAdults: (v) => set({ adults: Math.min(16, Math.max(1, v)) }),
   setRooms: (v) => set({ rooms: Math.min(8, Math.max(1, v)) }),
+  setCurrency: (v) => set({ currency: v }),
+  setGuestNationality: (v) => set({ guestNationality: v.toUpperCase() }),
   ensureDefaults: () => {
     if (get().checkIn && get().checkOut) return;
     const { checkIn, checkOut } = defaultHotelDates(new Date());
