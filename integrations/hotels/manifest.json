@@ -24,14 +24,14 @@
       },
       "liteApiKey": {
         "type": "string",
-        "title": "LiteAPI key (live prices — not yet active)",
-        "description": "Reserved for the upcoming live-prices feature (LiteAPI, https://liteapi.travel). Has no effect in this version, which ships deep-link price comparison only; setting it now does nothing until live prices are enabled.",
+        "title": "LiteAPI key (enables live prices)",
+        "description": "Optional. When set, lodging places show a live lowest nightly rate from LiteAPI (https://liteapi.travel) with editable currency + guest nationality. Leave empty to ship deep-link price comparison only (Tier 1). Use a sand_… key to test, prod_… to go live. Search/rate calls are free on LiteAPI's core tier; booking is not done in-app (deep-link hand-off only).",
         "x-openmapx-secret": true
       },
       "liteApiCurrency": {
         "type": "string",
-        "title": "LiteAPI rate currency (not yet active)",
-        "description": "ISO-4217 currency for the upcoming LiteAPI live-prices feature (e.g. EUR, USD). No effect in this version.",
+        "title": "LiteAPI default rate currency",
+        "description": "ISO-4217 currency used to preset the rate controls and request LiteAPI rates (e.g. EUR, USD). Users can change the currency per request in the panel. Only used when a LiteAPI key is set.",
         "default": "EUR"
       }
     }
