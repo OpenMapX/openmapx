@@ -2,6 +2,7 @@
 import { bareDomain, type HotelProviderInfo } from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { fetchOfficialBookingUrl } from "./official.js";
+import { createLiteApiProvider } from "./provider.js";
 import { getHotelProvider, HOTEL_PROVIDERS, providerServes } from "./providers.js";
 import { parseHotelQuery } from "./query.js";
 import type { HotelProviderConfig } from "./types.js";
@@ -27,6 +28,16 @@ export function setup(ctx: IntegrationContext): void {
     bookingAid: typeof ctx.config.bookingAid === "string" ? ctx.config.bookingAid : undefined,
   };
 
+  const liteApiKey = typeof ctx.config.liteApiKey === "string" ? ctx.config.liteApiKey : undefined;
+  const liteApiCurrency =
+    (typeof ctx.config.liteApiCurrency === "string" && ctx.config.liteApiCurrency.trim()) || "EUR";
+  /** One provider instance per configured key; null ⇒ Tier 2 off. */
+  const ratesProvider = liteApiKey ? createLiteApiProvider(liteApiKey) : null;
+  /** Live lowest-rate cache: prices are short-lived. */
+  const OFFER_TTL = 15 * 60; // 15 minutes
+  const CURRENCY_RE = /^[A-Za-z]{3}$/;
+  const NATIONALITY_RE = /^[A-Za-z]{2}$/;
+
   /** Booking-engine link is stable; cache the resolved (dated) URL a day. */
   const OFFICIAL_TTL = 24 * 60 * 60;
 
@@ -43,6 +54,54 @@ export function setup(ctx: IntegrationContext): void {
     }));
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send({ providers });
+  });
+
+  ctx.registerRoute("GET", "/config", async (_req, reply) => {
+    reply.header("Cache-Control", "public, max-age=3600");
+    reply.send({ liveEnabled: ratesProvider !== null, defaultCurrency: liteApiCurrency });
+  });
+
+  ctx.registerRoute("GET", "/offers", async (req, reply) => {
+    if (!ratesProvider) {
+      // Tier 2 not configured — Tier 1 deep-links remain the experience.
+      reply.status(204).send({});
+      return;
+    }
+    const parsed = parseHotelQuery(req.query);
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    const q = parsed.query;
+    if (typeof q.lat !== "number" || typeof q.lng !== "number" || !q.checkIn || !q.checkOut) {
+      reply.status(204).send({});
+      return;
+    }
+    // Currency + guest nationality are user-chosen; fall back to the operator
+    // currency and the place's country (US) when absent or malformed.
+    const curRaw = (req.query.currency ?? "").trim();
+    const natRaw = (req.query.nationality ?? "").trim();
+    const opts = {
+      currency: CURRENCY_RE.test(curRaw) ? curRaw.toUpperCase() : liteApiCurrency,
+      guestNationality: NATIONALITY_RE.test(natRaw)
+        ? natRaw.toUpperCase()
+        : (q.countryCode ?? "us").toUpperCase(),
+    };
+    const key = `hotels:offer:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
+    try {
+      const best = await ctx.cache.withCache(key, OFFER_TTL, () =>
+        ratesProvider.searchOffer(q, opts),
+      );
+      if (!best) {
+        reply.status(204).send({});
+        return;
+      }
+      reply.header("Cache-Control", "private, max-age=900");
+      reply.send({ best, attributionId: "liteapi" });
+    } catch (err) {
+      ctx.log.debug?.(`[hotels] offer lookup failed: ${(err as Error).message}`);
+      reply.status(204).send({});
+    }
   });
 
   ctx.registerRoute("GET", "/official", async (req, reply) => {
