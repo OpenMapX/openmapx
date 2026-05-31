@@ -35,6 +35,7 @@ export * as services from "./services";
 export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
 // Shared food-delivery wire contract (also re-exported from the client barrel).
 export type { DeliveryProviderInfo } from "./types/delivery";
+export type { HotelOffer, HotelOffersResponse, HotelProviderInfo } from "./types/hotel";
 export type { Identified, Ids } from "./types/identified";
 export { makeId, parseId, withId } from "./types/identified";
 export type { Place, PlaceFact, PlaceIds, PlacePhoto, PlaceReviewLink } from "./types/place";
