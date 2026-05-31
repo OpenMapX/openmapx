@@ -2,6 +2,7 @@
 export const API_ENDPOINTS = {
   geocode: "/api/integrations/geocoding/geocode",
   geocodeReverse: "/api/integrations/geocoding/geocode/reverse",
+  geocodeCountry: "/api/integrations/geocoding/geocode/country",
   autocomplete: "/api/integrations/geocoding/autocomplete",
   directions: "/api/integrations/routing/directions",
   directionsOptimize: "/api/integrations/routing/directions/optimize",
@@ -9,6 +10,9 @@ export const API_ENDPOINTS = {
   flights: "/api/integrations/flights", // used as `${base}/${provider}/open`
   flightProviders: "/api/integrations/flights/providers",
   airportNearest: "/api/integrations/knowledge-ourairports/nearest",
+  foodDelivery: "/api/integrations/food-delivery", // used as `${base}/${provider}/open`
+  foodDeliveryProviders: "/api/integrations/food-delivery/providers",
+  restaurantMenu: "/api/integrations/restaurants/menu",
   elevation: "/api/elevation",
   isochrone: "/api/isochrone",
   places: "/api/places",

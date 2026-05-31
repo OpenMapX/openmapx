@@ -9,7 +9,7 @@
     "dev": "node --env-file=.env --watch --import tsx/esm src/server.ts",
     "build": "tsc --noEmit && node esbuild.config.mjs",
     "start": "node dist/server.js",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.integrations.json",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",

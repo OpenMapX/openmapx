@@ -149,6 +149,7 @@ export { useAutocomplete } from "./hooks/useAutocomplete";
 export { type ServiceCapability, useCapabilities } from "./hooks/useCapabilities";
 export { isAreaTooLarge, useCategorySearch } from "./hooks/useCategorySearch";
 export { useChipTranslations } from "./hooks/useChipTranslations";
+export { useCountryFromCoordinates } from "./hooks/useCountryFromCoordinates";
 // Hooks — General
 export { useCurrentWeather } from "./hooks/useCurrentWeather";
 export { useDataSourceMatch } from "./hooks/useDataSourceMatch";
@@ -160,6 +161,7 @@ export {
   useDataSources,
 } from "./hooks/useDataSources";
 export { useDebounce, useDebouncedCallback } from "./hooks/useDebounce";
+export { useDeliveryProviders } from "./hooks/useDeliveryProviders";
 export { useDirections } from "./hooks/useDirections";
 export { useElevation } from "./hooks/useElevation";
 export { useExploreResults } from "./hooks/useExploreResults";
@@ -189,6 +191,7 @@ export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { usePlacePhotos } from "./hooks/usePlacePhotos";
 export { usePresetSuggest } from "./hooks/usePresetSuggest";
+export { useRestaurantMenu } from "./hooks/useRestaurantMenu";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export {
   useCreateList,
@@ -254,6 +257,7 @@ export { usePlaceStore } from "./stores/placeStore";
 export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
 export { useSidebarStore } from "./stores/sidebarStore";
+export type { DeliveryProviderInfo, DeliverySearchParams } from "./types/delivery";
 export type {
   ElevationApiResponse,
   ElevationPoint,
@@ -304,6 +308,7 @@ export {
   idsFromPrimary,
   idsFromPrimaryOrCoords,
 } from "./types/placeIds";
+export type { RestaurantMenu } from "./types/restaurantMenu";
 export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
 export {
   buildAttributionHtml,
@@ -332,6 +337,7 @@ export {
 } from "./utils/commons-metadata";
 export { haversineDistance } from "./utils/coordinates";
 export { applyClientSideFilters, splitFilters } from "./utils/dataSourceFilters";
+export { buildDeliveryOpenUrl } from "./utils/deliveryLink";
 export {
   buildElevationProfile,
   buildElevationProfileFromApi,
@@ -352,6 +358,7 @@ export {
   fetchWithRedirects,
 } from "./utils/fetchWithRedirects";
 export { buildFlightOpenUrl } from "./utils/flightLink";
+export { isFoodPlace, resolveOsmMenuUrl } from "./utils/foodPlace";
 export { escapeHtml, formatTime, relativeTime, sanitizeUrl } from "./utils/format";
 export {
   formatArea,
@@ -380,6 +387,7 @@ export {
   resolveStopAsPlace,
 } from "./utils/geocodeStopAsPlace";
 export { estimateFlightMinutes, greatCircleArc } from "./utils/greatCircle";
+export { bareDomain } from "./utils/httpUrl";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
 export { isOpenAtBitmap, isOpenAtSlot } from "./utils/openingHoursClient";
 export { otpMode } from "./utils/otp";

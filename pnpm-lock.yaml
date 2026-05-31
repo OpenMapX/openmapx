@@ -446,6 +446,15 @@ importers:
         specifier: workspace:^
         version: link:../../packages/integration-framework
 
+  integrations/food-delivery:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+
   integrations/fuel:
     dependencies:
       '@openmapx/core':
@@ -1042,6 +1051,15 @@ importers:
       '@openmapx/presets':
         specifier: workspace:^
         version: link:../../packages/presets
+
+  integrations/restaurants:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
 
   integrations/reviews:
     dependencies:

@@ -4,7 +4,11 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { MemCache } from "./mem-cache.js";
 import { getGeocodingProvider, setConfiguredProviderList } from "./orchestrator.js";
-import { lookupByOsmRef, setPlaceLookupNominatimUrl } from "./place-lookup.js";
+import {
+  lookupByOsmRef,
+  reverseGeocodeCountry,
+  setPlaceLookupNominatimUrl,
+} from "./place-lookup.js";
 import { expandSearchQuery, fetchWithVariants } from "./query-expansion.js";
 
 /** Build a short hash key from a prefix + arbitrary data. */
@@ -110,6 +114,21 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "no-cache");
       reply.send(null);
     }
+  });
+
+  // GET /geocode/country — coarse coordinate → lowercase ISO 3166-1 alpha-2
+  // country code. Used by region-aware integrations (e.g. food-delivery) when a
+  // place carries no countryCode of its own. Country-level zoom, cached 24h.
+  ctx.registerRoute("GET", "/geocode/country", async (req, reply) => {
+    const lat = Number.parseFloat(req.query.lat);
+    const lng = Number.parseFloat(req.query.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      reply.status(400).send({ error: "lat and lng must be valid numbers" });
+      return;
+    }
+    const countryCode = await reverseGeocodeCountry(lat, lng);
+    reply.header("Cache-Control", "public, max-age=86400");
+    reply.send({ countryCode: countryCode ?? null });
   });
 
   // GET /autocomplete

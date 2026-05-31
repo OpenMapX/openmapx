@@ -1,0 +1,35 @@
+{
+  "id": "restaurants",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["restaurant-menu"],
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Knowledge",
+  "dataSources": [
+    {
+      "sourceId": "openstreetmap",
+      "name": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/",
+      "license": "ODbL",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/",
+      "commercialUse": "yes",
+      "attribution": "© OpenStreetMap contributors",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://wiki.osmfoundation.org/wiki/Privacy_Policy",
+      "endUserExposure": "build-time"
+    }
+  ]
+}

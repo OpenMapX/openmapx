@@ -33,6 +33,8 @@ export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
 export * as services from "./services";
 // Subprocess helper used by git-clone and the community-integration build step
 export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
+// Shared food-delivery wire contract (also re-exported from the client barrel).
+export type { DeliveryProviderInfo } from "./types/delivery";
 export type { Identified, Ids } from "./types/identified";
 export { makeId, parseId, withId } from "./types/identified";
 export type { Place, PlaceFact, PlaceIds, PlacePhoto, PlaceReviewLink } from "./types/place";
@@ -48,6 +50,9 @@ export {
   combineAttributions,
 } from "./utils/attribution";
 export { applyHoursFilter } from "./utils/categoryFilter";
+// Server-side geo helpers (great-circle distance, etc.).
+export { haversineKm } from "./utils/geo-server";
+export { bareDomain, toHttpUrl } from "./utils/httpUrl";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
 // Server-only opening-hours runtime (imports the LGPL-3 `opening_hours`
 // package). Web code never touches this barrel — see `../utils/openingHours`

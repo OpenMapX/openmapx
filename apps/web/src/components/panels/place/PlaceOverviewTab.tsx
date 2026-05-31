@@ -56,6 +56,7 @@ import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
+import { PlaceFoodActions } from "./PlaceFoodActions";
 import { PlaceHarborFacilities } from "./PlaceHarborFacilities";
 import { PlaceMarineWeatherContent } from "./PlaceMarineWeather";
 import { PlaceSunTimes } from "./PlaceSunTimes";
@@ -517,6 +518,9 @@ export function PlaceOverviewTab({
               </DetailRow>
             ))
           )}
+
+          {/* Restaurant menu + delivery hand-off (self-hides for non-food places) */}
+          <PlaceFoodActions place={place} />
 
           {/* Phone */}
           {isLoading && !place.phone ? (

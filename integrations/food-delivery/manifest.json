@@ -1,0 +1,184 @@
+{
+  "id": "food-delivery",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["food-delivery"],
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "uberEatsScid": {
+        "type": "string",
+        "title": "Uber Eats Impact click id (scid)",
+        "description": "Optional. Appended to Uber Eats links as &scid= for affiliate attribution. Leave empty to deep-link without tracking (no account required)."
+      },
+      "affiliateTemplates": {
+        "type": "object",
+        "title": "Affiliate link wrappers",
+        "description": "Optional per-provider affiliate deep-link wrappers. Key = provider id (e.g. \"deliveroo\"), value = a URL template containing the literal token {url}, which is replaced with the URL-encoded destination link. Lets you plug in an Awin / Impact / Partnerize wrapper without code changes. Leave empty for plain links.",
+        "additionalProperties": { "type": "string" }
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "ubereats",
+      "name": "Uber Eats",
+      "url": "https://www.ubereats.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.uber.com/legal/privacy/",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "wolt",
+      "name": "Wolt",
+      "url": "https://wolt.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "FI",
+      "providerPrivacyUrl": "https://wolt.com/en/privacy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "lieferando",
+      "name": "Lieferando",
+      "url": "https://www.lieferando.de/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.lieferando.de/en/privacy-statement",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "doordash",
+      "name": "DoorDash",
+      "url": "https://www.doordash.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.doordash.com/privacy/",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "deliveroo",
+      "name": "Deliveroo",
+      "url": "https://deliveroo.co.uk/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://deliveroo.co.uk/privacy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "justeat",
+      "name": "Just Eat",
+      "url": "https://www.just-eat.co.uk/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://www.just-eat.co.uk/privacy-policy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "glovo",
+      "name": "Glovo",
+      "url": "https://glovoapp.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "ES",
+      "providerPrivacyUrl": "https://glovoapp.com/legal/privacy/",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "foodpanda",
+      "name": "foodpanda",
+      "url": "https://www.foodpanda.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://www.foodpanda.com/legal/privacy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "grubhub",
+      "name": "Grubhub",
+      "url": "https://www.grubhub.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.grubhub.com/legal/privacy-policy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "ifood",
+      "name": "iFood",
+      "url": "https://www.ifood.com.br/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "BR",
+      "providerPrivacyUrl": "https://www.ifood.com.br/privacidade",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "rappi",
+      "name": "Rappi",
+      "url": "https://www.rappi.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "CO",
+      "providerPrivacyUrl": "https://legal.rappi.com/colombia/politica-de-privacidad-y-tratamiento-de-datos-personales-rappi-s-a-s/",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "pedidosya",
+      "name": "PedidosYa",
+      "url": "https://www.pedidosya.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "UY",
+      "providerPrivacyUrl": "https://www.pedidosya.com.uy/privacy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "swiggy",
+      "name": "Swiggy",
+      "url": "https://www.swiggy.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "IN",
+      "providerPrivacyUrl": "https://www.swiggy.com/privacy-policy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "zomato",
+      "name": "Zomato",
+      "url": "https://www.zomato.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "IN",
+      "providerPrivacyUrl": "https://www.zomato.com/privacy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "talabat",
+      "name": "Talabat",
+      "url": "https://www.talabat.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "AE",
+      "providerPrivacyUrl": "https://www.talabat.com/uae/privacy-policy",
+      "endUserExposure": "direct"
+    }
+  ]
+}
