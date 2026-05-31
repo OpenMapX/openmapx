@@ -29,7 +29,12 @@ export interface HotelSearchParams {
   rooms?: number;
   /** ISO-4217 currency for live (Tier 2) rates, e.g. "EUR". */
   currency?: string;
-  /** ISO-3166-1 alpha-2 guest nationality for live rates, e.g. "DE". */
+  /**
+   * ISO-3166-1 alpha-2 guest nationality for live rates, e.g. "DE". Case-
+   * insensitive on input — `useHotelSearchStore.setGuestNationality` upper-cases
+   * it (unlike `countryCode` above, which is lowercase), so a lowercase value
+   * passed here is normalised before it reaches the backend.
+   */
   guestNationality?: string;
 }
 
