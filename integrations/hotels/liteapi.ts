@@ -1,11 +1,14 @@
 /**
  * LiteAPI v3.0 rates client + offer normalizer.
  *
- * IMPORTANT: LiteAPI request/response field paths are per the docs and
- * UNVERIFIED against a live sandbox — validate against a real `sand_` response
- * before enabling Tier 2 in production. The unit tests pin the documented
- * shape; until Step 0 of Task B1 is executed with a real key, treat the field
- * paths as best-effort.
+ * Request/response field paths were VERIFIED against the live LiteAPI sandbox
+ * on 2026-05-31: `/data/hotels` returns flat `data[].id/name/latitude/longitude`
+ * (radius in metres), and `/hotels/rates` returns
+ * `data[].roomTypes[].rates[].retailRate.{total,suggestedSellingPrice}[0].amount`
+ * with `cancellationPolicies.refundableTag` (`RFN`/`NRFN`). The unit tests pin
+ * this shape. Note: the matched hotel must have availability for the dates — if
+ * it doesn't, `searchOffer` correctly returns null (we never show a neighbour's
+ * price), which is common in the sparse sandbox but rare in production.
  */
 import { type HotelOffer, haversineKm } from "@openmapx/core/server";
 import type { HotelQuery } from "./types.js";
@@ -160,8 +163,8 @@ async function fetchNearbyHotels(apiKey: string, q: HotelQuery): Promise<LiteHot
     headers: { "X-API-Key": apiKey },
   });
   if (!res.ok) return [];
-  // NOTE: confirm the real candidate shape against the Step 0 fixture — coords
-  // may arrive as `geoCode.lat/long` rather than flat `latitude/longitude`.
+  // Verified against the live sandbox (2026-05-31): candidates carry flat
+  // `latitude`/`longitude` (not a nested `geoCode`).
   const json = (await res.json()) as {
     data?: Array<{ id?: string; name?: string; latitude?: number; longitude?: number }>;
   };
