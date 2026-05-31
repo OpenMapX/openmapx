@@ -4,8 +4,10 @@ export interface WikidataOtaIds {
   expedia?: string; // P5651, e.g. "h7172034"
   booking?: string; // P3607, e.g. "eg/windsor-palace"
   hotelscom?: string; // P3898
-  agoda?: string; // P6008 (slug) — prefer slug for the hotel URL
-  agodaNumeric?: string; // P10533
+  // Agoda: only the P6008 slug builds a working hotel URL (`/<slug>.html`); the
+  // P10533 numeric id is NOT deep-linkable (it needs a session-signed token), so
+  // it is intentionally not read here.
+  agoda?: string; // P6008 (slug)
   tripcom?: string; // P10425 (numeric)
 }
 
@@ -14,7 +16,6 @@ const PROP: Record<keyof WikidataOtaIds, string> = {
   booking: "P3607",
   hotelscom: "P3898",
   agoda: "P6008",
-  agodaNumeric: "P10533",
   tripcom: "P10425",
 };
 

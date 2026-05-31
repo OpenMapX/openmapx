@@ -144,7 +144,9 @@ async function wikidataIdsCached(q: HotelQuery, deps: IdResolverDeps): Promise<W
   const cached = await deps.cache.get<WikidataOtaIds>(key);
   if (cached != null) return cached;
   const ids = await deps.wikidata(q.wikidata);
-  await deps.cache.set(key, ids, ID_POSITIVE_TTL);
+  // An empty result (entity has no OTA claims yet) is cached only briefly, so a
+  // hotel that gets its Wikidata ids added is picked up within hours, not a week.
+  await deps.cache.set(key, ids, Object.keys(ids).length > 0 ? ID_POSITIVE_TTL : ID_NEGATIVE_TTL);
   return ids;
 }
 

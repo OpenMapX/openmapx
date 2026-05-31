@@ -114,7 +114,7 @@ export function setup(ctx: IntegrationContext): void {
         providers.push(toInfo(p));
       }
     }
-    reply.header("Cache-Control", "private, max-age=600");
+    reply.header("Cache-Control", "private, max-age=3600"); // matches the client staleTime
     reply.send({ providers });
   });
 
