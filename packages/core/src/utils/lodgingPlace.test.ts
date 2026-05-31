@@ -27,6 +27,8 @@ describe("isLodging", () => {
   });
   it("matches a raw-category segment", () => {
     expect(isLodging(place({ rawCategory: "tourism/hotel" }))).toBe(true);
+    expect(isLodging(place({ rawCategory: "lodging" }))).toBe(true);
+    expect(isLodging(place({ rawCategory: "accommodation" }))).toBe(true);
   });
   it("does NOT match non-lodging places", () => {
     expect(isLodging(place({ osmTags: { amenity: "restaurant" } }))).toBe(false);

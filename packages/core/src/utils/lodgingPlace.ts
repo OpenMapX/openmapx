@@ -41,5 +41,5 @@ export function isLodging(place: Place): boolean {
   const category = place.category?.toLowerCase();
   if (category && LODGING_CATEGORIES.has(category)) return true;
   const rawSegments = (place.rawCategory?.toLowerCase() ?? "").split(/[/;,\s]+/);
-  return rawSegments.some((seg) => LODGING_TOURISM.has(seg));
+  return rawSegments.some((seg) => LODGING_TOURISM.has(seg) || LODGING_CATEGORIES.has(seg));
 }
