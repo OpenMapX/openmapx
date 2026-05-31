@@ -61,10 +61,20 @@ function asAbsoluteUrl(value: string, base: string): URL | null {
   }
 }
 
+/** Asset URLs that happen to point at an engine host (scripts/styles/images). */
+const IBE_ASSET_RE = /\.(?:js|mjs|css|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|map)$/i;
+
 /** Apply a known engine's dated params (if any) and return the string, or null. */
 function buildIbeUrl(u: URL, dates: BookingDates): string | null {
   const engine = IBE_ENGINES.find((e) => e.test.test(u.hostname));
   if (!engine) return null;
+  // A booking-engine link is only useful if it already carries a property
+  // identifier — a path or a query. Reject a bare engine host (e.g. a
+  // `<link rel="preconnect" href="https://be.synxis.com">` hint), which would
+  // otherwise yield a property-less, wrongly-"dated" landing page, plus obvious
+  // asset URLs (engines serve scripts/widgets from the same hosts).
+  const hasIdentifier = (u.pathname && u.pathname !== "/") || u.search.length > 0;
+  if (!hasIdentifier || IBE_ASSET_RE.test(u.pathname)) return null;
   engine.withDates?.(u, dates);
   return u.toString();
 }

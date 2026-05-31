@@ -1,5 +1,6 @@
 // integrations/hotels/typeahead.ts
 import { haversineKm } from "@openmapx/core/server";
+import { nameMatches, normalizeName } from "./match.js";
 import type { HotelQuery } from "./types.js";
 
 export interface KeywordCandidate {
@@ -7,47 +8,6 @@ export interface KeywordCandidate {
   name: string;
   lat?: number;
   lng?: number;
-}
-
-/** Lowercase, fold diacritics, collapse to single-spaced alphanumerics. */
-function normalizeName(s: string): string {
-  return s
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-/** Word tokens (length ≥ 2) of a normalized name. */
-function tokenize(s: string): string[] {
-  return normalizeName(s)
-    .split(" ")
-    .filter((t) => t.length >= 2);
-}
-
-/** Fraction of the query name's tokens the candidate must share (when neither
- *  name contains the other) to count as a name match. */
-const MIN_TOKEN_OVERLAP = 0.6;
-
-/**
- * Does the candidate name plausibly refer to the same hotel as the query?
- * Substring either way (exact/contained names) OR a high token overlap. Pure
- * substring is too strict: real OTA names append marketing words — Trip.com
- * returns "Windsor Palace Luxury Heritage Hotel since 1906 by Paradise Inn
- * Group" for a query of "Windsor Palace Hotel", where neither contains the
- * other but all query tokens are present.
- */
-function nameMatches(queryName: string, candidateName: string): boolean {
-  const qn = normalizeName(queryName);
-  const cn = normalizeName(candidateName);
-  if (!qn || !cn) return false;
-  if (cn.includes(qn) || qn.includes(cn)) return true;
-  const qt = tokenize(queryName);
-  if (qt.length === 0) return false;
-  const ct = new Set(tokenize(candidateName));
-  const shared = qt.filter((t) => ct.has(t)).length;
-  return shared / qt.length >= MIN_TOKEN_OVERLAP;
 }
 
 /** Max km between a candidate's coords and the queried hotel to accept the
@@ -129,13 +89,19 @@ export function parseTripcomKeywords(json: TripKeywordsResp): KeywordCandidate[]
     const geo = (ci.coordinateItemList ?? []).find(
       (c) => c.coordinateType === "GOOGLE" || c.coordinateType === "NORMAL",
     );
-    const lat = geo ? Number(geo.latitude) : Number.NaN;
-    const lng = geo ? Number(geo.longitude) : Number.NaN;
+    const rawLat = geo ? Number(geo.latitude) : Number.NaN;
+    const rawLng = geo ? Number(geo.longitude) : Number.NaN;
+    // Trip.com uses -1 AND the (0,0) null-island pair as "no coordinate"
+    // placeholders; treat both as absent so pickKeywordMatch doesn't reject a
+    // genuine match on a bogus thousands-of-km distance.
+    const placeholder = (v: number) => !Number.isFinite(v) || v === -1;
+    const nullIsland = rawLat === 0 && rawLng === 0;
+    const valid = !placeholder(rawLat) && !placeholder(rawLng) && !nullIsland;
     out.push({
       id,
       name: ci.keyword,
-      lat: Number.isFinite(lat) && lat !== -1 ? lat : undefined,
-      lng: Number.isFinite(lng) && lng !== -1 ? lng : undefined,
+      lat: valid ? rawLat : undefined,
+      lng: valid ? rawLng : undefined,
     });
   }
   return out;

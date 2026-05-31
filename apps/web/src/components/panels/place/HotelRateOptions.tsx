@@ -77,7 +77,12 @@ export function HotelRateOptions({
   const { currency, guestNationality, setCurrency, setGuestNationality } = useHotelSearchStore();
 
   const effCurrency = currency || defaultCurrency;
-  const effNationality = guestNationality || (placeCountry ?? "US").toUpperCase();
+  // placeCountry can be a non-ISO-alpha-2 value (e.g. an OSM `addr:country` tag
+  // like "USA" or "Deutschland"); fall back to "US" so it never reaches the
+  // option list / Intl below as an invalid region subtag.
+  const effNationality =
+    guestNationality ||
+    (placeCountry && /^[A-Za-z]{2}$/.test(placeCountry) ? placeCountry.toUpperCase() : "US");
   const currencyChoices = CURRENCIES.includes(effCurrency)
     ? CURRENCIES
     : [effCurrency, ...CURRENCIES];
@@ -85,6 +90,16 @@ export function HotelRateOptions({
     ? NATIONALITIES
     : [effNationality, ...NATIONALITIES];
   const regionNames = useMemo(() => new Intl.DisplayNames(locale, { type: "region" }), [locale]);
+  // Intl.DisplayNames.of THROWS (not returns undefined) on a structurally
+  // invalid region subtag, so a bad code would crash render — fall back to the
+  // raw code instead.
+  const regionLabel = (cc: string): string => {
+    try {
+      return regionNames.of(cc) ?? cc;
+    } catch {
+      return cc;
+    }
+  };
 
   return (
     <Box sx={{ display: "flex", gap: 1 }}>
@@ -117,7 +132,7 @@ export function HotelRateOptions({
         >
           {nationChoices.map((cc) => (
             <option key={cc} value={cc}>
-              {regionNames.of(cc) ?? cc}
+              {regionLabel(cc)}
             </option>
           ))}
         </Box>

@@ -177,7 +177,6 @@ export {
 } from "./hooks/useHikingTrails";
 export { useHotelConfig } from "./hooks/useHotelConfig";
 export { useHotelOffers } from "./hooks/useHotelOffers";
-export { useHotelProviders } from "./hooks/useHotelProviders";
 export { useIntegrationOverlayActive } from "./hooks/useIntegrationOverlay";
 export { useIsochrone } from "./hooks/useIsochrone";
 export {

@@ -22,9 +22,8 @@ export interface ResolveHotelParams {
 /**
  * Which OTAs can deep-link THIS specific hotel: Booking.com (universal search)
  * plus any id-only OTA whose exact hotel id resolved server-side (Wikidata /
- * typeahead). Hotel-aware replacement for useHotelProviders in the compare list.
- * Keyed on the hotel identity (not dates) so it stays cached as the user edits
- * the stay. Mirrors useHotelProviders.
+ * typeahead). The hotel-aware provider list for the compare surface. Keyed on
+ * the hotel identity (not dates) so it stays cached as the user edits the stay.
  */
 export function useResolvedHotelProviders(params: ResolveHotelParams, enabled = true) {
   const { name, lat, lng, countryCode, wikidata } = params;

@@ -1,5 +1,5 @@
 // integrations/hotels/index.ts
-import { bareDomain, type HotelProviderInfo } from "@openmapx/core/server";
+import { bareDomain, type HotelOffer, type HotelProviderInfo } from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { buildExactDeepLink, type IdResolverDeps, resolveOtaHotelId } from "./idResolver.js";
 import { fetchOfficialBookingUrl } from "./official.js";
@@ -74,6 +74,10 @@ export function setup(ctx: IntegrationContext): void {
   const ratesProvider = liteApiKey ? createLiteApiProvider(liteApiKey) : null;
   /** Live lowest-rate cache: prices are short-lived. */
   const OFFER_TTL = 15 * 60; // 15 minutes
+  /** A "no rate / no availability" answer is cached only briefly, so a transient
+   *  empty result (sparse inventory, a momentary upstream hiccup) isn't frozen
+   *  for the full positive window. */
+  const OFFER_NEGATIVE_TTL = 3 * 60; // 3 minutes
   const CURRENCY_RE = /^[A-Za-z]{3}$/;
   const NATIONALITY_RE = /^[A-Za-z]{2}$/;
 
@@ -149,11 +153,22 @@ export function setup(ctx: IntegrationContext): void {
         ? natRaw.toUpperCase()
         : (q.countryCode ?? "us").toUpperCase(),
     };
-    const key = `hotels:offer:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
+    // The hotel name is part of the key because searchOffer picks WHICH nearby
+    // hotel to price by name — two different hotels rounding to the same coords
+    // must not share a cached rate.
+    const key = `hotels:offer:${q.name.toLowerCase()}:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
     try {
-      const best = await ctx.cache.withCache(key, OFFER_TTL, () =>
-        ratesProvider.searchOffer(q, opts),
-      );
+      // Explicit get/set (not withCache) so positives and "no availability"
+      // negatives get different TTLs — see OFFER_NEGATIVE_TTL. "" is the negative
+      // sentinel (distinct from a cache miss).
+      const cached = await ctx.cache.get<HotelOffer | "">(key);
+      let best: HotelOffer | null;
+      if (cached != null) {
+        best = cached || null;
+      } else {
+        best = await ratesProvider.searchOffer(q, opts);
+        await ctx.cache.set(key, best ?? "", best ? OFFER_TTL : OFFER_NEGATIVE_TTL);
+      }
       if (!best) {
         reply.status(204).send({});
         return;

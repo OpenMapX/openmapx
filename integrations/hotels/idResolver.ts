@@ -90,8 +90,9 @@ export interface IdResolverCache {
 
 /** Injected dependencies — real wiring supplies these in index.ts. */
 export interface IdResolverDeps {
-  /** Fetch a hotel's OTA ids from its Wikidata entity. */
-  wikidata: (qid: string) => Promise<WikidataOtaIds>;
+  /** Fetch a hotel's OTA ids from its Wikidata entity. Resolves to `null` on a
+   *  transient failure so the resolver does not cache a false negative. */
+  wikidata: (qid: string) => Promise<WikidataOtaIds | null>;
   /** Per-OTA typeahead resolvers (only the wired OTAs are present). */
   typeahead: Record<string, (q: HotelQuery) => Promise<string | null>>;
   cache: IdResolverCache;
@@ -123,13 +124,15 @@ function wikidataIdFor(ota: string, ids: WikidataOtaIds): string | undefined {
 }
 
 /** Stable per-hotel cache discriminator: the Wikidata qid when known, else
- *  name + rounded coords. Falls back to name + city/country when coords are
- *  absent so two same-named hotels don't share a cache entry (the real caller
- *  always has coords, but this keeps the resolver correct standalone). */
+ *  name + coords rounded to ~1m. Falls back to name + city/country when coords
+ *  are absent. The fine coordinate precision keeps two genuinely-different
+ *  same-named hotels a few metres apart from sharing a cache entry; the real
+ *  caller always passes a place's stable coordinates, so this never splits the
+ *  cache for one hotel. */
 function hotelKey(q: HotelQuery): string {
   if (q.wikidata) return `wd:${q.wikidata}`;
-  const lat = typeof q.lat === "number" ? q.lat.toFixed(4) : "";
-  const lng = typeof q.lng === "number" ? q.lng.toFixed(4) : "";
+  const lat = typeof q.lat === "number" ? q.lat.toFixed(5) : "";
+  const lng = typeof q.lng === "number" ? q.lng.toFixed(5) : "";
   const geo =
     lat || lng ? `${lat}:${lng}` : `${(q.city ?? "").toLowerCase()}:${q.countryCode ?? ""}`;
   return `q:${q.name.toLowerCase()}:${geo}`;
@@ -138,12 +141,18 @@ function hotelKey(q: HotelQuery): string {
 /** Fetch + cache the full WikidataOtaIds for the hotel once, so resolving N
  *  OTAs for the same hotel costs a single Wikidata request. Empty when the
  *  hotel carries no `wikidata` qid. */
-async function wikidataIdsCached(q: HotelQuery, deps: IdResolverDeps): Promise<WikidataOtaIds> {
+async function wikidataIdsCached(
+  q: HotelQuery,
+  deps: IdResolverDeps,
+): Promise<WikidataOtaIds | null> {
   if (!q.wikidata) return {};
   const key = `hotels:wd:${q.wikidata}`;
   const cached = await deps.cache.get<WikidataOtaIds>(key);
   if (cached != null) return cached;
   const ids = await deps.wikidata(q.wikidata);
+  // A transient fetch failure (null) is NOT cached — the next request retries,
+  // rather than freezing a false "no ids" for ID_NEGATIVE_TTL.
+  if (ids == null) return null;
   // An empty result (entity has no OTA claims yet) is cached only briefly, so a
   // hotel that gets its Wikidata ids added is picked up within hours, not a week.
   await deps.cache.set(key, ids, Object.keys(ids).length > 0 ? ID_POSITIVE_TTL : ID_NEGATIVE_TTL);
@@ -166,8 +175,9 @@ export async function resolveOtaHotelId(
   const cached = await deps.cache.get<ResolvedHotelId | "">(key);
   if (cached != null) return cached || null; // "" negative sentinel → null
 
+  const wdIds = await wikidataIdsCached(q, deps);
   let result: ResolvedHotelId | null = null;
-  const wdId = wikidataIdFor(ota, await wikidataIdsCached(q, deps));
+  const wdId = wdIds ? wikidataIdFor(ota, wdIds) : undefined;
   if (wdId) {
     result = { id: wdId, source: "wikidata" };
   } else if (deps.typeaheadEnabled) {
@@ -178,6 +188,14 @@ export async function resolveOtaHotelId(
     }
   }
 
-  await deps.cache.set(key, result ?? "", result ? ID_POSITIVE_TTL : ID_NEGATIVE_TTL);
+  if (result) {
+    await deps.cache.set(key, result, ID_POSITIVE_TTL);
+  } else if (wdIds != null) {
+    // Cache a negative only when the lookup definitively found nothing. When
+    // Wikidata transiently failed (wdIds === null) and typeahead also came up
+    // empty, leave the key unset so the next request retries instead of
+    // suppressing exact links for ID_NEGATIVE_TTL.
+    await deps.cache.set(key, "", ID_NEGATIVE_TTL);
+  }
   return result;
 }

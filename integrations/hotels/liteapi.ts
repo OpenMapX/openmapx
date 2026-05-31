@@ -11,6 +11,7 @@
  * price), which is common in the sparse sandbox but rare in production.
  */
 import { type HotelOffer, haversineKm } from "@openmapx/core/server";
+import { nameMatches, normalizeName } from "./match.js";
 import type { HotelQuery } from "./types.js";
 
 const LITEAPI_BASE = "https://api.liteapi.travel/v3.0";
@@ -19,6 +20,11 @@ const TIMEOUT_MS = 6000;
 const SEARCH_RADIUS_M = 1000;
 /** An unnamed candidate must be within this many km to be accepted. */
 const MAX_UNNAMED_MATCH_KM = 0.3;
+/** A name-matched candidate is trusted only within this many km: the queried
+ *  hotel sits at the query's own coordinates, so the true match is normally
+ *  <100m; a same-named candidate farther out (a different branch / a generic
+ *  brand-name neighbour) is rejected so we never price the wrong property. */
+const MAX_NAMED_MATCH_KM = 0.6;
 
 interface LiteRate {
   retailRate?: {
@@ -49,8 +55,11 @@ export function buildOccupancies(
   adults: number,
   rooms: number,
 ): Array<{ adults: number; children: number[] }> {
-  const r = Math.max(1, rooms);
-  const total = Math.max(r, adults); // ensure ≥1 adult per room
+  const total = Math.max(1, adults);
+  // Never create more occupied rooms than guests: LiteAPI requires ≥1 adult per
+  // occupancy, so when the user picks more rooms than adults we cap the room
+  // count rather than inventing extra guests (which would over-price the stay).
+  const r = Math.max(1, Math.min(rooms, total));
   const base = Math.floor(total / r);
   const extra = total % r;
   return Array.from({ length: r }, (_, i) => ({
@@ -66,16 +75,6 @@ export function nights(checkIn?: string, checkOut?: string): number {
   const b = Date.parse(checkOut);
   if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 1;
   return Math.max(1, Math.round((b - a) / 86_400_000));
-}
-
-/** Lowercase, strip diacritics, collapse non-alphanumerics — for name matching. */
-function normalizeName(s: string): string {
-  return s
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
 }
 
 /**
@@ -95,19 +94,22 @@ export function pickBestHotel(
     typeof q.lat === "number" && typeof q.lng === "number"
       ? haversineKm(q.lat, q.lng, c.lat, c.lng)
       : Number.POSITIVE_INFINITY;
-  const target = normalizeName(q.name);
-  const named = target
-    ? candidates.filter((c) => {
-        const n = normalizeName(c.name);
-        return n.length > 0 && (n.includes(target) || target.includes(n));
-      })
-    : [];
+  // Same name-match rule as the typeahead resolver (see match.ts) so the live
+  // price and the deep link agree on which hotel this is.
+  const named = normalizeName(q.name) ? candidates.filter((c) => nameMatches(q.name, c.name)) : [];
   const pool = named.length > 0 ? named : candidates;
   const best = [...pool].sort((a, b) => dist(a) - dist(b))[0];
   if (!best) return null;
-  // Name matches are trusted within the search radius; unnamed picks must be
-  // essentially the same address.
-  if (named.length === 0 && dist(best) > MAX_UNNAMED_MATCH_KM) return null;
+  const bestKm = dist(best);
+  if (named.length > 0) {
+    // A name match is trusted only within MAX_NAMED_MATCH_KM (when measurable);
+    // beyond that, even a same-named candidate is more likely a different
+    // property than the one at the query's own coordinates.
+    if (Number.isFinite(bestKm) && bestKm > MAX_NAMED_MATCH_KM) return null;
+  } else if (bestKm > MAX_UNNAMED_MATCH_KM) {
+    // Unnamed picks must be essentially the same address (no-coords → rejected).
+    return null;
+  }
   return best;
 }
 

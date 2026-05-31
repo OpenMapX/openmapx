@@ -19,20 +19,39 @@ const PROP: Record<keyof WikidataOtaIds, string> = {
   tripcom: "P10425",
 };
 
+interface WdStatement {
+  mainsnak?: { datavalue?: { value?: unknown } };
+  /** "preferred" | "normal" | "deprecated" — present on real statements. */
+  rank?: string;
+}
 interface WdEntities {
-  entities?: Record<
-    string,
-    { claims?: Record<string, Array<{ mainsnak?: { datavalue?: { value?: unknown } } }>> }
-  >;
+  entities?: Record<string, { claims?: Record<string, WdStatement[]> }>;
 }
 
-/** First string value of a Wikidata external-id claim, or undefined. */
+/**
+ * String value of a Wikidata external-id claim, respecting statement rank: a
+ * "preferred" statement wins, "deprecated" ones are skipped, otherwise the
+ * first normal value. Statements arrive in edit order (not rank order), so a
+ * stale/deprecated first statement must not be taken as authoritative.
+ */
 function claimValue(
-  claims: Record<string, Array<{ mainsnak?: { datavalue?: { value?: unknown } } }>> | undefined,
+  claims: Record<string, WdStatement[]> | undefined,
   prop: string,
 ): string | undefined {
-  const v = claims?.[prop]?.[0]?.mainsnak?.datavalue?.value;
-  return typeof v === "string" ? v : undefined;
+  const statements = claims?.[prop];
+  if (!statements?.length) return undefined;
+  const value = (st: WdStatement | undefined): string | undefined => {
+    const v = st?.mainsnak?.datavalue?.value;
+    return typeof v === "string" ? v : undefined;
+  };
+  const preferred = value(statements.find((s) => s.rank === "preferred"));
+  if (preferred) return preferred;
+  for (const s of statements) {
+    if (s.rank === "deprecated") continue;
+    const v = value(s);
+    if (v) return v;
+  }
+  return undefined;
 }
 
 /** Pure: extract OTA ids from a Special:EntityData JSON for `qid`. */
@@ -48,12 +67,18 @@ export function parseWikidataOtaIds(json: WdEntities, qid: string): WikidataOtaI
 
 const WIKIDATA_TIMEOUT_MS = 5000;
 
-/** Fetch + parse a Wikidata entity's OTA ids. Returns {} on any failure
- *  (invalid qid, network/timeout, non-OK, bad JSON) so callers degrade silently. */
+/**
+ * Fetch + parse a Wikidata entity's OTA ids. Distinguishes a GENUINE empty
+ * result from a TRANSIENT failure so callers can cache the former but retry the
+ * latter:
+ *   - invalid qid  → `{}`   (deterministically empty — safe to cache)
+ *   - success      → parsed ids (possibly `{}` if the entity has no OTA claims)
+ *   - network/timeout/non-OK/bad-JSON → `null` (transient — do NOT cache)
+ */
 export async function resolveWikidataOtaIds(
   qid: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<WikidataOtaIds> {
+): Promise<WikidataOtaIds | null> {
   if (!/^Q\d+$/.test(qid)) return {};
   try {
     const res = await fetchImpl(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`, {
@@ -63,9 +88,9 @@ export async function resolveWikidataOtaIds(
         "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
       },
     });
-    if (!res.ok) return {};
+    if (!res.ok) return null;
     return parseWikidataOtaIds((await res.json()) as WdEntities, qid);
   } catch {
-    return {};
+    return null;
   }
 }

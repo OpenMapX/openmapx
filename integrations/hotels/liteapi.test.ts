@@ -76,11 +76,10 @@ describe("buildOccupancies", () => {
       { adults: 1, children: [] },
     ]);
   });
-  it("guarantees at least one adult per room", () => {
-    expect(buildOccupancies(1, 2)).toEqual([
-      { adults: 1, children: [] },
-      { adults: 1, children: [] },
-    ]);
+  it("caps rooms at the guest count instead of inventing guests", () => {
+    // 1 guest + 2 rooms is contradictory (LiteAPI needs ≥1 adult per room); we
+    // price 1 occupied room for the 1 guest rather than inflating to 2 adults.
+    expect(buildOccupancies(1, 2)).toEqual([{ adults: 1, children: [] }]);
   });
 });
 
