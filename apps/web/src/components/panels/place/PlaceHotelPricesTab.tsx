@@ -8,8 +8,8 @@ import {
   useCountryFromCoordinates,
   useHotelConfig,
   useHotelOffers,
-  useHotelProviders,
   useHotelSearchStore,
+  useResolvedHotelProviders,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { HotelCompareList } from "./HotelCompareList";
@@ -31,7 +31,13 @@ export function PlaceHotelPricesTab({ place }: { place: Place }) {
     !place.countryCode,
   );
   const countryCode = place.countryCode ?? resolvedCountry ?? undefined;
-  const { data: providersData } = useHotelProviders(countryCode, true);
+  const { data: providersData } = useResolvedHotelProviders({
+    name: place.name,
+    lat: place.coordinates[1],
+    lng: place.coordinates[0],
+    countryCode,
+    wikidata: place.osmTags?.wikidata,
+  });
   const providers = providersData?.providers ?? [];
 
   const { data: config } = useHotelConfig();

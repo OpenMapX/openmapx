@@ -104,6 +104,7 @@ export function HotelCompareList({
       checkOut,
       adults,
       rooms,
+      wikidata: place.osmTags?.wikidata,
     });
     window.open(url, "_blank", "noopener,noreferrer");
   };

@@ -14,8 +14,8 @@ import {
   useCountryFromCoordinates,
   useHotelConfig,
   useHotelOffers,
-  useHotelProviders,
   useHotelSearchStore,
+  useResolvedHotelProviders,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
@@ -50,12 +50,23 @@ export function PlaceHotelActions({
     lodging && !place.countryCode,
   );
   const countryCode = place.countryCode ?? resolvedCountry ?? undefined;
-  const { data: providersData } = useHotelProviders(countryCode, lodging);
+  const [open, setOpen] = useState(false);
+  // Hotel-aware: resolved only when the dialog is open (each resolve may do a
+  // live Wikidata/typeahead lookup server-side; mirrors the deferred offers fetch).
+  const { data: providersData } = useResolvedHotelProviders(
+    {
+      name: place.name,
+      lat: place.coordinates[1],
+      lng: place.coordinates[0],
+      countryCode,
+      wikidata: place.osmTags?.wikidata,
+    },
+    lodging && open,
+  );
 
   const { data: config } = useHotelConfig(lodging);
   const liveEnabled = config?.liveEnabled ?? false;
   const { checkIn, checkOut, adults, rooms, currency, guestNationality } = useHotelSearchStore();
-  const [open, setOpen] = useState(false);
   // Only fetch the live rate once the compare dialog is open — the badge lives
   // inside it, so an unopened panel shouldn't spend a (paid) LiteAPI lookup. The
   // Prices tab fetches eagerly via its own hook; the sticky store shares the cache.
@@ -78,8 +89,9 @@ export function PlaceHotelActions({
   const dialogTitleId = useId();
 
   if (!lodging) return null;
+  // Booking.com (universal) always resolves for a lodging place, so the button
+  // always has at least one option — no need to gate on the (now deferred) list.
   const providers = providersData?.providers ?? [];
-  if (providers.length === 0 && !place.website) return null;
 
   return (
     <Box sx={{ py: 0.5 }}>

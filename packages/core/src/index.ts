@@ -195,6 +195,7 @@ export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { usePlacePhotos } from "./hooks/usePlacePhotos";
 export { usePresetSuggest } from "./hooks/usePresetSuggest";
+export { useResolvedHotelProviders } from "./hooks/useResolvedHotelProviders";
 export { useRestaurantMenu } from "./hooks/useRestaurantMenu";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export {

@@ -36,6 +36,8 @@ export interface HotelSearchParams {
    * passed here is normalised before it reaches the backend.
    */
   guestNationality?: string;
+  /** OSM `wikidata=Q…` tag, forwarded so the backend can resolve the exact OTA hotel id. */
+  wikidata?: string;
 }
 
 /** Tier 2 client config: whether live prices are on + the currency to preset. */

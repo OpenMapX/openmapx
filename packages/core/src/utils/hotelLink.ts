@@ -18,5 +18,6 @@ export function buildHotelOpenUrl(provider: string, p: HotelSearchParams): strin
   if (p.checkOut) params.checkOut = p.checkOut;
   if (typeof p.adults === "number") params.adults = String(p.adults);
   if (typeof p.rooms === "number") params.rooms = String(p.rooms);
+  if (p.wikidata) params.wikidata = p.wikidata;
   return apiUrl(`${API_ENDPOINTS.hotels}/${encodeURIComponent(provider)}/open`, params);
 }
