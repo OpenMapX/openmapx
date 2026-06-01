@@ -118,6 +118,22 @@ export function PlaceHotelActions({
         maxWidth="xs"
         fullWidth
         aria-labelledby={dialogTitleId}
+        slotProps={{
+          paper: {
+            // Mirror DetailShell: in dark mode the default Dialog Paper picks
+            // up MUI's elevation overlay (a translucent white wash), which
+            // lightens the body and inverts the grey tones vs. the Prices tab.
+            // Pin it to background.default (#1c1c1c) and drop the overlay so
+            // the body stays the darker grey and the inputs (background.paper)
+            // read as the lighter tone. Light mode keeps the default white.
+            sx: (theme) => ({
+              ...theme.applyStyles("dark", {
+                bgcolor: "background.default",
+                backgroundImage: "none",
+              }),
+            }),
+          },
+        }}
       >
         <Box sx={{ p: 2 }}>
           <Box sx={{ display: "flex", alignItems: "center", mb: 1.5 }}>
