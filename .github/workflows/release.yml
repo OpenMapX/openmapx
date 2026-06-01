@@ -1,8 +1,11 @@
 name: Release
 
+# Manual-only: this repo deploys via Docker images and publishes nothing to
+# npm, so versioning/release runs on demand rather than on every push to main.
+# Trigger from the Actions tab ("Run workflow") when you actually want to cut a
+# release from the pending changesets.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
