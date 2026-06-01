@@ -58,6 +58,7 @@ import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
 import { PlaceFoodActions } from "./PlaceFoodActions";
 import { PlaceHarborFacilities } from "./PlaceHarborFacilities";
+import { PlaceHotelActions } from "./PlaceHotelActions";
 import { PlaceMarineWeatherContent } from "./PlaceMarineWeather";
 import { PlaceSunTimes } from "./PlaceSunTimes";
 import { PlaceTagDetails } from "./PlaceTagDetails";
@@ -68,6 +69,7 @@ interface Props {
   place: Place;
   isLoading: boolean;
   onNavigateToInfo: () => void;
+  onOpenPrices?: () => void;
   onOpenDepartures: (mode?: TransportMode) => void;
   onOpenLineDetail: (route: MergedRoute) => void;
   onOpenTripDetail?: (dep: MergedDeparture) => void;
@@ -180,6 +182,7 @@ export function PlaceOverviewTab({
   place,
   isLoading,
   onNavigateToInfo,
+  onOpenPrices,
   onOpenDepartures,
   onOpenLineDetail,
   onOpenTripDetail,
@@ -521,6 +524,8 @@ export function PlaceOverviewTab({
 
           {/* Restaurant menu + delivery hand-off (self-hides for non-food places) */}
           <PlaceFoodActions place={place} />
+          {/* Hotel prices + booking hand-off (self-hides for non-lodging places) */}
+          <PlaceHotelActions place={place} onOpenPrices={onOpenPrices} />
 
           {/* Phone */}
           {isLoading && !place.phone ? (

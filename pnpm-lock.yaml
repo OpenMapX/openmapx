@@ -593,6 +593,15 @@ importers:
         specifier: workspace:^
         version: link:../geocoding
 
+  integrations/hotels:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+
   integrations/knowledge-marine-weather:
     dependencies:
       '@openmapx/core':

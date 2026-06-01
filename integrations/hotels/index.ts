@@ -1,0 +1,256 @@
+// integrations/hotels/index.ts
+import { bareDomain, type HotelOffer, type HotelProviderInfo } from "@openmapx/core/server";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { buildExactDeepLink, type IdResolverDeps, resolveOtaHotelId } from "./idResolver.js";
+import { fetchOfficialBookingUrl } from "./official.js";
+import { createLiteApiProvider } from "./provider.js";
+import { getHotelProvider, HOTEL_PROVIDERS, providerServes } from "./providers.js";
+import { parseHotelQuery } from "./query.js";
+import { TYPEAHEAD_RESOLVERS } from "./typeahead.js";
+import type { HotelProviderConfig } from "./types.js";
+import { resolveWikidataOtaIds } from "./wikidata.js";
+
+/**
+ * Hotels integration. Tier 1 hands a lodging place panel off to external hotel
+ * OTAs pre-filled with the hotel name, dates, and occupancy. `/resolve` and the
+ * exact `/:provider/open` redirect make live (cached) Wikidata + Trip.com
+ * typeahead lookups to find an OTA's internal hotel id, so id-only OTAs link to
+ * the exact hotel (Booking stays a universal search). (Tier 2 adds GET /offers
+ * for a live lowest rate via LiteAPI.) See docs/plans/hotel-prices-and-booking.md.
+ *
+ * Routes (under `/api/integrations/hotels`):
+ *   GET /providers?country=de  → OTAs serving that country (or all)
+ *   GET /resolve               → OTAs we can deep-link THIS hotel (exact for
+ *                                id-only OTAs, always for Booking)
+ *   GET /:provider/open        → 302 redirect to the pre-filled OTA search
+ *   GET /:provider/url         → { url } (same link as JSON, for previews/tests)
+ */
+export function setup(ctx: IntegrationContext): void {
+  const providerConfig: HotelProviderConfig = {
+    affiliateTemplates:
+      ctx.config.affiliateTemplates && typeof ctx.config.affiliateTemplates === "object"
+        ? (ctx.config.affiliateTemplates as Record<string, string>)
+        : undefined,
+    bookingAid: typeof ctx.config.bookingAid === "string" ? ctx.config.bookingAid : undefined,
+  };
+
+  const enableTypeaheadResolvers =
+    typeof ctx.config.enableTypeaheadResolvers === "boolean"
+      ? ctx.config.enableTypeaheadResolvers
+      : true;
+  /** Injected resolver deps (CacheClient structurally satisfies IdResolverCache). */
+  const resolverDeps: IdResolverDeps = {
+    wikidata: (qid) => resolveWikidataOtaIds(qid),
+    typeahead: TYPEAHEAD_RESOLVERS,
+    cache: ctx.cache,
+    typeaheadEnabled: enableTypeaheadResolvers,
+  };
+  /**
+   * Resolve an OTA's exact hotel id, degrading to null on ANY failure (a Redis
+   * cache error, etc.) so a resolver hiccup omits the row / 404s rather than
+   * 500-ing the request — mirrors the /offers route's defensive try/catch.
+   */
+  const safeResolve = async (id: string, q: Parameters<typeof resolveOtaHotelId>[1]) => {
+    try {
+      return await resolveOtaHotelId(id, q, resolverDeps);
+    } catch (err) {
+      ctx.log.debug?.(`[hotels] id resolve failed for ${id}: ${(err as Error).message}`);
+      return null;
+    }
+  };
+
+  const toInfo = (p: (typeof HOTEL_PROVIDERS)[number]): HotelProviderInfo => ({
+    id: p.id,
+    name: p.name,
+    domain: bareDomain(p.homepage),
+    homepage: p.homepage,
+    color: p.color,
+  });
+
+  const liteApiKey = typeof ctx.config.liteApiKey === "string" ? ctx.config.liteApiKey : undefined;
+  const liteApiCurrency =
+    (typeof ctx.config.liteApiCurrency === "string" && ctx.config.liteApiCurrency.trim()) || "EUR";
+  /** One provider instance per configured key; null ⇒ Tier 2 off. */
+  const ratesProvider = liteApiKey ? createLiteApiProvider(liteApiKey) : null;
+  /** Live lowest-rate cache: prices are short-lived. */
+  const OFFER_TTL = 15 * 60; // 15 minutes
+  /** A "no rate / no availability" answer is cached only briefly, so a transient
+   *  empty result (sparse inventory, a momentary upstream hiccup) isn't frozen
+   *  for the full positive window. */
+  const OFFER_NEGATIVE_TTL = 3 * 60; // 3 minutes
+  const CURRENCY_RE = /^[A-Za-z]{3}$/;
+  const NATIONALITY_RE = /^[A-Za-z]{2}$/;
+
+  /** Booking-engine link is stable; cache the resolved (dated) URL a day. */
+  const OFFICIAL_TTL = 24 * 60 * 60;
+
+  ctx.registerRoute("GET", "/providers", async (req, reply) => {
+    const country = (req.query.country ?? "").trim().toLowerCase() || undefined;
+    const providers: HotelProviderInfo[] = HOTEL_PROVIDERS.filter((p) =>
+      providerServes(p, country),
+    ).map(toInfo);
+    reply.header("Cache-Control", "public, max-age=3600");
+    reply.send({ providers });
+  });
+
+  // Hotel-aware: for THIS hotel, return only the providers we can deep-link —
+  // exact for id-only OTAs (Wikidata/typeahead resolved), always for Booking.
+  ctx.registerRoute("GET", "/resolve", async (req, reply) => {
+    const parsed = parseHotelQuery(req.query);
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    const q = parsed.query;
+    const providers: HotelProviderInfo[] = [];
+    // Sequential on purpose: resolveOtaHotelId shares one cached Wikidata fetch
+    // per hotel across OTAs, so resolving in series keeps that to a SINGLE
+    // upstream request (resolving concurrently would race four cold cache reads
+    // into four Wikidata fetches). The warm-cache cost is a few Redis GETs.
+    for (const p of HOTEL_PROVIDERS) {
+      if (!providerServes(p, q.countryCode)) continue;
+      if (!p.exactOnly) {
+        providers.push(toInfo(p)); // Booking: universal search always works
+        continue;
+      }
+      const resolved = await safeResolve(p.id, q);
+      if (resolved && buildExactDeepLink(p.id, resolved.id, q, providerConfig)) {
+        providers.push(toInfo(p));
+      }
+    }
+    reply.header("Cache-Control", "private, max-age=3600"); // matches the client staleTime
+    reply.send({ providers });
+  });
+
+  ctx.registerRoute("GET", "/config", async (_req, reply) => {
+    reply.header("Cache-Control", "public, max-age=60");
+    reply.send({ liveEnabled: ratesProvider !== null, defaultCurrency: liteApiCurrency });
+  });
+
+  ctx.registerRoute("GET", "/offers", async (req, reply) => {
+    if (!ratesProvider) {
+      // Tier 2 not configured — Tier 1 deep-links remain the experience.
+      reply.status(204).send({});
+      return;
+    }
+    const parsed = parseHotelQuery(req.query);
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    const q = parsed.query;
+    if (typeof q.lat !== "number" || typeof q.lng !== "number" || !q.checkIn || !q.checkOut) {
+      reply.status(204).send({});
+      return;
+    }
+    // Currency + guest nationality are user-chosen; fall back to the operator
+    // currency and the place's country (US) when absent or malformed.
+    const curRaw = (req.query.currency ?? "").trim();
+    const natRaw = (req.query.nationality ?? "").trim();
+    const opts = {
+      currency: CURRENCY_RE.test(curRaw) ? curRaw.toUpperCase() : liteApiCurrency,
+      guestNationality: NATIONALITY_RE.test(natRaw)
+        ? natRaw.toUpperCase()
+        : (q.countryCode ?? "us").toUpperCase(),
+    };
+    // The hotel name is part of the key because searchOffer picks WHICH nearby
+    // hotel to price by name — two different hotels rounding to the same coords
+    // must not share a cached rate.
+    const key = `hotels:offer:${q.name.toLowerCase()}:${q.lat.toFixed(4)}:${q.lng.toFixed(4)}:${q.checkIn}:${q.checkOut}:${q.adults ?? 2}:${q.rooms ?? 1}:${opts.currency}:${opts.guestNationality}`;
+    try {
+      // Explicit get/set (not withCache) so positives and "no availability"
+      // negatives get different TTLs — see OFFER_NEGATIVE_TTL. "" is the negative
+      // sentinel (distinct from a cache miss).
+      const cached = await ctx.cache.get<HotelOffer | "">(key);
+      let best: HotelOffer | null;
+      if (cached != null) {
+        best = cached || null;
+      } else {
+        best = await ratesProvider.searchOffer(q, opts);
+        await ctx.cache.set(key, best ?? "", best ? OFFER_TTL : OFFER_NEGATIVE_TTL);
+      }
+      if (!best) {
+        reply.status(204).send({});
+        return;
+      }
+      reply.header("Cache-Control", "private, max-age=900");
+      reply.send({ best, attributionId: "liteapi" });
+    } catch (err) {
+      ctx.log.debug?.(`[hotels] offer lookup failed: ${(err as Error).message}`);
+      reply.status(204).send({});
+    }
+  });
+
+  ctx.registerRoute("GET", "/official", async (req, reply) => {
+    const website = (req.query.website ?? "").trim();
+    if (!website) {
+      reply.status(204).send({});
+      return;
+    }
+    const parsed = parseHotelQuery(req.query); // requires name; client always has it
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    const q = parsed.query;
+    const key = `hotels:official:${website}:${q.checkIn ?? ""}:${q.checkOut ?? ""}:${q.adults ?? 2}:${q.rooms ?? 1}`;
+    try {
+      const url = await ctx.cache.withCache(key, OFFICIAL_TTL, () =>
+        fetchOfficialBookingUrl(
+          website,
+          { checkIn: q.checkIn, checkOut: q.checkOut, adults: q.adults, rooms: q.rooms },
+          ctx.log,
+        ),
+      );
+      if (!url) {
+        reply.status(204).send({});
+        return;
+      }
+      reply.header("Cache-Control", "public, max-age=86400");
+      reply.send({ url });
+    } catch {
+      reply.status(204).send({});
+    }
+  });
+
+  ctx.registerRoute("GET", "/:provider/open", async (req, reply) => {
+    const provider = getHotelProvider(req.params.provider ?? "");
+    if (!provider) {
+      reply.status(404).send({ error: "Unknown hotel provider" });
+      return;
+    }
+    const parsed = parseHotelQuery(req.query);
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    const q = parsed.query;
+    if (provider.exactOnly) {
+      const resolved = await safeResolve(provider.id, q);
+      const url = resolved && buildExactDeepLink(provider.id, resolved.id, q, providerConfig);
+      if (!url) {
+        reply.status(404).send({ error: "No exact hotel match for this provider" });
+        return;
+      }
+      reply.header("Location", url);
+      reply.status(302).send({});
+      return;
+    }
+    reply.header("Location", provider.build(q, providerConfig));
+    reply.status(302).send({});
+  });
+
+  ctx.registerRoute("GET", "/:provider/url", async (req, reply) => {
+    const provider = getHotelProvider(req.params.provider ?? "");
+    if (!provider) {
+      reply.status(404).send({ error: "Unknown hotel provider" });
+      return;
+    }
+    const parsed = parseHotelQuery(req.query);
+    if (!parsed.ok) {
+      reply.status(400).send({ error: parsed.error });
+      return;
+    }
+    reply.send({ provider: provider.id, url: provider.build(parsed.query, providerConfig) });
+  });
+}

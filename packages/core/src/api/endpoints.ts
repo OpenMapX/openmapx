@@ -13,6 +13,12 @@ export const API_ENDPOINTS = {
   foodDelivery: "/api/integrations/food-delivery", // used as `${base}/${provider}/open`
   foodDeliveryProviders: "/api/integrations/food-delivery/providers",
   restaurantMenu: "/api/integrations/restaurants/menu",
+  hotels: "/api/integrations/hotels", // used as `${base}/${provider}/open`
+  hotelProviders: "/api/integrations/hotels/providers",
+  hotelOfficial: "/api/integrations/hotels/official",
+  hotelOffers: "/api/integrations/hotels/offers",
+  hotelConfig: "/api/integrations/hotels/config",
+  hotelResolve: "/api/integrations/hotels/resolve",
   elevation: "/api/elevation",
   isochrone: "/api/isochrone",
   places: "/api/places",

@@ -1,0 +1,109 @@
+{
+  "id": "hotels",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "MIT",
+  "domains": ["hotel-search"],
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "bookingAid": {
+        "type": "string",
+        "title": "Booking.com Affiliate ID (aid)",
+        "description": "Optional. Appended to Booking.com links as &aid= for commission tracking. Leave empty to deep-link without tracking (no account required)."
+      },
+      "affiliateTemplates": {
+        "type": "object",
+        "title": "Affiliate link wrappers",
+        "description": "Optional per-provider affiliate deep-link wrappers. Key = provider id (e.g. \"expedia\"), value = a URL template containing the literal token {url}, which is replaced with the URL-encoded destination link. Lets you plug in a CJ / Impact / Partnerize / Awin wrapper without code changes. Leave empty for plain links.",
+        "additionalProperties": { "type": "string" }
+      },
+      "liteApiKey": {
+        "type": "string",
+        "title": "LiteAPI key (enables live prices)",
+        "description": "Optional. When set, lodging places show a live lowest nightly rate from LiteAPI (https://liteapi.travel) with editable currency + guest nationality. Leave empty to ship deep-link price comparison only (Tier 1). Use a sand_… key to test, prod_… to go live. Search/rate calls are free on LiteAPI's core tier; booking is not done in-app (deep-link hand-off only).",
+        "x-openmapx-secret": true
+      },
+      "liteApiCurrency": {
+        "type": "string",
+        "title": "LiteAPI default rate currency",
+        "description": "ISO-4217 currency used to preset the rate controls and request LiteAPI rates (e.g. EUR, USD). Users can change the currency per request in the panel. Only used when a LiteAPI key is set.",
+        "default": "EUR"
+      },
+      "enableTypeaheadResolvers": {
+        "type": "boolean",
+        "title": "Enable typeahead hotel-id resolvers",
+        "description": "When on (default), id-only OTAs may resolve an exact-hotel link via the OTA's own typeahead endpoint (currently Trip.com only) in addition to the always-on Wikidata source. Turn off to use only the clean Wikidata ids.",
+        "default": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "External",
+  "dataSources": [
+    {
+      "sourceId": "booking",
+      "name": "Booking.com",
+      "url": "https://www.booking.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "NL",
+      "providerPrivacyUrl": "https://www.booking.com/content/privacy.html",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "expedia",
+      "name": "Expedia",
+      "url": "https://www.expedia.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.expedia.com/privacy",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "hotelscom",
+      "name": "Hotels.com",
+      "url": "https://www.hotels.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://www.hotels.com/privacy/",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "agoda",
+      "name": "Agoda",
+      "url": "https://www.agoda.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "SG",
+      "providerPrivacyUrl": "https://www.agoda.com/info/agoda-privacy.html",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "tripcom",
+      "name": "Trip.com",
+      "url": "https://www.trip.com/",
+      "license": "Proprietary (deep-link only)",
+      "commercialUse": "conditional",
+      "providerCountry": "SG",
+      "providerPrivacyUrl": "https://pages.trip.com/privacy/privacy-en-xx.html",
+      "endUserExposure": "direct"
+    },
+    {
+      "sourceId": "liteapi",
+      "name": "LiteAPI",
+      "url": "https://www.liteapi.travel/",
+      "license": "Proprietary (commercial API)",
+      "commercialUse": "conditional",
+      "providerCountry": "AE",
+      "providerPrivacyUrl": "https://www.liteapi.travel/privacy-policy",
+      "endUserExposure": "proxied"
+    }
+  ]
+}

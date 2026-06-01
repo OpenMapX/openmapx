@@ -175,6 +175,8 @@ export {
   useHikingSearch,
   useHikingShelters,
 } from "./hooks/useHikingTrails";
+export { useHotelConfig } from "./hooks/useHotelConfig";
+export { useHotelOffers } from "./hooks/useHotelOffers";
 export { useIntegrationOverlayActive } from "./hooks/useIntegrationOverlay";
 export { useIsochrone } from "./hooks/useIsochrone";
 export {
@@ -186,11 +188,13 @@ export {
 } from "./hooks/useMarineWeather";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { type NearestAirportHit, useNearestAirports } from "./hooks/useNearestAirports";
+export { useOfficialBookingUrl } from "./hooks/useOfficialBookingUrl";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
 export { usePlaceDetails } from "./hooks/usePlaceDetails";
 export { usePlacePhotos } from "./hooks/usePlacePhotos";
 export { usePresetSuggest } from "./hooks/usePresetSuggest";
+export { useResolvedHotelProviders } from "./hooks/useResolvedHotelProviders";
 export { useRestaurantMenu } from "./hooks/useRestaurantMenu";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
 export {
@@ -236,6 +240,7 @@ export { useDataSourceStore } from "./stores/dataSourceStore";
 export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
 export { type FlightEndpoint, useFlightStore } from "./stores/flightStore";
+export { useHotelSearchStore } from "./stores/hotelSearchStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
@@ -282,6 +287,13 @@ export type {
   ShelterFeatureCollection,
 } from "./types/hiking";
 export { SAC_GRADES } from "./types/hiking";
+export type {
+  HotelConfig,
+  HotelOffer,
+  HotelOffersResponse,
+  HotelProviderInfo,
+  HotelSearchParams,
+} from "./types/hotel";
 export type { Identified, Ids } from "./types/identified";
 export { makeId, parseId, withId } from "./types/identified";
 export type {
@@ -387,8 +399,10 @@ export {
   resolveStopAsPlace,
 } from "./utils/geocodeStopAsPlace";
 export { estimateFlightMinutes, greatCircleArc } from "./utils/greatCircle";
+export { buildHotelOpenUrl } from "./utils/hotelLink";
 export { bareDomain } from "./utils/httpUrl";
 export { formatAddress, legalConfig } from "./utils/legalConfig";
+export { isLodging } from "./utils/lodgingPlace";
 export { isOpenAtBitmap, isOpenAtSlot } from "./utils/openingHoursClient";
 export { otpMode } from "./utils/otp";
 export {

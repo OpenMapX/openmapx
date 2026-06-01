@@ -15,6 +15,7 @@
       "!.turbo",
       "!apps/web/public/sw.js",
       "!**/db/migrations",
+      "!**/__fixtures__",
       "!infra/docker/data"
     ]
   },

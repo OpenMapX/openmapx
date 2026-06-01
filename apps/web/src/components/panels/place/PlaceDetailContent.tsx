@@ -10,7 +10,7 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
-import { usePlaceStore } from "@openmapx/core";
+import { isLodging, usePlaceStore } from "@openmapx/core";
 import { useReviewAggregate } from "@openmapx/mangrove-react";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
@@ -23,6 +23,7 @@ import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { StopBoardView } from "../transit/StopBoardView";
 import { StopInfrastructureSection } from "../transit/StopInfrastructureSection";
 import { TripDetailView } from "../transit/TripDetailView";
+import { PlaceHotelPricesTab } from "./PlaceHotelPricesTab";
 import { PlaceInfoTab } from "./PlaceInfoTab";
 import { PlaceOverviewTab } from "./PlaceOverviewTab";
 import { PlacePhotoGallery } from "./PlacePhotoGallery";
@@ -213,6 +214,11 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     );
   }
 
+  const showPrices = isLodging(place);
+  // Tab indices: Overview=0, Reviews=1, [Prices=2 if hotel], Info=last.
+  const pricesIndex = showPrices ? 2 : -1;
+  const infoIndex = showPrices ? 3 : 2;
+
   return (
     <>
       {/* Header photo with "View photos" */}
@@ -347,13 +353,15 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
       >
         <Tab label={t("overview")} />
         <Tab label={t("reviews")} />
+        {showPrices && <Tab label={t("prices")} />}
         <Tab label={t("info")} />
       </Tabs>
       {tab === 0 && (
         <PlaceOverviewTab
           place={place}
           isLoading={isLoading}
-          onNavigateToInfo={() => setTab(2)}
+          onNavigateToInfo={() => setTab(infoIndex)}
+          onOpenPrices={showPrices ? () => setTab(pricesIndex) : undefined}
           onOpenDepartures={(mode) => {
             setDeparturesModeFilter(mode ?? null);
             setShowDepartures(true);
@@ -366,7 +374,8 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         />
       )}
       {tab === 1 && <PlaceReviewsTab place={place} />}
-      {tab === 2 && <PlaceInfoTab place={place} isLoading={isLoading} />}
+      {showPrices && tab === pricesIndex && <PlaceHotelPricesTab place={place} />}
+      {tab === infoIndex && <PlaceInfoTab place={place} isLoading={isLoading} />}
     </>
   );
 }
