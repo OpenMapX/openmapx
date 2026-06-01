@@ -5,6 +5,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MenuIcon from "@mui/icons-material/Menu";
 import RouteIcon from "@mui/icons-material/Route";
 import ScheduleIcon from "@mui/icons-material/Schedule";
+import ShareIcon from "@mui/icons-material/Share";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
@@ -42,6 +43,7 @@ import { TransitItineraryCard } from "@/components/panels/directions/TransitRout
 import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
 
@@ -53,6 +55,7 @@ function toDateTimeLocalString(d: Date): string {
 export function DirectionsPanelContent() {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
+  const tp = useTranslations("place");
   const locale = useLocale();
   const {
     waypoints,
@@ -98,6 +101,11 @@ export function DirectionsPanelContent() {
   const [numItineraries, setNumItineraries] = useState(3);
   const [focusedField, setFocusedField] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+
+  const handleShare = async () => {
+    const result = await shareCurrentUrl();
+    if (result === "copied") setSnackbar(tp("linkCopied"));
+  };
 
   // Per-waypoint input text (synced from store labels)
   const [inputValues, setInputValues] = useState<string[]>(() => waypoints.map((wp) => wp.label));
@@ -431,6 +439,15 @@ export function DirectionsPanelContent() {
             );
           })}
         </Box>
+
+        <IconButton
+          size="small"
+          onClick={handleShare}
+          sx={{ mt: 1, mr: 0.5, flexShrink: 0 }}
+          aria-label={tp("share")}
+        >
+          <ShareIcon sx={{ fontSize: 20 }} />
+        </IconButton>
 
         <IconButton
           size="small"

@@ -261,6 +261,9 @@ importers:
       '@tanstack/react-query-persist-client':
         specifier: ^5.100.14
         version: 5.100.14(@tanstack/react-query@5.100.14(react@19.2.6))(react@19.2.6)
+      '@tmcw/togeojson':
+        specifier: ^7.1.2
+        version: 7.1.2
       '@turf/area':
         specifier: ^7.3.5
         version: 7.3.5
@@ -3813,6 +3816,9 @@ packages:
         optional: true
       '@types/react-dom':
         optional: true
+
+  '@tmcw/togeojson@7.1.2':
+    resolution: {integrity: sha512-QKnFs9DAuqqBVj4d6c69tV1Dj2TspSBTqffivoN0YoBCVdP/JY1+WaYCJbzU49RkoU5NOSOJ3jtFHCdEUVh21A==}
 
   '@turbo/darwin-64@2.9.15':
     resolution: {integrity: sha512-nnDo9R1Df+s2x6jxlERtbg7xRpuicf8p4J2krcnjeaMBt3q9V41pGXa4t9YM2Y4ozozsVJ+CH405CJUrWIQK4Q==}
@@ -8881,6 +8887,8 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.15
       '@types/react-dom': 19.2.3(@types/react@19.2.15)
+
+  '@tmcw/togeojson@7.1.2': {}
 
   '@turbo/darwin-64@2.9.15':
     optional: true

@@ -381,10 +381,14 @@ export async function shareCurrentUrl({
   }
 
   const url = requestDeepLinkUpdate();
+  const payload = { title, text, url };
 
   try {
-    if (typeof navigator.share === "function") {
-      await navigator.share({ title, text, url });
+    // `canShare` lets us avoid calling `share()` with a payload the platform
+    // would reject (and falling back to copy instead). When `canShare` is
+    // absent but `share` exists, assume the URL payload is shareable.
+    if (typeof navigator.share === "function" && (navigator.canShare?.(payload) ?? true)) {
+      await navigator.share(payload);
       return "shared";
     }
 

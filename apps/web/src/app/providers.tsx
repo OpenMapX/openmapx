@@ -4,14 +4,14 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { configureStorage } from "@openmapx/core";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
-import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
+import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
+import { createIdbPersister } from "../lib/queryPersister";
 import {
   enforceRecentMapDataCachePreference,
-  isRecentMapDataCacheEnabled,
   isRecentMapDataQueryKey,
   QUERY_CACHE_KEY,
 } from "../lib/recentMapDataCache";
@@ -74,22 +74,6 @@ const theme = createTheme({
   },
 });
 
-function createRecentMapDataQueryStorage() {
-  return {
-    getItem: (key: string) => {
-      if (key === QUERY_CACHE_KEY && !isRecentMapDataCacheEnabled()) return null;
-      return window.localStorage.getItem(key);
-    },
-    setItem: (key: string, value: string) => {
-      if (key === QUERY_CACHE_KEY && !isRecentMapDataCacheEnabled()) return;
-      window.localStorage.setItem(key, value);
-    },
-    removeItem: (key: string) => {
-      window.localStorage.removeItem(key);
-    },
-  };
-}
-
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -106,15 +90,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   );
 
-  // Persister is created lazily client-side so SSR doesn't touch localStorage.
+  // Persister is created lazily client-side so SSR doesn't touch storage. Backed
+  // by IndexedDB (not localStorage) so the persisted cache has real headroom.
   const [persister] = useState(() =>
-    typeof window === "undefined"
-      ? null
-      : createSyncStoragePersister({
-          storage: createRecentMapDataQueryStorage(),
-          key: QUERY_CACHE_KEY,
-          throttleTime: 1000,
-        }),
+    typeof window === "undefined" ? null : createIdbPersister(QUERY_CACHE_KEY),
   );
 
   useEffect(() => {
@@ -125,6 +104,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <ImpersonationBanner />
+      <SavedPlacesMirror />
       <MangroveTransportProvider>
         <KeypairSessionGuard />
         <IntegrationProvider>{children}</IntegrationProvider>

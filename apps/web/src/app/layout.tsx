@@ -9,6 +9,7 @@ import "maplibre-theme/icons.default.css";
 import "maplibre-theme/classic.css";
 import "./globals.css";
 import { OfflineNotice } from "@/components/OfflineNotice";
+import { FileOpenHandler } from "@/components/pwa/FileOpenHandler";
 import { PersistentStorageRequest } from "@/components/pwa/PersistentStorageRequest";
 import { SwUpdateNotice } from "@/components/pwa/SwUpdateNotice";
 import { InstallPromptCapture } from "@/components/pwa/useInstallPrompt";
@@ -100,6 +101,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 <SwUpdateNotice />
                 <InstallPromptCapture />
                 <PersistentStorageRequest />
+                <FileOpenHandler />
               </Providers>
             </EnvProvider>
           </NextIntlClientProvider>

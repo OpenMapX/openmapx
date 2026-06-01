@@ -56,6 +56,20 @@ export default function manifest(): MetadataRoute.Manifest {
         url: "/?action=directions",
         icons: [{ src: "/icons/app/icon-192.png", sizes: "192x192" }],
       },
+      {
+        name: "Saved places",
+        short_name: "Saved",
+        description: "Open your saved places",
+        url: "/?panel=saved",
+        icons: [{ src: "/icons/app/icon-192.png", sizes: "192x192" }],
+      },
+      {
+        name: "Offline maps",
+        short_name: "Offline",
+        description: "Manage downloaded offline areas",
+        url: "/settings/offline",
+        icons: [{ src: "/icons/app/icon-192.png", sizes: "192x192" }],
+      },
     ],
     share_target: {
       action: "/share",
@@ -81,5 +95,17 @@ export default function manifest(): MetadataRoute.Manifest {
     launch_handler: {
       client_mode: ["focus-existing", "auto"],
     },
+    // Open GPX / GeoJSON / KML files with OpenMapX (draws them on the map).
+    // `.json` is deliberately excluded — too generic to claim from the OS.
+    file_handlers: [
+      {
+        action: "/",
+        accept: {
+          "application/gpx+xml": [".gpx"],
+          "application/geo+json": [".geojson"],
+          "application/vnd.google-earth.kml+xml": [".kml"],
+        },
+      },
+    ],
   } satisfies MetadataRoute.Manifest;
 }

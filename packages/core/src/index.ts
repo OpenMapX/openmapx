@@ -241,6 +241,10 @@ export type { DirectionsState } from "./stores/directionsStore";
 export { useDirectionsStore } from "./stores/directionsStore";
 export { type FlightEndpoint, useFlightStore } from "./stores/flightStore";
 export { useHotelSearchStore } from "./stores/hotelSearchStore";
+export {
+  type ImportedGeometry,
+  useImportedGeometryStore,
+} from "./stores/importedGeometryStore";
 export type { MapLayer } from "./stores/layerStore";
 export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
@@ -331,7 +335,7 @@ export {
   extractSourcePrefix,
   pickIntegrationForSources,
 } from "./utils/attribution";
-export { bboxAroundPoint } from "./utils/bbox";
+export { bboxAroundPoint, geoJsonBBox } from "./utils/bbox";
 export { withCache } from "./utils/cache-helpers";
 export type { CategoryFacet, FacetPlacement, FacetType } from "./utils/categoryFacets";
 export {

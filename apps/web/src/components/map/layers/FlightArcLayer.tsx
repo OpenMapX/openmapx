@@ -34,6 +34,10 @@ export function FlightArcLayer() {
     if (!map || !mapReady) return;
 
     const setup = () => {
+      if (!map.isStyleLoaded()) {
+        map.once("idle", setup);
+        return;
+      }
       if (map.getSource(SOURCE_ID)) return;
 
       map.addSource(SOURCE_ID, { type: "geojson", data: EMPTY });
@@ -84,10 +88,14 @@ export function FlightArcLayer() {
       });
     };
 
-    if (map.isStyleLoaded()) setup();
-    else map.once("load", setup);
+    // Re-add after a style/theme swap (which wipes all sources): `styledata`
+    // re-fires on each style load — and the in-setup `once("idle")` covers the
+    // mid-load case — whereas `once("load")` fires only once, so the overlay
+    // would silently vanish on a theme change.
+    setup();
+    map.on("styledata", setup);
     return () => {
-      map.off("load", setup);
+      map.off("styledata", setup);
     };
   }, [mapRef, mapReady, styleVersion]);
 

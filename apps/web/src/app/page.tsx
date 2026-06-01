@@ -8,12 +8,14 @@ import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge"
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
 import { ExploreAnchorMarker } from "@/components/map/ExploreAnchorMarker";
+import { ImportedGeometryBanner } from "@/components/map/ImportedGeometryBanner";
 import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
 import { CyclingBaseLayer } from "@/components/map/layers/CyclingBaseLayer";
 import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { FlightArcLayer } from "@/components/map/layers/FlightArcLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
+import { ImportedGeometryLayer } from "@/components/map/layers/ImportedGeometryLayer";
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
@@ -136,6 +138,7 @@ export default function HomePage() {
           <CategoryResultMarkers />
           <DataSourceLayer />
           <SavedPlacesLayer />
+          <ImportedGeometryLayer />
           {/* All overlay/tool layers loaded dynamically by MapLayerHost */}
           <MapLayerHost />
           <DataSourceDetailBridge />
@@ -153,6 +156,7 @@ export default function HomePage() {
           <CategoryChips />
           <CategoryFilterBar />
           <SearchInAreaChip />
+          <ImportedGeometryBanner />
           <PanelHost />
           <MapClickFloatingCard />
           <TopRightControls />

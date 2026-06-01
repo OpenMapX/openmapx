@@ -1,5 +1,7 @@
 "use client";
 
+import { idbDelete, idbGet } from "./idbStore";
+
 export const RECENT_MAP_DATA_CACHE_ENABLED_KEY = "openmapx-recent-map-data-cache-enabled";
 export const QUERY_CACHE_KEY = "openmapx-query-cache";
 
@@ -56,8 +58,10 @@ export function isRecentMapDataQueryKey(queryKey: readonly unknown[]): boolean {
 
 export async function clearRecentMapDataCache(): Promise<void> {
   if (typeof window !== "undefined") {
+    // Remove any legacy localStorage blob as well as the current IndexedDB one.
     window.localStorage.removeItem(QUERY_CACHE_KEY);
   }
+  await idbDelete(QUERY_CACHE_KEY);
 
   if (typeof caches !== "undefined") {
     await Promise.all(RECENT_MAP_DATA_CACHE_NAMES.map((name) => caches.delete(name)));
@@ -91,15 +95,13 @@ export async function enforceRecentMapDataCachePreference(): Promise<void> {
   }
 }
 
-export function getStoredQueryCacheBytes(): number {
-  if (typeof window === "undefined") return 0;
-
-  const value = window.localStorage.getItem(QUERY_CACHE_KEY);
-  if (!value) return 0;
-
-  if (typeof Blob !== "undefined") {
-    return new Blob([value]).size;
+export async function getStoredQueryCacheBytes(): Promise<number> {
+  const client = await idbGet<unknown>(QUERY_CACHE_KEY);
+  if (client == null) return 0;
+  try {
+    const json = JSON.stringify(client);
+    return typeof Blob !== "undefined" ? new Blob([json]).size : json.length;
+  } catch {
+    return 0;
   }
-
-  return value.length;
 }

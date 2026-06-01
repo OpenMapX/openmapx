@@ -22,6 +22,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { haptics } from "@/lib/haptics";
 import { resolveListIcon } from "@/lib/listIcon";
 import { TEAL, TEAL_LIGHT } from "@/lib/theme";
 
@@ -78,6 +79,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
         }
       } else {
         setCheckedLists((prev) => new Set([...prev, listId]));
+        haptics.success();
         savePlaceMutation.mutate({
           listId,
           name: place.name,

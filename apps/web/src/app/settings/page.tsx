@@ -1,5 +1,6 @@
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DownloadForOfflineIcon from "@mui/icons-material/DownloadForOffline";
+import TuneIcon from "@mui/icons-material/Tune";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
@@ -19,6 +20,15 @@ export default async function SettingsHomePage() {
               <DownloadForOfflineIcon />
             </ListItemIcon>
             <ListItemText primary={t("offline")} secondary={t("offlineDescription")} />
+            <ChevronRightIcon color="action" />
+          </ListItemButton>
+        </Link>
+        <Link href="/settings/preferences" style={{ textDecoration: "none", color: "inherit" }}>
+          <ListItemButton>
+            <ListItemIcon>
+              <TuneIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("preferencesTitle")} secondary={t("preferencesDescription")} />
             <ChevronRightIcon color="action" />
           </ListItemButton>
         </Link>

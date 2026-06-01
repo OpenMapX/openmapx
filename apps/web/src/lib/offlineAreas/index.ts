@@ -1,3 +1,4 @@
+export * from "./backgroundDownload";
 export * from "./downloader";
 export * from "./storage";
 export * from "./styleAssets";

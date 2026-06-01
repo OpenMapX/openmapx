@@ -7,10 +7,12 @@ import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import List from "@mui/material/List";
@@ -20,11 +22,13 @@ import ListItemText from "@mui/material/ListItemText";
 import Paper from "@mui/material/Paper";
 import Slider from "@mui/material/Slider";
 import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import type { AreaGeometry, AutocompleteResult, BBox } from "@openmapx/core";
+import type { AutocompleteResult } from "@openmapx/core";
 import {
   createPlace,
+  geoJsonBBox,
   idsFromPrimaryOrCoords,
   useAutocomplete,
   useDebounce,
@@ -33,8 +37,12 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { haptics } from "@/lib/haptics";
 import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
 import {
+  type AreaDownloadUrls,
+  buildAreaDownloadUrls,
+  clearAreaResult,
   countTiles,
   type DownloadProgress,
   deleteAreaCache,
@@ -42,11 +50,20 @@ import {
   listAreas,
   type OfflineArea,
   type OfflineAreaBbox,
+  reconcileAreaFromResult,
   removeArea,
   saveArea,
+  startBackgroundAreaDownload,
+  supportsBackgroundFetch,
+  watchBackgroundAreaProgress,
 } from "@/lib/offlineAreas";
 import { requestPersistentStorage } from "@/lib/persistentStorage";
+import {
+  isRecentMapDataCacheEnabled,
+  setRecentMapDataCacheEnabled,
+} from "@/lib/recentMapDataCache";
 import { formatBytes } from "@/lib/storageFormat";
+import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import { AreaPickerMap } from "./AreaPickerMap";
 import { OfflineMapView } from "./OfflineMapView";
 
@@ -55,36 +72,97 @@ const MAX_ZOOM_LIMIT = 18;
 const DEFAULT_MIN_ZOOM = 10;
 const DEFAULT_MAX_ZOOM = 14;
 const TOO_MANY_TILES = 50_000;
+// Rough per-asset size used for the size estimate and the background-download
+// progress bar (Background Fetch reports bytes, not a fraction).
+const BYTES_PER_ASSET_ESTIMATE = 8 * 1024;
 // Half-size of the fallback bbox when a searched region has no boundary/extent.
 const FALLBACK_REGION_HALF_DEG = 0.15;
-
-/** Derive a [west, south, east, north] extent from a Polygon/MultiPolygon. */
-function bboxFromGeometry(geometry: AreaGeometry): BBox {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  const rings = geometry.type === "Polygon" ? geometry.coordinates : geometry.coordinates.flat();
-  for (const ring of rings) {
-    for (const [lng, lat] of ring) {
-      if (lng < west) west = lng;
-      if (lng > east) east = lng;
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-    }
-  }
-  return [west, south, east, north];
-}
 
 export function OfflineSettingsClient() {
   const t = useTranslations("settings");
   const [areas, setAreas] = useState<OfflineArea[]>([]);
   const [adding, setAdding] = useState(false);
   const [overview, setOverview] = useState(false);
+  // area id → detach its background-fetch progress listener, so each downloading
+  // area is watched exactly once (no duplicate listeners on repeated syncs).
+  const watchersRef = useRef<Map<string, () => void>>(new Map());
+
+  // Reconcile + watch background downloads. `markLost` is true only on the
+  // initial mount pass: an area still "downloading" then, with neither a
+  // completion marker nor a live registration, was interrupted (app killed, SW
+  // evicted), so we surface it as failed instead of a permanent spinner. Later
+  // passes (a download just started, or an OFFLINE_AREA_DONE message) never mark
+  // lost, so they can't kill an in-page download that is actively running.
+  const syncOfflineAreas = useCallback(
+    async (markLost: boolean) => {
+      for (const area of listAreas()) {
+        // A completion marker is authoritative regardless of current status.
+        const reconciled = await reconcileAreaFromResult(area);
+        if (reconciled) {
+          const detach = watchersRef.current.get(area.id);
+          if (detach) {
+            detach();
+            watchersRef.current.delete(area.id);
+          }
+          if (reconciled.status === "ready") haptics.success();
+          continue;
+        }
+        if (area.status !== "downloading" || watchersRef.current.has(area.id)) continue;
+
+        const detach = await watchBackgroundAreaProgress(area.id, (downloaded) => {
+          const latest = listAreas().find((a) => a.id === area.id);
+          if (!latest || latest.status !== "downloading") return;
+          const estTotal = latest.tileCount * BYTES_PER_ASSET_ESTIMATE;
+          const frac = estTotal > 0 ? Math.min(1, downloaded / estTotal) : 0;
+          saveArea({
+            ...latest,
+            sizeBytes: downloaded,
+            tilesDone: Math.round(latest.tileCount * frac),
+          });
+          setAreas(listAreas());
+        });
+        if (detach) {
+          watchersRef.current.set(area.id, detach);
+        } else if (markLost) {
+          saveArea({
+            ...area,
+            status: "error",
+            errorMessage: t("downloadInterrupted"),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+      setAreas(listAreas());
+    },
+    [t],
+  );
 
   useEffect(() => {
     setAreas(listAreas());
+    // Opening Offline maps acknowledges any "download finished" app badge set
+    // by the service worker while the app was backgrounded.
+    (navigator as Navigator & { clearAppBadge?: () => Promise<void> })
+      .clearAppBadge?.()
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    void syncOfflineAreas(true);
+
+    const onMessage = (e: MessageEvent) => {
+      if ((e.data as { type?: string } | null)?.type === "OFFLINE_AREA_DONE") {
+        void syncOfflineAreas(false);
+      }
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+
+    const watchers = watchersRef.current;
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+      for (const detach of watchers.values()) detach();
+      watchers.clear();
+    };
+  }, [syncOfflineAreas]);
 
   const refresh = useCallback(() => setAreas(listAreas()), []);
 
@@ -117,6 +195,7 @@ export function OfflineSettingsClient() {
           </Button>
         ) : null}
       </Stack>
+      <RecentDataOfflineToggle />
       <AreaList areas={areas} onChange={refresh} />
       {adding ? (
         <DownloadAreaDialog
@@ -125,6 +204,8 @@ export function OfflineSettingsClient() {
           onSaved={() => {
             setAdding(false);
             refresh();
+            // A background download was just queued — attach its progress watcher.
+            void syncOfflineAreas(false);
           }}
         />
       ) : null}
@@ -140,6 +221,57 @@ export function OfflineSettingsClient() {
         </Dialog>
       ) : null}
     </Stack>
+  );
+}
+
+/**
+ * Discoverable toggle for the recent-map-data offline cache — the same setting
+ * buried under Settings → Storage, surfaced here so users setting up offline
+ * use can keep the places/routes/searches they open available without a
+ * connection. Stored locally only (see the description copy).
+ */
+function RecentDataOfflineToggle() {
+  const t = useTranslations("settings");
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setEnabled(isRecentMapDataCacheEnabled());
+  }, []);
+
+  const handleChange = async (next: boolean) => {
+    setEnabled(next);
+    setBusy(true);
+    try {
+      await setRecentMapDataCacheEnabled(next);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={enabled}
+            disabled={busy}
+            onChange={(e) => void handleChange(e.target.checked)}
+          />
+        }
+        label={
+          <Stack spacing={0.5}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {t("rememberRecentMapData")}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              {t("rememberRecentMapDataDescription")}
+            </Typography>
+          </Stack>
+        }
+        sx={{ alignItems: "flex-start", m: 0 }}
+      />
+    </Paper>
   );
 }
 
@@ -230,6 +362,7 @@ function AreaList({ areas, onChange }: { areas: OfflineArea[]; onChange: () => v
             onClick={async () => {
               if (!removing) return;
               await deleteAreaCache(removing);
+              await clearAreaResult(removing.id);
               removeArea(removing.id);
               setRemoving(null);
               onChange();
@@ -303,6 +436,21 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Offer to turn on the recent-map-data offline cache as part of the download
+  // — only when it's currently off, default-checked since the user is
+  // explicitly setting up offline use.
+  const [recentDataOptIn, setRecentDataOptIn] = useState(false);
+  const [recentDataOptInVisible, setRecentDataOptInVisible] = useState(false);
+  useEffect(() => {
+    const off = !isRecentMapDataCacheEnabled();
+    setRecentDataOptInVisible(off);
+    setRecentDataOptIn(off);
+  }, []);
+
+  // Warn before downloading a lot of tiles over a metered/cellular connection.
+  const network = useNetworkStatus();
+  const [meteredConfirmed, setMeteredConfirmed] = useState(false);
+
   // Admin-boundary search: pick a city/region/country and the area is framed
   // automatically (the user then only tunes the zoom range). Reuses the same
   // autocomplete + place-detail boundary lookup as the main map search.
@@ -351,8 +499,11 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
       return { west: w, south: s, east: e, north: n };
     }
     if (regionBoundary) {
-      const [w, s, e, n] = bboxFromGeometry(regionBoundary);
-      return { west: w, south: s, east: e, north: n };
+      const box = geoJsonBBox(regionBoundary);
+      if (box) {
+        const [w, s, e, n] = box;
+        return { west: w, south: s, east: e, north: n };
+      }
     }
     if (selectedRegion?.coordinates) {
       const [lng, lat] = selectedRegion.coordinates;
@@ -376,7 +527,7 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
     [bbox, zoomRange],
   );
   const tooLarge = tileEstimate > TOO_MANY_TILES;
-  const sizeEstimateBytes = tileEstimate * 8 * 1024; // assume ~8 KB / vector tile
+  const sizeEstimateBytes = tileEstimate * BYTES_PER_ASSET_ESTIMATE;
 
   const handleMapChange = useCallback((nextBbox: OfflineAreaBbox, nextZoom: number) => {
     setBbox(nextBbox);
@@ -397,6 +548,13 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
     // whole origin between sessions, taking the downloaded tiles — and the
     // offline app itself — with it. Best-effort: never block the download on it.
     await requestPersistentStorage();
+
+    // Opt into keeping recent map data (places/routes/searches) offline if the
+    // user left the box checked. Enable early so requests made while using this
+    // area get cached.
+    if (recentDataOptInVisible && recentDataOptIn) {
+      await setRecentMapDataCacheEnabled(true);
+    }
 
     const id = crypto.randomUUID();
     const styleKey = env.styleProvider === "openmapx" ? "openmapx" : "maptiler:multi";
@@ -441,8 +599,36 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
               }),
             );
 
+      // Background Fetch needs the full URL list up front; keep it so the
+      // in-page fallback below can reuse it instead of resolving styles and
+      // re-expanding the tile list a second time.
+      let prebuiltUrls: AreaDownloadUrls | undefined;
+
+      // Prefer Background Fetch where available: the OS runs the download so it
+      // survives navigation and the screen locking, with a progress
+      // notification. The service worker lands the tiles in the same cache.
+      if (supportsBackgroundFetch()) {
+        prebuiltUrls = await buildAreaDownloadUrls(area, styles, signal);
+        const urls = [...prebuiltUrls.styleUrls, ...prebuiltUrls.assetUrls];
+        const queued: OfflineArea = {
+          ...area,
+          status: "downloading",
+          tileCount: urls.length,
+          tilesDone: 0,
+          sizeBytes: 0,
+        };
+        saveArea(queued);
+        const reg = await startBackgroundAreaDownload(queued, urls, { title: queued.name });
+        if (reg) {
+          onSaved();
+          return;
+        }
+        // Couldn't start (quota/permission) — fall through to the in-page path.
+      }
+
       saveArea(area);
-      area = await downloadArea(area, { styles, signal, onProgress: setProgress });
+      area = await downloadArea(area, { styles, signal, onProgress: setProgress, prebuiltUrls });
+      haptics.success();
       onSaved();
     } catch (err) {
       setError((err as Error).message ?? String(err));
@@ -572,6 +758,26 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
             </Typography>
           </Box>
 
+          {recentDataOptInVisible ? (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={recentDataOptIn}
+                  onChange={(e) => setRecentDataOptIn(e.target.checked)}
+                />
+              }
+              label={
+                <Stack spacing={0.25}>
+                  <Typography variant="body2">{t("rememberRecentMapData")}</Typography>
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                    {t("rememberRecentMapDataDescription")}
+                  </Typography>
+                </Stack>
+              }
+              sx={{ alignItems: "flex-start", m: 0 }}
+            />
+          ) : null}
+
           {downloading ? (
             <Box>
               <Stack direction="row" sx={{ justifyContent: "space-between", mb: 0.5 }}>
@@ -594,6 +800,23 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
             </Box>
           ) : null}
 
+          {network.metered && !downloading ? (
+            <Box>
+              <Alert severity="warning" sx={{ mb: 1 }}>
+                {t("meteredWarning", { size: formatBytes(sizeEstimateBytes) })}
+              </Alert>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={meteredConfirmed}
+                    onChange={(e) => setMeteredConfirmed(e.target.checked)}
+                  />
+                }
+                label={t("meteredConfirm")}
+              />
+            </Box>
+          ) : null}
+
           {tooLarge ? <Alert severity="warning">{t("tooLarge")}</Alert> : null}
           {error ? <Alert severity="error">{error}</Alert> : null}
         </Stack>
@@ -603,7 +826,7 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
         <Button
           variant="contained"
           onClick={startDownload}
-          disabled={!bbox || tooLarge || downloading}
+          disabled={!bbox || tooLarge || downloading || (network.metered && !meteredConfirmed)}
         >
           {t("startDownload")}
         </Button>

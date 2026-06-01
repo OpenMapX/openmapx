@@ -71,7 +71,7 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
   }
 
   const rows: CacheRow[] = [];
-  const queryCacheBytes = getStoredQueryCacheBytes();
+  const queryCacheBytes = await getStoredQueryCacheBytes();
   if (queryCacheBytes > 0) {
     rows.push({
       cacheName: "openmapx-query-cache",

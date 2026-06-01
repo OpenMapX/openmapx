@@ -5,7 +5,9 @@ import Paper from "@mui/material/Paper";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { motion, type PanInfo } from "framer-motion";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { haptics } from "@/lib/haptics";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
+import { useVisualViewport } from "@/lib/useVisualViewport";
 
 // Snap heights as fractions of viewport — Google-Maps-style three-step sheet.
 const SNAP_FRACTIONS = [0.3, 0.65, 0.95] as const;
@@ -65,7 +67,9 @@ export function MobileBottomSheet({ id, zIndex, contentSx, children }: Props) {
   const [vh, setVh] = useState(0);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   const [floating, setFloating] = useState(false);
+  const [focusInside, setFocusInside] = useState(false);
   useMobilePanelHeightTracker(id, el);
+  const { keyboardInset } = useVisualViewport();
 
   const dragStartHeightRef = useRef(0);
   const animatingRef = useRef(false);
@@ -76,6 +80,26 @@ export function MobileBottomSheet({ id, zIndex, contentSx, children }: Props) {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
+
+  // Track whether focus is on an input *inside* the sheet, so we only lift the
+  // sheet above the keyboard when the user is actually typing in it (not when
+  // the keyboard comes from the top search bar).
+  useEffect(() => {
+    if (!el) return;
+    const onFocusIn = () => setFocusInside(el.contains(document.activeElement));
+    const onFocusOut = () =>
+      requestAnimationFrame(() => setFocusInside(el.contains(document.activeElement)));
+    el.addEventListener("focusin", onFocusIn);
+    el.addEventListener("focusout", onFocusOut);
+    return () => {
+      el.removeEventListener("focusin", onFocusIn);
+      el.removeEventListener("focusout", onFocusOut);
+    };
+  }, [el]);
+
+  // Lift the sheet by the keyboard height while editing inside it, capping the
+  // height so the top stays on-screen and the focused field scrolls into view.
+  const keyboardLift = focusInside && keyboardInset > 0 ? keyboardInset : 0;
 
   const heightForSnap = (idx: number) => Math.round(vh * SNAP_FRACTIONS[idx]);
 
@@ -122,6 +146,7 @@ export function MobileBottomSheet({ id, zIndex, contentSx, children }: Props) {
     if (v < -FLICK_VELOCITY && bestIdx < SNAP_FRACTIONS.length - 1) bestIdx += 1;
     else if (v > FLICK_VELOCITY && bestIdx > 0) bestIdx -= 1;
 
+    if (bestIdx !== snapIdx) haptics.tap();
     animatingRef.current = true;
     setInlineTransition(`height ${SNAP_TRANSITION_MS}ms ${SNAP_TIMING}`);
     setInlineHeight(heightForSnap(bestIdx));
@@ -183,11 +208,12 @@ export function MobileBottomSheet({ id, zIndex, contentSx, children }: Props) {
       sx={[
         (theme) => ({
           position: "absolute",
-          bottom: 0,
+          bottom: keyboardLift,
           left: 0,
           right: 0,
           width: "100%",
           height: `${SNAP_FRACTIONS[snapIdx] * 100}dvh`,
+          ...(keyboardLift > 0 ? { maxHeight: `calc(100dvh - ${keyboardLift}px)` } : {}),
           overflow: "hidden",
           borderRadius: "16px 16px 0 0",
           boxShadow: 6,

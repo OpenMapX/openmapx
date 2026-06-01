@@ -36,6 +36,12 @@ interface DownloadOptions {
   styles: OfflineStyleSource[];
   onProgress?: (progress: DownloadProgress) => void;
   signal?: AbortSignal;
+  /**
+   * Pre-resolved URL list. When the Background Fetch path already built it (and
+   * then fell back to the in-page downloader), pass it here so we don't re-fetch
+   * every TileJSON and re-expand the whole tile list a second time.
+   */
+  prebuiltUrls?: AreaDownloadUrls;
 }
 
 /**
@@ -51,6 +57,57 @@ interface DownloadOptions {
  * Progress is reported per-asset; size is summed from response Content-Length
  * when available, otherwise from the response body byte length.
  */
+export interface AreaDownloadUrls {
+  /** Raw style JSON URLs — cached verbatim so the app's loader can refetch them. */
+  styleUrls: string[];
+  /** Tile / glyph / sprite / TileJSON asset URLs for the bbox + zoom range. */
+  assetUrls: string[];
+}
+
+/**
+ * Resolve every URL an offline area needs (style JSON + tiles + glyphs +
+ * sprites + TileJSON) without fetching them. Shared by the in-page downloader
+ * and the Background Fetch path so both cache exactly the same asset set.
+ */
+export async function buildAreaDownloadUrls(
+  area: OfflineArea,
+  styles: OfflineStyleSource[],
+  signal?: AbortSignal,
+): Promise<AreaDownloadUrls> {
+  if (styles.length === 0) {
+    throw new Error("buildAreaDownloadUrls: at least one style source is required");
+  }
+  const tileTemplateSet = new Set<string>();
+  const tileJsonUrlSet = new Set<string>();
+  const glyphUrlSet = new Set<string>();
+  const spriteUrlSet = new Set<string>();
+
+  for (const source of styles) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    // Resolve from the pre-resolved JSON the caller provided — for placeholder
+    // styles (e.g. openmapx-streets.json with __TILES_URL__) the raw bytes
+    // would yield no discoverable tile/glyph/sprite URLs.
+    const assets = await resolveStyleAssets(
+      source.url,
+      source.json as Parameters<typeof resolveStyleAssets>[1],
+    );
+    for (const t of assets.tileTemplates) tileTemplateSet.add(t);
+    for (const t of assets.tileJsonUrls) tileJsonUrlSet.add(t);
+    if (assets.glyphTemplate) {
+      for (const u of glyphUrls(assets.glyphTemplate, assets.fontStacks)) glyphUrlSet.add(u);
+    }
+    for (const sprite of assets.spriteUrls) {
+      for (const u of spriteAssetUrls(sprite)) spriteUrlSet.add(u);
+    }
+  }
+
+  const tileCoords = tilesInBbox(area.bbox, area.minZoom, area.maxZoom);
+  const tileFetchUrls = [...tileTemplateSet].flatMap((tpl) => expandTileUrls(tpl, tileCoords));
+  // TileJSON URLs must be cached so MapLibre can re-resolve sources offline.
+  const assetUrls = [...tileJsonUrlSet, ...spriteUrlSet, ...glyphUrlSet, ...tileFetchUrls];
+  return { styleUrls: styles.map((s) => s.url), assetUrls };
+}
+
 export async function downloadArea(
   area: OfflineArea,
   options: DownloadOptions,
@@ -90,64 +147,38 @@ export async function downloadArea(
   try {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-    // 1) Cache the raw style JSON URL for each source — the app's loader
-    //    (e.g. loadOpenMapXStyle) refetches these and may post-process
-    //    placeholders, so we cache the raw bytes verbatim rather than the
-    //    resolved object. Caching every variant the user might switch to
-    //    (e.g. light + dark) keeps the area usable across theme changes.
-    const tileTemplateSet = new Set<string>();
-    const tileJsonUrlSet = new Set<string>();
-    const glyphUrlSet = new Set<string>();
-    const spriteUrlSet = new Set<string>();
+    // Resolve the full asset URL list (shared with the Background Fetch path),
+    // reusing a pre-built list when the caller already computed one.
+    const { styleUrls, assetUrls } =
+      options.prebuiltUrls ?? (await buildAreaDownloadUrls(area, styles, signal));
 
-    for (const source of styles) {
+    // Cache the raw style JSON for each variant — the app's loader refetches
+    // these and may post-process placeholders, so we cache the raw bytes
+    // verbatim. Caching every variant the user might switch to (e.g. light +
+    // dark) keeps the area usable across theme changes. Required: a failed
+    // style fetch aborts the download.
+    for (const url of styleUrls) {
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const styleResponse = await fetch(source.url, { signal });
+      const styleResponse = await fetch(url, { signal });
       if (!styleResponse.ok) {
-        throw new Error(`Failed to fetch style ${source.url}: ${styleResponse.status}`);
+        throw new Error(`Failed to fetch style ${url}: ${styleResponse.status}`);
       }
       bytes += await responseSize(styleResponse.clone());
-      await cache.put(source.url, styleResponse);
-
-      // Resolve from the pre-resolved JSON the caller provided. We don't use
-      // the just-fetched response — for placeholder styles (e.g.
-      // openmapx-streets.json with __TILES_URL__) it would yield no
-      // discoverable tile/glyph/sprite URLs.
-      const assets = await resolveStyleAssets(
-        source.url,
-        source.json as Parameters<typeof resolveStyleAssets>[1],
-      );
-
-      for (const t of assets.tileTemplates) tileTemplateSet.add(t);
-      for (const t of assets.tileJsonUrls) tileJsonUrlSet.add(t);
-      if (assets.glyphTemplate) {
-        for (const u of glyphUrls(assets.glyphTemplate, assets.fontStacks)) glyphUrlSet.add(u);
-      }
-      for (const sprite of assets.spriteUrls) {
-        for (const u of spriteAssetUrls(sprite)) spriteUrlSet.add(u);
-      }
+      await cache.put(url, styleResponse);
     }
 
-    // 2) Build the full URL list
-    const tileCoords = tilesInBbox(area.bbox, area.minZoom, area.maxZoom);
-    const tileFetchUrls = [...tileTemplateSet].flatMap((tpl) => expandTileUrls(tpl, tileCoords));
-
-    // TileJSON URLs must be cached so MapLibre can re-resolve sources offline.
-    // Without these, a downloaded area still depends on the runtime map-tiles
-    // SWR cache surviving — clearing it would make the area unusable.
-    const allUrls = [...tileJsonUrlSet, ...spriteUrlSet, ...glyphUrlSet, ...tileFetchUrls];
-    total = allUrls.length;
+    total = assetUrls.length;
     updateArea({ tileCount: total });
     report("downloading");
 
-    // 4) Fetch with concurrency cap
+    // Fetch with concurrency cap
     let cursor = 0;
     let fatalError: Error | null = null;
     const next = (): string | null => {
       if (signal?.aborted) return null;
       if (fatalError) return null;
-      if (cursor >= allUrls.length) return null;
-      const url = allUrls[cursor];
+      if (cursor >= assetUrls.length) return null;
+      const url = assetUrls[cursor];
       cursor += 1;
       return url;
     };

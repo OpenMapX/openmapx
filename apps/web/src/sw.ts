@@ -25,6 +25,31 @@ import {
 
 declare const self: ServiceWorkerGlobalScope;
 
+// Background Fetch API (not in lib.webworker) — only what we consume, plus the
+// event-map augmentation so `addEventListener` types the handler events.
+interface BackgroundFetchRecord {
+  readonly request: Request;
+  readonly responseReady: Promise<Response>;
+}
+interface BackgroundFetchRegistrationSW extends EventTarget {
+  readonly id: string;
+  readonly downloaded: number;
+  readonly downloadTotal: number;
+  readonly failureReason: string;
+  matchAll(): Promise<BackgroundFetchRecord[]>;
+}
+interface BackgroundFetchEvent extends ExtendableEvent {
+  readonly registration: BackgroundFetchRegistrationSW;
+}
+declare global {
+  interface ServiceWorkerGlobalScopeEventMap {
+    backgroundfetchsuccess: BackgroundFetchEvent;
+    backgroundfetchfail: BackgroundFetchEvent;
+    backgroundfetchabort: BackgroundFetchEvent;
+    backgroundfetchclick: BackgroundFetchEvent;
+  }
+}
+
 const OFFLINE_URL = "/offline";
 const HOME_URL = "/";
 const APP_SHELL_CACHE = "app-shell-v1";
@@ -346,6 +371,120 @@ self.addEventListener("activate", (event) => {
           .filter((k) => k.startsWith("app-shell-") && k !== APP_SHELL_CACHE)
           .map((k) => caches.delete(k)),
       );
+    })(),
+  );
+});
+
+// Background Fetch — reliable offline-area downloads that survive navigation and
+// the page closing, with an OS progress notification. The client kicks one off
+// (see lib/offlineAreas/backgroundDownload); here we land the results into the
+// same `offline-area-<id>` cache the in-page downloader uses, write a small
+// completion marker the page reconciles from, and ping any open client.
+const OFFLINE_AREA_RESULTS_CACHE = "omx-offline-results";
+
+async function writeAreaResult(
+  id: string,
+  data: { ok: boolean; downloaded?: number; count?: number; reason?: string },
+): Promise<void> {
+  const cache = await caches.open(OFFLINE_AREA_RESULTS_CACHE);
+  await cache.put(
+    `/__offline-area-result/${encodeURIComponent(id)}`,
+    new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } }),
+  );
+}
+
+async function notifyOfflineAreaDone(id: string, ok: boolean): Promise<void> {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  for (const client of clients) client.postMessage({ type: "OFFLINE_AREA_DONE", id, ok });
+}
+
+/** Show an app-icon badge so a finished background download is noticeable when
+ * the app is closed/backgrounded. Cleared when the user opens Offline maps. */
+async function badgeOfflineDownloadDone(): Promise<void> {
+  const nav = navigator as unknown as { setAppBadge?: (n?: number) => Promise<void> };
+  if (typeof nav.setAppBadge !== "function") return;
+  try {
+    await nav.setAppBadge(1);
+  } catch {
+    // badging is optional
+  }
+}
+
+/** Copy a Background Fetch's successful responses into the area cache. */
+async function storeBackgroundFetchRecords(reg: BackgroundFetchRegistrationSW): Promise<number> {
+  const cache = await caches.open(`${OFFLINE_AREA_CACHE_PREFIX}${reg.id}`);
+  const records = await reg.matchAll();
+  let stored = 0;
+  await Promise.all(
+    records.map(async (record) => {
+      const response = await record.responseReady.catch(() => null);
+      // Skip 4xx/5xx (e.g. ocean tiles past coverage) — matches the in-page path.
+      if (response?.ok) {
+        await cache.put(record.request, response);
+        stored += 1;
+      }
+    }),
+  );
+  return stored;
+}
+
+self.addEventListener("backgroundfetchsuccess", (event) => {
+  const reg = event.registration;
+  event.waitUntil(
+    (async () => {
+      try {
+        const count = await storeBackgroundFetchRecords(reg);
+        await writeAreaResult(reg.id, { ok: true, downloaded: reg.downloaded, count });
+        await notifyOfflineAreaDone(reg.id, true);
+        await badgeOfflineDownloadDone();
+      } catch (err) {
+        await writeAreaResult(reg.id, {
+          ok: false,
+          reason: (err as Error)?.message ?? "store failed",
+        });
+        await notifyOfflineAreaDone(reg.id, false);
+      }
+    })(),
+  );
+});
+
+self.addEventListener("backgroundfetchfail", (event) => {
+  const reg = event.registration;
+  event.waitUntil(
+    (async () => {
+      // Keep whatever did download so a partial area is still usable.
+      let count = 0;
+      try {
+        count = await storeBackgroundFetchRecords(reg);
+      } catch {
+        // best-effort
+      }
+      await writeAreaResult(reg.id, {
+        ok: false,
+        downloaded: reg.downloaded,
+        count,
+        reason: reg.failureReason || "fetch failed",
+      });
+      await notifyOfflineAreaDone(reg.id, false);
+    })(),
+  );
+});
+
+self.addEventListener("backgroundfetchabort", (event) => {
+  event.waitUntil(writeAreaResult(event.registration.id, { ok: false, reason: "aborted" }));
+});
+
+self.addEventListener("backgroundfetchclick", (event) => {
+  const target = new URL("/settings/offline", self.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const existing = clients.find((c) => c.url.includes("/settings/offline"));
+      if (existing) {
+        await existing.focus();
+        return;
+      }
+      await self.clients.openWindow(target);
     })(),
   );
 });

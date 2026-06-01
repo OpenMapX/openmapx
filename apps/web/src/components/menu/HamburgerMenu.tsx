@@ -13,6 +13,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
 import StorageIcon from "@mui/icons-material/Storage";
 import TranslateIcon from "@mui/icons-material/Translate";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
@@ -28,12 +29,13 @@ import Typography from "@mui/material/Typography";
 import { PANEL, useMenuStore, useSession, useSidebarStore } from "@openmapx/core";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { InstallEntry, IosInstallHintDialog } from "@/components/pwa/InstallEntry";
 import { StorageDialog } from "@/components/settings/StorageDialog";
 import { localeNames, locales } from "@/i18n/config";
 import { shareCurrentUrl } from "@/lib/deepLink";
+import { IMPORT_ACCEPT, importGeoFromFile } from "@/lib/importGeoFile";
 import { setLocaleAndReload } from "@/lib/setLocale";
 
 const DRAWER_WIDTH = 280;
@@ -53,6 +55,17 @@ export function HamburgerMenu() {
   const [authOpen, setAuthOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
   const [iosHintOpen, setIosHintOpen] = useState(false);
+  const [importFailed, setImportFailed] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-importing the same file later
+    if (!file) return;
+    const ok = await importGeoFromFile(file);
+    if (ok) close();
+    else setImportFailed(true);
+  };
 
   const handleSaved = () => {
     close();
@@ -175,6 +188,13 @@ export function HamburgerMenu() {
             <ListItemText primary={t("shareMap")} />
           </ListItemButton>
 
+          <ListItemButton sx={{ height: 48 }} onClick={() => fileInputRef.current?.click()}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <UploadFileIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("importFile")} />
+          </ListItemButton>
+
           <ListItemButton
             sx={{ height: 48, opacity: 0.4, pointerEvents: "none" }}
             aria-disabled="true"
@@ -278,11 +298,25 @@ export function HamburgerMenu() {
           </ListItemButton>
         </List>
       </Drawer>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={IMPORT_ACCEPT}
+        hidden
+        onChange={(e) => void handleImportFile(e)}
+      />
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={2500}
         onClose={() => setSnackbarOpen(false)}
         message={tCommon("copied")}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
+      <Snackbar
+        open={importFailed}
+        autoHideDuration={3500}
+        onClose={() => setImportFailed(false)}
+        message={t("importFailed")}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
