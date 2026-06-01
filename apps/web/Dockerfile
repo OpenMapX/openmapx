@@ -10,6 +10,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
+COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
@@ -33,6 +34,7 @@ COPY --from=deps /app ./
 
 COPY packages/command-palette/ packages/command-palette/
 COPY packages/core/ packages/core/
+COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/i18n/ packages/i18n/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
