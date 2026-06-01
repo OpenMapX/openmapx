@@ -1,6 +1,6 @@
 {
   "name": "@openmapx/core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Platform-agnostic business logic for OpenMapX",
   "type": "module",
   "main": "./src/index.ts",
