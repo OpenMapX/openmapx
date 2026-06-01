@@ -1,0 +1,254 @@
+import { haversineKm } from "@openmapx/core/server";
+import { withAffiliate } from "../affiliate.js";
+import { enc, foldDiacritics, term } from "../slug.js";
+import type { DeliveryProvider, DeliveryProviderConfig, DeliveryQuery } from "../types.js";
+
+/** English country names, used only inside the Uber Eats `pl` location blob. */
+const COUNTRY_NAMES: Record<string, string> = {
+  de: "Germany",
+  at: "Austria",
+  us: "United States",
+  ca: "Canada",
+  gb: "United Kingdom",
+  ie: "Ireland",
+  fr: "France",
+  es: "Spain",
+  it: "Italy",
+  pt: "Portugal",
+  be: "Belgium",
+  nl: "Netherlands",
+  pl: "Poland",
+  se: "Sweden",
+  jp: "Japan",
+  au: "Australia",
+  nz: "New Zealand",
+  za: "South Africa",
+  mx: "Mexico",
+  br: "Brazil",
+  cl: "Chile",
+  in: "India",
+};
+
+/**
+ * Build the Uber Eats delivery-location object. Verified empirically: only the
+ * coordinates plus a free-text address are needed — the Google-Places
+ * `reference` may be left empty — so it can be constructed from OSM data alone
+ * (no Places API). Used both as the base64 `pl` URL param and as the `uev2.loc`
+ * cookie value for the server-side store resolver below.
+ */
+function buildUberEatsLocation(q: DeliveryQuery): object | null {
+  if (typeof q.lat !== "number" || typeof q.lng !== "number") return null;
+  const address1 = (q.address?.split(",")[0] ?? q.city ?? "").trim();
+  const subtitle = q.address ?? [q.postcode, q.city].filter(Boolean).join(" ").trim();
+  return {
+    address: {
+      address1,
+      address2: subtitle,
+      aptOrSuite: "",
+      city: q.city ?? "",
+      country: q.countryCode ? (COUNTRY_NAMES[q.countryCode] ?? "") : "",
+      postalCode: q.postcode ?? "",
+      region: "",
+      subtitle,
+      title: address1 || (q.city ?? ""),
+      uuid: "",
+    },
+    latitude: q.lat,
+    longitude: q.lng,
+    reference: "",
+    referenceType: "google_places",
+    type: "google_places",
+    source: "manual_auto_complete",
+  };
+}
+
+/** base64 `pl` URL param carrying the delivery location. */
+function buildUberEatsPl(q: DeliveryQuery): string | null {
+  const loc = buildUberEatsLocation(q);
+  return loc ? Buffer.from(JSON.stringify(loc), "utf8").toString("base64") : null;
+}
+
+const UBEREATS_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const UBEREATS_RESOLVE_TIMEOUT_MS = 6000;
+
+interface UberFeedItem {
+  type?: string;
+  store?: {
+    actionUrl?: string;
+    title?: { text?: string };
+    mapMarker?: { latitude?: number; longitude?: number };
+  };
+}
+interface UberFeedResponse {
+  data?: { feedItems?: UberFeedItem[] };
+}
+
+/**
+ * Max distance (km) between the queried restaurant and a candidate store's map
+ * marker for it to count as "the same place". Chain branches in a city sit well
+ * over 1 km apart, so this reliably distinguishes the exact branch from a
+ * different one while tolerating OSM-vs-Uber coordinate noise. Beyond it, we
+ * assume the actual restaurant isn't on Uber Eats and fall back to the
+ * location-scoped feed URL rather than linking a wrong branch.
+ */
+const UBEREATS_MAX_MATCH_KM = 1;
+
+/** Lowercase, strip diacritics, collapse non-alphanumerics — for name matching. */
+function normalizeName(s: string): string {
+  return foldDiacritics(s)
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function toUberStoreUrl(actionUrl: string, countryCode?: string): string {
+  const path = actionUrl.split("?")[0];
+  const cc = countryCode ?? "us";
+  const prefix = cc === "us" ? "" : `/${cc}`;
+  return `https://www.ubereats.com${prefix}${path}`;
+}
+
+/**
+ * Resolve a restaurant to its exact Uber Eats `/store/<slug>/<uuid>` page — the
+ * same canonical URL "Order with Google" links to, which works for logged-out
+ * users (unlike the `?pl=` feed URL, which Uber gates behind an address wall).
+ * Sets the delivery location as the `uev2.loc` cookie and queries Uber Eats'
+ * (undocumented) `getFeedV1` endpoint, then among the name-matching stores picks
+ * the one whose map marker is closest to the queried coordinates (chains have
+ * many same-named branches in a city, so first-match is not enough). Returns
+ * null when the nearest match is farther than {@link UBEREATS_MAX_MATCH_KM} —
+ * i.e. this exact restaurant likely isn't on Uber Eats — so the caller falls
+ * back to {@link buildUberEatsPl} rather than linking a wrong branch.
+ *
+ * This is the one place we call a platform's internal API rather than pure
+ * deep-linking — justified because it yields the precise store page Google
+ * itself uses, is a single cached server-side request to a fixed host, and
+ * degrades gracefully. See docs/plans/restaurant-menus-and-delivery.md.
+ */
+async function resolveUberEatsStoreUrl(q: DeliveryQuery): Promise<string | null> {
+  const loc = buildUberEatsLocation(q);
+  if (!loc) return null;
+  const cc = q.countryCode ?? "us";
+  try {
+    const res = await fetch(`https://www.ubereats.com/_p/api/getFeedV1?localeCode=${enc(cc)}`, {
+      method: "POST",
+      signal: AbortSignal.timeout(UBEREATS_RESOLVE_TIMEOUT_MS),
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": "x",
+        "accept-language": cc,
+        "user-agent": UBEREATS_UA,
+        cookie: `uev2.loc=${encodeURIComponent(JSON.stringify(loc))}`,
+      },
+      body: JSON.stringify({
+        userQuery: q.name,
+        pageInfo: { offset: 0, pageSize: 80 },
+        diningMode: "DELIVERY",
+        source: "manual",
+      }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as UberFeedResponse;
+    const items = json.data?.feedItems;
+    if (!Array.isArray(items)) return null;
+    const target = normalizeName(q.name);
+    if (!target) return null;
+
+    // Collect every name-matching store with a usable /store/ URL.
+    const matches: Array<{ url: string; lat?: number; lng?: number }> = [];
+    for (const it of items) {
+      if (it.type !== "REGULAR_STORE") continue;
+      const url = it.store?.actionUrl;
+      if (typeof url !== "string" || !url.startsWith("/store/")) continue;
+      const title = normalizeName(it.store?.title?.text ?? "");
+      if (title && (title.includes(target) || target.includes(title))) {
+        matches.push({
+          url,
+          lat: it.store?.mapMarker?.latitude,
+          lng: it.store?.mapMarker?.longitude,
+        });
+      }
+    }
+    if (matches.length === 0) return null;
+
+    // Disambiguate same-named branches by proximity to the queried coordinates.
+    const ranked = matches
+      .map((m) => ({
+        url: m.url,
+        km:
+          typeof m.lat === "number" && typeof m.lng === "number"
+            ? haversineKm(q.lat as number, q.lng as number, m.lat, m.lng)
+            : Number.POSITIVE_INFINITY,
+      }))
+      .sort((a, b) => a.km - b.km);
+
+    const best = ranked[0];
+    // If no candidate has marker coords, ranked distances are all Infinity →
+    // fall back to the first match (best we can do without location signal).
+    if (!Number.isFinite(best.km)) return toUberStoreUrl(matches[0].url, cc);
+    // Reject a too-far nearest match: the real branch isn't listed.
+    if (best.km > UBEREATS_MAX_MATCH_KM) return null;
+    return toUberStoreUrl(best.url, cc);
+  } catch {
+    return null;
+  }
+}
+
+/** Append the operator's Impact click id (`scid`) when configured. */
+function appendScid(url: string, config: DeliveryProviderConfig): string {
+  const scid = config.uberEatsScid?.trim();
+  if (!scid) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}scid=${enc(scid)}`;
+}
+
+export const uberEatsProvider: DeliveryProvider = {
+  id: "ubereats",
+  name: "Uber Eats",
+  homepage: "https://www.ubereats.com/",
+  color: "#06C167",
+  regions: [
+    "us",
+    "ca",
+    "gb",
+    "ie",
+    "fr",
+    "es",
+    "it",
+    "pt",
+    "de",
+    "at",
+    "be",
+    "nl",
+    "pl",
+    "se",
+    "jp",
+    "au",
+    "nz",
+    "tw",
+    "za",
+    "ke",
+    "ng",
+    "mx",
+    "br",
+    "cl",
+    "ae",
+    "sa",
+    "in",
+  ],
+  build(q, config) {
+    const cc = q.countryCode ?? "us";
+    const prefix = cc === "us" ? "" : `/${cc}`;
+    const pl = buildUberEatsPl(q);
+    const url = pl
+      ? `https://www.ubereats.com${prefix}/feed?diningMode=DELIVERY&pl=${enc(pl)}&q=${enc(q.name)}`
+      : `https://www.ubereats.com${prefix}/search?q=${term(q)}`;
+    return withAffiliate("ubereats", appendScid(url, config), config);
+  },
+  // Resolve the precise /store/ page server-side; everyone else relies on
+  // build()'s location-scoped deep link.
+  async resolve(q, config) {
+    const url = await resolveUberEatsStoreUrl(q);
+    if (!url) return null;
+    return withAffiliate("ubereats", appendScid(url, config), config);
+  },
+};

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getDeliveryProvider, providerServes } from "./providers.js";
-import type { DeliveryProviderConfig, DeliveryQuery } from "./types.js";
+import type { DeliveryProviderConfig, DeliveryQuery } from "../types.js";
+import { getDeliveryProvider, providerServes } from "./index.js";
 
 const NO_CONFIG: DeliveryProviderConfig = {};
 
@@ -106,5 +106,35 @@ describe("food-delivery deep-link builders", () => {
       const url = build(id, { name: "Test Place", city: "Test City", countryCode: "xx" });
       expect(url).not.toContain("/search?q=");
     }
+  });
+
+  it("wolt city-scopes via the alpha-3 country path", () => {
+    expect(build("wolt", { name: "Burgermeister", city: "Berlin", countryCode: "de" })).toBe(
+      "https://wolt.com/en/deu/berlin/search?q=Burgermeister",
+    );
+  });
+
+  it("uber eats builds the location-feed URL and appends the operator scid", () => {
+    const q: DeliveryQuery = {
+      name: "Joe's Pizza",
+      city: "New York",
+      countryCode: "us",
+      lat: 40.73,
+      lng: -74,
+    };
+    const base = prov("ubereats").build(q, NO_CONFIG);
+    expect(base.startsWith("https://www.ubereats.com/feed?diningMode=DELIVERY&pl=")).toBe(true);
+    const withScid = prov("ubereats").build(q, { uberEatsScid: "abc123" });
+    expect(withScid).toContain("&scid=abc123");
+  });
+
+  it("wraps the final URL in an operator affiliate template", () => {
+    const url = prov("rappi").build(
+      { name: "X", countryCode: "mx" },
+      { affiliateTemplates: { rappi: "https://aff.example/?u={url}" } },
+    );
+    expect(url).toBe(
+      `https://aff.example/?u=${encodeURIComponent("https://www.rappi.com.mx/search?query=X")}`,
+    );
   });
 });

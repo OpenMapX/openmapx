@@ -1,6 +1,6 @@
 import { bareDomain, type DeliveryProviderInfo } from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { DELIVERY_PROVIDERS, getDeliveryProvider, providerServes } from "./providers.js";
+import { DELIVERY_PROVIDERS, getDeliveryProvider, providerServes } from "./providers/index.js";
 import { parseDeliveryQuery } from "./query.js";
 import type { DeliveryProvider, DeliveryProviderConfig, DeliveryQuery } from "./types.js";
 
