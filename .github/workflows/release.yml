@@ -11,14 +11,20 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# Only what changesets needs: push the version commit/tags + GitHub releases
+# (contents) and open the "Version Packages" PR (pull-requests). No id-token —
+# npm publish/OIDC provenance is disabled.
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 jobs:
   release:
     name: Version / publish
+    # workflow_dispatch lets a caller pick any ref, so refuse to run this
+    # privileged job (contents/PR write + checkout + install) on anything but
+    # main — a malicious branch can't use it to execute code with write scope.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
