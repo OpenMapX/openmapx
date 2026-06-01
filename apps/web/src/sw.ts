@@ -134,7 +134,17 @@ const serwist = new Serwist({
   // and posts SKIP_WAITING when the user accepts the reload.
   skipWaiting: false,
   clientsClaim: true,
-  navigationPreload: true,
+  // Navigation preload is DISABLED on purpose. With it enabled, Firefox (incl.
+  // Firefox Android) surfaces the *failed* preload network request as the
+  // navigation result when offline — even though this SW answers from cache via
+  // respondWith — so an installed PWA shows the browser's "Unable to connect" /
+  // "Address not found" page on cold launch instead of the cached app. It only
+  // bites top-level navigations (launch/reload), which is why warm in-app use
+  // works but a cold reopen doesn't, and why reloading doesn't help. Chromium
+  // handles preload correctly (Brave/Chrome launch offline fine), but for
+  // offline parity on Firefox we forgo the preload optimization entirely.
+  // See https://github.com/GoogleChrome/workbox/issues/3134.
+  navigationPreload: false,
   runtimeCaching: [
     // Auth — never cache. Always go to network. Failures must surface to UI.
     {
@@ -319,18 +329,24 @@ self.addEventListener("message", (event) => {
   }
 });
 
-// Clean up older app-shell caches when activating a new SW.
+// On activation: turn navigation preload OFF and clean up older app-shell
+// caches. Serwist only ever *enables* preload, so a registration that an
+// earlier SW switched on would otherwise stay on for this origin even after we
+// set `navigationPreload: false` above — actively disable it so Firefox stops
+// breaking offline cold launches. See the config note + workbox#3134.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((k) => k.startsWith("app-shell-") && k !== APP_SHELL_CACHE)
-            .map((k) => caches.delete(k)),
-        ),
-      ),
+    (async () => {
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.disable();
+      }
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith("app-shell-") && k !== APP_SHELL_CACHE)
+          .map((k) => caches.delete(k)),
+      );
+    })(),
   );
 });
 
