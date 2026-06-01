@@ -79,7 +79,7 @@ importers:
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
         specifier: ^2.9.2
-        version: 2.9.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -546,7 +546,7 @@ importers:
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
         specifier: ^2.9.2
-        version: 2.9.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -750,7 +750,7 @@ importers:
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
         specifier: ^2.9.2
-        version: 2.9.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -1281,7 +1281,7 @@ importers:
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
         specifier: ^2.9.2
-        version: 2.9.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -1704,7 +1704,7 @@ importers:
         version: link:../hey-api-client-fetch
       '@motis-project/motis-client':
         specifier: ^2.9.2
-        version: 2.9.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../core
@@ -2968,8 +2968,8 @@ packages:
   '@maplibre/vt-pbf@4.3.0':
     resolution: {integrity: sha512-jIvp8F5hQCcreqOOpEt42TJMUlsrEcpf/kI1T2v85YrQRV6PPXUcEXUg5karKtH6oh47XJZ4kHu56pUkOuqA7w==}
 
-  '@motis-project/motis-client@2.9.2':
-    resolution: {integrity: sha512-QOqRq9LpirRpXZbGbr18mRa7mgke14J6F1ZJpyG7iEcuWMbrFfI7j1EumRz6QDni40esymqyFEbZF7fMayV8BQ==}
+  '@motis-project/motis-client@2.10.2':
+    resolution: {integrity: sha512-6HSznDh+iHDxPZXGRG5L8gHXztiTa9Zr+/ZPzOf9wc3JeYQHYlSh5SnUpMrhEch03fQ82EdnQkZ444i3hOW7SQ==}
 
   '@mui/core-downloads-tracker@9.0.1':
     resolution: {integrity: sha512-GzamIIhZ1bH77dq7eKaeyRgJdkypsxin4jBFq2EMs4lBWRR0LFO1CSVMsoebn/VvjcNrnrOrjy48MkrkQUK2iw==}
@@ -6667,6 +6667,10 @@ packages:
     resolution: {integrity: sha512-pn99VhoACYR8nFHhxqix+uvsbXineAasWm5ojXoN8xEwK5Kd3/TrhNn1wByuD52UxWRLy8pu+kRMniEi6Eq9Zg==}
     engines: {node: '>=12.0.0'}
 
+  tinyglobby@0.2.17:
+    resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
+    engines: {node: '>=12.0.0'}
+
   tinyqueue@1.2.3:
     resolution: {integrity: sha512-Qz9RgWuO9l8lT+Y9xvbzhPT2efIUIFd69N7eF7tJ9lnQl0iLj1M7peK7IoUGZL9DJHw9XftqLreccfxcQgYLxA==}
 
@@ -8142,7 +8146,7 @@ snapshots:
       pbf: 4.0.1
       supercluster: 8.0.1
 
-  '@motis-project/motis-client@2.9.2':
+  '@motis-project/motis-client@2.10.2':
     dependencies:
       '@hey-api/client-fetch': link:packages/hey-api-client-fetch
 
@@ -11723,6 +11727,11 @@ snapshots:
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
 
+  tinyglobby@0.2.17:
+    dependencies:
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
+
   tinyqueue@1.2.3: {}
 
   tinyqueue@2.0.3: {}
@@ -11879,7 +11888,7 @@ snapshots:
       picomatch: 4.0.4
       postcss: 8.5.15
       rolldown: 1.0.0-rc.17
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 25.9.1
       esbuild: 0.28.0
