@@ -15,9 +15,15 @@ interface Props {
   placeName: string;
   onClose?: () => void;
   onViewPhotos: () => void;
+  /**
+   * Called when the hero image fails to load (e.g. the proxy rejects a
+   * non-allowlisted OSM `image=` host). The parent drops the URL so the layout
+   * falls back to the no-photo arrangement rather than leaving an empty hero.
+   */
+  onPhotoError?: (url: string) => void;
 }
 
-export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos }: Props) {
+export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPhotoError }: Props) {
   const tc = useTranslations("common");
   const tp = useTranslations("photoGallery");
   const photo = photos[0];
@@ -49,10 +55,7 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos }: Pro
           component="img"
           src={photoUrl}
           alt={placeName}
-          onError={(e) => {
-            const container = (e.currentTarget as HTMLImageElement).parentElement?.parentElement;
-            if (container) container.style.display = "none";
-          }}
+          onError={() => onPhotoError?.(photo.url)}
           sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
 

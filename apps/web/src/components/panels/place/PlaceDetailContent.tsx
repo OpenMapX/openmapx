@@ -44,6 +44,12 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   const locale = useLocale();
   const [tab, setTab] = useState(0);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  // Hero photos whose <img> failed to load — e.g. an OSM `image=` tag pointing
+  // at a host the image-proxy doesn't allow (→ 403). Dropping them lets the
+  // hero fall through to the next candidate and ultimately to the no-photo
+  // layout, instead of keeping the photo-mode top spacing with an empty hero
+  // (which hides the title behind the floating search bar).
+  const [failedHeroUrls, setFailedHeroUrls] = useState<Set<string>>(new Set());
   const [showDepartures, setShowDepartures] = useState(false);
   const [departuresModeFilter, setDeparturesModeFilter] = useState<TransportMode | null>(null);
   const [selectedRoute, setSelectedRoute] = useState<MergedRoute | null>(null);
@@ -69,6 +75,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   useEffect(() => {
     setTab(0);
     setGalleryOpen(false);
+    setFailedHeroUrls(new Set());
     setShowDepartures(false);
     setDeparturesModeFilter(null);
     setSelectedRoute(null);
@@ -102,10 +109,14 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
         ? { rating: place.rating, count: place.reviewCount ?? 0 }
         : null;
   const placePhotos = place.photos ?? [];
+  // Skip photos that already failed to load so the hero advances through any
+  // remaining candidates and, when none load, falls back to the no-photo layout.
+  const viableHeroPhotos = placePhotos.filter((p) => !failedHeroUrls.has(p.url));
   const hasPhoto =
     !isStopMode &&
-    placePhotos.length > 0 &&
-    (placePhotos[0].url.startsWith("https://") || placePhotos[0].url.startsWith("http://"));
+    viableHeroPhotos.length > 0 &&
+    (viableHeroPhotos[0].url.startsWith("https://") ||
+      viableHeroPhotos[0].url.startsWith("http://"));
   // When a photo hero is rendered as the first child, let the mobile sheet's
   // drag pill float over it so the image reaches the rounded sheet corners.
   // No-op on desktop and when no photo is available. Must be called before
@@ -224,10 +235,17 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
       {/* Header photo with "View photos" */}
       {hasPhoto ? (
         <PlacePhotoHero
-          photos={placePhotos}
+          photos={viableHeroPhotos}
           placeName={place.name}
           onClose={onClose}
           onViewPhotos={() => setGalleryOpen(true)}
+          onPhotoError={(url) =>
+            setFailedHeroUrls((prev) => {
+              const next = new Set(prev);
+              next.add(url);
+              return next;
+            })
+          }
         />
       ) : null}
       {/* Photo gallery modal */}
