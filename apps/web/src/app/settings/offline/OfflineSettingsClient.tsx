@@ -33,6 +33,7 @@ import {
   removeArea,
   saveArea,
 } from "@/lib/offlineAreas";
+import { requestPersistentStorage } from "@/lib/persistentStorage";
 import { formatBytes } from "@/lib/storageFormat";
 import { AreaPickerMap } from "./AreaPickerMap";
 
@@ -247,6 +248,13 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
     if (!bbox) return;
     setError(null);
     setDownloading(true);
+
+    // Keep this area safe from eviction before writing anything. Without
+    // persistent storage the browser (notably Firefox Android) can reclaim the
+    // whole origin between sessions, taking the downloaded tiles — and the
+    // offline app itself — with it. Best-effort: never block the download on it.
+    await requestPersistentStorage();
+
     const id = crypto.randomUUID();
     const styleKey = env.styleProvider === "openmapx" ? "openmapx" : "maptiler:multi";
 

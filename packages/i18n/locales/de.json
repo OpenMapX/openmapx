@@ -1111,6 +1111,10 @@
     "clearRecentMapDataDescription": "Entfernt gespeicherte kürzliche Suchanfragen, Routen, Koordinaten und API-Antwort-Caches von diesem Gerät.",
     "clearTiles": "Zwischengespeicherte Kacheln löschen",
     "clearTilesDescription": "Entfernt alle automatisch zwischengespeicherten Kartenkacheln. Deine heruntergeladenen Offline-Bereiche bleiben erhalten.",
+    "persistentStorageTitle": "Offline-Speicher schützen",
+    "persistentStorageOn": "Geschützt – der Browser löscht deine heruntergeladenen Bereiche und die Offline-App nicht zwischen Sitzungen.",
+    "persistentStorageOff": "Nicht geschützt – bei wenig Speicher kann der Browser zwischengespeicherte Kacheln, heruntergeladene Bereiche und die Offline-App löschen. Dann lässt sich die App offline nicht mehr öffnen.",
+    "enablePersistentStorage": "Offline-Speicher schützen",
     "back": "Zurück zur Karte"
   },
   "pwa": {

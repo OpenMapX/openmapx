@@ -17,6 +17,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
 import {
+  isStoragePersisted,
+  persistentStorageSupported,
+  requestPersistentStorage,
+} from "@/lib/persistentStorage";
+import {
   clearRecentMapDataCache,
   getStoredQueryCacheBytes,
   isRecentMapDataCacheEnabled,
@@ -128,11 +133,18 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [recentMapDataCacheEnabled, setRecentMapDataCacheEnabledState] = useState(false);
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+  const persistSupported = persistentStorageSupported();
 
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      setInfo(await inspectStorage(t as unknown as (key: string) => string));
+      const [storageInfo, isPersisted] = await Promise.all([
+        inspectStorage(t as unknown as (key: string) => string),
+        isStoragePersisted(),
+      ]);
+      setInfo(storageInfo);
+      setPersisted(isPersisted);
     } finally {
       setBusy(false);
     }
@@ -164,6 +176,16 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
       });
       queryClient.removeQueries({ predicate: (query) => isRecentMapDataQueryKey(query.queryKey) });
       await clearRecentMapDataCache();
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleEnablePersist = async () => {
+    setBusy(true);
+    try {
+      await requestPersistentStorage();
       await refresh();
     } finally {
       setBusy(false);
@@ -232,6 +254,22 @@ export function StorageDialog({ open, onClose }: { open: boolean; onClose: () =>
               })}
             </Typography>
             <LinearProgress variant="determinate" value={info.total.percent} />
+          </Box>
+        ) : null}
+
+        {persistSupported && persisted !== null ? (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              {t("persistentStorageTitle")}
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary", mb: persisted ? 0 : 1 }}>
+              {persisted ? t("persistentStorageOn") : t("persistentStorageOff")}
+            </Typography>
+            {persisted ? null : (
+              <Button variant="outlined" size="small" onClick={handleEnablePersist} disabled={busy}>
+                {t("enablePersistentStorage")}
+              </Button>
+            )}
           </Box>
         ) : null}
 

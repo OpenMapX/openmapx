@@ -1111,6 +1111,10 @@
     "clearRecentMapDataDescription": "Removes persisted recent searches, routes, coordinates, and API response caches from this device.",
     "clearTiles": "Clear cached tiles",
     "clearTilesDescription": "Removes all map tiles cached on the fly. Your downloaded offline areas are kept.",
+    "persistentStorageTitle": "Offline storage protection",
+    "persistentStorageOn": "Protected — the browser won't evict your downloaded areas or the offline app between sessions.",
+    "persistentStorageOff": "Not protected — the browser may delete cached tiles, downloaded areas, and the offline app when storage runs low. This can stop the app from opening offline.",
+    "enablePersistentStorage": "Protect offline storage",
     "back": "Back to map"
   },
   "pwa": {
