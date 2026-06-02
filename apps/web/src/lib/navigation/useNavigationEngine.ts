@@ -8,7 +8,7 @@ import {
   type VoiceCue,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
 import { useNavigationVoice } from "./useNavigationVoice";
@@ -76,8 +76,10 @@ export function useNavigationEngine(): void {
         const waypoints = [from, ...destinationWaypoints.slice(1)];
         fetchDirections({ waypoints, mode, lang: locale })
           .then((res) => {
-            // Bail out if navigation was stopped while the reroute was in flight.
-            if (useNavigationStore.getState().status === "idle") return;
+            // Bail out if navigation ended (stopped or arrived) while the
+            // reroute was in flight — otherwise we'd resurrect a finished trip.
+            const st = useNavigationStore.getState().status;
+            if (st === "idle" || st === "arrived") return;
             const next = res.routes?.[res.activeRouteIndex ?? 0];
             if (next) {
               tickRef.current = freshTick();
@@ -87,7 +89,8 @@ export function useNavigationEngine(): void {
             }
           })
           .catch(() => {
-            if (useNavigationStore.getState().status === "idle") return;
+            const st = useNavigationStore.getState().status;
+            if (st === "idle" || st === "arrived") return;
             useNavigationStore.setState({ status: "navigating" });
           })
           .finally(() => {
@@ -97,6 +100,15 @@ export function useNavigationEngine(): void {
     },
     [locale, speakCue],
   );
+
+  // Reset per-session tick state (spoken cues + deviation history) whenever the
+  // active route changes — a fresh start or an applied reroute — so a second
+  // navigation session doesn't inherit the previous one's spoken-cue keys.
+  const activeRoute = useNavigationStore((s) => s.route);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on route identity, not tickRef.
+  useEffect(() => {
+    tickRef.current = freshTick();
+  }, [activeRoute]);
 
   const active = useNavigationStore((s) => s.status !== "idle" && s.status !== "arrived");
   useWatchPosition(active, onFix);

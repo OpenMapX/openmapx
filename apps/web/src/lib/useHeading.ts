@@ -17,19 +17,29 @@ export function useHeading(active: boolean): number | null {
 
   useEffect(() => {
     if (!active || !hasCapability("deviceOrientation")) return;
-    const onOrient = (raw: Event) => {
-      const e = raw as CompassEvent;
+    // Once the absolute event fires we ignore the relative `deviceorientation`
+    // fallback, so devices that support both don't double-fire setHeading.
+    let absoluteSeen = false;
+    const apply = (e: CompassEvent) => {
       if (typeof e.webkitCompassHeading === "number") {
         setHeading(e.webkitCompassHeading);
       } else if (typeof e.alpha === "number") {
         setHeading((360 - e.alpha) % 360);
       }
     };
-    window.addEventListener("deviceorientationabsolute", onOrient as EventListener);
-    window.addEventListener("deviceorientation", onOrient as EventListener);
+    const onAbsolute = (raw: Event) => {
+      absoluteSeen = true;
+      apply(raw as CompassEvent);
+    };
+    const onRelative = (raw: Event) => {
+      if (absoluteSeen) return;
+      apply(raw as CompassEvent);
+    };
+    window.addEventListener("deviceorientationabsolute", onAbsolute as EventListener);
+    window.addEventListener("deviceorientation", onRelative as EventListener);
     return () => {
-      window.removeEventListener("deviceorientationabsolute", onOrient as EventListener);
-      window.removeEventListener("deviceorientation", onOrient as EventListener);
+      window.removeEventListener("deviceorientationabsolute", onAbsolute as EventListener);
+      window.removeEventListener("deviceorientation", onRelative as EventListener);
     };
   }, [active]);
 

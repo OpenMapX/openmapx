@@ -35,4 +35,18 @@ export function useFollowCamera(map: maplibregl.Map | null): void {
       { programmatic: true },
     );
   }, [map, status, cameraMode, progress, mode]);
+
+  // A user pan/rotate gesture drops follow mode; the RecenterFab restores it.
+  // `dragstart`/`rotatestart` only fire from user interaction (programmatic
+  // easeTo emits movestart, not dragstart), so no programmatic-flag check is needed.
+  useEffect(() => {
+    if (!map || status === "idle") return;
+    const onUserGesture = () => useNavigationStore.getState().setCameraMode("free");
+    map.on("dragstart", onUserGesture);
+    map.on("rotatestart", onUserGesture);
+    return () => {
+      map.off("dragstart", onUserGesture);
+      map.off("rotatestart", onUserGesture);
+    };
+  }, [map, status]);
 }

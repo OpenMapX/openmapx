@@ -5,6 +5,7 @@
     "done": "Fertig",
     "arrived": "Sie haben Ihr Ziel erreicht",
     "recenter": "Zentrieren",
+    "eta": "Ankunft {time}",
     "in": "In {distance}",
     "now": "Jetzt",
     "rerouting": "Route wird neu berechnet…",

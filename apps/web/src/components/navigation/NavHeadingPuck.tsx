@@ -57,7 +57,7 @@ export function NavHeadingPuck({ heading }: { heading: number | null }) {
     const map = mapRef.current;
     const marker = markerRef.current;
     if (!map || !marker) return;
-    if (status === "idle" || !progress) {
+    if (status === "idle" || status === "arrived" || !progress) {
       marker.remove();
       return;
     }

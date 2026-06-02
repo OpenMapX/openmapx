@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("next-intl", () => ({ useTranslations: () => (k: string) => k }));
+vi.mock("next-intl", () => ({
+  useTranslations: () => (k: string) => k,
+  useLocale: () => "en",
+}));
 vi.mock("@openmapx/core", () => ({
   formatDistance: (m: number) => `${m} m`,
   formatDuration: (s: number) => `${s}s`,

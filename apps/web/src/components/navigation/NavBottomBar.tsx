@@ -8,7 +8,7 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { formatDistance, formatDuration } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 interface Props {
   distanceRemaining: number;
@@ -23,11 +23,17 @@ interface Props {
 export function NavBottomBar({
   distanceRemaining,
   durationRemaining,
+  etaEpochMs,
   voiceEnabled,
   onToggleVoice,
   onEnd,
 }: Props) {
   const t = useTranslations("navigation");
+  const locale = useLocale();
+  const etaTime = new Date(etaEpochMs).toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return (
     <Box
       sx={{
@@ -42,7 +48,7 @@ export function NavBottomBar({
       <Box sx={{ flexGrow: 1 }}>
         <Typography variant="h6">{formatDuration(durationRemaining)}</Typography>
         <Typography variant="body2" color="text.secondary">
-          {formatDistance(distanceRemaining)}
+          {formatDistance(distanceRemaining)} · {t("eta", { time: etaTime })}
         </Typography>
       </Box>
       <IconButton
