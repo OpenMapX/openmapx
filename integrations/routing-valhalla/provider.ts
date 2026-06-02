@@ -242,6 +242,7 @@ interface ValhallaTraceEdge {
   way_id?: number;
   length?: number; // km
   speed?: number; // km/h
+  speed_limit?: number; // km/h (posted)
   surface?: string;
   names?: string[];
   begin_shape_index?: number;
@@ -267,6 +268,7 @@ const TRACE_ATTRIBUTE_FILTER = [
   "edge.way_id",
   "edge.length",
   "edge.speed",
+  "edge.speed_limit",
   "edge.surface",
   "edge.names",
   "edge.begin_shape_index",
@@ -279,11 +281,14 @@ const TRACE_ATTRIBUTE_FILTER = [
   "shape",
 ] as const;
 
-function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
+export function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
   return {
     wayId: edge.way_id,
     length: (edge.length ?? 0) * 1000, // km -> metres
     speed: edge.speed,
+    // Valhalla returns km/h; absent/0 means unknown — passed through as-is.
+    // The client treats <=0 as null.
+    speedLimit: edge.speed_limit,
     surface: edge.surface,
     names: edge.names,
     beginShapeIndex: edge.begin_shape_index ?? 0,

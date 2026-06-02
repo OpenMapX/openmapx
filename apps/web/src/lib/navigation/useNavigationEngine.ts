@@ -1,7 +1,9 @@
 import {
   type FixInput,
   fetchDirections,
+  fetchSpeedLimit,
   formatMeasurementDistance,
+  type LngLat,
   type NavTickState,
   navOptionsForMode,
   processFix,
@@ -9,6 +11,8 @@ import {
   useSettingsStore,
   type VoiceCue,
 } from "@openmapx/core";
+import along from "@turf/along";
+import { lineString } from "@turf/helpers";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { haptics } from "../haptics";
@@ -29,6 +33,7 @@ export function useNavigationEngine(): void {
 
   const tickRef = useRef<NavTickState>(freshTick());
   const reroutingRef = useRef(false);
+  const lastSpeedFetchRef = useRef(0);
 
   const speakCue = useCallback(
     (cue: VoiceCue) => {
@@ -57,9 +62,34 @@ export function useNavigationEngine(): void {
 
       store.applyProgress(result.progress);
       store.setOffRoute(result.offRoute);
-      // Surface the current step's speed limit (OSRM populates step.speedLimit;
-      // unknown steps clear the badge).
-      store.setSpeedLimit(route.steps[result.progress.currentStepIndex]?.speedLimit ?? null);
+
+      // Speed limit: OSRM populates per-step speedLimit, so prefer that. When
+      // the route lacks it (Valhalla steps carry none), fall back to a
+      // throttled live map-match lookup while driving; walking/cycling clear
+      // the badge.
+      const staticLimit = route.steps[result.progress.currentStepIndex]?.speedLimit ?? null;
+      if (staticLimit !== null) {
+        store.setSpeedLimit(staticLimit);
+      } else if (mode === "driving") {
+        if (fix.timestampMs - lastSpeedFetchRef.current >= 5000) {
+          lastSpeedFetchRef.current = fix.timestampMs;
+          // Build a 2-point trace from the snapped position to a point ~25m
+          // ahead along the route so the matcher snaps to the road we're on.
+          const line = lineString(route.geometry);
+          const ahead = along(line, (result.progress.alongMeters + 25) / 1000, {
+            units: "kilometers",
+          }).geometry.coordinates as LngLat;
+          const trace: LngLat[] = [result.progress.snapped, ahead];
+          fetchSpeedLimit(trace, "driving").then((limit) => {
+            // Ignore if navigation ended while the lookup was in flight.
+            const st = useNavigationStore.getState().status;
+            if (st === "idle" || st === "arrived") return;
+            useNavigationStore.getState().setSpeedLimit(limit);
+          });
+        }
+      } else {
+        store.setSpeedLimit(null);
+      }
 
       if (result.arrived) {
         haptics.success();

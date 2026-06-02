@@ -264,6 +264,9 @@ importers:
       '@tmcw/togeojson':
         specifier: ^7.1.2
         version: 7.1.2
+      '@turf/along':
+        specifier: ^7.3.5
+        version: 7.3.5
       '@turf/area':
         specifier: ^7.3.5
         version: 7.3.5
@@ -3861,6 +3864,9 @@ packages:
     resolution: {integrity: sha512-fOHEsLcqVdFXLw2ApWv4gxwfHzkUnpo9rHGml+9+dyHj148m/Bc+556kEvb5+4u6prI1LMd8zEZE2HcO6Jn2VQ==}
     cpu: [arm64]
     os: [win32]
+
+  '@turf/along@7.3.5':
+    resolution: {integrity: sha512-Ee4AHV9j2Bnlm/5nm4ChY7nkwpaaMffSez9nsJ9HcMbzG+GgTkt0F5pn9d02U7YvuWqckM5lfr3kBI+w2uTz+g==}
 
   '@turf/area@7.3.5':
     resolution: {integrity: sha512-sSn80wPT7XfBIDN3vurCPxhk9W4U8ozS/XImSqeLN8qveTICOxzZkhsGDMp0CuncaN+plWut4a2TdNM7mzZB6Q==}
@@ -8931,6 +8937,16 @@ snapshots:
 
   '@turbo/windows-arm64@2.9.15':
     optional: true
+
+  '@turf/along@7.3.5':
+    dependencies:
+      '@turf/bearing': 7.3.5
+      '@turf/destination': 7.3.5
+      '@turf/distance': 7.3.5
+      '@turf/helpers': 7.3.5
+      '@turf/invariant': 7.3.5
+      '@types/geojson': 7946.0.16
+      tslib: 2.8.1
 
   '@turf/area@7.3.5':
     dependencies:

@@ -138,6 +138,8 @@ export interface MatchEdge {
   length: number;
   /** Posted or modelled speed in km/h. */
   speed?: number;
+  /** Posted speed limit in km/h, when known. */
+  speedLimit?: number;
   /** Surface tag (paved, gravel, dirt, …). */
   surface?: string;
   /** Street names attached to the edge, when known. */

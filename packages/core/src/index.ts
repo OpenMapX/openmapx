@@ -86,6 +86,7 @@ export {
   fetchDirections,
 } from "./api/directions";
 export { API_ENDPOINTS } from "./api/endpoints";
+export { fetchSpeedLimit } from "./api/speedLimit";
 // Auth
 export type { Session, User } from "./auth/client";
 export { type AuthConfig, authClient, initAuth } from "./auth/client";
