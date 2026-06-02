@@ -42,6 +42,7 @@ import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
 import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
 import { NavigationView } from "@/components/navigation/NavigationView";
+import { TransitNavigationView } from "@/components/navigation/TransitNavigationView";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
 import { PanelHost } from "@/components/panels/PanelHost";
 import { ShareIntentHandler } from "@/components/pwa/ShareIntentHandler";
@@ -135,6 +136,7 @@ export default function HomePage() {
           <RouteLayer />
           <NavigationRouteLayer />
           <NavigationView />
+          <TransitNavigationView />
           <FlightArcLayer />
           <TransitRouteLayer />
           <VehicleLiveLayer />

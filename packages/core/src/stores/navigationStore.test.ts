@@ -1,6 +1,17 @@
 import type { Route } from "@integrations/routing/types";
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { TransitProgress } from "../navigation/transitProgress";
 import { useNavigationStore } from "./navigationStore";
+
+const itinerary = {
+  duration: 1800,
+  startTime: "2026-06-01T10:00:00Z",
+  endTime: "2026-06-01T10:30:00Z",
+  transfers: 1,
+  walkDistance: 200,
+  legs: [],
+} as TripItinerary;
 
 const route = {
   distance: 100,
@@ -61,5 +72,66 @@ describe("navigationStore", () => {
     ]);
     store.setCameraMode("free");
     expect(useNavigationStore.getState().cameraMode).toBe("free");
+  });
+
+  it("starts transit navigation and resets ground bits", () => {
+    const store = useNavigationStore.getState();
+    store.startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+    store.startTransitNavigation(itinerary);
+    const s = useNavigationStore.getState();
+    expect(s.status).toBe("navigating");
+    expect(s.kind).toBe("transit");
+    expect(s.itinerary).toBe(itinerary);
+    expect(s.route).toBeNull();
+    expect(s.progress).toBeNull();
+    expect(s.transitProgress).toBeNull();
+  });
+
+  it("applyTransitProgress stores progress", () => {
+    const store = useNavigationStore.getState();
+    store.startTransitNavigation(itinerary);
+    const tp: TransitProgress = {
+      currentLegIndex: 1,
+      snapped: [1, 2],
+      fractionAlongLeg: 0.5,
+      deviationMeters: 12,
+      arrived: false,
+    };
+    store.applyTransitProgress(tp);
+    expect(useNavigationStore.getState().transitProgress).toBe(tp);
+  });
+
+  it("stopNavigation resets kind/itinerary/transitProgress", () => {
+    const store = useNavigationStore.getState();
+    store.startTransitNavigation(itinerary);
+    store.applyTransitProgress({
+      currentLegIndex: 0,
+      snapped: [0, 0],
+      fractionAlongLeg: 0,
+      deviationMeters: 0,
+      arrived: false,
+    });
+    store.stopNavigation();
+    const s = useNavigationStore.getState();
+    expect(s.status).toBe("idle");
+    expect(s.kind).toBe("ground");
+    expect(s.itinerary).toBeNull();
+    expect(s.transitProgress).toBeNull();
+  });
+
+  it("startGroundNavigation resets transit bits", () => {
+    const store = useNavigationStore.getState();
+    store.startTransitNavigation(itinerary);
+    store.startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+    const s = useNavigationStore.getState();
+    expect(s.kind).toBe("ground");
+    expect(s.itinerary).toBeNull();
+    expect(s.transitProgress).toBeNull();
   });
 });

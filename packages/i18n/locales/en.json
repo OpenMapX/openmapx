@@ -14,7 +14,15 @@
     "keepScreenOn": "Keep screen on",
     "voiceUpcoming": "In {distance}, {instruction}",
     "weakGps": "Weak GPS signal",
-    "waitingForGps": "Waiting for GPS signal…"
+    "waitingForGps": "Waiting for GPS signal…",
+    "walkTo": "Walk to {place}",
+    "ride": "{line} to {to}",
+    "nextStop": "Next: {stop}",
+    "alightAt": "Alight at {place}",
+    "alightAtCount": "Alight at {place} · {count, plural, one {# stop} other {# stops}}",
+    "alightSoon": "Get off at the next stop",
+    "legCounter": "Leg {current}/{total}",
+    "arriveAt": "Arrive {time}"
   },
   "common": {
     "close": "Close",

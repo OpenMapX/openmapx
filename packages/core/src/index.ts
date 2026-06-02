@@ -229,6 +229,7 @@ export {
 // Navigation
 export {
   computeProgress,
+  computeTransitProgress,
   eta,
   navOptionsForMode,
   nextVoiceCue,
@@ -236,7 +237,9 @@ export {
   shouldReroute,
   simulatePositions,
   snapToRoute,
+  stopsUntilAlight,
 } from "./navigation";
+export type { TransitProgress } from "./navigation/transitProgress";
 export type {
   CameraMode,
   CueTier,
@@ -281,6 +284,7 @@ export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
 export { useMenuStore } from "./stores/menuStore";
+export type { NavKind } from "./stores/navigationStore";
 export { useNavigationStore } from "./stores/navigationStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";

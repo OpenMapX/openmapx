@@ -5,10 +5,17 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import NavigationIcon from "@mui/icons-material/Navigation";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { formatDistance, formatDuration, useVehicleJourney } from "@openmapx/core";
+import {
+  formatDistance,
+  formatDuration,
+  useNavigationStore,
+  useVehicleJourney,
+} from "@openmapx/core";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
@@ -221,7 +228,9 @@ export function TransitItineraryCard({
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tt = useTranslations("transit");
+  const tNav = useTranslations("navigation");
   const locale = useLocale();
+  const startTransitNavigation = useNavigationStore((s) => s.startTransitNavigation);
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
   const startTime = new Date(itinerary.startTime).toLocaleTimeString(locale, {
@@ -336,7 +345,7 @@ export function TransitItineraryCard({
         </Box>
       )}
       {active && (
-        <Box sx={{ mt: 0.5, ml: -1.5 }}>
+        <Box sx={{ mt: 0.5, ml: -1.5, display: "flex", alignItems: "center", gap: 0.5 }}>
           <Typography
             component="span"
             variant="caption"
@@ -357,6 +366,23 @@ export function TransitItineraryCard({
           >
             {tc("details")}
           </Typography>
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<NavigationIcon />}
+            onClick={(e) => {
+              e.stopPropagation();
+              startTransitNavigation(itinerary);
+            }}
+            sx={{
+              bgcolor: TEAL,
+              textTransform: "none",
+              borderRadius: 99,
+              "&:hover": { bgcolor: TEAL },
+            }}
+          >
+            {tNav("start")}
+          </Button>
         </Box>
       )}
     </Box>

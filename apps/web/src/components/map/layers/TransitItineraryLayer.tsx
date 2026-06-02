@@ -1,7 +1,14 @@
 "use client";
 
-import { API_ENDPOINTS, apiClient, MODE_COLORS, useDirectionsStore } from "@openmapx/core";
+import {
+  API_ENDPOINTS,
+  apiClient,
+  MODE_COLORS,
+  useDirectionsStore,
+  useNavigationStore,
+} from "@openmapx/core";
 import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
+import type { ExpressionSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
@@ -15,6 +22,14 @@ const POINTS_LAYER_ID = "transit-itinerary-points";
 export function TransitItineraryLayer() {
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const { mode, transitItineraries, activeItineraryIndex } = useDirectionsStore();
+
+  // During transit follow-along navigation, dim every leg except the one the
+  // traveller is currently on so the active segment stands out. When not
+  // navigating, all legs render at full opacity (normal itinerary preview).
+  const navActive = useNavigationStore(
+    (s) => s.status !== "idle" && s.status !== "arrived" && s.kind === "transit",
+  );
+  const navLegIndex = useNavigationStore((s) => s.transitProgress?.currentLegIndex ?? 0);
 
   // Refined per-leg geometries fetched lazily from /leg-geometry after the
   // itinerary is selected. Keyed by tripId; replaces stopovers geometry when available.
@@ -85,6 +100,11 @@ export function TransitItineraryLayer() {
 
     cleanup();
 
+    // When following a transit trip, dim non-current legs; otherwise full opacity.
+    const lineOpacity: ExpressionSpecification | number = navActive
+      ? ["case", ["==", ["get", "index"], navLegIndex], 1, 0.3]
+      : 1;
+
     // Build line features for each leg; use refined trip geometry when available
     const lineFeatures = itinerary.legs.map((leg, i) => {
       const isWalk = leg.mode === "walking";
@@ -139,6 +159,7 @@ export function TransitItineraryLayer() {
         "line-color": "#757575",
         "line-width": 4,
         "line-dasharray": [2, 2],
+        "line-opacity": lineOpacity,
       },
       layout: { "line-cap": "round", "line-join": "round" },
     });
@@ -152,6 +173,7 @@ export function TransitItineraryLayer() {
       paint: {
         "line-color": ["get", "color"],
         "line-width": 5,
+        "line-opacity": lineOpacity,
       },
       layout: { "line-cap": "round", "line-join": "round" },
     });
@@ -211,6 +233,8 @@ export function TransitItineraryLayer() {
     activeItineraryIndex,
     fitBounds,
     legGeometries,
+    navActive,
+    navLegIndex,
   ]);
 
   return null;

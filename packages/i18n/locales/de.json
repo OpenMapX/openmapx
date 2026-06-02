@@ -14,7 +14,15 @@
     "keepScreenOn": "Bildschirm anlassen",
     "voiceUpcoming": "In {distance}, {instruction}",
     "weakGps": "Schwaches GPS-Signal",
-    "waitingForGps": "Warte auf GPS-Signal…"
+    "waitingForGps": "Warte auf GPS-Signal…",
+    "walkTo": "Zu Fuß nach {place}",
+    "ride": "{line} nach {to}",
+    "nextStop": "Nächster Halt: {stop}",
+    "alightAt": "Aussteigen an {place}",
+    "alightAtCount": "Aussteigen an {place} · {count, plural, one {noch # Halt} other {noch # Halte}}",
+    "alightSoon": "Am nächsten Halt aussteigen",
+    "legCounter": "Abschnitt {current}/{total}",
+    "arriveAt": "Ankunft {time}"
   },
   "common": {
     "close": "Schließen",
