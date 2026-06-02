@@ -50,12 +50,14 @@
     "@better-auth/passkey": "^1.6.11",
     "@openstreetmap/id-tagging-schema": "^6.17.0",
     "@tanstack/react-query": "^5.100.14",
+    "@turf/helpers": "^7.3.5",
+    "@turf/nearest-point-on-line": "^7.3.5",
     "@types/js-yaml": "^4.0.9",
+    "@types/tz-lookup": "^6.1.2",
     "better-auth": "^1.6.11",
     "js-yaml": "^4.1.1",
     "opening_hours": "^3.12.0",
     "tz-lookup": "^6.1.25",
-    "@types/tz-lookup": "^6.1.2",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"
   }

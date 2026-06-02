@@ -14,11 +14,24 @@ export interface Waypoint {
   type: "origin" | "waypoint" | "destination";
 }
 
+export interface ManeuverLane {
+  /** Allowed turn indications for this lane, e.g. ["straight","slight right"]. */
+  indications: string[];
+  /** Whether this lane is valid for the recommended maneuver. */
+  valid: boolean;
+}
+
 export interface RouteStep {
   instruction: string;
   distance: number;
   duration: number;
   coordinates: LngLat[];
+  /** Normalized maneuver for icon + voice phrasing. Optional — populated when the engine provides it. */
+  maneuver?: { type: string; modifier?: string };
+  /** Speed limit in km/h for this step, when known. */
+  speedLimit?: number;
+  /** Lane guidance at the maneuver, when known. */
+  lanes?: ManeuverLane[];
 }
 
 export interface RouteLeg {

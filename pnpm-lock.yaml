@@ -267,10 +267,16 @@ importers:
       '@turf/area':
         specifier: ^7.3.5
         version: 7.3.5
+      '@turf/bearing':
+        specifier: ^7.3.5
+        version: 7.3.5
       '@turf/helpers':
         specifier: ^7.3.5
         version: 7.3.5
       '@turf/length':
+        specifier: ^7.3.5
+        version: 7.3.5
+      '@turf/line-slice-along':
         specifier: ^7.3.5
         version: 7.3.5
       better-auth:
@@ -1517,6 +1523,12 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.91.3
         version: 5.100.14(react@19.2.6)
+      '@turf/helpers':
+        specifier: ^7.3.5
+        version: 7.3.5
+      '@turf/nearest-point-on-line':
+        specifier: ^7.3.5
+        version: 7.3.5
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -3853,8 +3865,14 @@ packages:
   '@turf/area@7.3.5':
     resolution: {integrity: sha512-sSn80wPT7XfBIDN3vurCPxhk9W4U8ozS/XImSqeLN8qveTICOxzZkhsGDMp0CuncaN+plWut4a2TdNM7mzZB6Q==}
 
+  '@turf/bearing@7.3.5':
+    resolution: {integrity: sha512-/qabIt/IuPsGlE6RukJ0zOirc6afNxoK7fK1WBNVnHuJjeOpSkW+7q1QW5XQGXBMv3odcD0ZgRR+MBiAHduYSA==}
+
   '@turf/boolean-point-in-polygon@7.3.5':
     resolution: {integrity: sha512-ba7+B0wzaS9GtERZOoXUZ6oW8IcIJHNQZf3c+tiD9ESjcsPO1Q/4qIJGTKl92nBLhhracHJxMWBM/U6hAVkaRg==}
+
+  '@turf/destination@7.3.5':
+    resolution: {integrity: sha512-x6ylChhOlIbucRSw7wF6z2gSEqqQl+dE0nSH5AL/ojZkqqGYahiw+2P4A8ZMuDM6rzH+FIqRYDes0o4nSArZCw==}
 
   '@turf/distance@7.3.5':
     resolution: {integrity: sha512-uQAC63zg/l91KUxzfhqio7Ii3+UXTrPOVJScIdRj6EO6+9XHI4kC+AdyIS4cPAv14sZfJLIBxzMnzcGrss+kEA==}
@@ -3868,8 +3886,14 @@ packages:
   '@turf/length@7.3.5':
     resolution: {integrity: sha512-Bi+vEP54wt1ly3BRcCOP0nd2kGTYEhGk6haQxTpkrqr3XtmqDh8c3NowSgseN2cegIZRjwCOEC8eSsZ0JemJdA==}
 
+  '@turf/line-slice-along@7.3.5':
+    resolution: {integrity: sha512-zLOU9mGFXJdbPvA3/zXpDsBmXY2paA7eD6/p0iYiP9OASYO0GDcarwY5K/E0uuEdLrMf8G8YA2cJDcEl9gRgFw==}
+
   '@turf/meta@7.3.5':
     resolution: {integrity: sha512-r+ohqxoyqeigFB0oFrQx/YEHIkOKqcKpCjvZkvZs7Tkv+IFco5MezAd2zd4rzK+0DfFgDP3KpJc7HqrYjvEjhg==}
+
+  '@turf/nearest-point-on-line@7.3.5':
+    resolution: {integrity: sha512-MZn6OkEFZpjS6BNUANfqiHMIbQSivu7TNji3a+OAIrnPJ71vp8cbz0N2aVEa5M7I8ipvxoxAPIV3eqg3h280Vg==}
 
   '@tybys/wasm-util@0.10.2':
     resolution: {integrity: sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg==}
@@ -8915,12 +8939,26 @@ snapshots:
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
+  '@turf/bearing@7.3.5':
+    dependencies:
+      '@turf/helpers': 7.3.5
+      '@turf/invariant': 7.3.5
+      '@types/geojson': 7946.0.16
+      tslib: 2.8.1
+
   '@turf/boolean-point-in-polygon@7.3.5':
     dependencies:
       '@turf/helpers': 7.3.5
       '@turf/invariant': 7.3.5
       '@types/geojson': 7946.0.16
       point-in-polygon-hao: 1.2.4
+      tslib: 2.8.1
+
+  '@turf/destination@7.3.5':
+    dependencies:
+      '@turf/helpers': 7.3.5
+      '@turf/invariant': 7.3.5
+      '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
   '@turf/distance@7.3.5':
@@ -8949,9 +8987,27 @@ snapshots:
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
+  '@turf/line-slice-along@7.3.5':
+    dependencies:
+      '@turf/bearing': 7.3.5
+      '@turf/destination': 7.3.5
+      '@turf/distance': 7.3.5
+      '@turf/helpers': 7.3.5
+      '@types/geojson': 7946.0.16
+      tslib: 2.8.1
+
   '@turf/meta@7.3.5':
     dependencies:
       '@turf/helpers': 7.3.5
+      '@types/geojson': 7946.0.16
+      tslib: 2.8.1
+
+  '@turf/nearest-point-on-line@7.3.5':
+    dependencies:
+      '@turf/distance': 7.3.5
+      '@turf/helpers': 7.3.5
+      '@turf/invariant': 7.3.5
+      '@turf/meta': 7.3.5
       '@types/geojson': 7946.0.16
       tslib: 2.8.1
 
