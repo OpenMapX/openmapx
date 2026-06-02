@@ -21,6 +21,7 @@ import { SpeedLimitBadge } from "./SpeedLimitBadge";
 export function NavigationView() {
   const map = useMapOptional()?.mapRef.current ?? null;
   const status = useNavigationStore((s) => s.status);
+  const kind = useNavigationStore((s) => s.kind);
   const route = useNavigationStore((s) => s.route);
   const progress = useNavigationStore((s) => s.progress);
   const cameraMode = useNavigationStore((s) => s.cameraMode);
@@ -33,7 +34,8 @@ export function NavigationView() {
 
   const units = useSettingsStore((s) => s.units);
   const t = useTranslations("navigation");
-  const active = status !== "idle";
+  // Ground nav only; transit navigation is handled by TransitNavigationView.
+  const active = status !== "idle" && kind === "ground";
 
   useNavigationEngine();
   useFollowCamera(map);
