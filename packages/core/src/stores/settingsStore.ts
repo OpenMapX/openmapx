@@ -11,6 +11,13 @@ function readUnits(): UnitSystem {
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
+  /**
+   * Re-read the persisted preference from storage. The store is created at
+   * module-eval time, which can run before the platform storage adapter is
+   * configured; calling this once on the client (after configuration) ensures
+   * the saved choice is applied instead of the default.
+   */
+  hydrate: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -19,4 +26,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(UNITS_STORAGE_KEY, units);
     set({ units });
   },
+  hydrate: () => set({ units: readUnits() }),
 }));

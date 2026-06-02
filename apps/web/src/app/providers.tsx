@@ -2,7 +2,7 @@
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { configureStorage } from "@openmapx/core";
+import { configureStorage, useSettingsStore } from "@openmapx/core";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -98,6 +98,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void enforceRecentMapDataCachePreference();
+    // Storage is configured at module scope above, but the settings store may
+    // have initialized before that ran; re-read the persisted units preference.
+    useSettingsStore.getState().hydrate();
   }, []);
 
   const inner = (

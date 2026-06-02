@@ -54,7 +54,6 @@ import {
   usePlaceStore,
   useSavedPlacesStore,
   useSearchStore,
-  useSettingsStore,
   useSidebarStore,
 } from "@openmapx/core";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
@@ -357,7 +356,8 @@ function clearPanelState(): void {
   directions.setAvoidHighways(false);
   directions.setAvoidTolls(false);
   directions.setAvoidFerries(false);
-  useSettingsStore.getState().setUnits("metric");
+  // Units is a persisted global preference (settings panel), not deep-link
+  // state — never reset it on navigation, or it would clobber the user's choice.
 
   useMeasurementStore.getState().deactivate();
   useTravelTimeStore.getState().deactivate();
@@ -395,9 +395,7 @@ function applyDirections(parsed: ParsedDeepLink["directions"]): void {
 
   directions.close();
   const mode = oneOf(parsed.mode, DIRECTION_MODES);
-  const units = oneOf(parsed.units, UNIT_SYSTEMS);
   if (mode) directions.setMode(mode);
-  if (units) useSettingsStore.getState().setUnits(units);
   directions.setAvoidHighways(parsed.avoid.includes("highways"));
   directions.setAvoidTolls(parsed.avoid.includes("tolls"));
   directions.setAvoidFerries(parsed.avoid.includes("ferries"));
@@ -519,8 +517,6 @@ function encodeDirections(params: URLSearchParams): void {
 
   params.set("panel", PANEL.DIRECTIONS);
   if (directions.mode !== "driving") params.set("mode", directions.mode);
-  const units = useSettingsStore.getState().units;
-  if (units !== "metric") params.set("units", units);
 
   const avoid = [
     directions.avoidHighways ? "highways" : "",
