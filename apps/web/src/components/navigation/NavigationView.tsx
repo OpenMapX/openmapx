@@ -126,7 +126,7 @@ export function NavigationView() {
             </Box>
 
             {route && (
-              <Box sx={{ pointerEvents: "auto" }}>
+              <Box sx={{ pointerEvents: "auto", mb: 5 }}>
                 <NavBottomBar
                   distanceRemaining={distanceRemaining}
                   durationRemaining={durationRemaining}

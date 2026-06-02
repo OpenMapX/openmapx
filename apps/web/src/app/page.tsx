@@ -174,7 +174,9 @@ export default function HomePage() {
             {/* All legends/toolbars loaded dynamically by LegendHost */}
             <LegendHost />
           </div>
-          <LayerSelector />
+          <HideDuringNavigation>
+            <LayerSelector />
+          </HideDuringNavigation>
           <MapControls />
           <MapFooter />
           <Suspense>
