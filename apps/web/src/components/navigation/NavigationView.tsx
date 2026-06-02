@@ -2,9 +2,9 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { useNavigationStore, useSidebarStore } from "@openmapx/core";
+import { useNavigationStore, useSettingsStore, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useMapOptional } from "@/lib/MapContext";
 import { useFollowCamera } from "@/lib/navigation/useFollowCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
@@ -31,7 +31,7 @@ export function NavigationView() {
   const toggleVoice = useNavigationStore((s) => s.toggleVoice);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
 
-  const [units] = useState<"metric" | "imperial">("metric");
+  const units = useSettingsStore((s) => s.units);
   const t = useTranslations("navigation");
   const active = status !== "idle";
 

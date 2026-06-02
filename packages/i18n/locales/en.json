@@ -12,7 +12,7 @@
     "muteVoice": "Mute voice guidance",
     "unmuteVoice": "Unmute voice guidance",
     "keepScreenOn": "Keep screen on",
-    "voiceUpcoming": "In {distance} meters, {instruction}",
+    "voiceUpcoming": "In {distance}, {instruction}",
     "weakGps": "Weak GPS signal",
     "waitingForGps": "Waiting for GPS signal…"
   },
@@ -1361,6 +1361,9 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System",
+    "units": "Units",
+    "unitsMetric": "Metric (km)",
+    "unitsImperial": "Imperial (mi)",
     "privacy": "Privacy",
     "terms": "Terms",
     "imprint": "Imprint"

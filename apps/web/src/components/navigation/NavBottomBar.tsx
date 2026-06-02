@@ -7,7 +7,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import { formatDistance, formatDuration } from "@openmapx/core";
+import { formatDuration, formatMeasurementDistance } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 
 interface Props {
@@ -27,6 +27,7 @@ export function NavBottomBar({
   voiceEnabled,
   onToggleVoice,
   onEnd,
+  units,
 }: Props) {
   const t = useTranslations("navigation");
   const locale = useLocale();
@@ -48,7 +49,7 @@ export function NavBottomBar({
       <Box sx={{ flexGrow: 1 }}>
         <Typography variant="h6">{formatDuration(durationRemaining)}</Typography>
         <Typography variant="body2" color="text.secondary">
-          {formatDistance(distanceRemaining)} · {t("eta", { time: etaTime })}
+          {formatMeasurementDistance(distanceRemaining, units)} · {t("eta", { time: etaTime })}
         </Typography>
       </Box>
       <IconButton

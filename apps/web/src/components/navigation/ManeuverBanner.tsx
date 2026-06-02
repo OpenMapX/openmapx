@@ -2,7 +2,7 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { formatDistance } from "@openmapx/core";
+import { formatMeasurementDistance } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { maneuverIconFor } from "@/lib/navigation/maneuverIcon";
 
@@ -13,7 +13,7 @@ interface Props {
   units: "metric" | "imperial";
 }
 
-export function ManeuverBanner({ instruction, distanceToManeuver, maneuver }: Props) {
+export function ManeuverBanner({ instruction, distanceToManeuver, maneuver, units }: Props) {
   const t = useTranslations("navigation");
   const Icon = maneuverIconFor(maneuver).component;
   return (
@@ -31,7 +31,7 @@ export function ManeuverBanner({ instruction, distanceToManeuver, maneuver }: Pr
       <Icon sx={{ fontSize: 44 }} />
       <Box>
         <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
-          {t("in", { distance: formatDistance(distanceToManeuver) })}
+          {t("in", { distance: formatMeasurementDistance(distanceToManeuver, units) })}
         </Typography>
         <Typography variant="body1">{instruction}</Typography>
       </Box>

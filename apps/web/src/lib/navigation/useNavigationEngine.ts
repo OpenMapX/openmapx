@@ -1,10 +1,12 @@
 import {
   type FixInput,
   fetchDirections,
+  formatMeasurementDistance,
   type NavTickState,
   navOptionsForMode,
   processFix,
   useNavigationStore,
+  useSettingsStore,
   type VoiceCue,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
@@ -31,10 +33,12 @@ export function useNavigationEngine(): void {
   const speakCue = useCallback(
     (cue: VoiceCue) => {
       const instruction = cue.step.instruction;
+      const units = useSettingsStore.getState().units;
+      const distanceStr = formatMeasurementDistance(cue.distance, units);
       const text =
         cue.tier === "now"
           ? instruction
-          : t("voiceUpcoming", { distance: Math.round(cue.distance), instruction });
+          : t("voiceUpcoming", { distance: distanceStr, instruction });
       speak(text);
     },
     [speak, t],

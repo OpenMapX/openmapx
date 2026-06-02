@@ -12,7 +12,7 @@
     "muteVoice": "Sprachansagen stummschalten",
     "unmuteVoice": "Sprachansagen aktivieren",
     "keepScreenOn": "Bildschirm anlassen",
-    "voiceUpcoming": "In {distance} Metern, {instruction}",
+    "voiceUpcoming": "In {distance}, {instruction}",
     "weakGps": "Schwaches GPS-Signal",
     "waitingForGps": "Warte auf GPS-Signal…"
   },
@@ -1361,6 +1361,9 @@
     "themeLight": "Hell",
     "themeDark": "Dunkel",
     "themeSystem": "System",
+    "units": "Einheiten",
+    "unitsMetric": "Metrisch (km)",
+    "unitsImperial": "Imperial (mi)",
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
     "imprint": "Impressum"

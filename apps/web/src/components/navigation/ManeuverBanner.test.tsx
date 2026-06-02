@@ -5,7 +5,11 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, unknown>) =>
     key === "in" ? `In ${String(values?.distance ?? "")}` : key,
 }));
-vi.mock("@openmapx/core", () => ({ formatDistance: (m: number) => `${m} m` }));
+vi.mock("@openmapx/core", () => ({
+  formatDistance: (m: number) => `${m} m`,
+  formatMeasurementDistance: (m: number, sys: string) =>
+    sys === "imperial" ? `${m} ft` : `${m} m`,
+}));
 
 import { ManeuverBanner } from "./ManeuverBanner";
 

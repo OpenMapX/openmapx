@@ -24,6 +24,7 @@ import {
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
+  useSettingsStore,
   useSidebarStore,
   useTransitPlan,
 } from "@openmapx/core";
@@ -68,7 +69,6 @@ export function DirectionsPanelContent() {
     avoidHighways,
     avoidTolls,
     avoidFerries,
-    units,
     transitItineraries,
     activeItineraryIndex,
     transitDepartureTime,
@@ -86,6 +86,7 @@ export function DirectionsPanelContent() {
     setTransitDepartureTime,
     setTransitArrivalTime,
   } = useDirectionsStore();
+  const units = useSettingsStore((s) => s.units);
 
   const { userLocation } = useMapStore();
   const registry = useIntegrationRegistry();

@@ -1,7 +1,7 @@
 "use client";
 
 import type { LngLat } from "@openmapx/core";
-import { useDirections, useDirectionsStore } from "@openmapx/core";
+import { useDirections, useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/lib/MapContext";
@@ -25,8 +25,8 @@ export function RouteLayer() {
     avoidHighways,
     avoidTolls,
     avoidFerries,
-    units,
   } = useDirectionsStore();
+  const units = useSettingsStore((s) => s.units);
 
   const routeWaypoints = useMemo(
     () =>
