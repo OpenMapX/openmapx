@@ -40,6 +40,7 @@ import { TopRightControls } from "@/components/map/TopRightControls";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
+import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
 import { NavigationView } from "@/components/navigation/NavigationView";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
 import { PanelHost } from "@/components/panels/PanelHost";
@@ -154,16 +155,20 @@ export default function HomePage() {
           <SelectedStopInfrastructureLayer />
           <WaypointMarkers />
           <ElevationHoverMarker />
-          <HamburgerMenu />
-          <SearchBar />
-          <WeatherWidget />
-          <CategoryChips />
-          <CategoryFilterBar />
+          <HideDuringNavigation>
+            <HamburgerMenu />
+            <SearchBar />
+            <WeatherWidget />
+            <CategoryChips />
+            <CategoryFilterBar />
+          </HideDuringNavigation>
           <SearchInAreaChip />
           <ImportedGeometryBanner />
           <PanelHost />
           <MapClickFloatingCard />
-          <TopRightControls />
+          <HideDuringNavigation>
+            <TopRightControls />
+          </HideDuringNavigation>
           <StreetViewViewer />
           <div className="absolute bottom-[calc(1rem+var(--omx-safe-bottom))] left-1/2 -translate-x-1/2 z-10 flex flex-col-reverse items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
             {/* All legends/toolbars loaded dynamically by LegendHost */}
