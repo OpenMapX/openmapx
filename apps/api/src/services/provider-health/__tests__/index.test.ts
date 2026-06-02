@@ -27,12 +27,12 @@ class FakeRedis {
   }
 
   async runCommand(_name: string, args: unknown[]): Promise<string> {
-    // Signature mirrors the script's KEYS/ARGV order:
-    //   [keyCount, key, op, latencyMs, nowIso, reason,
+    // Mirrors ioredis `defineCommand({ numberOfKeys: 1 })`: the method is called
+    // as (key, ...ARGV) — ioredis injects the key count, callers never pass it.
+    //   [key, op, latencyMs, nowIso, reason,
     //    windowSize, cooldownMs, cooldownUntilIso,
     //    threshold, minSampleSize, emaAlpha, ttlSeconds]
     const [
-      ,
       key,
       op,
       latencyMs,

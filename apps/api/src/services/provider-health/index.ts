@@ -175,7 +175,6 @@ function annotate(state: ProviderHealthState): ProviderHealthState {
 
 interface RedisWithCommand extends Redis {
   providerHealthApply(
-    keyCount: number,
     key: string,
     op: string,
     latencyMs: string,
@@ -250,7 +249,6 @@ export class ProviderHealth implements ProviderHealthHandle {
     const nowIso = new Date(nowMs).toISOString();
     const cooldownUntilIso = new Date(nowMs + this.cooldownMs).toISOString();
     const raw = await this.redis.providerHealthApply(
-      1,
       keyFor(providerId),
       op,
       String(Math.max(0, Math.round(latencyMs))),
