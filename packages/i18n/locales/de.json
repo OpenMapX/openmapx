@@ -13,7 +13,8 @@
     "unmuteVoice": "Sprachansagen aktivieren",
     "keepScreenOn": "Bildschirm anlassen",
     "voiceUpcoming": "In {distance} Metern, {instruction}",
-    "weakGps": "Schwaches GPS-Signal"
+    "weakGps": "Schwaches GPS-Signal",
+    "waitingForGps": "Warte auf GPS-Signal…"
   },
   "common": {
     "close": "Schließen",

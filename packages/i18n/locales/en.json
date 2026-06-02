@@ -13,7 +13,8 @@
     "unmuteVoice": "Unmute voice guidance",
     "keepScreenOn": "Keep screen on",
     "voiceUpcoming": "In {distance} meters, {instruction}",
-    "weakGps": "Weak GPS signal"
+    "weakGps": "Weak GPS signal",
+    "waitingForGps": "Waiting for GPS signal…"
   },
   "common": {
     "close": "Close",

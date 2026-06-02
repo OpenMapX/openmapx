@@ -1,8 +1,10 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { useNavigationStore } from "@openmapx/core";
-import { useState } from "react";
+import Typography from "@mui/material/Typography";
+import { useNavigationStore, useSidebarStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import { useMapOptional } from "@/lib/MapContext";
 import { useFollowCamera } from "@/lib/navigation/useFollowCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
@@ -30,6 +32,7 @@ export function NavigationView() {
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
 
   const [units] = useState<"metric" | "imperial">("metric");
+  const t = useTranslations("navigation");
   const active = status !== "idle";
 
   useNavigationEngine();
@@ -37,9 +40,27 @@ export function NavigationView() {
   useWakeLock(active && keepScreenOn);
   const heading = useHeading(active);
 
+  // Collapse the route-planning sidebar while navigating so it doesn't sit on
+  // top of the map behind the nav overlay; restore the prior state on exit.
+  useEffect(() => {
+    if (!active) return;
+    const prevCollapsed = useSidebarStore.getState().collapsed;
+    useSidebarStore.getState().setCollapsed(true);
+    return () => useSidebarStore.getState().setCollapsed(prevCollapsed);
+  }, [active]);
+
   if (!active) return null;
 
-  const step = route && progress ? route.steps[progress.currentStepIndex] : null;
+  // Show the nav chrome from the static route immediately on Start; live
+  // position (progress) refines it once GPS fixes arrive. Without this, the
+  // overlay is blank until the first fix — which never comes on devices that
+  // deny or can't provide geolocation, so Start would appear to do nothing.
+  const step = route ? route.steps[progress?.currentStepIndex ?? 0] : null;
+  const awaitingFix = status !== "arrived" && !progress;
+  const distanceToManeuver = progress?.distanceToNextManeuver ?? step?.distance ?? 0;
+  const distanceRemaining = progress?.distanceRemaining ?? route?.distance ?? 0;
+  const durationRemaining = progress?.durationRemaining ?? route?.duration ?? 0;
+  const etaEpochMs = progress?.etaEpochMs ?? Date.now() + durationRemaining * 1000;
 
   return (
     <>
@@ -67,15 +88,30 @@ export function NavigationView() {
         ) : (
           <>
             <Box sx={{ pointerEvents: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
-              {step && progress && (
+              {step && (
                 <ManeuverBanner
                   instruction={step.instruction}
-                  distanceToManeuver={progress.distanceToNextManeuver}
+                  distanceToManeuver={distanceToManeuver}
                   maneuver={step.maneuver}
                   units={units}
                 />
               )}
               {step?.lanes && <LaneGuidance lanes={step.lanes} />}
+              {awaitingFix && (
+                <Box
+                  sx={{
+                    alignSelf: "flex-start",
+                    bgcolor: "background.paper",
+                    borderRadius: 2,
+                    px: 1.5,
+                    py: 0.5,
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    {t("waitingForGps")}
+                  </Typography>
+                </Box>
+              )}
             </Box>
 
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -89,12 +125,12 @@ export function NavigationView() {
               )}
             </Box>
 
-            {progress && (
+            {route && (
               <Box sx={{ pointerEvents: "auto" }}>
                 <NavBottomBar
-                  distanceRemaining={progress.distanceRemaining}
-                  durationRemaining={progress.durationRemaining}
-                  etaEpochMs={progress.etaEpochMs}
+                  distanceRemaining={distanceRemaining}
+                  durationRemaining={durationRemaining}
+                  etaEpochMs={etaEpochMs}
                   voiceEnabled={voiceEnabled}
                   onToggleVoice={toggleVoice}
                   onEnd={stopNavigation}
