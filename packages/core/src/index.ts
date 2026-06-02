@@ -81,6 +81,10 @@ export {
   configureApiClient,
   proxyImageUrl,
 } from "./api/client";
+export {
+  type FetchDirectionsParams,
+  fetchDirections,
+} from "./api/directions";
 export { API_ENDPOINTS } from "./api/endpoints";
 // Auth
 export type { Session, User } from "./auth/client";
@@ -276,6 +280,7 @@ export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
 export { useMenuStore } from "./stores/menuStore";
+export { useNavigationStore } from "./stores/navigationStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
 export type { OverlayEntry, OverlayId } from "./stores/overlayRegistry";

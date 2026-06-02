@@ -1,7 +1,6 @@
-import type { DirectionsResult, TravelMode } from "@integrations/routing/types";
+import type { TravelMode } from "@integrations/routing/types";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
-import { API_ENDPOINTS } from "../api/endpoints";
+import { fetchDirections } from "../api/directions";
 import type { LngLat } from "../types/geometry";
 
 interface UseDirectionsParams {
@@ -45,16 +44,16 @@ export function useDirections({
       arriveBy,
     ],
     queryFn: () =>
-      apiClient.get<DirectionsResult>(API_ENDPOINTS.directions, {
-        waypoints: waypointsStr,
+      fetchDirections({
+        waypoints,
         mode,
-        avoidHighways: String(avoidHighways),
-        avoidTolls: String(avoidTolls),
-        avoidFerries: String(avoidFerries),
+        avoidHighways,
+        avoidTolls,
+        avoidFerries,
         units,
-        ...(lang && { lang }),
-        ...(departAt && { departAt }),
-        ...(arriveBy && { arriveBy }),
+        lang,
+        departAt,
+        arriveBy,
       }),
     enabled: waypoints.length >= 2,
     staleTime: 120_000,
