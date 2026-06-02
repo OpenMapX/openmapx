@@ -1,4 +1,19 @@
 {
+  "navigation": {
+    "start": "Start",
+    "end": "End",
+    "done": "Done",
+    "arrived": "You have arrived",
+    "recenter": "Recenter",
+    "in": "In {distance}",
+    "now": "Now",
+    "rerouting": "Rerouting…",
+    "muteVoice": "Mute voice guidance",
+    "unmuteVoice": "Unmute voice guidance",
+    "keepScreenOn": "Keep screen on",
+    "voiceUpcoming": "In {distance} meters, {instruction}",
+    "weakGps": "Weak GPS signal"
+  },
   "common": {
     "close": "Close",
     "cancel": "Cancel",

@@ -10,16 +10,21 @@ interface VitestExpectation {
   toContain(expected: unknown): void;
   toEqual(expected: unknown): void;
   toHaveBeenCalled(): void;
+  toHaveBeenCalledTimes(times: number): void;
   toHaveBeenCalledWith(...args: unknown[]): void;
   toThrow(expected?: unknown): void;
 }
 
 interface VitestMockFunction {
   (...args: unknown[]): unknown;
+  mock: { calls: unknown[][] };
   mockImplementation(implementation: VitestMockImplementation): VitestMockFunction;
   mockResolvedValue(value: unknown): VitestMockFunction;
   mockReturnValue(value: unknown): VitestMockFunction;
+  mockReset(): VitestMockFunction;
 }
+
+type VitestMockFactory = (importOriginal: <T = unknown>() => Promise<T>) => unknown;
 
 declare module "vitest" {
   export const describe: (name: string, callback: VitestTestCallback) => void;
@@ -33,7 +38,7 @@ declare module "vitest" {
   export const afterEach: (callback: VitestTestCallback) => void;
   export const vi: {
     fn(implementation?: VitestMockImplementation): VitestMockFunction;
-    mock(id: string, factory: () => unknown): void;
+    mock(id: string, factory: VitestMockFactory): void;
     mocked<T>(item: T): T;
     importActual<T = unknown>(id: string): Promise<T>;
     stubGlobal(name: string, value: unknown): void;
