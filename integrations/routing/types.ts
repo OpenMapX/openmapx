@@ -6,6 +6,7 @@ export type {
   IsochronePolygon,
   IsochroneResult,
   IsochroneTravelMode,
+  ManeuverLane,
   MatchEdge,
   MatchOptions,
   MatchPoint,

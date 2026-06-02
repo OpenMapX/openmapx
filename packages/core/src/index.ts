@@ -35,6 +35,7 @@ export type {
   IsochronePolygon,
   IsochroneResult,
   IsochroneTravelMode,
+  ManeuverLane,
   Route,
   RouteLeg,
   RouteStep,
@@ -220,6 +221,31 @@ export {
   useTides,
   type WaterLevelObservation,
 } from "./hooks/useTides";
+// Navigation
+export {
+  computeProgress,
+  eta,
+  navOptionsForMode,
+  nextVoiceCue,
+  processFix,
+  shouldReroute,
+  simulatePositions,
+  snapToRoute,
+} from "./navigation";
+export type {
+  CameraMode,
+  CueTier,
+  FixInput,
+  NavProgress,
+  NavStatus,
+  NavTickOptions,
+  NavTickResult,
+  NavTickState,
+  ProgressResult,
+  RerouteOpts,
+  SnapResult,
+  VoiceCue,
+} from "./navigation/types";
 export type { PanelId } from "./panels/ids";
 export { PANEL } from "./panels/ids";
 export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
