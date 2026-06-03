@@ -13,7 +13,6 @@ import { LaneGuidance } from "./LaneGuidance";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
 import { NavHeadingPuck } from "./NavHeadingPuck";
-import { RecenterFab } from "./RecenterFab";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
 export function NavigationView() {
@@ -22,11 +21,9 @@ export function NavigationView() {
   const kind = useNavigationStore((s) => s.kind);
   const route = useNavigationStore((s) => s.route);
   const progress = useNavigationStore((s) => s.progress);
-  const cameraMode = useNavigationStore((s) => s.cameraMode);
   const currentSpeedLimit = useNavigationStore((s) => s.currentSpeedLimit);
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
-  const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const toggleVoice = useNavigationStore((s) => s.toggleVoice);
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
 
@@ -108,11 +105,6 @@ export function NavigationView() {
               <Box sx={{ pointerEvents: "auto" }}>
                 <SpeedLimitBadge speedLimit={currentSpeedLimit} units={units} />
               </Box>
-              {cameraMode === "free" && (
-                <Box sx={{ pointerEvents: "auto" }}>
-                  <RecenterFab onClick={() => setCameraMode("follow")} />
-                </Box>
-              )}
             </Box>
 
             {route && (

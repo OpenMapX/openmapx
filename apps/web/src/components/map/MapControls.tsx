@@ -24,8 +24,11 @@ const NAV_BOTTOM = 150;
 
 export function MapControls() {
   const t = useTranslations("map");
+  const tNav = useTranslations("navigation");
   const { zoomIn, zoomOut, resetBearing } = useMap();
   const navigating = useNavigationStore((s) => s.status !== "idle");
+  const navCameraMode = useNavigationStore((s) => s.cameraMode);
+  const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
@@ -107,15 +110,17 @@ export function MapControls() {
 
       <Pegman />
 
-      {/* Compass — only visible when map is rotated */}
-      {(Math.abs(bearing) > 0.5 || pitch > 0.5) && (
-        <Tooltip title={t("resetBearing")} placement="left">
+      {/* Compass — while navigating it appears only when the user has panned
+          off-track and recenters/resumes tracking; otherwise it resets bearing
+          and is only visible when the map is rotated. */}
+      {(navigating ? navCameraMode === "free" : Math.abs(bearing) > 0.5 || pitch > 0.5) && (
+        <Tooltip title={navigating ? tNav("recenter") : t("resetBearing")} placement="left">
           <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
             <IconButton
               size="medium"
-              onClick={resetBearing}
+              onClick={navigating ? () => setCameraMode("follow") : resetBearing}
               sx={{ width: 40, height: 40 }}
-              aria-label={t("resetBearingAriaLabel")}
+              aria-label={navigating ? tNav("recenter") : t("resetBearingAriaLabel")}
             >
               <ExploreIcon
                 sx={{
