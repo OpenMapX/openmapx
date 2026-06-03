@@ -12,6 +12,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import PrintIcon from "@mui/icons-material/Print";
 import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
 import StorageIcon from "@mui/icons-material/Storage";
+import StraightenIcon from "@mui/icons-material/Straighten";
 import TranslateIcon from "@mui/icons-material/Translate";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
@@ -26,7 +27,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import { PANEL, useMenuStore, useSession, useSidebarStore } from "@openmapx/core";
+import { PANEL, useMenuStore, useSession, useSettingsStore, useSidebarStore } from "@openmapx/core";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, useRef, useState } from "react";
@@ -51,6 +52,9 @@ export function HamburgerMenu() {
   const isSignedIn = !!session?.user?.id;
   const [langOpen, setLangOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
+  const [unitsOpen, setUnitsOpen] = useState(false);
+  const units = useSettingsStore((s) => s.units);
+  const setUnits = useSettingsStore((s) => s.setUnits);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
@@ -276,6 +280,26 @@ export function HamburgerMenu() {
                       m === "light" ? "themeLight" : m === "dark" ? "themeDark" : "themeSystem",
                     )}
                   />
+                </ListItemButton>
+              ))}
+            </List>
+          </Collapse>
+
+          <ListItemButton sx={{ height: 48 }} onClick={() => setUnitsOpen((prev) => !prev)}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <StraightenIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("units")} />
+          </ListItemButton>
+
+          <Collapse in={unitsOpen}>
+            <List disablePadding>
+              {(["metric", "imperial"] as const).map((u) => (
+                <ListItemButton key={u} sx={{ height: 44, pl: 4 }} onClick={() => setUnits(u)}>
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    {u === units ? <CheckIcon fontSize="small" /> : null}
+                  </ListItemIcon>
+                  <ListItemText primary={t(u === "metric" ? "unitsMetric" : "unitsImperial")} />
                 </ListItemButton>
               ))}
             </List>

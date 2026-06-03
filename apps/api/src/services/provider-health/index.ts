@@ -175,7 +175,6 @@ function annotate(state: ProviderHealthState): ProviderHealthState {
 
 interface RedisWithCommand extends Redis {
   providerHealthApply(
-    keyCount: number,
     key: string,
     op: string,
     latencyMs: string,
@@ -250,7 +249,6 @@ export class ProviderHealth implements ProviderHealthHandle {
     const nowIso = new Date(nowMs).toISOString();
     const cooldownUntilIso = new Date(nowMs + this.cooldownMs).toISOString();
     const raw = await this.redis.providerHealthApply(
-      1,
       keyFor(providerId),
       op,
       String(Math.max(0, Math.round(latencyMs))),
@@ -301,11 +299,27 @@ export class ProviderHealth implements ProviderHealthHandle {
   }
 
   async recordSuccess(providerId: string, latencyMs: number): Promise<void> {
-    await this.applyOp(providerId, "ok", latencyMs, "");
+    // Health tracking is observability, not core function — never let a store
+    // failure (Redis down, script error) propagate and fail the user's request.
+    try {
+      await this.applyOp(providerId, "ok", latencyMs, "");
+    } catch (err) {
+      this.log?.warn(
+        `[provider-health] failed to record success for ${providerId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async recordFailure(providerId: string, latencyMs: number, reason: string): Promise<void> {
-    const state = await this.applyOp(providerId, "err", latencyMs, truncateReason(reason));
+    let state: ProviderHealthState;
+    try {
+      state = await this.applyOp(providerId, "err", latencyMs, truncateReason(reason));
+    } catch (err) {
+      this.log?.warn(
+        `[provider-health] failed to record failure for ${providerId}: ${(err as Error).message}`,
+      );
+      return;
+    }
     if (state.disabledUntil) {
       // Was the disable set in this call? Heuristic: lastFailureAt matches
       // disabledUntil's window-start. We don't need exactness, just stop the

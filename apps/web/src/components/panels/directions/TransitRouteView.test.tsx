@@ -22,6 +22,11 @@ vi.mock("@openmapx/core", () => ({
   formatDistance: (distance: number) => `${distance} m`,
   formatDuration: (duration: number) => `${duration}s`,
   useVehicleJourney: () => ({ data: null }),
+  useNavigationStore: Object.assign(
+    (sel: (s: { startTransitNavigation: () => void }) => unknown) =>
+      sel({ startTransitNavigation: () => {} }),
+    { getState: () => ({ startTransitNavigation: () => {} }) },
+  ),
 }));
 
 vi.mock("@/components/panels/transit/RouteBadge", () => ({

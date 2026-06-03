@@ -54,6 +54,7 @@ export type {
   KnowledgeContext,
   KnowledgeProvider,
   KnowledgeResult,
+  ManeuverLane,
   MatchEdge,
   MatchOptions,
   MatchPoint,

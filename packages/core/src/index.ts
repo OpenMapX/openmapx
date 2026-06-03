@@ -35,6 +35,7 @@ export type {
   IsochronePolygon,
   IsochroneResult,
   IsochroneTravelMode,
+  ManeuverLane,
   Route,
   RouteLeg,
   RouteStep,
@@ -80,7 +81,12 @@ export {
   configureApiClient,
   proxyImageUrl,
 } from "./api/client";
+export {
+  type FetchDirectionsParams,
+  fetchDirections,
+} from "./api/directions";
 export { API_ENDPOINTS } from "./api/endpoints";
+export { fetchSpeedLimit } from "./api/speedLimit";
 // Auth
 export type { Session, User } from "./auth/client";
 export { type AuthConfig, authClient, initAuth } from "./auth/client";
@@ -220,6 +226,34 @@ export {
   useTides,
   type WaterLevelObservation,
 } from "./hooks/useTides";
+// Navigation
+export {
+  computeProgress,
+  computeTransitProgress,
+  eta,
+  navOptionsForMode,
+  nextVoiceCue,
+  processFix,
+  shouldReroute,
+  simulatePositions,
+  snapToRoute,
+  stopsUntilAlight,
+} from "./navigation";
+export type { TransitProgress } from "./navigation/transitProgress";
+export type {
+  CameraMode,
+  CueTier,
+  FixInput,
+  NavProgress,
+  NavStatus,
+  NavTickOptions,
+  NavTickResult,
+  NavTickState,
+  ProgressResult,
+  RerouteOpts,
+  SnapResult,
+  VoiceCue,
+} from "./navigation/types";
 export type { PanelId } from "./panels/ids";
 export { PANEL } from "./panels/ids";
 export { getPanel, getPanelsByLayer, PANEL_REGISTRY } from "./panels/registry";
@@ -250,6 +284,8 @@ export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
 export { useMenuStore } from "./stores/menuStore";
+export type { NavKind } from "./stores/navigationStore";
+export { useNavigationStore } from "./stores/navigationStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
 export type { OverlayEntry, OverlayId } from "./stores/overlayRegistry";
@@ -265,6 +301,7 @@ export {
 export { usePlaceStore } from "./stores/placeStore";
 export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
+export { useSettingsStore } from "./stores/settingsStore";
 export { useSidebarStore } from "./stores/sidebarStore";
 export type { DeliveryProviderInfo, DeliverySearchParams } from "./types/delivery";
 export type {

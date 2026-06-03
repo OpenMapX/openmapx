@@ -3,12 +3,22 @@
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import NavigationIcon from "@mui/icons-material/Navigation";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type { Route } from "@openmapx/core";
-import { formatDistance, formatDuration } from "@openmapx/core";
+import {
+  formatDistance,
+  formatDuration,
+  useDirectionsStore,
+  useNavigationStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { TEAL } from "@/lib/theme";
+import { requestHeadingPermission } from "@/lib/useHeading";
+
+const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling"]);
 
 export function RouteCard({
   route,
@@ -27,6 +37,17 @@ export function RouteCard({
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
+  const tNav = useTranslations("navigation");
+  const startGroundNavigation = useNavigationStore((s) => s.startGroundNavigation);
+  const waypoints = useDirectionsStore((s) => s.waypoints);
+
+  const handleStart = async () => {
+    const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
+    if (coords.length < 2) return;
+    await requestHeadingPermission();
+    startGroundNavigation(route, route.mode, coords);
+  };
+
   const dist =
     units === "imperial"
       ? `${(route.distance / 1609.34).toFixed(1)} mi`
@@ -102,7 +123,7 @@ export function RouteCard({
           </Typography>
         )}
         {active && (
-          <Box sx={{ mt: 0.5, ml: -1.5 }}>
+          <Box sx={{ mt: 0.5, ml: -1.5, display: "flex", alignItems: "center", gap: 0.5 }}>
             <Typography
               component="span"
               variant="caption"
@@ -123,6 +144,25 @@ export function RouteCard({
             >
               {tc("details")}
             </Typography>
+            {GROUND_MODES.has(route.mode) && (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<NavigationIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleStart();
+                }}
+                sx={{
+                  bgcolor: TEAL,
+                  textTransform: "none",
+                  borderRadius: 99,
+                  "&:hover": { bgcolor: TEAL },
+                }}
+              >
+                {tNav("start")}
+              </Button>
+            )}
           </Box>
         )}
       </Box>

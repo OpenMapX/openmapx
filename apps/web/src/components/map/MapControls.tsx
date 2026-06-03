@@ -8,7 +8,7 @@ import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
-import { useMapStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
@@ -19,10 +19,13 @@ import { Pegman } from "./Pegman";
 
 const BASE_BOTTOM = 48;
 const PANEL_GAP = 12;
+// Clearance above the navigation bottom bar so the controls don't sit under it.
+const NAV_BOTTOM = 150;
 
 export function MapControls() {
   const t = useTranslations("map");
   const { zoomIn, zoomOut, resetBearing } = useMap();
+  const navigating = useNavigationStore((s) => s.status !== "idle");
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
@@ -45,13 +48,15 @@ export function MapControls() {
     <Box
       sx={{
         position: "absolute",
-        bottom: {
-          xs:
-            followHeight > 0
-              ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
-              : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
-          sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
-        },
+        bottom: navigating
+          ? `calc(${NAV_BOTTOM}px + var(--omx-safe-bottom))`
+          : {
+              xs:
+                followHeight > 0
+                  ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
+                  : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+              sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+            },
         right: "calc(12px + var(--omx-safe-right))",
         display: "flex",
         flexDirection: "column",

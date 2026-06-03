@@ -16,6 +16,7 @@ import { DataSourceLayer } from "@/components/map/layers/DataSourceLayer";
 import { FlightArcLayer } from "@/components/map/layers/FlightArcLayer";
 import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
 import { ImportedGeometryLayer } from "@/components/map/layers/ImportedGeometryLayer";
+import { NavigationRouteLayer } from "@/components/map/layers/NavigationRouteLayer";
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
 import { RouteLayer } from "@/components/map/layers/RouteLayer";
@@ -39,6 +40,9 @@ import { TopRightControls } from "@/components/map/TopRightControls";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
+import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
+import { NavigationView } from "@/components/navigation/NavigationView";
+import { TransitNavigationView } from "@/components/navigation/TransitNavigationView";
 import { MapClickFloatingCard } from "@/components/panels/MapClickFloatingCard";
 import { PanelHost } from "@/components/panels/PanelHost";
 import { ShareIntentHandler } from "@/components/pwa/ShareIntentHandler";
@@ -130,6 +134,9 @@ export default function HomePage() {
           {/* Core layers (not integration-managed) */}
           <PlaceBoundaryLayer />
           <RouteLayer />
+          <NavigationRouteLayer />
+          <NavigationView />
+          <TransitNavigationView />
           <FlightArcLayer />
           <TransitRouteLayer />
           <VehicleLiveLayer />
@@ -150,22 +157,28 @@ export default function HomePage() {
           <SelectedStopInfrastructureLayer />
           <WaypointMarkers />
           <ElevationHoverMarker />
-          <HamburgerMenu />
-          <SearchBar />
-          <WeatherWidget />
-          <CategoryChips />
-          <CategoryFilterBar />
+          <HideDuringNavigation>
+            <HamburgerMenu />
+            <SearchBar />
+            <WeatherWidget />
+            <CategoryChips />
+            <CategoryFilterBar />
+          </HideDuringNavigation>
           <SearchInAreaChip />
           <ImportedGeometryBanner />
           <PanelHost />
           <MapClickFloatingCard />
-          <TopRightControls />
+          <HideDuringNavigation>
+            <TopRightControls />
+          </HideDuringNavigation>
           <StreetViewViewer />
           <div className="absolute bottom-[calc(1rem+var(--omx-safe-bottom))] left-1/2 -translate-x-1/2 z-10 flex flex-col-reverse items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
             {/* All legends/toolbars loaded dynamically by LegendHost */}
             <LegendHost />
           </div>
-          <LayerSelector />
+          <HideDuringNavigation>
+            <LayerSelector />
+          </HideDuringNavigation>
           <MapControls />
           <MapFooter />
           <Suspense>

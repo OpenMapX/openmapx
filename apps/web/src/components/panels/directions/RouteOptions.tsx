@@ -7,7 +7,7 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
-import { useDirectionsStore } from "@openmapx/core";
+import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { TEAL } from "@/lib/theme";
 
@@ -79,12 +79,12 @@ export function RouteOptions() {
     avoidHighways,
     avoidTolls,
     avoidFerries,
-    units,
     setAvoidHighways,
     setAvoidTolls,
     setAvoidFerries,
-    setUnits,
   } = useDirectionsStore();
+  const units = useSettingsStore((s) => s.units);
+  const setUnits = useSettingsStore((s) => s.setUnits);
 
   return (
     <Box sx={{ px: 2, pb: 1.5 }}>

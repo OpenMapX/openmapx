@@ -40,7 +40,6 @@ export interface DirectionsState {
   avoidHighways: boolean;
   avoidTolls: boolean;
   avoidFerries: boolean;
-  units: "metric" | "imperial";
   transitItineraries: TripItinerary[];
   activeItineraryIndex: number;
   transitDepartureTime: "now" | Date;
@@ -68,7 +67,6 @@ export interface DirectionsState {
   setAvoidHighways: (v: boolean) => void;
   setAvoidTolls: (v: boolean) => void;
   setAvoidFerries: (v: boolean) => void;
-  setUnits: (u: "metric" | "imperial") => void;
   setTransitItineraries: (items: TripItinerary[]) => void;
   setActiveItineraryIndex: (i: number) => void;
   setTransitDepartureTime: (t: "now" | Date) => void;
@@ -93,7 +91,6 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     avoidHighways: false,
     avoidTolls: false,
     avoidFerries: false,
-    units: "metric",
     transitItineraries: [],
     activeItineraryIndex: 0,
     transitDepartureTime: "now" as const,
@@ -174,7 +171,6 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setAvoidHighways: (avoidHighways) => set({ avoidHighways }),
     setAvoidTolls: (avoidTolls) => set({ avoidTolls }),
     setAvoidFerries: (avoidFerries) => set({ avoidFerries }),
-    setUnits: (units) => set({ units }),
     setTransitItineraries: (transitItineraries) =>
       set({ transitItineraries, activeItineraryIndex: 0 }),
     setActiveItineraryIndex: (activeItineraryIndex) => set({ activeItineraryIndex }),

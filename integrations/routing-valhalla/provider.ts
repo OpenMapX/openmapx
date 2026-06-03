@@ -7,6 +7,7 @@
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 import { decodePolyline } from "@openmapx/core";
 import type {
+  ManeuverLane,
   MatchEdge,
   MatchOptions,
   MatchPoint,
@@ -48,6 +49,12 @@ const COSTING_MAP: Record<string, string> = {
 
 const ELEVATION_INTERVAL = 30; // metres between elevation samples
 
+interface ValhallaLaneRaw {
+  directions?: string[];
+  active?: boolean;
+  valid?: boolean;
+}
+
 interface ValhallaManeuver {
   type: number;
   instruction: string;
@@ -56,6 +63,7 @@ interface ValhallaManeuver {
   begin_shape_index: number;
   end_shape_index: number;
   street_names?: string[];
+  lanes?: ValhallaLaneRaw[];
 }
 
 interface ValhallaLeg {
@@ -113,6 +121,65 @@ function buildDateTime(options: RoutingOptions): ValhallaDateTime {
   return { type: 0 };
 }
 
+/**
+ * Map a Valhalla maneuver type enum to the normalized { type, modifier } shape.
+ * Enum values follow Valhalla's documented `maneuver.type` table.
+ * Exported for testing.
+ */
+export function valhallaManeuverType(t: number): { type: string; modifier?: string } {
+  switch (t) {
+    case 1:
+    case 2:
+    case 3:
+      return { type: "depart" };
+    case 4:
+    case 5:
+    case 6:
+      return { type: "arrive" };
+    case 8:
+      return { type: "turn", modifier: "straight" };
+    case 9:
+      return { type: "turn", modifier: "slight right" };
+    case 10:
+      return { type: "turn", modifier: "right" };
+    case 11:
+      return { type: "turn", modifier: "sharp right" };
+    case 12:
+      return { type: "turn", modifier: "uturn" };
+    case 13:
+      return { type: "turn", modifier: "sharp left" };
+    case 14:
+      return { type: "turn", modifier: "left" };
+    case 15:
+      return { type: "turn", modifier: "slight left" };
+    case 16:
+    case 17:
+      return { type: "turn", modifier: "straight" }; // ramp straight / stay
+    case 18:
+    case 19:
+    case 20:
+      return { type: "fork", modifier: t === 18 ? "right" : "left" };
+    case 21:
+    case 22:
+    case 23:
+      return { type: "merge" };
+    case 26:
+    case 27:
+      return { type: "roundabout" };
+    default:
+      return { type: "turn", modifier: "straight" };
+  }
+}
+
+/** Lane guidance from a Valhalla maneuver, when present. */
+function valhallaLanes(maneuver: ValhallaManeuver): ManeuverLane[] | undefined {
+  if (!maneuver.lanes || maneuver.lanes.length === 0) return undefined;
+  return maneuver.lanes.map((l) => ({
+    indications: l.directions ?? [],
+    valid: Boolean(l.valid ?? l.active),
+  }));
+}
+
 function transformLeg(leg: ValhallaLeg): RouteLeg {
   const coords = decodePolyline(leg.shape, 6);
   const steps: RouteStep[] = leg.maneuvers.map((m) => ({
@@ -120,6 +187,8 @@ function transformLeg(leg: ValhallaLeg): RouteLeg {
     distance: m.length * 1000, // km -> metres
     duration: m.time,
     coordinates: coords.slice(m.begin_shape_index, m.end_shape_index + 1),
+    maneuver: valhallaManeuverType(m.type),
+    lanes: valhallaLanes(m),
   }));
 
   const firstNamed = leg.maneuvers.find((m) => m.street_names && m.street_names.length > 0);
@@ -173,6 +242,7 @@ interface ValhallaTraceEdge {
   way_id?: number;
   length?: number; // km
   speed?: number; // km/h
+  speed_limit?: number; // km/h (posted)
   surface?: string;
   names?: string[];
   begin_shape_index?: number;
@@ -198,6 +268,7 @@ const TRACE_ATTRIBUTE_FILTER = [
   "edge.way_id",
   "edge.length",
   "edge.speed",
+  "edge.speed_limit",
   "edge.surface",
   "edge.names",
   "edge.begin_shape_index",
@@ -210,11 +281,14 @@ const TRACE_ATTRIBUTE_FILTER = [
   "shape",
 ] as const;
 
-function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
+export function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
   return {
     wayId: edge.way_id,
     length: (edge.length ?? 0) * 1000, // km -> metres
     speed: edge.speed,
+    // Valhalla returns km/h; absent/0 means unknown — passed through as-is.
+    // The client treats <=0 as null.
+    speedLimit: edge.speed_limit,
     surface: edge.surface,
     names: edge.names,
     beginShapeIndex: edge.begin_shape_index ?? 0,

@@ -5,7 +5,11 @@
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
 import { USER_AGENT } from "@openmapx/core";
-import type { RoutingOptions, RoutingProvider } from "@openmapx/integration-routing/types";
+import type {
+  ManeuverLane,
+  RoutingOptions,
+  RoutingProvider,
+} from "@openmapx/integration-routing/types";
 
 // Populated by setup(ctx): service-registry URL → ctx.config.endpoint (which
 // already folds in `INTEGRATION_ROUTING_OSRM_ENDPOINT` + legacy `OSRM_URL`
@@ -24,6 +28,19 @@ interface OsrmManeuver {
   exit?: number;
 }
 
+interface OsrmLane {
+  valid?: boolean;
+  indications?: string[];
+}
+
+interface OsrmIntersection {
+  lanes?: OsrmLane[];
+}
+
+interface OsrmAnnotation {
+  maxspeed?: { speed?: number; unit?: string; unknown?: boolean }[];
+}
+
 interface OsrmStep {
   distance: number;
   duration: number;
@@ -31,6 +48,8 @@ interface OsrmStep {
   ref?: string;
   maneuver: OsrmManeuver;
   geometry: { type: "LineString"; coordinates: [number, number][] };
+  intersections?: OsrmIntersection[];
+  annotation?: OsrmAnnotation;
 }
 
 interface OsrmLeg {
@@ -93,13 +112,42 @@ function generateInstruction(maneuver: OsrmManeuver, name: string, ref?: string)
   }
 }
 
-function transformLeg(leg: OsrmLeg): RouteLeg {
-  const steps: RouteStep[] = leg.steps.map((step) => ({
+/** Lane guidance from the first intersection that carries lanes, if any. */
+function osrmLanes(step: OsrmStep): ManeuverLane[] | undefined {
+  const withLanes = step.intersections?.find((i) => i.lanes && i.lanes.length > 0);
+  if (!withLanes?.lanes) return undefined;
+  return withLanes.lanes.map((l) => ({
+    indications: l.indications ?? [],
+    valid: Boolean(l.valid),
+  }));
+}
+
+/** First known maxspeed annotation, normalized to km/h. */
+function osrmSpeedLimit(step: OsrmStep): number | undefined {
+  const entry = step.annotation?.maxspeed?.find((m) => typeof m.speed === "number" && !m.unknown);
+  if (!entry || typeof entry.speed !== "number") return undefined;
+  if (entry.unit === "mph") return Math.round(entry.speed * 1.609);
+  return entry.speed; // km/h
+}
+
+/**
+ * Map a raw OSRM step to the unified RouteStep, carrying the normalized
+ * maneuver, lane guidance, and speed limit when present. Exported for testing.
+ */
+export function transformOsrmStep(step: OsrmStep): RouteStep {
+  return {
     instruction: generateInstruction(step.maneuver, step.name, step.ref),
     distance: step.distance,
     duration: step.duration,
     coordinates: step.geometry.coordinates,
-  }));
+    maneuver: { type: step.maneuver.type, modifier: step.maneuver.modifier },
+    lanes: osrmLanes(step),
+    speedLimit: osrmSpeedLimit(step),
+  };
+}
+
+function transformLeg(leg: OsrmLeg): RouteLeg {
+  const steps: RouteStep[] = leg.steps.map(transformOsrmStep);
 
   const geometry: [number, number][] = leg.steps.flatMap((step) => step.geometry.coordinates);
   const summary = leg.summary ? `via ${leg.summary}` : undefined;
@@ -152,6 +200,7 @@ export const osrmService: RoutingProvider = {
     url.searchParams.set("overview", "full");
     url.searchParams.set("geometries", "geojson");
     url.searchParams.set("steps", "true");
+    url.searchParams.set("annotations", "maxspeed");
     // OSRM only supports alternatives with exactly 2 waypoints
     if (waypoints.length === 2) {
       url.searchParams.set("alternatives", "3");
@@ -191,6 +240,7 @@ export const osrmService: RoutingProvider = {
     url.searchParams.set("overview", "full");
     url.searchParams.set("geometries", "geojson");
     url.searchParams.set("steps", "true");
+    url.searchParams.set("annotations", "maxspeed");
     url.searchParams.set("source", "first");
     url.searchParams.set("destination", "last");
     url.searchParams.set("roundtrip", "false");
