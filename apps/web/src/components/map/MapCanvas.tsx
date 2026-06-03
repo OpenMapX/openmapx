@@ -2,7 +2,7 @@
 
 import { useColorScheme } from "@mui/material/styles";
 import type { LngLat } from "@openmapx/core";
-import { useMapStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
@@ -71,7 +71,17 @@ export function MapCanvas() {
         canvasContextAttributes: { antialias: true },
       });
 
-      map.on("moveend", () => {
+      map.on("moveend", (e) => {
+        // The navigation follow camera drives the map with a programmatic
+        // jumpTo every animation frame; skip those so we don't write to the
+        // store 60×/s while navigating. User gestures and other programmatic
+        // moves (flyTo, deep links) still persist as before.
+        if (
+          (e as { programmatic?: boolean })?.programmatic &&
+          useNavigationStore.getState().status !== "idle"
+        ) {
+          return;
+        }
         const c = map.getCenter();
         setCenter([c.lng, c.lat]);
         setZoom(map.getZoom());

@@ -4,19 +4,16 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useMapOptional } from "@/lib/MapContext";
-import { useFollowCamera } from "@/lib/navigation/useFollowCamera";
+import { useNavCamera } from "@/lib/navigation/useNavCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { ArrivalCard } from "./ArrivalCard";
 import { LaneGuidance } from "./LaneGuidance";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
-import { NavHeadingPuck } from "./NavHeadingPuck";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
 export function NavigationView() {
-  const map = useMapOptional()?.mapRef.current ?? null;
   const status = useNavigationStore((s) => s.status);
   const kind = useNavigationStore((s) => s.kind);
   const route = useNavigationStore((s) => s.route);
@@ -33,7 +30,7 @@ export function NavigationView() {
   const active = status !== "idle" && kind === "ground";
 
   useNavigationEngine();
-  useFollowCamera(map);
+  useNavCamera();
   useWakeLock(active && keepScreenOn);
 
   if (!active) return null;
@@ -50,79 +47,76 @@ export function NavigationView() {
   const etaEpochMs = progress?.etaEpochMs ?? Date.now() + durationRemaining * 1000;
 
   return (
-    <>
-      <NavHeadingPuck />
-      <Box
-        sx={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 1300,
-          pointerEvents: "none",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          p: 2,
-          pt: "calc(var(--omx-safe-top) + 8px)",
-          pb: "calc(var(--omx-safe-bottom) + 8px)",
-        }}
-      >
-        {status === "arrived" ? (
-          <Box
-            sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
-          >
-            <ArrivalCard onClose={stopNavigation} />
-          </Box>
-        ) : (
-          <>
-            <Box sx={{ pointerEvents: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
-              {step && (
-                <ManeuverBanner
-                  instruction={step.instruction}
-                  distanceToManeuver={distanceToManeuver}
-                  maneuver={step.maneuver}
-                  units={units}
-                />
-              )}
-              {step?.lanes && <LaneGuidance lanes={step.lanes} />}
-              {awaitingFix && (
-                <Box
-                  sx={{
-                    alignSelf: "flex-start",
-                    bgcolor: "background.paper",
-                    borderRadius: 2,
-                    px: 1.5,
-                    py: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" color="text.secondary">
-                    {t("waitingForGps")}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-              <Box sx={{ pointerEvents: "auto" }}>
-                <SpeedLimitBadge speedLimit={currentSpeedLimit} units={units} />
-              </Box>
-            </Box>
-
-            {route && (
-              <Box sx={{ pointerEvents: "auto", mb: 5 }}>
-                <NavBottomBar
-                  distanceRemaining={distanceRemaining}
-                  durationRemaining={durationRemaining}
-                  etaEpochMs={etaEpochMs}
-                  voiceEnabled={voiceEnabled}
-                  onToggleVoice={toggleVoice}
-                  onEnd={stopNavigation}
-                  units={units}
-                />
+    <Box
+      sx={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1300,
+        pointerEvents: "none",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        p: 2,
+        pt: "calc(var(--omx-safe-top) + 8px)",
+        pb: "calc(var(--omx-safe-bottom) + 8px)",
+      }}
+    >
+      {status === "arrived" ? (
+        <Box
+          sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
+        >
+          <ArrivalCard onClose={stopNavigation} />
+        </Box>
+      ) : (
+        <>
+          <Box sx={{ pointerEvents: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
+            {step && (
+              <ManeuverBanner
+                instruction={step.instruction}
+                distanceToManeuver={distanceToManeuver}
+                maneuver={step.maneuver}
+                units={units}
+              />
+            )}
+            {step?.lanes && <LaneGuidance lanes={step.lanes} />}
+            {awaitingFix && (
+              <Box
+                sx={{
+                  alignSelf: "flex-start",
+                  bgcolor: "background.paper",
+                  borderRadius: 2,
+                  px: 1.5,
+                  py: 0.5,
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {t("waitingForGps")}
+                </Typography>
               </Box>
             )}
-          </>
-        )}
-      </Box>
-    </>
+          </Box>
+
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            <Box sx={{ pointerEvents: "auto" }}>
+              <SpeedLimitBadge speedLimit={currentSpeedLimit} units={units} />
+            </Box>
+          </Box>
+
+          {route && (
+            <Box sx={{ pointerEvents: "auto", mb: 5 }}>
+              <NavBottomBar
+                distanceRemaining={distanceRemaining}
+                durationRemaining={durationRemaining}
+                etaEpochMs={etaEpochMs}
+                voiceEnabled={voiceEnabled}
+                onToggleVoice={toggleVoice}
+                onEnd={stopNavigation}
+                units={units}
+              />
+            </Box>
+          )}
+        </>
+      )}
+    </Box>
   );
 }

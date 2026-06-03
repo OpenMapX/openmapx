@@ -230,13 +230,18 @@ export {
 export {
   computeProgress,
   computeTransitProgress,
+  cumulativeDistances,
+  type DeadReckonOptions,
+  type DeadReckonTarget,
   eta,
   navOptionsForMode,
   nextVoiceCue,
+  positionAt,
   processFix,
   shouldReroute,
   simulatePositions,
   snapToRoute,
+  stepDeadReckon,
   stopsUntilAlight,
 } from "./navigation";
 export type { TransitProgress } from "./navigation/transitProgress";

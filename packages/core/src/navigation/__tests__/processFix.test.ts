@@ -52,6 +52,34 @@ describe("processFix", () => {
     expect(r.progress?.bearing).toBeCloseTo(90, 0);
   });
 
+  it("uses the GPS-reported speed when present", () => {
+    const r = processFix(
+      route,
+      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000, speed: 12.5 },
+      emptyState,
+      opts,
+    );
+    expect(r.progress?.speedMps).toBe(12.5);
+  });
+
+  it("estimates speed from along-route progress when GPS speed is absent", () => {
+    const first = processFix(
+      route,
+      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000 },
+      emptyState,
+      opts,
+    );
+    // ~111 m further east, 1 s later → ~111 m/s.
+    const second = processFix(
+      route,
+      { coords: [0.002, 0], accuracy: 5, timestampMs: 2000 },
+      first.nextState,
+      opts,
+    );
+    expect(second.progress?.speedMps).toBeGreaterThan(100);
+    expect(second.progress?.speedMps).toBeLessThan(125);
+  });
+
   it("flags reroute after sustained off-route fixes", () => {
     let state: NavTickState = emptyState;
     let last: NavTickResult | undefined;

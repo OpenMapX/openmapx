@@ -26,6 +26,12 @@ export interface NavProgress extends ProgressResult {
   etaEpochMs: number;
   /** Travel direction at the snapped position, degrees clockwise from north. */
   bearing: number;
+  /**
+   * Ground speed at this fix, m/s. Prefers the GPS-reported speed; falls back to
+   * the along-route distance covered since the previous fix. Drives the
+   * dead-reckoning follow camera between fixes.
+   */
+  speedMps: number;
 }
 
 export interface RerouteOpts {
@@ -54,6 +60,10 @@ export interface NavTickState {
   deviationHistory: number[];
   lastRerouteAtMs: number | null;
   spokenCues: string[];
+  /** Snapped arc-length of the previous fix, m — for the speed fallback. */
+  lastAlongMeters?: number;
+  /** Timestamp of the previous fix, ms — for the speed fallback. */
+  lastFixMs?: number;
 }
 
 export interface VoiceCue {

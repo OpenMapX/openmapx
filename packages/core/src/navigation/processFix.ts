@@ -49,6 +49,21 @@ export function processFix(
   const snap = snapToRoute(route.geometry, fix.coords);
   const prog = computeProgress(route, snap.alongMeters);
 
+  // Prefer the GPS-reported ground speed; otherwise estimate it from how far we
+  // moved along the route since the previous fix. Feeds the follow camera's
+  // between-fix dead reckoning.
+  let speedMps = fix.speed != null && fix.speed >= 0 ? fix.speed : 0;
+  if (
+    (fix.speed == null || fix.speed < 0) &&
+    state.lastAlongMeters != null &&
+    state.lastFixMs != null
+  ) {
+    const dtSeconds = (fix.timestampMs - state.lastFixMs) / 1000;
+    if (dtSeconds > 0) {
+      speedMps = Math.max((snap.alongMeters - state.lastAlongMeters) / dtSeconds, 0);
+    }
+  }
+
   const deviationHistory = [...state.deviationHistory, snap.deviationMeters].slice(-HISTORY_LIMIT);
   const offRoute = snap.deviationMeters > opts.reroute.thresholdMeters;
   const needsReroute = shouldReroute(
@@ -83,6 +98,7 @@ export function processFix(
       deviationMeters: snap.deviationMeters,
       etaEpochMs: eta(prog.durationRemaining, fix.timestampMs),
       bearing: bearingAt(route.geometry, snap.segmentIndex),
+      speedMps,
     },
     offRoute,
     needsReroute,
@@ -92,6 +108,8 @@ export function processFix(
       deviationHistory,
       lastRerouteAtMs: needsReroute ? fix.timestampMs : state.lastRerouteAtMs,
       spokenCues,
+      lastAlongMeters: snap.alongMeters,
+      lastFixMs: fix.timestampMs,
     },
   };
 }
