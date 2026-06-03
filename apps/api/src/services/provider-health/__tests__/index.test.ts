@@ -134,6 +134,14 @@ function createRedis(): Redis {
   return new FakeRedis() as unknown as Redis;
 }
 
+/** A redis whose health-store command always rejects, to test best-effort recording. */
+function createThrowingRedis(): Redis {
+  const base = new FakeRedis();
+  (base as unknown as Record<string, unknown>).providerHealthApply = () =>
+    Promise.reject(new Error("redis down"));
+  return base as unknown as Redis;
+}
+
 describe("ProviderHealth", () => {
   let nowMs = 1_700_000_000_000;
   const advance = (ms: number) => {
@@ -152,6 +160,12 @@ describe("ProviderHealth", () => {
     const ph = await ProviderHealth.init({ redis: createRedis(), now: () => nowMs });
     expect(await ph.isHealthy("acme")).toBe(true);
     expect(await ph.getState("acme")).toBeNull();
+  });
+
+  it("never throws when the health store is unavailable (best-effort recording)", async () => {
+    const ph = await ProviderHealth.init({ redis: createThrowingRedis(), now: () => nowMs });
+    await expect(ph.recordSuccess("acme", 100)).resolves.toBeUndefined();
+    await expect(ph.recordFailure("acme", 50, "boom")).resolves.toBeUndefined();
   });
 
   it("records successes and failures with EMA latency", async () => {
