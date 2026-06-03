@@ -5,12 +5,18 @@ import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
 
-export function NavHeadingPuck({ heading }: { heading: number | null }) {
+// A bold navigation chevron pointing "up" (north) at rotation 0. The marker is
+// created with rotationAlignment: "map" and rotated by the travel bearing, so
+// it points along the direction of travel and turns with the map.
+const CHEVRON_SVG = `<svg width="34" height="34" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
+  <path d="M17 2 L28 30 L17 23 L6 30 Z" fill="#1a73e8" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+</svg>`;
+
+export function NavHeadingPuck() {
   const { mapRef, mapReady } = useMap();
   const progress = useNavigationStore((s) => s.progress);
   const status = useNavigationStore((s) => s.status);
   const markerRef = useRef<maplibregl.Marker | null>(null);
-  const coneRef = useRef<HTMLDivElement | null>(null);
 
   // Create the marker element once the map is ready.
   useEffect(() => {
@@ -21,21 +27,16 @@ export function NavHeadingPuck({ heading }: { heading: number | null }) {
 
     import("maplibre-gl").then(({ default: maplibregl }) => {
       if (destroyed || markerRef.current) return;
-
       const el = document.createElement("div");
-      el.style.cssText = "width:22px;height:22px;position:relative;";
-      const cone = document.createElement("div");
-      cone.style.cssText =
-        "position:absolute;left:50%;top:50%;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:18px solid #1a73e8;transform-origin:50% 70%;transform:translate(-50%,-70%);";
-      const dot = document.createElement("div");
-      dot.style.cssText =
-        "position:absolute;left:50%;top:50%;width:12px;height:12px;border-radius:50%;background:#1a73e8;border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.4);";
-      el.appendChild(cone);
-      el.appendChild(dot);
-      coneRef.current = cone;
-      markerRef.current = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([
-        0, 0,
-      ]);
+      el.style.cssText =
+        "width:34px;height:34px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));";
+      el.innerHTML = CHEVRON_SVG;
+      markerRef.current = new maplibregl.Marker({
+        element: el,
+        anchor: "center",
+        // Rotate with the map so the chevron tracks the world travel direction.
+        rotationAlignment: "map",
+      }).setLngLat([0, 0]);
     });
 
     return () => {
@@ -48,11 +49,10 @@ export function NavHeadingPuck({ heading }: { heading: number | null }) {
     return () => {
       markerRef.current?.remove();
       markerRef.current = null;
-      coneRef.current = null;
     };
   }, []);
 
-  // Reposition + rotate as the user moves.
+  // Reposition + rotate to the travel bearing as the user moves.
   useEffect(() => {
     const map = mapRef.current;
     const marker = markerRef.current;
@@ -61,11 +61,8 @@ export function NavHeadingPuck({ heading }: { heading: number | null }) {
       marker.remove();
       return;
     }
-    marker.setLngLat(progress.snapped).addTo(map);
-    if (coneRef.current && heading !== null) {
-      coneRef.current.style.transform = `translate(-50%,-70%) rotate(${heading}deg)`;
-    }
-  }, [mapRef, status, progress, heading]);
+    marker.setLngLat(progress.snapped).setRotation(progress.bearing).addTo(map);
+  }, [mapRef, status, progress]);
 
   return null;
 }

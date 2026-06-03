@@ -5,6 +5,7 @@ import { getCommunityModule } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
+import { HideDuringNavigation } from "@/components/navigation/HideDuringNavigation";
 import { DetailShell } from "./DetailShell";
 import { DETAIL_PANELS, SIDEBAR_PANELS } from "./panel-map";
 import { SidebarShell } from "./SidebarShell";
@@ -56,16 +57,21 @@ export function PanelHost() {
 
   return (
     <>
-      {sidebarEntry && (
-        <SidebarShell contentSx={sidebarEntry.contentSx}>
-          <sidebarEntry.component />
-        </SidebarShell>
-      )}
-      {DetailContent && (
-        <DetailShell>
-          <DetailContent />
-        </DetailShell>
-      )}
+      {/* The route-planning sidebar / place detail are hidden during turn-by-turn
+          navigation (both the desktop rail and the mobile bottom sheet), so the
+          nav overlay owns the screen. They restore when navigation ends. */}
+      <HideDuringNavigation>
+        {sidebarEntry && (
+          <SidebarShell contentSx={sidebarEntry.contentSx}>
+            <sidebarEntry.component />
+          </SidebarShell>
+        )}
+        {DetailContent && (
+          <DetailShell>
+            <DetailContent />
+          </DetailShell>
+        )}
+      </HideDuringNavigation>
       {withPanel.map((integration) => {
         const isCommunity = getCommunityModule(integration.id) !== undefined;
         return isCommunity ? (

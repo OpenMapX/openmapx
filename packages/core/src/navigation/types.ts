@@ -24,6 +24,8 @@ export interface NavProgress extends ProgressResult {
   alongMeters: number;
   deviationMeters: number;
   etaEpochMs: number;
+  /** Travel direction at the snapped position, degrees clockwise from north. */
+  bearing: number;
 }
 
 export interface RerouteOpts {

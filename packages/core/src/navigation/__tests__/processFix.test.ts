@@ -48,6 +48,8 @@ describe("processFix", () => {
     expect(r.progress?.currentStepIndex).toBe(0);
     expect(r.offRoute).toBe(false);
     expect(r.progress?.etaEpochMs).toBeGreaterThan(1000);
+    // Route runs due east, so the travel bearing should be ~90°.
+    expect(r.progress?.bearing).toBeCloseTo(90, 0);
   });
 
   it("flags reroute after sustained off-route fixes", () => {

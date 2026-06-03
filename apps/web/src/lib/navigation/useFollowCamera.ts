@@ -27,7 +27,8 @@ export function useFollowCamera(map: maplibregl.Map | null): void {
     map.easeTo(
       {
         center: progress.snapped,
-        bearing: map.getBearing(),
+        // Rotate the map so travel direction is "up" (course-up navigation).
+        bearing: progress.bearing,
         pitch: PITCH[mode] ?? 0,
         zoom: Math.max(map.getZoom(), 16),
         duration: CAMERA_EASE_DURATION_MS,
@@ -37,11 +38,15 @@ export function useFollowCamera(map: maplibregl.Map | null): void {
   }, [map, status, cameraMode, progress, mode]);
 
   // A user pan/rotate gesture drops follow mode; the RecenterFab restores it.
-  // `dragstart`/`rotatestart` only fire from user interaction (programmatic
-  // easeTo emits movestart, not dragstart), so no programmatic-flag check is needed.
+  // The follow camera's own `easeTo` changes bearing (course-up), which emits a
+  // programmatic `rotatestart` — guard against it so we only react to real
+  // user input (our easeTo passes `{ programmatic: true }` as event data).
   useEffect(() => {
     if (!map || status === "idle") return;
-    const onUserGesture = () => useNavigationStore.getState().setCameraMode("free");
+    const onUserGesture = (e: { programmatic?: boolean }) => {
+      if (e?.programmatic) return;
+      useNavigationStore.getState().setCameraMode("free");
+    };
     map.on("dragstart", onUserGesture);
     map.on("rotatestart", onUserGesture);
     return () => {

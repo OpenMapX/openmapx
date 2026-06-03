@@ -1,4 +1,5 @@
 import type { Route } from "@integrations/routing/types";
+import type { LngLat } from "../types/geometry";
 import { eta } from "./eta";
 import { computeProgress } from "./progress";
 import { shouldReroute } from "./reroute";
@@ -7,6 +8,21 @@ import type { FixInput, NavTickOptions, NavTickResult, NavTickState } from "./ty
 import { nextVoiceCue } from "./voiceCue";
 
 const HISTORY_LIMIT = 6;
+
+/** Initial bearing (deg clockwise from north) of the route segment at `segmentIndex`. */
+function bearingAt(geometry: LngLat[], segmentIndex: number): number {
+  if (geometry.length < 2) return 0;
+  const i = Math.max(0, Math.min(segmentIndex, geometry.length - 2));
+  const [lng1, lat1] = geometry[i];
+  const [lng2, lat2] = geometry[i + 1];
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLng = toRad(lng2 - lng1);
+  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
 
 /**
  * Process one GPS fix against the active route. Pure: returns the new progress,
@@ -66,6 +82,7 @@ export function processFix(
       alongMeters: snap.alongMeters,
       deviationMeters: snap.deviationMeters,
       etaEpochMs: eta(prog.durationRemaining, fix.timestampMs),
+      bearing: bearingAt(route.geometry, snap.segmentIndex),
     },
     offRoute,
     needsReroute,

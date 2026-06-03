@@ -2,13 +2,11 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { useNavigationStore, useSettingsStore, useSidebarStore } from "@openmapx/core";
+import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect } from "react";
 import { useMapOptional } from "@/lib/MapContext";
 import { useFollowCamera } from "@/lib/navigation/useFollowCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
-import { useHeading } from "@/lib/useHeading";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { ArrivalCard } from "./ArrivalCard";
 import { LaneGuidance } from "./LaneGuidance";
@@ -40,16 +38,6 @@ export function NavigationView() {
   useNavigationEngine();
   useFollowCamera(map);
   useWakeLock(active && keepScreenOn);
-  const heading = useHeading(active);
-
-  // Collapse the route-planning sidebar while navigating so it doesn't sit on
-  // top of the map behind the nav overlay; restore the prior state on exit.
-  useEffect(() => {
-    if (!active) return;
-    const prevCollapsed = useSidebarStore.getState().collapsed;
-    useSidebarStore.getState().setCollapsed(true);
-    return () => useSidebarStore.getState().setCollapsed(prevCollapsed);
-  }, [active]);
 
   if (!active) return null;
 
@@ -66,7 +54,7 @@ export function NavigationView() {
 
   return (
     <>
-      <NavHeadingPuck heading={heading} />
+      <NavHeadingPuck />
       <Box
         sx={{
           position: "fixed",
