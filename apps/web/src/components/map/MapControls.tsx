@@ -108,7 +108,8 @@ export function MapControls() {
         </Tooltip>
       </Paper>
 
-      <Pegman />
+      {/* Street View pegman is irrelevant during turn-by-turn navigation. */}
+      {!navigating && <Pegman />}
 
       {/* Compass — while navigating it appears only when the user has panned
           off-track and recenters/resumes tracking; otherwise it resets bearing
