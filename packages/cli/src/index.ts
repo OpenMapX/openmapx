@@ -1,6 +1,7 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
 import { Command } from "commander";
 import { registerBackupCommands } from "./commands/backup";
+import { registerCacheCommands } from "./commands/cache";
 import { registerCheckCommand } from "./commands/check";
 import { registerComposeCommands } from "./commands/compose";
 import { registerDataCommands } from "./commands/data";
@@ -35,6 +36,7 @@ registerReposCommands(program);
 registerBackupCommands(program);
 registerUsersCommands(program);
 registerCheckCommand(program);
+registerCacheCommands(program);
 registerTransitousCommands(program);
 
 await program.parseAsync(process.argv);
