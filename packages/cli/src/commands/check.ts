@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { dockerCompose } from "../lib/docker";
+import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
 
 interface PsLine {
@@ -55,27 +55,31 @@ interface ProbeResult {
   detail: string;
 }
 
+/**
+ * Probe image: a small, pinned curl container. curl's ENTRYPOINT is `curl`, so
+ * everything after the image name is curl flags. `-f` turns non-2xx responses
+ * into a non-zero exit (the "require any 2xx" contract); `-sS` keeps stdout to
+ * the body while still surfacing transport errors on stderr.
+ */
+export const PROBE_IMAGE = "curlimages/curl:8.20.0";
+
+/**
+ * Build the argv (after `docker run`) for an in-network HTTP probe: a one-off
+ * curl container attached to the compose network. This must run via `docker
+ * run`, not `docker compose run` — the latter rejects `--network` ("unknown
+ * flag") and treats the image as a service name.
+ */
+export function buildProbeArgs(network: string, url: string): string[] {
+  return ["--rm", "--network", network, PROBE_IMAGE, "-fsS", "--max-time", "5", url];
+}
+
 async function runDeepProbe(serviceId: string, network: string): Promise<ProbeResult> {
   const probe = DEEP_PROBES[serviceId];
   if (probe === null) return { status: "skipped", detail: "no app-level probe" };
   if (probe === undefined) return { status: "skipped", detail: "unknown service" };
 
   const url = `http://${serviceId}:${probe.port}${probe.path}`;
-  const result = await dockerCompose([
-    "run",
-    "--rm",
-    "--no-deps",
-    "--network",
-    network,
-    "--entrypoint",
-    "wget",
-    "alpine/wget:1.27.0",
-    "-q",
-    "-O-",
-    "-T",
-    "5",
-    url,
-  ]);
+  const result = await dockerRun(buildProbeArgs(network, url));
 
   if (result.exitCode !== 0) {
     const stderr =
