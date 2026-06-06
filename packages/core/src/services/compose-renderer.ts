@@ -406,7 +406,15 @@ function renderHealthcheck(
   if (hc.type === "http") {
     const port = hc.port ?? container.expose?.[0] ?? 80;
     const path = hc.path ?? "/";
-    out.test = ["CMD-SHELL", `curl -fs http://localhost:${port}${path} || exit 1`];
+    // Use `127.0.0.1`, not `localhost`: `localhost` resolves to `::1` first and
+    // an IPv4-only server (e.g. MOTIS binds 0.0.0.0 = IPv4) refuses it. Fall back
+    // to wget so images that ship no curl (again, MOTIS) still get a working
+    // probe; if neither client exists the `|| exit 1` keeps it unhealthy.
+    const url = `http://127.0.0.1:${port}${path}`;
+    out.test = [
+      "CMD-SHELL",
+      `curl -fsS ${url} -o /dev/null 2>/dev/null || wget -q -O /dev/null ${url} 2>/dev/null || exit 1`,
+    ];
   } else if (hc.type === "tcp") {
     const port = hc.port ?? container.expose?.[0] ?? 80;
     out.test = ["CMD-SHELL", `nc -z localhost ${port} || exit 1`];

@@ -692,3 +692,28 @@ describe("renderCompose", () => {
     });
   });
 });
+
+describe("renderServiceSnippet healthcheck", () => {
+  it("renders an http healthcheck that works without curl and on IPv4-only servers", () => {
+    const snippet = renderServiceSnippet(
+      svc("alpha", {
+        container: {
+          image: "t/alpha",
+          tag: "latest",
+          expose: [8080],
+          healthcheck: { type: "http", path: "/api/v1/health", port: 8080 },
+        },
+      }),
+      {},
+    );
+    const test = (snippet.healthcheck as { test: string[] }).test;
+    expect(test[0]).toBe("CMD-SHELL");
+    const cmd = test[1];
+    // IPv4 literal, not `localhost` — `localhost` resolves to `::1` first and is
+    // refused by IPv4-only servers (e.g. MOTIS binds 0.0.0.0 = IPv4 only).
+    expect(cmd).toContain("http://127.0.0.1:8080/api/v1/health");
+    expect(cmd).not.toContain("localhost");
+    // Falls back to wget when the image ships no curl (e.g. the MOTIS image).
+    expect(cmd).toContain("wget");
+  });
+});
