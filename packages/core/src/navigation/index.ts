@@ -13,7 +13,14 @@ export { shouldReroute } from "./reroute";
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
 export {
+  extractTrafficSignals,
+  type GeometryWindow,
+  signalCoordKey,
+  windowGeometry,
+} from "./trafficSignals";
+export {
   computeTransitProgress,
+  detectMissedConnection,
   stopsUntilAlight,
   type TransitProgress,
 } from "./transitProgress";

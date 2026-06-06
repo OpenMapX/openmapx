@@ -19,6 +19,13 @@ export interface ManeuverLane {
   indications: string[];
   /** Whether this lane is valid for the recommended maneuver. */
   valid: boolean;
+  /**
+   * The single recommended indication to follow within a valid lane, when the
+   * engine reports it (OSRM `valid_indication`, Valhalla active/valid lane
+   * direction). Lets the UI brighten the exact arrow to take in a multi-arrow
+   * lane. Undefined when unknown.
+   */
+  active?: string;
 }
 
 export interface RouteStep {
@@ -144,6 +151,12 @@ export interface MatchEdge {
   surface?: string;
   /** Street names attached to the edge, when known. */
   names?: string[];
+  /**
+   * Whether this edge's END node is a traffic signal
+   * (OSM highway=traffic_signals). The node's coordinate is
+   * `MatchResult.geometry[endShapeIndex]`.
+   */
+  endNodeTrafficSignal?: boolean;
   /** Inclusive index into the matched shape where this edge begins. */
   beginShapeIndex: number;
   /** Inclusive index into the matched shape where this edge ends. */

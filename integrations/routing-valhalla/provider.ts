@@ -49,10 +49,17 @@ const COSTING_MAP: Record<string, string> = {
 
 const ELEVATION_INTERVAL = 30; // metres between elevation samples
 
+/**
+ * Valhalla turn-lane fields vary by version: `valid`/`active` may be plain
+ * booleans, a single indication string, or an array of indication strings. We
+ * accept all three so lane validity and the active indication survive either way.
+ */
+type ValhallaLaneFlag = boolean | string | string[];
+
 interface ValhallaLaneRaw {
   directions?: string[];
-  active?: boolean;
-  valid?: boolean;
+  active?: ValhallaLaneFlag;
+  valid?: ValhallaLaneFlag;
 }
 
 interface ValhallaManeuver {
@@ -171,13 +178,32 @@ export function valhallaManeuverType(t: number): { type: string; modifier?: stri
   }
 }
 
-/** Lane guidance from a Valhalla maneuver, when present. */
-function valhallaLanes(maneuver: ValhallaManeuver): ManeuverLane[] | undefined {
+/** True when a Valhalla lane flag is set (boolean true, non-empty string/array). */
+function laneFlagSet(flag: ValhallaLaneFlag | undefined): boolean {
+  if (Array.isArray(flag)) return flag.length > 0;
+  if (typeof flag === "string") return flag.length > 0;
+  return Boolean(flag);
+}
+
+/** The active indication string from a Valhalla lane flag, when it carries one. */
+function laneFlagIndication(flag: ValhallaLaneFlag | undefined): string | undefined {
+  if (Array.isArray(flag)) return flag[0];
+  if (typeof flag === "string" && flag.length > 0) return flag;
+  return undefined;
+}
+
+/** Lane guidance from a Valhalla maneuver, when present. Exported for testing. */
+export function valhallaLanes(maneuver: ValhallaManeuver): ManeuverLane[] | undefined {
   if (!maneuver.lanes || maneuver.lanes.length === 0) return undefined;
-  return maneuver.lanes.map((l) => ({
-    indications: l.directions ?? [],
-    valid: Boolean(l.valid ?? l.active),
-  }));
+  return maneuver.lanes.map((l) => {
+    const lane: ManeuverLane = {
+      indications: l.directions ?? [],
+      valid: laneFlagSet(l.valid) || laneFlagSet(l.active),
+    };
+    const active = laneFlagIndication(l.active) ?? laneFlagIndication(l.valid);
+    if (active) lane.active = active;
+    return lane;
+  });
 }
 
 function transformLeg(leg: ValhallaLeg): RouteLeg {
@@ -247,6 +273,7 @@ interface ValhallaTraceEdge {
   names?: string[];
   begin_shape_index?: number;
   end_shape_index?: number;
+  end_node?: { traffic_signal?: boolean };
 }
 
 interface ValhallaTraceMatchedPoint {
@@ -264,7 +291,7 @@ interface ValhallaTraceAttributesResponse {
   matched_points?: ValhallaTraceMatchedPoint[];
 }
 
-const TRACE_ATTRIBUTE_FILTER = [
+export const TRACE_ATTRIBUTE_FILTER = [
   "edge.way_id",
   "edge.length",
   "edge.speed",
@@ -273,6 +300,7 @@ const TRACE_ATTRIBUTE_FILTER = [
   "edge.names",
   "edge.begin_shape_index",
   "edge.end_shape_index",
+  "node.traffic_signal",
   "matched.point",
   "matched.type",
   "matched.edge_index",
@@ -293,6 +321,7 @@ export function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
     names: edge.names,
     beginShapeIndex: edge.begin_shape_index ?? 0,
     endShapeIndex: edge.end_shape_index ?? 0,
+    endNodeTrafficSignal: edge.end_node?.traffic_signal,
   };
 }
 

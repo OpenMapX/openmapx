@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { transformTraceEdge, valhallaManeuverType } from "./provider.js";
+import {
+  TRACE_ATTRIBUTE_FILTER,
+  transformTraceEdge,
+  valhallaLanes,
+  valhallaManeuverType,
+} from "./provider.js";
 
 describe("valhallaManeuverType", () => {
   it("maps right-turn enum to normalized turn/right", () => {
@@ -61,5 +66,70 @@ describe("transformTraceEdge", () => {
   it("passes through a missing speed_limit as undefined", () => {
     const edge = transformTraceEdge({ length: 0.1 });
     expect(edge.speedLimit).toBeUndefined();
+  });
+
+  it("maps end_node.traffic_signal to endNodeTrafficSignal", () => {
+    const signal = transformTraceEdge({ length: 0.1, end_node: { traffic_signal: true } });
+    expect(signal.endNodeTrafficSignal).toBe(true);
+
+    const plain = transformTraceEdge({ length: 0.1 });
+    expect(plain.endNodeTrafficSignal).toBeUndefined();
+  });
+});
+
+describe("valhallaLanes", () => {
+  it("returns undefined when the maneuver carries no lanes", () => {
+    expect(
+      valhallaLanes({
+        type: 10,
+        instruction: "",
+        length: 0,
+        time: 0,
+        begin_shape_index: 0,
+        end_shape_index: 0,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("maps directions to indications and derives validity (boolean form)", () => {
+    const lanes = valhallaLanes({
+      type: 10,
+      instruction: "",
+      length: 0,
+      time: 0,
+      begin_shape_index: 0,
+      end_shape_index: 0,
+      lanes: [
+        { directions: ["left"], valid: false, active: false },
+        { directions: ["through", "right"], valid: true, active: false },
+      ],
+    });
+    expect(lanes).toEqual([
+      { indications: ["left"], valid: false },
+      { indications: ["through", "right"], valid: true },
+    ]);
+  });
+
+  it("captures the active indication from array-form active/valid lanes", () => {
+    const lanes = valhallaLanes({
+      type: 10,
+      instruction: "",
+      length: 0,
+      time: 0,
+      begin_shape_index: 0,
+      end_shape_index: 0,
+      lanes: [
+        { directions: ["through", "right"], valid: ["right"], active: ["right"] },
+        { directions: ["left"], valid: [], active: [] },
+      ],
+    });
+    expect(lanes?.[0]).toEqual({ indications: ["through", "right"], valid: true, active: "right" });
+    expect(lanes?.[1]).toEqual({ indications: ["left"], valid: false });
+  });
+});
+
+describe("TRACE_ATTRIBUTE_FILTER", () => {
+  it("requests the node.traffic_signal attribute", () => {
+    expect(TRACE_ATTRIBUTE_FILTER).toContain("node.traffic_signal");
   });
 });
