@@ -22,7 +22,10 @@ describe("NavBottomBar", () => {
         durationRemaining={300}
         etaEpochMs={0}
         voiceEnabled
+        keepScreenOn
         onToggleVoice={() => {}}
+        onToggleKeepScreenOn={() => {}}
+        onOverview={() => {}}
         onEnd={() => {}}
         units="metric"
       />,
@@ -30,5 +33,23 @@ describe("NavBottomBar", () => {
     expect(html).toContain("1200 m");
     expect(html).toContain("300s");
     expect(html).toContain("end"); // i18n key passthrough
+  });
+
+  it("exposes a more-options menu trigger", () => {
+    const html = renderToStaticMarkup(
+      <NavBottomBar
+        distanceRemaining={1200}
+        durationRemaining={300}
+        etaEpochMs={0}
+        voiceEnabled
+        keepScreenOn
+        onToggleVoice={() => {}}
+        onToggleKeepScreenOn={() => {}}
+        onOverview={() => {}}
+        onEnd={() => {}}
+        units="metric"
+      />,
+    );
+    expect(html).toContain("moreOptions"); // overflow trigger aria-label
   });
 });

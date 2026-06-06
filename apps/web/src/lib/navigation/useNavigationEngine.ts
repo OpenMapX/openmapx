@@ -58,7 +58,13 @@ export function useNavigationEngine(): void {
       const opts = navOptionsForMode(mode);
       const result = processFix(route, fix, tickRef.current, opts);
       tickRef.current = result.nextState;
-      if (!result.progress) return;
+      // Surface noisy GPS: fixes dropped for poor accuracy flag "Weak GPS"; a
+      // usable fix clears it. (Dropping them also suppresses false off-route.)
+      if (!result.progress) {
+        if (result.accuracyRejected) store.setWeakGps(true);
+        return;
+      }
+      store.setWeakGps(false);
 
       store.applyProgress(result.progress);
       store.setOffRoute(result.offRoute);
@@ -80,12 +86,16 @@ export function useNavigationEngine(): void {
             units: "kilometers",
           }).geometry.coordinates as LngLat;
           const trace: LngLat[] = [result.progress.snapped, ahead];
-          fetchSpeedLimit(trace, "driving").then((limit) => {
-            // Ignore if navigation ended while the lookup was in flight.
-            const st = useNavigationStore.getState().status;
-            if (st === "idle" || st === "arrived") return;
-            useNavigationStore.getState().setSpeedLimit(limit);
-          });
+          fetchSpeedLimit(trace, "driving")
+            .then((limit) => {
+              // Ignore if navigation ended while the lookup was in flight.
+              const st = useNavigationStore.getState().status;
+              if (st === "idle" || st === "arrived") return;
+              useNavigationStore.getState().setSpeedLimit(limit);
+            })
+            // A failed lookup just leaves the badge as-is; never let it surface
+            // as an unhandled rejection.
+            .catch(() => {});
         }
       } else {
         store.setSpeedLimit(null);
@@ -119,13 +129,18 @@ export function useNavigationEngine(): void {
               tickRef.current = freshTick();
               useNavigationStore.getState().applyReroute(next);
             } else {
+              // No alternative found: stay on the old route and tell the user.
               useNavigationStore.setState({ status: "navigating" });
+              useNavigationStore.getState().signalRerouteFailed();
             }
           })
           .catch(() => {
             const st = useNavigationStore.getState().status;
             if (st === "idle" || st === "arrived") return;
+            // Offline / API error: keep the old route, surface a toast; the next
+            // qualifying off-route fix will retry.
             useNavigationStore.setState({ status: "navigating" });
+            useNavigationStore.getState().signalRerouteFailed();
           })
           .finally(() => {
             reroutingRef.current = false;

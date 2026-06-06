@@ -2,23 +2,22 @@
 
 import Box from "@mui/material/Box";
 import type { ManeuverLane } from "@openmapx/core";
-import { maneuverIconFor } from "@/lib/navigation/maneuverIcon";
+import { laneIndicationIcon, normalizeLaneToken } from "@/lib/navigation/maneuverIcon";
 
-const TO_MANEUVER: Record<string, { type: string; modifier?: string }> = {
-  left: { type: "turn", modifier: "left" },
-  right: { type: "turn", modifier: "right" },
-  straight: { type: "turn", modifier: "straight" },
-  "slight left": { type: "turn", modifier: "slight left" },
-  "slight right": { type: "turn", modifier: "slight right" },
-};
-
+/**
+ * Turn-lane guidance: one cell per lane, with an overlaid arrow for each allowed
+ * indication. Lanes you may take are highlighted; the recommended arrow (the
+ * engine's active indication, or the sole arrow of a single-option valid lane)
+ * is drawn brightest, other arrows mid, and arrows in lanes you must not take
+ * are dimmed. A lane with no real indication (`none`) renders as a blank cell.
+ */
 export function LaneGuidance({ lanes }: { lanes?: ManeuverLane[] }) {
   if (!lanes || lanes.length === 0) return null;
   return (
     <Box
       sx={{
         display: "flex",
-        gap: 0.5,
+        gap: 0.75,
         justifyContent: "center",
         p: 1,
         bgcolor: "background.paper",
@@ -26,12 +25,56 @@ export function LaneGuidance({ lanes }: { lanes?: ManeuverLane[] }) {
       }}
     >
       {lanes.map((lane, i) => {
-        const ind = lane.indications[0] ?? "straight";
-        const Icon = maneuverIconFor(TO_MANEUVER[ind]).component;
+        const arrows = lane.indications
+          .map((ind) => ({ ind, icon: laneIndicationIcon(ind) }))
+          .filter((a): a is { ind: string; icon: NonNullable<typeof a.icon> } => a.icon !== null);
+        const activeNorm = lane.active ? normalizeLaneToken(lane.active) : null;
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: lanes have no stable id
-          <Box key={i} data-valid={String(lane.valid)} sx={{ opacity: lane.valid ? 1 : 0.3 }}>
-            <Icon fontSize="small" />
+          <Box
+            // biome-ignore lint/suspicious/noArrayIndexKey: lanes have no stable id
+            key={i}
+            data-valid={String(lane.valid)}
+            data-arrow-count={String(arrows.length)}
+            sx={{
+              position: "relative",
+              width: 28,
+              height: 28,
+              borderRadius: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              bgcolor: lane.valid ? "action.selected" : "transparent",
+            }}
+          >
+            {arrows.length === 0 ? (
+              <Box
+                data-empty="true"
+                sx={{ width: 12, height: 2, borderRadius: 1, bgcolor: "text.disabled" }}
+              />
+            ) : (
+              arrows.map(({ ind, icon }) => {
+                const Icon = icon.component;
+                const isActive =
+                  lane.valid &&
+                  (activeNorm ? normalizeLaneToken(ind) === activeNorm : arrows.length === 1);
+                return (
+                  <Icon
+                    key={ind}
+                    data-active={String(isActive)}
+                    sx={{
+                      position: "absolute",
+                      fontSize: 22,
+                      color: !lane.valid
+                        ? "text.disabled"
+                        : isActive
+                          ? "primary.main"
+                          : "text.primary",
+                      opacity: lane.valid ? (isActive ? 1 : 0.55) : 0.3,
+                    }}
+                  />
+                );
+              })
+            )}
           </Box>
         );
       })}

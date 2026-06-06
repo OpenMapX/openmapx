@@ -31,6 +31,8 @@ interface OsrmManeuver {
 interface OsrmLane {
   valid?: boolean;
   indications?: string[];
+  /** The specific indication to follow when this lane is valid (OSRM ≥ 5.x). */
+  valid_indication?: string;
 }
 
 interface OsrmIntersection {
@@ -116,10 +118,14 @@ function generateInstruction(maneuver: OsrmManeuver, name: string, ref?: string)
 function osrmLanes(step: OsrmStep): ManeuverLane[] | undefined {
   const withLanes = step.intersections?.find((i) => i.lanes && i.lanes.length > 0);
   if (!withLanes?.lanes) return undefined;
-  return withLanes.lanes.map((l) => ({
-    indications: l.indications ?? [],
-    valid: Boolean(l.valid),
-  }));
+  return withLanes.lanes.map((l) => {
+    const lane: ManeuverLane = {
+      indications: l.indications ?? [],
+      valid: Boolean(l.valid),
+    };
+    if (l.valid_indication) lane.active = l.valid_indication;
+    return lane;
+  });
 }
 
 /** First known maxspeed annotation, normalized to km/h. */

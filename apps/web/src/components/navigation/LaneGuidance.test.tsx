@@ -18,4 +18,27 @@ describe("LaneGuidance", () => {
     expect(html).toContain('data-valid="true"');
     expect(html).toContain('data-valid="false"');
   });
+
+  it("renders a blank cell for a 'none' lane", () => {
+    const html = renderToStaticMarkup(
+      <LaneGuidance lanes={[{ indications: ["none"], valid: false }]} />,
+    );
+    expect(html).toContain('data-empty="true"');
+  });
+
+  it("overlays an arrow per indication in a multi-indication lane", () => {
+    const html = renderToStaticMarkup(
+      <LaneGuidance lanes={[{ indications: ["straight", "right"], valid: true }]} />,
+    );
+    expect(html).toContain('data-arrow-count="2"');
+  });
+
+  it("marks the active indication's arrow", () => {
+    const html = renderToStaticMarkup(
+      <LaneGuidance
+        lanes={[{ indications: ["straight", "right"], valid: true, active: "right" }]}
+      />,
+    );
+    expect(html).toContain('data-active="true"');
+  });
 });

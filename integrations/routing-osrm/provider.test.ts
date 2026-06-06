@@ -38,6 +38,27 @@ describe("transformOsrmStep", () => {
     ]);
   });
 
+  it("captures valid_indication as the active lane indication", () => {
+    const s = transformOsrmStep({
+      ...osrmStep,
+      intersections: [
+        {
+          lanes: [
+            { valid: false, indications: ["left"] },
+            { valid: true, indications: ["straight", "right"], valid_indication: "right" },
+          ],
+        },
+      ],
+    });
+    expect(s.lanes?.[1]).toEqual({
+      indications: ["straight", "right"],
+      valid: true,
+      active: "right",
+    });
+    // Invalid lane without a valid_indication carries no `active`.
+    expect(s.lanes?.[0].active).toBeUndefined();
+  });
+
   it("carries speed limit in km/h", () => {
     const s = transformOsrmStep(osrmStep);
     expect(s.speedLimit).toBe(50);

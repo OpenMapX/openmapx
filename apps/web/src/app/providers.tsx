@@ -2,7 +2,7 @@
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { configureStorage, useSettingsStore } from "@openmapx/core";
+import { configureStorage, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -101,6 +101,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // Storage is configured at module scope above, but the settings store may
     // have initialized before that ran; re-read the persisted units preference.
     useSettingsStore.getState().hydrate();
+    // Same for the navigation voice / keep-screen-on toggle preferences.
+    useNavigationStore.getState().hydrate();
   }, []);
 
   const inner = (

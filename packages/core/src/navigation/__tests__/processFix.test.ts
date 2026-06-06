@@ -35,6 +35,17 @@ describe("processFix", () => {
       opts,
     );
     expect(r.progress).toBeNull();
+    expect(r.accuracyRejected).toBe(true);
+  });
+
+  it("does not flag accuracyRejected for an acceptable fix", () => {
+    const r = processFix(
+      route,
+      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000 },
+      emptyState,
+      opts,
+    );
+    expect(r.accuracyRejected).toBe(false);
   });
 
   it("produces progress for an on-route fix", () => {

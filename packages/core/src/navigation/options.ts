@@ -11,6 +11,7 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         reroute: { thresholdMeters: 25, consecutiveFixes: 3, debounceMs: 8_000 },
         voiceThresholds: { far: 150, near: 50 },
         arrivalThresholdMeters: 20,
+        laneGuidanceMeters: 80,
       };
     case "cycling":
       return {
@@ -19,6 +20,7 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         reroute: { thresholdMeters: 30, consecutiveFixes: 3, debounceMs: 10_000 },
         voiceThresholds: { far: 250, near: 100 },
         arrivalThresholdMeters: 25,
+        laneGuidanceMeters: 200,
       };
     default:
       return {
@@ -27,6 +29,7 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         reroute: { thresholdMeters: 45, consecutiveFixes: 3, debounceMs: 10_000 },
         voiceThresholds: { far: 400, near: 200 },
         arrivalThresholdMeters: 35,
+        laneGuidanceMeters: 500,
       };
   }
 }

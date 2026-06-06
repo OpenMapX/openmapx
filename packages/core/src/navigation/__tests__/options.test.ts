@@ -15,4 +15,13 @@ describe("navOptionsForMode", () => {
       expect(o.arrivalThresholdMeters).toBeGreaterThan(0);
     }
   });
+
+  it("provides a positive lane-guidance distance, wider for driving than walking", () => {
+    for (const m of ["driving", "walking", "cycling"] as const) {
+      expect(navOptionsForMode(m).laneGuidanceMeters).toBeGreaterThan(0);
+    }
+    expect(navOptionsForMode("driving").laneGuidanceMeters).toBeGreaterThan(
+      navOptionsForMode("walking").laneGuidanceMeters,
+    );
+  });
 });

@@ -38,6 +38,7 @@ export function processFix(
   if (fix.accuracy > opts.accuracyCapMeters) {
     return {
       progress: null,
+      accuracyRejected: true,
       offRoute: false,
       needsReroute: false,
       arrived: false,
@@ -100,6 +101,7 @@ export function processFix(
       bearing: bearingAt(route.geometry, snap.segmentIndex),
       speedMps,
     },
+    accuracyRejected: false,
     offRoute,
     needsReroute,
     arrived,

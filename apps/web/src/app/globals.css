@@ -23,6 +23,9 @@
    * `<MapAttributionPositioner>` and consumed by the
    * `.maplibregl-ctrl-bottom-right` rule below. */
   --omx-attrib-shift: 0px;
+  /* Pixels to lift the bottom-right attribution control above the navigation
+   * bottom sheet. Set by `<MapAttributionPositioner>`. */
+  --omx-attrib-bottom: 0px;
 }
 
 .dark {
@@ -98,9 +101,9 @@ main {
    * extend left under the sidebar when it's open. */
   .maplibregl-ctrl-bottom-right {
     right: var(--omx-safe-right) !important;
-    bottom: var(--omx-safe-bottom) !important;
+    bottom: calc(var(--omx-safe-bottom) + var(--omx-attrib-bottom)) !important;
     max-width: calc(100vw - var(--omx-safe-left) - var(--omx-safe-right) - var(--omx-attrib-shift) - 16px) !important;
-    transition: max-width 0.25s ease;
+    transition: max-width 0.25s ease, bottom 0.25s ease;
   }
 
   .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {

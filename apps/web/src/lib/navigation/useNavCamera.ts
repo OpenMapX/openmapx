@@ -29,12 +29,26 @@ const POS_TAU = 0.45;
 const MAX_LEAD = 1.5;
 const BEARING_TAU = 0.35;
 
-// A bold navigation chevron pointing "up" (north) at rotation 0. Created with
-// rotationAlignment: "map" and rotated by the travel bearing, so it points along
-// the direction of travel and turns with the map (course-up).
-const CHEVRON_SVG = `<svg width="34" height="34" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
-  <path d="M17 2 L28 30 L17 23 L6 30 Z" fill="#1a73e8" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+// A bold navigation chevron, seated in a white disc, pointing "up" (north) at
+// rotation 0. Created with rotationAlignment: "map" and rotated by the travel
+// bearing, so it points along the direction of travel and turns with the map
+// (course-up).
+const PUCK_PX = 48;
+const CHEVRON_SVG = `<svg width="${PUCK_PX}" height="${PUCK_PX}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="24" cy="24" r="20" fill="#ffffff"/>
+  <path d="M24 11 L34 36 L24 30 L14 36 Z" fill="#1a73e8" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
 </svg>`;
+
+// Keep the puck on the line between the screen's bottom two quarters (i.e. 3/4
+// of the way down) so the road ahead fills the view. Realised via camera
+// padding: a top inset shifts the centred point downward.
+const PUCK_SCREEN_RATIO = 0.75;
+
+/** Camera padding that places the followed point at PUCK_SCREEN_RATIO down. */
+function followPadding(map: maplibregl.Map): maplibregl.PaddingOptions {
+  const h = map.getContainer().clientHeight;
+  return { top: Math.max(0, (2 * PUCK_SCREEN_RATIO - 1) * h), bottom: 0, left: 0, right: 0 };
+}
 
 /** Ease an angle (deg) toward a target along the shortest arc. */
 function easeAngle(current: number, target: number, alpha: number): number {
@@ -85,6 +99,9 @@ export function useNavCamera(): void {
   const bearingRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
   const settleUntilRef = useRef(0);
+  // Last camera pose applied via jumpTo; lets the per-frame loop skip a redundant
+  // camera transform + repaint while the puck is stationary (e.g. at a light).
+  const lastCamRef = useRef<{ lng: number; lat: number; bearing: number } | null>(null);
 
   const active = status === "navigating" || status === "rerouting";
 
@@ -96,8 +113,7 @@ export function useNavCamera(): void {
     import("maplibre-gl").then(({ default: maplibregl }) => {
       if (destroyed || markerRef.current) return;
       const el = document.createElement("div");
-      el.style.cssText =
-        "width:34px;height:34px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));";
+      el.style.cssText = `width:${PUCK_PX}px;height:${PUCK_PX}px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));`;
       el.innerHTML = CHEVRON_SVG;
       markerRef.current = new maplibregl.Marker({
         element: el,
@@ -127,6 +143,7 @@ export function useNavCamera(): void {
     displayedRef.current = null;
     bearingRef.current = null;
     targetRef.current = null;
+    lastCamRef.current = null;
   }, [route]);
 
   // Record each new fix as the dead-reckoning target, stamped with its arrival
@@ -158,6 +175,7 @@ export function useNavCamera(): void {
       {
         zoom: Math.max(map.getZoom(), NAV_ENTER_ZOOM),
         pitch: PITCH[mode] ?? 0,
+        padding: followPadding(map),
         duration: ENTER_EASE_MS,
       },
       { programmatic: true },
@@ -206,18 +224,34 @@ export function useNavCamera(): void {
         .addTo(map);
 
       const camMode = useNavigationStore.getState().cameraMode;
-      if (camMode === "follow" && now >= settleUntilRef.current) {
-        map.jumpTo({ center: point as LngLat, bearing: brg }, { programmatic: true });
+      if (camMode !== "follow" || now < settleUntilRef.current) {
+        // Released, or still settling the enter-ease: re-center on the next
+        // follow frame rather than fighting the easeTo / the user's gesture.
+        lastCamRef.current = null;
+      } else {
+        const last = lastCamRef.current;
+        const moved =
+          !last ||
+          Math.abs(point[0] - last.lng) > 1e-6 ||
+          Math.abs(point[1] - last.lat) > 1e-6 ||
+          Math.abs(((brg - last.bearing + 540) % 360) - 180) > 0.05;
+        if (moved) {
+          map.jumpTo({ center: point as LngLat, bearing: brg }, { programmatic: true });
+          lastCamRef.current = { lng: point[0], lat: point[1], bearing: brg };
+        }
       }
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [active, mapRef]);
 
-  // Hide the puck when not actively navigating.
+  // Hide the puck and release the follow padding when not actively navigating.
   useEffect(() => {
-    if (!active) markerRef.current?.remove();
-  }, [active]);
+    if (!active) {
+      markerRef.current?.remove();
+      mapRef?.current?.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    }
+  }, [active, mapRef]);
 
   // A real user pan/rotate gesture releases the camera; our own programmatic
   // easeTo/jumpTo pass `{ programmatic: true }` so they don't trip this.

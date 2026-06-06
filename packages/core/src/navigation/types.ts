@@ -46,6 +46,8 @@ export interface NavTickOptions {
   reroute: RerouteOpts;
   voiceThresholds: { far: number; near: number };
   arrivalThresholdMeters: number;
+  /** Show lane guidance only within this distance (m) of the next maneuver. */
+  laneGuidanceMeters: number;
 }
 
 export interface FixInput {
@@ -77,6 +79,8 @@ export interface VoiceCue {
 export interface NavTickResult {
   /** null when the fix was rejected (e.g. accuracy too poor). */
   progress: NavProgress | null;
+  /** True when the fix was discarded because its accuracy exceeded the cap. */
+  accuracyRejected: boolean;
   offRoute: boolean;
   needsReroute: boolean;
   arrived: boolean;

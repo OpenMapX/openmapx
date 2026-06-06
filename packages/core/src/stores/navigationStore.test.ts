@@ -2,7 +2,22 @@ import type { Route } from "@integrations/routing/types";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TransitProgress } from "../navigation/transitProgress";
+import type { NavProgress } from "../navigation/types";
+import { configureStorage, type StorageAdapter } from "../platform/storage";
 import { useNavigationStore } from "./navigationStore";
+
+function makeMemoryStorage(): StorageAdapter {
+  const map = new Map<string, string>();
+  return {
+    getString: (key) => map.get(key) ?? null,
+    setString: (key, value) => {
+      map.set(key, value);
+    },
+    remove: (key) => {
+      map.delete(key);
+    },
+  };
+}
 
 const itinerary = {
   duration: 1800,
@@ -43,12 +58,15 @@ describe("navigationStore", () => {
       [0, 0],
       [1, 1],
     ]);
+    // Stale progress from the old route must not survive the swap.
+    store.applyProgress({ alongMeters: 5000 } as NavProgress);
     store.beginReroute();
     expect(useNavigationStore.getState().status).toBe("rerouting");
     const route2 = { ...route, distance: 200 } as Route;
     store.applyReroute(route2);
     expect(useNavigationStore.getState().status).toBe("navigating");
     expect(useNavigationStore.getState().route?.distance).toBe(200);
+    expect(useNavigationStore.getState().progress).toBeNull();
   });
 
   it("completeArrival then stop resets", () => {
@@ -133,5 +151,44 @@ describe("navigationStore", () => {
     expect(s.kind).toBe("ground");
     expect(s.itinerary).toBeNull();
     expect(s.transitProgress).toBeNull();
+  });
+});
+
+describe("navigationStore preference persistence", () => {
+  beforeEach(() => {
+    configureStorage(makeMemoryStorage());
+    useNavigationStore.setState({ voiceEnabled: true, keepScreenOn: true });
+  });
+
+  it("persists voiceEnabled across a toggle + hydrate (simulated reload)", () => {
+    useNavigationStore.getState().toggleVoice();
+    expect(useNavigationStore.getState().voiceEnabled).toBe(false);
+    // Simulate a fresh session whose in-memory default is true.
+    useNavigationStore.setState({ voiceEnabled: true });
+    useNavigationStore.getState().hydrate();
+    expect(useNavigationStore.getState().voiceEnabled).toBe(false);
+  });
+
+  it("persists keepScreenOn across a toggle + hydrate (simulated reload)", () => {
+    useNavigationStore.getState().toggleKeepScreenOn();
+    expect(useNavigationStore.getState().keepScreenOn).toBe(false);
+    useNavigationStore.setState({ keepScreenOn: true });
+    useNavigationStore.getState().hydrate();
+    expect(useNavigationStore.getState().keepScreenOn).toBe(false);
+  });
+
+  it("hydrate keeps defaults when nothing is stored", () => {
+    useNavigationStore.getState().hydrate();
+    expect(useNavigationStore.getState().voiceEnabled).toBe(true);
+    expect(useNavigationStore.getState().keepScreenOn).toBe(true);
+  });
+
+  it("startGroundNavigation preserves persisted toggle prefs", () => {
+    useNavigationStore.getState().toggleVoice();
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+    expect(useNavigationStore.getState().voiceEnabled).toBe(false);
   });
 });
