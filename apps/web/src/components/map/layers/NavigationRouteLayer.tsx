@@ -1,11 +1,10 @@
 "use client";
 
 import { useNavigationStore } from "@openmapx/core";
-import { lineString } from "@turf/helpers";
-import lineSliceAlong from "@turf/line-slice-along";
 import type maplibregl from "maplibre-gl";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useMap } from "@/lib/MapContext";
+import { buildNavRouteLine, splitNavRoute } from "./navRouteSplit";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -22,6 +21,10 @@ export function NavigationRouteLayer() {
   const status = useNavigationStore((s) => s.status);
   const route = useNavigationStore((s) => s.route);
   const progress = useNavigationStore((s) => s.progress);
+
+  // Cache the turf line + total length per route so the per-fix update below
+  // doesn't re-walk the whole geometry every time the user moves.
+  const navLine = useMemo(() => (route ? buildNavRouteLine(route.geometry) : null), [route]);
 
   // Create source + layers once per style.
   useEffect(() => {
@@ -72,25 +75,13 @@ export function NavigationRouteLayer() {
       return;
     }
 
-    const line = lineString(route.geometry);
-    const totalKm = route.distance / 1000;
-    const alongKm = progress ? Math.min(progress.alongMeters / 1000, totalKm) : 0;
-
-    const features: GeoJSON.Feature[] = [];
-    if (alongKm > 0.001) {
-      features.push({
-        type: "Feature",
-        properties: { kind: "traveled" },
-        geometry: lineSliceAlong(line, 0, alongKm, { units: "kilometers" }).geometry,
-      });
-    }
-    features.push({
-      type: "Feature",
-      properties: { kind: "remaining" },
-      geometry: lineSliceAlong(line, alongKm, totalKm, { units: "kilometers" }).geometry,
-    });
+    const features = splitNavRoute(
+      route.geometry,
+      progress?.alongMeters ?? 0,
+      navLine ?? undefined,
+    );
     source.setData({ type: "FeatureCollection", features });
-  }, [mapRef, status, route, progress]);
+  }, [mapRef, status, route, navLine, progress?.alongMeters]);
 
   return null;
 }
