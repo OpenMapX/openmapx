@@ -139,6 +139,32 @@ describe("geocode", () => {
   });
 });
 
+// request params
+
+describe("request includes POI types", () => {
+  it("geocode requests `types` including poi so station/POIs surface", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk(makeMaptilerResponse([])));
+    const { maptilerGeocodingService } = await loadModule();
+
+    await maptilerGeocodingService.geocode("Köln Hbf");
+
+    // MapTiler omits POIs from its default response, so "Köln Hbf" returns only
+    // addresses (Düren Hbf, …) unless we explicitly ask for poi.
+    const types = new URL(String(mockFetch.mock.calls[0][0])).searchParams.get("types");
+    expect(types?.split(",")).toContain("poi");
+  });
+
+  it("autocomplete requests `types` including poi", async () => {
+    mockFetch.mockResolvedValueOnce(mockOk(makeMaptilerResponse([])));
+    const { maptilerGeocodingService } = await loadModule();
+
+    await maptilerGeocodingService.autocomplete("Köln Hb");
+
+    const types = new URL(String(mockFetch.mock.calls[0][0])).searchParams.get("types");
+    expect(types?.split(",")).toContain("poi");
+  });
+});
+
 // autocomplete
 
 describe("autocomplete", () => {

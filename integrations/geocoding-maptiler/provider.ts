@@ -15,6 +15,15 @@ import { resolvePoiIconPath } from "@openmapx/core";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
 
+// MapTiler omits POIs from its default geocoding response, so a query like
+// "Köln Hbf" returns only addresses (Düren Hbf, …) and never the station POI.
+// Requesting an explicit `types` whitelist that includes `poi` surfaces it
+// ("Köln Hauptbahnhof" at relevance 1.0) while keeping addresses, places, and
+// admin areas. Every name here is a valid MapTiler feature type — an unknown
+// one makes the API return 400.
+const SEARCH_TYPES =
+  "poi,address,street,neighbourhood,municipality,municipal_district,locality,subregion,region,county,country,postal_code,place";
+
 // Populated by setup(ctx) from the resolved integration config cascade.
 let apiKey: string | undefined;
 export function setMaptilerApiKey(value: string | undefined): void {
@@ -97,7 +106,7 @@ async function fetchMaptilerReverse(
 
 export const maptilerGeocodingService: GeocodingProviderImpl = {
   async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
-    const params: Record<string, string> = { limit: "10" };
+    const params: Record<string, string> = { limit: "10", types: SEARCH_TYPES };
     if (proximity) params.proximity = `${proximity[0]},${proximity[1]}`;
     const data = await fetchMaptiler(query, params, lang);
     return data.features.map((f) => ({
@@ -128,7 +137,11 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
   },
 
   async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
-    const data = await fetchMaptiler(query, { limit: "6", autocomplete: "true" }, lang);
+    const data = await fetchMaptiler(
+      query,
+      { limit: "6", autocomplete: "true", types: SEARCH_TYPES },
+      lang,
+    );
     return data.features.map((f) => {
       const category = f.properties?.categories?.[0];
       return {
