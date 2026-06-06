@@ -17,6 +17,23 @@ export async function dockerCompose(
   };
 }
 
+/**
+ * Run a one-off `docker run` (not `docker compose run`). Used for ephemeral
+ * helper containers — e.g. the deep-probe curl container — that attach to an
+ * existing compose network via `--network`, a flag `docker compose run` does
+ * not accept.
+ */
+export async function dockerRun(
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const result = await execa("docker", ["run", ...args], { reject: false });
+  return {
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    exitCode: result.exitCode ?? 0,
+  };
+}
+
 export async function dockerComposeStream(args: string[]): Promise<number> {
   const paths = repoPaths();
   const composeFile = paths.composeOutPath;
