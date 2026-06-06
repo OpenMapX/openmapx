@@ -3,6 +3,7 @@
 import CloseIcon from "@mui/icons-material/Close";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
+import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import Box from "@mui/material/Box";
@@ -17,10 +18,15 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { IsochroneTravelMode, LngLat } from "@openmapx/core";
-import { useIsochrone } from "@openmapx/core";
+import type { LngLat } from "@openmapx/core";
+import { useIsochrone, useReachableStops } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { TRAVEL_TIME_PRESETS, useTravelTimeStore } from "./store";
+import {
+  resolveIsochroneMode,
+  TRAVEL_TIME_PRESETS,
+  type TravelTimeMode,
+  useTravelTimeStore,
+} from "./store";
 
 function formatPresetLabel(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
@@ -43,12 +49,19 @@ export function TravelTimeToolbar() {
   const setOnlyWithinReach = useTravelTimeStore((s) => s.setOnlyWithinReach);
   const deactivate = useTravelTimeStore((s) => s.deactivate);
 
-  const { isFetching } = useIsochrone({
+  const { isTransit, isochroneMode } = resolveIsochroneMode(mode);
+  const { isFetching: isochroneFetching } = useIsochrone({
     origin,
-    mode,
+    mode: isochroneMode,
     contourMinutes: selectedMinutes,
-    enabled: isActive,
+    enabled: isActive && !isTransit,
   });
+  const { isFetching: reachFetching } = useReachableStops({
+    origin,
+    maxMinutes: selectedMinutes.length ? Math.max(...selectedMinutes) : 30,
+    enabled: isActive && isTransit,
+  });
+  const isFetching = isTransit ? reachFetching : isochroneFetching;
 
   if (!isActive) return null;
 
@@ -85,7 +98,7 @@ export function TravelTimeToolbar() {
           value={mode}
           exclusive
           size="small"
-          onChange={(_, v: IsochroneTravelMode | null) => {
+          onChange={(_, v: TravelTimeMode | null) => {
             if (v) setMode(v);
           }}
           sx={{ "& .MuiToggleButton-root": { px: 1, py: 0.5 } }}
@@ -103,6 +116,11 @@ export function TravelTimeToolbar() {
           <ToggleButton value="cycling" aria-label={t("cycling")}>
             <Tooltip title={t("cycling")}>
               <DirectionsBikeIcon sx={{ fontSize: 20 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="transit" aria-label={t("transit")}>
+            <Tooltip title={t("transit")}>
+              <DirectionsTransitIcon sx={{ fontSize: 20 }} />
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>
@@ -153,7 +171,9 @@ export function TravelTimeToolbar() {
         })}
       </Box>
 
-      {anchored && (
+      {/* Transit reachability is point-based (no contour), so the "only within
+          reach" polygon filter doesn't apply — hide it in transit mode. */}
+      {anchored && !isTransit && (
         <>
           <Divider />
           <FormControlLabel

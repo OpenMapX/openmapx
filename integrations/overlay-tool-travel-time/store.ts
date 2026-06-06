@@ -3,16 +3,41 @@ import { create } from "zustand";
 
 const MAX_SELECTED = 4;
 
-export const TRAVEL_TIME_PRESETS: Record<IsochroneTravelMode, number[]> = {
+/**
+ * Travel-time modes. `walking`/`cycling`/`driving` render Valhalla isochrone
+ * polygons; `transit` renders a MOTIS one-to-all reachability layer (graduated
+ * stop dots) since transit reachability is point-based, not a single contour.
+ */
+export type TravelTimeMode = IsochroneTravelMode | "transit";
+
+/**
+ * Resolve a travel-time mode for the isochrone request. Valhalla isochrones
+ * can't route transit, so `transit` substitutes a street mode (walking) and is
+ * flagged so callers disable the isochrone request and let the point-based
+ * reachability layer take over. One source of truth for the toolbar, the map
+ * layer, and the within-reach filter, so the substitution can't drift between
+ * them.
+ */
+export function resolveIsochroneMode(mode: TravelTimeMode): {
+  isTransit: boolean;
+  isochroneMode: IsochroneTravelMode;
+} {
+  const isTransit = mode === "transit";
+  const isochroneMode: IsochroneTravelMode = isTransit ? "walking" : mode;
+  return { isTransit, isochroneMode };
+}
+
+export const TRAVEL_TIME_PRESETS: Record<TravelTimeMode, number[]> = {
   walking: [5, 10, 15, 20, 30, 60],
   cycling: [5, 10, 15, 20, 30, 45, 60, 90],
   driving: [5, 10, 15, 30, 45, 60],
+  transit: [15, 30, 45, 60, 90],
 };
 
 export interface TravelTimeState {
   isActive: boolean;
   origin: LngLat | null;
-  mode: IsochroneTravelMode;
+  mode: TravelTimeMode;
   selectedMinutes: number[];
   /** Anchored mode (e.g. Explore): origin is seeded to a place, so the layer
    * skips click-to-place and the toolbar shows the "only within reach" filter. */
@@ -24,7 +49,7 @@ export interface TravelTimeState {
   activateAnchored: (origin: LngLat) => void;
   deactivate: () => void;
   setOrigin: (lngLat: LngLat | null) => void;
-  setMode: (mode: IsochroneTravelMode) => void;
+  setMode: (mode: TravelTimeMode) => void;
   toggleMinutes: (minutes: number) => void;
   setAnchored: (anchored: boolean) => void;
   setOnlyWithinReach: (onlyWithinReach: boolean) => void;

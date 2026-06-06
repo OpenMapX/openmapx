@@ -1,6 +1,9 @@
 "use client";
 
-import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
+import {
+  resolveIsochroneMode,
+  useTravelTimeStore,
+} from "@integrations/overlay-tool-travel-time/store";
 import { pointInIsochroneGeometry, useExploreResults, useIsochrone } from "@openmapx/core";
 import { useMemo } from "react";
 
@@ -20,12 +23,15 @@ export function useExploreReachResults(lang?: string) {
   const mode = useTravelTimeStore((s) => s.mode);
   const selectedMinutes = useTravelTimeStore((s) => s.selectedMinutes);
 
-  const ttActive = isActive && anchored && origin !== null;
+  // The "only within reach" polygon filter is isochrone-based; transit
+  // reachability is point-based (no contour), so it doesn't drive this filter.
+  const { isTransit, isochroneMode } = resolveIsochroneMode(mode);
+  const ttActive = isActive && anchored && origin !== null && !isTransit;
   const reachActive = ttActive && onlyWithinReach;
 
   const { data: isochroneData } = useIsochrone({
     origin,
-    mode,
+    mode: isochroneMode,
     contourMinutes: selectedMinutes,
     enabled: ttActive,
   });

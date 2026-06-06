@@ -1,27 +1,38 @@
 "use client";
 
-import type { IsochroneTravelMode, LngLat } from "@openmapx/core";
-import { useIsochrone } from "@openmapx/core";
+import type { LngLat } from "@openmapx/core";
+import { useIsochrone, useReachableStops } from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-import { useTravelTimeStore } from "./store";
+import { resolveIsochroneMode, type TravelTimeMode, useTravelTimeStore } from "./store";
 
 const SOURCE_ID = "travel-time-source";
 const FILL_LAYER = "travel-time-fill";
 const OUTLINE_LAYER = "travel-time-outline";
+const REACH_SOURCE = "travel-time-reach-source";
+const REACH_LAYER = "travel-time-reach";
 const ORIGIN_SOURCE = "travel-time-origin-source";
 const ORIGIN_LAYER = "travel-time-origin";
 const ORIGIN_PULSE_LAYER = "travel-time-origin-pulse";
 
-const LAYER_IDS = [FILL_LAYER, OUTLINE_LAYER, ORIGIN_LAYER, ORIGIN_PULSE_LAYER];
+const LAYER_IDS = [FILL_LAYER, OUTLINE_LAYER, REACH_LAYER, ORIGIN_LAYER, ORIGIN_PULSE_LAYER];
 
-const MODE_COLORS: Record<IsochroneTravelMode, string> = {
+const MODE_COLORS: Record<TravelTimeMode, string> = {
   driving: "#1A73E8",
   walking: "#34A853",
   cycling: "#F9AB00",
+  transit: "#6F42C1",
 };
+
+/** Smallest selected band (ascending) a reach time falls into, or -1 if beyond all. */
+function bandIndex(reachMinutes: number, sortedAsc: number[]): number {
+  for (let i = 0; i < sortedAsc.length; i++) {
+    if (reachMinutes <= sortedAsc[i]) return i;
+  }
+  return -1;
+}
 
 function computeOpacity(index: number, total: number): number {
   if (total <= 1) return 0.2;
@@ -41,11 +52,20 @@ export function TravelTimeLayer() {
 
   const draggingRef = useRef(false);
 
+  const { isTransit, isochroneMode } = resolveIsochroneMode(mode);
+  const maxMinutes = selectedMinutes.length ? Math.max(...selectedMinutes) : 30;
+
   const { data: isochroneData } = useIsochrone({
     origin,
-    mode,
+    mode: isochroneMode,
     contourMinutes: selectedMinutes,
-    enabled: isActive,
+    enabled: isActive && !isTransit,
+  });
+
+  const { data: reachableStops } = useReachableStops({
+    origin,
+    maxMinutes,
+    enabled: isActive && isTransit,
   });
 
   // Register interactive layers
@@ -69,6 +89,7 @@ export function TravelTimeLayer() {
       const emptyFC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
       map.addSource(SOURCE_ID, { type: "geojson", data: emptyFC });
+      map.addSource(REACH_SOURCE, { type: "geojson", data: emptyFC });
       map.addSource(ORIGIN_SOURCE, { type: "geojson", data: emptyFC });
 
       map.addLayer({
@@ -89,6 +110,21 @@ export function TravelTimeLayer() {
           "line-color": ["get", "color"],
           "line-width": 2,
           "line-opacity": 0.6,
+        },
+      });
+
+      // Transit reachability: one dot per reachable stop, graduated by time band.
+      map.addLayer({
+        id: REACH_LAYER,
+        type: "circle",
+        source: REACH_SOURCE,
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 13, 5, 16, 7],
+          "circle-color": ["get", "color"],
+          "circle-opacity": ["get", "opacity"],
+          "circle-stroke-color": "#FFFFFF",
+          "circle-stroke-width": 0.5,
+          "circle-stroke-opacity": ["get", "opacity"],
         },
       });
 
@@ -128,10 +164,11 @@ export function TravelTimeLayer() {
 
     return () => {
       if (!map.getStyle()) return;
-      for (const id of [ORIGIN_LAYER, ORIGIN_PULSE_LAYER, OUTLINE_LAYER, FILL_LAYER]) {
+      for (const id of [ORIGIN_LAYER, ORIGIN_PULSE_LAYER, REACH_LAYER, OUTLINE_LAYER, FILL_LAYER]) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      if (map.getSource(REACH_SOURCE)) map.removeSource(REACH_SOURCE);
       if (map.getSource(ORIGIN_SOURCE)) map.removeSource(ORIGIN_SOURCE);
     };
   }, [mapRef, mapReady, styleVersion, isActive]);
@@ -168,6 +205,43 @@ export function TravelTimeLayer() {
 
     src.setData({ type: "FeatureCollection", features });
   }, [mapRef, mapReady, styleVersion, isActive, isochroneData]);
+
+  // Update transit reachability dots (one-to-all). Each reachable stop is
+  // coloured by the transit mode and faded by which selected time band it falls
+  // into (nearest band most opaque). Cleared whenever transit isn't selected.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady || !isActive) return;
+
+    const src = map.getSource(REACH_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+
+    if (!isTransit || !reachableStops?.length) {
+      src.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+
+    const sortedAsc = [...selectedMinutes].sort((a, b) => a - b);
+    const bands = sortedAsc.length;
+    const color = MODE_COLORS.transit;
+
+    const features: GeoJSON.Feature[] = [];
+    for (const stop of reachableStops) {
+      const r = stop.reachMinutes;
+      if (r == null) continue;
+      const band = bandIndex(r, sortedAsc);
+      if (band === -1) continue; // beyond the largest selected budget
+      // Nearest band (index 0) most opaque.
+      const opacity = bands <= 1 ? 0.8 : 0.85 - (band / (bands - 1)) * 0.5;
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [stop.lng, stop.lat] },
+        properties: { color, opacity, reachMinutes: r, name: stop.name },
+      });
+    }
+    src.setData({ type: "FeatureCollection", features });
+  }, [mapRef, mapReady, styleVersion, isActive, isTransit, reachableStops, selectedMinutes]);
 
   // Update origin marker
   useEffect(() => {

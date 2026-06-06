@@ -1,5 +1,9 @@
 "use client";
 
+import { API_ENDPOINTS, apiClient, routeColor } from "@openmapx/core";
+import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
+import type { TransitRoute } from "@openmapx/mobility-core/transit";
+import type { GeoJSONSource } from "maplibre-gl";
 import { useEffect } from "react";
 import {
   findVectorLineReference,
@@ -21,6 +25,17 @@ const TRANSIT_LAYER_HINTS = [
   /bus/i,
   /transport/i,
 ] as const;
+
+// MOTIS operated-route network drawn on top of the basemap transit lines. The
+// basemap layer is the cheap global base (OSM infrastructure); this enhancement
+// shows the actually-operated routes from ingested feeds, but only where we have
+// coverage and only when zoomed in (to bound the query + result size).
+const MOTIS_SOURCE_ID = "openmapx-transit-motis-source";
+const MOTIS_LINE_ID = "openmapx-transit-motis-line";
+const MOTIS_MIN_ZOOM = 11;
+const MOTIS_FETCH_DEBOUNCE_MS = 350;
+
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 export function TransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -89,6 +104,105 @@ export function TransitLayer() {
     map.on("styledata", syncLayer);
     return () => {
       map.off("styledata", syncLayer);
+    };
+  }, [mapReady, mapRef, styleVersion, showTransit]);
+
+  // MOTIS operated-route network: a viewport-driven GeoJSON line layer fetched
+  // from /routes?bbox, layered above the basemap transit lines. Active only when
+  // the overlay is on and zoomed past MOTIS_MIN_ZOOM.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    let disposed = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let requestSeq = 0;
+
+    const ensureLayer = () => {
+      if (!map.isStyleLoaded() || map.getSource(MOTIS_SOURCE_ID)) return;
+      map.addSource(MOTIS_SOURCE_ID, { type: "geojson", data: EMPTY_FC });
+      map.addLayer(
+        {
+          id: MOTIS_LINE_ID,
+          type: "line",
+          source: MOTIS_SOURCE_ID,
+          paint: {
+            "line-color": ["get", "color"],
+            "line-opacity": 0.9,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 14, 3, 17, 5],
+          },
+          layout: { "line-cap": "round", "line-join": "round" },
+        },
+        getFirstSymbolLayerId(map),
+      );
+    };
+
+    const clearData = () => {
+      const src = map.getSource(MOTIS_SOURCE_ID) as GeoJSONSource | undefined;
+      src?.setData(EMPTY_FC);
+    };
+
+    const fetchNetwork = async () => {
+      if (disposed || !showTransit) return;
+      if (map.getZoom() < MOTIS_MIN_ZOOM) {
+        clearData();
+        return;
+      }
+      const b = map.getBounds();
+      const seq = ++requestSeq;
+      try {
+        const env = await apiClient.get<MobilityEnvelope<TransitRoute[]>>(
+          API_ENDPOINTS.transitRoutes,
+          {
+            sw_lat: String(b.getSouth()),
+            sw_lng: String(b.getWest()),
+            ne_lat: String(b.getNorth()),
+            ne_lng: String(b.getEast()),
+          },
+        );
+        // Ignore stale responses (user kept panning) and post-unmount results.
+        if (disposed || seq !== requestSeq) return;
+        const src = map.getSource(MOTIS_SOURCE_ID) as GeoJSONSource | undefined;
+        if (!src) return;
+        const features: GeoJSON.Feature[] = (env.data ?? [])
+          .filter((r) => r.geometry)
+          .map((r) => ({
+            type: "Feature",
+            properties: { color: routeColor(r, "#34A853"), routeId: r.id },
+            geometry: r.geometry as GeoJSON.Geometry,
+          }));
+        src.setData({ type: "FeatureCollection", features });
+      } catch {
+        // Soft-fail: leave the basemap transit lines in place.
+      }
+    };
+
+    const scheduleFetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchNetwork, MOTIS_FETCH_DEBOUNCE_MS);
+    };
+
+    const onMoveEnd = () => {
+      if (showTransit) scheduleFetch();
+    };
+
+    if (showTransit) {
+      ensureLayer();
+      setLayerVisibility(map, MOTIS_LINE_ID, true);
+      scheduleFetch();
+      map.on("moveend", onMoveEnd);
+      map.on("styledata", ensureLayer);
+    } else {
+      setLayerVisibility(map, MOTIS_LINE_ID, false);
+      clearData();
+    }
+
+    return () => {
+      disposed = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      map.off("moveend", onMoveEnd);
+      map.off("styledata", ensureLayer);
     };
   }, [mapReady, mapRef, styleVersion, showTransit]);
 
