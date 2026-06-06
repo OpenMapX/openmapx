@@ -21,16 +21,21 @@ interface PsLine {
  * tooling each service image happens to ship. `expect` is a substring grep on
  * the response body; omit to require any 2xx.
  */
-const DEEP_PROBES: Record<string, { port: number; path: string; expect?: string } | null> = {
+export const DEEP_PROBES: Record<string, { port: number; path: string; expect?: string } | null> = {
   valhalla: { port: 8002, path: "/status", expect: "tileset_last_modified" },
   osrm: { port: 5000, path: "/nearest/v1/driving/13.405,52.52", expect: "waypoints" },
   motis: { port: 8080, path: "/api/v1/geocode?text=test", expect: "name" },
   otp: { port: 8080, path: "/otp/routers" },
   nominatim: { port: 8080, path: "/status" },
   photon: { port: 2322, path: "/api?q=test", expect: "features" },
+  // The explicit `[timeout:25]` matters: a timeout-less query reaped under load
+  // can orphan its query-hash-keyed shm segment, after which Overpass returns
+  // `duplicate_query` for that exact string indefinitely. Bounding the query lets
+  // it clean up. `node(1)` is a cheap liveness query — an empty `elements` array
+  // is still a valid 2xx body.
   overpass: {
     port: 80,
-    path: "/api/interpreter?data=%5Bout%3Ajson%5D%3Bnode(1)%3Bout%3B",
+    path: "/api/interpreter?data=%5Bout%3Ajson%5D%5Btimeout%3A25%5D%3Bnode(1)%3Bout%3B",
     expect: "elements",
   },
   tileserver: { port: 8080, path: "/health" },

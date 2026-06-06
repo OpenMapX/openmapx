@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildProbeArgs, PROBE_IMAGE } from "../src/commands/check";
+import { buildProbeArgs, DEEP_PROBES, PROBE_IMAGE } from "../src/commands/check";
 
 describe("buildProbeArgs", () => {
   it("builds args for a standalone `docker run` curl container on the compose network", () => {
@@ -31,5 +31,17 @@ describe("buildProbeArgs", () => {
     const args = buildProbeArgs("docker_openmapx", url);
     expect(args).toContain("--rm");
     expect(args[args.length - 1]).toBe(url);
+  });
+});
+
+describe("DEEP_PROBES", () => {
+  it("bounds the overpass query with an explicit timeout", () => {
+    // A timeout-less Overpass query reaped under load can orphan its
+    // query-hash-keyed shm segment, after which that exact string returns
+    // `duplicate_query` forever (`%5Btimeout%3A` is the URL-encoded `[timeout:`).
+    const overpass = DEEP_PROBES.overpass;
+    expect(overpass).not.toBeNull();
+    expect(overpass?.path).toContain("%5Btimeout%3A");
+    expect(overpass?.expect).toBe("elements");
   });
 });
