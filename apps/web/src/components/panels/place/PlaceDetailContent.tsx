@@ -10,7 +10,7 @@ import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
-import { isLodging, usePlaceStore } from "@openmapx/core";
+import { isCityOrSmaller, isLodging, usePlaceStore } from "@openmapx/core";
 import { useReviewAggregate } from "@openmapx/mangrove-react";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
@@ -23,6 +23,7 @@ import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { StopBoardView } from "../transit/StopBoardView";
 import { StopInfrastructureSection } from "../transit/StopInfrastructureSection";
 import { TripDetailView } from "../transit/TripDetailView";
+import { PlaceHeaderWeather } from "./PlaceHeaderWeather";
 import { PlaceHotelPricesTab } from "./PlaceHotelPricesTab";
 import { PlaceInfoTab } from "./PlaceInfoTab";
 import { PlaceOverviewTab } from "./PlaceOverviewTab";
@@ -226,6 +227,9 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
   }
 
   const showPrices = isLodging(place);
+  // City (or smaller) admin areas get a compact weather + local-time readout in
+  // the header, mirroring Google Maps' city panel.
+  const showHeaderWeather = isCityOrSmaller(place);
   // Tab indices: Overview=0, Reviews=1, [Prices=2 if hotel], Info=last.
   const pricesIndex = showPrices ? 2 : -1;
   const infoIndex = showPrices ? 3 : 2;
@@ -288,44 +292,55 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
           </IconButton>
         )}
 
-        <Typography
-          variant="h6"
-          gutterBottom
-          sx={{
-            fontWeight: 600,
-            pr: onClose ? 4 : 0,
-          }}
-        >
-          {place.name}
-        </Typography>
-        {headerReviewStats && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start" }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
-              variant="body2"
+              variant="h6"
+              gutterBottom
               sx={{
                 fontWeight: 600,
+                pr: onClose && !showHeaderWeather ? 4 : 0,
               }}
             >
-              {headerReviewStats.rating.toFixed(1)}
+              {place.name}
             </Typography>
-            <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              ({headerReviewStats.count.toLocaleString(locale)})
-            </Typography>
+            {headerReviewStats && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                  }}
+                >
+                  {headerReviewStats.rating.toFixed(1)}
+                </Typography>
+                <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
+                  ({headerReviewStats.count.toLocaleString(locale)})
+                </Typography>
+              </Box>
+            )}
+            {place.category && (
+              <Chip
+                label={place.category.toLowerCase() === "poi" ? "POI" : place.category}
+                size="small"
+                sx={{ borderRadius: "4px", fontSize: 12 }}
+              />
+            )}
           </Box>
-        )}
-        {place.category && (
-          <Chip
-            label={place.category.toLowerCase() === "poi" ? "POI" : place.category}
-            size="small"
-            sx={{ borderRadius: "4px", fontSize: 12 }}
-          />
-        )}
+          {showHeaderWeather && (
+            // Shift down past the absolute close button when there is no photo
+            // hero, so the weather icon never sits under it.
+            <Box sx={{ mt: onClose && !hasPhoto ? 4 : 0 }}>
+              <PlaceHeaderWeather lat={place.coordinates[1]} lng={place.coordinates[0]} />
+            </Box>
+          )}
+        </Box>
       </Box>
       {/* Tabs */}
       <Tabs

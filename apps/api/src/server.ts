@@ -33,6 +33,7 @@ import { internalPoiSourcesRoute } from "./routes/internal-poi-sources";
 import { isochroneRoute } from "./routes/isochrone";
 import { maptilerRoute } from "./routes/maptiler";
 import { motisRoute } from "./routes/motis";
+import { neighborhoodsRoute } from "./routes/neighborhoods";
 import { placesRoute } from "./routes/places";
 import { reviewsKeypairRoute } from "./routes/reviews-keypair";
 import { savedRoute } from "./routes/saved";
@@ -223,6 +224,7 @@ await server.register(capabilitiesRoute, { prefix: "/api" });
 
 // Routes
 await server.register(placesRoute, { prefix: "/api" });
+await server.register(neighborhoodsRoute, { prefix: "/api" });
 
 await server.register(elevationRoute, { prefix: "/api" });
 await server.register(trafficRoute, { prefix: "/api" });

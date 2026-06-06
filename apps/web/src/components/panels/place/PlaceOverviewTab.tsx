@@ -34,6 +34,7 @@ import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
   computePlusCode,
+  isCityOrSmaller,
   plusCodeUrl,
   shortenPlusCode,
   useDeleteLabel,
@@ -56,6 +57,7 @@ import { PlaceTransitSection } from "../transit/PlaceTransitSection";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
+import { PlaceCitySections } from "./PlaceCitySections";
 import { PlaceFoodActions } from "./PlaceFoodActions";
 import { PlaceHarborFacilities } from "./PlaceHarborFacilities";
 import { PlaceHotelActions } from "./PlaceHotelActions";
@@ -194,6 +196,7 @@ export function PlaceOverviewTab({
   const tSun = useTranslations("sunTimes");
   const tTides = useTranslations("tides");
   const tMarine = useTranslations("marineWeather");
+  const isCity = isCityOrSmaller(place);
   const hours = place.openingHoursInfo?.status ?? null;
   const plusCode = computePlusCode(place.coordinates);
   const shortCode = shortenPlusCode(plusCode);
@@ -278,6 +281,9 @@ export function PlaceOverviewTab({
         {/* Action buttons */}
         <PlaceActionButtons place={place} />
 
+        {/* City-only sections: Quick facts, Hotels, Neighborhoods */}
+        {isCity && <PlaceCitySections place={place} onNavigateToInfo={onNavigateToInfo} />}
+
         {/* Saved-in banner */}
         {savedInLists.length > 0 && (
           <>
@@ -336,9 +342,10 @@ export function PlaceOverviewTab({
           </>
         )}
 
-        {/* Description — clickable row leading to Info tab */}
-        {place.description && <Divider sx={{ my: 1 }} />}
-        {place.description && (
+        {/* Description — clickable row leading to Info tab. Suppressed for
+            cities, where the Quick facts section already surfaces it. */}
+        {place.description && !isCity && <Divider sx={{ my: 1 }} />}
+        {place.description && !isCity && (
           <Box
             role="button"
             tabIndex={0}
