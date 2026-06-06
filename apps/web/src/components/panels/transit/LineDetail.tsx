@@ -5,7 +5,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
-  MODE_COLORS,
+  routeColor,
   useLinkedTransitStops,
   useRouteAlerts,
   useRouteStops,
@@ -80,11 +80,7 @@ export function LineDetail({
     linkedStopsQuery,
   );
 
-  const lineColor = route?.color
-    ? `#${route.color.replace("#", "")}`
-    : route?.mode
-      ? MODE_COLORS[route.mode]
-      : PRIMARY_BLUE;
+  const lineColor = routeColor(route, PRIMARY_BLUE);
 
   return (
     <Box>

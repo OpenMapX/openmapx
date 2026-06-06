@@ -1,6 +1,6 @@
 "use client";
 
-import { MODE_COLORS, usePlaceStore, useRouteStops, useTransitRoute } from "@openmapx/core";
+import { routeColor, usePlaceStore, useRouteStops, useTransitRoute } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
@@ -35,11 +35,7 @@ export function TransitRouteLayer() {
       return;
     }
 
-    const lineColor = route?.color
-      ? `#${route.color.replace("#", "")}`
-      : route?.mode
-        ? MODE_COLORS[route.mode]
-        : PRIMARY_BLUE_HEX;
+    const lineColor = routeColor(route, PRIMARY_BLUE_HEX);
 
     // Use route geometry from the API (road-snapped) when available,
     // otherwise fall back to connecting stop coordinates with straight lines.

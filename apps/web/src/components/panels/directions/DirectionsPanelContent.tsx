@@ -12,10 +12,20 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
-import type { AutocompleteResult, DirectionsResult, LngLat, TravelMode } from "@openmapx/core";
+import type {
+  AutocompleteResult,
+  DirectionsResult,
+  LngLat,
+  TransitReplanOptions,
+  TravelMode,
+} from "@openmapx/core";
 import {
+  applyDeutschlandticketFilter,
   formatDistance,
   formatDuration,
+  preferredModesToMotis,
+  rankItineraries,
+  TRANSIT_ACCESS_MOTIS_MODES,
   useAutocomplete,
   useCapabilities,
   useDebounce,
@@ -24,6 +34,7 @@ import {
   useMapStore,
   useMenuStore,
   useOptimizeRoute,
+  useRouteInGermany,
   useSettingsStore,
   useSidebarStore,
   useTransitPlan,
@@ -73,6 +84,10 @@ export function DirectionsPanelContent() {
     activeItineraryIndex,
     transitDepartureTime,
     transitArrivalTime,
+    transitPreferredModes,
+    transitRoutePreference,
+    transitAccessMode,
+    deutschlandticketOnly,
     setWaypoint,
     addWaypoint,
     removeWaypoint,
@@ -151,12 +166,55 @@ export function DirectionsPanelContent() {
       ? debouncedArrivalTime.toISOString()
       : undefined;
 
+  // "Fewer transfers" / "Less walking" re-rank the returned Pareto front, so
+  // fetch a few extra alternatives to give the sort something to choose from.
+  const ranksClientSide =
+    transitRoutePreference === "fewerTransfers" || transitRoutePreference === "lessWalking";
+  const effectiveNumItineraries = ranksClientSide ? Math.max(numItineraries, 5) : numItineraries;
+
+  // The Deutschlandticket filter is Germany-only; gate it on both endpoints
+  // resolving to DE so we never silently constrain a route that leaves Germany.
+  // Only resolve the endpoints' country when the toggle is actually on —
+  // bothInGermany is consumed solely by deutschlandticketActive below, so an
+  // off toggle must not fire two reverse-geocodes per transit route. (The
+  // options panel resolves it separately to decide whether to show the toggle.)
+  const { bothInGermany } = useRouteInGermany(
+    isTransitMode && deutschlandticketOnly ? origin : null,
+    isTransitMode && deutschlandticketOnly ? destination : null,
+  );
+  const deutschlandticketActive = isTransitMode && bothInGermany && deutschlandticketOnly;
+
+  const effectiveMotisModes = useMemo(() => {
+    const base = preferredModesToMotis(transitPreferredModes);
+    return deutschlandticketActive ? applyDeutschlandticketFilter(base) : base;
+  }, [transitPreferredModes, deutschlandticketActive]);
+
+  const accessModes = TRANSIT_ACCESS_MOTIS_MODES[transitAccessMode];
+
+  // Snapshot of the resolved MOTIS options to hand to navigation, so an on-trip
+  // replan reuses the same modes/access/wheelchair/D-Ticket gate the plan used.
+  const transitReplanOptions = useMemo<TransitReplanOptions>(
+    () => ({
+      modes: effectiveMotisModes,
+      wheelchair: transitRoutePreference === "wheelchair",
+      preTransitModes: accessModes.preTransitModes,
+      postTransitModes: accessModes.postTransitModes,
+      directModes: accessModes.directModes,
+    }),
+    [effectiveMotisModes, transitRoutePreference, accessModes],
+  );
+
   const transitPlanQuery = useTransitPlan({
     origin: isTransitMode ? origin : null,
     destination: isTransitMode ? destination : null,
     departAt: transitDepartAtStr,
     arriveBy: transitArriveByStr,
-    numItineraries,
+    numItineraries: effectiveNumItineraries,
+    modes: effectiveMotisModes,
+    wheelchair: transitRoutePreference === "wheelchair",
+    preTransitModes: accessModes.preTransitModes,
+    postTransitModes: accessModes.postTransitModes,
+    directModes: accessModes.directModes,
   });
   const {
     data: transitPlanData,
@@ -167,9 +225,9 @@ export function DirectionsPanelContent() {
 
   useEffect(() => {
     if (transitPlanData?.itineraries) {
-      setTransitItineraries(transitPlanData.itineraries);
+      setTransitItineraries(rankItineraries(transitPlanData.itineraries, transitRoutePreference));
     }
-  }, [transitPlanData, setTransitItineraries]);
+  }, [transitPlanData, transitRoutePreference, setTransitItineraries]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger deps
   useEffect(() => {
@@ -443,15 +501,6 @@ export function DirectionsPanelContent() {
 
         <IconButton
           size="small"
-          onClick={handleShare}
-          sx={{ mt: 1, mr: 0.5, flexShrink: 0 }}
-          aria-label={tp("share")}
-        >
-          <ShareIcon sx={{ fontSize: 20 }} />
-        </IconButton>
-
-        <IconButton
-          size="small"
           onClick={() => useSidebarStore.getState().closeSidebar()}
           sx={{ mt: 1, ml: 0.5, mr: 1, flexShrink: 0 }}
           aria-label={t("close")}
@@ -575,24 +624,22 @@ export function DirectionsPanelContent() {
               </Box>
             )}
 
-            {!isTransitMode && (
-              <Typography
-                variant="body2"
-                sx={{
-                  color: TEAL,
-                  cursor: "pointer",
-                  fontWeight: 500,
-                  px: 1.5,
-                  py: 0.75,
-                  borderRadius: 99,
-                  "&:hover": { bgcolor: `${TEAL}18` },
-                  transition: "background-color 0.15s",
-                }}
-                onClick={() => setShowOptions((v) => !v)}
-              >
-                {t("options")}
-              </Typography>
-            )}
+            <Typography
+              variant="body2"
+              sx={{
+                color: showOptions ? TEAL : "text.secondary",
+                cursor: "pointer",
+                fontWeight: 500,
+                px: 1.5,
+                py: 0.75,
+                borderRadius: 99,
+                "&:hover": { bgcolor: `${TEAL}18`, color: TEAL },
+                transition: "background-color 0.15s, color 0.15s",
+              }}
+              onClick={() => setShowOptions((v) => !v)}
+            >
+              {isTransitMode ? t("routeOptions") : t("options")}
+            </Typography>
           </Box>
         )}
 
@@ -680,7 +727,48 @@ export function DirectionsPanelContent() {
           </Box>
         )}
 
-        {showOptions && !isTransitMode && <RouteOptions />}
+        {showOptions && !isFlightMode && <RouteOptions />}
+
+        {/* Share row — sits between the options row and the offered routes */}
+        {!isFlightMode && allWaypointsFilled && (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              px: 2,
+              py: 0.75,
+              borderTop: "1px solid",
+              borderColor: "divider",
+              bgcolor: "action.hover",
+            }}
+          >
+            <Box
+              component="button"
+              type="button"
+              onClick={handleShare}
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.75,
+                border: 0,
+                bgcolor: "transparent",
+                color: TEAL,
+                cursor: "pointer",
+                fontWeight: 500,
+                fontFamily: "inherit",
+                fontSize: "0.875rem",
+                px: 1,
+                py: 0.5,
+                borderRadius: 99,
+                "&:hover": { bgcolor: `${TEAL}18` },
+                transition: "background-color 0.15s",
+              }}
+            >
+              <ShareIcon sx={{ fontSize: 18 }} />
+              {tp("share")}
+            </Box>
+          </Box>
+        )}
 
         <Divider />
 
@@ -734,6 +822,7 @@ export function DirectionsPanelContent() {
                     itinerary={itin}
                     active={i === activeItineraryIndex}
                     isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
+                    replanOptions={transitReplanOptions}
                     onSelect={() => setActiveItineraryIndex(i)}
                     onDetails={() => setTransitDetailsIndex(i)}
                   />

@@ -1,6 +1,6 @@
 "use client";
 
-import { MODE_COLORS, usePlaceStore, useRouteLive, useTransitRoute } from "@openmapx/core";
+import { routeColor, usePlaceStore, useRouteLive, useTransitRoute } from "@openmapx/core";
 import { useEffect } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
@@ -29,11 +29,7 @@ export function VehicleLiveLayer() {
       return;
     }
 
-    const lineColor = route?.color
-      ? `#${route.color.replace("#", "")}`
-      : route?.mode
-        ? MODE_COLORS[route.mode]
-        : PRIMARY_BLUE_HEX;
+    const lineColor = routeColor(route, PRIMARY_BLUE_HEX);
 
     const geojson = {
       type: "FeatureCollection" as const,

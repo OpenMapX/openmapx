@@ -4,14 +4,19 @@ import {
   API_ENDPOINTS,
   apiClient,
   MODE_COLORS,
+  routeColor,
   useDirectionsStore,
   useNavigationStore,
 } from "@openmapx/core";
-import type { GeoJSONLineString } from "@openmapx/mobility-core/transit";
+import type { GeoJSONLineString, TransportMode } from "@openmapx/mobility-core/transit";
 import type { ExpressionSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+
+// Non-transit "street" legs (walk plus intermodal bike/car access) render as
+// dashed lines — like the panel's street-leg styling — vs solid transit lines.
+const STREET_MODES = new Set<TransportMode>(["walking", "cycling", "driving"]);
 
 const SOURCE_ID = "transit-itinerary-source";
 const WALK_LAYER_ID = "transit-itinerary-walk";
@@ -107,17 +112,15 @@ export function TransitItineraryLayer() {
 
     // Build line features for each leg; use refined trip geometry when available
     const lineFeatures = itinerary.legs.map((leg, i) => {
-      const isWalk = leg.mode === "walking";
-      const color = isWalk
-        ? "#757575"
-        : leg.route?.color
-          ? `#${leg.route.color.replace("#", "")}`
-          : (MODE_COLORS[leg.mode] ?? PRIMARY_BLUE_HEX);
+      const isStreet = STREET_MODES.has(leg.mode);
+      const color = isStreet
+        ? (MODE_COLORS[leg.mode] ?? "#757575")
+        : routeColor({ color: leg.route?.color, mode: leg.mode }, PRIMARY_BLUE_HEX);
       const geometry = (leg.tripId ? legGeometries[leg.tripId] : undefined) ?? leg.geometry;
 
       return {
         type: "Feature" as const,
-        properties: { isWalk, color, index: i },
+        properties: { isStreet, color, index: i },
         geometry,
       };
     });
@@ -149,14 +152,14 @@ export function TransitItineraryLayer() {
       data: { type: "FeatureCollection", features: lineFeatures },
     });
 
-    // Walk legs — dashed gray
+    // Street legs (walk/bike/car) — dashed, colored per mode
     map.addLayer({
       id: WALK_LAYER_ID,
       type: "line",
       source: SOURCE_ID,
-      filter: ["==", ["get", "isWalk"], true],
+      filter: ["==", ["get", "isStreet"], true],
       paint: {
-        "line-color": "#757575",
+        "line-color": ["get", "color"],
         "line-width": 4,
         "line-dasharray": [2, 2],
         "line-opacity": lineOpacity,
@@ -169,7 +172,7 @@ export function TransitItineraryLayer() {
       id: TRANSIT_LAYER_ID,
       type: "line",
       source: SOURCE_ID,
-      filter: ["==", ["get", "isWalk"], false],
+      filter: ["==", ["get", "isStreet"], false],
       paint: {
         "line-color": ["get", "color"],
         "line-width": 5,

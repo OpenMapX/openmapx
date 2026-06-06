@@ -2708,7 +2708,7 @@
         },
         "symbol-spacing": {
           "base": 1,
-          "stops": [[7, 500], [9, 400], [11, 250], [13, 200], [15, 150]]
+          "stops": [[7, 2500], [9, 2000], [11, 1250], [13, 1000], [15, 750]]
         },
         "text-field": "{ref}",
         "text-font": ["Noto Sans Bold"],
@@ -2747,7 +2747,7 @@
         },
         "symbol-spacing": {
           "base": 1,
-          "stops": [[8, 500], [10, 350], [12, 250], [14, 180]]
+          "stops": [[8, 2500], [10, 1750], [12, 1250], [14, 900]]
         }
       },
       "paint": {
@@ -2781,7 +2781,7 @@
         },
         "symbol-spacing": {
           "base": 1,
-          "stops": [[10, 500], [12, 300], [14, 200]]
+          "stops": [[10, 2500], [12, 1500], [14, 1000]]
         }
       },
       "paint": {
@@ -2812,7 +2812,7 @@
         "symbol-placement": "line",
         "symbol-spacing": {
           "base": 1,
-          "stops": [[12, 400], [14, 250]]
+          "stops": [[12, 2000], [14, 1250]]
         }
       },
       "paint": {
@@ -2839,7 +2839,7 @@
           "base": 1,
           "stops": [[7, "point"], [7, "line"], [8, "line"]]
         },
-        "symbol-spacing": 200,
+        "symbol-spacing": 1000,
         "text-field": "{ref}",
         "text-font": ["Noto Sans Regular"],
         "text-rotation-alignment": "viewport",
@@ -2869,7 +2869,7 @@
           "base": 1,
           "stops": [[10, "point"], [11, "line"]]
         },
-        "symbol-spacing": 200,
+        "symbol-spacing": 1000,
         "text-field": "{ref}",
         "text-font": ["Noto Sans Regular"],
         "text-rotation-alignment": "viewport",

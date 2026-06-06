@@ -1,6 +1,11 @@
 import type { TravelMode, Waypoint } from "@integrations/routing/types";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { create } from "zustand";
+import type {
+  TransitAccessMode,
+  TransitPreferKey,
+  TransitRoutePreference,
+} from "../constants/transit";
 import type { LngLat } from "../types/geometry";
 
 let waypointCounter = 0;
@@ -35,6 +40,15 @@ const MAX_WAYPOINTS = 10;
 export interface DirectionsState {
   isOpen: boolean;
   waypoints: Waypoint[];
+  /**
+   * Active travel mode. ROUTING BOUNDARY: `driving`/`walking`/`cycling` are
+   * served by the street-routing orchestrator (`integrations/routing/*` →
+   * OSRM/Valhalla); `transit` is served by the transit orchestrator
+   * (`integrations/transit/*` → MOTIS). These paths share no code or types.
+   * MOTIS street routing must only ever reach the app inside transit
+   * `TripLeg` access legs (intermodal first/last-mile) — never wire MOTIS into
+   * the `/directions` chain. See docs/plans/2026-06-05-motis-feature-opportunities.md §4 (2.2).
+   */
   mode: TravelMode;
   activeRouteIndex: number;
   avoidHighways: boolean;
@@ -44,6 +58,14 @@ export interface DirectionsState {
   activeItineraryIndex: number;
   transitDepartureTime: "now" | Date;
   transitArrivalTime: Date | null;
+  /** "Prefer" column: transit modes to allow-list (empty = all modes). */
+  transitPreferredModes: TransitPreferKey[];
+  /** "Routes" column: single-select route optimisation. */
+  transitRoutePreference: TransitRoutePreference;
+  /** First/last-mile access mode for intermodal transit (walk/bike/car). */
+  transitAccessMode: TransitAccessMode;
+  /** Germany-only: restrict transit to Deutschlandticket-covered services. */
+  deutschlandticketOnly: boolean;
 
   // Derived from waypoints (kept in sync for backward compat)
   origin: LngLat | null;
@@ -71,6 +93,10 @@ export interface DirectionsState {
   setActiveItineraryIndex: (i: number) => void;
   setTransitDepartureTime: (t: "now" | Date) => void;
   setTransitArrivalTime: (t: Date | null) => void;
+  toggleTransitPreferredMode: (key: TransitPreferKey) => void;
+  setTransitRoutePreference: (p: TransitRoutePreference) => void;
+  setTransitAccessMode: (m: TransitAccessMode) => void;
+  setDeutschlandticketOnly: (v: boolean) => void;
 }
 
 function initialWaypoints(): Waypoint[] {
@@ -95,6 +121,10 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     activeItineraryIndex: 0,
     transitDepartureTime: "now" as const,
     transitArrivalTime: null,
+    transitPreferredModes: [],
+    transitRoutePreference: "best" as const,
+    transitAccessMode: "walk" as const,
+    deutschlandticketOnly: false,
 
     open: () => set({ isOpen: true }),
     close: () => {
@@ -108,6 +138,10 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         activeItineraryIndex: 0,
         transitDepartureTime: "now" as const,
         transitArrivalTime: null,
+        transitPreferredModes: [],
+        transitRoutePreference: "best" as const,
+        transitAccessMode: "walk" as const,
+        deutschlandticketOnly: false,
       });
     },
 
@@ -176,5 +210,16 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setActiveItineraryIndex: (activeItineraryIndex) => set({ activeItineraryIndex }),
     setTransitDepartureTime: (transitDepartureTime) => set({ transitDepartureTime }),
     setTransitArrivalTime: (transitArrivalTime) => set({ transitArrivalTime }),
+    toggleTransitPreferredMode: (key) => {
+      const current = get().transitPreferredModes;
+      const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+      set({ transitPreferredModes: next, activeItineraryIndex: 0 });
+    },
+    setTransitRoutePreference: (transitRoutePreference) =>
+      set({ transitRoutePreference, activeItineraryIndex: 0 }),
+    setTransitAccessMode: (transitAccessMode) =>
+      set({ transitAccessMode, activeItineraryIndex: 0 }),
+    setDeutschlandticketOnly: (deutschlandticketOnly) =>
+      set({ deutschlandticketOnly, activeItineraryIndex: 0 }),
   };
 });

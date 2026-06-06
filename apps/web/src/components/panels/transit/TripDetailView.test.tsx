@@ -42,7 +42,10 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@openmapx/core", () => ({
-  MODE_COLORS: { rail: "#0055aa" },
+  routeColor: (route?: { color?: string | null; mode?: string }, fallback?: string) =>
+    route?.color
+      ? `#${String(route.color).replace(/^#/, "")}`
+      : ((route?.mode === "rail" ? "#0055aa" : undefined) ?? fallback),
   useRouteAlerts: () => ({ data: [], attributions: [] }),
   useVehicleJourney: () => ({
     attributions: [

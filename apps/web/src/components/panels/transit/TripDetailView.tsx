@@ -7,7 +7,7 @@ import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { MODE_COLORS, useRouteAlerts, useVehicleJourney } from "@openmapx/core";
+import { routeColor, useRouteAlerts, useVehicleJourney } from "@openmapx/core";
 import type { MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
@@ -38,9 +38,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
 
   const isDelayed = (departure.delaySeconds ?? 0) > 60;
   const isCanceled = departure.canceled === true;
-  const lineColor = departure.route.color
-    ? `#${departure.route.color.replace("#", "")}`
-    : (MODE_COLORS[departure.route.mode] ?? TEAL);
+  const lineColor = routeColor(departure.route, TEAL);
   const serviceInfo = journey?.serviceInfo;
   const formationDetails = journey?.formationDetails;
 

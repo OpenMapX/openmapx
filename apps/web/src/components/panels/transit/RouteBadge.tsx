@@ -1,7 +1,7 @@
 "use client";
 
 import Chip from "@mui/material/Chip";
-import { MODE_COLORS } from "@openmapx/core";
+import { routeColor } from "@openmapx/core";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 
 function expandHex(hex: string): string {
@@ -38,7 +38,7 @@ export function RouteBadge({
   size = "small",
   onClick,
 }: RouteBadgeProps) {
-  const bg = color && color !== "" ? `#${color.replace("#", "")}` : MODE_COLORS[mode];
+  const bg = routeColor({ color, mode });
   const fg = textColor && textColor !== "" ? `#${textColor.replace("#", "")}` : contrastText(bg);
 
   return (

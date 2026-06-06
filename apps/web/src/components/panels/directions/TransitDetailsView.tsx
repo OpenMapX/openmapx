@@ -1,11 +1,14 @@
 "use client";
 
+import type { SvgIconComponent } from "@mui/icons-material";
 import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
+import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBoatIcon from "@mui/icons-material/DirectionsBoat";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
+import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import SubwayIcon from "@mui/icons-material/Subway";
 import TrainIcon from "@mui/icons-material/Train";
@@ -13,6 +16,7 @@ import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
+import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
@@ -25,7 +29,12 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import type { MergedDeparture, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
+import type {
+  MergedDeparture,
+  TransportMode,
+  TripItinerary,
+  TripLeg,
+} from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import {
@@ -45,6 +54,19 @@ import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
 
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+
+/**
+ * Per-mode rendering for non-transit street legs (walk + intermodal bike/car
+ * access): line colour, glyph, and the i18n duration key. One table instead of
+ * three parallel ternaries so a new street mode is added in a single place.
+ */
+const STREET_LEG: Partial<
+  Record<TransportMode, { color: string; Icon: SvgIconComponent; durationKey: string }>
+> = {
+  walking: { color: "#757575", Icon: DirectionsWalkIcon, durationKey: "walkDuration" },
+  cycling: { color: "#34A853", Icon: DirectionsBikeIcon, durationKey: "bikeDuration" },
+  driving: { color: "#5F6368", Icon: DirectionsCarIcon, durationKey: "driveDuration" },
+};
 
 /**
  * A leg's per-leg attribution set is redundant when it carries no entries or
@@ -246,8 +268,11 @@ export function TransitDetailsView({
             minute: "2-digit",
           });
           const isWalk = leg.mode === "walking";
-          const legColor = isWalk
-            ? "#757575"
+          // Non-transit street legs (walk + intermodal bike/car access) share the
+          // compact dashed-line rendering; `street` is set only for those.
+          const street = STREET_LEG[leg.mode];
+          const legColor = street
+            ? street.color
             : leg.route?.color
               ? `#${leg.route.color.replace("#", "")}`
               : TEAL;
@@ -322,7 +347,7 @@ export function TransitDetailsView({
                       minHeight: 32,
                       bgcolor: legColor,
                       borderRadius: 1,
-                      ...(isWalk
+                      ...(street
                         ? {
                             backgroundImage: `repeating-linear-gradient(to bottom, ${legColor} 0px, ${legColor} 4px, transparent 4px, transparent 8px)`,
                             bgcolor: "transparent",
@@ -332,17 +357,53 @@ export function TransitDetailsView({
                   />
                 </Box>
                 <Box sx={{ flex: 1, py: 0.5, minWidth: 0 }}>
-                  {isWalk ? (
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                      <DirectionsWalkIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: "text.secondary",
-                        }}
-                      >
-                        {t("walkDuration", { duration: formatDuration(Math.round(duration) * 60) })}
-                      </Typography>
+                  {street ? (
+                    <Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                        <street.Icon sx={{ fontSize: 16, color: "text.secondary" }} />
+                        <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                          {t(street.durationKey, {
+                            duration: formatDuration(Math.round(duration) * 60),
+                          })}
+                        </Typography>
+                      </Box>
+                      {leg.rental && (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.75,
+                            mt: 0.25,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          {leg.rental.color && (
+                            <Box
+                              sx={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: "2px",
+                                bgcolor: `#${leg.rental.color}`,
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                            {leg.rental.providerName ?? leg.rental.systemName ?? t("rentalVehicle")}
+                          </Typography>
+                          {leg.rental.bookingUrl && (
+                            <Link
+                              href={leg.rental.bookingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              variant="caption"
+                              sx={{ color: TEAL }}
+                            >
+                              {t("book")}
+                            </Link>
+                          )}
+                        </Box>
+                      )}
                     </Box>
                   ) : (
                     <Box>
@@ -410,6 +471,69 @@ export function TransitDetailsView({
                           duration: formatDuration(Math.round(duration) * 60),
                         })}
                       </Typography>
+                      {leg.flex && (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.75,
+                            mt: 0.25,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            sx={{ color: "warning.main", fontWeight: 600 }}
+                          >
+                            {t("onDemandBookAhead")}
+                          </Typography>
+                          {leg.flex.bookingUrl && (
+                            <Link
+                              href={leg.flex.bookingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              variant="caption"
+                              sx={{ color: TEAL }}
+                            >
+                              {t("book")}
+                            </Link>
+                          )}
+                        </Box>
+                      )}
+                      {leg.alternatives && leg.alternatives.length > 0 && (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            mt: 0.25,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                            {t("alsoDeparts")}
+                          </Typography>
+                          {leg.alternatives.map((alt) => (
+                            <Box
+                              key={alt.startTime}
+                              component="span"
+                              sx={{
+                                px: 0.75,
+                                py: 0.1,
+                                borderRadius: 1,
+                                bgcolor: "action.hover",
+                                color: "text.secondary",
+                                fontSize: 12,
+                              }}
+                            >
+                              {new Date(alt.startTime).toLocaleTimeString(locale, {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
                       <TransitLegStops
                         tripId={leg.tripId}
                         stopCount={leg._intermediateStopCount}

@@ -30,13 +30,20 @@ export function useDirections({
 }: UseDirectionsParams) {
   const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
 
+  // Highways and tolls only apply to driving; the UI hides their toggles for
+  // other modes, so never send a stale flag (set while driving) to a cycling /
+  // walking route the user can no longer clear. Ferries can be avoided on foot
+  // or bike too, so it is not gated.
+  const effectiveAvoidHighways = mode === "driving" && avoidHighways;
+  const effectiveAvoidTolls = mode === "driving" && avoidTolls;
+
   return useQuery({
     queryKey: [
       "directions",
       waypointsStr,
       mode,
-      avoidHighways,
-      avoidTolls,
+      effectiveAvoidHighways,
+      effectiveAvoidTolls,
       avoidFerries,
       units,
       lang,
@@ -47,8 +54,8 @@ export function useDirections({
       fetchDirections({
         waypoints,
         mode,
-        avoidHighways,
-        avoidTolls,
+        avoidHighways: effectiveAvoidHighways,
+        avoidTolls: effectiveAvoidTolls,
         avoidFerries,
         units,
         lang,

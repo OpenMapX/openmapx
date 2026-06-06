@@ -2,7 +2,9 @@
 
 import AirlineSeatReclineNormalIcon from "@mui/icons-material/AirlineSeatReclineNormal";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
+import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NavigationIcon from "@mui/icons-material/Navigation";
@@ -10,6 +12,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import type { TransitReplanOptions } from "@openmapx/core";
 import {
   formatDistance,
   formatDuration,
@@ -46,6 +49,12 @@ function worstOccupancy(itinerary: TripItinerary): OccupancyLevel | null {
 function LegBadge({ leg }: { leg: TripLeg }) {
   if (leg.mode === "walking") {
     return <DirectionsWalkIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
+  }
+  if (leg.mode === "cycling") {
+    return <DirectionsBikeIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
+  }
+  if (leg.mode === "driving") {
+    return <DirectionsCarIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
   }
   if (leg.route) {
     return (
@@ -216,12 +225,14 @@ export function TransitItineraryCard({
   itinerary,
   active,
   isLowestCo2 = false,
+  replanOptions,
   onSelect,
   onDetails,
 }: {
   itinerary: TripItinerary;
   active: boolean;
   isLowestCo2?: boolean;
+  replanOptions?: TransitReplanOptions;
   onSelect: () => void;
   onDetails: () => void;
 }) {
@@ -372,7 +383,7 @@ export function TransitItineraryCard({
             startIcon={<NavigationIcon />}
             onClick={(e) => {
               e.stopPropagation();
-              startTransitNavigation(itinerary);
+              startTransitNavigation(itinerary, replanOptions);
             }}
             sx={{
               bgcolor: TEAL,

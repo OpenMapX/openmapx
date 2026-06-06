@@ -87,14 +87,31 @@ export {
 } from "./api/directions";
 export { API_ENDPOINTS } from "./api/endpoints";
 export { fetchSpeedLimit } from "./api/speedLimit";
+export { fetchTrafficSignals } from "./api/trafficSignals";
 // Auth
 export type { Session, User } from "./auth/client";
 export { type AuthConfig, authClient, initAuth } from "./auth/client";
 export type { OAuthProviderMeta } from "./auth/oauth-providers";
 export { oauthProviders } from "./auth/oauth-providers";
 export { useSession } from "./auth/useSession";
+export type {
+  TransitAccessMode,
+  TransitPreferKey,
+  TransitRoutePreference,
+} from "./constants/transit";
 // Constants
-export { MODE_COLORS } from "./constants/transit";
+export {
+  applyDeutschlandticketFilter,
+  DEUTSCHLANDTICKET_MOTIS_MODES,
+  MODE_COLORS,
+  preferredModesToMotis,
+  rankItineraries,
+  routeColor,
+  TRANSIT_ACCESS_MOTIS_MODES,
+  TRANSIT_ACCESS_OPTIONS,
+  TRANSIT_PREFER_MOTIS_MODES,
+  TRANSIT_PREFER_OPTIONS,
+} from "./constants/transit";
 // Domains
 export type {
   GeoJsonFeatureCollection,
@@ -126,6 +143,7 @@ export {
   useLinkedTransitRoutes,
   useLinkedTransitStops,
   usePlaceStopInfrastructure,
+  useReachableStops,
   useRouteAlerts,
   useRouteLive,
   useRouteStops,
@@ -194,6 +212,7 @@ export {
 } from "./hooks/useMarineWeather";
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { type NearestAirportHit, useNearestAirports } from "./hooks/useNearestAirports";
+export { useNeighborhoods } from "./hooks/useNeighborhoods";
 export { useOfficialBookingUrl } from "./hooks/useOfficialBookingUrl";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
@@ -203,6 +222,7 @@ export { usePresetSuggest } from "./hooks/usePresetSuggest";
 export { useResolvedHotelProviders } from "./hooks/useResolvedHotelProviders";
 export { useRestaurantMenu } from "./hooks/useRestaurantMenu";
 export { useReverseGeocoding } from "./hooks/useReverseGeocoding";
+export { useRouteInGermany } from "./hooks/useRouteInGermany";
 export {
   useCreateList,
   useDeleteLabel,
@@ -233,16 +253,21 @@ export {
   cumulativeDistances,
   type DeadReckonOptions,
   type DeadReckonTarget,
+  detectMissedConnection,
   eta,
+  extractTrafficSignals,
+  type GeometryWindow,
   navOptionsForMode,
   nextVoiceCue,
   positionAt,
   processFix,
   shouldReroute,
+  signalCoordKey,
   simulatePositions,
   snapToRoute,
   stepDeadReckon,
   stopsUntilAlight,
+  windowGeometry,
 } from "./navigation";
 export type { TransitProgress } from "./navigation/transitProgress";
 export type {
@@ -289,7 +314,7 @@ export { useLayerStore } from "./stores/layerStore";
 export { useMapClickStore } from "./stores/mapClickStore";
 export { useMapStore } from "./stores/mapStore";
 export { useMenuStore } from "./stores/menuStore";
-export type { NavKind } from "./stores/navigationStore";
+export type { NavKind, TransitReplanOptions } from "./stores/navigationStore";
 export { useNavigationStore } from "./stores/navigationStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
@@ -342,6 +367,7 @@ export type {
 } from "./types/hotel";
 export type { Identified, Ids } from "./types/identified";
 export { makeId, parseId, withId } from "./types/identified";
+export type { NeighborhoodCard, NeighborhoodsResponse } from "./types/neighborhood";
 export type {
   DaySchedule,
   LocationContext,
@@ -368,6 +394,7 @@ export {
 } from "./types/placeIds";
 export type { RestaurantMenu } from "./types/restaurantMenu";
 export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
+export { isCityOrSmaller } from "./utils/administrativePlace";
 export {
   buildAttributionHtml,
   buildIntegrationAttribution,
@@ -501,6 +528,7 @@ export { decodePolyline, encodePolyline } from "./utils/polyline";
 export { sectionSlug } from "./utils/sectionSlug";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./utils/tideExtrema";
 export { despikeSeries, findTideExtrema } from "./utils/tideExtrema";
+export { timeZoneAt } from "./utils/timezone";
 export {
   USER_AGENT,
   USER_AGENT_ADMIN,
