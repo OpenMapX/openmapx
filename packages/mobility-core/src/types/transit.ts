@@ -11,7 +11,12 @@ export type TransportMode =
   | "funicular"
   | "cable_car"
   | "monorail"
-  | "walking";
+  | "walking"
+  // Non-transit street modes, used for intermodal first/last-mile and direct
+  // (door-to-door) legs returned by the transit planner. `cycling` also covers
+  // bike-share rentals; `driving` covers car, park-and-ride and car-share.
+  | "cycling"
+  | "driving";
 
 export interface TransitStop {
   /**
@@ -42,6 +47,13 @@ export interface TransitStop {
   platformCode?: string;
   parentStationId?: string;
   provider: string;
+  /**
+   * Travel time in minutes to reach this stop, populated only by reachability
+   * (one-to-all) queries. Lets the UI colour stops by time band.
+   */
+  reachMinutes?: number;
+  /** Number of transfers used to reach this stop in a reachability query. */
+  reachTransfers?: number;
 }
 
 export interface TransitRoute {
@@ -238,6 +250,51 @@ export interface TripFare {
   }>;
 }
 
+/**
+ * Vehicle-rental (GBFS bike/scooter/car-share) details for a rental leg,
+ * derived from the MOTIS `Rental` object. Present only on `RENTAL` legs.
+ */
+export interface TransitRentalInfo {
+  systemId: string;
+  systemName?: string;
+  /** Provider display name (falls back to systemName). */
+  providerName?: string;
+  /** Brand colour (hex, without a leading `#`, matching route/leg colours). */
+  color?: string;
+  /** GBFS form factor, e.g. "BICYCLE", "SCOOTER_STANDING", "CAR". */
+  formFactor?: string;
+  fromStationName?: string;
+  toStationName?: string;
+  /** Best booking deep-link (web URI, falling back to the system URL). */
+  bookingUrl?: string;
+}
+
+/**
+ * On-demand / flexible transport metadata for a leg whose MOTIS mode is
+ * `ODM`, `RIDE_SHARING` or `FLEX`. These services usually require advance
+ * booking, so the UI surfaces a booking link and pickup window.
+ */
+export interface TransitFlexInfo {
+  kind: "odm" | "ride_sharing" | "flex";
+  /** Booking deep-link (route or agency URL from the feed), when available. */
+  bookingUrl?: string;
+  /** Flex service area / location-group name (FLEX only). */
+  areaName?: string;
+  /** ISO start of the pickup/drop-off booking window (FLEX only). */
+  pickupWindowStart?: string;
+  /** ISO end of the pickup/drop-off booking window (FLEX only). */
+  pickupWindowEnd?: string;
+}
+
+/** An alternative departure for a transit leg (earlier/later same-route service). */
+export interface TransitLegAlternative {
+  startTime: string;
+  endTime: string;
+  /** Prefixed trip id of the alternative's transit leg, when available. */
+  tripId?: string;
+  routeShortName?: string;
+}
+
 export interface TripLeg {
   mode: TransportMode;
   startTime: string;
@@ -258,6 +315,16 @@ export interface TripLeg {
   intermodal?: TransitIntermodalLeg;
   fareTransferIndex?: number;
   effectiveFareLegIndex?: number;
+  /** GBFS vehicle-rental details, present on bike/scooter/car-share (`RENTAL`) legs. */
+  rental?: TransitRentalInfo;
+  /** On-demand / flexible transport details, present on ODM/RIDE_SHARING/FLEX legs. */
+  flex?: TransitFlexInfo;
+  /**
+   * Alternative departures that could replace this transit leg (earlier/later
+   * services on the same or comparable routes), from MOTIS leg alternatives.
+   * Present only on transit legs when alternatives were requested.
+   */
+  alternatives?: TransitLegAlternative[];
   /** Occupancy level for this transit leg (e.g. from RIS::Transports or FPTF). */
   occupancy?: OccupancyLevel;
   formation?: TransitFormationReference[];

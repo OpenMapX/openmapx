@@ -17,6 +17,16 @@ interface UseTransitPlanParams {
   numItineraries?: number;
   /** Language for localized responses (e.g. "en", "de"). */
   lang?: string;
+  /** MOTIS `transitModes` allow-list (e.g. ["BUS", "TRAM"]). Omit for all modes. */
+  modes?: string[];
+  /** When true, requests wheelchair-accessible routing (MOTIS pedestrianProfile=WHEELCHAIR). */
+  wheelchair?: boolean;
+  /** MOTIS first-mile access modes (e.g. ["BIKE"], ["CAR_PARKING"]). */
+  preTransitModes?: string[];
+  /** MOTIS last-mile egress modes. */
+  postTransitModes?: string[];
+  /** MOTIS direct (door-to-door) modes; adds non-transit options to the result. */
+  directModes?: string[];
 }
 
 /** Floor a Date to the nearest minute so queries within the same minute share a cache key. */
@@ -31,7 +41,18 @@ export function useTransitPlan({
   arriveBy,
   numItineraries,
   lang,
+  modes,
+  wheelchair,
+  preTransitModes,
+  postTransitModes,
+  directModes,
 }: UseTransitPlanParams): MobilityEnvelopeQueryResult<TripPlan> {
+  // Stable, order-independent key for the modes allow-list so toggling the same
+  // set in a different order reuses the cached query.
+  const modesKey = modes && modes.length > 0 ? [...modes].sort().join(",") : undefined;
+  const preKey = preTransitModes?.length ? [...preTransitModes].sort().join(",") : undefined;
+  const postKey = postTransitModes?.length ? [...postTransitModes].sort().join(",") : undefined;
+  const directKey = directModes?.length ? [...directModes].sort().join(",") : undefined;
   // When no explicit time is set, floor "now" to the current minute so that
   // React Query can serve cached results for up to staleTime (2 min) instead
   // of treating every refetch as a new query due to a fresh timestamp.
@@ -46,6 +67,11 @@ export function useTransitPlan({
       !!arriveBy,
       numItineraries,
       lang,
+      modesKey,
+      !!wheelchair,
+      preKey,
+      postKey,
+      directKey,
     ],
     queryFn: () => {
       if (!origin || !destination) throw new Error("Origin and destination required");
@@ -64,6 +90,21 @@ export function useTransitPlan({
       }
       if (lang) {
         params.lang = lang;
+      }
+      if (modesKey) {
+        params.modes = modesKey;
+      }
+      if (wheelchair) {
+        params.wheelchair = "true";
+      }
+      if (preKey) {
+        params.pre_modes = preKey;
+      }
+      if (postKey) {
+        params.post_modes = postKey;
+      }
+      if (directKey) {
+        params.direct_modes = directKey;
       }
       return apiClient.get<MobilityEnvelope<TripPlan>>(API_ENDPOINTS.transitPlan, params);
     },

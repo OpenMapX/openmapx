@@ -192,9 +192,18 @@ async function planWithInstance(
     from: { lat: number; lng: number };
     to: { lat: number; lng: number };
     departureTime?: string;
+    arrivalTime?: string;
+    modes?: string[];
+    wheelchair?: boolean;
+    preTransitModes?: string[];
+    postTransitModes?: string[];
+    directModes?: string[];
+    numItineraries?: number;
   },
 ) {
-  const { date, time } = resolveDateTime(params.departureTime);
+  // Arrive-by when an arrival time is given; otherwise plan a departure.
+  const arriveBy = params.arrivalTime != null;
+  const { date, time } = resolveDateTime(arriveBy ? params.arrivalTime : params.departureTime);
   return motis.planTrip(
     instance,
     params.from.lat,
@@ -203,6 +212,15 @@ async function planWithInstance(
     params.to.lng,
     date,
     time,
+    arriveBy,
+    params.numItineraries,
+    {
+      modes: params.modes,
+      wheelchair: params.wheelchair,
+      preTransitModes: params.preTransitModes,
+      postTransitModes: params.postTransitModes,
+      directModes: params.directModes,
+    },
   );
 }
 
@@ -334,6 +352,15 @@ export function setupLocal(ctx: IntegrationContext): void {
         if (local) return wrapLocalRT(local);
       }
       return wrapTransitousRT(await motis.getTrip(transitousInstance, cloudId));
+    },
+    async getReachableStops(lat, lng, maxMinutes, modes) {
+      if (await isMotisReachableCached()) {
+        const local = await motis.getReachable(motisLocalInstance, lat, lng, maxMinutes, { modes });
+        if (local.length > 0) return wrapLocalRT(local);
+      }
+      return wrapTransitousRT(
+        await motis.getReachable(transitousInstance, lat, lng, maxMinutes, { modes }),
+      );
     },
   });
 }

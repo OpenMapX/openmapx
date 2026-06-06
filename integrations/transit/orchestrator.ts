@@ -402,6 +402,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     departureTime?: string;
     arrivalTime?: string;
     modes?: string[];
+    wheelchair?: boolean;
+    preTransitModes?: string[];
+    postTransitModes?: string[];
+    directModes?: string[];
+    numItineraries?: number;
   }): Promise<MobilityResult<TripPlan | null>> {
     const tripBbox: BBox = [
       Math.min(params.from.lng, params.to.lng) - 0.5,

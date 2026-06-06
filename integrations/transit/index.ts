@@ -260,8 +260,17 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Provide stop_id or valid bbox params" });
       return;
     }
-    const routes = await orchestrator.getRoutesInBbox(bbox);
-    reply.send(toEnvelope(routes));
+    // The network overlay refetches on every moveend (and on style/theme
+    // changes), so cache by a coarsened bbox (~110m) to collapse near-identical
+    // viewports onto one upstream MOTIS call instead of hammering the always-on
+    // cloud instance.
+    reply.header("Cache-Control", "public, max-age=120, s-maxage=120");
+    const cacheKey = `transit:routes-bbox:${bbox.map((n) => n.toFixed(3)).join(",")}`;
+    const routes = await ctx.cache.withCache(cacheKey, 120, async () => {
+      const res = await orchestrator.getRoutesInBbox(bbox);
+      return toEnvelope(res);
+    });
+    reply.send(routes);
   });
 
   // GET /routes/for-place
@@ -420,11 +429,24 @@ export function setup(ctx: IntegrationContext): void {
       date = q.date ?? utcDate();
       time = q.time ? (q.time.split(":").length >= 3 ? q.time : `${q.time}:00`) : utcTime();
     }
+    // `time` is an arrival deadline when arrive_by is set, otherwise a departure.
+    const arriveBy = q.arrive_by === "true";
+    const when = `${date}T${time}Z`;
+    const numItinerariesRaw = Number(q.num_itineraries);
+    const numItineraries =
+      Number.isFinite(numItinerariesRaw) && numItinerariesRaw > 0
+        ? Math.min(Math.floor(numItinerariesRaw), 10)
+        : undefined;
     const planRes = await orchestrator.planTrip({
       from: { lat: fromLat, lng: fromLng },
       to: { lat: toLat, lng: toLng },
-      departureTime: `${date}T${time}Z`,
+      ...(arriveBy ? { arrivalTime: when } : { departureTime: when }),
+      numItineraries,
       modes: (q.modes ?? "TRANSIT").split(",").map((m) => m.trim()),
+      wheelchair: q.wheelchair === "true",
+      preTransitModes: parseModes(q.pre_modes),
+      postTransitModes: parseModes(q.post_modes),
+      directModes: parseModes(q.direct_modes),
     });
     if (!planRes.data) {
       reply.status(503).send({
@@ -443,7 +465,8 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Required: lat, lng" });
       return;
     }
-    const maxTravelTime = Math.min(Number(req.query.maxTravelTime ?? 30), 120);
+    const maxRaw = Number(req.query.maxTravelTime ?? 30);
+    const maxTravelTime = Number.isFinite(maxRaw) ? Math.min(Math.max(maxRaw, 1), 120) : 30;
 
     const cacheKey = `reachable:${lat.toFixed(3)}:${lng.toFixed(3)}:${maxTravelTime}:${req.query.modes ?? ""}`;
     const results = await ctx.cache.withCache(cacheKey, 300, async () => {

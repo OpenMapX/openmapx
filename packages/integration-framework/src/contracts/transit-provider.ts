@@ -63,7 +63,18 @@ export interface TripPlanRequest {
   to: { lat: number; lng: number };
   departureTime?: string;
   arrivalTime?: string;
+  /** Transit mode allow-list passed to MOTIS `transitModes` (e.g. ["BUS", "TRAM"]). */
   modes?: string[];
+  /** When true, request wheelchair-accessible routing (MOTIS pedestrianProfile=WHEELCHAIR). */
+  wheelchair?: boolean;
+  /** MOTIS `preTransitModes` — first-mile access modes (e.g. ["BIKE"], ["CAR_PARKING"]). */
+  preTransitModes?: string[];
+  /** MOTIS `postTransitModes` — last-mile egress modes. */
+  postTransitModes?: string[];
+  /** MOTIS `directModes` — non-transit door-to-door modes; surfaced as `direct` itineraries. */
+  directModes?: string[];
+  /** Number of itineraries to request (MOTIS `numItineraries`); the provider default applies when unset. */
+  numItineraries?: number;
 }
 
 // Re-exported so consumers of the framework barrel don't need a separate

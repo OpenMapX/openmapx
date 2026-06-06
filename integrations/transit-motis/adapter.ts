@@ -7,15 +7,19 @@ import type {
   FareTransfer,
   Itinerary,
   Leg,
+  Mode,
   FareProduct as MotisFareProduct,
   Place,
+  Rental,
   StopTime,
   TripSegment,
 } from "@motis-project/motis-client";
 import {
   geocode,
+  routes as motisRoutesApi,
   stops as motisStops,
   trip as motisTrip,
+  oneToAll,
   plan,
   stoptimes,
   trips,
@@ -25,6 +29,9 @@ import type {
   Departure,
   FareProduct,
   GeoJSONLineString,
+  TransitFlexInfo,
+  TransitLegAlternative,
+  TransitRentalInfo,
   TransitRoute,
   TransitStop,
   TripFare,
@@ -36,7 +43,7 @@ import type {
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
 import type { MotisInstance } from "./instances.js";
-import { motisMode, uniqueModes } from "./mode-map.js";
+import { motisLegMode, motisMode, uniqueModes } from "./mode-map.js";
 
 /** Strip the instance prefix from a prefixed stop/trip ID. */
 export function rawId(instance: MotisInstance, stopId: string): string {
@@ -74,6 +81,99 @@ export async function getStops(instance: MotisInstance, bbox: BBox): Promise<Tra
   }
 }
 
+/**
+ * Reachability query via the MOTIS `one-to-all` endpoint: every stop reachable
+ * from `(lat,lng)` within `maxMinutes` by transit, each annotated with the
+ * travel time and number of transfers. Powers transit isochrone / "reachable
+ * by transit" overlays.
+ */
+export async function getReachable(
+  instance: MotisInstance,
+  lat: number,
+  lng: number,
+  maxMinutes: number,
+  opts?: { modes?: string[]; time?: string; arriveBy?: boolean },
+): Promise<TransitStop[]> {
+  try {
+    const transitModes = opts?.modes && opts.modes.length > 0 ? (opts.modes as Mode[]) : undefined;
+    const { data } = await oneToAll({
+      client: instance.client,
+      query: {
+        one: `${lat},${lng}`,
+        maxTravelTime: maxMinutes,
+        ...(opts?.time ? { time: opts.time } : {}),
+        ...(opts?.arriveBy ? { arriveBy: true } : {}),
+        ...(transitModes ? { transitModes } : {}),
+      },
+    });
+    if (!data?.all?.length) return [];
+    return data.all
+      .filter((rp) => rp.place?.stopId)
+      .map((rp): TransitStop => {
+        const stop = normalizeStop(instance, rp.place as Place);
+        return {
+          ...stop,
+          reachMinutes: rp.duration != null ? Math.round(rp.duration / 60) : undefined,
+          reachTransfers: rp.k != null ? Math.max(0, rp.k - 1) : undefined,
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch the transit route network within a bounding box via the MOTIS
+ * `map/routes` endpoint, reconstructing each route's geometry by merging the
+ * segment polylines that reference it. Powers a color-coded line-network
+ * overlay. `zoom` controls MOTIS's server-side filtering (low zoom = only
+ * long-distance routes).
+ */
+export async function getRoutesInBbox(
+  instance: MotisInstance,
+  bbox: BBox,
+  zoom = 12,
+): Promise<TransitRoute[]> {
+  const [west, south, east, north] = bbox;
+  try {
+    const { data } = await motisRoutesApi({
+      client: instance.client,
+      query: { min: `${south},${west}`, max: `${north},${east}`, zoom },
+    });
+    if (!data?.routes?.length) return [];
+
+    // Group segment polylines by the route indexes that traverse them.
+    const geomByIdx = new Map<number, [number, number][][]>();
+    for (const pl of data.polylines ?? []) {
+      if (!pl.polyline?.points) continue;
+      const decoded = decodePolyline(pl.polyline.points, pl.polyline.precision ?? 6);
+      if (decoded.length < 2) continue;
+      for (const idx of pl.routeIndexes ?? []) {
+        const arr = geomByIdx.get(idx) ?? [];
+        arr.push(decoded);
+        geomByIdx.set(idx, arr);
+      }
+    }
+
+    return data.routes.map((r): TransitRoute => {
+      const info = r.transitRoutes?.[0];
+      const lines = geomByIdx.get(r.routeIdx);
+      return {
+        id: info?.id ? `${instance.prefix}${info.id}` : `${instance.prefix}route-${r.routeIdx}`,
+        shortName: info?.shortName ?? "",
+        longName: info?.longName ?? "",
+        mode: motisMode(r.mode),
+        color: info?.color ? info.color.replace(/^#/, "") : undefined,
+        textColor: info?.textColor ? info.textColor.replace(/^#/, "") : undefined,
+        operatorName: "",
+        geometry: lines?.length ? { type: "MultiLineString", coordinates: lines } : undefined,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 /** Fetch a single stop by ID (using stoptimes with n=0). */
 export async function getStopById(
   instance: MotisInstance,
@@ -101,7 +201,7 @@ export async function searchByName(
   try {
     const { data } = await geocode({
       client: instance.client,
-      query: { text: query, type: "STOP" },
+      query: { text: query, type: ["STOP"] },
     });
     if (!data || !Array.isArray(data)) return [];
     return data
@@ -278,9 +378,65 @@ function mapFares(fareTransfers: FareTransfer[]): TripFare {
   };
 }
 
+/** Map a MOTIS Rental to our TransitRentalInfo. */
+function mapRental(rental: Rental): TransitRentalInfo {
+  return {
+    systemId: rental.systemId,
+    systemName: rental.systemName ?? undefined,
+    providerName: rental.systemName ?? undefined,
+    // Stored hash-stripped, matching route/leg colours; consumers prepend `#`.
+    color: rental.color ? rental.color.replace(/^#/, "") : undefined,
+    formFactor: rental.formFactor ?? undefined,
+    fromStationName: rental.fromStationName ?? undefined,
+    toStationName: rental.toStationName ?? undefined,
+    bookingUrl: rental.rentalUriWeb ?? rental.url ?? undefined,
+  };
+}
+
+/**
+ * Map MOTIS leg alternatives (each a `[ingress, transit, egress]` leg chain) to
+ * our compact alternative-departure shape by extracting the transit leg.
+ */
+function mapAlternatives(instance: MotisInstance, alternatives: Leg[][]): TransitLegAlternative[] {
+  const out: TransitLegAlternative[] = [];
+  for (const chain of alternatives) {
+    const transit = chain.find((l) => l.routeShortName || l.routeLongName || l.routeId) ?? chain[1];
+    if (!transit?.startTime || !transit?.endTime) continue;
+    out.push({
+      startTime: transit.startTime,
+      endTime: transit.endTime,
+      tripId: transit.tripId ? `${instance.prefix}${transit.tripId}` : undefined,
+      routeShortName: transit.displayName ?? transit.routeShortName ?? undefined,
+    });
+  }
+  return out;
+}
+
+/** Map an on-demand/flexible MOTIS leg to our TransitFlexInfo, or null. */
+function mapFlex(leg: Leg): TransitFlexInfo | null {
+  const kind =
+    leg.mode === "ODM"
+      ? "odm"
+      : leg.mode === "RIDE_SHARING"
+        ? "ride_sharing"
+        : leg.mode === "FLEX"
+          ? "flex"
+          : null;
+  if (!kind) return null;
+  return {
+    kind,
+    bookingUrl: leg.routeUrl ?? leg.agencyUrl ?? undefined,
+    areaName: leg.from.flex ?? undefined,
+    pickupWindowStart: leg.from.flexStartPickupDropOffWindow ?? undefined,
+    pickupWindowEnd: leg.from.flexEndPickupDropOffWindow ?? undefined,
+  };
+}
+
 /** Map a single MOTIS Leg to our TripLeg. */
 function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
-  const mode = motisMode(leg.mode);
+  // Rental legs report mode `RENTAL`; motisLegMode refines car-like form factors
+  // to driving so the UI shows a car (not bike) glyph.
+  const mode = motisLegMode(leg);
   const fromPlace = leg.from;
   const toPlace = leg.to;
 
@@ -340,6 +496,11 @@ function mapLeg(instance: MotisInstance, leg: Leg): TripLeg {
     geometry,
     tripId: isTransit && leg.tripId ? `${instance.prefix}${leg.tripId}` : undefined,
     routeId: isTransit && leg.routeId ? `${instance.prefix}${leg.routeId}` : undefined,
+    rental: leg.rental ? mapRental(leg.rental) : undefined,
+    flex: mapFlex(leg) ?? undefined,
+    alternatives: leg.alternatives?.length
+      ? mapAlternatives(instance, leg.alternatives)
+      : undefined,
     _intermediateStopCount: Array.isArray(leg.intermediateStops)
       ? leg.intermediateStops.length
       : undefined,
@@ -359,10 +520,14 @@ function mapItinerary(instance: MotisInstance, it: Itinerary): TripItinerary {
       ? it.transfers
       : Math.max(0, legs.filter((l) => l.route).length - 1);
 
-  // Sum walk distances from raw legs (walk legs expose `distance` in meters)
-  const walkDistance = it.legs
-    .filter((l) => !l.routeShortName && !l.routeLongName && !l.routeId)
-    .reduce((sum, l) => sum + (l.distance ?? 0), 0);
+  // Sum distance of WALK legs only (raw legs expose `distance` in meters). Filter
+  // on the mapped mode, not route-field absence: intermodal bike/car/rental
+  // access legs also lack route ids but must not count as walking, or the "Less
+  // walking" ranking and the "X walk" label would include cycled/driven metres.
+  const walkDistance = it.legs.reduce(
+    (sum, l, i) => (legs[i]?.mode === "walking" ? sum + (l.distance ?? 0) : sum),
+    0,
+  );
 
   const result: TripItinerary = {
     duration: it.duration ?? 0,
@@ -391,9 +556,26 @@ export async function planTrip(
   time: string,
   arriveBy?: boolean,
   numItineraries?: number,
+  opts?: {
+    modes?: string[];
+    wheelchair?: boolean;
+    preTransitModes?: string[];
+    postTransitModes?: string[];
+    directModes?: string[];
+  },
 ): Promise<TripPlan | null> {
   try {
     const queryTime = date && time ? `${date}T${time}Z` : date ? `${date}T00:00:00Z` : undefined;
+    // MOTIS treats `transitModes` as a hard allow-list; an empty list returns no
+    // transit at all, so only set it when the user actually picked modes.
+    const transitModes = opts?.modes && opts.modes.length > 0 ? (opts.modes as Mode[]) : undefined;
+    const preTransitModes = opts?.preTransitModes?.length
+      ? (opts.preTransitModes as Mode[])
+      : undefined;
+    const postTransitModes = opts?.postTransitModes?.length
+      ? (opts.postTransitModes as Mode[])
+      : undefined;
+    const directModes = opts?.directModes?.length ? (opts.directModes as Mode[]) : undefined;
 
     const { data } = await plan({
       client: instance.client,
@@ -401,14 +583,29 @@ export async function planTrip(
         fromPlace: `${fromLat},${fromLng}`,
         toPlace: `${toLat},${toLng}`,
         numItineraries: numItineraries ?? 3,
+        // Ask MOTIS for a couple of earlier/later alternatives per transit leg
+        // so the UI can offer departure swaps without a re-query.
+        numLegAlternatives: 2,
         ...(queryTime ? { time: queryTime } : {}),
         ...(arriveBy ? { arriveBy: true } : {}),
+        ...(transitModes ? { transitModes } : {}),
+        ...(preTransitModes ? { preTransitModes } : {}),
+        ...(postTransitModes ? { postTransitModes } : {}),
+        ...(directModes ? { directModes } : {}),
+        ...(opts?.wheelchair ? { pedestrianProfile: "WHEELCHAIR" as const } : {}),
         withFares: true,
       },
     });
-    if (!data?.itineraries?.length) return null;
+    if (!data?.itineraries?.length && !data?.direct?.length) return null;
 
-    const itineraries = data.itineraries.map((it) => mapItinerary(instance, it));
+    // Transit itineraries first; append `direct` (door-to-door bike/car) options
+    // only when the caller explicitly requested directModes — MOTIS otherwise
+    // always computes a WALK direct trip we don't want cluttering transit results.
+    const transitItins = (data?.itineraries ?? []).map((it) => mapItinerary(instance, it));
+    const directItins = directModes
+      ? (data?.direct ?? []).map((it) => mapItinerary(instance, it))
+      : [];
+    const itineraries = [...transitItins, ...directItins];
 
     const from = data.from;
     const to = data.to;

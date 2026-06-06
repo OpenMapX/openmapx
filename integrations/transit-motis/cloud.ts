@@ -44,12 +44,18 @@ export function setupCloud(ctx: IntegrationContext): void {
       },
       departures: true,
       arrivals: true,
-      routes: { lookup: false, forStop: false, stops: false, geometry: false },
+      routes: { lookup: false, forStop: false, stops: false, geometry: true },
       planning: false,
       vehiclePositions: false,
       vehicleJourney: true,
       alerts: { byStop: false, byRoute: false, byBbox: false },
       facilities: false,
+    },
+    // Transit route network for the line-network map overlay. Only the
+    // always-on cloud provider implements this (the local provider keeps
+    // bbox methods off to avoid orchestrator fan-out across both instances).
+    async getRoutesInBbox(bbox) {
+      return wrapTransitous(await motis.getRoutesInBbox(transitousInstance, bbox));
     },
     async getStop(id) {
       return wrapTransitous(await motis.getStopById(transitousInstance, withPrefix(id, "mo:")));
