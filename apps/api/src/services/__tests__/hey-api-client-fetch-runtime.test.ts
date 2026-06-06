@@ -111,7 +111,7 @@ describe("@hey-api/client-fetch runtime integrations", () => {
       const request = getRequest(input, init);
       const url = new URL(request.url);
 
-      if (url.pathname === "/api/v1/map/stops") {
+      if (url.pathname === "/api/v6/map/stops") {
         expect(url.searchParams.get("min")).toBe("0,0");
         expect(url.searchParams.get("max")).toBe("0.1,0.1");
         return jsonResponse([]);
@@ -150,11 +150,11 @@ describe("@hey-api/client-fetch runtime integrations", () => {
     const cloudRequest = getRequest(fetchMock.mock.calls[0]?.[0], fetchMock.mock.calls[0]?.[1]);
     const localRequest = getRequest(fetchMock.mock.calls[1]?.[0], fetchMock.mock.calls[1]?.[1]);
 
-    expect(cloudRequest.url).toBe("https://cloud.example/api/v1/map/stops?max=0.1%2C0.1&min=0%2C0");
+    expect(cloudRequest.url).toBe("https://cloud.example/api/v6/map/stops?max=0.1%2C0.1&min=0%2C0");
     expect(cloudRequest.headers.get("User-Agent")).toBe("OpenMapX-Test/1.0");
     expect(cloudRequest.signal).toBeInstanceOf(AbortSignal);
 
-    expect(localRequest.url).toBe("http://local.example/api/v1/map/stops?max=0.1%2C0.1&min=0%2C0");
+    expect(localRequest.url).toBe("http://local.example/api/v6/map/stops?max=0.1%2C0.1&min=0%2C0");
     expect(localRequest.signal).toBeInstanceOf(AbortSignal);
   });
 

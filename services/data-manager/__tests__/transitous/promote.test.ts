@@ -135,7 +135,7 @@ describe("promote stage", () => {
       }),
     );
     expect(result.status).toBe("error");
-    expect(result.message).toMatch(/staging probe "initial" failed/);
+    expect(result.message).toMatch(/staging probe "health" failed/);
     // Filesystem unchanged.
     expect(existsSync(fx.stagingDir)).toBe(true);
     expect(existsSync(fx.currentDir)).toBe(true);

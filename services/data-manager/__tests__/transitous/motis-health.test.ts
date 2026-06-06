@@ -60,7 +60,7 @@ describe("motis-health stage", () => {
     expect(result.status).toBe("skipped");
   });
 
-  it("returns ok after all three probes succeed against the staging url", async () => {
+  it("returns ok after all probes succeed against the staging url", async () => {
     const dataDir = makeStagingDir();
     const calls: string[] = [];
     globalThis.fetch = vi.fn(async (input: unknown) => {
@@ -71,11 +71,13 @@ describe("motis-health stage", () => {
 
     const result = await motisHealthRun(ctxFor(dataDir));
     expect(result.status).toBe("ok");
-    expect(calls.length).toBe(3);
-    expect(calls[0]).toMatch(/\/api\/v1\/initial$/);
-    expect(calls[1]).toMatch(/\/api\/v1\/stops\?/);
-    expect(calls[2]).toMatch(/\/api\/v1\/plan\?/);
+    expect(calls.length).toBe(4);
+    expect(calls[0]).toMatch(/\/api\/v1\/health$/);
+    expect(calls[1]).toMatch(/\/api\/v1\/initial$/);
+    expect(calls[2]).toMatch(/\/api\/v1\/stops\?/);
+    expect(calls[3]).toMatch(/\/api\/v1\/plan\?/);
     expect((result.artifacts as { probes?: string[] }).probes).toEqual([
+      "health",
       "initial",
       "stops",
       "plan",
@@ -94,7 +96,7 @@ describe("motis-health stage", () => {
     const result = await motisHealthRun(ctxFor(dataDir));
     expect(result.status).toBe("error");
     expect(calls.length).toBe(1);
-    expect(result.message).toMatch(/probe "initial" failed: HTTP 503/);
+    expect(result.message).toMatch(/probe "health" failed: HTTP 503/);
   });
 
   it("fails when a probe responds with a non-JSON content-type", async () => {

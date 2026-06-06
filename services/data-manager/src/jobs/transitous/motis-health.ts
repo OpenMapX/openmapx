@@ -146,6 +146,10 @@ export const run: StageFn = async (ctx) => {
     `&toPlace=${probe.planToLat},${probe.planToLng}`;
 
   const probes: Array<{ name: string; url: string }> = [
+    // MOTIS's dedicated health endpoint is the fast liveness gate; the
+    // functional probes below additionally confirm the timetable index and
+    // routing engine actually answer queries.
+    { name: "health", url: `${base}/api/v1/health` },
     { name: "initial", url: initialUrl },
     { name: "stops", url: stopsUrl },
     { name: "plan", url: planUrl },

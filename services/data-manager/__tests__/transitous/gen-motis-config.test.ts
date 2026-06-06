@@ -7,15 +7,26 @@ import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
-let originalEnv: string | undefined;
+const ENV_KEYS = [
+  "MOTIS_INCREMENTAL_RT_UPDATE",
+  "MOTIS_ELEVATORS_URL",
+  "MOTIS_ELEVATORS_AUTH",
+  "MOTIS_OSR_FOOTPATH",
+] as const;
+const originalEnv: Record<string, string | undefined> = {};
 
 beforeEach(() => {
-  originalEnv = process.env.MOTIS_INCREMENTAL_RT_UPDATE;
+  for (const k of ENV_KEYS) {
+    originalEnv[k] = process.env[k];
+    delete process.env[k];
+  }
 });
 
 afterEach(() => {
-  if (originalEnv === undefined) delete process.env.MOTIS_INCREMENTAL_RT_UPDATE;
-  else process.env.MOTIS_INCREMENTAL_RT_UPDATE = originalEnv;
+  for (const k of ENV_KEYS) {
+    if (originalEnv[k] === undefined) delete process.env[k];
+    else process.env[k] = originalEnv[k];
+  }
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
     tmp = undefined;
@@ -56,6 +67,8 @@ function ctxFor(dataDir: string, catalogDir: string) {
 
 const TEMPLATE = `server:
   port: 8080
+osr_footpath: false
+elevators: false
 timetable:
   update_interval: 60
   incremental_rt_update: false
@@ -108,5 +121,45 @@ describe("gen-motis-config incremental_rt_update override", () => {
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
     expect(result.status).toBe("ok");
     expect(result.artifacts).toMatchObject({ incrementalRtOverridden: false });
+  });
+});
+
+describe("gen-motis-config elevators override", () => {
+  it("injects an elevators block (with auth header) when MOTIS_ELEVATORS_URL is set", async () => {
+    process.env.MOTIS_ELEVATORS_URL = "https://fasta.example/api";
+    process.env.MOTIS_ELEVATORS_AUTH = "Bearer secret";
+    const fx = setupCatalog(TEMPLATE);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.status).toBe("ok");
+    expect(result.artifacts).toMatchObject({ elevatorsOverridden: true });
+    const updated = readFileSync(fx.configPath, "utf-8");
+    expect(updated).toMatch(/elevators:\n {2}url: https:\/\/fasta\.example\/api/);
+    expect(updated).toMatch(/headers:\n {4}Authorization: Bearer secret/);
+    // Other top-level keys remain intact.
+    expect(updated).toMatch(/^timetable:/m);
+  });
+
+  it("leaves elevators disabled when the env var is unset", async () => {
+    const fx = setupCatalog(TEMPLATE);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ elevatorsOverridden: false });
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/elevators:\s*false/);
+  });
+});
+
+describe("gen-motis-config osr_footpath override", () => {
+  it("flips osr_footpath to true when MOTIS_OSR_FOOTPATH=true", async () => {
+    process.env.MOTIS_OSR_FOOTPATH = "true";
+    const fx = setupCatalog(TEMPLATE);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ osrFootpathOverridden: true });
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/osr_footpath:\s*true/);
+  });
+
+  it("leaves osr_footpath alone when the env var is unset", async () => {
+    const fx = setupCatalog(TEMPLATE);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ osrFootpathOverridden: false });
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/osr_footpath:\s*false/);
   });
 });

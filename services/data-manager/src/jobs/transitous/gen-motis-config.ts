@@ -3,6 +3,62 @@ import { join } from "node:path";
 import type { JobLogger, StageFn, StageResult } from "./types.js";
 
 /**
+ * Flip a `<key>: true|false` YAML scalar in `configPath` from a boolean env var.
+ * Shared by the incremental_rt_update and osr_footpath overrides (identical
+ * read → regex-flip → write shape). `yamlKey` is a hardcoded literal, so the
+ * built RegExp carries no untrusted input.
+ *
+ * Returns `true` iff the file was modified. Leaves the file (and the Transitous
+ * default) untouched when the env var is unset, unrecognised, the file is
+ * missing/unreadable, the key is absent, or the value already matches.
+ */
+function flipYamlBoolFromEnv(
+  configPath: string,
+  logger: JobLogger,
+  opts: { envVar: string; yamlKey: string },
+): boolean {
+  const { envVar, yamlKey } = opts;
+  const raw = process.env[envVar];
+  if (raw === undefined) return false;
+  const normalized = raw.trim().toLowerCase();
+  const truthy = ["1", "true", "yes", "on"].includes(normalized);
+  const falsy = ["0", "false", "no", "off"].includes(normalized);
+  if (!truthy && !falsy) {
+    logger.warn(`gen-motis-config: ignoring ${envVar}=${raw} (expected true/false)`);
+    return false;
+  }
+  if (!existsSync(configPath)) return false;
+  let text: string;
+  try {
+    text = readFileSync(configPath, "utf-8");
+  } catch (error) {
+    logger.warn(
+      `gen-motis-config: could not read ${configPath} to apply ${yamlKey} override: ${(error as Error).message}`,
+    );
+    return false;
+  }
+  const desired = truthy ? "true" : "false";
+  const re = new RegExp(`^(\\s*${yamlKey}:\\s*)(true|false)\\s*$`, "m");
+  const match = text.match(re);
+  if (!match) {
+    logger.warn(`gen-motis-config: ${yamlKey} key not found in ${configPath}; override skipped`);
+    return false;
+  }
+  if (match[2] === desired) return false;
+  const next = text.replace(re, `$1${desired}`);
+  try {
+    writeFileSync(configPath, next, "utf-8");
+    logger.info(`gen-motis-config: ${yamlKey} set to ${desired} via ${envVar}`);
+    return true;
+  } catch (error) {
+    logger.warn(
+      `gen-motis-config: could not write ${yamlKey} override to ${configPath}: ${(error as Error).message}`,
+    );
+    return false;
+  }
+}
+
+/**
  * Post-process the generated `config.yml` to flip MOTIS's
  * `incremental_rt_update` flag when the operator opts in via
  * `MOTIS_INCREMENTAL_RT_UPDATE=true`.
@@ -17,51 +73,85 @@ import type { JobLogger, StageFn, StageResult } from "./types.js";
  * Returns `true` iff the file was modified.
  */
 function applyIncrementalRtOverride(configPath: string, logger: JobLogger): boolean {
-  const raw = process.env.MOTIS_INCREMENTAL_RT_UPDATE;
-  if (raw === undefined) return false;
-  const truthy = ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
-  const falsy = ["0", "false", "no", "off"].includes(raw.trim().toLowerCase());
-  if (!truthy && !falsy) {
-    logger.warn(
-      `gen-motis-config: ignoring MOTIS_INCREMENTAL_RT_UPDATE=${raw} (expected true/false)`,
-    );
-    return false;
-  }
+  return flipYamlBoolFromEnv(configPath, logger, {
+    envVar: "MOTIS_INCREMENTAL_RT_UPDATE",
+    yamlKey: "incremental_rt_update",
+  });
+}
+
+/**
+ * Post-process the generated `config.yml` to enable MOTIS's elevator
+ * (FaSta / SIRI-FM) integration when the operator sets `MOTIS_ELEVATORS_URL`.
+ *
+ * Upstream Transitous templates `elevators: false`. When enabled, MOTIS polls
+ * the configured status API and routes wheelchair (`pedestrianProfile=WHEELCHAIR`)
+ * trips around out-of-service elevators in real time. An optional
+ * `MOTIS_ELEVATORS_AUTH` supplies an `Authorization` header (e.g. for the DB
+ * FaSta API). We only mutate the file when the URL is set; otherwise the
+ * Transitous default is left untouched.
+ *
+ * Returns `true` iff the file was modified.
+ */
+function applyElevatorsOverride(configPath: string, logger: JobLogger): boolean {
+  const url = process.env.MOTIS_ELEVATORS_URL?.trim();
+  if (!url) return false;
   if (!existsSync(configPath)) return false;
   let text: string;
   try {
     text = readFileSync(configPath, "utf-8");
   } catch (error) {
     logger.warn(
-      `gen-motis-config: could not read ${configPath} to apply incremental_rt_update override: ${(error as Error).message}`,
+      `gen-motis-config: could not read ${configPath} to apply elevators override: ${(error as Error).message}`,
     );
     return false;
   }
-  const desired = truthy ? "true" : "false";
-  // Indented YAML scalar inside the `timetable:` block; the upstream template
-  // emits it at two-space indent.
-  const re = /^(\s*incremental_rt_update:\s*)(true|false)\s*$/m;
-  const match = text.match(re);
-  if (!match) {
-    logger.warn(
-      `gen-motis-config: incremental_rt_update key not found in ${configPath}; override skipped`,
-    );
+  const auth = process.env.MOTIS_ELEVATORS_AUTH?.trim();
+  const block = [
+    "elevators:",
+    `  url: ${url}`,
+    ...(auth ? ["  headers:", `    Authorization: ${auth}`] : []),
+  ].join("\n");
+  // Matches the top-level `elevators:` scalar (or a previously-injected block:
+  // the key line plus any following indented lines).
+  const re = /^elevators:.*(?:\n[ \t]+.*)*$/m;
+  if (!re.test(text)) {
+    logger.warn(`gen-motis-config: elevators key not found in ${configPath}; override skipped`);
     return false;
   }
-  if (match[2] === desired) return false;
-  const next = text.replace(re, `$1${desired}`);
+  // Use a replacer function so `$` sequences in the URL/auth value (e.g. a token
+  // containing `$1` or `$&`) are inserted literally rather than interpreted as
+  // String.replace substitution patterns.
+  const next = text.replace(re, () => block);
+  if (next === text) return false;
   try {
     writeFileSync(configPath, next, "utf-8");
-    logger.info(
-      `gen-motis-config: incremental_rt_update set to ${desired} via MOTIS_INCREMENTAL_RT_UPDATE`,
-    );
+    logger.info(`gen-motis-config: elevators enabled via MOTIS_ELEVATORS_URL (${url})`);
     return true;
   } catch (error) {
     logger.warn(
-      `gen-motis-config: could not write incremental_rt_update override to ${configPath}: ${(error as Error).message}`,
+      `gen-motis-config: could not write elevators override to ${configPath}: ${(error as Error).message}`,
     );
     return false;
   }
+}
+
+/**
+ * Post-process the generated `config.yml` to flip MOTIS's `osr_footpath` flag
+ * when the operator opts in via `MOTIS_OSR_FOOTPATH=true`.
+ *
+ * Upstream Transitous templates `osr_footpath: false` (transfers come from the
+ * timetable feeds). Setting it to `true` makes MOTIS compute transfer footpaths
+ * on the OSM street graph instead — more realistic walking transfers, at the
+ * cost of extra import time and RAM (~+2-4 GB; validate on `motis-staging`
+ * before promoting). Requires `street_routing: true`, which is already set.
+ *
+ * Returns `true` iff the file was modified.
+ */
+function applyOsrFootpathOverride(configPath: string, logger: JobLogger): boolean {
+  return flipYamlBoolFromEnv(configPath, logger, {
+    envVar: "MOTIS_OSR_FOOTPATH",
+    yamlKey: "osr_footpath",
+  });
 }
 
 /**
@@ -92,6 +182,8 @@ export const run: StageFn = async (ctx) => {
     });
     const configPath = join(catalogDir, "out", "config.yml");
     const incrementalRtOverridden = applyIncrementalRtOverride(configPath, ctx.logger);
+    const elevatorsOverridden = applyElevatorsOverride(configPath, ctx.logger);
+    const osrFootpathOverridden = applyOsrFootpathOverride(configPath, ctx.logger);
     return {
       stage: "gen-motis-config",
       status: "ok",
@@ -102,6 +194,8 @@ export const run: StageFn = async (ctx) => {
       artifacts: {
         configPath,
         incrementalRtOverridden,
+        elevatorsOverridden,
+        osrFootpathOverridden,
       },
     };
   } catch (error) {

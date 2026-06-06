@@ -4,7 +4,10 @@ RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/
 FROM docker.io/debian:bookworm-slim
 
 # Pin the MOTIS release we install. Override with `--build-arg MOTIS_VERSION=vX.Y.Z`.
-ARG MOTIS_VERSION=v2.9.1
+# Keep this aligned with the `ghcr.io/motis-project/motis` image tag the
+# `motis`/`motis-staging` services run and the `@motis-project/motis-client`
+# version in package.json.
+ARG MOTIS_VERSION=v2.10.2
 # Per-arch SHA256 of the corresponding motis-linux-<arch>.tar.bz2 release
 # asset. When non-empty for the target arch, the build fails if the
 # downloaded tarball's hash differs — protects against an in-flight retag /

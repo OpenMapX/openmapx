@@ -79,6 +79,7 @@ async function runSmokeProbes(deadline: number): Promise<string | null> {
   const stops = `${STAGING_URL}/api/v1/stops?min=52.515,13.359&max=52.535,13.379`;
   const plan = `${STAGING_URL}/api/v1/plan?fromPlace=52.525,13.369&toPlace=48.14,11.558`;
   const probes: Array<{ name: string; url: string }> = [
+    { name: "health", url: `${STAGING_URL}/api/v1/health` },
     { name: "initial", url: `${STAGING_URL}/api/v1/initial` },
     { name: "stops", url: stops },
     { name: "plan", url: plan },

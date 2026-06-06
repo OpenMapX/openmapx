@@ -8,7 +8,7 @@
   "homepage": "https://github.com/motis-project/motis",
   "container": {
     "image": "ghcr.io/motis-project/motis",
-    "tag": "latest",
+    "tag": "2.10.2",
     "expose": [8080],
     "user": "${UID:-1000}:${GID:-1000}",
     "workingDir": "/motis-data",
@@ -17,6 +17,15 @@
     "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
     "memory": "16g",
     "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/api/v1/health",
+      "port": 8080,
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "600s"
+    },
     "logging": {
       "driver": "json-file",
       "options": { "max-size": "50m", "max-file": "3" }

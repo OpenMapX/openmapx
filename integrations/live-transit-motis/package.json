@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@hey-api/client-fetch": "workspace:*",
-    "@motis-project/motis-client": "^2.9.2",
+    "@motis-project/motis-client": "^2.10.2",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^"

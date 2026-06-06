@@ -78,8 +78,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
-        specifier: ^2.9.2
-        version: 2.9.2
+        specifier: ^2.10.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -557,8 +557,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
-        specifier: ^2.9.2
-        version: 2.9.2
+        specifier: ^2.10.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -761,8 +761,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
-        specifier: ^2.9.2
-        version: 2.9.2
+        specifier: ^2.10.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -1292,8 +1292,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
-        specifier: ^2.9.2
-        version: 2.9.2
+        specifier: ^2.10.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -1721,8 +1721,8 @@ importers:
         specifier: workspace:*
         version: link:../hey-api-client-fetch
       '@motis-project/motis-client':
-        specifier: ^2.9.2
-        version: 2.9.2
+        specifier: ^2.10.2
+        version: 2.10.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../core
@@ -2986,8 +2986,8 @@ packages:
   '@maplibre/vt-pbf@4.3.0':
     resolution: {integrity: sha512-jIvp8F5hQCcreqOOpEt42TJMUlsrEcpf/kI1T2v85YrQRV6PPXUcEXUg5karKtH6oh47XJZ4kHu56pUkOuqA7w==}
 
-  '@motis-project/motis-client@2.9.2':
-    resolution: {integrity: sha512-QOqRq9LpirRpXZbGbr18mRa7mgke14J6F1ZJpyG7iEcuWMbrFfI7j1EumRz6QDni40esymqyFEbZF7fMayV8BQ==}
+  '@motis-project/motis-client@2.10.2':
+    resolution: {integrity: sha512-6HSznDh+iHDxPZXGRG5L8gHXztiTa9Zr+/ZPzOf9wc3JeYQHYlSh5SnUpMrhEch03fQ82EdnQkZ444i3hOW7SQ==}
 
   '@mui/core-downloads-tracker@9.0.1':
     resolution: {integrity: sha512-GzamIIhZ1bH77dq7eKaeyRgJdkypsxin4jBFq2EMs4lBWRR0LFO1CSVMsoebn/VvjcNrnrOrjy48MkrkQUK2iw==}
@@ -8178,7 +8178,7 @@ snapshots:
       pbf: 4.0.1
       supercluster: 8.0.1
 
-  '@motis-project/motis-client@2.9.2':
+  '@motis-project/motis-client@2.10.2':
     dependencies:
       '@hey-api/client-fetch': link:packages/hey-api-client-fetch
 
