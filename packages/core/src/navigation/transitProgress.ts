@@ -72,6 +72,42 @@ export function computeTransitProgress(itinerary: TripItinerary, raw: LngLat): T
 }
 
 /**
+ * Detect a missed connection during transit follow-along: the next transit leg
+ * the traveller still needs to board has a scheduled departure more than
+ * `graceSec` in the past, yet they haven't actually boarded it (still on an
+ * earlier leg, or barely onto it with a large deviation). Used to trigger an
+ * on-trip replan from the current position. Deliberately conservative — it only
+ * inspects the first upcoming transit leg to avoid false positives mid-trip.
+ */
+export function detectMissedConnection(
+  itinerary: TripItinerary,
+  progress: TransitProgress,
+  nowMs: number,
+  graceSec = 120,
+): boolean {
+  const legs = itinerary.legs ?? [];
+  for (let i = progress.currentLegIndex; i < legs.length; i++) {
+    const leg = legs[i];
+    if (!leg.tripId) continue; // only transit legs have a catchable departure
+    const dep = leg.startTime ? new Date(leg.startTime).getTime() : Number.NaN;
+    if (!Number.isFinite(dep)) return false;
+    if (nowMs <= dep + graceSec * 1000) return false; // departure not yet missed
+    // You're aboard the leg you're currently snapped to (i === currentLegIndex)
+    // if you've made real progress along it, OR if the fix is too unreliable to
+    // trust: a transient deviation spike (tunnel, urban canyon) must not flip a
+    // clearly-underway rider back to "missed". A low fraction with a SMALL
+    // deviation means you're genuinely still at the stop — a real miss. The leg
+    // is always at or ahead of the current one, so a future transit leg
+    // (i > currentLegIndex) is never "boarded" → its missed departure is flagged.
+    const boarded =
+      i === progress.currentLegIndex &&
+      (progress.fractionAlongLeg > 0.1 || progress.deviationMeters >= 150);
+    return !boarded;
+  }
+  return false;
+}
+
+/**
  * Given the current leg polyline, its ordered stop list, and the snapped
  * position, work out the next stop and how many stops remain until alighting.
  * Each stop and the snapped point are projected onto the leg geometry to get a
