@@ -22,7 +22,7 @@ import {
   StaleWhileRevalidate,
   type Strategy,
 } from "serwist";
-import { isStalePrecacheName, offlineFallback } from "./lib/swCaches";
+import { isStalePrecacheName, offlineFallback, refreshPinnedStyleAssets } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -401,6 +401,34 @@ self.addEventListener("activate", (event) => {
           .filter((k) => isStalePrecacheName(k, { appShell: APP_SHELL_CACHE, style: STYLE_CACHE }))
           .map((k) => caches.delete(k)),
       );
+
+      // Refresh the style/sprite pinned in downloaded offline areas, but only
+      // when they actually changed (conditional ETag request → 304 = skip).
+      // Keeps offline rendering on the latest style after a deploy without
+      // re-downloading when nothing changed. Best-effort; offline = no-op.
+      await refreshPinnedStyleAssets({
+        listAreaCacheNames: async () =>
+          (await caches.keys()).filter((k) => k.startsWith(OFFLINE_AREA_CACHE_PREFIX)),
+        openCache: async (name) => {
+          const cache = await caches.open(name);
+          return {
+            keys: () => cache.keys(),
+            match: (url) => cache.match(url),
+            put: (url, response) => cache.put(url, response as Response),
+          };
+        },
+        isStyleUrl: (url) => /\/styles\//i.test(new URL(url).pathname),
+        fetchFresh: async (url, etag) => {
+          try {
+            return await fetch(url, {
+              cache: "no-store",
+              headers: etag ? { "If-None-Match": etag } : undefined,
+            });
+          } catch {
+            return null;
+          }
+        },
+      });
     })(),
   );
 });

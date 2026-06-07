@@ -45,3 +45,49 @@ export async function offlineFallback<T>(
     throw err;
   }
 }
+
+export interface PinnedStyleCache {
+  keys(): Promise<ReadonlyArray<{ readonly url: string }>>;
+  match(url: string): Promise<{ headers: { get(name: string): string | null } } | undefined>;
+  put(url: string, response: unknown): Promise<void>;
+}
+
+export interface RefreshPinnedStylesDeps {
+  /** Cache names of downloaded offline areas. */
+  listAreaCacheNames(): Promise<string[]>;
+  openCache(name: string): Promise<PinnedStyleCache>;
+  /** True for region-independent style/sprite URLs (e.g. under `/styles/`). */
+  isStyleUrl(url: string): boolean;
+  /**
+   * Conditional GET: re-fetch `url` sending the pinned ETag as If-None-Match.
+   * Resolve with the response (status 304 = unchanged, 200 = changed) or `null`
+   * when offline / the request fails.
+   */
+  fetchFresh(url: string, etag: string | null): Promise<{ status: number } | null>;
+}
+
+/**
+ * Refresh the style/sprite copies pinned inside downloaded offline-area caches,
+ * but only the ones that actually changed. For each pinned style URL we issue a
+ * conditional request with the stored ETag: a `304` leaves the pin untouched, a
+ * `200` replaces it. This keeps offline rendering on the latest style after a
+ * deploy without re-downloading anything when nothing changed (most activates).
+ * Best-effort: offline / failed fetches are skipped so the existing pin stays.
+ * Returns how many entries were replaced.
+ */
+export async function refreshPinnedStyleAssets(deps: RefreshPinnedStylesDeps): Promise<number> {
+  let replaced = 0;
+  for (const name of await deps.listAreaCacheNames()) {
+    const cache = await deps.openCache(name);
+    for (const { url } of await cache.keys()) {
+      if (!deps.isStyleUrl(url)) continue;
+      const pinned = await cache.match(url);
+      const fresh = await deps.fetchFresh(url, pinned?.headers.get("etag") ?? null);
+      if (fresh && fresh.status === 200) {
+        await cache.put(url, fresh);
+        replaced += 1;
+      }
+    }
+  }
+  return replaced;
+}
