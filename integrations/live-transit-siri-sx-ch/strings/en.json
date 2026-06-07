@@ -1,4 +1,11 @@
 {
   "name": "Swiss SIRI-SX Live Alerts",
-  "description": "Realtime SIRI-SX service alerts for Switzerland surfaced from opentransportdata.swiss"
+  "description": "Realtime SIRI-SX service alerts for Switzerland surfaced from opentransportdata.swiss",
+  "dataSources": [
+    {
+      "purpose": "Realtime SIRI-SX situation and disruption messages for Swiss public transport, surfaced as service alerts by stop, route, and map area",
+      "dataSent": "No user data is sent. The complete and unplanned SIRI-SX feeds are polled server-side with an API key and a static requestor reference (\"OpenMapX\"); the requested stop, route, or bounding box is applied as a local filter on the cached feed and is never forwarded to the provider.",
+      "dataReceived": "Nationwide SIRI-SX situation messages: alert text, severity, effect, validity periods, and the affected stops and lines"
+    }
+  ]
 }

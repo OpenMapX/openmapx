@@ -21,6 +21,41 @@
       "purpose": "OpenSeaMap-Häfen und Marinas im sichtbaren Ausschnitt auflisten, beim Klick Einrichtungen per Overpass anreichern.",
       "dataSent": "Bounding Box des Ausschnitts, optional Hafen-ID + Koordinaten für die Anreicherung.",
       "dataReceived": "Hafenliste (ID, Name, Koordinaten, Kategorie) und nahegelegene Seezeichen (Liegeplätze, Tankstelle, Mooring, …)."
+    },
+    {
+      "purpose": "Gezeitenvorhersagen und gemessene Wasserstände an US-amerikanischen Küstenpegeln bereitstellen.",
+      "dataSent": "Eine Stations-ID und ein Datums-/Zeitbereich (sowie ein Stationstyp-Filter beim Abruf des Stationskatalogs). Keine personenbezogenen Daten.",
+      "dataReceived": "Stationskatalog (ID, Name, Koordinaten) sowie je Station vorhergesagte Hoch- und Niedrigwasser und gemessene Wasserstände."
+    },
+    {
+      "purpose": "Offizielle norwegische Seekartenkacheln für Norwegen und Svalbard per WMS-Proxy darstellen.",
+      "dataSent": "Kachel-Begrenzungsrahmen in EPSG:3857.",
+      "dataReceived": "PNG-Rasterkacheln der Kartverket-Sjøkart-Seekarten."
+    },
+    {
+      "purpose": "Gezeitenvorhersagen und gemessene Wasserstände an kanadischen Pegeln bereitstellen.",
+      "dataSent": "Eine Stations-ID und ein Von-/Bis-Zeitbereich (sowie ein Zeitreihen-Code-Filter beim Abruf des Stationskatalogs). Keine personenbezogenen Daten.",
+      "dataReceived": "Stationskatalog (ID, Name, Koordinaten) sowie je Station vorhergesagte Hoch- und Niedrigwasser und gemessene Wasserstände."
+    },
+    {
+      "purpose": "Gezeitenvorhersagen und gemessene Wasserstände an norwegischen Pegeln bereitstellen.",
+      "dataSent": "Die geografische Breite und Länge einer Station sowie ein Von-/Bis-Zeitbereich für die angeforderten Daten. Keine personenbezogenen Daten.",
+      "dataReceived": "Stationskatalog (Name, Code, Koordinaten) sowie je Station vorhergesagte und gemessene Wasserstände."
+    },
+    {
+      "purpose": "Gemessene Wasserstände an deutschen Küsten- und Ästuarpegeln (Nordsee und Ostsee) bereitstellen.",
+      "dataSent": "Eine Stations-UUID für die Messreihe (sowie ein Nordsee-/Ostsee-Gewässerfilter beim Abruf des Stationskatalogs). Keine personenbezogenen Daten.",
+      "dataReceived": "Stationskatalog (UUID, Name, Koordinaten) sowie je Station gemessene Wasserstände."
+    },
+    {
+      "purpose": "Gemessene Meeresspiegeldaten aus dem globalen IOC-Pegelmessnetz bereitstellen.",
+      "dataSent": "Ein Stationscode und ein Zeitraum in Tagen für die Messwerte. Keine personenbezogenen Daten.",
+      "dataReceived": "Stationskatalog (Code, Standort, Koordinaten) sowie je Station gemessene Meeresspiegelwerte."
+    },
+    {
+      "purpose": "Pegelstationen mit Meeresspiegeldaten nahezu in Echtzeit europaweit als Kartenmarker anzeigen.",
+      "dataSent": "Eine Anfrage für die Echtzeit-Meeresspiegel-Stationsebene; es werden keine vom Nutzer abgeleiteten Standort- oder Abfrageparameter gesendet.",
+      "dataReceived": "Standorte der Pegelstationen (Plattform-Code, Koordinaten) mit Zeitstempeln der letzten Messung."
     }
   ]
 }

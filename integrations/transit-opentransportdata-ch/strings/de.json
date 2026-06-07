@@ -6,6 +6,61 @@
       "purpose": "Schweizweite Transitdaten — Haltestellensuche, Abfahrts-/Ankunftstafeln, Reiseplanung mit Zwischenhalten und Polylinien, Echtzeit-Trip-Updates, Verkehrsmeldungen, optionale Tarifabfrage und Formationsinformationen",
       "dataSent": "Haltestellennamen oder Koordinaten mit Suchradius; Start- und Zielhaltestelle, Datum und Uhrzeit für Reiseplanung; Trip-ID für Echtzeit-Updates; Bounding-Box für Verkehrsmeldungen; Itinerar-Referenz für Tarife; Zugnummer und Datum für Formationen",
       "dataReceived": "Schweizer Haltestellen mit Koordinaten und Verkehrsmitteln; Abfahrten/Ankünfte mit Verspätungen, Gleisen und Ausfällen; Reiseverbindungen mit Polylinien je Teilstrecke; Echtzeit-Trip-Updates; geplante und ungeplante Störungsmeldungen; Tarifübersichten; Fahrzeugformationen"
+    },
+    {
+      "purpose": "Aus OpenStreetMap abgeleitete Streckengeometrie, die in der Routenausgabe des Schweizer OJP enthalten ist; dient ausschließlich als Quellenangabe für OSM-basierte Teilstrecken-Polylinien",
+      "dataSent": "Keine Daten — OpenMapX kontaktiert OpenStreetMap dafür nicht; die Geometrie ist bereits in der OJP-Reiseantwort der Schweiz enthalten, OSM wird lediglich als zugrunde liegende Quelle genannt",
+      "dataReceived": "In die OJP-Reiseplanungsantwort der Schweiz eingebettete Teilstrecken-Geometrie (Polylinien), abgeleitet aus OpenStreetMap-Basisdaten"
+    },
+    {
+      "purpose": "Statische GTFS-Fahrplandaten der Schweiz — Fahrplan-, Linien-, Trip-, Shape- und Haltestellendaten zur Rekonstruktion von Linienverläufen und Haltestellenfolgen",
+      "dataSent": "Keine Nutzerdaten — der veröffentlichte GTFS-Datensatz wird serverseitig als geplanter Bulk-Feed heruntergeladen und in die Datenbank importiert; es wird keine Endnutzeranfrage weitergeleitet",
+      "dataReceived": "Der vollständige Schweizer GTFS-Feed (Verkehrsunternehmen, Linien, Trips, Haltestellen, Haltezeiten, Shapes)"
+    },
+    {
+      "purpose": "GTFS-Realtime-Verkehrsmeldungen (-sa) — Störungs- und Hinweismeldungen, zugeordnet zu betroffenen Haltestellen und Linien",
+      "dataSent": "Keine Nutzerdaten — der gesamte GTFS-RT-Service-Alerts-Protobuf-Feed wird serverseitig mit einem API-Token heruntergeladen; es werden keine Endnutzerdaten übertragen",
+      "dataReceived": "GTFS-RT-FeedMessage mit Alert-Entitäten (Titel-/Beschreibungstext, Auswirkung, Schweregrad, Gültigkeitszeiträume, betroffene Haltestellen und Linien)"
+    },
+    {
+      "purpose": "GTFS-Realtime-Trip-Updates — Echtzeit-Verspätungen, prognostizierte Ankunfts-/Abfahrtszeiten und Fahrplanänderungen pro Trip",
+      "dataSent": "Keine Nutzerdaten — der gesamte GTFS-RT-Trip-Updates-Protobuf-Feed wird serverseitig mit einem API-Token heruntergeladen; es werden keine Endnutzerdaten übertragen",
+      "dataReceived": "GTFS-RT-FeedMessage mit Trip-Update-Entitäten (Ankunfts-/Abfahrtsverspätungen je Halt, prognostizierte Zeiten, Fahrplanbezüge)"
+    },
+    {
+      "purpose": "SIRI Situation Exchange (SIRI-SX) — geplante und ungeplante Situations-/Störungsmeldungen für das gesamte Schweizer Netz",
+      "dataSent": "Keine Nutzerdaten — die vollständigen SIRI-SX-XML-Feeds (geplant und ungeplant) werden serverseitig mit einem API-Token heruntergeladen; es werden keine Endnutzerdaten übertragen",
+      "dataReceived": "SIRI-SX-Situationsmeldungen (Zusammenfassungen, Beschreibungen, Gültigkeitszeiträume, betroffene Verkehrsunternehmen, Linien und Haltestellen)"
+    },
+    {
+      "purpose": "OJP-Fare — optionale Preisabfrage für eine geplante Reiseverbindung",
+      "dataSent": "Ein API-Token sowie die Trip- und Teilstrecken-Referenzen der geplanten Reiseverbindung (keine personenbezogenen Daten); die Anfrage erfolgt serverseitig zum Anfragezeitpunkt bei einer Tarifabfrage",
+      "dataReceived": "Tarifprodukte und Preisübersichten für die angefragten Teilstrecken der Reiseverbindung"
+    },
+    {
+      "purpose": "Zugformation / Wagenreihung — Sektorpositionen, Fahrzeugtypen, Sitzplatz- und Barrierefreiheitsangaben für eine bestimmte Zugfahrt",
+      "dataSent": "Ein API-Token sowie Betreiberkennung (EVU), Betriebsdatum und Zugnummer der angezeigten Fahrt (keine personenbezogenen Daten); die Anfrage erfolgt serverseitig zum Anfragezeitpunkt",
+      "dataReceived": "Zugformation mit Fahrzeugreihenfolge, -typen, -längen, Sitzplatzzahlen, Rollstuhlplätzen, Toiletten- und Niederflur-Kennzeichen sowie Sektoranordnung je Halt"
+    },
+    {
+      "purpose": "Auslastungsprognose — erwartete Auslastung in der 1. und 2. Klasse für anstehende Zugfahrten",
+      "dataSent": "Keine Nutzerdaten — der JSON-Datensatz der Auslastungsprognose wird serverseitig als geplantes Bulk-ZIP heruntergeladen; Abfragen werden lokal anhand von Betriebsdatum und Betreiber innerhalb der heruntergeladenen Datei aufgelöst",
+      "dataReceived": "Auslastungsprognosen je Zug und Abschnitt mit erwarteten Auslastungsstufen in der 1. und 2. Klasse sowie Gültigkeits-Metadaten"
+    },
+    {
+      "purpose": "Geschäftsorganisationen mit Echtzeitdaten — Referenzliste zur Beschriftung von Betreibern und zur Erkennung, welche Verkehrsunternehmen Echtzeitdaten bereitstellen",
+      "dataSent": "Keine Nutzerdaten — die go-realtime-Referenz-CSV wird serverseitig als geplanter Bulk-Feed heruntergeladen; es wird keine Endnutzeranfrage weitergeleitet",
+      "dataReceived": "Betreiber-Referenzdatensätze (Abkürzung, Beschreibung, SBOID, Organisationsnummer, Echtzeitdaten-Kennzeichen)"
+    },
+    {
+      "purpose": "Geschäftsorganisationen mit SIRI-SX-Daten — Referenzliste zur Beschriftung von Betreibern und zur Erkennung, welche Verkehrsunternehmen Situation-Exchange-Daten bereitstellen",
+      "dataSent": "Keine Nutzerdaten — die go-siri-sx-Referenz-CSV wird serverseitig als geplanter Bulk-Feed heruntergeladen; es wird keine Endnutzeranfrage weitergeleitet",
+      "dataReceived": "Betreiber-Referenzdatensätze (Abkürzung, Beschreibung, SBOID, Teilnehmer-Referenz, Situation-Exchange-Kennzeichen)"
+    },
+    {
+      "purpose": "Stamm-/Referenzdaten — Dienststellen, Verkehrspunkte, Bahnsteige, Referenzpunkte, Toiletten, Parkplätze, Kontaktstellen und Relationen zur Anreicherung von Haltestellen, Bahnsteigen und Infrastruktur",
+      "dataSent": "Keine Nutzerdaten — die CSV- und ZIP-Stammdatensätze werden serverseitig als geplante Bulk-Feeds heruntergeladen; Haltestellen- und Infrastrukturabfragen werden lokal aus den heruntergeladenen Dateien aufgelöst",
+      "dataReceived": "Dienststellen und Verkehrspunkte mit Koordinaten und Verkehrsmitteln, Barrierefreiheit von Bahnsteigen und Haltepunkten, Referenzpunkte, Toiletten, Parkplätze, Kontaktstellen und Relationen"
     }
   ]
 }

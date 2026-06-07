@@ -1,0 +1,10 @@
+{
+  "name": "Restaurants",
+  "description": "Restaurant-Menülinks, ermittelt von der Website des jeweiligen Lokals",
+  "dataSources": [
+    {
+      "purpose": "Liefert das offizielle Website-Tag des Lokals, das als Ausgangspunkt für die Suche nach einem Link zur Speisekarte dient",
+      "dataSent": "Keine – das OpenStreetMap-Website-Tag wird aus bereits geladenen Ortsdaten gelesen; von dieser Integration wird keine Anfrage an OpenStreetMap gesendet"
+    }
+  ]
+}

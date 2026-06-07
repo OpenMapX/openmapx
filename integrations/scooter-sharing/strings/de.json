@@ -92,14 +92,19 @@
       "dataReceived": "Fahrzeuge mit ID, Koordinaten, Füllstand, Fahrzeugtyp"
     },
     {
-      "purpose": "GO-Sharing-Scooter in der Nähe des Kartenzentrums (hauptsächlich Niederlande)",
-      "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius in Metern",
-      "dataReceived": "Fahrzeuge mit ID, Koordinaten, Akkustand, Fahrzeugtyp"
-    },
-    {
       "purpose": "Link-E-Scooter (mehrere europäische Städte). Unternehmen eingestellt Dez. 2023.",
       "dataSent": "Koordinaten (Breitengrad, Längengrad)",
       "dataReceived": "Fahrzeuge mit ID, Koordinaten, Akkustand, Fahrzeugtyp"
+    },
+    {
+      "purpose": "Anreicherung norwegischer E-Scooter und Mopeds mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
+      "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",
+      "dataReceived": "Betreiber-Branding, Preispläne, Fahrzeugtypdetails, Verleih-Apps/-URIs, Geofencing-Zonen"
+    },
+    {
+      "purpose": "Ergänzende E-Scooter und Mopeds aus GBFS-Feeds, aggregiert über die Transitous-(MOTIS-)Instanz",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (Minimal- und Maximalecke aus Breitengrad/Längengrad)",
+      "dataReceived": "Freifahrzeug-Positionen, Stationsstandorte, Fahrzeugtypen, Betreibernamen"
     },
     {
       "purpose": "NRW.Mobidrom gebündelter E-Scooter-Feed (Voi + Lime in Nordrhein-Westfalen)",

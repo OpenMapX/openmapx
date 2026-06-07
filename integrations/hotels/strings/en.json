@@ -1,0 +1,31 @@
+{
+  "name": "Hotels",
+  "description": "Compares hotel deep links across booking platforms for a lodging place, with optional live lowest nightly rates via LiteAPI.",
+  "dataSources": [
+    {
+      "purpose": "Deep link to search the hotel on Booking.com",
+      "dataSent": "None sent by OpenMapX — an outbound deep link (with the hotel name, city, coordinates, check-in/check-out dates, and occupancy as URL parameters) is opened in your browser only when you click it"
+    },
+    {
+      "purpose": "Deep link to search the hotel on Expedia",
+      "dataSent": "None sent by OpenMapX — an outbound deep link (with the hotel name, city, check-in/check-out dates, and occupancy as URL parameters) is opened in your browser only when you click it"
+    },
+    {
+      "purpose": "Deep link to search the hotel on Hotels.com",
+      "dataSent": "None sent by OpenMapX — an outbound deep link (with the hotel name, city, check-in/check-out dates, and occupancy as URL parameters) is opened in your browser only when you click it"
+    },
+    {
+      "purpose": "Deep link to search the hotel on Agoda",
+      "dataSent": "None sent by OpenMapX — an outbound deep link (with the hotel name, city, check-in/check-out dates, and occupancy as URL parameters) is opened in your browser only when you click it"
+    },
+    {
+      "purpose": "Deep link to search the hotel on Trip.com",
+      "dataSent": "None sent by OpenMapX — an outbound deep link (with the hotel name, city, check-in/check-out dates, and occupancy as URL parameters) is opened in your browser only when you click it"
+    },
+    {
+      "purpose": "Live lowest nightly rate for the hotel (only when an operator LiteAPI key is configured)",
+      "dataSent": "Place coordinates, search radius, check-in/check-out dates, occupancy, currency, guest nationality, and the operator's API key — sent server-side from OpenMapX, never from your browser",
+      "dataReceived": "Nearby hotel candidates with names and coordinates, and the lowest available nightly rate, total price, currency, and refundability for the matched hotel"
+    }
+  ]
+}

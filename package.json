@@ -13,6 +13,7 @@
     "prepare": "husky",
     "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
     "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts",
+    "check-legal-tables": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-tables.ts",
     "openmapx": "pnpm -C packages/cli exec tsx src/index.ts"
   },
   "devDependencies": {

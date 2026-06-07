@@ -1,4 +1,11 @@
 {
   "name": "Mangrove.reviews",
-  "description": "Open, decentralized, signed reviews"
+  "description": "Open, decentralized, signed reviews",
+  "dataSources": [
+    {
+      "purpose": "Reading, aggregating and submitting open, signed place reviews via the Mangrove.reviews network",
+      "dataSent": "On read: a geo: subject URI with the place's coordinates and an uncertainty radius (no place name). On submit: a user-signed review JWT (rating, opinion, metadata). On image upload: the attached image file",
+      "dataReceived": "Signed reviews for the subject (rating, opinion, images, author key and nickname, timestamps) and uploaded image URLs"
+    }
+  ]
 }

@@ -105,6 +105,16 @@
       "purpose": "Erkennung GBFS-kompatibler Bikesharing-Systeme weltweit",
       "dataSent": "Keine Nutzerdaten (statischer Katalog)",
       "dataReceived": "GBFS-Feed-URLs für Bikesharing-Betreiber"
+    },
+    {
+      "purpose": "Anreicherung norwegischer Bikesharing-Stationen und -Fahrräder mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
+      "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",
+      "dataReceived": "Betreiber-Branding, Preispläne, Fahrzeugtypdetails, Verleih-Apps/-URIs, Stationsadressen, Geofencing-Zonen"
+    },
+    {
+      "purpose": "Ergänzende Bikesharing-Stationen und Freifahrzeuge aus GBFS-Feeds, aggregiert über die Transitous-(MOTIS-)Instanz",
+      "dataSent": "Begrenzungsrahmen-Koordinaten (Minimal- und Maximalecke aus Breitengrad/Längengrad)",
+      "dataReceived": "Stationsstandorte, verfügbare Fahrräder, Freifahrzeug-Positionen, Fahrzeugtypen, Betreibernamen"
     }
   ]
 }

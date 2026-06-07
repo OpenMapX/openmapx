@@ -1,0 +1,67 @@
+{
+  "name": "Essenslieferung",
+  "description": "Direktverlinkungen, die einen Ort an gängige Essensbestellplattformen übergeben, vorausgefüllt mit dem Namen des Restaurants und dem Lieferort. Es werden keine Live-Daten zu Speisekarten, Preisen oder Lieferungen abgerufen.",
+  "dataSources": [
+    {
+      "purpose": "Direktlink zur Bestellung bei Uber Eats für das ausgewählte Restaurant, vorausgefüllt mit dessen Namen und Lieferort.",
+      "dataSent": "Für den Direktlink selbst sendet OpenMapX nichts — ein ausgehender Link (der den Restaurantnamen und, sofern bekannt, die Koordinaten/Adresse/Stadt/Postleitzahl als URL-Parameter enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken. Separat kann eine optionale serverseitige Abfrage den Restaurantnamen und einen Lieferort an den Store-Feed-Endpunkt von Uber Eats senden, um die genaue Restaurantseite zu ermitteln; dies erfolgt auf dem OpenMapX-Server, nicht in Ihrem Browser.",
+      "dataReceived": "Nur bei der optionalen serverseitigen Abfrage: eine Liste übereinstimmender Restaurantnamen, URLs und Kartenmarkierungen, anhand derer die nächstgelegene Filiale ausgewählt wird. Der Direktlink selbst liefert nichts an OpenMapX zurück."
+    },
+    {
+      "purpose": "Direktlink zur Bestellung bei Wolt für das ausgewählte Restaurant, eingegrenzt auf dessen Land und Stadt.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der den Restaurantnamen sowie Land und Stadt als URL-Pfad- oder Abfrageparameter enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Lieferseite von Lieferando für die ausgewählte Stadt.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der die Stadt als URL-Pfadsegment enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Suche bei DoorDash nach dem ausgewählten Restaurant.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der den Restaurantnamen und die Stadt als Suchbegriff enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Restaurantliste von Deliveroo für die ausgewählte Stadt.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der die Stadt als URL-Pfadsegment enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Takeaway-Liste von Just Eat für die ausgewählte Stadt.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der die Stadt als URL-Pfadsegment enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Restaurantliste von Glovo für das ausgewählte Land und die ausgewählte Stadt.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der Land und Stadt als URL-Pfadsegmente enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Restaurantliste von foodpanda für das ausgewählte Land und die ausgewählte Stadt.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der den Länder-Host und die Stadt als URL-Pfadsegment enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Suche bei Grubhub nach dem ausgewählten Restaurant.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der den Restaurantnamen und die Stadt als Suchanfrage enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Suche bei iFood nach dem ausgewählten Restaurant.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der den Restaurantnamen und die Stadt als Suchanfrage enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Suche bei Rappi nach dem ausgewählten Restaurant im Storefront des jeweiligen Landes.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der den Restaurantnamen als Suchanfrage enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Restaurantliste von PedidosYa für die ausgewählte Stadt.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der die Stadt als URL-Pfadsegment enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Suche bei Swiggy nach dem ausgewählten Restaurant.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der den Restaurantnamen und die Stadt als Suchanfrage enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Marken- oder Stadt-Restaurantseite von Zomato für das ausgewählte Restaurant.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der die Stadt und den Restaurantnamen als URL-Pfadsegmente enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    },
+    {
+      "purpose": "Direktlink zur Markenseite von Talabat für das ausgewählte Restaurant im Storefront des jeweiligen Landes.",
+      "dataSent": "OpenMapX sendet nichts — ein ausgehender Direktlink (der das Land und den Restaurantnamen als URL-Pfadsegmente enthält) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken."
+    }
+  ]
+}

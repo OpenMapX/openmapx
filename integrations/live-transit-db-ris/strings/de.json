@@ -1,4 +1,11 @@
 {
   "name": "DB Live-Transit",
-  "description": "Provider-Integration für Live-Zugpositionen aus Deutsche Bahn RIS Maps"
+  "description": "Provider-Integration für Live-Zugpositionen aus Deutsche Bahn RIS Maps",
+  "dataSources": [
+    {
+      "purpose": "Echtzeitpositionen von Zügen der Deutschen Bahn, dargestellt als Live-Fahrzeugmarkierungen auf der Karte",
+      "dataSent": "Es werden keine Nutzer- oder Standortdaten übermittelt. Der Server fragt Fahrtpositionen für die konfigurierten Administrations-IDs (Standard 80,81) mit DB-API-Zugangsdaten ab; der sichtbare Kartenausschnitt wird erst nach der Antwort lokal als Filter angewendet.",
+      "dataReceived": "Fahrtpositionen (Koordinaten, Fahrtrichtung, Geschwindigkeit), Linien-/Fahrtbezeichnungen sowie Start- und Zielnamen und der Aktualisierungszeitstempel"
+    }
+  ]
 }

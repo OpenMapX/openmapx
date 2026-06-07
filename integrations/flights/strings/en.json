@@ -1,0 +1,30 @@
+{
+  "name": "Flight Search",
+  "description": "Opens a pre-filled flight search on external flight-search engines (Skyscanner, Google Flights, KAYAK, Kiwi.com, momondo, Skiplagged). OpenMapX fetches no live flight schedules or prices: each result is a deep link built locally from your chosen origin and destination airports, travel dates, passengers and cabin, opened in your browser only when you click it.",
+  "dataSources": [
+    {
+      "purpose": "Deep link to search flights on Skyscanner for the chosen origin/destination airports, travel dates, passengers and cabin",
+      "dataSent": "None sent by OpenMapX — an outbound deep link to skyscanner.net is built locally and opened in your browser only when you click it. The URL carries the origin and destination IATA airport codes, the outbound (and optional return) date, the passenger counts (adults, children, infants), the cabin class and a direct-flights-only flag as path segments and URL parameters. If a Skyscanner affiliate mediaPartnerId is configured by the operator, it is added to the link so referrals can be attributed."
+    },
+    {
+      "purpose": "Deep link to search flights on Google Flights for the chosen origin/destination airports and travel dates",
+      "dataSent": "None sent by OpenMapX — an outbound deep link to google.com/travel/flights is built locally and opened in your browser only when you click it. The origin and destination airport codes, the outbound (and optional return) date, cabin class, adult and child counts and a non-stop preference are encoded as a natural-language search phrase in the URL's q parameter."
+    },
+    {
+      "purpose": "Deep link to search flights on KAYAK for the chosen origin/destination airports, travel dates, passengers and cabin",
+      "dataSent": "None sent by OpenMapX — an outbound deep link to kayak.com is built locally and opened in your browser only when you click it. The URL carries the origin and destination IATA codes, the outbound (and optional return) date, the cabin class and the adult passenger count as path segments, plus a sort order and a stops-only filter as URL parameters."
+    },
+    {
+      "purpose": "Deep link to search flights on Kiwi.com for the chosen origin/destination airports and travel dates",
+      "dataSent": "None sent by OpenMapX — an outbound deep link to kiwi.com is built locally and opened in your browser only when you click it. The URL carries the origin and destination IATA airport codes and the departure (and optional return) date as URL parameters; passengers and cabin are not transmitted."
+    },
+    {
+      "purpose": "Deep link to search flights on momondo for the chosen origin/destination airports, travel dates, passengers and cabin",
+      "dataSent": "None sent by OpenMapX — an outbound deep link to momondo.com is built locally and opened in your browser only when you click it. The URL carries the origin and destination IATA codes, the outbound (and optional return) date, the cabin class and the adult passenger count as path segments."
+    },
+    {
+      "purpose": "Deep link to search flights on Skiplagged for the chosen origin/destination airports and travel dates",
+      "dataSent": "None sent by OpenMapX — an outbound deep link to skiplagged.com is built locally and opened in your browser only when you click it. The URL carries the origin and destination IATA airport codes and the outbound (and optional return) date as path segments; passengers and cabin are not transmitted."
+    }
+  ]
+}

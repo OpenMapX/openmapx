@@ -1,4 +1,11 @@
 {
   "name": "MOTIS GTFS-RT",
-  "description": "Live alerts and trip updates from MOTIS"
+  "description": "Live alerts and trip updates from MOTIS",
+  "dataSources": [
+    {
+      "purpose": "Realtime service alerts and trip updates (delays, platform changes, cancellations) passed through from GTFS-RT feeds ingested by MOTIS",
+      "dataSent": "Nothing is sent to a third party. Requests go to OpenMapX's own MOTIS deployment and carry only an internal stop ID (for alerts) or trip ID (for trip updates); no user or location data is included.",
+      "dataReceived": "Service alerts (title, description, severity, effect, validity periods) and trip-level deltas (expected times, delay in seconds, platform, cancellation status)"
+    }
+  ]
 }

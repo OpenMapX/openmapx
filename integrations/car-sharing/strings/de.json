@@ -105,6 +105,11 @@
       "purpose": "Erkennung GBFS-kompatibler Carsharing-Systeme weltweit",
       "dataSent": "Keine Nutzerdaten (statischer Datensatz, ruft alle Stationen ab)",
       "dataReceived": "GBFS-Feed-URLs für Carsharing-Betreiber"
+    },
+    {
+      "purpose": "Anreicherung norwegischer Carsharing-Stationen und -Fahrzeuge mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
+      "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",
+      "dataReceived": "Betreiber-Branding, Preispläne, Fahrzeugtypdetails, Verleih-Apps/-URIs, Stationsadressen, Geofencing-Zonen"
     }
   ]
 }

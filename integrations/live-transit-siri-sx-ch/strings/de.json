@@ -1,4 +1,11 @@
 {
   "name": "Schweizer SIRI-SX Live-Meldungen",
-  "description": "Echtzeit-SIRI-SX-Verkehrsmeldungen für die Schweiz von opentransportdata.swiss"
+  "description": "Echtzeit-SIRI-SX-Verkehrsmeldungen für die Schweiz von opentransportdata.swiss",
+  "dataSources": [
+    {
+      "purpose": "Echtzeit-SIRI-SX-Situations- und Störungsmeldungen für den öffentlichen Verkehr der Schweiz, dargestellt als Verkehrsmeldungen nach Haltestelle, Linie und Kartenausschnitt",
+      "dataSent": "Es werden keine Nutzerdaten übermittelt. Die vollständigen und ungeplanten SIRI-SX-Feeds werden serverseitig mit einem API-Schlüssel und einer festen Anfragekennung (\"OpenMapX\") abgerufen; die angefragte Haltestelle, Linie oder der Begrenzungsrahmen wird lokal auf dem zwischengespeicherten Feed gefiltert und niemals an den Anbieter weitergeleitet.",
+      "dataReceived": "Landesweite SIRI-SX-Situationsmeldungen: Meldungstext, Schweregrad, Auswirkung, Gültigkeitszeiträume sowie betroffene Haltestellen und Linien"
+    }
+  ]
 }

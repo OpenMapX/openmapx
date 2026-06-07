@@ -1,0 +1,30 @@
+{
+  "name": "Flugsuche",
+  "description": "Öffnet eine vorausgefüllte Flugsuche bei externen Flugsuchmaschinen (Skyscanner, Google Flights, KAYAK, Kiwi.com, momondo, Skiplagged). OpenMapX ruft keine Live-Flugpläne oder -preise ab: Jedes Ergebnis ist ein lokal erzeugter Deep-Link, der aus den von Ihnen gewählten Start- und Zielflughäfen, Reisedaten, Passagieren und der Beförderungsklasse gebildet und erst beim Anklicken in Ihrem Browser geöffnet wird.",
+  "dataSources": [
+    {
+      "purpose": "Deep-Link zur Flugsuche bei Skyscanner für die gewählten Start- und Zielflughäfen, Reisedaten, Passagiere und Beförderungsklasse",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Deep-Link zu skyscanner.net wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Die URL enthält die IATA-Codes des Start- und Zielflughafens, das Hin- (und optional Rück-)reisedatum, die Passagierzahlen (Erwachsene, Kinder, Kleinkinder), die Beförderungsklasse sowie ein Kennzeichen für ausschließlich Direktflüge als Pfadsegmente und URL-Parameter. Ist vom Betreiber eine Skyscanner-Affiliate-mediaPartnerId konfiguriert, wird sie dem Link hinzugefügt, damit Vermittlungen zugeordnet werden können."
+    },
+    {
+      "purpose": "Deep-Link zur Flugsuche bei Google Flights für die gewählten Start- und Zielflughäfen und Reisedaten",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Deep-Link zu google.com/travel/flights wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Die Codes des Start- und Zielflughafens, das Hin- (und optional Rück-)reisedatum, die Beförderungsklasse, die Anzahl der Erwachsenen und Kinder sowie eine Direktflug-Präferenz werden als natürlichsprachliche Suchanfrage im URL-Parameter q codiert."
+    },
+    {
+      "purpose": "Deep-Link zur Flugsuche bei KAYAK für die gewählten Start- und Zielflughäfen, Reisedaten, Passagiere und Beförderungsklasse",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Deep-Link zu kayak.com wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Die URL enthält die IATA-Codes des Start- und Zielflughafens, das Hin- (und optional Rück-)reisedatum, die Beförderungsklasse und die Anzahl der Erwachsenen als Pfadsegmente sowie eine Sortierreihenfolge und einen Filter für ausschließlich Direktflüge als URL-Parameter."
+    },
+    {
+      "purpose": "Deep-Link zur Flugsuche bei Kiwi.com für die gewählten Start- und Zielflughäfen und Reisedaten",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Deep-Link zu kiwi.com wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Die URL enthält die IATA-Codes des Start- und Zielflughafens sowie das Abflug- (und optional Rück-)datum als URL-Parameter; Passagiere und Beförderungsklasse werden nicht übermittelt."
+    },
+    {
+      "purpose": "Deep-Link zur Flugsuche bei momondo für die gewählten Start- und Zielflughäfen, Reisedaten, Passagiere und Beförderungsklasse",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Deep-Link zu momondo.com wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Die URL enthält die IATA-Codes des Start- und Zielflughafens, das Hin- (und optional Rück-)reisedatum, die Beförderungsklasse und die Anzahl der Erwachsenen als Pfadsegmente."
+    },
+    {
+      "purpose": "Deep-Link zur Flugsuche bei Skiplagged für die gewählten Start- und Zielflughäfen und Reisedaten",
+      "dataSent": "Keine Übermittlung durch OpenMapX – ein ausgehender Deep-Link zu skiplagged.com wird lokal erzeugt und erst beim Anklicken in Ihrem Browser geöffnet. Die URL enthält die IATA-Codes des Start- und Zielflughafens sowie das Hin- (und optional Rück-)reisedatum als Pfadsegmente; Passagiere und Beförderungsklasse werden nicht übermittelt."
+    }
+  ]
+}

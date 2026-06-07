@@ -6,6 +6,61 @@
       "purpose": "Swiss-wide transit data — stop search, departure/arrival boards, journey planning with intermediate stops and polylines, live trip updates, service alerts, optional itinerary fares and formation/composition info",
       "dataSent": "Stop names or coordinates with search radius; origin and destination stops, date and time for journey planning; trip ID for live updates; bounding box for service alerts; itinerary reference for fares; train number and date for formation",
       "dataReceived": "Swiss stops with coordinates and modes; departures/arrivals with delays, platforms, and cancellations; journeys with leg-level GeoJSON polylines; real-time trip updates; planned and unplanned service alerts; fare summaries; vehicle formations"
+    },
+    {
+      "purpose": "OpenStreetMap-derived route geometry surfaced within the Swiss OJP routing output; provided only as attribution for OSM-backed leg polylines",
+      "dataSent": "No data — OpenMapX never contacts OpenStreetMap for this; the geometry arrives inside the Swiss OJP journey response and OSM is credited only as the underlying source",
+      "dataReceived": "Route leg geometry (polylines) embedded in the Swiss OJP journey planning response, derived from OpenStreetMap base data"
+    },
+    {
+      "purpose": "GTFS static timetable for Switzerland — schedule, route, trip, shape and stop data used to reconstruct route patterns and stop sequences",
+      "dataSent": "No user data — the published GTFS dataset is downloaded server-side as a scheduled bulk feed and imported into the database; no end-user query is forwarded",
+      "dataReceived": "The complete Swiss GTFS feed (agencies, routes, trips, stops, stop times, shapes)"
+    },
+    {
+      "purpose": "GTFS Realtime Service Alerts (-sa) — service disruption and alert messages mapped to affected stops and routes",
+      "dataSent": "No user data — the whole GTFS-RT Service Alerts protobuf feed is downloaded server-side using an API token; no end-user data is transmitted",
+      "dataReceived": "GTFS-RT FeedMessage with alert entities (header/description text, effect, severity, active periods, informed stops and routes)"
+    },
+    {
+      "purpose": "GTFS Realtime Trip Updates — live delays, predicted arrival/departure times and schedule changes per trip",
+      "dataSent": "No user data — the whole GTFS-RT Trip Updates protobuf feed is downloaded server-side using an API token; no end-user data is transmitted",
+      "dataReceived": "GTFS-RT FeedMessage with trip-update entities (per-stop arrival/departure delays, predicted times, schedule relationships)"
+    },
+    {
+      "purpose": "SIRI Situation Exchange (SIRI-SX) — planned and unplanned situation/disruption messages across the Swiss network",
+      "dataSent": "No user data — the complete SIRI-SX XML feeds (planned and unplanned) are downloaded server-side using an API token; no end-user data is transmitted",
+      "dataReceived": "SIRI-SX situation messages (summaries, descriptions, validity periods, affected operators, lines and stops)"
+    },
+    {
+      "purpose": "OJP Fare — optional price lookup for a planned itinerary",
+      "dataSent": "An API token plus the planned itinerary's trip and leg references (no personal data); the request is sent server-side at request time when a fare lookup is performed",
+      "dataReceived": "Fare products and price summaries for the requested itinerary legs"
+    },
+    {
+      "purpose": "Train formation / coach composition — sector positions, vehicle types, seat and accessibility details for a specific train run",
+      "dataSent": "An API token plus the operator code (EVU), operation date and train number for the journey being viewed (no personal data); the request is sent server-side at request time",
+      "dataReceived": "Train formation with vehicle order, types, lengths, seat counts, wheelchair places, toilet and low-floor flags, and per-stop sector layout"
+    },
+    {
+      "purpose": "Occupancy forecast — expected first/second-class occupancy levels for upcoming train runs",
+      "dataSent": "No user data — the occupancy forecast JSON dataset is downloaded server-side as a scheduled bulk ZIP; lookups are resolved locally by operation date and operator within the downloaded file",
+      "dataReceived": "Per-train occupancy forecasts by section, with first- and second-class expected occupancy levels and validity metadata"
+    },
+    {
+      "purpose": "Business organisations with realtime data — reference list used to label operators and detect which carriers provide real-time data",
+      "dataSent": "No user data — the go-realtime reference CSV is downloaded server-side as a scheduled bulk feed; no end-user query is forwarded",
+      "dataReceived": "Operator reference records (abbreviation, description, SBOID, organisation number, real-time data flags)"
+    },
+    {
+      "purpose": "Business organisations with SIRI-SX data — reference list used to label operators and detect which carriers provide situation-exchange data",
+      "dataSent": "No user data — the go-siri-sx reference CSV is downloaded server-side as a scheduled bulk feed; no end-user query is forwarded",
+      "dataReceived": "Operator reference records (abbreviation, description, SBOID, participant reference, situation-exchange flags)"
+    },
+    {
+      "purpose": "Master/reference data — service points, traffic points, platforms, reference points, toilets, parking, contact points and relations used to enrich stops, platforms and infrastructure",
+      "dataSent": "No user data — the master-data CSV and ZIP datasets are downloaded server-side as scheduled bulk feeds; stop and infrastructure lookups are resolved locally from the downloaded files",
+      "dataReceived": "Service and traffic points with coordinates and modes, platform and stop-point accessibility, reference points, toilets, parking lots, contact points and relations"
     }
   ]
 }

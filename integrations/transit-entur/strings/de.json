@@ -6,6 +6,16 @@
       "purpose": "Suche nach norwegischen Haltestellen sowie Abruf von Abfahrtstafeln, Liniendetails, Haltestellenfolgen, Echtzeitfahrten, Störungsmeldungen, Live-Fahrzeugen und Haltestellen-Metadaten über Enturs öffentliche APIs",
       "dataSent": "Koordinaten, Haltestellen-IDs, Linien-IDs, Service-Journey-IDs, Zeitfenster, optionaler Norwegen-Filter, Modus für multimodale Haltestellen, ET-Client-Name-Header",
       "dataReceived": "Journey-Planner-GraphQL-Haltestellen, Linien, Trip-Patterns, Estimated Calls, Situations, codierte Liniengeometrien, Echtzeit-Fahrzeugpositionen sowie NSR-Daten zu Barrierefreiheit, Ausstattung und Parkmöglichkeiten"
+    },
+    {
+      "purpose": "Verfolgung der Echtzeitpositionen überwachter norwegischer ÖPNV-Fahrzeuge, entweder für eine einzelne Linie oder innerhalb des Kartenausschnitts, zur Darstellung auf der Karte",
+      "dataSent": "Eine GraphQL-Abfrage mit entweder einer Linienreferenz oder Begrenzungsrahmen-Koordinaten, einem maximalen Datenalter-Zeitfenster sowie dem ET-Client-Name-Header; keine Nutzerdaten",
+      "dataReceived": "Echtzeit-Fahrzeugpositionen mit Koordinaten, Fahrtrichtung, Geschwindigkeit, Verspätung, Verkehrsmittel, Auslastung, Linie, Betreiber und Service-Journey-Referenzen"
+    },
+    {
+      "purpose": "Abruf detaillierter Metadaten zu Haltestellen, Bahnsteigen, Barrierefreiheit, Ausstattung, Parkmöglichkeiten und Tarifzonen aus dem norwegischen National Stop Register",
+      "dataSent": "Eine REST-Anfrage mit der Haltestellen- oder Bahnsteigkennung im URL-Pfad sowie dem ET-Client-Name-Header; keine Nutzerdaten",
+      "dataReceived": "Haltestellen- und Bahnsteigdatensätze mit Koordinaten, Namen, Verkehrsmitteln, Bahnsteigcodes, Einschränkungen der Barrierefreiheit, Ausstattung, Parkmöglichkeiten und Tarifzonendetails"
     }
   ]
 }

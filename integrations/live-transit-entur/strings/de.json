@@ -1,4 +1,16 @@
 {
   "name": "Entur Live-Transit",
-  "description": "Provider-Integration für Entur-Echtzeitfahrzeuge und Journey-Planner-Störungsmeldungen in Norwegen"
+  "description": "Provider-Integration für Entur-Echtzeitfahrzeuge und Journey-Planner-Störungsmeldungen in Norwegen",
+  "dataSources": [
+    {
+      "purpose": "Abruf der Echtzeitpositionen überwachter norwegischer ÖPNV-Fahrzeuge innerhalb des sichtbaren Kartenausschnitts zur Animation auf dem Live-Transit-Overlay",
+      "dataSent": "Eine GraphQL-Abfrage mit den Begrenzungsrahmen-Koordinaten des Kartenausschnitts, einem maximalen Datenalter-Zeitfenster sowie dem ET-Client-Name-Header; keine Nutzerdaten",
+      "dataReceived": "Echtzeit-Fahrzeugpositionen mit Koordinaten, Fahrtrichtung, Geschwindigkeit, Verkehrsmittel, Linie, Betreiber und Service-Journey-Referenzen"
+    },
+    {
+      "purpose": "Abruf landesweiter Störungsmeldungen aus dem Journey Planner und Anzeige der für den sichtbaren Kartenausschnitt relevanten Meldungen",
+      "dataSent": "Eine GraphQL-Abfrage für alle landesweiten Situations sowie der ET-Client-Name-Header; es werden keine Nutzerdaten oder Standorte gesendet (die Filterung nach Begrenzungsrahmen erfolgt serverseitig nach dem Abruf)",
+      "dataReceived": "Störungsmeldungen mit lokalisierten Zusammenfassungen und Beschreibungen, Schweregrad, Meldungstyp, Gültigkeitszeiträumen sowie den betroffenen Linien, Haltestellen und Bahnsteigen"
+    }
+  ]
 }
