@@ -59,18 +59,27 @@ export function maneuverIconFor(maneuver: Maneuver | undefined): ResolvedIcon {
   switch (maneuver?.type) {
     case "arrive":
       return { component: Flag, name: "Flag" };
+    // OSRM uses `exit roundabout`/`exit rotary` for the leaving maneuver.
     case "roundabout":
     case "rotary":
+    case "exit roundabout":
+    case "exit rotary":
       return m.includes("left")
         ? { component: RoundaboutLeft, name: "RoundaboutLeft" }
         : { component: RoundaboutRight, name: "RoundaboutRight" };
     case "merge":
       return MERGE_ICON;
+    // Forks and ramps both branch off the through road; OSRM emits `on ramp`/
+    // `off ramp` (Valhalla ramps/exits are normalized to `fork`).
     case "fork":
+    case "on ramp":
+    case "off ramp":
       return m.includes("left")
         ? { component: ForkLeft, name: "ForkLeft" }
         : { component: ForkRight, name: "ForkRight" };
   }
+  // `turn`, `end of road`, `continue`, `new name`, `roundabout turn`,
+  // `notification`, `use lane`, `depart` → a directional arrow from the modifier.
   return ARROW_ICONS[normalizeLaneToken(m)] ?? ARROW_ICONS.straight;
 }
 

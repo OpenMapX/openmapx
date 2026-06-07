@@ -12,6 +12,35 @@ describe("maneuverIconFor", () => {
   it("maps arrive to a flag", () => {
     expect(maneuverIconFor({ type: "arrive" }).name).toContain("Flag");
   });
+
+  it("maps forks and ramps (OSRM on/off ramp) to a fork on the modifier side", () => {
+    expect(maneuverIconFor({ type: "fork", modifier: "right" }).name).toBe("ForkRight");
+    expect(maneuverIconFor({ type: "off ramp", modifier: "slight right" }).name).toBe("ForkRight");
+    expect(maneuverIconFor({ type: "off ramp", modifier: "left" }).name).toBe("ForkLeft");
+    expect(maneuverIconFor({ type: "on ramp", modifier: "right" }).name).toBe("ForkRight");
+    expect(maneuverIconFor({ type: "on ramp", modifier: "slight left" }).name).toBe("ForkLeft");
+  });
+
+  it("maps roundabouts/rotaries (incl. OSRM exit variants) to a roundabout icon", () => {
+    expect(maneuverIconFor({ type: "roundabout" }).name).toBe("RoundaboutRight");
+    expect(maneuverIconFor({ type: "rotary", modifier: "left" }).name).toBe("RoundaboutLeft");
+    expect(maneuverIconFor({ type: "exit roundabout", modifier: "right" }).name).toBe(
+      "RoundaboutRight",
+    );
+    expect(maneuverIconFor({ type: "exit rotary", modifier: "left" }).name).toBe("RoundaboutLeft");
+  });
+
+  it("maps merge to a merge icon", () => {
+    expect(maneuverIconFor({ type: "merge", modifier: "slight left" }).name).toBe("MergeType");
+  });
+
+  it("maps OSRM end-of-road / continue / new name to a directional arrow", () => {
+    expect(maneuverIconFor({ type: "end of road", modifier: "left" }).name).toBe("TurnLeft");
+    expect(maneuverIconFor({ type: "continue", modifier: "slight right" }).name).toBe(
+      "TurnSlightRight",
+    );
+    expect(maneuverIconFor({ type: "new name", modifier: "straight" }).name).toBe("Straight");
+  });
 });
 
 describe("laneIndicationIcon", () => {
