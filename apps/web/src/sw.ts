@@ -22,6 +22,7 @@ import {
   StaleWhileRevalidate,
   type Strategy,
 } from "serwist";
+import { isStalePrecacheName } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -60,6 +61,11 @@ declare const __SW_BUILD_ID__: string;
 const OFFLINE_URL = "/offline";
 const HOME_URL = "/";
 const APP_SHELL_CACHE = `app-shell-${__SW_BUILD_ID__}`;
+// Map-style assets (style JSON / sprite / TileJSON) are versioned by build id
+// too, so a deploy that changes the self-hosted style serves the new one on the
+// next load instead of the worker's stale copy. Old style caches are pruned on
+// activate; downloaded offline areas (offline-area-*) are intentionally kept.
+const STYLE_CACHE = `style-assets-${__SW_BUILD_ID__}`;
 // `/` is precached so a user with downloaded offline areas can still reach
 // the map after the runtime `pages` cache has expired (24h / 20 entries).
 // Without this, the nav handler would fall through to /offline and the
@@ -222,7 +228,7 @@ const serwist = new Serwist({
       matcher: ({ url }: { url: URL }) => /\/styles\//i.test(url.pathname),
       handler: withOfflineFirst(
         new StaleWhileRevalidate({
-          cacheName: "style-assets",
+          cacheName: STYLE_CACHE,
           plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
         }),
       ),
@@ -375,7 +381,7 @@ self.addEventListener("activate", (event) => {
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((k) => k.startsWith("app-shell-") && k !== APP_SHELL_CACHE)
+          .filter((k) => isStalePrecacheName(k, { appShell: APP_SHELL_CACHE, style: STYLE_CACHE }))
           .map((k) => caches.delete(k)),
       );
     })(),
