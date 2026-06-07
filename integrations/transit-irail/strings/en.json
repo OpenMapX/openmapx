@@ -1,11 +1,11 @@
 {
   "name": "iRail (Belgian Railways)",
   "description": "Belgian rail transit data",
-  "dataSources": [
-    {
+  "dataSources": {
+    "irail": {
       "purpose": "Belgian railway data — stations, departure/arrival boards, journey planning, vehicle tracking",
       "dataSent": "Stop ID, language; station IDs, date, time for connections; vehicle ID for tracking",
       "dataReceived": "Stations with coordinates; departures/arrivals with delays, platforms, cancellation flags; connections with vias and durations; vehicle stop sequences"
     }
-  ]
+  }
 }

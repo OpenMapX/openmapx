@@ -1,11 +1,11 @@
 {
   "name": "TomTom Traffic",
   "description": "Real-time traffic flow visualization",
-  "dataSources": [
-    {
+  "dataSources": {
+    "tomtom": {
       "purpose": "Real-time traffic flow conditions",
       "dataSent": "Tile coordinates (z/x/y), traffic style",
       "dataReceived": "PNG raster tiles showing traffic flow (color-coded road segments)"
     }
-  ]
+  }
 }

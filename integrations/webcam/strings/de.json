@@ -41,86 +41,86 @@
   "imageAlt": {
     "webcam": "{name}"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "windy": {
       "purpose": "Webcam-Streams weltweit (Tourismus, Wetter, Verkehr)",
       "dataSent": "Begrenzungsrahmen-Koordinaten über das Backend; der Browser lädt den Windy-Player bzw. Medien direkt, wenn ein Live- oder Timelapse-Embed geöffnet wird",
       "dataReceived": "Webcam-Cluster/Punkte mit Name, Koordinaten, Vorschau-URL, Stream-URL, Aufrufzahl, Kategorien"
     },
-    {
+    "osm": {
       "purpose": "In OpenStreetMap getaggte Webcam-Standorte",
       "dataSent": "Begrenzungsrahmen-Koordinaten über Overpass-API",
       "dataReceived": "OSM-Knoten mit Webcam-URL, Name, Betreiber, Richtung"
     },
-    {
+    "caltrans": {
       "purpose": "Kalifornische Autobahnkameras (Caltrans CCTV)",
       "dataSent": "Keine Nutzerdaten (Bezirksdatensätze werden abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Standort, Name, Standbild-URL, Route/Richtung"
     },
-    {
+    "tfl": {
       "purpose": "Londoner Verkehrskameras (TfL JamCams)",
       "dataSent": "Keine Nutzerdaten beim Katalogabruf; der Browser lädt TfL-Videomedien direkt, wenn der Videoclip angezeigt wird",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Video-URL"
     },
-    {
+    "nps": {
       "purpose": "US-Nationalpark-Webcams (NPS)",
       "dataSent": "Keine Nutzerdaten (gesamter Webcam-Katalog wird paginiert abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Webcams mit Titel, Koordinaten, Bild-URL, Streaming-Status, zugehöriger Parkname/Bundesstaat, Tags"
     },
-    {
+    "dot-ny": {
       "purpose": "Verkehrskameras des Staates New York (511NY)",
       "dataSent": "Keine Nutzerdaten beim Katalogabruf; der Browser lädt 511NY-HLS-Medien direkt, wenn der Live-Stream geöffnet wird",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, HLS-Videostream-URL, Straßenname, Fahrtrichtung"
     },
-    {
+    "dot-or": {
       "purpose": "Autobahnkameras in Oregon (ODOT TripCheck)",
       "dataSent": "Keine Nutzerdaten (gesamtes Kamerainventar wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Titel, Koordinaten, Standbild-URL, Routenname"
     },
-    {
+    "dot-ga": {
       "purpose": "Verkehrskameras in Georgia (511GA)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-fl": {
       "purpose": "Verkehrskameras in Florida (FL511)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-az": {
       "purpose": "Verkehrskameras in Arizona (AZ511)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-id": {
       "purpose": "Verkehrskameras in Idaho (Idaho 511)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-ut": {
       "purpose": "Verkehrskameras in Utah (Utah 511)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-la": {
       "purpose": "Verkehrskameras in Louisiana (511LA)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-pa": {
       "purpose": "Verkehrskameras in Pennsylvania (511PA)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-sc": {
       "purpose": "Verkehrskameras in South Carolina (511SC)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     },
-    {
+    "dot-ma": {
       "purpose": "Verkehrskameras in Massachusetts (Mass511)",
       "dataSent": "API-Schlüssel (gesamte Kameraliste wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Verkehrskameras mit Name, Koordinaten, Standbild-URL, Straßenname, Richtung"
     }
-  ]
+  }
 }

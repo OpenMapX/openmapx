@@ -1,11 +1,11 @@
 {
   "name": "OSRM-Routenberechnung",
   "description": "Autorouten-Berechnung über OSRM",
-  "dataSources": [
-    {
+  "dataSources": {
+    "osrm": {
       "purpose": "Auto-Routing mit Abbiegeanweisungen; Wegpunktoptimierung (Handlungsreisender)",
       "dataSent": "Routen-Wegpunktkoordinaten, optionale Vermeidungsoptionen (Autobahn, Maut, Fähre)",
       "dataReceived": "Routen mit GeoJSON-Geometrie, Entfernung/Dauer, Schritt-für-Schritt-Abbiegeanweisungen, bis zu 3 Alternativen. Optimierte Wegpunktfolge für /trip."
     }
-  ]
+  }
 }

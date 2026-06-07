@@ -22,41 +22,41 @@
     "connectorsCountPower": "{count, plural, =1 {1 connector} other {# connectors}} · {power} kW",
     "powerKw": "{power} kW"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "ocm": {
       "purpose": "Global community-maintained EV charging station locations with connector details, power levels, operator info, and per-record data-provider/license attribution",
       "dataSent": "Bounding-box coordinates (south, west, north, east), optional filters (connector type, usage type, status), and the OpenChargeMap API key — sent server-side per map request",
       "dataReceived": "Charging stations with connector types, power levels, operator info, pricing, availability status, and per-record data-provider/license metadata when available"
     },
-    {
+    "afdc": {
       "purpose": "Official Alternative Fuel Stations dataset (US DOE / NREL) covering public electric charging stations in the United States and Canada",
       "dataSent": "Bounding-box centre latitude/longitude plus a derived search radius, the filters fuel_type=ELEC, country=all, status=E, access=public, and the AFDC/NREL API key (in an X-Api-Key header) — sent server-side per map request",
       "dataReceived": "Charging station records with location, operator/network, connector types and per-level port counts, access, pricing, opening hours, and status metadata"
     },
-    {
+    "bnetza-ev": {
       "purpose": "Official German charging station registry (Bundesnetzagentur Ladesäulenregister) covering public charging infrastructure in Germany",
       "dataSent": "No query parameters — the full national CSV dataset is downloaded server-side on a daily schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
       "dataReceived": "Charging station records with location, operator, connector types, rated power, EVSE ids, and operational status"
     },
-    {
+    "france-irve": {
       "purpose": "French national consolidated EV charging dataset (Base nationale consolidée des IRVE) covering public charging points in France",
       "dataSent": "Bounding-box coordinates as an in_bbox(point_geo, north, west, south, east) filter with pagination (limit/offset) — sent server-side per map request; no API key",
       "dataReceived": "Charging point records with location, operator/owner, connector types, rated power, access conditions, payment methods, pricing, opening hours, and accessibility metadata"
     },
-    {
+    "switzerland-ev": {
       "purpose": "Swiss national charging station dataset (Swiss Federal Office of Energy SFOE) covering public charging infrastructure in Switzerland",
       "dataSent": "No query parameters — the full national OICP dataset (and a 5-minute live-status feed) is downloaded server-side on a schedule into the local database and then queried by bounding box locally; no user data reaches the provider per map request",
       "dataReceived": "Charging station records with location, operator, connector/plug types, rated power, accessibility, authentication/payment modes, opening hours, and live availability status"
     },
-    {
+    "nobil": {
       "purpose": "Nordic EV charging station database (NOBIL) covering public charging stations in Norway and Sweden",
       "dataSent": "Bounding box as type=rectangle with northeast=(north, east) and southwest=(south, west), plus the NOBIL API key — sent server-side per map request",
       "dataReceived": "Charging station records with location, operator/owner, connector types, charging capacity, port counts, accessibility, opening hours, and station status"
     },
-    {
+    "osm": {
       "purpose": "EV charging station locations from OpenStreetMap via Overpass (secondary source, global fallback)",
       "dataSent": "An Overpass QL query for amenity=charging_station nodes within the bounding box (south, west, north, east) — sent server-side; no API key",
       "dataReceived": "OSM charging station nodes with name, operator, socket types, capacity, and fee info"
     }
-  ]
+  }
 }

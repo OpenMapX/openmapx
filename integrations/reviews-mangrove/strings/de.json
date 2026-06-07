@@ -1,11 +1,11 @@
 {
   "name": "Mangrove.reviews",
   "description": "Offene, dezentrale, signierte Bewertungen",
-  "dataSources": [
-    {
+  "dataSources": {
+    "mangrove": {
       "purpose": "Lesen, Aggregieren und Einreichen offener, signierter Ortsbewertungen über das Mangrove.reviews-Netzwerk",
       "dataSent": "Beim Lesen: eine geo:-Subjekt-URI mit den Koordinaten des Ortes und einem Unsicherheitsradius (ohne Ortsname). Beim Einreichen: ein vom Nutzer signiertes Bewertungs-JWT (Bewertung, Meinung, Metadaten). Beim Bild-Upload: die angehängte Bilddatei",
       "dataReceived": "Signierte Bewertungen zum Subjekt (Bewertung, Meinung, Bilder, Autorenschlüssel und Spitzname, Zeitstempel) sowie URLs hochgeladener Bilder"
     }
-  ]
+  }
 }

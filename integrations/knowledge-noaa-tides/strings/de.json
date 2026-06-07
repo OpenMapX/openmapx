@@ -1,11 +1,11 @@
 {
   "name": "NOAA-Gezeiten",
   "description": "Astronomische Hoch- und Niedrigwasservorhersagen für Orte in der Nähe von NOAA-Gezeitenstationen (USA).",
-  "dataSources": [
-    {
+  "dataSources": {
+    "noaa-co-ops": {
       "purpose": "Nächstgelegene NOAA-Gezeitenstation zu den Koordinaten des Orts ermitteln und die Hoch-/Niedrigwasservorhersagen der nächsten ~24 h abrufen.",
       "dataSent": "Breiten- und Längengrad des Orts (auf 4 Nachkommastellen gerundet) sowie die aufgelöste Stations-ID. Anfrage trägt die Kennung `application=OpenMapX`.",
       "dataReceived": "Stationsmetadaten (ID, Name, Koordinaten) und Hoch-/Niedrigwasserzeiten plus Pegelhöhen für den gewünschten Tag."
     }
-  ]
+  }
 }

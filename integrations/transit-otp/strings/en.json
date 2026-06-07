@@ -1,11 +1,11 @@
 {
   "name": "OpenTripPlanner",
   "description": "Multi-modal transit trip planning via OpenTripPlanner",
-  "dataSources": [
-    {
+  "dataSources": {
+    "otp": {
       "purpose": "Multi-modal transit trip planning via self-hosted OpenTripPlanner. Coverage depends on loaded data.",
       "dataSent": "Origin and destination coordinates, time, date, travel mode, number of itineraries, optional arrive-by flag",
       "dataReceived": "Itineraries with duration, transfers, walk distance, legs with mode, route, encoded polyline geometry, intermediate stops"
     }
-  ]
+  }
 }

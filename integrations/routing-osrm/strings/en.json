@@ -1,11 +1,11 @@
 {
   "name": "OSRM Routing",
   "description": "Driving route calculation",
-  "dataSources": [
-    {
+  "dataSources": {
+    "osrm": {
       "purpose": "Car routing with turn-by-turn directions; waypoint optimization (Traveling Salesman)",
       "dataSent": "Route waypoint coordinates, optional avoidance options (motorway, toll, ferry)",
       "dataReceived": "Routes with GeoJSON geometry, distance/duration, per-step turn-by-turn instructions, up to 3 alternatives. Optimized waypoint order for /trip."
     }
-  ]
+  }
 }

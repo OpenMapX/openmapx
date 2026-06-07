@@ -1,11 +1,11 @@
 {
   "name": "Mapillary Photos",
   "description": "Street-level photos near places",
-  "dataSources": [
-    {
+  "dataSources": {
+    "mapillary": {
       "purpose": "Street-level photos near a place for the place detail panel",
       "dataSent": "Bounding box coordinates (~660 m around point), result limit",
       "dataReceived": "Images with id, coordinates, thumbnail URLs, capture timestamp, creator username"
     }
-  ]
+  }
 }

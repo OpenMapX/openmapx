@@ -1,11 +1,11 @@
 {
   "name": "NASA FIRMS Wildfires",
   "description": "Active wildfire and hotspot detections",
-  "dataSources": [
-    {
+  "dataSources": {
+    "firms": {
       "purpose": "Active wildfire/fire detections globally, sized by fire radiative power and colored by recency",
       "dataSent": "Satellite source (VIIRS or MODIS), day range (1-3)",
       "dataReceived": "CSV with lat, lon, date/time, confidence, satellite, fire radiative power (MW), temperature (K)"
     }
-  ]
+  }
 }

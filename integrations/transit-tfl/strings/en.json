@@ -1,11 +1,11 @@
 {
   "name": "TfL (Transport for London)",
   "description": "London public transit data",
-  "dataSources": [
-    {
+  "dataSources": {
+    "tfl": {
       "purpose": "London transit data — stops, arrivals, alerts, line status, route stop sequences",
       "dataSent": "Coordinates (latitude, longitude), search radius, stop types; line ID or mode filter; stop ID",
       "dataReceived": "Stop points with modes; live arrival predictions; line disruption statuses; route stop sequences"
     }
-  ]
+  }
 }

@@ -1,11 +1,11 @@
 {
   "name": "Nominatim-Geokodierung",
   "description": "Vorwärts- und Rückwärtsgeokodierung über Nominatim (OpenStreetMap)",
-  "dataSources": [
-    {
+  "dataSources": {
+    "nominatim": {
       "purpose": "Vorwärts-Geokodierung, Autovervollständigung und Rückwärts-Geokodierung mit OpenStreetMap-Daten",
       "dataSent": "Suchtext oder Koordinaten (Breitengrad, Längengrad), Ergebnislimit, Sprache",
       "dataReceived": "Ergebnisse mit OSM-Typ/ID, Anzeigename, Koordinaten, Klasse/Typ, Wichtigkeitsbewertung; strukturierte Adresse für Rückwärts"
     }
-  ]
+  }
 }

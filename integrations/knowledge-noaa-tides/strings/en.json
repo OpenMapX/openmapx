@@ -1,11 +1,11 @@
 {
   "name": "NOAA Tides",
   "description": "Today's astronomical high/low tide predictions for places near US-jurisdiction tide-prediction stations (NOAA CO-OPS).",
-  "dataSources": [
-    {
+  "dataSources": {
+    "noaa-co-ops": {
       "purpose": "Resolve the nearest NOAA tide-prediction station to a place's coordinates and fetch the next ~24 hours of high/low tide predictions.",
       "dataSent": "Place latitude and longitude (rounded to 4 decimals) plus the resolved station ID. Sent to NOAA as `application=OpenMapX`.",
       "dataReceived": "Station metadata (ID, name, coordinates) and high/low tide event times + heights for the requested day."
     }
-  ]
+  }
 }

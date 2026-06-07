@@ -1,35 +1,40 @@
 {
   "name": "Kraftstoffpreise",
   "description": "Tankstellenpreise von Tankerkoenig (DE), E-Control (AT), prix-carburants (FR), Minetur (ES) und OpenStreetMap",
-  "dataSources": [
-    {
+  "dataSources": {
+    "tankerkoenig": {
       "purpose": "Deutsche Tankstellenpreise (E5, E10, Diesel)",
       "dataSent": "Zentrumskoordinaten (Breitengrad, Längengrad), Suchradius (max. 25 km)",
       "dataReceived": "Tankstellen mit Name, Marke, Adresse, Koordinaten, Live-Diesel/E5/E10-Preisen, Öffnungsstatus"
     },
-    {
+    "e-control-at": {
       "purpose": "Österreichische Tankstellenpreise (Diesel, Super 95)",
       "dataSent": "Zentrumskoordinaten (Breitengrad, Längengrad), Suchradius, Kraftstoffart (Diesel und Super 95 separat abgefragt)",
       "dataReceived": "Tankstellen mit Name, Adresse, Koordinaten, Preise pro Kraftstoffart, Öffnungsstatus"
     },
-    {
+    "prix-carburants-fr": {
       "purpose": "Französische Tankstellenpreise (6 Kraftstoffarten)",
       "dataSent": "Zentrumskoordinaten (Breitengrad, Längengrad), Suchradius",
       "dataReceived": "Tankstellen mit Adresse, Koordinaten, Preise für 6 Kraftstoffarten mit Aktualisierungszeitstempeln"
     },
-    {
+    "minetur-es": {
       "purpose": "Spanische Tankstellenpreise (5 Kraftstoffarten)",
       "dataSent": "Keine Nutzerdaten (ruft den gesamten nationalen Datensatz ab)",
       "dataReceived": "Alle spanischen Tankstellen mit Name, Adresse, Koordinaten, Preise für 5 Kraftstoffarten"
     },
-    {
+    "osm": {
       "purpose": "Tankstellenstandorte (globaler Fallback, keine Preise)",
       "dataSent": "Begrenzungsrahmen-Koordinaten",
       "dataReceived": "OSM-Tankstellenknoten mit Name, Betreiber, Adresse"
     }
-  ],
-  "section": { "fuelPrices": "Kraftstoffpreise" },
-  "column": { "fuelType": "Kraftstoffart", "priceEur": "Preis (€)" },
+  },
+  "section": {
+    "fuelPrices": "Kraftstoffpreise"
+  },
+  "column": {
+    "fuelType": "Kraftstoffart",
+    "priceEur": "Preis (€)"
+  },
   "fuel": {
     "diesel": "Diesel",
     "e5": "E5 (Super 95)",

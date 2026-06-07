@@ -1,11 +1,11 @@
 {
   "name": "MOTIS GTFS-RT",
   "description": "Live-Meldungen und Fahrplanaktualisierungen von MOTIS",
-  "dataSources": [
-    {
+  "dataSources": {
+    "motis-rt": {
       "purpose": "Echtzeit-Verkehrsmeldungen und Fahrplanaktualisierungen (Verspätungen, Gleiswechsel, Ausfälle), die aus den von MOTIS eingelesenen GTFS-RT-Feeds durchgereicht werden",
       "dataSent": "Es werden keine Daten an Dritte übermittelt. Die Anfragen gehen an die eigene MOTIS-Instanz von OpenMapX und enthalten lediglich eine interne Haltestellen-ID (für Meldungen) oder Fahrt-ID (für Fahrplanaktualisierungen); Nutzer- oder Standortdaten werden nicht übermittelt.",
       "dataReceived": "Verkehrsmeldungen (Titel, Beschreibung, Schweregrad, Auswirkung, Gültigkeitszeiträume) sowie fahrtbezogene Abweichungen (erwartete Zeiten, Verspätung in Sekunden, Gleis, Ausfallstatus)"
     }
-  ]
+  }
 }

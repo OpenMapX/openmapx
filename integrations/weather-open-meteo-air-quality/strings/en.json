@@ -1,11 +1,11 @@
 {
   "name": "Open-Meteo Air Quality",
   "description": "Global air quality index and pollutant forecasts",
-  "dataSources": [
-    {
+  "dataSources": {
+    "open-meteo-air-quality": {
       "purpose": "Current air quality index and pollutant concentrations",
       "dataSent": "Coordinates (latitude, longitude)",
       "dataReceived": "European and US AQI values, PM10, PM2.5, CO, NO2, SO2, ozone concentrations. Cached 15 min."
     }
-  ]
+  }
 }

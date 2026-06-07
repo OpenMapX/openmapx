@@ -1,16 +1,16 @@
 {
   "name": "Wikidata-Wissen",
   "description": "Strukturiertes Wissen für Ortsdetails aus Wikidata",
-  "dataSources": [
-    {
+  "dataSources": {
+    "wikidata": {
       "purpose": "Strukturierte Fakten (Gründungsdatum, Einwohnerzahl, Architekt etc.), Beschreibung, Wikipedia-Link und Hauptbild für Ortsdetails bereitstellen",
       "dataSent": "Wikidata-Entitäts-ID (QID aus OSM-Tag), Sprachpräferenz",
       "dataReceived": "Entitäts-Aussagen, Beschreibungen, Wikipedia-Sitelinks, referenzierte Entitäts-Labels"
     },
-    {
+    "wikimedia-commons": {
       "purpose": "Metadaten für das Wikidata-Hauptbild (P18-Aussage) abrufen",
       "dataSent": "Bilddateiname (aus Wikidata-P18-Aussage)",
       "dataReceived": "Vorschaubild-URL, Künstler, Lizenz, Aufnahmedatum, Koordinaten"
     }
-  ]
+  }
 }

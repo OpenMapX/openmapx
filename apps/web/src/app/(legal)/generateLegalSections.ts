@@ -112,27 +112,27 @@ const EXPOSURE_LABELS: Record<string, { en: string; de: string }> = {
 };
 
 /**
- * Resolve a localized string from integration.strings dataSources array by index.
+ * Resolve a localized per-source string from `integration.strings[locale].dataSources`,
+ * which is an object keyed by the manifest source's `sourceId` (NOT a positional
+ * array — keying by sourceId is what makes the strings impossible to silently
+ * misalign with the manifest when sources are added or reordered). Returns "" when
+ * the locale, the dataSources map, the keyed entry, or the field is absent; the
+ * completeness checker (scripts/check-legal-tables.ts) turns those empties — and any
+ * accidental array shape — into commit-blocking errors.
  */
 function localizedDataSourceField(
   integration: LoadedIntegrationMeta,
   locale: string,
-  index: number,
+  sourceId: string,
   field: string,
 ): string {
-  const localeStrings = integration.strings?.[locale];
-  if (!localeStrings) return "";
+  const dsLocale = integration.strings?.[locale]?.dataSources;
+  if (!dsLocale || typeof dsLocale !== "object" || Array.isArray(dsLocale)) return "";
 
-  const dsLocale = localeStrings.dataSources;
-  if (!dsLocale) return "";
-
-  if (Array.isArray(dsLocale)) {
-    const entry = dsLocale[index] as Record<string, unknown> | undefined;
-    const val = entry?.[field];
-    return typeof val === "string" ? val : "";
-  }
-
-  const val = (dsLocale as Record<string, unknown>)[field];
+  const entry = (dsLocale as Record<string, unknown>)[sourceId] as
+    | Record<string, unknown>
+    | undefined;
+  const val = entry?.[field];
   return typeof val === "string" ? val : "";
 }
 
@@ -175,8 +175,7 @@ export function generatePrivacySectionsFromManifests(
       grouped.set(sectionMeta.key, { ...sectionMeta, rows: [] });
     }
 
-    for (let i = 0; i < sources.length; i++) {
-      const ds = sources[i];
+    for (const ds of sources) {
       const service = ds.name || localized(integration, locale, "name") || integration.name;
       const exposure = ds.endUserExposure
         ? (EXPOSURE_LABELS[ds.endUserExposure]?.[locale === "de" ? "de" : "en"] ??
@@ -186,10 +185,10 @@ export function generatePrivacySectionsFromManifests(
       grouped.get(sectionMeta.key)?.rows.push({
         service,
         purpose:
-          localizedDataSourceField(integration, locale, i, "purpose") ||
-          localizedDataSourceField(integration, locale, i, "service") ||
+          localizedDataSourceField(integration, locale, ds.sourceId, "purpose") ||
+          localizedDataSourceField(integration, locale, ds.sourceId, "service") ||
           "",
-        dataSent: localizedDataSourceField(integration, locale, i, "dataSent") || "",
+        dataSent: localizedDataSourceField(integration, locale, ds.sourceId, "dataSent") || "",
         country: ds.providerCountry,
         privacy: ds.providerPrivacyUrl,
         endUserExposure: exposure,

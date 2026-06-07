@@ -16,11 +16,11 @@
     "centimetersValue": "{count} cm",
     "minutesValue": "{count, plural, =1 {1 Min.} other {# Min.}}"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "db-ris-stations": {
       "purpose": "Vorwärts-/Rückwärts-Geokodierung deutscher Bahnhöfe sowie Bahnhofsdetail-Anreicherung",
       "dataSent": "Suchbegriff oder Koordinaten (Breitengrad, Längengrad, Radius) zur Geokodierung; EVA-Haltestellennummer für Detail-Anreicherung",
       "dataReceived": "Haltestellen mit EVA-Nummer, mehrsprachigen Namen, Koordinaten, Verkehrsmitteln; Bahnsteige, Umsteigezeiten, lokale Dienste"
     }
-  ]
+  }
 }

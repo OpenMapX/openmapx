@@ -1,11 +1,11 @@
 {
   "name": "NASA-FIRMS-Waldbrände",
   "description": "Aktive Waldbrand-/Hotspot-Erkennungen von NASA FIRMS",
-  "dataSources": [
-    {
+  "dataSources": {
+    "firms": {
       "purpose": "Aktive Waldbrand-/Feuererkennungen weltweit, nach Feuerstrahlungsleistung skaliert und nach Aktualität eingefärbt",
       "dataSent": "Satellitenquelle (VIIRS oder MODIS), Zeitraum in Tagen (1-3)",
       "dataReceived": "CSV mit Breitengrad, Längengrad, Datum/Uhrzeit, Konfidenz, Satellit, Feuerstrahlungsleistung (MW), Temperatur (K)"
     }
-  ]
+  }
 }

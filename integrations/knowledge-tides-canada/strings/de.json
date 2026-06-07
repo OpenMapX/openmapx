@@ -1,11 +1,11 @@
 {
   "name": "DFO/CHS Kanada-Gezeiten",
   "description": "Gezeitenvorhersagen und Pegel­messungen für kanadische Küstengewässer und die Großen Seen vom Canadian Hydrographic Service (IWLS).",
-  "dataSources": [
-    {
+  "dataSources": {
+    "dfo-iwls": {
       "purpose": "Gezeitenvorhersagen für kanadische Orte in der Nähe einer CHS-Station.",
       "dataSent": "Breiten-/Längengrad (auf 4 Dezimalstellen gerundet) oder Stations-ID.",
       "dataReceived": "Hoch-/Niedrigwasser-Ereignisse heute + morgen, 30-Min-Kurve, aktueller Wasserstand falls verfügbar."
     }
-  ]
+  }
 }

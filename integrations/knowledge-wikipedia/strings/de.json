@@ -1,16 +1,16 @@
 {
   "name": "Wikipedia-Wissen",
   "description": "Beschreibung und Vorschaubild für Ortsdetails",
-  "dataSources": [
-    {
+  "dataSources": {
+    "wikipedia": {
       "purpose": "Wikipedia-Beschreibung und Hauptbild auf der Ortsdetailseite anzeigen",
       "dataSent": "Artikeltitel und Sprachcode (aus OSM-Tag `wikipedia` extrahiert)",
       "dataReceived": "Artikelbeschreibung, Vorschaubild-/Originalbild-URL, Desktop-Seiten-URL"
     },
-    {
+    "wikimedia-commons": {
       "purpose": "Korrekte Quellenangabe und Lizenzierung für das Wikipedia-Artikelhauptbild abrufen",
       "dataSent": "Bilddateiname (aus der Vorschaubild-URL des Wikipedia-Artikels extrahiert)",
       "dataReceived": "Bild-Metadaten: Künstler, Lizenz, Vorschaubild-URL, Aufnahmedatum, Koordinaten"
     }
-  ]
+  }
 }

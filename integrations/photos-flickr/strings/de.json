@@ -1,11 +1,11 @@
 {
   "name": "Flickr-Fotos",
   "description": "Ortsfotos von Flickr",
-  "dataSources": [
-    {
+  "dataSources": {
+    "flickr": {
       "purpose": "Offen lizenzierte Fotos in der Nähe eines Ortes für das Ortsdetail-Panel",
       "dataSent": "Koordinaten (Breitengrad, Längengrad), Suchradius (0,5 km), Ergebnislimit",
       "dataReceived": "Fotos mit mehreren Größen-URLs, Eigentümername, Lizenz-ID (zugeordnet zu CC-Name/URL), Aufnahmedatum"
     }
-  ]
+  }
 }

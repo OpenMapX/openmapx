@@ -1,61 +1,61 @@
 {
   "name": "Nautical Charts",
   "description": "Sailor-oriented overlay: OpenSeaMap seamarks (buoys, beacons, lights), depth contours, optional NOAA charts in US waters, and harbours/marinas with facility details. Click a harbour to open its place panel.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "openseamap": {
       "purpose": "Render OpenSeaMap seamark tiles as a transparent overlay.",
       "dataSent": "Tile coordinates (z/x/y).",
       "dataReceived": "PNG raster tiles showing buoys, beacons, lights, fairways, anchorages, and other IHO S-57 features."
     },
-    {
+    "openstreetmap": {
       "purpose": "Render OpenSeaMap depth-contour and GEBCO bathymetry as raster tiles via WMS proxy.",
       "dataSent": "Tile bbox in EPSG:3857.",
       "dataReceived": "PNG raster tiles showing isobaths and shaded relief of the seafloor."
     },
-    {
+    "gebco": {
       "purpose": "Render NOAA Maritime Chart Service tiles in US waters via WMS proxy.",
       "dataSent": "Tile bbox in EPSG:3857.",
       "dataReceived": "PNG raster tiles of the official NOAA paper-chart equivalents."
     },
-    {
+    "noaa-ncds": {
       "purpose": "List OpenSeaMap harbours and marinas in the viewport, enrich the clicked harbour with seamark facilities via Overpass.",
       "dataSent": "Viewport bounding box, optionally harbour ID + coordinates for enrichment.",
       "dataReceived": "Harbour list (id, name, coordinates, category) and nearby seamark facilities (berths, fuel, moorings, …)."
     },
-    {
+    "noaa-co-ops": {
       "purpose": "Provide tide predictions and observed water levels at US coastal tide-gauge stations.",
       "dataSent": "A station ID and a date/time range (and a station-type filter when fetching the station catalog). No personal data.",
       "dataReceived": "Station catalog (id, name, coordinates) and per-station predicted high/low tides and observed water-level readings."
     },
-    {
+    "kartverket-sjokart": {
       "purpose": "Render official Norwegian nautical chart tiles for Norway and Svalbard via WMS proxy.",
       "dataSent": "Tile bounding box in EPSG:3857.",
       "dataReceived": "PNG raster tiles of the Kartverket Sjøkart sea charts."
     },
-    {
+    "dfo-iwls": {
       "purpose": "Provide tide predictions and observed water levels at Canadian tide-gauge stations.",
       "dataSent": "A station ID and a from/to time range (and a time-series-code filter when fetching the station catalog). No personal data.",
       "dataReceived": "Station catalog (id, name, coordinates) and per-station predicted high/low tides and observed water-level readings."
     },
-    {
+    "kartverket-sehavniva": {
       "purpose": "Provide tide predictions and observed water levels at Norwegian tide-gauge stations.",
       "dataSent": "A station's latitude/longitude and a from/to time range for the requested data. No personal data.",
       "dataReceived": "Station catalog (name, code, coordinates) and per-station predicted and observed water levels."
     },
-    {
+    "wsv-pegelonline": {
       "purpose": "Provide observed water levels at German coastal and estuarine tide gauges (North Sea and Baltic Sea).",
       "dataSent": "A station UUID for the measurement series (and a North Sea / Baltic Sea waters filter when fetching the station catalog). No personal data.",
       "dataReceived": "Station catalog (uuid, name, coordinates) and per-station water-level measurements."
     },
-    {
+    "ioc-sealevel": {
       "purpose": "Provide observed sea-level data from the global IOC tide-gauge monitoring network.",
       "dataSent": "A station code and a time period in days for observations. No personal data.",
       "dataReceived": "Station catalog (code, location, coordinates) and per-station sea-level observations."
     },
-    {
+    "emodnet-physics": {
       "purpose": "Surface near-real-time sea-level monitoring stations across Europe as map markers.",
       "dataSent": "A request for the near-real-time sea-level station layer; no location or query parameters derived from the user are sent.",
       "dataReceived": "Sea-level station locations (platform code, coordinates) with last-observation timestamps."
     }
-  ]
+  }
 }

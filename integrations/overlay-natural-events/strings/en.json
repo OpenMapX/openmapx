@@ -1,16 +1,16 @@
 {
   "name": "Natural Events (NASA EONET + GDACS)",
   "description": "Global natural events including volcanoes, storms, floods, landslides, drought, and more from NASA EONET and GDACS with alert severity levels",
-  "dataSources": [
-    {
+  "dataSources": {
+    "eonet": {
       "purpose": "Natural events (volcanoes, storms, floods, landslides). Earthquakes and wildfires excluded (separate overlays).",
       "dataSent": "Event status filter, optional day range and category",
       "dataReceived": "GeoJSON features with event title, description, date, magnitude, categories, source URLs"
     },
-    {
+    "gdacs": {
       "purpose": "Disaster events with alert levels; deduplicated against EONET (80km threshold)",
       "dataSent": "Event type filter, date range, alert level filter",
       "dataReceived": "GeoJSON features with event type/id, name, alert level/score, country, severity, report URLs"
     }
-  ]
+  }
 }

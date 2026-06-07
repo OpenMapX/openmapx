@@ -1,16 +1,16 @@
 {
   "name": "Fotos",
   "description": "Aggregierte Ortsfotos von mehreren Anbietern",
-  "dataSources": [
-    {
+  "dataSources": {
+    "osm": {
       "purpose": "Ortsfotos, die aus den Bild-Tags von OpenStreetMap aufgelöst werden (direkte Bild-URLs und Wikimedia-Commons-Dateinamen)",
       "dataSent": "OpenStreetMap-Elementreferenz (node/way/relation) oder Ortsname und Koordinaten zur Abfrage der Tags des Elements",
       "dataReceived": "OpenStreetMap-Element-Tags, einschließlich image, image:0..N und verwandter Fotoreferenzen"
     },
-    {
+    "google-photos": {
       "purpose": "Link-Vorschaubilder für Orte, deren OpenStreetMap-Bild-Tag auf einen Google-Photos-Freigabelink verweist",
       "dataSent": "Die Google-Photos-Freigabe-URL aus dem OpenStreetMap-Bild-Tag des Ortes (keine Nutzer- oder Kontodaten)",
       "dataReceived": "Die von der Freigabeseite zum Einbetten bereitgestellte Open-Graph-Vorschaubild-URL"
     }
-  ]
+  }
 }

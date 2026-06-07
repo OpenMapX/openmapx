@@ -1,11 +1,11 @@
 {
   "name": "Kartverket Sehavnivå (Norwegen)",
   "description": "Norwegische Gezeitenvorhersagen und Wasserstands-Beobachtungen von Kartverket Sehavnivå.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "kartverket-sehavniva": {
       "purpose": "Gezeitenvorhersagen für norwegische Orte in der Nähe einer Kartverket-Station.",
       "dataSent": "Breiten-/Längengrad (gerundet) oder Stations-Code.",
       "dataReceived": "Hoch-/Niedrigwasser-Ereignisse heute + morgen, 30-Min-Kurve."
     }
-  ]
+  }
 }

@@ -1,11 +1,11 @@
 {
   "name": "Winter Sports",
   "description": "Winter sports piste and lift visualization",
-  "dataSources": [
-    {
+  "dataSources": {
+    "opensnowmap": {
       "purpose": "Ski piste overlay tiles and interactive piste/lift vector data",
       "dataSent": "Tile coordinates (z/x/y)",
       "dataReceived": "PNG piste overlay tiles; OSM piste/lift features with difficulty, grooming, snowmaking, capacity"
     }
-  ]
+  }
 }

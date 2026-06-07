@@ -1,11 +1,11 @@
 {
   "name": "DB Vendo (Deutsche Bahn)",
   "description": "German long-distance rail journey planning",
-  "dataSources": [
-    {
+  "dataSources": {
+    "db-vendo": {
       "purpose": "Deutsche Bahn transit data — stop search, departure boards, journey planning, live trip tracking",
       "dataSent": "Coordinates (latitude, longitude), search radius, stop ID, search query, origin and destination coordinates, departure/arrival time, trip ID",
       "dataReceived": "FPTF stops, departures/arrivals with real-time delays, multi-leg journeys with stopovers, trip details with per-stop times/platforms"
     }
-  ]
+  }
 }

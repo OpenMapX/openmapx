@@ -1,16 +1,16 @@
 {
   "name": "Dynamic Transit Registry",
   "description": "Automatically discovered public transit APIs",
-  "dataSources": [
-    {
+  "dataSources": {
+    "jsdelivr": {
       "purpose": "Load transit API provider definitions from the public-transport/transport-apis registry",
       "dataSent": "No user data (static registry metadata)",
       "dataReceived": "Provider configs with name, protocol type, coverage area (GeoJSON), endpoint URL, auth config, products"
     },
-    {
+    "github": {
       "purpose": "Fallback for loading transit registry when JSDelivr is unavailable",
       "dataSent": "No user data (fallback registry source)",
       "dataReceived": "Same provider config JSON as JSDelivr"
     }
-  ]
+  }
 }

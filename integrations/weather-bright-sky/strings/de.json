@@ -1,11 +1,11 @@
 {
   "name": "Bright Sky Wetter",
   "description": "Aktuelles Wetter und Vorhersagen für Deutschland über DWD-Offene-Daten",
-  "dataSources": [
-    {
+  "dataSources": {
+    "bright-sky": {
       "purpose": "Aktuelles Wetter und Vorhersagen für Deutschland (DWD-Daten)",
       "dataSent": "Koordinaten (Breitengrad, Längengrad), Datumsbereich für Vorhersagen",
       "dataReceived": "Aktuelle Bedingungen und stündliche Einträge: Temperatur, Bewölkung, Symbol, Niederschlag, Druck, Feuchtigkeit, Wind"
     }
-  ]
+  }
 }

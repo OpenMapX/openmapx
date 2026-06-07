@@ -1,11 +1,11 @@
 {
   "name": "TransitLand",
   "description": "Weltweite Haltestellen- und Routendaten",
-  "dataSources": [
-    {
+  "dataSources": {
+    "transitland": {
       "purpose": "Globale Nahverkehrsdaten — Haltestellen, Routen, Abfahrten über Transitland-Aggregator",
       "dataSent": "Begrenzungsrahmen-Koordinaten, optionaler Routentypfilter; Haltestellen-ID, Zeitfenster für Abfahrten",
       "dataReceived": "Haltestellen mit Onestop-ID, Name, Koordinaten, Routentypen; Routen mit Geometrie, Farben; Abfahrten mit Echtzeiten"
     }
-  ]
+  }
 }

@@ -1,16 +1,16 @@
 {
   "name": "Wikidata Knowledge",
   "description": "Structured knowledge for place details",
-  "dataSources": [
-    {
+  "dataSources": {
+    "wikidata": {
       "purpose": "Provide structured facts (founding date, population, architect, etc.), description, Wikipedia link, and lead image for place details",
       "dataSent": "Wikidata entity ID (QID from OSM tag), language preference",
       "dataReceived": "Entity claims, descriptions, Wikipedia sitelinks, referenced entity labels"
     },
-    {
+    "wikimedia-commons": {
       "purpose": "Fetch metadata for the Wikidata main image (P18 claim)",
       "dataSent": "Image filename (from Wikidata P18 claim)",
       "dataReceived": "Thumbnail URL, artist, license, capture date, coordinates"
     }
-  ]
+  }
 }

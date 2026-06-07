@@ -1,11 +1,11 @@
 {
   "name": "USGS-Erdbeben",
   "description": "Echtzeit-Erdbebendaten des US Geological Survey",
-  "dataSources": [
-    {
+  "dataSources": {
+    "usgs": {
       "purpose": "Erdbebeneignisse auf der Karte, farbcodiert nach Tiefe/Aktualität mit magnitudenskalierten Kreisen",
       "dataSent": "Magnitudenschwelle und Zeitraum",
       "dataReceived": "GeoJSON-Features mit Magnitude, Ortsname, Zeit, Tiefe, Alarmstufe, Tsunami-Flag, Signifikanz"
     }
-  ]
+  }
 }

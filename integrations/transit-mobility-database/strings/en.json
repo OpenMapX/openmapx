@@ -1,11 +1,11 @@
 {
   "name": "Mobility Database",
   "description": "Authoritative global catalog of GTFS schedule, GTFS-Realtime, and GBFS feeds (~6,000) with daily-mirrored snapshots and stable mdb-* IDs, operated by MobilityData (the GTFS/GBFS spec stewards).",
-  "dataSources": [
-    {
+  "dataSources": {
+    "mobilitydatabase": {
       "purpose": "Discover and download GTFS schedule feeds for import into the local GTFS catalog. Per-feed license metadata flows into the import pipeline.",
       "dataSent": "No user data (server-only catalog request)",
       "dataReceived": "Provider name, country, mdb-* id, producer URL, latest snapshot URL + hash, license URL"
     }
-  ]
+  }
 }

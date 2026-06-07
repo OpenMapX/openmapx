@@ -1,31 +1,31 @@
 {
   "name": "Hotels",
   "description": "Vergleicht für einen Beherbergungsort Hotel-Deeplinks verschiedener Buchungsplattformen, optional mit aktuellen niedrigsten Übernachtungspreisen über LiteAPI.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "booking": {
       "purpose": "Deeplink zur Hotelsuche auf Booking.com",
       "dataSent": "Keine Übermittlung durch OpenMapX — ein ausgehender Deeplink (mit Hotelname, Stadt, Koordinaten, An- und Abreisedatum sowie Belegung als URL-Parameter) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken"
     },
-    {
+    "expedia": {
       "purpose": "Deeplink zur Hotelsuche auf Expedia",
       "dataSent": "Keine Übermittlung durch OpenMapX — ein ausgehender Deeplink (mit Hotelname, Stadt, An- und Abreisedatum sowie Belegung als URL-Parameter) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken"
     },
-    {
+    "hotelscom": {
       "purpose": "Deeplink zur Hotelsuche auf Hotels.com",
       "dataSent": "Keine Übermittlung durch OpenMapX — ein ausgehender Deeplink (mit Hotelname, Stadt, An- und Abreisedatum sowie Belegung als URL-Parameter) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken"
     },
-    {
+    "agoda": {
       "purpose": "Deeplink zur Hotelsuche auf Agoda",
       "dataSent": "Keine Übermittlung durch OpenMapX — ein ausgehender Deeplink (mit Hotelname, Stadt, An- und Abreisedatum sowie Belegung als URL-Parameter) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken"
     },
-    {
+    "tripcom": {
       "purpose": "Deeplink zur Hotelsuche auf Trip.com",
       "dataSent": "Keine Übermittlung durch OpenMapX — ein ausgehender Deeplink (mit Hotelname, Stadt, An- und Abreisedatum sowie Belegung als URL-Parameter) wird nur dann in Ihrem Browser geöffnet, wenn Sie ihn anklicken"
     },
-    {
+    "liteapi": {
       "purpose": "Aktueller niedrigster Übernachtungspreis für das Hotel (nur wenn ein LiteAPI-Schlüssel des Betreibers konfiguriert ist)",
       "dataSent": "Standortkoordinaten, Suchradius, An- und Abreisedatum, Belegung, Währung, Nationalität des Gastes sowie der API-Schlüssel des Betreibers — serverseitig von OpenMapX übermittelt, niemals aus Ihrem Browser",
       "dataReceived": "Nahegelegene Hotelkandidaten mit Namen und Koordinaten sowie der niedrigste verfügbare Übernachtungspreis, Gesamtpreis, Währung und Stornierbarkeit für das zugeordnete Hotel"
     }
-  ]
+  }
 }

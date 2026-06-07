@@ -1,16 +1,16 @@
 {
   "name": "Entur Live Transit",
   "description": "Provider integration for Entur realtime vehicles and Journey Planner situations in Norway",
-  "dataSources": [
-    {
+  "dataSources": {
+    "entur-live-vehicles": {
       "purpose": "Poll live positions of monitored Norwegian transit vehicles within the visible map area to animate them on the live-transit overlay",
       "dataSent": "A GraphQL query containing the map bounding-box coordinates, a maximum data-age window, and the ET-Client-Name header; no user data",
       "dataReceived": "Realtime vehicle positions with coordinates, bearing, speed, transport mode, line, operator, and service-journey references"
     },
-    {
+    "entur-live-situations": {
       "purpose": "Fetch nationwide service alerts and disruption messages from the Journey Planner and show those affecting the visible map area",
       "dataSent": "A GraphQL query for all national situations plus the ET-Client-Name header; no user data or location is sent (bounding-box filtering happens server-side after the fetch)",
       "dataReceived": "Service situations with localized summaries and descriptions, severity, report type, validity periods, and the affected lines, stop places, and quays"
     }
-  ]
+  }
 }

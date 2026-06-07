@@ -1,11 +1,11 @@
 {
   "name": "Valhalla Routing",
   "description": "Walking and cycling route calculation",
-  "dataSources": [
-    {
+  "dataSources": {
+    "valhalla": {
       "purpose": "Multi-modal routing (walking, cycling, driving) with elevation profiles and localized instructions; waypoint optimization",
       "dataSent": "Route waypoint coordinates, travel mode, avoidance options (highways, ferry), unit preference, language",
       "dataReceived": "Trip with polyline6 geometry, localized turn-by-turn instructions, distance/duration, elevation profile, up to 3 alternatives. Optimized waypoint order."
     }
-  ]
+  }
 }

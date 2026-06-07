@@ -1,11 +1,11 @@
 {
   "name": "Overpass-POI-Suche",
   "description": "Kategoriebasierte Suche nach Points of Interest über die Overpass API",
-  "dataSources": [
-    {
+  "dataSources": {
+    "overpass": {
       "purpose": "Kategoriebasierte POI-Suche (46 Kategorien, z.B. Restaurants, Apotheken, Geldautomaten) mit OpenStreetMap-Daten",
       "dataSent": "Begrenzungsrahmen-Koordinaten, POI-Kategorie (OSM-Tag-Filter)",
       "dataReceived": "OSM-Elemente mit Name, Koordinaten, Tags (Adresse, Telefon, Website, Öffnungszeiten, Kategorie)"
     }
-  ]
+  }
 }

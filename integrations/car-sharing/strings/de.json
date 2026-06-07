@@ -80,36 +80,36 @@
     "co2PerKm": "{value} g/km",
     "accessMethod": "Zugang: {method}"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "cambio": {
       "purpose": "Stationsbasiertes Carsharing in Deutschland und Belgien",
       "dataSent": "Regionscode im URL-Pfad (zugeordnet nach Nähe zum Kartenausschnittszentrum, bis zu 14 Regionen). Keine Nutzerstandortdaten direkt gesendet",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Fahrzeugklassen, Adressen"
     },
-    {
+    "stadtteilauto": {
       "purpose": "Carsharing-Stationen und Fahrzeuge in Münster (offene Daten)",
       "dataSent": "Keine Nutzerdaten (statischer Datensatz, ruft alle Stationen ab)",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Fahrzeugklassen, Preise"
     },
-    {
+    "bielefeld": {
       "purpose": "Carsharing-Stationen in Bielefeld (offene Daten)",
       "dataSent": "Keine Nutzerdaten (statischer Datensatz, parallel mit Stationen abgerufen)",
       "dataReceived": "Stationsstandorte, Kapazität, Buchungs-URLs"
     },
-    {
+    "wuppertal": {
       "purpose": "Carsharing-Stationen in Wuppertal von mehreren Anbietern (offene Daten)",
       "dataSent": "Keine Nutzerdaten (statische WFS-Abfrage mit festen Parametern für Carsharing-Layer)",
       "dataReceived": "Stationsstandorte, Fahrzeuganzahl, Anbieternamen, Fahrzeugklassen"
     },
-    {
+    "gbfs": {
       "purpose": "Erkennung GBFS-kompatibler Carsharing-Systeme weltweit",
       "dataSent": "Keine Nutzerdaten (statischer Datensatz, ruft alle Stationen ab)",
       "dataReceived": "GBFS-Feed-URLs für Carsharing-Betreiber"
     },
-    {
+    "entur-mobility": {
       "purpose": "Anreicherung norwegischer Carsharing-Stationen und -Fahrzeuge mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
       "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",
       "dataReceived": "Betreiber-Branding, Preispläne, Fahrzeugtypdetails, Verleih-Apps/-URIs, Stationsadressen, Geofencing-Zonen"
     }
-  ]
+  }
 }

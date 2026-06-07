@@ -80,41 +80,41 @@
     "co2PerKm": "{value} g/km",
     "accessMethod": "Zugang: {method}"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "citybikes": {
       "purpose": "Weltweite Bikesharing-Netzwerk- und Stationsdaten",
       "dataSent": "Keine Nutzerdaten (Netzwerkindex mit Feldfilter); Stationsdaten pro Netzwerk über Netzwerk-URL",
       "dataReceived": "Stationsstandorte, verfügbare Fahrräder, freie Stellplätze, Netzwerk-Metadaten"
     },
-    {
+    "donkey": {
       "purpose": "Fahrrad- und E-Bike-Hub-Standorte und Verfügbarkeit in europäischen Städten",
       "dataSent": "Begrenzungsrahmen-Koordinaten (Breitengrad/Längengrad-Paare der oberen rechten und unteren linken Ecke)",
       "dataReceived": "Hub-Standorte, verfügbare Fahrräder/E-Bikes/E-Scooter, Radius"
     },
-    {
+    "nextbike": {
       "purpose": "Bikesharing-Stationsstandorte und Verfügbarkeit weltweit",
       "dataSent": "Keine Nutzerdaten (ruft den gesamten globalen Datensatz ab)",
       "dataReceived": "Stationsstandorte, verfügbare Fahrradanzahl, freie Stellplätze, Stationsnamen"
     },
-    {
+    "db-bike": {
       "purpose": "Call-a-Bike und StadtRad-Stationen und Freifahrzeuge in deutschen Städten",
       "dataSent": "Keine Nutzerdaten (ruft vollständige GBFS-Feeds pro Anbieter ab)",
       "dataReceived": "Stationsstandorte, Fahrradverfügbarkeit, Freifahrzeug-Positionen, Fahrzeugtypen"
     },
-    {
+    "gbfs": {
       "purpose": "Erkennung GBFS-kompatibler Bikesharing-Systeme weltweit",
       "dataSent": "Keine Nutzerdaten (statischer Katalog)",
       "dataReceived": "GBFS-Feed-URLs für Bikesharing-Betreiber"
     },
-    {
+    "entur-mobility": {
       "purpose": "Anreicherung norwegischer Bikesharing-Stationen und -Fahrräder mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
       "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",
       "dataReceived": "Betreiber-Branding, Preispläne, Fahrzeugtypdetails, Verleih-Apps/-URIs, Stationsadressen, Geofencing-Zonen"
     },
-    {
+    "transitous": {
       "purpose": "Ergänzende Bikesharing-Stationen und Freifahrzeuge aus GBFS-Feeds, aggregiert über die Transitous-(MOTIS-)Instanz",
       "dataSent": "Begrenzungsrahmen-Koordinaten (Minimal- und Maximalecke aus Breitengrad/Längengrad)",
       "dataReceived": "Stationsstandorte, verfügbare Fahrräder, Freifahrzeug-Positionen, Fahrzeugtypen, Betreibernamen"
     }
-  ]
+  }
 }

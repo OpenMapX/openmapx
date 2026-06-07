@@ -1,11 +1,11 @@
 {
   "name": "Flickr Photos",
   "description": "Geotagged place photos",
-  "dataSources": [
-    {
+  "dataSources": {
+    "flickr": {
       "purpose": "Openly-licensed photos near a place for the place detail panel",
       "dataSent": "Coordinates (latitude, longitude), search radius (0.5 km), result limit",
       "dataReceived": "Photos with multiple size URLs, owner name, license ID (mapped to CC name/URL), capture date"
     }
-  ]
+  }
 }

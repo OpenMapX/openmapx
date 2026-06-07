@@ -1,11 +1,11 @@
 {
   "name": "Nominatim Geocoding",
   "description": "Forward and reverse geocoding",
-  "dataSources": [
-    {
+  "dataSources": {
+    "nominatim": {
       "purpose": "Forward geocoding, autocomplete, and reverse geocoding using OpenStreetMap data",
       "dataSent": "Search query text or coordinates (latitude, longitude), result limit, language",
       "dataReceived": "Results with OSM type/id, display name, coordinates, class/type, importance score; structured address for reverse"
     }
-  ]
+  }
 }

@@ -1,21 +1,21 @@
 {
   "name": "Hiking Trails",
   "description": "Hiking trail routes and mountain shelter locations",
-  "dataSources": [
-    {
+  "dataSources": {
+    "waymarked-trails": {
       "purpose": "Hiking trail search, details, and tile overlay",
       "dataSent": "Search query text or bounding box coordinates, result limit",
       "dataReceived": "Trail results with name, symbol, operator, length; tile overlay PNG; trail geometry with SAC difficulty"
     },
-    {
+    "refuges-info": {
       "purpose": "Mountain shelters, refuges, water points, and cabins",
       "dataSent": "Bounding box coordinates, optional shelter type filter",
       "dataReceived": "GeoJSON features with refuge name, type, altitude, bed capacity, coordinates"
     },
-    {
+    "osm": {
       "purpose": "Full hiking trail geometry with per-segment SAC difficulty grading",
       "dataSent": "OSM relation ID for trail geometry",
       "dataReceived": "Relation members with inline geometry, way tags (sac_scale, surface, highway)"
     }
-  ]
+  }
 }

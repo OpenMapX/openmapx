@@ -1,11 +1,11 @@
 {
   "name": "iRail (Belgische Eisenbahn)",
   "description": "Belgische NMBS/SNCB-Zugdaten",
-  "dataSources": [
-    {
+  "dataSources": {
+    "irail": {
       "purpose": "Belgische Eisenbahndaten — Bahnhöfe, Abfahrts-/Ankunftstafeln, Reiseplanung, Fahrzeugverfolgung",
       "dataSent": "Haltestellen-ID, Sprache; Bahnhofs-IDs, Datum, Uhrzeit für Verbindungen; Fahrzeug-ID zur Verfolgung",
       "dataReceived": "Bahnhöfe mit Koordinaten; Abfahrten/Ankünfte mit Verspätungen, Bahnsteigen, Ausfallhinweisen; Verbindungen mit Umsteigepunkten und Dauern; Fahrzeug-Haltsequenzen"
     }
-  ]
+  }
 }

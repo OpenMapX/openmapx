@@ -1,21 +1,21 @@
 {
   "name": "Entur Transit",
   "description": "Norway-wide transit stops, boards, routes, trip planning, alerts, vehicles, and stop facilities via Entur",
-  "dataSources": [
-    {
+  "dataSources": {
+    "entur-journey-planner": {
       "purpose": "Search Norwegian transit stops, fetch stop boards, line details, route sequences, realtime journeys, service alerts, live vehicles, and stop-facility metadata via Entur's public APIs",
       "dataSent": "Coordinates, stop IDs, line IDs, service-journey IDs, time windows, optional Norway boundary filter, multimodal stop mode, ET-Client-Name header",
       "dataReceived": "Journey Planner GraphQL stops, lines, trip patterns, estimated calls, service situations, encoded leg geometries, realtime vehicle positions, NSR stop accessibility/equipment/parking data"
     },
-    {
+    "entur-vehicles": {
       "purpose": "Track live positions of monitored Norwegian transit vehicles, either for a single line or within the map view, to show them on the map",
       "dataSent": "A GraphQL query containing either a line reference or bounding-box coordinates, a maximum data-age window, and the ET-Client-Name header; no user data",
       "dataReceived": "Realtime vehicle positions with coordinates, bearing, speed, delay, transport mode, occupancy, line, operator, and service-journey references"
     },
-    {
+    "entur-nsr": {
       "purpose": "Resolve detailed stop, quay, accessibility, facility, parking, and fare-zone metadata from Norway's National Stop Register",
       "dataSent": "A REST request containing the stop place or quay identifier in the URL path and the ET-Client-Name header; no user data",
       "dataReceived": "Stop place and quay records with coordinates, names, transport modes, platform codes, accessibility limitations, equipment, parking, and fare-zone details"
     }
-  ]
+  }
 }

@@ -1,16 +1,16 @@
 {
   "name": "Environmental Sensors (openSenseMap + Sensor.Community)",
   "description": "Citizen science environmental sensor stations showing temperature, humidity, PM2.5, PM10, UV, noise, and more",
-  "dataSources": [
-    {
+  "dataSources": {
+    "opensensemap": {
       "purpose": "Environmental sensor stations (temperature, humidity, PM2.5, PM10, pressure, UV, noise)",
       "dataSent": "Bounding box coordinates, exposure filter (outdoor/indoor), date",
       "dataReceived": "Sensor boxes with coordinates, last measurement, exposure, model, sensors with latest values"
     },
-    {
+    "sensor-community": {
       "purpose": "Citizen-driven air quality and environmental sensors (merged with openSenseMap, deduplicated)",
       "dataSent": "Bounding box coordinates, hardware sensor type",
       "dataReceived": "Sensor entries with coordinates, timestamp, sensor type, measurement values"
     }
-  ]
+  }
 }

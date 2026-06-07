@@ -1,21 +1,21 @@
 {
   "name": "Wanderwege",
   "description": "Wanderwegrouten und Berghüttenstandorte über Waymarked Trails",
-  "dataSources": [
-    {
+  "dataSources": {
+    "waymarked-trails": {
       "purpose": "Wanderweg-Suche, Details und Kachel-Overlay",
       "dataSent": "Suchbegriff oder Begrenzungsrahmen-Koordinaten, Ergebnislimit",
       "dataReceived": "Routenergebnisse mit Name, Symbol, Betreiber, Länge; Kachel-Overlay PNG; Routengeometrie mit SAC-Schwierigkeit"
     },
-    {
+    "refuges-info": {
       "purpose": "Berghütten, Schutzhütten, Wasserstellen und Hütten",
       "dataSent": "Begrenzungsrahmen-Koordinaten, optionaler Unterkunftstypfilter",
       "dataReceived": "GeoJSON-Features mit Hüttenname, Typ, Höhe, Bettkapazität, Koordinaten"
     },
-    {
+    "osm": {
       "purpose": "Vollständige Wanderweg-Geometrie mit SAC-Schwierigkeitsgrad pro Abschnitt",
       "dataSent": "OSM-Relations-ID für Weggeometrie",
       "dataReceived": "Relationsmitglieder mit Inline-Geometrie, Weg-Tags (sac_scale, surface, highway)"
     }
-  ]
+  }
 }

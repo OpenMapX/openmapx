@@ -1,10 +1,10 @@
 {
   "name": "Restaurants",
   "description": "Restaurant menu links resolved from each venue's own website",
-  "dataSources": [
-    {
+  "dataSources": {
+    "openstreetmap": {
       "purpose": "Provides the venue's official website tag used as the starting point for finding a link to its menu",
       "dataSent": "None — the OpenStreetMap website tag is read from already-loaded place data; no request is made to OpenStreetMap by this integration"
     }
-  ]
+  }
 }

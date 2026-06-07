@@ -1,11 +1,11 @@
 {
   "name": "TomTom-Verkehr",
   "description": "Echtzeit-Verkehrsflussvisualisierung von TomTom",
-  "dataSources": [
-    {
+  "dataSources": {
+    "tomtom": {
       "purpose": "Echtzeit-Verkehrsflussbedingungen",
       "dataSent": "Kachelkoordinaten (z/x/y), Verkehrsstil",
       "dataReceived": "PNG-Rasterkacheln mit Verkehrsfluss (farbcodierte Straßenabschnitte)"
     }
-  ]
+  }
 }

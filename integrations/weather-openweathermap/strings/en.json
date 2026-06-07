@@ -1,11 +1,11 @@
 {
   "name": "OpenWeatherMap Weather",
   "description": "Weather data from OpenWeatherMap One Call API 3.0",
-  "dataSources": [
-    {
+  "dataSources": {
+    "openweathermap": {
       "purpose": "Current weather and 3-hourly forecasts (up to 5 days). Global coverage.",
       "dataSent": "Coordinates (latitude, longitude), unit preference, language; interval count for forecasts",
       "dataReceived": "Temperature, feels-like, humidity, pressure, wind, clouds, weather condition, precipitation probability, rain/snow"
     }
-  ]
+  }
 }

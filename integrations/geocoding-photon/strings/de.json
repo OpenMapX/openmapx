@@ -1,11 +1,11 @@
 {
   "name": "Photon-Geokodierung",
   "description": "Vorwärts- und Rückwärtsgeokodierung über Photon (Komoot)",
-  "dataSources": [
-    {
+  "dataSources": {
+    "photon": {
       "purpose": "Vorwärts-Geokodierung, Autovervollständigung und Rückwärts-Geokodierung mit Komotos Photon (OSM-basiert)",
       "dataSent": "Suchtext oder Koordinaten (Breitengrad, Längengrad), Ergebnislimit, Sprache",
       "dataReceived": "GeoJSON-Features mit OSM-ID/Typ, Name, Straße, Stadt, Bundesland, Land, OSM-Schlüssel/Wert"
     }
-  ]
+  }
 }

@@ -80,41 +80,41 @@
     "co2PerKm": "{value} g/km",
     "accessMethod": "Access: {method}"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "citybikes": {
       "purpose": "Bike-sharing network and station data worldwide",
       "dataSent": "No user data (network index with fields filter); per-network station data by network URL",
       "dataReceived": "Station locations, available bikes, empty slots, network metadata"
     },
-    {
+    "donkey": {
       "purpose": "Bike and e-bike hub locations and availability in European cities",
       "dataSent": "Bounding box coordinates (top-right and bottom-left corner lat/lng pairs)",
       "dataReceived": "Hub locations, available bikes/e-bikes/e-scooters counts, radius"
     },
-    {
+    "nextbike": {
       "purpose": "Bike-sharing station locations and availability worldwide",
       "dataSent": "No user data (fetches entire global dataset)",
       "dataReceived": "Station locations, available bike counts, free racks, station names"
     },
-    {
+    "db-bike": {
       "purpose": "Call-a-Bike and StadtRad stations and free-floating bikes in German cities",
       "dataSent": "No user data (fetches full GBFS feeds per provider)",
       "dataReceived": "Station locations, bike availability, free-floating vehicle positions, vehicle types"
     },
-    {
+    "gbfs": {
       "purpose": "Discover GBFS-compliant bike-sharing systems worldwide",
       "dataSent": "No user data (static catalog)",
       "dataReceived": "GBFS feed URLs for bike-sharing operators"
     },
-    {
+    "entur-mobility": {
       "purpose": "Enrich Norwegian bike-sharing stations and bikes with operator branding, pricing plans, rental apps and geofencing zones via the Entur Mobility API",
       "dataSent": "GBFS station and vehicle identifiers (and system identifiers for geofencing) of items already found within the viewport. No user account or raw location data",
       "dataReceived": "Operator branding, pricing plans, vehicle type details, rental apps/URIs, station addresses, geofencing zones"
     },
-    {
+    "transitous": {
       "purpose": "Supplementary bike-sharing stations and free-floating bikes from GBFS feeds aggregated by the Transitous (MOTIS) deployment",
       "dataSent": "Bounding-box coordinates (min and max latitude/longitude corners)",
       "dataReceived": "Station locations, available bikes, free-floating vehicle positions, vehicle types, operator names"
     }
-  ]
+  }
 }

@@ -80,36 +80,36 @@
     "co2PerKm": "{value} g/km",
     "accessMethod": "Zugang: {method}"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "gbfs": {
       "purpose": "GBFS-kompatible Shared-Mobility-Systeme weltweit entdecken",
       "dataSent": "Keine Nutzerdaten (statischer Katalog)",
       "dataReceived": "Stationsstandorte/-kapazität/-verfügbarkeit, freifliegende Fahrzeugpositionen, Fahrzeugtypen, Preispläne"
     },
-    {
+    "felyx": {
       "purpose": "Felyx-Moped-/E-Scooter-Positionen (Niederlande, Belgien)",
       "dataSent": "Keine Nutzerdaten (gesamter Datensatz wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Fahrzeuge mit ID, Koordinaten, Füllstand, Fahrzeugtyp"
     },
-    {
+    "link": {
       "purpose": "Link-E-Scooter (mehrere europäische Städte). Unternehmen eingestellt Dez. 2023.",
       "dataSent": "Koordinaten (Breitengrad, Längengrad)",
       "dataReceived": "Fahrzeuge mit ID, Koordinaten, Akkustand, Fahrzeugtyp"
     },
-    {
+    "entur-mobility": {
       "purpose": "Anreicherung norwegischer E-Scooter und Mopeds mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
       "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",
       "dataReceived": "Betreiber-Branding, Preispläne, Fahrzeugtypdetails, Verleih-Apps/-URIs, Geofencing-Zonen"
     },
-    {
+    "transitous": {
       "purpose": "Ergänzende E-Scooter und Mopeds aus GBFS-Feeds, aggregiert über die Transitous-(MOTIS-)Instanz",
       "dataSent": "Begrenzungsrahmen-Koordinaten (Minimal- und Maximalecke aus Breitengrad/Längengrad)",
       "dataReceived": "Freifahrzeug-Positionen, Stationsstandorte, Fahrzeugtypen, Betreibernamen"
     },
-    {
+    "nrw-mobidrom-scooter": {
       "purpose": "NRW.Mobidrom gebündelter E-Scooter-Feed (Voi + Lime in Nordrhein-Westfalen)",
       "dataSent": "OAuth2-Client-Credentials (keine Nutzerdaten; nur serverseitig)",
       "dataReceived": "GBFS-Feeds je Anbieter mit Fahrzeugpositionen, Akkustand, Fahrzeugtypen, Preisplänen"
     }
-  ]
+  }
 }

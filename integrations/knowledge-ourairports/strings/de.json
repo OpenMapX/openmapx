@@ -1,11 +1,11 @@
 {
   "name": "OurAirports-Wissen",
   "description": "Start-/Landebahnen, Funkfrequenzen und Funkfeuer für Flughäfen, abgeglichen über IATA-/ICAO-Code",
-  "dataSources": [
-    {
+  "dataSources": {
+    "ourairports": {
       "purpose": "OSM-Flughafen anhand des OurAirports-Datensatzes anreichern (Start-/Landebahnen, Frequenzen, Funkfeuer)",
       "dataSent": "Keine Anfragedaten – die Integration spiegelt die öffentlichen CSV-Dumps beim Start und führt den Abgleich im Speicher anhand des IATA/ICAO-Codes durch",
       "dataReceived": "Flughafenkennungen, Pisten­abmessungen/-beläge, Flugfunkfrequenzen, zugehörige Navigationsfunkfeuer, Länder- und Regionsmetadaten"
     }
-  ]
+  }
 }

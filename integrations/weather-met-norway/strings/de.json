@@ -1,11 +1,11 @@
 {
   "name": "MET Norway Wetter",
   "description": "Wettervorhersagen vom Norwegischen Meteorologischen Institut",
-  "dataSources": [
-    {
+  "dataSources": {
+    "met-norway": {
       "purpose": "Aktuelles Wetter, stündliche und tägliche Vorhersagen. Globale Abdeckung.",
       "dataSent": "Koordinaten (Breitengrad, Längengrad)",
       "dataReceived": "Zeitreihen mit Sofortwerten (Temperatur, Druck, Wolken, Feuchtigkeit, Wind) und next_1h/next_6h-Zusammenfassungen (Symbol, Niederschlag, Min/Max-Temperatur)"
     }
-  ]
+  }
 }

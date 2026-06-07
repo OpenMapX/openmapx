@@ -1,67 +1,67 @@
 {
   "name": "Food Delivery",
   "description": "Deep links that hand a place off to popular food-ordering platforms, pre-filled with the restaurant name and delivery location. No live menu, price, or delivery data is fetched.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "ubereats": {
       "purpose": "Deep link to order from Uber Eats for the selected restaurant, pre-filling its name and delivery location.",
       "dataSent": "None sent by OpenMapX for the deep link itself — an outbound link (carrying the restaurant name and, when known, the coordinates/address/city/postcode as URL parameters) is opened in your browser only when you click it. Separately, an optional server-side lookup may send the restaurant name and a delivery location to Uber Eats' store-feed endpoint to resolve the exact store page; this runs on the OpenMapX server, not in your browser.",
       "dataReceived": "Only for the optional server-side lookup: a list of matching store names, URLs, and map markers used to pick the closest branch. The deep link itself returns nothing to OpenMapX."
     },
-    {
+    "wolt": {
       "purpose": "Deep link to order from Wolt for the selected restaurant, scoped to its country and city.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the restaurant name and the country/city as URL path or query parameters) is opened in your browser only when you click it."
     },
-    {
+    "lieferando": {
       "purpose": "Deep link to Lieferando's delivery page for the selected city.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the city as a URL path segment) is opened in your browser only when you click it."
     },
-    {
+    "doordash": {
       "purpose": "Deep link to search DoorDash for the selected restaurant.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the restaurant name and city as the search term) is opened in your browser only when you click it."
     },
-    {
+    "deliveroo": {
       "purpose": "Deep link to Deliveroo's restaurant listing for the selected city.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the city as a URL path segment) is opened in your browser only when you click it."
     },
-    {
+    "justeat": {
       "purpose": "Deep link to Just Eat's takeaway listing for the selected city.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the city as a URL path segment) is opened in your browser only when you click it."
     },
-    {
+    "glovo": {
       "purpose": "Deep link to Glovo's restaurant listing for the selected country and city.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the country and city as URL path segments) is opened in your browser only when you click it."
     },
-    {
+    "foodpanda": {
       "purpose": "Deep link to foodpanda's restaurant listing for the selected country and city.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the country host and city as a URL path segment) is opened in your browser only when you click it."
     },
-    {
+    "grubhub": {
       "purpose": "Deep link to search Grubhub for the selected restaurant.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the restaurant name and city as the search query) is opened in your browser only when you click it."
     },
-    {
+    "ifood": {
       "purpose": "Deep link to search iFood for the selected restaurant.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the restaurant name and city as the search query) is opened in your browser only when you click it."
     },
-    {
+    "rappi": {
       "purpose": "Deep link to search Rappi for the selected restaurant in its country storefront.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the restaurant name as the search query) is opened in your browser only when you click it."
     },
-    {
+    "pedidosya": {
       "purpose": "Deep link to PedidosYa's restaurant listing for the selected city.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the city as a URL path segment) is opened in your browser only when you click it."
     },
-    {
+    "swiggy": {
       "purpose": "Deep link to search Swiggy for the selected restaurant.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the restaurant name and city as the search query) is opened in your browser only when you click it."
     },
-    {
+    "zomato": {
       "purpose": "Deep link to Zomato's brand or city restaurant page for the selected restaurant.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the city and restaurant name as URL path segments) is opened in your browser only when you click it."
     },
-    {
+    "talabat": {
       "purpose": "Deep link to Talabat's brand page for the selected restaurant in its country storefront.",
       "dataSent": "None sent by OpenMapX — an outbound deep link (carrying the country and restaurant name as URL path segments) is opened in your browser only when you click it."
     }
-  ]
+  }
 }

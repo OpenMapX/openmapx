@@ -1,11 +1,11 @@
 {
   "name": "Flughafen-Overlay",
   "description": "Weltweite Flughafenmarkierungen aus OurAirports (~85.000 Einträge). Zuschaltbare Kartenebene mit Typfiltern (groß, mittel, klein, Hubschrauberlandeplätze …); ein Klick öffnet die Detailansicht mit Pisten, Funkfrequenzen und Funkfeuern.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "ourairports": {
       "purpose": "Flughafenmarkierungen auf der Karte rendern und Klicks zur Detailansicht auflösen.",
       "dataSent": "Sichtbarer Kartenausschnitt (Bounding Box), optional gefiltert nach Flughafentyp.",
       "dataReceived": "Koordinaten, Name, IATA/ICAO-Codes, Typ, Höhe und Linienverkehr-Flag für die Flughäfen im Ausschnitt."
     }
-  ]
+  }
 }

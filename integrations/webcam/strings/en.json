@@ -41,86 +41,86 @@
   "imageAlt": {
     "webcam": "{name}"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "windy": {
       "purpose": "Webcam streams worldwide (tourism, weather, traffic)",
       "dataSent": "Bounding box coordinates via backend; browser loads Windy player/media directly when a live or timelapse embed is opened",
       "dataReceived": "Webcam clusters/points with name, coordinates, thumbnail URL, stream URL, view count, categories"
     },
-    {
+    "osm": {
       "purpose": "Webcam locations tagged in OpenStreetMap",
       "dataSent": "Bounding box coordinates via Overpass API",
       "dataReceived": "OSM nodes with webcam URL, name, operator, direction"
     },
-    {
+    "caltrans": {
       "purpose": "California highway traffic cameras (Caltrans CCTV)",
       "dataSent": "No user data (fetches district datasets, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with location, name, still image URL, route/direction"
     },
-    {
+    "tfl": {
       "purpose": "London traffic cameras (TfL JamCams)",
       "dataSent": "No user data for catalog fetch; browser loads TfL video media directly when the video clip is displayed",
       "dataReceived": "Traffic cameras with name, coordinates, still image URL, video URL"
     },
-    {
+    "nps": {
       "purpose": "US National Park webcams (NPS)",
       "dataSent": "No user data (fetches entire webcam catalog with pagination, filtered server-side to bounding box)",
       "dataReceived": "Webcams with title, coordinates, image URL, streaming status, related park name/state, tags"
     },
-    {
+    "dot-ny": {
       "purpose": "New York State traffic cameras (511NY)",
       "dataSent": "No user data for catalog fetch; browser loads 511NY HLS media directly when the live stream is opened",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, HLS video stream URL, roadway name, direction of travel"
     },
-    {
+    "dot-or": {
       "purpose": "Oregon highway traffic cameras (ODOT TripCheck)",
       "dataSent": "No user data (fetches entire camera inventory, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with title, coordinates, still image URL, route name"
     },
-    {
+    "dot-ga": {
       "purpose": "Georgia traffic cameras (511GA)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-fl": {
       "purpose": "Florida traffic cameras (FL511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-az": {
       "purpose": "Arizona traffic cameras (AZ511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-id": {
       "purpose": "Idaho traffic cameras (Idaho 511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-ut": {
       "purpose": "Utah traffic cameras (Utah 511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-la": {
       "purpose": "Louisiana traffic cameras (511LA)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-pa": {
       "purpose": "Pennsylvania traffic cameras (511PA)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-sc": {
       "purpose": "South Carolina traffic cameras (511SC)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     },
-    {
+    "dot-ma": {
       "purpose": "Massachusetts traffic cameras (Mass511)",
       "dataSent": "API key (fetches entire camera list, filtered server-side to bounding box)",
       "dataReceived": "Traffic cameras with name, coordinates, snapshot URL, roadway, direction"
     }
-  ]
+  }
 }

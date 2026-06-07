@@ -1,11 +1,11 @@
 {
   "name": "Mapillary Street View",
   "description": "Street-level imagery and navigation",
-  "dataSources": [
-    {
+  "dataSources": {
+    "mapillary": {
       "purpose": "Street-level imagery. Coverage tiles are proxied via BFF. The MapillaryJS viewer is loaded only after an in-app notice is confirmed, then contacts graph.mapillary.com and fbcdn.net directly from the browser.",
       "dataSent": "Coverage tile requests are proxied. After confirmation, direct browser requests may expose IP address, browser/device request metadata, selected image ID, and viewed location to Mapillary/Meta.",
       "dataReceived": "Nearest image ID for viewer; vector tiles (sequence lines + image points); panoramic imagery via MapillaryJS"
     }
-  ]
+  }
 }

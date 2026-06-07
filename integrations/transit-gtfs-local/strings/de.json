@@ -1,11 +1,11 @@
 {
   "name": "Lokale GTFS-Feeds",
   "description": "Nahverkehrsdaten aus importierten GTFS-Feeds",
-  "dataSources": [
-    {
+  "dataSources": {
+    "transit-gtfs-local": {
       "purpose": "Statische Fahrplandaten (Haltestellen, Linien, Abfahrten, Ankünfte, Fahrpläne, Fahrtgeometrie) aus GTFS-Feeds, die in die eigene Datenbank von OpenMapX importiert wurden",
       "dataSent": "Es werden keine Daten an Dritte übermittelt. Die Fahrplandaten werden aus der eigenen PostGIS-Datenbank von OpenMapX bereitgestellt; Anfragen enthalten lediglich einen internen Begrenzungsrahmen, eine Haltestellen-, Linien- oder Fahrt-ID und verbleiben innerhalb der Infrastruktur von OpenMapX.",
       "dataReceived": "Haltestellen mit Koordinaten und Bahnsteigen, Linien mit Betreiber und Farben, geplante Abfahrten und Ankünfte, vollständige Fahrpläne, Fahrtverläufe sowie Fahrtgeometrie aus den importierten Feeds"
     }
-  ]
+  }
 }

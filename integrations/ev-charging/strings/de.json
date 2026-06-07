@@ -22,41 +22,41 @@
     "connectorsCountPower": "{count, plural, =1 {1 Anschluss} other {# Anschlüsse}} · {power} kW",
     "powerKw": "{power} kW"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "ocm": {
       "purpose": "Weltweite, von der Community gepflegte Ladestationsstandorte mit Steckerdetails, Leistungsstufen, Betreiberinfo und Datenanbieter-/Lizenzattribution pro Datensatz",
       "dataSent": "Begrenzungsrahmen-Koordinaten (Süd, West, Nord, Ost), optionale Filter (Steckertyp, Nutzungsart, Status) und der OpenChargeMap-API-Schlüssel – serverseitig pro Kartenabfrage gesendet",
       "dataReceived": "Ladestationen mit Steckertypen, Leistungsstufen, Betreiberinfo, Preisen, Verfügbarkeitsstatus und, sofern verfügbar, Datenanbieter-/Lizenzmetadaten pro Datensatz"
     },
-    {
+    "afdc": {
       "purpose": "Amtlicher Datensatz für alternative Tankstellen (US DOE / NREL) mit öffentlichen Ladestationen in den USA und Kanada",
       "dataSent": "Breiten-/Längengrad des Begrenzungsrahmen-Mittelpunkts samt abgeleitetem Suchradius, die Filter fuel_type=ELEC, country=all, status=E, access=public sowie der AFDC/NREL-API-Schlüssel (im X-Api-Key-Header) – serverseitig pro Kartenabfrage gesendet",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber/Netzwerk, Steckertypen und Anschlusszahlen pro Stufe, Zugang, Preisen, Öffnungszeiten und Statusmetadaten"
     },
-    {
+    "bnetza-ev": {
       "purpose": "Amtliches deutsches Ladesäulenregister (Bundesnetzagentur) mit öffentlicher Ladeinfrastruktur in Deutschland",
       "dataSent": "Keine Abfrageparameter – der vollständige nationale CSV-Datensatz wird serverseitig täglich in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Steckertypen, Nennleistung, EVSE-IDs und Betriebsstatus"
     },
-    {
+    "france-irve": {
       "purpose": "Französischer nationaler konsolidierter Ladedatensatz (Base nationale consolidée des IRVE) mit öffentlichen Ladepunkten in Frankreich",
       "dataSent": "Begrenzungsrahmen-Koordinaten als in_bbox(point_geo, Nord, West, Süd, Ost)-Filter mit Seitennummerierung (limit/offset) – serverseitig pro Kartenabfrage gesendet; kein API-Schlüssel",
       "dataReceived": "Ladepunkt-Datensätze mit Standort, Betreiber/Eigentümer, Steckertypen, Nennleistung, Zugangsbedingungen, Zahlungsmethoden, Preisen, Öffnungszeiten und Barrierefreiheitsmetadaten"
     },
-    {
+    "switzerland-ev": {
       "purpose": "Schweizer nationaler Ladestationsdatensatz (Bundesamt für Energie BFE) mit öffentlicher Ladeinfrastruktur in der Schweiz",
       "dataSent": "Keine Abfrageparameter – der vollständige nationale OICP-Datensatz (und ein Live-Status-Feed im 5-Minuten-Takt) wird serverseitig regelmäßig in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber, Stecker-/Plug-Typen, Nennleistung, Barrierefreiheit, Authentifizierungs-/Zahlungsmodi, Öffnungszeiten und Live-Verfügbarkeitsstatus"
     },
-    {
+    "nobil": {
       "purpose": "Nordische Ladestationsdatenbank (NOBIL) mit öffentlichen Ladestationen in Norwegen und Schweden",
       "dataSent": "Begrenzungsrahmen als type=rectangle mit northeast=(Nord, Ost) und southwest=(Süd, West) sowie der NOBIL-API-Schlüssel – serverseitig pro Kartenabfrage gesendet",
       "dataReceived": "Ladestationsdatensätze mit Standort, Betreiber/Eigentümer, Steckertypen, Ladekapazität, Anschlusszahlen, Barrierefreiheit, Öffnungszeiten und Stationsstatus"
     },
-    {
+    "osm": {
       "purpose": "Ladestationsstandorte aus OpenStreetMap über Overpass (Sekundärquelle, globaler Fallback)",
       "dataSent": "Eine Overpass-QL-Abfrage nach amenity=charging_station-Knoten innerhalb des Begrenzungsrahmens (Süd, West, Nord, Ost) – serverseitig gesendet; kein API-Schlüssel",
       "dataReceived": "OSM-Ladestationsknoten mit Name, Betreiber, Steckertypen, Kapazität und Gebühreninfo"
     }
-  ]
+  }
 }

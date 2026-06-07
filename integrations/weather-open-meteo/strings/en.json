@@ -1,11 +1,11 @@
 {
   "name": "Open-Meteo Weather",
   "description": "Current weather conditions and forecasts from Open-Meteo",
-  "dataSources": [
-    {
+  "dataSources": {
+    "open-meteo": {
       "purpose": "Current weather, hourly (up to 7 days), and daily (up to 16 days) forecasts. Global coverage.",
       "dataSent": "Coordinates (latitude, longitude), requested weather variables, unit preferences",
       "dataReceived": "Current: temperature, humidity, weather code, cloud cover, pressure, wind. Hourly/daily: same per interval plus sunrise/sunset."
     }
-  ]
+  }
 }

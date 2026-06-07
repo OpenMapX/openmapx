@@ -1,11 +1,11 @@
 {
   "name": "MapTiler Geocoding",
   "description": "Forward geocoding and autocomplete",
-  "dataSources": [
-    {
+  "dataSources": {
+    "maptiler": {
       "purpose": "Forward geocoding and autocomplete — text search for places, addresses, POIs worldwide; reverse geocoding",
       "dataSent": "Search query text or coordinates (longitude, latitude), language, result limit",
       "dataReceived": "GeoJSON features with place name, coordinates, place type, relevance score, categories"
     }
-  ]
+  }
 }

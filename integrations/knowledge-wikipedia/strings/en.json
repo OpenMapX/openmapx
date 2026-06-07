@@ -1,16 +1,16 @@
 {
   "name": "Wikipedia Knowledge",
   "description": "Description and thumbnail for place details",
-  "dataSources": [
-    {
+  "dataSources": {
+    "wikipedia": {
       "purpose": "Show Wikipedia description and lead image on place detail panel",
       "dataSent": "Article title and language code (extracted from OSM `wikipedia` tag)",
       "dataReceived": "Article description, thumbnail/original image URL, desktop page URL"
     },
-    {
+    "wikimedia-commons": {
       "purpose": "Get proper attribution and licensing for the Wikipedia article's lead image",
       "dataSent": "Image filename (extracted from Wikipedia article thumbnail URL)",
       "dataReceived": "Image metadata: artist, license, thumbnail URL, capture date, coordinates"
     }
-  ]
+  }
 }

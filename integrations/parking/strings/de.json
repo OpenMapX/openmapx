@@ -69,186 +69,186 @@
     "negativeFreeSpacesClamped": "Echtzeit-Anzahl freier Plätze war negativ und wurde auf 0 gesetzt.",
     "evChargingAvailable": "E-Ladeplätze verfügbar"
   },
-  "dataSources": [
-    {
+  "dataSources": {
+    "parkapi-v2": {
       "purpose": "Echtzeit-Parkplatzverfügbarkeit in europäischen Städten (ParkenDD-Aggregator mit rund 12 Städten in Deutschland, Österreich, der Schweiz und Nachbarländern)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Städtekatalog und die Parkplätze je Stadt planmäßig ab",
       "dataReceived": "Städteliste mit Koordinaten und Quelleninfo; Parkplätze pro Stadt mit Name, Adresse, Koordinaten, Gesamt-/Freie Kapazität"
     },
-    {
+    "parkapi-v3": {
       "purpose": "Deutsche Parkplätze mit Echtzeit-Belegungsdaten (MobiData-BW-ParkAPI-v3-Aggregator über mehrere baden-württembergische und bundesweite Betreiber)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Parkplatz-Datensatz planmäßig ab",
       "dataReceived": "Parkplätze mit Name, Adresse, Koordinaten, Kapazität, Echtzeit-Freie Kapazität, Typ, Gebühreninfo, Öffnungszeiten"
     },
-    {
+    "db-bahnpark": {
       "purpose": "Deutsche-Bahn-Bahnhofsparkplätze in ganz Deutschland (einzelner Betreiber)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Anlagen-Datensatz planmäßig mit Abonnement-Zugangsdaten (DB-Client-ID und API-Schlüssel) ab",
       "dataReceived": "Parkanlagen mit Name, Adresse, Koordinaten, Kapazität, Tarif/Preise, Barrierefreiheit, E-Ladeinfo"
     },
-    {
+    "rdw-nl": {
       "purpose": "Niederländische Parkhäuser, Park & Ride und Carpool-Anlagen aus dem nationalen RDW-Open-Data-Register",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die vollständigen RDW-Datensätze (Stammdaten sowie die Parkhaus-/P+R-/Carpool-Geodatensätze) planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Typ (Parkhaus/P+R/Carpool), Kapazität, Anzahl E-Ladepunkte, Barrierefreiheit, maximale Fahrzeughöhe"
     },
-    {
+    "bnls-fr": {
       "purpose": "Französische Parkeinrichtungen aus dem nationalen BNLS-Register (Base nationale des lieux de stationnement, Aggregator)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten BNLS-GeoJSON-Export planmäßig ab",
       "dataReceived": "Anlagen-ID, Name, Koordinaten, Stellplatzanzahl, Kostenlos/Kostenpflichtig-Status, Anlagentyp, Stunden-/Tages-/Monatspreise, Behinderten-/E-Auto-/P+R-Stellplätze, Maximalhöhe, Adresse"
     },
-    {
+    "ghent-be": {
       "purpose": "Echtzeit-Parkhaus-Belegung in Gent, Belgien (Open-Data-Feed einer einzelnen Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Datensatz planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Gesamt-/Freie Kapazität, Auslastung in Prozent, Offen/Geschlossen-Status, Belegungstrend, Betreiber"
     },
-    {
+    "brussels-be": {
       "purpose": "Statische Parkdaten für Brüssel, Belgien (Open-Data-Portal einer einzelnen Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Datensatz planmäßig ab",
       "dataReceived": "Anlagenname (FR/NL), Koordinaten, Kapazität, Behindertenstellplätze, Maximalhöhe, Stockwerke, Betreiber, Adresse"
     },
-    {
+    "basel-ch": {
       "purpose": "Echtzeit-Parkhaus-Belegung in Basel, Schweiz (kantonales Open-Data-Portal)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die neuesten Datensatz-Schnappschüsse planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Freie/Gesamt-Stellplätze, Adresse"
     },
-    {
+    "opentransportdata-ch-parking": {
       "purpose": "Fahrrad- und Autoparkplätze in der gesamten Schweiz von der nationalen Open-Data-Plattform Mobilität (opentransportdata.swiss, Aggregator)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Datensatz für Fahrrad- und Autoparkplätze planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Kapazität, abgeleitete freie Plätze (aus der aktuellen geschätzten Belegung), Parklayout-Typ"
     },
-    {
+    "cita-lu": {
       "purpose": "Parkeinrichtungen in Luxemburg aus dem CITA-DATEX-II-Feed (nationale Mobilitätsbehörde)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten statischen DATEX-II-XML-Feed planmäßig ab",
       "dataReceived": "Parkplatzname, Koordinaten, Kapazität, Echtzeit-Freie Plätze und Belegungsstatus, Adresse"
     },
-    {
+    "florence-it": {
       "purpose": "Echtzeit-Parkverfügbarkeit in Florenz, Italien (Open-Data-Portal einer einzelnen Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten ParkFreeSpot-Datensatz planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Freie Plätze, Zeitstempel der letzten Aktualisierung"
     },
-    {
+    "barcelona-es": {
       "purpose": "Statische Parkdaten für Barcelona, Spanien (Open-Data-Portal einer einzelnen Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Datensatz planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Adresse, Bezirk, Stadtviertel, Status"
     },
-    {
+    "vienna-at": {
       "purpose": "Statische Parkhäuser und P+R-Anlagen in Wien, Österreich (WFS-Dienst einer einzelnen Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamte WFS-Feature-Sammlung planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Betreiber, Adresse, P+R-Kennzeichnung, Barrierefreiheit, Webseite"
     },
-    {
+    "copenhagen-dk": {
       "purpose": "Statische Parkhausdaten für Kopenhagen, Dänemark (WFS-Dienst einer einzelnen Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamte WFS-Feature-Sammlung planmäßig ab",
       "dataReceived": "Straßenname, Hausnummer, Postbezirk, Kapazität, Typ (Tiefgarage/Parkhaus), Eigentümer"
     },
-    {
+    "singapore": {
       "purpose": "Echtzeit-Parkplatzverfügbarkeit in Singapur (nationales Open-Data-Portal, das HDB-Parkplätze aggregiert)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamten Verfügbarkeits- und Stammdaten planmäßig ab",
       "dataReceived": "Parkplatznummer, Stellplatztyp, Gesamt-/Freie Plätze, Adresse, Koordinaten (SVY21 zu WGS84 konvertiert), Parkplatztyp"
     },
-    {
+    "madrid-es": {
       "purpose": "Statische Parkdaten für Madrid, Spanien (Open-Data-Portal einer einzelnen Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Datensatz planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Adresse, Kapazität (aus Beschreibung), Öffnungszeiten, P+R-Kennzeichnung, Betreiber"
     },
-    {
+    "utmc-newcastle": {
       "purpose": "Echtzeit-Parkdaten für Newcastle/Tyne & Wear, UK (NE-Travel-Data-UTMC-Feed)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamten statischen und dynamischen Parkplatz-Feeds planmäßig mit UTMC-Zugangsdaten (Benutzername/Passwort) ab",
       "dataReceived": "Parkplatzname, Koordinaten, Kapazität, Freie Plätze, Status (offen/geschlossen/voll)"
     },
-    {
+    "nsw-au": {
       "purpose": "Echtzeit-P+R-Parkdaten für Greater Sydney, Australien (Transport for NSW, Open Data)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die Parkplatzliste und die Belegung je Anlage planmäßig mit dem NSW-Transport-API-Schlüssel ab",
       "dataReceived": "Anlagenname, Koordinaten, Kapazität, Verfügbare Plätze, Auslastung"
     },
-    {
+    "ndw-truck-nl": {
       "purpose": "Echtzeit-LKW-Parkverfügbarkeit an niederländischen Autobahnen (NDW, nationale Open-Data-DATEX-II-Feeds)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamte statische Tabelle und die dynamischen Status-XML-Feeds planmäßig ab",
       "dataReceived": "LKW-Parkplätze mit Name, Koordinaten, Kapazität, Echtzeit-Frei-/Belegtzahlen, Ausstattung (Ladestation, Toilette, Dusche)"
     },
-    {
+    "autobahn-de": {
       "purpose": "Deutsche Autobahn-Raststätten und LKW-Parkplätze (nationaler Feed der Autobahn GmbH)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die Straßenliste und die Parkdaten je Straße planmäßig ab",
       "dataReceived": "Raststättenname, Koordinaten, PKW-/LKW-Stellplatzkapazität, Sperrstatus, Ausstattung (Toilette, Tankstelle, Restaurant, WLAN, Dusche)"
     },
-    {
+    "opendatahub-it": {
       "purpose": "Parkstationen in Südtirol, Italien (Open Data Hub, regionaler Aggregator)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamte Stationsliste und die neuesten Messwerte planmäßig ab",
       "dataReceived": "Stationsname (mehrsprachig), Koordinaten, Kapazität, Echtzeit-Belegt-/Freiplätze, Parklayout-Typ, E-Ladeverfügbarkeit"
     },
-    {
+    "nrw-mobidrom-pr": {
       "purpose": "NRW.Mobidrom-gebündelte Park+Ride-Daten (VRR, Bielefeld, Bonn, Köln, Münster, Oberhausen) – regionaler Park+Ride-Aggregator",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten gebündelten DATEX-II-Parking-Light-Feed planmäßig ab",
       "dataReceived": "Park+Ride-Standortname, Koordinaten, Kapazität, Echtzeit-Verfügbarkeit (sofern vorhanden), Gebühreninfo, Adresse; jeder Datensatz als P+R gekennzeichnet"
     },
-    {
+    "nrw-mobidrom-parking": {
       "purpose": "NRW.Mobidrom-gebündelte Parkdaten (Düsseldorf, Köln, Bielefeld, Krefeld, Wuppertal, Aachen sowie statische Betreiberdaten) – regionaler Park-Aggregator",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten gebündelten DATEX-II-Parking-Light-Feed planmäßig ab",
       "dataReceived": "Parkplatzname, Koordinaten, Kapazität, Echtzeit-Verfügbarkeit, Belegungstrend, Parktyp, Gebühr/Tarif, Öffnungszeiten, Adresse, Behinderten- und E-Ladezuordnungen"
     },
-    {
+    "apcoa": {
       "purpose": "APCOA-Deutschland-Parkeinrichtungen über den NRW.Mobidrom-Exporter (einzelner Betreiber, offen lizenzierte Datenquelle)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den Betreiber-Feed planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Kapazität, Adresse, Tarifinfo, Öffnungszeiten, Ausstattungsmerkmale"
     },
-    {
+    "apag": {
       "purpose": "APAG-Aachener-Parkhaus-Echtzeit-Parkhausdaten aus der hauseigenen PMS-API des Betreibers (einzelner Betreiber, Aachen)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den Anlagen-Feed des Betreibers planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Kapazität, Echtzeit-Freie Plätze, Belegungstrend, Adresse, Tarifinfo, Ausstattungsmerkmale"
     },
-    {
+    "apag-mobidrom": {
       "purpose": "APAG-Aachener-Parkhaus-Daten über den NRW.Mobidrom-Exporter (einzelner Betreiber, Aachen; offen lizenzierte Ersatzdatenquelle zum direkten APAG-Feed)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den Betreiber-Feed planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Kapazität, Echtzeit-Freie Plätze, Belegungstrend, Adresse, Tarifinfo, Ausstattungsmerkmale"
     },
-    {
+    "goldbeck": {
       "purpose": "GOLDBECK-Parking-Services-statische-Parkhausdaten über den NRW.Mobidrom-Exporter (einzelner Betreiber)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den Betreiber-Feed planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Adresse, Tarifinfo, Öffnungszeiten"
     },
-    {
+    "braunschweig-de": {
       "purpose": "Echtzeit-Parkhausdaten für Braunschweig, Deutschland (städtischer PULP-Feed, einzelne Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten PULP-GeoJSON-Feed planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Kapazität, Parktyp, Echtzeit-Freie Plätze, Gebühreninfo"
     },
-    {
+    "bremen-de": {
       "purpose": "Statischer Parkkatalog für Bremen, Deutschland (VMZ-Bremen-Stadtfeed, einzelne Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Park-GeoJSON-Katalog planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Parktyp, Maximalhöhe, Gebühreninfo"
     },
-    {
+    "duesseldorf-de": {
       "purpose": "Echtzeit-Parkhausdaten für Düsseldorf, Deutschland (städtischer VT-Manager-WFS-Dienst, einzelne Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamte WFS-Feature-Sammlung planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Kapazität, Echtzeit-Freie Plätze, Gebühren- und Tarifinfo, Adresse, Öffnungszeiten, Maximalhöhe, Behindertenstellplätze"
     },
-    {
+    "salzburg-at": {
       "purpose": "Parkdaten für die Stadt Salzburg, Österreich (städtischer WFS-Dienst, einzelne Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamte WFS-Feature-Sammlung planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Kapazität, Gebühren- und Tarifinfo, Adresse, Öffnungszeiten, Betreiber, Echtzeit-Freie Plätze und Belegungstrend (sofern vorhanden)"
     },
-    {
+    "bielefeld-de": {
       "purpose": "Parkdaten für Bielefeld, Deutschland (städtischer WFS-Dienst mit eingebetteten PLS-Echtzeitzählungen, einzelne Stadt)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft die gesamte WFS-Feature-Sammlung planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Kapazität, Echtzeit-Freie Plätze, Gebühreninfo, Adresse, Maximalhöhe, Behindertenstellplätze, E-Ladeplätze, Öffnungszeiten"
     },
-    {
+    "bamberg-de": {
       "purpose": "Echtzeit-Parkhausbelegung für Bamberg, Deutschland (Stadtwerke-Bamberg-carparkcounter-Feed, einzelner Betreiber)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Status-Feed planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Kapazität, Echtzeit-Freie Plätze, Gebühreninfo, Adresse, Betreiber"
     },
-    {
+    "trier-de": {
       "purpose": "Echtzeit-Parkhausbelegung für Trier, Deutschland (Stadtwerke-Trier-parken-v2-Feed, einzelner Betreiber)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten parken-v2-XML-Feed planmäßig ab",
       "dataReceived": "Parkhausname, Koordinaten, Kapazität, Echtzeit-Freie Plätze, Gebühreninfo, Betreiber, Öffnungszeiten"
     },
-    {
+    "potsdam-de": {
       "purpose": "Parkdaten für Potsdam, Deutschland (Stadtwerke-Potsdam-CSV-Feed, einzelner Betreiber)",
       "dataSent": "Keine Nutzerdaten; der Data-Manager unseres Servers ruft den gesamten Park-CSV-Feed planmäßig ab",
       "dataReceived": "Anlagenname, Koordinaten, Kapazität, Echtzeit-Freie Plätze (sofern vorhanden), Gebühreninfo, Betreiber, Park+Ride-Kennzeichnung"
     },
-    {
+    "osm": {
       "purpose": "Parkeinrichtungen aus OpenStreetMap (global crowdgesourcte Daten, statisch, keine Echtzeit-Verfügbarkeit)",
       "dataSent": "Eine Overpass-QL-Abfrage mit den Begrenzungsrahmen-Koordinaten des aktuellen Kartenausschnitts (Abfrage von amenity=parking-Knoten und -Wegen); OSM-Elementtyp und -ID für Detailabfrage",
       "dataReceived": "OSM-Elemente mit Name, Koordinaten, Kapazität, Gebühr, Zugang, Betreiber, Öffnungszeiten"
     }
-  ]
+  }
 }

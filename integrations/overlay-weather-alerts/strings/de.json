@@ -1,26 +1,26 @@
 {
   "name": "Wetterwarnungen",
   "description": "Aktive Wetterwarnungen von NOAA (USA), ECCC (Kanada), DWD (Deutschland) und MeteoAlarm (Europa)",
-  "dataSources": [
-    {
+  "dataSources": {
+    "noaa": {
       "purpose": "US-Wetterwarnungen mit Polygon-Grenzen",
       "dataSent": "Keine Nutzerdaten (statischer aktiver Warnungs-Feed)",
       "dataReceived": "GeoJSON mit Polygon-Geometrien; Schlagzeile, Ereignis, Schwere, Dringlichkeit, Beschreibung, Anweisung, Beginn/Ende"
     },
-    {
+    "eccc": {
       "purpose": "Kanadische Wetterwarnungen mit Polygon-Grenzen",
       "dataSent": "Keine Nutzerdaten (statischer aktiver Warnungs-Feed)",
       "dataReceived": "GeoJSON mit Warnungstyp, Name (EN/FR), Dringlichkeit, Konfidenz, Veröffentlichung/Ablauf, Provinz, Polygon-Geometrie"
     },
-    {
+    "dwd": {
       "purpose": "Deutsche Wetterwarnungen mit Gemeinde-Polygon-Grenzen",
       "dataSent": "Keine Nutzerdaten (statischer aktiver Warnungs-Feed)",
       "dataReceived": "GeoJSON mit Gemeinde-Polygonen; Schlagzeile, Ereignis, Schwere, Dringlichkeit, Beschreibung, Anweisung, Beginn/Ende"
     },
-    {
+    "meteoalarm": {
       "purpose": "Europäische Wetterwarnungen (24 Länder, ohne Deutschland). Keine Polygon-Geometrie — Landeszentrums verwendet.",
       "dataSent": "Ländercode (länderspezifische Feed-Auswahl)",
       "dataReceived": "Atom-XML mit CAP-Einträgen: Ereignis, Schwere, Dringlichkeit, Sicherheit, Beginn/Ende, Gebietsbeschreibung"
     }
-  ]
+  }
 }

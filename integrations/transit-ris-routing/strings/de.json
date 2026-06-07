@@ -1,11 +1,11 @@
 {
   "name": "DB-RIS-Routing",
   "description": "Deutsche Bahnreiseplanung über die RIS API",
-  "dataSources": [
-    {
+  "dataSources": {
+    "db-ris-routing": {
       "purpose": "Offizieller Reiseplaner der Deutschen Bahn für multimodales Transit-Routing in Deutschland",
       "dataSent": "Start- und Zielkoordinaten, Abfahrts- oder Ankunftszeit, Sprache",
       "dataReceived": "Fahrten mit Abschnitten (GEHEN/FAHRT/UMSTEIGEN), Verkehrskategorie/Linie/Nummer, Google-kodierte Polylinien, planmäßige/tatsächliche Zeiten und Bahnsteige pro Halt"
     }
-  ]
+  }
 }

@@ -1,11 +1,11 @@
 {
   "name": "Marine Weather (Open-Meteo)",
   "description": "Wave height, swell, period, direction, and ocean current forecasts for coastal coordinates. Surfaces on the place panel for waterfront locations.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "open-meteo-marine": {
       "purpose": "Render a wave/swell forecast widget on coastal place panels.",
       "dataSent": "Latitude/longitude (rounded to 2 decimals for caching).",
       "dataReceived": "Hourly wave height/direction/period, swell components, ocean currents."
     }
-  ]
+  }
 }

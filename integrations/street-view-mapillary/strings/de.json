@@ -1,11 +1,11 @@
 {
   "name": "Mapillary-Straßenansicht",
   "description": "Straßenansichtsbilder von Mapillary",
-  "dataSources": [
-    {
+  "dataSources": {
+    "mapillary": {
       "purpose": "Straßenansichtsbilder. Abdeckungskacheln laufen über den BFF-Proxy. Der MapillaryJS-Viewer wird erst nach Bestätigung eines In-App-Hinweises geladen und kontaktiert dann graph.mapillary.com und fbcdn.net direkt aus dem Browser.",
       "dataSent": "Abdeckungskachel-Anfragen laufen über den Proxy. Nach Bestätigung können direkte Browser-Anfragen IP-Adresse, Browser-/Geräte-Anfragedaten, ausgewählte Bild-ID und betrachteten Ort an Mapillary/Meta übermitteln.",
       "dataReceived": "Nächste Bild-ID für Viewer; Vektorkacheln (Sequenzlinien + Bildpunkte); Panoramabilder über MapillaryJS"
     }
-  ]
+  }
 }

@@ -1,11 +1,11 @@
 {
   "name": "Open-Meteo Wetter",
   "description": "Aktuelle Wetterbedingungen und Vorhersagen von Open-Meteo",
-  "dataSources": [
-    {
+  "dataSources": {
+    "open-meteo": {
       "purpose": "Aktuelles Wetter, stündlich (bis 7 Tage) und täglich (bis 16 Tage) Vorhersagen. Globale Abdeckung.",
       "dataSent": "Koordinaten (Breitengrad, Längengrad), angeforderte Wettervariablen, Einheitenpräferenzen",
       "dataReceived": "Aktuell: Temperatur, Feuchtigkeit, Wettercode, Bewölkung, Druck, Wind. Stündlich/täglich: gleich pro Intervall plus Sonnenauf-/-untergang."
     }
-  ]
+  }
 }

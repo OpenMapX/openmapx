@@ -1,11 +1,11 @@
 {
   "name": "MBTA (Boston Transit)",
   "description": "Boston area public transit data",
-  "dataSources": [
-    {
+  "dataSources": {
+    "mbta": {
       "purpose": "Boston metro transit data — stops, predictions, alerts, vehicles, routes, shapes, facilities",
       "dataSent": "Coordinates (latitude, longitude), search radius; stop ID; route ID; time window",
       "dataReceived": "JSON:API stops, real-time predictions with delays, service alerts, vehicle positions, route shapes/colors, elevator/escalator facilities"
     }
-  ]
+  }
 }

@@ -1,11 +1,11 @@
 {
   "name": "Travel Time (Isochrone)",
   "description": "Travel time isochrone visualization using existing routing APIs",
-  "dataSources": [
-    {
+  "dataSources": {
+    "valhalla": {
       "purpose": "Visualize travel time reachability from a point on the map (isochrone polygons)",
       "dataSent": "Center coordinates (latitude, longitude), travel mode, contour time thresholds in minutes",
       "dataReceived": "GeoJSON isochrone polygons showing reachable area within specified time/distance thresholds"
     }
-  ]
+  }
 }

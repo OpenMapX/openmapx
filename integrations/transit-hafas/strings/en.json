@@ -1,11 +1,11 @@
 {
   "name": "HAFAS Transit (DB/VBB/BVG)",
   "description": "German public transit journey planning",
-  "dataSources": [
-    {
+  "dataSources": {
+    "hafas": {
       "purpose": "German transit data via community HAFAS REST wrappers (DB, VBB, BVG instances)",
       "dataSent": "Coordinates (latitude, longitude), search radius, stop ID, search query, origin and destination coordinates, departure/arrival time, trip ID, bounding box (for vehicle radar)",
       "dataReceived": "FPTF stops, departures/arrivals with delays/remarks, journeys with GeoJSON polylines and stopovers, live vehicle positions"
     }
-  ]
+  }
 }

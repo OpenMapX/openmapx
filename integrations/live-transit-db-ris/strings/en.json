@@ -1,11 +1,11 @@
 {
   "name": "DB Live Transit",
   "description": "Provider integration for Deutsche Bahn RIS Maps live train positions",
-  "dataSources": [
-    {
+  "dataSources": {
+    "db-ris-maps": {
       "purpose": "Realtime positions of Deutsche Bahn trains, shown as live vehicle markers on the map",
       "dataSent": "No user data or location is sent. The server requests journey positions for the configured administration IDs (default 80,81) using DB API credentials; the visible map area is applied as a local filter after the response.",
       "dataReceived": "Journey positions (coordinates, bearing, speed), line/journey labels and origin/destination names, and the update timestamp"
     }
-  ]
+  }
 }

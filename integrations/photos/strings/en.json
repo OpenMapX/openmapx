@@ -1,16 +1,16 @@
 {
   "name": "Photos",
   "description": "Aggregated place photos from multiple providers",
-  "dataSources": [
-    {
+  "dataSources": {
+    "osm": {
       "purpose": "Place photos resolved from OpenStreetMap image tags (direct image URLs and Wikimedia Commons filenames)",
       "dataSent": "OpenStreetMap element reference (node/way/relation) or place name and coordinates, used to look up the element's tags",
       "dataReceived": "OpenStreetMap element tags, including image, image:0..N and related photo references"
     },
-    {
+    "google-photos": {
       "purpose": "Link-preview images for places whose OpenStreetMap image tag points to a Google Photos share link",
       "dataSent": "The Google Photos share URL taken from the place's OpenStreetMap image tag (no user or account data)",
       "dataReceived": "The Open Graph preview image URL advertised by the share page for embedding"
     }
-  ]
+  }
 }

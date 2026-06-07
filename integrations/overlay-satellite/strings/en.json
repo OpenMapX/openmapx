@@ -1,11 +1,11 @@
 {
   "name": "NASA GIBS Satellite Imagery",
   "description": "Browse NASA satellite imagery layers with date selection — true-color Earth, vegetation, snow cover, sea surface temperature, night lights, and aerosol data.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "nasa-gibs": {
       "purpose": "Satellite imagery layers (MODIS, VIIRS, NDVI, Snow Cover, SST, etc.). Tiles and legends proxied via BFF.",
       "dataSent": "Layer identifier, date, tile coordinates (z/y/x); no user data for capabilities",
       "dataReceived": "WMTS capabilities XML with layer dates/legends; raster tiles (JPEG/PNG); legend images"
     }
-  ]
+  }
 }

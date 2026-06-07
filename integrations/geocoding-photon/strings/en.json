@@ -1,11 +1,11 @@
 {
   "name": "Photon Geocoding",
   "description": "Forward and reverse geocoding",
-  "dataSources": [
-    {
+  "dataSources": {
+    "photon": {
       "purpose": "Forward geocoding, autocomplete, and reverse geocoding using Komoot's Photon (OSM-based)",
       "dataSent": "Search query text or coordinates (latitude, longitude), result limit, language",
       "dataReceived": "GeoJSON features with OSM id/type, name, street, city, state, country, OSM key/value"
     }
-  ]
+  }
 }

@@ -1,11 +1,11 @@
 {
   "name": "Airports Overlay",
   "description": "Worldwide airport markers from OurAirports (~85,000 records). Toggleable map layer with type filters (large, medium, small, heliports, etc.); clicking a marker opens the place panel with runways, frequencies, and navaids.",
-  "dataSources": [
-    {
+  "dataSources": {
+    "ourairports": {
       "purpose": "Render airport markers on the map layer and resolve clicks to a place panel.",
       "dataSent": "Map viewport bounding box, optionally filtered by airport type.",
       "dataReceived": "Airport coordinates, name, IATA/ICAO codes, type, elevation, and scheduled-service flag for airports inside the bbox."
     }
-  ]
+  }
 }
