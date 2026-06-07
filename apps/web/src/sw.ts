@@ -50,9 +50,16 @@ declare global {
   }
 }
 
+// Replaced at build time by scripts/build-sw.mjs (esbuild `define`) with a
+// per-build id. Weaving it into the app-shell cache name below makes sw.js's
+// bytes change every deploy, so the browser detects a new worker and
+// SwUpdateNotice can surface the "update available" prompt — without it the
+// custom esbuild output is identical across builds and updates never fire.
+declare const __SW_BUILD_ID__: string;
+
 const OFFLINE_URL = "/offline";
 const HOME_URL = "/";
-const APP_SHELL_CACHE = "app-shell-v1";
+const APP_SHELL_CACHE = `app-shell-${__SW_BUILD_ID__}`;
 // `/` is precached so a user with downloaded offline areas can still reach
 // the map after the runtime `pages` cache has expired (24h / 20 entries).
 // Without this, the nav handler would fall through to /offline and the

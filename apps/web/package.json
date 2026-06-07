@@ -8,7 +8,7 @@
     "build": "next build && pnpm build:sw && pnpm build:copy-assets",
     "build:runtime": "node scripts/build-runtime-modules.mjs",
     "build:licenses": "node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/generate-license-notices.mjs",
-    "build:sw": "esbuild src/sw.ts --bundle --outfile=public/sw.js --format=iife --platform=browser --define:process.env.NODE_ENV='\"production\"'",
+    "build:sw": "node scripts/build-sw.mjs",
     "build:copy-assets": "mkdir -p .next/standalone/apps/web/public .next/standalone/apps/web/.next/static && cp -R public/. .next/standalone/apps/web/public/ && cp -R .next/static/. .next/standalone/apps/web/.next/static/",
     "start": "node .next/standalone/apps/web/server.js",
     "check-types": "pnpm build:licenses && tsc --noEmit && tsc --noEmit -p tsconfig.sw.json",

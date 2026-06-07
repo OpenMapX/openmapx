@@ -129,6 +129,10 @@ jobs:
           context: ${{ steps.ctx.outputs.context }}
           file: ${{ steps.ctx.outputs.dockerfile }}
           platforms: linux/amd64
+          # Stamp the web service worker with the commit SHA so each deploy
+          # produces a fresh sw.js and the PWA's update prompt fires. Ignored by
+          # the other images (their Dockerfiles declare no such ARG).
+          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', github.sha) || '' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
