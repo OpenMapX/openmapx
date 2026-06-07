@@ -14,7 +14,20 @@ vi.mock("@openmapx/core", () => ({
     sys === "imperial" ? `${m} ft` : `${m} m`,
 }));
 
-import { ManeuverBanner } from "./ManeuverBanner";
+import { lowercaseFirstWord, ManeuverBanner } from "./ManeuverBanner";
+
+describe("lowercaseFirstWord", () => {
+  it("lowercases the leading verb so it reads mid-sentence after 'Then'", () => {
+    expect(lowercaseFirstWord("Take exit 21.")).toBe("take exit 21.");
+    expect(lowercaseFirstWord("Keep left to stay on A 57")).toBe("keep left to stay on A 57");
+    expect(lowercaseFirstWord("Über die Brücke")).toBe("über die Brücke");
+  });
+
+  it("leaves refs/acronyms (no lowercase second letter) untouched", () => {
+    expect(lowercaseFirstWord("B 477 toward …")).toBe("B 477 toward …");
+    expect(lowercaseFirstWord("")).toBe("");
+  });
+});
 
 describe("ManeuverBanner", () => {
   it("renders the instruction and distance to the maneuver", () => {
@@ -53,6 +66,6 @@ describe("ManeuverBanner", () => {
         units="metric"
       />,
     );
-    expect(html).toContain("Then Turn left onto 2nd Ave");
+    expect(html).toContain("Then turn left onto 2nd Ave");
   });
 });

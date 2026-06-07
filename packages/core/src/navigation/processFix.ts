@@ -1,7 +1,7 @@
 import type { Route } from "@integrations/routing/types";
 import type { LngLat } from "../types/geometry";
 import { eta } from "./eta";
-import { computeProgress } from "./progress";
+import { computeProgress, upcomingManeuverIndex } from "./progress";
 import { shouldReroute } from "./reroute";
 import { snapToRoute } from "./snap";
 import type { FixInput, NavTickOptions, NavTickResult, NavTickState } from "./types";
@@ -78,12 +78,16 @@ export function processFix(
     prog.currentStepIndex === route.steps.length - 1 &&
     prog.distanceRemaining <= opts.arrivalThresholdMeters;
 
-  const step = route.steps[prog.currentStepIndex];
+  // Announce the UPCOMING maneuver (at the end of the current step), not the one
+  // already performed at the start of it. distanceToNextManeuver counts down to
+  // exactly this maneuver.
+  const upcomingIndex = upcomingManeuverIndex(prog.currentStepIndex, route.steps.length);
+  const step = route.steps[upcomingIndex];
   const cue = arrived
     ? null
     : nextVoiceCue(
         step,
-        prog.currentStepIndex,
+        upcomingIndex,
         prog.distanceToNextManeuver,
         opts.voiceThresholds,
         state.spokenCues,

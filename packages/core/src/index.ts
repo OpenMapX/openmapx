@@ -267,6 +267,7 @@ export {
   snapToRoute,
   stepDeadReckon,
   stopsUntilAlight,
+  upcomingManeuverIndex,
   windowGeometry,
 } from "./navigation";
 export type { TransitProgress } from "./navigation/transitProgress";

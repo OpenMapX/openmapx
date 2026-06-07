@@ -6,6 +6,24 @@ import { formatMeasurementDistance } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type Maneuver, maneuverIconFor } from "@/lib/navigation/maneuverIcon";
 
+/**
+ * De-capitalize the leading word so a routing-engine instruction (which always
+ * starts with a capitalized verb, e.g. "Take exit 21.") reads naturally when
+ * embedded mid-sentence after "Then …". Only a normal Capitalized word is
+ * lowercased; refs/acronyms like "B 477" (no lowercase second letter) are left
+ * alone. Handles German umlauts.
+ */
+export function lowercaseFirstWord(instruction: string): string {
+  if (
+    instruction.length >= 2 &&
+    /[A-ZÄÖÜ]/.test(instruction[0]) &&
+    /[a-zäöüß]/.test(instruction[1])
+  ) {
+    return instruction[0].toLowerCase() + instruction.slice(1);
+  }
+  return instruction;
+}
+
 interface Props {
   instruction: string;
   distanceToManeuver: number;
@@ -60,7 +78,7 @@ export function ManeuverBanner({
         >
           <NextIcon sx={{ fontSize: 20, opacity: 0.85 }} />
           <Typography variant="body2" sx={{ opacity: 0.85 }} noWrap>
-            {t("then", { instruction: nextInstruction })}
+            {t("then", { instruction: lowercaseFirstWord(nextInstruction) })}
           </Typography>
         </Box>
       )}

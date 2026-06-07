@@ -8,6 +8,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   geoJsonBBox,
   navOptionsForMode,
+  upcomingManeuverIndex,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
@@ -66,8 +67,12 @@ export function NavigationView() {
   // overlay is blank until the first fix — which never comes on devices that
   // deny or can't provide geolocation, so Start would appear to do nothing.
   const stepIndex = progress?.currentStepIndex ?? 0;
-  const step = route ? route.steps[stepIndex] : null;
-  const nextStep = route ? route.steps[stepIndex + 1] : undefined;
+  // Surface the UPCOMING maneuver (at the end of the step you're driving), which
+  // is what distanceToNextManeuver counts down to — not the one already done at
+  // the start of the current step. `nextStep` is the one after that ("Then …").
+  const upcomingIndex = route ? upcomingManeuverIndex(stepIndex, route.steps.length) : 0;
+  const step = route ? route.steps[upcomingIndex] : null;
+  const nextStep = route ? route.steps[upcomingIndex + 1] : undefined;
   const awaitingFix = status !== "arrived" && !progress;
   const distanceToManeuver = progress?.distanceToNextManeuver ?? step?.distance ?? 0;
   // Only surface lane guidance as the maneuver approaches, mirroring Google.

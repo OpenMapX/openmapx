@@ -42,3 +42,19 @@ export function computeProgress(route: Route, alongMeters: number): ProgressResu
 
   return { currentStepIndex: idx, distanceToNextManeuver, distanceRemaining, durationRemaining };
 }
+
+/**
+ * Index of the maneuver to announce/display while driving a step.
+ *
+ * `computeProgress` reports `currentStepIndex` as the step you're driving ALONG
+ * and `distanceToNextManeuver` as the distance to its END — i.e. to the maneuver
+ * at the start of the *next* step. A route step's `instruction`/`maneuver`
+ * describes the action at its start, so the upcoming maneuver to surface is
+ * `currentStepIndex + 1`, clamped to the final (arrival) step. Using
+ * `currentStepIndex` instead shows the maneuver you just performed — the
+ * off-by-one that made "Keep left to stay on A57" appear when the exit was due.
+ */
+export function upcomingManeuverIndex(currentStepIndex: number, stepCount: number): number {
+  if (stepCount <= 0) return 0;
+  return Math.min(currentStepIndex + 1, stepCount - 1);
+}

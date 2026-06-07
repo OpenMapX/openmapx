@@ -7,37 +7,49 @@ import {
 } from "./provider.js";
 
 describe("valhallaManeuverType", () => {
-  it("maps right-turn enum to normalized turn/right", () => {
-    // Valhalla: 10 = turn right
-    expect(valhallaManeuverType(10)).toEqual({ type: "turn", modifier: "right" });
-  });
+  // Every documented Valhalla maneuver.type (0-43) → normalized { type, modifier }.
+  // https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/
+  const cases: Array<[number, { type: string; modifier?: string }]> = [
+    [0, { type: "turn", modifier: "straight" }], // kNone
+    [1, { type: "depart" }], // kStart
+    [2, { type: "depart" }], // kStartRight
+    [3, { type: "depart" }], // kStartLeft
+    [4, { type: "arrive" }], // kDestination
+    [5, { type: "arrive" }], // kDestinationRight
+    [6, { type: "arrive" }], // kDestinationLeft
+    [7, { type: "turn", modifier: "straight" }], // kBecomes
+    [8, { type: "turn", modifier: "straight" }], // kContinue
+    [9, { type: "turn", modifier: "slight right" }], // kSlightRight
+    [10, { type: "turn", modifier: "right" }], // kRight
+    [11, { type: "turn", modifier: "sharp right" }], // kSharpRight
+    [12, { type: "turn", modifier: "uturn" }], // kUturnRight
+    [13, { type: "turn", modifier: "uturn" }], // kUturnLeft
+    [14, { type: "turn", modifier: "sharp left" }], // kSharpLeft
+    [15, { type: "turn", modifier: "left" }], // kLeft
+    [16, { type: "turn", modifier: "slight left" }], // kSlightLeft
+    [17, { type: "turn", modifier: "straight" }], // kRampStraight
+    [18, { type: "fork", modifier: "right" }], // kRampRight
+    [19, { type: "fork", modifier: "left" }], // kRampLeft
+    [20, { type: "fork", modifier: "right" }], // kExitRight
+    [21, { type: "fork", modifier: "left" }], // kExitLeft
+    [22, { type: "turn", modifier: "straight" }], // kStayStraight
+    [23, { type: "fork", modifier: "right" }], // kStayRight
+    [24, { type: "fork", modifier: "left" }], // kStayLeft
+    [25, { type: "merge" }], // kMerge
+    [26, { type: "roundabout" }], // kRoundaboutEnter
+    [27, { type: "roundabout" }], // kRoundaboutExit
+    [28, { type: "turn", modifier: "straight" }], // kFerryEnter
+    [29, { type: "turn", modifier: "straight" }], // kFerryExit
+    [30, { type: "turn", modifier: "straight" }], // kTransit
+    [36, { type: "turn", modifier: "straight" }], // kPostTransitConnectionDestination
+    [37, { type: "merge" }], // kMergeRight
+    [38, { type: "merge" }], // kMergeLeft
+    [39, { type: "turn", modifier: "straight" }], // kElevatorEnter
+    [43, { type: "turn", modifier: "straight" }], // kBuildingExit
+  ];
 
-  it("maps left-turn enum to normalized turn/left", () => {
-    // Valhalla: 14 = turn left
-    expect(valhallaManeuverType(14)).toEqual({ type: "turn", modifier: "left" });
-  });
-
-  it("maps a depart enum", () => {
-    expect(valhallaManeuverType(1)).toEqual({ type: "depart" });
-  });
-
-  it("maps destination enum to arrive", () => {
-    // Valhalla: 4/5/6 = destination
-    expect(valhallaManeuverType(4)).toEqual({ type: "arrive" });
-  });
-
-  it("maps a roundabout enum", () => {
-    // Valhalla: 26/27 = roundabout enter/exit
-    expect(valhallaManeuverType(26).type).toBe("roundabout");
-  });
-
-  it("maps a merge enum", () => {
-    expect(valhallaManeuverType(21)).toEqual({ type: "merge" });
-  });
-
-  it("maps a fork enum with side modifier", () => {
-    expect(valhallaManeuverType(18)).toEqual({ type: "fork", modifier: "right" });
-    expect(valhallaManeuverType(19)).toEqual({ type: "fork", modifier: "left" });
+  it.each(cases)("maps Valhalla maneuver.type %i", (input, expected) => {
+    expect(valhallaManeuverType(input)).toEqual(expected);
   });
 
   it("falls back to turn/straight for unknown enums", () => {

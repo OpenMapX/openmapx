@@ -1,6 +1,22 @@
 import type { Route } from "@integrations/routing/types";
 import { describe, expect, it } from "vitest";
-import { computeProgress } from "../progress";
+import { computeProgress, upcomingManeuverIndex } from "../progress";
+
+describe("upcomingManeuverIndex", () => {
+  it("points at the maneuver at the END of the current step (currentStepIndex + 1)", () => {
+    expect(upcomingManeuverIndex(0, 5)).toBe(1);
+    expect(upcomingManeuverIndex(3, 5)).toBe(4);
+  });
+
+  it("clamps to the final (arrival) step", () => {
+    expect(upcomingManeuverIndex(4, 5)).toBe(4);
+    expect(upcomingManeuverIndex(0, 1)).toBe(0);
+  });
+
+  it("is safe for an empty route", () => {
+    expect(upcomingManeuverIndex(0, 0)).toBe(0);
+  });
+});
 
 const route = {
   distance: 300,

@@ -135,44 +135,57 @@ function buildDateTime(options: RoutingOptions): ValhallaDateTime {
  */
 export function valhallaManeuverType(t: number): { type: string; modifier?: string } {
   switch (t) {
+    // 1-3 kStart{,Right,Left}
     case 1:
     case 2:
     case 3:
       return { type: "depart" };
+    // 4-6 kDestination{,Right,Left}
     case 4:
     case 5:
     case 6:
       return { type: "arrive" };
-    case 8:
-      return { type: "turn", modifier: "straight" };
+    // Turns (9-16). NB Valhalla's left family is 14 kSharpLeft, 15 kLeft,
+    // 16 kSlightLeft — mirror of the right family, NOT shifted.
     case 9:
       return { type: "turn", modifier: "slight right" };
     case 10:
       return { type: "turn", modifier: "right" };
     case 11:
       return { type: "turn", modifier: "sharp right" };
-    case 12:
+    case 12: // kUturnRight — only a left U-turn glyph exists, used for both
+    case 13: // kUturnLeft
       return { type: "turn", modifier: "uturn" };
-    case 13:
-      return { type: "turn", modifier: "sharp left" };
     case 14:
-      return { type: "turn", modifier: "left" };
+      return { type: "turn", modifier: "sharp left" };
     case 15:
-      return { type: "turn", modifier: "slight left" };
+      return { type: "turn", modifier: "left" };
     case 16:
-    case 17:
-      return { type: "turn", modifier: "straight" }; // ramp straight / stay
-    case 18:
-    case 19:
-    case 20:
-      return { type: "fork", modifier: t === 18 ? "right" : "left" };
-    case 21:
-    case 22:
-    case 23:
+      return { type: "turn", modifier: "slight left" };
+    // Ramps (18/19) and exits (20/21) — a fork off the through road.
+    case 18: // kRampRight
+    case 20: // kExitRight
+      return { type: "fork", modifier: "right" };
+    case 19: // kRampLeft
+    case 21: // kExitLeft
+      return { type: "fork", modifier: "left" };
+    // Keep right/left at a fork (23/24).
+    case 23: // kStayRight
+      return { type: "fork", modifier: "right" };
+    case 24: // kStayLeft
+      return { type: "fork", modifier: "left" };
+    // Merges (25 kMerge, 37 kMergeRight, 38 kMergeLeft).
+    case 25:
+    case 37:
+    case 38:
       return { type: "merge" };
+    // Roundabouts (26 enter, 27 exit).
     case 26:
     case 27:
       return { type: "roundabout" };
+    // Everything else proceeds straight, with no dedicated glyph: kNone (0),
+    // kBecomes (7), kContinue (8), kRampStraight (17), kStayStraight (22),
+    // ferry (28-29), transit (30-36), and indoor/pedestrian (39-43).
     default:
       return { type: "turn", modifier: "straight" };
   }
