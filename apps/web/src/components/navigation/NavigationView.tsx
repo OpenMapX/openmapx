@@ -136,7 +136,9 @@ export function NavigationView() {
               flexDirection: "column",
               gap: 1,
               p: 2,
-              pt: "calc(var(--omx-safe-top) + 8px)",
+              // Match the 16px (`p: 2`) side inset below the safe-area top so the
+              // banner's gap to the top equals its gap to the sides.
+              pt: "calc(var(--omx-safe-top) + 16px)",
             }}
           >
             {step && (
