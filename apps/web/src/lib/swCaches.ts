@@ -17,3 +17,31 @@ export function isStalePrecacheName(
   if (name.startsWith("style-assets")) return name !== current.style;
   return false;
 }
+
+/**
+ * Offline-area caches are checked only as a *fallback*, not first. Use for
+ * region-independent, deploy-versioned assets (the map style JSON + sprite,
+ * which live at one URL for every region): when online, the runtime strategy
+ * fetches the fresh copy, so a style deploy takes effect even for users who
+ * downloaded an offline area; when offline (the strategy yields nothing or
+ * throws), the user's pinned copy still renders.
+ *
+ * Contrast with the tile/glyph routes, which check offline-area caches *first*
+ * — those are region-specific and large, so a downloaded area should serve them
+ * directly rather than re-fetch.
+ */
+export async function offlineFallback<T>(
+  runStrategy: () => Promise<T>,
+  matchOffline: () => Promise<T | null>,
+): Promise<T> {
+  try {
+    const res = await runStrategy();
+    if (res) return res;
+    const offline = await matchOffline();
+    return offline ?? res;
+  } catch (err) {
+    const offline = await matchOffline();
+    if (offline) return offline;
+    throw err;
+  }
+}

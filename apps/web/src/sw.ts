@@ -22,7 +22,7 @@ import {
   StaleWhileRevalidate,
   type Strategy,
 } from "serwist";
-import { isStalePrecacheName } from "./lib/swCaches";
+import { isStalePrecacheName, offlineFallback } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -148,6 +148,20 @@ function withOfflineFirst(strategy: Strategy): RouteHandlerCallback {
   };
 }
 
+/**
+ * Like withOfflineFirst, but the runtime strategy wins when it can respond and
+ * the offline-area pin is only a fallback. Used for the map style / sprite,
+ * which share one region-independent URL — so a downloaded area must not freeze
+ * the style globally after a deploy, yet still renders offline.
+ */
+function withOfflineFallback(strategy: Strategy): RouteHandlerCallback {
+  return (options: RouteHandlerCallbackOptions) =>
+    offlineFallback(
+      () => strategy.handle(options),
+      () => matchOfflineArea(options.request),
+    );
+}
+
 function withRecentMapDataCache(strategy: Strategy): RouteHandlerCallback {
   return async (options: RouteHandlerCallbackOptions) => {
     if (!(await readRecentMapDataCachePreference())) {
@@ -222,11 +236,14 @@ const serwist = new Serwist({
     // Self-hosted map style assets — covers `/styles/*` for the same-origin
     // openmapx style as well as for any `NEXT_PUBLIC_MAP_STYLE_URL` base
     // whose path is also `/styles/*`. Style JSON, sprite JSON/PNG, and
-    // TileJSON live here. Offline-area entries are served first so a
-    // downloaded area renders even when the runtime cache has been cleared.
+    // TileJSON live here. These share one region-independent URL, so we use
+    // offline-FALLBACK (not offline-first): online, the build-versioned runtime
+    // cache serves the fresh style after a deploy even when the user has a
+    // downloaded area pinning the old one; offline, the area's copy still
+    // renders. (Tiles/glyphs below stay offline-first — they're per-region.)
     {
       matcher: ({ url }: { url: URL }) => /\/styles\//i.test(url.pathname),
-      handler: withOfflineFirst(
+      handler: withOfflineFallback(
         new StaleWhileRevalidate({
           cacheName: STYLE_CACHE,
           plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
