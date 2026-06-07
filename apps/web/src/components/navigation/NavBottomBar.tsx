@@ -58,7 +58,15 @@ export function NavBottomBar({
       <IconButton
         onClick={onEnd}
         aria-label={t("end")}
-        sx={{ border: "1px solid", borderColor: "divider", color: "text.primary" }}
+        // borderRadius: the app-wide MuiIconButton override (providers.tsx) sets
+        // a rounded-square radius; force a full circle so the visible border is
+        // round rather than a rounded square.
+        sx={{
+          border: "1px solid",
+          borderColor: "divider",
+          color: "text.primary",
+          borderRadius: "50%",
+        }}
       >
         <CloseIcon />
       </IconButton>
