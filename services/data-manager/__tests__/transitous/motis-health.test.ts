@@ -8,13 +8,20 @@ import { StateStore } from "../../src/state.js";
 
 let tmp: string | undefined;
 let originalFetch: typeof fetch;
+let originalImportTimeout: string | undefined;
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
+  originalImportTimeout = process.env.MOTIS_IMPORT_TIMEOUT_MS;
+  // Bound the liveness poll so a never-healthy probe doesn't retry for the
+  // 30-min default. Tests that need multiple poll iterations raise this.
+  process.env.MOTIS_IMPORT_TIMEOUT_MS = "1000";
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  if (originalImportTimeout === undefined) delete process.env.MOTIS_IMPORT_TIMEOUT_MS;
+  else process.env.MOTIS_IMPORT_TIMEOUT_MS = originalImportTimeout;
   if (tmp) {
     rmSync(tmp, { recursive: true, force: true });
     tmp = undefined;
@@ -84,7 +91,7 @@ describe("motis-health stage", () => {
     ]);
   });
 
-  it("fails fast on the first probe failure and does not call later probes", async () => {
+  it("errors with the last failure when staging never becomes healthy", async () => {
     const dataDir = makeStagingDir();
     const calls: string[] = [];
     globalThis.fetch = vi.fn(async (input: unknown) => {
@@ -95,9 +102,27 @@ describe("motis-health stage", () => {
 
     const result = await motisHealthRun(ctxFor(dataDir));
     expect(result.status).toBe("error");
-    expect(calls.length).toBe(1);
+    expect(calls.length).toBeGreaterThanOrEqual(1);
     expect(result.message).toMatch(/probe "health" failed: HTTP 503/);
   });
+
+  it("retries the liveness poll while staging is still importing (HTTP 400 → 200)", async () => {
+    // MOTIS's /api/v1/health returns 400 until the timetable finishes importing,
+    // then 200 — the poll must keep waiting, not bail on the first 400.
+    process.env.MOTIS_IMPORT_TIMEOUT_MS = "6000";
+    const dataDir = makeStagingDir();
+    let n = 0;
+    globalThis.fetch = vi.fn(async () => {
+      n += 1;
+      // First health probe: not ready yet. Everything after: ready + JSON.
+      if (n === 1) return new Response("not ready", { status: 400 });
+      return jsonResponse({ ok: true });
+    }) as unknown as typeof fetch;
+
+    const result = await motisHealthRun(ctxFor(dataDir));
+    expect(result.status).toBe("ok");
+    expect(n).toBeGreaterThanOrEqual(2); // retried past the initial 400
+  }, 12_000);
 
   it("fails when a probe responds with a non-JSON content-type", async () => {
     const dataDir = makeStagingDir();

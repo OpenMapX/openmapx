@@ -65,11 +65,15 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Poll `url` until it answers 200 (returns null) or `deadline` passes. Retries
- * only transient failures (server still starting); a terminal failure (the
- * server answered with an HTTP/content-type error) returns immediately. Each
- * attempt's timeout is clamped to the remaining budget so the whole loop stays
- * bounded by `deadline` rather than overshooting by a fixed probe timeout.
+ * Poll `url` until it answers 200 + JSON (returns null) or `deadline` passes.
+ *
+ * Unlike a single {@link probe}, this is a *liveness* poll, so it retries EVERY
+ * non-200 — a refused connection (server not bound yet) AND an HTTP/content-type
+ * error — until the server is ready. MOTIS's `/api/v1/health` in particular
+ * returns HTTP 400 while the timetable is still importing and only flips to 200
+ * once it can serve, so a poll that bailed on the first 400 would never see a
+ * healthy staging during a real (multi-minute) import. Each attempt's timeout is
+ * clamped to the remaining budget so the loop stays bounded by `deadline`.
  */
 export async function pollUntilHealthy(
   url: string,
@@ -84,8 +88,6 @@ export async function pollUntilHealthy(
     const remaining = deadline - Date.now();
     last = await probe(name, url, Math.min(probeTimeout, remaining));
     if (!last) return null;
-    // The server answered but the response was bad — terminal, don't retry.
-    if (!last.transient) return last;
     const sleep = Math.min(interval, deadline - Date.now());
     if (sleep <= 0) break;
     await delay(sleep);
