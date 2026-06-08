@@ -39,7 +39,7 @@
     { "source": "@infra:data/motis/staging", "target": "/motis-data", "readOnly": false }
   ],
   "exposure": {
-    "hostPorts": [{ "container": 8080, "host": 8082, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [{ "container": 8080, "host": 8083, "bindAddress": "127.0.0.1" }]
   },
   "ui": { "category": "transit" }
 }
