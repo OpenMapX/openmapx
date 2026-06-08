@@ -198,7 +198,7 @@ describe("renderServiceSnippet", () => {
   });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
 
-  it("renders @docker-socket bindMount as /var/run/docker.sock", () => {
+  it("renders @docker-socket bindMount as /var/run/docker.sock + adds the docker group", () => {
     const snippet = renderServiceSnippet(
       svc("traefik", {
         bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
@@ -206,6 +206,17 @@ describe("renderServiceSnippet", () => {
       {},
     );
     expect(snippet.volumes).toEqual(["/var/run/docker.sock:/var/run/docker.sock:ro"]);
+    // A socket-mounting container must join the socket's group (root:docker, 660)
+    // or it gets "permission denied"; the gid is host-specific via DOCKER_GID.
+    expect(snippet.group_add).toEqual([expect.stringContaining("${DOCKER_GID")]);
+  });
+
+  it("does not add group_add for services that don't mount the docker socket", () => {
+    const snippet = renderServiceSnippet(
+      svc("plain", { bindMounts: [{ source: "config/x.json", target: "/etc/x.json" }] }),
+      {},
+    );
+    expect(snippet.group_add).toBeUndefined();
   });
 
   it("renders a relative-path bindMount as compose-relative when composeOutDir provided", () => {

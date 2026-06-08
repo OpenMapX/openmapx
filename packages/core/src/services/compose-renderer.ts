@@ -280,6 +280,7 @@ export interface ComposeServiceSnippet {
   env_file?: string[];
   working_dir?: string;
   user?: string;
+  group_add?: string[];
   shm_size?: string;
   cap_add?: string[];
   cap_drop?: string[];
@@ -401,6 +402,17 @@ export function renderServiceSnippet(
     }
   }
   if (volumes.length) snippet.volumes = volumes;
+
+  // A non-root container that mounts the docker socket needs the socket's group
+  // to use it (it's root:docker, mode 660). The gid is host-specific, so it
+  // comes from DOCKER_GID in the env — required, because docker access is the
+  // whole point of mounting the socket and a wrong/absent gid just yields a
+  // "permission denied" at runtime that's painful to diagnose.
+  if ((m.bindMounts ?? []).some((bm) => bm.source === "@docker-socket")) {
+    snippet.group_add = [
+      "${DOCKER_GID:?DOCKER_GID must be set to the host docker socket group id — find it with: stat -c %g /var/run/docker.sock}",
+    ];
+  }
 
   if (m.exposure?.proxy?.enabled) {
     snippet.labels = renderTraefikLabels(m, ctx);
