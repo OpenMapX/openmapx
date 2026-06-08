@@ -4,6 +4,9 @@ import type { ServiceManifest } from "./types";
 
 const IMAGE_REGEX = /^[a-z0-9]([a-z0-9._\-/])*$/;
 const TAG_REGEX = /^[a-zA-Z0-9._-]+$/;
+// Docker's container-name grammar: `[a-zA-Z0-9][a-zA-Z0-9_.-]*` (single-char
+// names are legal, hence `*` not `+` after the leading char).
+const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const VOLUME_NAME_REGEX = /^openmapx-[a-z0-9-]+$/;
 const ABSOLUTE_PATH_REGEX = /^\/[^\s]+$/;
 const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
@@ -223,6 +226,10 @@ const dependsOnSchema = z.object({
 const containerSchema = z.object({
   image: z.string().regex(IMAGE_REGEX, "must be lowercase, no tag suffix (use 'tag' field)"),
   tag: z.string().regex(TAG_REGEX),
+  containerName: z
+    .string()
+    .regex(CONTAINER_NAME_REGEX, "must be a valid docker container name")
+    .optional(),
   expose: z.array(z.number().int().min(1).max(65535)).optional(),
   networkAliases: z
     .array(

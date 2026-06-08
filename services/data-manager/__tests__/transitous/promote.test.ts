@@ -164,8 +164,12 @@ describe("promote stage", () => {
     expect(existsSync(join(fx.currentDir, "tt.json"))).toBe(true);
     expect(existsSync(fx.previousDir)).toBe(true);
 
-    // docker restart was called against the primary container.
-    expect(runnerCalls).toEqual([{ command: "docker", args: ["restart", "motis"] }]);
+    // The primary is stopped before the swap, then restarted against the
+    // freshly-promoted data.
+    expect(runnerCalls).toEqual([
+      { command: "docker", args: ["stop", "motis"] },
+      { command: "docker", args: ["restart", "motis"] },
+    ]);
 
     const artifacts = result.artifacts as { rollback?: boolean; previousDir?: string };
     expect(artifacts.rollback).toBe(false);

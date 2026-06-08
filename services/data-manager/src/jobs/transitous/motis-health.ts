@@ -1,9 +1,12 @@
 import { existsSync, readdirSync } from "node:fs";
+import { healthUrl, mapInitialUrl, mapStopsUrl, planUrl } from "./motis-endpoints.js";
+import { pollUntilHealthy, probe } from "./motis-probe.js";
 import type { StageFn, StageResult } from "./types.js";
 
 const DEFAULT_STAGING_URL = "http://localhost:8082";
 const PROBE_TIMEOUT_MS = 5_000;
 const TOTAL_BUDGET_MS = 30_000;
+const HEALTH_POLL_INTERVAL_MS = 1_000;
 
 // Berlin Hauptbahnhof-ish (52.525, 13.369) and Munich Hauptbahnhof (48.140, 11.558)
 // — large German station references that the planet-scale Transitous import
@@ -31,57 +34,17 @@ function stagingUrl(): string {
   return process.env.MOTIS_STAGING_URL ?? DEFAULT_STAGING_URL;
 }
 
-interface ProbeFailure {
-  probe: string;
-  reason: string;
-}
-
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit & { timeoutMs: number },
-): Promise<Response> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), init.timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function runProbe(
-  name: string,
-  url: string,
-  init?: RequestInit,
-): Promise<ProbeFailure | null> {
-  try {
-    const res = await fetchWithTimeout(url, { ...init, timeoutMs: PROBE_TIMEOUT_MS });
-    if (!res.ok) {
-      return { probe: name, reason: `HTTP ${res.status}` };
-    }
-    // Validate the response is JSON so we catch HTML error pages from a reverse
-    // proxy that still returns 200.
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.toLowerCase().includes("json")) {
-      return { probe: name, reason: `unexpected content-type ${ct || "(none)"}` };
-    }
-    await res.json();
-    return null;
-  } catch (error) {
-    return { probe: name, reason: (error as Error).message };
-  }
-}
-
 /**
- * Three probes against the staging MOTIS instance (port 8082 by default).
- * Fails fast on the first probe error; budgets the whole sequence under
- * {@link TOTAL_BUDGET_MS} so a hung MOTIS doesn't stall the pipeline.
+ * Probes against the staging MOTIS instance (port 8082 by default). Polls the
+ * liveness endpoint until the server is up, then runs the functional probes;
+ * fails fast on the first error. The whole sequence is budgeted under
+ * {@link TOTAL_BUDGET_MS} (each probe's timeout is clamped to the remaining
+ * budget) so a hung MOTIS doesn't stall the pipeline.
  *
- *   1. `/api/v1/initial` — returns the bounded map view; smoke-tests that the
- *      server is up and the JSON pipe is intact.
- *   2. `/api/v1/stops` — small bbox query; confirms the timetable index loaded.
- *   3. `/api/v1/plan` — single-leg routing between two coordinates; covers the
- *      routing engine itself.
+ *   1. `/api/v1/health` — liveness gate, polled until the server binds.
+ *   2. `/api/v1/map/initial` — bounded map view; confirms the JSON pipe is intact.
+ *   3. `/api/v1/map/stops` — small bbox query; confirms the timetable index loaded.
+ *   4. `/api/v1/plan` — single-leg routing; covers the routing engine itself.
  *
  * The probe targets default to coordinates in Germany (the catalog's primary
  * coverage area). Operators outside that region override the defaults with
@@ -122,41 +85,49 @@ export const run: StageFn = async (ctx) => {
 
   const base = stagingUrl();
 
-  const probe = {
-    bboxMinLat: parseFloatEnv("MOTIS_HEALTH_BBOX_MIN_LAT", DEFAULT_PROBE.bboxMinLat),
-    bboxMinLng: parseFloatEnv("MOTIS_HEALTH_BBOX_MIN_LNG", DEFAULT_PROBE.bboxMinLng),
-    bboxMaxLat: parseFloatEnv("MOTIS_HEALTH_BBOX_MAX_LAT", DEFAULT_PROBE.bboxMaxLat),
-    bboxMaxLng: parseFloatEnv("MOTIS_HEALTH_BBOX_MAX_LNG", DEFAULT_PROBE.bboxMaxLng),
-    planFromLat: parseFloatEnv("MOTIS_HEALTH_PLAN_FROM_LAT", DEFAULT_PROBE.planFromLat),
-    planFromLng: parseFloatEnv("MOTIS_HEALTH_PLAN_FROM_LNG", DEFAULT_PROBE.planFromLng),
-    planToLat: parseFloatEnv("MOTIS_HEALTH_PLAN_TO_LAT", DEFAULT_PROBE.planToLat),
-    planToLng: parseFloatEnv("MOTIS_HEALTH_PLAN_TO_LNG", DEFAULT_PROBE.planToLng),
+  const bbox = {
+    minLat: parseFloatEnv("MOTIS_HEALTH_BBOX_MIN_LAT", DEFAULT_PROBE.bboxMinLat),
+    minLng: parseFloatEnv("MOTIS_HEALTH_BBOX_MIN_LNG", DEFAULT_PROBE.bboxMinLng),
+    maxLat: parseFloatEnv("MOTIS_HEALTH_BBOX_MAX_LAT", DEFAULT_PROBE.bboxMaxLat),
+    maxLng: parseFloatEnv("MOTIS_HEALTH_BBOX_MAX_LNG", DEFAULT_PROBE.bboxMaxLng),
+  };
+  const plan = {
+    fromLat: parseFloatEnv("MOTIS_HEALTH_PLAN_FROM_LAT", DEFAULT_PROBE.planFromLat),
+    fromLng: parseFloatEnv("MOTIS_HEALTH_PLAN_FROM_LNG", DEFAULT_PROBE.planFromLng),
+    toLat: parseFloatEnv("MOTIS_HEALTH_PLAN_TO_LAT", DEFAULT_PROBE.planToLat),
+    toLng: parseFloatEnv("MOTIS_HEALTH_PLAN_TO_LNG", DEFAULT_PROBE.planToLng),
   };
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
 
-  const initialUrl = `${base}/api/v1/initial`;
-  const stopsUrl =
-    `${base}/api/v1/stops` +
-    `?min=${probe.bboxMinLat},${probe.bboxMinLng}` +
-    `&max=${probe.bboxMaxLat},${probe.bboxMaxLng}`;
-  const planUrl =
-    `${base}/api/v1/plan` +
-    `?fromPlace=${probe.planFromLat},${probe.planFromLng}` +
-    `&toPlace=${probe.planToLat},${probe.planToLng}`;
+  // MOTIS's dedicated health endpoint is the fast liveness gate — poll it
+  // until the server is up (or the budget runs out), then run the functional
+  // probes that confirm the timetable index and routing engine answer queries.
+  const healthFailure = await pollUntilHealthy(healthUrl(base), deadline, {
+    intervalMs: HEALTH_POLL_INTERVAL_MS,
+    probeTimeoutMs: PROBE_TIMEOUT_MS,
+  });
+  if (healthFailure) {
+    return {
+      stage: "motis-health",
+      status: "error",
+      startedAt,
+      finishedAt: ctx.now(),
+      durationMs: Date.now() - start,
+      message: `motis-health probe "${healthFailure.probe}" failed: ${healthFailure.reason}`,
+      artifacts: { failedProbe: healthFailure.probe, url: healthUrl(base) },
+    } satisfies StageResult;
+  }
 
-  const probes: Array<{ name: string; url: string }> = [
-    // MOTIS's dedicated health endpoint is the fast liveness gate; the
-    // functional probes below additionally confirm the timetable index and
-    // routing engine actually answer queries.
-    { name: "health", url: `${base}/api/v1/health` },
-    { name: "initial", url: initialUrl },
-    { name: "stops", url: stopsUrl },
-    { name: "plan", url: planUrl },
+  const functionalProbes: Array<{ name: string; url: string }> = [
+    { name: "initial", url: mapInitialUrl(base) },
+    { name: "stops", url: mapStopsUrl(base, bbox) },
+    { name: "plan", url: planUrl(base, plan) },
   ];
 
-  for (const p of probes) {
-    if (Date.now() > deadline) {
+  for (const p of functionalProbes) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
       return {
         stage: "motis-health",
         status: "error",
@@ -166,7 +137,7 @@ export const run: StageFn = async (ctx) => {
         message: `motis-health exceeded total budget ${TOTAL_BUDGET_MS}ms before reaching probe "${p.name}"`,
       } satisfies StageResult;
     }
-    const failure = await runProbe(p.name, p.url);
+    const failure = await probe(p.name, p.url, Math.min(PROBE_TIMEOUT_MS, remaining));
     if (failure) {
       return {
         stage: "motis-health",
@@ -180,15 +151,16 @@ export const run: StageFn = async (ctx) => {
     }
   }
 
+  const probeNames = ["health", ...functionalProbes.map((p) => p.name)];
   return {
     stage: "motis-health",
     status: "ok",
     startedAt,
     finishedAt: ctx.now(),
     durationMs: Date.now() - start,
-    message: `motis-health: ${probes.length} probes passed against ${base}`,
+    message: `motis-health: ${probeNames.length} probes passed against ${base}`,
     artifacts: {
-      probes: probes.map((p) => p.name),
+      probes: probeNames,
       stagingUrl: base,
     },
   } satisfies StageResult;

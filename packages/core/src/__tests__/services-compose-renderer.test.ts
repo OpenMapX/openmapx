@@ -40,6 +40,19 @@ describe("renderServiceSnippet", () => {
     expect(snippet.deploy?.resources?.limits?.memory).toBe("512m");
   });
 
+  it("omits container_name by default and emits it when containerName is set", () => {
+    expect(renderServiceSnippet(svc("alpha"), {}).container_name).toBeUndefined();
+    const pinned = renderServiceSnippet(
+      svc("motis-staging", {
+        container: { image: "t/motis", tag: "2.10.2", containerName: "motis-staging" },
+      }),
+      {},
+    );
+    // Pinned name lets the data-manager reach the container by bare name over
+    // the docker CLI (`docker exec motis-staging`, `docker restart motis`).
+    expect(pinned.container_name).toBe("motis-staging");
+  });
+
   it("renders host port mapping when exposure.hostPorts is set", () => {
     const snippet = renderServiceSnippet(
       svc("alpha", {
@@ -498,6 +511,18 @@ describe("renderCompose", () => {
       bindMounts: [{ source: "@service:nonexistent:config/x.json", target: "/code/x.json" }],
     });
     expect(() => renderCompose([orphan], { domain: "example.com" })).toThrow(/not found/);
+  });
+
+  it("rejects two services that pin the same container_name", () => {
+    const a = svc("svc-a", {
+      container: { image: "t/a", tag: "1", containerName: "shared" },
+    });
+    const b = svc("svc-b", {
+      container: { image: "t/b", tag: "1", containerName: "shared" },
+    });
+    expect(() => renderCompose([a, b], { domain: "example.com" })).toThrow(
+      /[Dd]uplicate container_name "shared"/,
+    );
   });
 
   it("can resolve @service:<slug>:<path> against installed services outside the rendered subset", () => {

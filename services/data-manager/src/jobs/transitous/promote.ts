@@ -1,16 +1,22 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { IMPORT_MARKER_FILE } from "./internal.js";
+import { PRIMARY_CONTAINER } from "./motis-containers.js";
+import { healthUrl, mapInitialUrl, mapStopsUrl, planUrl } from "./motis-endpoints.js";
+import { DEFAULT_PROBE_TIMEOUT_MS, pollUntilHealthy, probe } from "./motis-probe.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
-const PRIMARY_CONTAINER = "motis";
 const PRIMARY_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
 const STAGING_URL = process.env.MOTIS_STAGING_URL ?? "http://localhost:8082";
 
-const PROBE_TIMEOUT_MS = 5_000;
+const PROBE_TIMEOUT_MS = DEFAULT_PROBE_TIMEOUT_MS;
 const SMOKE_BUDGET_MS = 30_000;
 const RESTART_BUDGET_MS = 5 * 60 * 1000;
 const RESTART_POLL_INTERVAL_MS = 5_000;
+
+// Smoke-probe targets — the same German station references motis-health uses.
+const SMOKE_BBOX = { minLat: 52.515, minLng: 13.359, maxLat: 52.535, maxLng: 13.379 };
+const SMOKE_PLAN = { fromLat: 52.525, fromLng: 13.369, toLat: 48.14, toLng: 11.558 };
 
 /**
  * Files MOTIS writes during a successful import. Names + locations come from
@@ -46,29 +52,6 @@ interface PromoteArtifacts {
   rollbackReason?: string;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    return await fetch(url, { signal: ctrl.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function probe(url: string, timeoutMs = PROBE_TIMEOUT_MS): Promise<string | null> {
-  try {
-    const res = await fetchWithTimeout(url, timeoutMs);
-    if (!res.ok) return `HTTP ${res.status}`;
-    const ct = res.headers.get("content-type") ?? "";
-    if (!ct.toLowerCase().includes("json")) return `unexpected content-type ${ct || "(none)"}`;
-    await res.json();
-    return null;
-  } catch (error) {
-    return (error as Error).message;
-  }
-}
-
 /**
  * Smoke probes against the staging MOTIS instance. Mirrors {@link motis-health}
  * but is owned by the promote stage so we can fail-fast right at the swap
@@ -76,19 +59,17 @@ async function probe(url: string, timeoutMs = PROBE_TIMEOUT_MS): Promise<string 
  * `null` when all probes pass.
  */
 async function runSmokeProbes(deadline: number): Promise<string | null> {
-  const stops = `${STAGING_URL}/api/v1/stops?min=52.515,13.359&max=52.535,13.379`;
-  const plan = `${STAGING_URL}/api/v1/plan?fromPlace=52.525,13.369&toPlace=48.14,11.558`;
   const probes: Array<{ name: string; url: string }> = [
-    { name: "health", url: `${STAGING_URL}/api/v1/health` },
-    { name: "initial", url: `${STAGING_URL}/api/v1/initial` },
-    { name: "stops", url: stops },
-    { name: "plan", url: plan },
+    { name: "health", url: healthUrl(STAGING_URL) },
+    { name: "initial", url: mapInitialUrl(STAGING_URL) },
+    { name: "stops", url: mapStopsUrl(STAGING_URL, SMOKE_BBOX) },
+    { name: "plan", url: planUrl(STAGING_URL, SMOKE_PLAN) },
   ];
   for (const p of probes) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) return `total smoke-test budget exceeded before probe "${p.name}"`;
-    const reason = await probe(p.url, Math.min(PROBE_TIMEOUT_MS, remaining));
-    if (reason) return `staging probe "${p.name}" failed: ${reason}`;
+    const fail = await probe(p.name, p.url, Math.min(PROBE_TIMEOUT_MS, remaining));
+    if (fail) return `staging probe "${p.name}" failed: ${fail.reason}`;
   }
   return null;
 }
@@ -123,21 +104,28 @@ function isImportShaped(dir: string): boolean {
 }
 
 async function waitForPrimaryHealthy(deadline: number): Promise<string | null> {
-  while (Date.now() < deadline) {
-    const remaining = deadline - Date.now();
-    const fail = await probe(
-      `${PRIMARY_URL}/api/v1/initial`,
-      Math.min(PROBE_TIMEOUT_MS, remaining),
-    );
-    if (!fail) return null;
-    const sleep = Math.min(RESTART_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now()));
-    if (sleep === 0) break;
-    await new Promise<void>((resolve) => {
-      const t = setTimeout(resolve, sleep);
-      if (typeof t.unref === "function") t.unref();
+  const fail = await pollUntilHealthy(mapInitialUrl(PRIMARY_URL), deadline, {
+    intervalMs: RESTART_POLL_INTERVAL_MS,
+  });
+  if (!fail) return null;
+  return `primary MOTIS at ${mapInitialUrl(PRIMARY_URL)} did not become healthy within ${RESTART_BUDGET_MS}ms (${fail.reason})`;
+}
+
+/**
+ * Stop the primary container before the rename swap so it never holds a
+ * bind-mounted directory that we're about to rename out from under it. Best
+ * effort: a not-running / not-yet-created primary (first-ever promotion) makes
+ * `docker stop` fail, which is fine — there's nothing to protect.
+ */
+async function stopPrimary(ctx: JobContext): Promise<void> {
+  try {
+    await ctx.runner("docker", ["stop", PRIMARY_CONTAINER], {
+      cwd: ctx.dataDir,
+      stdio: "pipe",
     });
+  } catch {
+    // Not running / doesn't exist — nothing to stop.
   }
-  return `primary MOTIS at ${PRIMARY_URL}/api/v1/initial did not return 200 within ${RESTART_BUDGET_MS}ms`;
 }
 
 async function restartPrimary(ctx: JobContext): Promise<string | null> {
@@ -191,11 +179,12 @@ function tryRollback(
  * Sequence:
  *
  *   1. Pre-flight: staging dir exists and looks import-shaped.
- *   2. Smoke probes against staging MOTIS (`/initial`, `/stops`, `/plan`).
- *   3. Rename `data/motis-data` → `data/motis-data.previous`, then
- *      `data/motis-staging-data` → `data/motis-data`. Recreate an empty
- *      staging dir so the next pipeline run has a clean target.
- *   4. `docker restart motis` and poll `/api/v1/initial` until it responds
+ *   2. Smoke probes against staging MOTIS (`/map/initial`, `/map/stops`, `/plan`).
+ *   3. `docker stop motis`, then rename `data/motis-data` →
+ *      `data/motis-data.previous` and `data/motis-staging-data` →
+ *      `data/motis-data` (so the rename never happens under a running mount).
+ *      Recreate an empty staging dir so the next pipeline run has a clean target.
+ *   4. `docker restart motis` and poll `/api/v1/map/initial` until it responds
  *      (5-minute budget).
  *
  * Rollback paths:
@@ -250,6 +239,12 @@ export const run: StageFn = async (ctx) => {
       rmSync(previousDir, { recursive: true, force: true });
     }
 
+    // Stop the primary before touching its data directory so the rename never
+    // happens under a running container holding the old mount (which, on some
+    // bind-mount backends, could leave it serving stale data after restart).
+    // The restart below starts it again against the freshly-promoted data.
+    await stopPrimary(ctx);
+
     // First rename: current → previous. If current doesn't exist (first ever
     // promotion) we skip this step and let the staging dir become the live
     // dir directly.
@@ -260,6 +255,9 @@ export const run: StageFn = async (ctx) => {
         firstRenameDone = true;
       }
     } catch (error) {
+      // We stopped the primary above; bring it back before returning so a
+      // rename failure doesn't leave it down on the (unchanged) old data.
+      await restartPrimary(ctx);
       return {
         stage: "promote",
         status: "error",
@@ -283,6 +281,8 @@ export const run: StageFn = async (ctx) => {
           // Swallow — the outer error is more useful.
         }
       }
+      // Restore the primary we stopped above on the (rolled-back) old data.
+      await restartPrimary(ctx);
       return {
         stage: "promote",
         status: "error",

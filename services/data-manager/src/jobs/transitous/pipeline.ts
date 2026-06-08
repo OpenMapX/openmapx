@@ -137,6 +137,7 @@ function aggregateFinalStatus(results: StageResult[]): StageStatus {
 
 export interface BuildJobContextOptions {
   dataDir: string;
+  composeFile?: string;
   store: StateStore;
   countries?: string[];
   repoRoot?: string;
@@ -161,6 +162,7 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     jobId: opts.jobId ?? randomUUID(),
     repoRoot: opts.repoRoot ?? "",
     dataDir: opts.dataDir,
+    composeFile: opts.composeFile,
     catalogDir,
     downloadsDir,
     outDir,

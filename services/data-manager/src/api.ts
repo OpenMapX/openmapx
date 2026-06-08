@@ -12,6 +12,7 @@ import {
   runTransitousPipeline,
   toDownloadGtfsResult,
 } from "./jobs/transitous/index.js";
+import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
@@ -118,6 +119,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         const ctx = buildJobContext({
           dataDir,
           store,
+          composeFile: process.env.OPENMAPX_COMPOSE_FILE,
           countries,
           repoRoot: process.env.OPENMAPX_ROOT_DIR,
         });
@@ -288,6 +290,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         const ctx = buildJobContext({
           dataDir,
           store,
+          composeFile: process.env.OPENMAPX_COMPOSE_FILE,
           countries: body.countries ?? [],
           repoRoot,
           jobId,
@@ -318,7 +321,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   // reloads the pipeline already performs.
   app.post("/transit/restart-motis", async (_req, reply) => {
     try {
-      await execa("docker", ["restart", "motis"], { stdio: "pipe", timeout: 60_000 });
+      await execa("docker", ["restart", PRIMARY_CONTAINER], { stdio: "pipe", timeout: 60_000 });
       return { ok: true, status: "restart-initiated" };
     } catch (err) {
       // The most common failure mode is "data-manager container has no

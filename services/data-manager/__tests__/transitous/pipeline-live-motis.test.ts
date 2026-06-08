@@ -47,13 +47,27 @@ const describeLive = LIVE ? describe : describe.skip;
 const MOTIS_IMAGE = "ghcr.io/motis-project/motis:latest";
 const STAGING_SERVICE = "motis-staging";
 const STAGING_PORT = 8082;
-const TOTAL_BUDGET_MS = 90_000;
+// The promote stage restarts the primary `motis` container (`docker restart
+// motis`) and polls it at MOTIS_URL (default localhost:8081) after the atomic
+// swap. The canary runs a primary alongside staging so that path is exercised
+// for real rather than failing on a missing container.
+const PRIMARY_SERVICE = "motis";
+const PRIMARY_PORT = 8081;
+// Generous wall-clock ceiling for the whole pipeline. It now performs TWO
+// MOTIS imports + boots on a cold-cache runner — the staging import
+// (motis-import) and the primary's re-import on promote's `docker restart motis`
+// — so a tight budget would flake on a correct-but-slow run. This is a sanity
+// cap against a pathological hang, not a perf SLA.
+const PIPELINE_BUDGET_MS = 4 * 60_000;
 // The pipeline invokes `docker compose up -d motis-staging` without an
 // explicit `-p`, so docker derives the project name from the cwd basename
 // (i.e. `ctx.dataDir`'s last segment). To keep teardown consistent we
 // reuse the same default-derived project name. `process.pid` is folded
-// into the dataDir name (see beforeAll) so concurrent test runs don't
-// collide.
+// into the dataDir name (see beforeAll) so the project name is unique.
+// Note: the compose service pins `container_name: motis-staging` (mirroring
+// the generated production compose so the stage's `docker exec motis-staging`
+// resolves), so this suite must not run concurrently with itself — the fixed
+// name would collide. CI serialises it via the workflow concurrency group.
 
 const ORDERED_STAGES: StageName[] = [
   "prepare",
@@ -87,20 +101,53 @@ async function dockerDaemonReachable(): Promise<boolean> {
   }
 }
 
-function writeStagingCompose(dataDir: string, stagingDataDir: string): string {
+/**
+ * One MOTIS compose service. Both staging and the primary are identical apart
+ * from name, published port, and the host data dir they mount.
+ *
+ * - `container_name` is pinned to match the generated production compose (the
+ *   motis and motis-staging service manifests set `containerName`). The pipeline
+ *   addresses these containers by bare name over the docker CLI — `docker exec
+ *   motis-staging …` (motis-import) and `docker restart motis` (promote) — which
+ *   only resolves with a fixed name; compose's default `<project>-<svc>-1` would
+ *   not.
+ * - The command mirrors the production manifests: `motis import` reads
+ *   ./config.yml and writes the preprocessed `./data` folder (cwd is working_dir
+ *   /motis-data); `motis server` then serves that folder. `server` takes no
+ *   `-c` — passing one is an "unrecognised option" error.
+ */
+function motisService(name: string, hostPort: number, hostDataDir: string): string[] {
+  return [
+    `  ${name}:`,
+    `    image: ${MOTIS_IMAGE}`,
+    `    container_name: ${name}`,
+    "    working_dir: /motis-data",
+    '    entrypoint: ["/bin/sh", "-c"]',
+    '    command: ["/motis import && /motis server"]',
+    "    ports:",
+    `      - "127.0.0.1:${hostPort}:8080"`,
+    "    volumes:",
+    `      - ${hostDataDir}:/motis-data`,
+    '    restart: "no"',
+  ];
+}
+
+/**
+ * Compose file with both the staging and primary MOTIS services. The primary
+ * (`motis`) backs the promote stage's `docker restart motis` + health poll on
+ * MOTIS_URL (default localhost:8081); staging (`motis-staging`) backs
+ * motis-import + motis-health on localhost:8082.
+ */
+function writeStagingCompose(
+  dataDir: string,
+  stagingDataDir: string,
+  motisDataDir: string,
+): string {
   const composeFile = join(dataDir, "docker-compose.yml");
   const yaml = [
     "services:",
-    `  ${STAGING_SERVICE}:`,
-    `    image: ${MOTIS_IMAGE}`,
-    "    working_dir: /motis-data",
-    '    entrypoint: ["/bin/sh", "-c"]',
-    '    command: ["/motis import -c /motis-data/config.yml && /motis server -c /motis-data/config.yml"]',
-    "    ports:",
-    `      - "127.0.0.1:${STAGING_PORT}:8080"`,
-    "    volumes:",
-    `      - ${stagingDataDir}:/motis-data`,
-    '    restart: "no"',
+    ...motisService(STAGING_SERVICE, STAGING_PORT, stagingDataDir),
+    ...motisService(PRIMARY_SERVICE, PRIMARY_PORT, motisDataDir),
     "",
   ].join("\n");
   writeFileSync(composeFile, yaml);
@@ -119,14 +166,22 @@ async function composeDown(composeFile: string, cwd: string): Promise<void> {
 }
 
 async function composeUp(composeFile: string, cwd: string): Promise<void> {
-  await execa("docker", ["compose", "-f", composeFile, "up", "-d", STAGING_SERVICE], {
-    cwd,
-    stdio: "pipe",
-  });
+  // `--force-recreate`: the staging container from the first spec's pipeline is
+  // still running with its original bind mount (which promote renamed away), so
+  // a plain `up -d` (unchanged spec) would reuse it and ignore the freshly
+  // repopulated data dir. Recreating it re-establishes the mount.
+  await execa(
+    "docker",
+    ["compose", "-f", composeFile, "up", "-d", "--force-recreate", STAGING_SERVICE],
+    {
+      cwd,
+      stdio: "pipe",
+    },
+  );
 }
 
 async function waitForStagingHealthy(deadlineMs: number): Promise<boolean> {
-  const url = `http://127.0.0.1:${STAGING_PORT}/api/v1/initial`;
+  const url = `http://127.0.0.1:${STAGING_PORT}/api/v1/map/initial`;
   while (Date.now() < deadlineMs) {
     try {
       const ctrl = new AbortController();
@@ -140,6 +195,25 @@ async function waitForStagingHealthy(deadlineMs: number): Promise<boolean> {
     await new Promise((r) => setTimeout(r, 1_000));
   }
   return false;
+}
+
+/**
+ * Build a diagnostic string for a failed staging stage. The stage result only
+ * carries the docker CLI error (e.g. a failed `docker exec`); the actual MOTIS
+ * import failure lives in the container's logs. We fold both into the assertion
+ * message so CI shows the root cause inline — the workflow's artifact upload
+ * can't help here (the tmp dir is torn down in `afterAll` before it runs).
+ */
+async function stagingFailureDiagnostics(label: string, message?: string): Promise<string> {
+  const lines = [`${label}${message ? `: ${message}` : ""}`];
+  try {
+    const logs = await execa("docker", ["logs", STAGING_SERVICE], { reject: false });
+    if (logs.stdout) lines.push(`--- docker logs ${STAGING_SERVICE} (stdout) ---`, logs.stdout);
+    if (logs.stderr) lines.push(`--- docker logs ${STAGING_SERVICE} (stderr) ---`, logs.stderr);
+  } catch (err) {
+    lines.push(`(could not fetch ${STAGING_SERVICE} logs: ${(err as Error).message})`);
+  }
+  return lines.join("\n");
 }
 
 describeLive("transitous pipeline end-to-end against motis-staging", () => {
@@ -224,10 +298,30 @@ describeLive("transitous pipeline end-to-end against motis-staging", () => {
       );
     }
 
-    composeFile = writeStagingCompose(dataDir, stagingDataDir);
-    // Make sure we own a clean container — a previous failed run could
-    // have left one behind.
+    // Empty primary data dir so the `motis` container has a host-owned mount
+    // target. The promote stage renames this dir during its atomic swap, so it
+    // must exist (and be ours) up front.
+    const motisDataDir = join(dataDir, "motis-data");
+    mkdirSync(motisDataDir, { recursive: true });
+
+    composeFile = writeStagingCompose(dataDir, stagingDataDir, motisDataDir);
+    // Make sure we own a clean slate. `compose down` only reaps containers in
+    // THIS run's (pid-derived) project; a crashed earlier run leaves pinned
+    // `motis`/`motis-staging` containers under a different project that would
+    // otherwise collide with our `up` ("container name already in use"). Force-
+    // remove them by name first — best effort, ignore "no such container".
+    await execa("docker", ["rm", "-f", PRIMARY_SERVICE, STAGING_SERVICE], {
+      stdio: "pipe",
+    }).catch(() => {});
     await composeDown(composeFile, dataDir);
+    // Bring the primary `motis` container into existence so the promote stage's
+    // `docker restart motis` has something to restart. With no config in
+    // motis-data yet it imports, fails, and exits — that's expected; promote's
+    // restart-after-swap revives it against the just-promoted data.
+    await execa("docker", ["compose", "-f", composeFile, "up", "-d", PRIMARY_SERVICE], {
+      cwd: dataDir,
+      stdio: "pipe",
+    });
   }, 60_000);
 
   afterAll(async () => {
@@ -310,10 +404,16 @@ describeLive("transitous pipeline end-to-end against motis-staging", () => {
       const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
       // Previously stubbed stages must now actually run. We assert "ok"
       // (not "skipped") so a regression to the empty-staging-dir
-      // short-circuit fails this spec.
-      expect(byStage["motis-import"]?.status, "motis-import").toBe("ok");
-      expect(byStage["motis-health"]?.status, "motis-health").toBe("ok");
-      expect(byStage.promote?.status, "promote").toBe("ok");
+      // short-circuit fails this spec. On failure we attach the container
+      // logs so the real MOTIS error (not just the stage's CLI error) shows
+      // up in the CI run.
+      for (const stage of ["motis-import", "motis-health"] as const) {
+        if (byStage[stage]?.status !== "ok") {
+          const diag = await stagingFailureDiagnostics(stage, byStage[stage]?.message);
+          expect(byStage[stage]?.status, diag).toBe("ok");
+        }
+      }
+      expect(byStage.promote?.status, byStage.promote?.message ?? "promote").toBe("ok");
 
       // Staging container responded to the smoke probe directly. The
       // promote stage has now renamed staging → motis-data, so we
@@ -325,11 +425,14 @@ describeLive("transitous pipeline end-to-end against motis-staging", () => {
       // cycle. Either empty or freshly populated is acceptable.
       expect(existsSync(stagingDataDir as string)).toBe(true);
 
-      // 90s budget — generous enough to absorb first-boot of the MOTIS
-      // container in a cold-cache CI runner.
-      expect(elapsed).toBeLessThan(TOTAL_BUDGET_MS);
+      // Sanity cap only — see PIPELINE_BUDGET_MS. The pipeline does two real
+      // MOTIS imports+boots (staging + primary-on-promote), so we don't assert
+      // a tight wall-clock; we just guard against a pathological hang and log
+      // the elapsed time for visibility.
+      console.error(`E9 pipeline elapsed: ${elapsed}ms`);
+      expect(elapsed).toBeLessThan(PIPELINE_BUDGET_MS);
     },
-    TOTAL_BUDGET_MS + 30_000,
+    PIPELINE_BUDGET_MS + 30_000,
   );
 
   it("staging container served at least one health probe directly", async (testCtx) => {
@@ -346,20 +449,39 @@ describeLive("transitous pipeline end-to-end against motis-staging", () => {
       testCtx.skip();
       return;
     }
-    // If staging dir was recreated empty by promote, repopulate from
-    // motis-data (which has the swapped content) before bringing the
-    // container back up.
     const dst = stagingDataDir;
     const src = join(dataDir as string, "motis-data");
-    if (existsSync(src) && readdirSync(dst).length === 0) {
+    // This spec depends on the pipeline spec above having completed a promote
+    // (which leaves the imported feeds at motis-data). If that didn't happen
+    // — the spec above failed mid-promote — there's nothing to serve. Skip
+    // with a clear reason rather than booting an empty container and reporting
+    // a misleading 45s health timeout that buries the real failure.
+    if (!existsSync(src)) {
+      console.warn(
+        `skipping direct-probe spec: ${src} is absent — the pipeline spec above did not complete a promote`,
+      );
+      testCtx.skip();
+      return;
+    }
+    // Repopulate staging with only the IMPORT INPUTS (config + GTFS zips), not
+    // the already-built `data/` dir or the import marker: the recreated
+    // container's `/motis import` entrypoint rebuilds `data/` from scratch, and
+    // importing on top of an existing `data/` is version-dependent.
+    if (readdirSync(dst).length === 0) {
       for (const name of readdirSync(src)) {
+        if (name === "data" || name.startsWith(".data-manager-import")) continue;
         cpSync(join(src, name), join(dst, name), { recursive: true });
       }
     }
     await composeUp(composeFile, dataDir as string);
     const healthy = await waitForStagingHealthy(Date.now() + 45_000);
-    expect(healthy, "staging container did not become healthy within 45s").toBe(true);
-    const res = await fetch(`http://127.0.0.1:${STAGING_PORT}/api/v1/initial`);
+    if (!healthy) {
+      // Surface the container's own logs so a failure shows the MOTIS error
+      // inline (afterAll tears the container down before any artifact upload).
+      const diag = await stagingFailureDiagnostics("direct staging probe");
+      expect(healthy, diag).toBe(true);
+    }
+    const res = await fetch(`http://127.0.0.1:${STAGING_PORT}/api/v1/map/initial`);
     expect(res.ok).toBe(true);
   }, 90_000);
 });

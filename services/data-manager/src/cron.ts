@@ -8,6 +8,7 @@ import {
   type RunPipelineResult,
   runTransitousPipeline,
 } from "./jobs/transitous/index.js";
+import { FEED_PROXY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import {
@@ -179,6 +180,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         const ctx = buildJobContext({
           dataDir: options.dataDir,
           store: options.store,
+          composeFile: process.env.OPENMAPX_COMPOSE_FILE,
           countries: options.countries,
           repoRoot: options.repoRoot,
           jobId: start.jobId,
@@ -242,7 +244,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const runStalenessCheck = options.runStalenessCheck ?? defaultStalenessCheck;
 
   const defaultReload = async (): Promise<void> => {
-    await execa("docker", ["exec", "motis-feed-proxy", "nginx", "-s", "reload"], {
+    await execa("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], {
       stdio: "pipe",
     });
   };

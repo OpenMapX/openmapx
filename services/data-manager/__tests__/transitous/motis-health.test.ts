@@ -73,8 +73,8 @@ describe("motis-health stage", () => {
     expect(result.status).toBe("ok");
     expect(calls.length).toBe(4);
     expect(calls[0]).toMatch(/\/api\/v1\/health$/);
-    expect(calls[1]).toMatch(/\/api\/v1\/initial$/);
-    expect(calls[2]).toMatch(/\/api\/v1\/stops\?/);
+    expect(calls[1]).toMatch(/\/api\/v1\/map\/initial$/);
+    expect(calls[2]).toMatch(/\/api\/v1\/map\/stops\?/);
     expect(calls[3]).toMatch(/\/api\/v1\/plan\?/);
     expect((result.artifacts as { probes?: string[] }).probes).toEqual([
       "health",

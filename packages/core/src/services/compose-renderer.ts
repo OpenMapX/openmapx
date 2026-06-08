@@ -262,6 +262,7 @@ function resolveBindSource(
 
 export interface ComposeServiceSnippet {
   image: string;
+  container_name?: string;
   expose?: string[];
   ports?: string[];
   command?: string[] | string;
@@ -295,6 +296,11 @@ export function renderServiceSnippet(
   const snippet: ComposeServiceSnippet = {
     image: `${c.image}:${c.tag}`,
   };
+
+  // Pin the container name when the manifest opts in — see ServiceContainer.
+  // containerName. Lets the data-manager address the container by bare name
+  // over the docker CLI instead of the compose-derived `<project>-<svc>-<n>`.
+  if (c.containerName) snippet.container_name = c.containerName;
 
   if (c.expose?.length) snippet.expose = c.expose.map((p) => String(p));
 
@@ -588,6 +594,22 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       consumesPaths,
       warnings,
     });
+  }
+
+  // Pinned container names must be unique across the rendered stack — docker
+  // rejects a duplicate `container_name` at `up` time, so fail closed here at
+  // render rather than letting it blow up on deploy.
+  const containerNameOwner = new Map<string, string>();
+  for (const [serviceId, snippet] of Object.entries(composeServices)) {
+    const name = snippet.container_name;
+    if (!name) continue;
+    const existing = containerNameOwner.get(name);
+    if (existing) {
+      throw new Error(
+        `Duplicate container_name "${name}" on services "${existing}" and "${serviceId}". Pinned container names must be unique across the stack.`,
+      );
+    }
+    containerNameOwner.set(name, serviceId);
   }
 
   const namedVolumes: Record<string, null> = {};

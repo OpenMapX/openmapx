@@ -27,6 +27,28 @@ describe("validateServiceManifest", () => {
     expect(result.errors.join(" ")).toMatch(/id/);
   });
 
+  it("accepts a containerName (including a single-char Docker name)", () => {
+    const multi = validateServiceManifest({
+      ...validMinimal,
+      container: { ...validMinimal.container, containerName: "motis-staging" },
+    });
+    expect(multi.valid).toBe(true);
+    const single = validateServiceManifest({
+      ...validMinimal,
+      container: { ...validMinimal.container, containerName: "m" },
+    });
+    expect(single.valid).toBe(true);
+  });
+
+  it("rejects a containerName with illegal characters", () => {
+    const result = validateServiceManifest({
+      ...validMinimal,
+      container: { ...validMinimal.container, containerName: "bad/name" },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/container/i);
+  });
+
   it("rejects image containing a colon (tag must be separate)", () => {
     const result = validateServiceManifest({
       ...validMinimal,

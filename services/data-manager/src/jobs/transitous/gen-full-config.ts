@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildFeedProxyConfig } from "@openmapx/motis-feed-proxy-config";
+import { FEED_PROXY_CONTAINER } from "./motis-containers.js";
 import type { JobContext, JobLogger, StageFn, StageResult } from "./types.js";
 
 /**
@@ -37,7 +38,6 @@ function applyIncrementalRtOverride(configPath: string, logger: JobLogger): bool
   }
 }
 
-const FEED_PROXY_CONTAINER = "motis-feed-proxy";
 const FEED_PROXY_CONF_REL = "motis-feed-proxy/conf/feed-proxy.conf";
 
 async function generateFeedProxyConfig(

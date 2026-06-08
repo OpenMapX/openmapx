@@ -9,6 +9,7 @@
   "container": {
     "image": "nginx",
     "tag": "1.27-alpine",
+    "containerName": "motis-feed-proxy",
     "expose": [80],
     "networkAliases": ["rt.openmapx.local"],
     "memory": "256m",

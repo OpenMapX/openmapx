@@ -91,6 +91,15 @@ export interface JobContext {
   repoRoot: string;
   /** Absolute path, typically `infra/docker/data`. */
   dataDir: string;
+  /**
+   * Path to the generated docker-compose file, as seen inside the data-manager
+   * container. When set, `motis-import`'s create fallback runs
+   * `docker compose -f <composeFile> up -d motis-staging` instead of relying on
+   * a compose file in the process cwd (the prod data-manager's cwd has none).
+   * Plumbed from `OPENMAPX_COMPOSE_FILE`; unset in tests/the canary, which keep
+   * the cwd-relative behavior.
+   */
+  composeFile?: string;
   /** `<dataDir>/.transitous-catalog` */
   catalogDir: string;
   /** `<dataDir>/.transitous-downloads` */
