@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 """Stub generate-motis-config.py for the Phase E9 live-MOTIS pipeline test.
 
-Writes a minimal MOTIS config.yml under `out/config.yml`, and additionally
-mirrors the just-fetched `out/*.gtfs.zip` into the staging data dir
-(`OPENMAPX_E9_STAGING_DIR`) along with the config file. The real upstream
-script renders a much larger Jinja-templated config; the live test only
-needs MOTIS to import the seeded feeds and answer probes on port 8080.
+Writes a minimal MOTIS config.yml under `out/config.yml` referencing the
+just-fetched `out/*.gtfs.zip`. The real upstream script renders a much larger
+Jinja-templated config; the live test only needs MOTIS to import the seeded
+feeds and answer probes on port 8080.
+
+The data-manager's `assemble-staging` stage is what copies config + feeds from
+`out/` into the staging container's mount — this stub only mirrors the real
+script's job of producing `out/config.yml` (it does NOT touch the staging dir).
 
 Recognises:
   --import-only   (no-op flag, accepted for parity)
   --feed-proxy    emits out/feed-proxy-vars.json so gen-full-config is happy.
-                  This pass runs after the staging container is already live,
-                  so it does NOT re-mirror feeds over the running volume.
 """
 from __future__ import annotations
 
-import os
 import re
-import shutil
 import sys
 from pathlib import Path
 
@@ -62,7 +61,8 @@ def assign_dataset_ids(feeds: list[str]) -> list[tuple[str, str]]:
 
 def main(argv: list[str]) -> int:
     flag_feed_proxy = "--feed-proxy" in argv[1:]
-    flag_import_only = "--import-only" in argv[1:]
+    # `--import-only` is accepted for parity with the real script but needs no
+    # special handling here.
     out_dir = Path("out")
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -85,25 +85,9 @@ def main(argv: list[str]) -> int:
     if flag_feed_proxy:
         (out_dir / "feed-proxy-vars.json").write_text("{}\n", encoding="utf-8")
 
-    # Mirror everything the staging container needs into the data-manager's
-    # configured staging dir. The path is supplied via env so the test can
-    # point it at its tmp dir. We always overwrite — every pipeline run
-    # rebuilds from scratch. Only the `--import-only` pass (gen-motis-config,
-    # which runs *before* motis-import) mirrors; the later gen-full-config
-    # invocations (`--feed-proxy` and the plain full-config render) run after
-    # the staging container is already importing/serving this volume, so
-    # re-copying the feeds then would churn files under a live MOTIS.
-    staging = os.environ.get("OPENMAPX_E9_STAGING_DIR")
-    if staging and flag_import_only:
-        staging_dir = Path(staging)
-        staging_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(cfg_path, staging_dir / "config.yml")
-        for zip_name in feeds:
-            shutil.copyfile(out_dir / zip_name, staging_dir / zip_name)
-        sys.stderr.write(
-            f"stub generate-motis-config.py: mirrored {len(feeds)} feed(s) + config -> {staging_dir}\n"
-        )
-
+    sys.stderr.write(
+        f"stub generate-motis-config.py: wrote out/config.yml referencing {len(feeds)} feed(s)\n"
+    )
     return 0
 
 

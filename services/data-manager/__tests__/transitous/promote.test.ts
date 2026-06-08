@@ -59,31 +59,29 @@ function setupFixture(opts: FixtureOptions): {
   previousDir: string;
 } {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-promote-"));
-  const stagingDir = join(tmp, "motis-staging-data");
-  const currentDir = join(tmp, "motis-data");
+  const stagingDir = join(tmp, "motis", "staging");
+  const currentDir = join(tmp, "motis", "live");
   if (opts.staging) {
-    mkdirSync(stagingDir, { recursive: true });
+    mkdirSync(join(stagingDir, "data"), { recursive: true });
     writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
-    writeFileSync(join(stagingDir, "tt.json"), "{}");
-    writeFileSync(join(stagingDir, "adr_extend.json"), "{}");
-    writeFileSync(join(stagingDir, "osr_footpath.json"), "{}");
+    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt");
     writeFileSync(
       join(stagingDir, IMPORT_MARKER_FILE),
       JSON.stringify({ finishedAt: "2026-05-01T00:00:00.000Z" }),
     );
   }
   if (opts.stagingWithoutMarker) {
-    mkdirSync(stagingDir, { recursive: true });
+    mkdirSync(join(stagingDir, "data"), { recursive: true });
     writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
-    writeFileSync(join(stagingDir, "tt.json"), "{}");
+    writeFileSync(join(stagingDir, "data", "tt.bin"), "tt");
   }
   if (opts.stagingJunk) {
     mkdirSync(stagingDir, { recursive: true });
     writeFileSync(join(stagingDir, "leftover.log"), "junk");
   }
   if (opts.current) {
-    mkdirSync(currentDir, { recursive: true });
-    writeFileSync(join(currentDir, "tt.json"), "{}-old");
+    mkdirSync(join(currentDir, "data"), { recursive: true });
+    writeFileSync(join(currentDir, "data", "tt.bin"), "tt-old");
   }
   return {
     dataDir: tmp,
@@ -161,7 +159,7 @@ describe("promote stage", () => {
     // sentinels, previous holds the old sentinel.
     expect(existsSync(fx.stagingDir)).toBe(true);
     expect(readdirSync(fx.stagingDir)).toEqual([]);
-    expect(existsSync(join(fx.currentDir, "tt.json"))).toBe(true);
+    expect(existsSync(join(fx.currentDir, "data", "tt.bin"))).toBe(true);
     expect(existsSync(fx.previousDir)).toBe(true);
 
     // The primary is stopped before the swap, then restarted against the
@@ -212,7 +210,7 @@ describe("promote stage", () => {
     });
     const result = await promoteRun(ctx);
     expect(result.status).toBe("ok");
-    expect(existsSync(join(fx.currentDir, "tt.json"))).toBe(true);
+    expect(existsSync(join(fx.currentDir, "data", "tt.bin"))).toBe(true);
     expect(existsSync(fx.previousDir)).toBe(false);
   });
 
@@ -242,6 +240,6 @@ describe("promote stage", () => {
     });
     const result = await promoteRun(ctx);
     expect(result.status).toBe("ok");
-    expect(existsSync(join(fx.currentDir, "tt.json"))).toBe(true);
+    expect(existsSync(join(fx.currentDir, "data", "tt.bin"))).toBe(true);
   });
 });

@@ -14,15 +14,18 @@ afterEach(() => {
   }
 });
 
+/** The dir the motis-staging container bind-mounts (plain bind, pipeline-owned). */
+function stagingDirOf(dataDir: string): string {
+  return join(dataDir, "motis", "staging");
+}
+
 function makeCtx(opts: {
   dataDir: string;
-  composeFile?: string;
   runner: (command: string, args: string[]) => Promise<void>;
 }) {
   return buildJobContext({
     dataDir: opts.dataDir,
     store: new StateStore(opts.dataDir),
-    composeFile: opts.composeFile,
     runner: async (command, args) => {
       await opts.runner(command, args);
     },
@@ -47,8 +50,7 @@ describe("motis-import stage", () => {
 
   it("skips when the staging config has not been generated", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-noconfig-"));
-    const stagingDir = join(tmp, "motis-staging-data");
-    mkdirSync(stagingDir, { recursive: true });
+    mkdirSync(stagingDirOf(tmp), { recursive: true });
 
     const ctx = makeCtx({
       dataDir: tmp,
@@ -63,7 +65,7 @@ describe("motis-import stage", () => {
 
   it("restarts the staging container to re-import and drops the marker", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-ok-"));
-    const stagingDir = join(tmp, "motis-staging-data");
+    const stagingDir = stagingDirOf(tmp);
     mkdirSync(stagingDir, { recursive: true });
     writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
 
@@ -76,8 +78,9 @@ describe("motis-import stage", () => {
     });
     const result = await motisImportRun(ctx);
     expect(result.status).toBe("ok");
-    // A single, clean import via the container entrypoint — no concurrent
-    // `docker exec /motis import`.
+    // A single, clean import via the container entrypoint — `docker restart`
+    // covers running / stopped / waiting-for-config, with no concurrent
+    // `docker exec /motis import` and no `docker compose` (no plugin in the image).
     expect(calls).toEqual([{ command: "docker", args: ["restart", "motis-staging"] }]);
     expect(result.artifacts).toMatchObject({ action: "restarted", container: "motis-staging" });
     // The promote stage relies on this marker as its strong "import done"
@@ -88,72 +91,20 @@ describe("motis-import stage", () => {
     expect(marker).toMatchObject({ container: "motis-staging", action: "restarted" });
   });
 
-  it("creates the container via compose up when it does not exist yet", async () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-create-"));
-    const stagingDir = join(tmp, "motis-staging-data");
-    mkdirSync(stagingDir, { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "x");
-
-    const calls: Array<{ command: string; args: string[] }> = [];
-    const ctx = makeCtx({
-      dataDir: tmp,
-      runner: async (command, args) => {
-        calls.push({ command, args });
-        if (args[0] === "restart") throw new Error("No such container: motis-staging");
-      },
-    });
-    const result = await motisImportRun(ctx);
-    expect(result.status).toBe("ok");
-    expect(calls).toEqual([
-      { command: "docker", args: ["restart", "motis-staging"] },
-      { command: "docker", args: ["compose", "up", "-d", "motis-staging"] },
-    ]);
-    expect(result.artifacts).toMatchObject({ action: "created" });
-  });
-
-  it("passes -f <composeFile> to the create fallback when configured", async () => {
-    tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-compose-f-"));
-    const stagingDir = join(tmp, "motis-staging-data");
-    mkdirSync(stagingDir, { recursive: true });
-    writeFileSync(join(stagingDir, "config.yml"), "x");
-
-    const composeFile = "/data/infra/docker/docker-compose.generated.yml";
-    const calls: Array<{ command: string; args: string[] }> = [];
-    const ctx = makeCtx({
-      dataDir: tmp,
-      composeFile,
-      runner: async (command, args) => {
-        calls.push({ command, args });
-        if (args[0] === "restart") throw new Error("No such container: motis-staging");
-      },
-    });
-    const result = await motisImportRun(ctx);
-    expect(result.status).toBe("ok");
-    // The fallback targets the explicit compose file rather than relying on the
-    // process cwd having one — the prod data-manager's cwd has no compose.
-    expect(calls).toEqual([
-      { command: "docker", args: ["restart", "motis-staging"] },
-      {
-        command: "docker",
-        args: ["compose", "-f", composeFile, "up", "-d", "motis-staging"],
-      },
-    ]);
-  });
-
-  it("returns error when neither restart nor compose up can start the container", async () => {
+  it("returns error when the staging container can't be (re)started", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-import-startfail-"));
-    const stagingDir = join(tmp, "motis-staging-data");
+    const stagingDir = stagingDirOf(tmp);
     mkdirSync(stagingDir, { recursive: true });
     writeFileSync(join(stagingDir, "config.yml"), "x");
 
     const ctx = makeCtx({
       dataDir: tmp,
       runner: async (command) => {
-        if (command === "docker") throw new Error("docker daemon unavailable");
+        if (command === "docker") throw new Error("No such container: motis-staging");
       },
     });
     const result = await motisImportRun(ctx);
     expect(result.status).toBe("error");
-    expect(result.message).toMatch(/failed to start motis-staging/);
+    expect(result.message).toMatch(/failed to \(re\)start motis-staging/);
   });
 });

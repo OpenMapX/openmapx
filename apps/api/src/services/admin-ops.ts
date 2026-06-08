@@ -317,7 +317,7 @@ const BUILT_PRODUCT_DIRS: Record<string, string> = {
   valhalla: "valhalla",
   osrm: "osrm-graph",
   otp: "otp-graph",
-  motis: "motis-data",
+  motis: "motis/live",
   motisFeedProxy: "motis-feed-proxy",
   tiles: "tile-mbtiles",
   pelias: "pelias",
@@ -506,7 +506,7 @@ function countGbfsFeeds(configText: string): number {
 }
 
 export function getMotisTransitousStatus(): MotisTransitousStatus {
-  const motisDir = join(DATA_DIR, "motis-data");
+  const motisDir = join(DATA_DIR, "motis", "live");
   const feedProxyDir = join(DATA_DIR, "motis-feed-proxy");
   const configPath = join(motisDir, "config.yml");
   const feedProxyConfigPath = join(feedProxyDir, "conf", "default.conf");

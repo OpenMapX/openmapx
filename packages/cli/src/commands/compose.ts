@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
@@ -81,6 +81,12 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   writeFileSync(paths.composeOutPath, result.composeYaml, "utf-8");
   const hardlinkPath = join(paths.infraDir, "docker-compose.generated.hardlinks.json");
   writeFileSync(hardlinkPath, JSON.stringify(result.hardlinkPlan, null, 2), "utf-8");
+  // Pre-create writable data bind-dirs as the invoking (data-owning) user so a
+  // later `docker compose up` doesn't auto-create them as root. Runs on every
+  // render path that precedes a compose up (start/recreate/up/build/link).
+  for (const dir of result.writableBindDirs ?? []) {
+    mkdirSync(dir, { recursive: true });
+  }
   return {
     servicesRendered: enabled.length,
     composePath: paths.composeOutPath,

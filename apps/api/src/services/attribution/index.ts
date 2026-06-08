@@ -280,7 +280,7 @@ export function defaultMotisLicenseFile(): string {
   const fromEnv = process.env.MOTIS_LICENSE_FILE;
   if (fromEnv) return fromEnv;
   const rootDir = process.env.OPENMAPX_ROOT_DIR ?? process.cwd();
-  return join(rootDir, "infra", "docker", "data", "motis-data", "license.json");
+  return join(rootDir, "infra", "docker", "data", "motis", "live", "license.json");
 }
 
 let singleton: AttributionIndex | null = null;

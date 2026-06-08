@@ -9,6 +9,7 @@ export type StageName =
   | "fetch"
   | "validate"
   | "gen-motis-config"
+  | "assemble-staging"
   | "motis-import"
   | "motis-health"
   | "gen-full-config"
@@ -91,24 +92,22 @@ export interface JobContext {
   repoRoot: string;
   /** Absolute path, typically `infra/docker/data`. */
   dataDir: string;
-  /**
-   * Path to the generated docker-compose file, as seen inside the data-manager
-   * container. When set, `motis-import`'s create fallback runs
-   * `docker compose -f <composeFile> up -d motis-staging` instead of relying on
-   * a compose file in the process cwd (the prod data-manager's cwd has none).
-   * Plumbed from `OPENMAPX_COMPOSE_FILE`; unset in tests/the canary, which keep
-   * the cwd-relative behavior.
-   */
-  composeFile?: string;
   /** `<dataDir>/.transitous-catalog` */
   catalogDir: string;
   /** `<dataDir>/.transitous-downloads` */
   downloadsDir: string;
-  /** `<dataDir>/gtfs` */
+  /** `<dataDir>/gtfs` — also the Transitous build output (`out/` symlinks here). */
   outDir: string;
-  /** `<dataDir>/motis-staging-data` */
+  /**
+   * `<dataDir>/motis/staging` — the dir the `motis-staging` container bind-mounts
+   * (plain bind, pipeline-owned). assemble-staging populates it from `outDir`;
+   * the container imports in place; promote renames it over {@link motisDataDir}.
+   */
   motisStagingDataDir: string;
-  /** `<dataDir>/motis-data` */
+  /**
+   * `<dataDir>/motis/live` — the dir the primary `motis` container bind-mounts
+   * (plain bind, pipeline-owned). promote's atomic-swap target.
+   */
   motisDataDir: string;
   /** `TRANSITOUS_COUNTRIES` filter, lowercased + deduplicated. */
   countries: string[];

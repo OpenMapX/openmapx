@@ -14,7 +14,9 @@
     "user": "${UID:-1000}:${GID:-1000}",
     "workingDir": "/motis-data",
     "entrypoint": ["/bin/sh", "-c"],
-    "command": ["/motis import && /motis server"],
+    "command": [
+      "until [ -f /motis-data/config.yml ]; do echo 'motis-staging: waiting for /motis-data/config.yml'; sleep 5; done; /motis import && /motis server"
+    ],
     "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
     "memory": "16g",
     "restart": "unless-stopped",
@@ -33,8 +35,9 @@
     }
   },
   "provides": ["transit-engine-staging"],
-  "produces": [{ "type": "motis-staging-data", "sourceDir": "data/motis-staging-data" }],
-  "consumes": [{ "type": "motis-staging-data", "mountAt": "/motis-data", "required": true }],
+  "bindMounts": [
+    { "source": "@infra:data/motis/staging", "target": "/motis-data", "readOnly": false }
+  ],
   "exposure": {
     "hostPorts": [{ "container": 8080, "host": 8082, "bindAddress": "127.0.0.1" }]
   },

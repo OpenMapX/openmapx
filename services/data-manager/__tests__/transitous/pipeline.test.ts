@@ -21,6 +21,7 @@ const ORDERED_STAGES: StageName[] = [
   "fetch",
   "validate",
   "gen-motis-config",
+  "assemble-staging",
   "motis-import",
   "motis-health",
   "gen-full-config",
@@ -30,7 +31,7 @@ const ORDERED_STAGES: StageName[] = [
 ];
 
 describe("runTransitousPipeline orchestrator", () => {
-  it("invokes all 11 stages in order against an in-memory persistence hook", async () => {
+  it("invokes all 12 stages in order against an in-memory persistence hook", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-pipeline-orchestrator-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -69,8 +70,10 @@ describe("runTransitousPipeline orchestrator", () => {
     expect(results.map((r) => r.stage)).toEqual(ORDERED_STAGES);
     expect(persisted.map((r) => r.stage)).toEqual(ORDERED_STAGES);
 
-    // Stub stages always come back skipped.
+    // Stub stages always come back skipped (no out/config.yml → assemble skips;
+    // no staging container → import/health/promote skip).
     const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
+    expect(byStage["assemble-staging"]?.status).toBe("skipped");
     expect(byStage["motis-import"]?.status).toBe("skipped");
     expect(byStage["motis-health"]?.status).toBe("skipped");
     expect(byStage.promote?.status).toBe("skipped");
@@ -119,7 +122,7 @@ describe("runTransitousPipeline orchestrator", () => {
 
   it("runs end-to-end on a seeded 3-feed catalog within a 60s wall-clock budget", async () => {
     // A seeded fake transitous-catalog with multiple feeds across two regions;
-    // the pipeline runs all 11 stages in order (stubs included) and finishes
+    // the pipeline runs all 12 stages in order (stubs included) and finishes
     // under 60s.
     //
     // A "real MOTIS container in CI" variant (where motis-import / motis-health

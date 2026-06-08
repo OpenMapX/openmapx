@@ -119,7 +119,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         const ctx = buildJobContext({
           dataDir,
           store,
-          composeFile: process.env.OPENMAPX_COMPOSE_FILE,
           countries,
           repoRoot: process.env.OPENMAPX_ROOT_DIR,
         });
@@ -290,7 +289,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         const ctx = buildJobContext({
           dataDir,
           store,
-          composeFile: process.env.OPENMAPX_COMPOSE_FILE,
           countries: body.countries ?? [],
           repoRoot,
           jobId,

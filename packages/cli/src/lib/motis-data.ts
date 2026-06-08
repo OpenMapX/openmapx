@@ -17,7 +17,10 @@ import { readFeedProxyVars, renderFeedProxyNginxConfig } from "./motis-feed-prox
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
 
-export const MOTIS_DATA_DIR = "motis-data";
+// The primary `motis` container bind-mounts data/motis/live (plain bind,
+// pipeline-owned). `services build motis` seeds it directly; the data-manager's
+// staging→promote pipeline refreshes it via an atomic swap from data/motis/staging.
+export const MOTIS_DATA_DIR = "motis/live";
 export const MOTIS_FEED_PROXY_DIR = "motis-feed-proxy";
 export const MOTIS_FEED_PROXY_CONF_SUBDIR = "conf";
 export const MOTIS_CONFIG_FILENAME = "config.yml";

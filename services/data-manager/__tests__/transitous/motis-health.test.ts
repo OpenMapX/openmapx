@@ -23,10 +23,10 @@ afterEach(() => {
 
 function makeStagingDir(): string {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-health-"));
-  const stagingDir = join(tmp, "motis-staging-data");
+  const stagingDir = join(tmp, "motis", "staging");
   mkdirSync(stagingDir, { recursive: true });
   // Drop a single file so the readyness gate doesn't short-circuit.
-  writeFileSync(join(stagingDir, "tt.json"), "{}");
+  writeFileSync(join(stagingDir, "config.yml"), "server:\n  port: 8080\n");
   return tmp;
 }
 
@@ -55,7 +55,7 @@ describe("motis-health stage", () => {
 
   it("skips when the staging data dir is empty", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-motis-health-empty-"));
-    mkdirSync(join(tmp, "motis-staging-data"));
+    mkdirSync(join(tmp, "motis", "staging"), { recursive: true });
     const result = await motisHealthRun(ctxFor(tmp));
     expect(result.status).toBe("skipped");
   });

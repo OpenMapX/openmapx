@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { StateStore } from "../../state.js";
 import type { DownloadGtfsResult, FeedDownloadFailure } from "../download-gtfs.js";
+import * as assembleStagingStage from "./assemble-staging.js";
 import * as fetchStage from "./fetch.js";
 import * as filterStage from "./filter.js";
 import * as gcStage from "./gc.js";
@@ -37,6 +38,7 @@ const STAGES: ReadonlyArray<{ name: StageName; run: StageFn; hardStop?: boolean 
   { name: "fetch", run: fetchStage.run },
   { name: "validate", run: validateStage.run },
   { name: "gen-motis-config", run: genMotisConfigStage.run },
+  { name: "assemble-staging", run: assembleStagingStage.run },
   { name: "motis-import", run: motisImportStage.run },
   { name: "motis-health", run: motisHealthStage.run },
   { name: "gen-full-config", run: genFullConfigStage.run },
@@ -137,7 +139,6 @@ function aggregateFinalStatus(results: StageResult[]): StageStatus {
 
 export interface BuildJobContextOptions {
   dataDir: string;
-  composeFile?: string;
   store: StateStore;
   countries?: string[];
   repoRoot?: string;
@@ -162,12 +163,11 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     jobId: opts.jobId ?? randomUUID(),
     repoRoot: opts.repoRoot ?? "",
     dataDir: opts.dataDir,
-    composeFile: opts.composeFile,
     catalogDir,
     downloadsDir,
     outDir,
-    motisStagingDataDir: join(opts.dataDir, "motis-staging-data"),
-    motisDataDir: join(opts.dataDir, "motis-data"),
+    motisStagingDataDir: join(opts.dataDir, "motis", "staging"),
+    motisDataDir: join(opts.dataDir, "motis", "live"),
     countries: normaliseCountries(opts.countries ?? []),
     logger,
     abortSignal: opts.abortSignal ?? new AbortController().signal,

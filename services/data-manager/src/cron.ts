@@ -180,7 +180,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         const ctx = buildJobContext({
           dataDir: options.dataDir,
           store: options.store,
-          composeFile: process.env.OPENMAPX_COMPOSE_FILE,
           countries: options.countries,
           repoRoot: options.repoRoot,
           jobId: start.jobId,

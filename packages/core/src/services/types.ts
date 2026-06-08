@@ -365,4 +365,12 @@ export interface RenderResult {
    * bind-mount's host source is missing and the mount is therefore skipped.
    */
   warnings?: string[];
+  /**
+   * Absolute host paths of writable `@infra:data/...` bind-mount sources. The
+   * deploy step pre-creates these (owned by the invoking, data-owning user)
+   * before `docker compose up` so docker doesn't auto-create them as root —
+   * which would block the non-root container (and the data-manager pipeline)
+   * from writing into its own data dir.
+   */
+  writableBindDirs?: string[];
 }

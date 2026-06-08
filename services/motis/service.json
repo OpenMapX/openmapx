@@ -14,7 +14,9 @@
     "user": "${UID:-1000}:${GID:-1000}",
     "workingDir": "/motis-data",
     "entrypoint": ["/bin/sh", "-c"],
-    "command": ["/motis import && /motis server"],
+    "command": [
+      "until [ -f /motis-data/config.yml ]; do echo 'motis: waiting for /motis-data/config.yml'; sleep 5; done; /motis import && /motis server"
+    ],
     "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
     "memory": "16g",
     "restart": "unless-stopped",
@@ -34,11 +36,10 @@
   },
   "buildCommand": "openmapx services build motis",
   "provides": ["transit-engine", "routing-engine"],
-  "produces": [
-    { "type": "motis-data", "sourceDir": "data/motis-data" },
-    { "type": "motis-feed-proxy-config", "sourceDir": "data/motis-feed-proxy/conf" }
+  "produces": [{ "type": "motis-feed-proxy-config", "sourceDir": "data/motis-feed-proxy/conf" }],
+  "bindMounts": [
+    { "source": "@infra:data/motis/live", "target": "/motis-data", "readOnly": false }
   ],
-  "consumes": [{ "type": "motis-data", "mountAt": "/motis-data", "required": true }],
   "exposure": {
     "hostPorts": [{ "container": 8080, "host": 8081, "bindAddress": "127.0.0.1" }]
   },

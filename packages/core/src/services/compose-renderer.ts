@@ -161,6 +161,15 @@ export interface RenderContext {
    * still emitted on the `RenderResult.warnings` field.
    */
   warnings?: string[];
+  /**
+   * Per-render sink for writable `@infra:data/...` bind-mount source dirs (as
+   * absolute host paths). The deploy step pre-creates these as the invoking
+   * (data-owning) user before `docker compose up`, so docker doesn't auto-create
+   * them as root — which would leave a non-root container (and the data-manager
+   * pipeline) unable to write into its own data dir. Surfaced on
+   * `RenderResult.writableBindDirs` when omitted.
+   */
+  bindDirSink?: string[];
 }
 
 // Maps `@`-prefixed special bind sources (literals only) to concrete host
@@ -379,6 +388,17 @@ export function renderServiceSnippet(
     // readOnly defaults to true for bind mounts (config files, docker socket)
     const readOnly = bm.readOnly !== false;
     volumes.push(`${resolved.src}:${bm.target}${readOnly ? ":ro" : ""}`);
+    // A writable `@infra:data/...` source is a data dir the container (and the
+    // data-manager pipeline) writes into. Record it so the deploy step can
+    // pre-create it owned by the data UID before compose up; otherwise docker
+    // auto-creates it as root and the non-root container can't write.
+    if (
+      !readOnly &&
+      resolved.absoluteHostPath &&
+      bm.source.startsWith(`${INFRA_BIND_PREFIX}data/`)
+    ) {
+      ctx.bindDirSink?.push(resolved.absoluteHostPath);
+    }
   }
   if (volumes.length) snippet.volumes = volumes;
 
@@ -579,6 +599,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
   // surfaces every skipped optional bind-mount in one pass. Callers can also
   // pre-allocate `ctx.warnings` to capture into their own array.
   const warnings: string[] = ctx.warnings ?? [];
+  const bindDirSink: string[] = ctx.bindDirSink ?? [];
 
   const composeServices: Record<string, ComposeServiceSnippet> = {};
   for (const s of sorted) {
@@ -593,6 +614,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       allServices: ctx.allServices ?? services,
       consumesPaths,
       warnings,
+      bindDirSink,
     });
   }
 
@@ -640,9 +662,12 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
 
   const composeYaml = yamlDump(composeDoc, { lineWidth: 120, noRefs: true });
 
+  const writableBindDirs = [...new Set(bindDirSink)];
+
   return {
     composeYaml,
     hardlinkPlan,
     ...(warnings.length ? { warnings } : {}),
+    ...(writableBindDirs.length ? { writableBindDirs } : {}),
   };
 }

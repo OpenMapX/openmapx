@@ -130,7 +130,7 @@ describe.skipIf(!manifestsPresent)(
       expect(result.composeYaml).not.toContain("./data/otp/gtfs");
     });
 
-    it("renders MOTIS against a prepared motis-data product, not raw OSM or GTFS mounts", async () => {
+    it("renders MOTIS as a pipeline-owned writable bind-mount, not a hardlinked product", async () => {
       const registry = new ServiceRegistry({ rootDir: repoRoot });
       await registry.load();
 
@@ -140,17 +140,22 @@ describe.skipIf(!manifestsPresent)(
       const result = renderCompose(services, {
         domain: "example.com",
         allServices: registry.list(),
+        composeOutDir: "/repo/infra/docker",
       });
-      const motisPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "motis");
 
-      expect(motisPlanEntry).toEqual(
-        expect.objectContaining({
-          source: "data/motis-data",
-          target: "data/motis/motis-data",
-          dataType: "motis-data",
-        }),
-      );
-      expect(result.composeYaml).toContain("./data/motis/motis-data:/motis-data");
+      // The MOTIS dataset is owned + atomically swapped by the data-manager
+      // pipeline, so it's a plain writable bind-mount with NO producer/hardlink
+      // indirection (the hardlink sentinel/prune model can't carry the
+      // container-built import output the swap depends on).
+      const motisPlanEntry = result.hardlinkPlan.find((entry) => entry.consumerService === "motis");
+      expect(motisPlanEntry).toBeUndefined();
+
+      // Writable (no `:ro`) — MOTIS imports in place + writes its compiled
+      // timetable into the mounted dir.
+      expect(result.composeYaml).toContain("./data/motis/live:/motis-data");
+      expect(result.composeYaml).not.toContain("./data/motis/live:/motis-data:ro");
+      // The deploy step pre-creates this writable data dir as the data-owning user.
+      expect(result.writableBindDirs?.some((d) => d.endsWith("/data/motis/live"))).toBe(true);
       expect(result.composeYaml).not.toContain("./data/motis/osm-pbf");
       expect(result.composeYaml).not.toContain("./data/motis/gtfs");
     });

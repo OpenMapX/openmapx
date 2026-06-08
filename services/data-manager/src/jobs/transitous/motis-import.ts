@@ -7,14 +7,14 @@ import type { StageFn, StageResult } from "./types.js";
 /**
  * Trigger a fresh MOTIS import of the just-generated staging config.
  *
- * The staging container's command is `/motis import && /motis server` (see the
- * motis-staging manifest), so the import is owned by the container's own
- * lifecycle: a `docker restart` re-runs it against the freshly-rendered
- * `config.yml` on the staging volume, then serves. We deliberately do NOT also
- * `docker exec /motis import` — that would race the entrypoint's import,
- * writing the same `data/` directory from two processes at once. If the
- * container doesn't exist yet (first run / fresh stack), `docker compose up -d`
- * creates and starts it; its entrypoint then performs the single import.
+ * The staging container's command waits for `config.yml` then runs
+ * `/motis import && /motis server` (see the motis-staging manifest), so the
+ * import is owned by the container's own lifecycle: a `docker restart` re-runs it
+ * against the freshly-assembled staging dir, then serves. We deliberately do NOT
+ * also `docker exec /motis import` — that would race the entrypoint's import,
+ * writing the same `data/` directory from two processes at once. The container is
+ * brought up by the deploy step (it's in the rendered stack), so `docker restart`
+ * also covers the stopped / waiting-for-config cases without needing to create it.
  *
  * Import *completion* is verified by the downstream motis-health stage (which
  * polls the staging server until it serves), so this stage returns as soon as
@@ -57,45 +57,37 @@ export const run: StageFn = async (ctx) => {
       } satisfies StageResult;
     }
 
-    // Re-run the container's import+serve entrypoint against the new config.
-    // `docker restart` handles the common case (container already exists, from
-    // a previous cycle or a prior `up`); if it has never been created, fall
-    // back to `docker compose up -d` which creates and starts it. Either way a
-    // single import runs — never two concurrently.
-    let action: "restarted" | "created";
+    // Re-run the staging container's import+serve entrypoint against the freshly
+    // assembled config. `docker restart` covers every state the container can be
+    // in: running (re-import the new data), stopped (start it), or blocked in its
+    // wait-for-config loop (the restart picks up the now-present config.yml). The
+    // import itself is owned by the container entrypoint; completion is verified
+    // downstream by motis-health, so we return as soon as the restart is issued.
+    //
+    // Creating the container is NOT our job: motis-staging is part of the
+    // rendered stack (plain bind-mount, pinned container name), brought up by the
+    // deploy step. A missing container is an operator/selection error we surface
+    // rather than paper over with `docker compose up` — the data-manager image
+    // ships only a static docker CLI (no compose plugin), so that path can't run
+    // here anyway.
     try {
       await ctx.runner("docker", ["restart", STAGING_CONTAINER_NAME], {
         cwd: ctx.dataDir,
         stdio: "pipe",
       });
-      action = "restarted";
-    } catch {
-      try {
-        // Prefer an explicit `-f <composeFile>` so the create path doesn't
-        // depend on a compose file in the process cwd (the prod data-manager's
-        // cwd has none). Falls back to cwd-relative resolution when no
-        // composeFile is configured (tests / the self-contained canary).
-        const composeArgs = ctx.composeFile
-          ? ["compose", "-f", ctx.composeFile, "up", "-d", STAGING_CONTAINER_NAME]
-          : ["compose", "up", "-d", STAGING_CONTAINER_NAME];
-        await ctx.runner("docker", composeArgs, {
-          cwd: ctx.dataDir,
-          stdio: "pipe",
-        });
-        action = "created";
-      } catch (error) {
-        const err = error as Error;
-        return {
-          stage: "motis-import",
-          status: "error",
-          startedAt,
-          finishedAt: ctx.now(),
-          durationMs: Date.now() - start,
-          message: `failed to start ${STAGING_CONTAINER_NAME}: ${err.message}`,
-          error: { message: err.message, stack: err.stack },
-        } satisfies StageResult;
-      }
+    } catch (error) {
+      const err = error as Error;
+      return {
+        stage: "motis-import",
+        status: "error",
+        startedAt,
+        finishedAt: ctx.now(),
+        durationMs: Date.now() - start,
+        message: `failed to (re)start ${STAGING_CONTAINER_NAME} (is it in the service selection and is the stack up?): ${err.message}`,
+        error: { message: err.message, stack: err.stack },
+      } satisfies StageResult;
     }
+    const action = "restarted" as const;
 
     const durationMs = Date.now() - start;
     const finishedAt = ctx.now();

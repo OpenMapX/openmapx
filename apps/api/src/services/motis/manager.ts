@@ -10,7 +10,7 @@ import { serviceUrl } from "../service-registry.js";
 
 const DEFAULT_MOTIS_URL = "http://localhost:8081";
 const MOTIS_DATA_DIR =
-  process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis-data");
+  process.env.MOTIS_DATA_DIR ?? join(process.cwd(), "../../infra/docker/data/motis/live");
 const STATE_FILE = "openmapx-feeds.json";
 
 function getMotisUrl(): string {

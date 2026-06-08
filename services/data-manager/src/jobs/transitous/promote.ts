@@ -19,22 +19,14 @@ const SMOKE_BBOX = { minLat: 52.515, minLng: 13.359, maxLat: 52.535, maxLng: 13.
 const SMOKE_PLAN = { fromLat: 52.525, fromLng: 13.369, toLat: 48.14, toLng: 11.558 };
 
 /**
- * Files MOTIS writes during a successful import. Names + locations come from
- * the upstream Transitous CI pipeline (`out/data/meta/*.json` after
- * `motis import`). We check both layouts — meta-nested AND flat — because
- * the staging volume layout depends on which MOTIS version + config the
- * operator runs. Used only as a fallback when the data-manager-written
- * {@link IMPORT_MARKER_FILE} is absent (e.g. an operator hand-populated
- * staging from an out-of-band MOTIS run).
+ * Artifacts MOTIS writes into the working dir's `data/` subdir during a
+ * successful import (verified against a live MOTIS 2.10.2 dataset: `data/tt.bin`
+ * is the compiled timetable, `data/meta` the import metadata, `data/osr`/`data/adr`
+ * the street-routing + address indexes). Used only as a fallback when the
+ * data-manager-written {@link IMPORT_MARKER_FILE} is absent (e.g. an operator
+ * hand-populated staging from an out-of-band MOTIS run).
  */
-const STAGING_SENTINEL_FILES = [
-  "tt.json",
-  "meta/tt.json",
-  "adr_extend.json",
-  "meta/adr_extend.json",
-  "osr_footpath.json",
-  "meta/osr_footpath.json",
-];
+const STAGING_SENTINEL_FILES = ["data/tt.bin", "data/meta", "data/osr", "data/adr"];
 
 /**
  * `config.yml` is written by the gen-motis-config stage and is the one
@@ -142,14 +134,14 @@ async function restartPrimary(ctx: JobContext): Promise<string | null> {
 
 /**
  * Try to revert a completed rename. The pre-swap state was:
- *   current = data/motis-data         (live, just-replaced by staging)
- *   previous = data/motis-data.previous (the old live data)
- *   staging = data/motis-staging-data  (gone — became current)
+ *   current = data/motis/live           (live, just-replaced by staging)
+ *   previous = data/motis/live.previous (the old live data)
+ *   staging = data/motis/staging        (gone — became current)
  *
  * Best-effort: rename current → staging, previous → current. On any error
  * we leave the filesystem as-is and surface a descriptive reason. The
- * operator can then manually rescue via `mv data/motis-data.previous-broken
- * data/motis-data`.
+ * operator can then manually rescue via `mv data/motis/live.previous-broken
+ * data/motis/live`.
  */
 function tryRollback(
   currentDir: string,
@@ -180,9 +172,9 @@ function tryRollback(
  *
  *   1. Pre-flight: staging dir exists and looks import-shaped.
  *   2. Smoke probes against staging MOTIS (`/map/initial`, `/map/stops`, `/plan`).
- *   3. `docker stop motis`, then rename `data/motis-data` →
- *      `data/motis-data.previous` and `data/motis-staging-data` →
- *      `data/motis-data` (so the rename never happens under a running mount).
+ *   3. `docker stop motis`, then rename `data/motis/live` →
+ *      `data/motis/live.previous` and `data/motis/staging` →
+ *      `data/motis/live` (so the rename never happens under a running mount).
  *      Recreate an empty staging dir so the next pipeline run has a clean target.
  *   4. `docker restart motis` and poll `/api/v1/map/initial` until it responds
  *      (5-minute budget).
@@ -191,7 +183,7 @@ function tryRollback(
  *   - Smoke probes fail → no rename happens; return error.
  *   - First rename succeeds but the second fails → restore the first.
  *   - Restart fails or primary never becomes healthy → revert renames,
- *     restart again. If THAT fails, leave a `data/motis-data.previous-broken`
+ *     restart again. If THAT fails, leave a `data/motis/live.previous-broken`
  *     directory and return error with operator instructions.
  */
 export const run: StageFn = async (ctx) => {
