@@ -24,6 +24,8 @@
       "APP_API_BASE_URL": "${APP_API_BASE_URL:-http://app-api:3001}",
       "MOTIS_URL": "${MOTIS_URL:-http://motis:8080}",
       "MOTIS_STAGING_URL": "${MOTIS_STAGING_URL:-http://motis-staging:8080}",
+      "OPENMAPX_REGION": "${OPENMAPX_REGION:-}",
+      "MOTIS_REGION": "${MOTIS_REGION:-}",
       "POI_INGEST_BOOTSTRAP": "${POI_INGEST_BOOTSTRAP:-true}",
       "UTMC_USERNAME": "${UTMC_USERNAME:-}",
       "UTMC_PASSWORD": "${UTMC_PASSWORD:-}",

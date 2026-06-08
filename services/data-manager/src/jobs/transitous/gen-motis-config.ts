@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { osmPbfName } from "../download-osm.js";
 import type { JobLogger, StageFn, StageResult } from "./types.js";
 
 /**
@@ -155,6 +156,50 @@ function applyOsrFootpathOverride(configPath: string, logger: JobLogger): boolea
 }
 
 /**
+ * Point the generated config's `osm:` line at the OSM extract for the
+ * deployment's build region, so MOTIS imports the same area as the rest of the
+ * stack (osrm/otp/overpass/...). The region resolves from `MOTIS_REGION` then
+ * `OPENMAPX_REGION` — the same precedence the CLI's `resolveBuildRegion("motis")`
+ * uses — and maps to a filename via {@link osmPbfName} (e.g. `europe/germany` →
+ * `europe-germany.osm.pbf`). Upstream Transitous templates `planet-latest.osm.pbf`
+ * because it builds a global instance; a regional deployment overrides it here.
+ *
+ * No region configured, or the generated config has no `osm:` line (transit-only,
+ * `street_routing: false`) → leave the upstream default untouched.
+ *
+ * Returns `true` iff the file was modified.
+ */
+function applyOsmRegionOverride(configPath: string, logger: JobLogger): boolean {
+  const region = (process.env.MOTIS_REGION ?? process.env.OPENMAPX_REGION)?.trim();
+  if (!region) return false;
+  if (!existsSync(configPath)) return false;
+  let text: string;
+  try {
+    text = readFileSync(configPath, "utf-8");
+  } catch (error) {
+    logger.warn(
+      `gen-motis-config: could not read ${configPath} to apply osm region override: ${(error as Error).message}`,
+    );
+    return false;
+  }
+  const re = /^(\s*osm:\s*)(\S+)\s*$/m;
+  const match = text.match(re);
+  if (!match) return false; // no osm key (transit-only config) — nothing to point
+  const desired = osmPbfName(region);
+  if (match[2] === desired) return false;
+  try {
+    writeFileSync(configPath, text.replace(re, `$1${desired}`), "utf-8");
+    logger.info(`gen-motis-config: osm set to ${desired} for region ${region}`);
+    return true;
+  } catch (error) {
+    logger.warn(
+      `gen-motis-config: could not write osm region override to ${configPath}: ${(error as Error).message}`,
+    );
+    return false;
+  }
+}
+
+/**
  * Run Transitous's `src/generate-motis-config.py --import-only`. Writes the
  * import-time config under the catalog working tree; downstream MOTIS-import
  * stages read it as input. Skipped when the catalog doesn't ship the script
@@ -181,6 +226,7 @@ export const run: StageFn = async (ctx) => {
       stdio: "pipe",
     });
     const configPath = join(catalogDir, "out", "config.yml");
+    const osmRegionOverridden = applyOsmRegionOverride(configPath, ctx.logger);
     const incrementalRtOverridden = applyIncrementalRtOverride(configPath, ctx.logger);
     const elevatorsOverridden = applyElevatorsOverride(configPath, ctx.logger);
     const osrFootpathOverridden = applyOsrFootpathOverride(configPath, ctx.logger);
@@ -193,6 +239,7 @@ export const run: StageFn = async (ctx) => {
       message: "Generated MOTIS import-only config",
       artifacts: {
         configPath,
+        osmRegionOverridden,
         incrementalRtOverridden,
         elevatorsOverridden,
         osrFootpathOverridden,

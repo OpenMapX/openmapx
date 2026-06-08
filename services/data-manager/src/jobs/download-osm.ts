@@ -14,6 +14,15 @@ export function resolveOsmUrl(region: string): string {
 }
 
 /**
+ * Local OSM PBF filename for a build region, matching the CLI's `osmPbfName`:
+ * `planet` → `planet.osm.pbf`, otherwise the region with `/` → `-`
+ * (e.g. `europe/germany` → `europe-germany.osm.pbf`).
+ */
+export function osmPbfName(region: string): string {
+  return region === "planet" ? "planet.osm.pbf" : `${region.replace(/\//g, "-")}.osm.pbf`;
+}
+
+/**
  * Both Geofabrik (per-region) and planet.openstreetmap.org publish a
  * sibling `.md5` file next to every PBF containing `<hex>  <filename>`.
  * Returning it lets `downloadOsm` verify the file landed intact — a
@@ -68,8 +77,7 @@ export interface DownloadOsmResult {
 
 export async function downloadOsm(opts: DownloadOsmOptions): Promise<DownloadOsmResult> {
   const url = resolveOsmUrl(opts.region);
-  const fileName =
-    opts.region === "planet" ? "planet.osm.pbf" : `${opts.region.replace(/\//g, "-")}.osm.pbf`;
+  const fileName = osmPbfName(opts.region);
   const targetDir = join(opts.dataDir, "osm");
   mkdirSync(targetDir, { recursive: true });
   const targetPath = join(targetDir, fileName);

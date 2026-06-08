@@ -12,6 +12,8 @@ const ENV_KEYS = [
   "MOTIS_ELEVATORS_URL",
   "MOTIS_ELEVATORS_AUTH",
   "MOTIS_OSR_FOOTPATH",
+  "MOTIS_REGION",
+  "OPENMAPX_REGION",
 ] as const;
 const originalEnv: Record<string, string | undefined> = {};
 
@@ -72,6 +74,16 @@ elevators: false
 timetable:
   update_interval: 60
   incremental_rt_update: false
+  datasets:
+    foo:
+      path: foo.gtfs.zip
+`;
+
+const TEMPLATE_WITH_OSM = `server:
+  port: 8080
+street_routing: true
+osm: planet-latest.osm.pbf
+timetable:
   datasets:
     foo:
       path: foo.gtfs.zip
@@ -144,6 +156,50 @@ describe("gen-motis-config elevators override", () => {
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
     expect(result.artifacts).toMatchObject({ elevatorsOverridden: false });
     expect(readFileSync(fx.configPath, "utf-8")).toMatch(/elevators:\s*false/);
+  });
+});
+
+describe("gen-motis-config osm region override", () => {
+  it("points osm at the region pbf from OPENMAPX_REGION", async () => {
+    process.env.OPENMAPX_REGION = "europe/germany";
+    const fx = setupCatalog(TEMPLATE_WITH_OSM);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.status).toBe("ok");
+    expect(result.artifacts).toMatchObject({ osmRegionOverridden: true });
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^osm: europe-germany\.osm\.pbf$/m);
+  });
+
+  it("prefers MOTIS_REGION over OPENMAPX_REGION", async () => {
+    process.env.OPENMAPX_REGION = "europe/germany";
+    process.env.MOTIS_REGION = "europe/france";
+    const fx = setupCatalog(TEMPLATE_WITH_OSM);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ osmRegionOverridden: true });
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^osm: europe-france\.osm\.pbf$/m);
+  });
+
+  it("maps the planet region to planet.osm.pbf", async () => {
+    process.env.OPENMAPX_REGION = "planet";
+    const fx = setupCatalog(TEMPLATE_WITH_OSM);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    // The template already says planet-latest; planet → planet.osm.pbf is a change.
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^osm: planet\.osm\.pbf$/m);
+  });
+
+  it("leaves osm alone when no region is configured", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_OSM);
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.artifacts).toMatchObject({ osmRegionOverridden: false });
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^osm: planet-latest\.osm\.pbf$/m);
+  });
+
+  it("is a no-op for a transit-only config with no osm key", async () => {
+    process.env.OPENMAPX_REGION = "europe/germany";
+    const fx = setupCatalog(TEMPLATE); // no `osm:` line
+    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    expect(result.status).toBe("ok");
+    expect(result.artifacts).toMatchObject({ osmRegionOverridden: false });
+    expect(readFileSync(fx.configPath, "utf-8")).not.toMatch(/^osm:/m);
   });
 });
 
