@@ -15,7 +15,7 @@
     "workingDir": "/motis-data",
     "entrypoint": ["/bin/sh", "-c"],
     "command": [
-      "until [ -f /motis-data/config.yml ]; do echo 'motis-staging: waiting for /motis-data/config.yml'; sleep 5; done; /motis import && /motis server"
+      "until [ -f /motis-data/config.yml ]; do echo 'motis-staging: waiting for /motis-data/config.yml'; sleep 5; done; /motis import && /motis server || { echo 'motis-staging: import/serve failed; holding (a pipeline restart will retry)'; while true; do sleep 3600; done; }"
     ],
     "dependsOn": [{ "service": "motis-feed-proxy", "condition": "service_started" }],
     "memory": "16g",

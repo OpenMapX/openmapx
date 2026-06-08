@@ -12,6 +12,7 @@ import {
   runTransitousPipeline,
   toDownloadGtfsResult,
 } from "./jobs/transitous/index.js";
+import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
 import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
@@ -255,6 +256,10 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     };
   }>("/transit/sync", async (req, reply) => {
     const body = req.body ?? {};
+    // Default to the deployment's configured countries (same as the cron) when
+    // the caller doesn't specify any — an empty list means "every country",
+    // which would kick off a global multi-GB fetch by accident.
+    const countries = body.countries ?? parseTransitousCountriesEnv();
     const start = await singleFlight.tryStartSync({
       trigger: "api",
       triggeredBy: body.triggeredBy ?? "api",
@@ -262,7 +267,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       kind: "transitous-sync",
       metadata: {
         source: "api",
-        countries: body.countries ?? [],
+        countries,
       },
     });
 
@@ -289,7 +294,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         const ctx = buildJobContext({
           dataDir,
           store,
-          countries: body.countries ?? [],
+          countries,
           repoRoot,
           jobId,
           onStageComplete: persistingHook,

@@ -159,6 +159,54 @@ describe("gen-motis-config elevators override", () => {
   });
 });
 
+describe("gen-motis-config region scoping", () => {
+  it("passes the configured countries as region args to the generator", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_OSM);
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const ctx = buildJobContext({
+      dataDir: fx.dataDir,
+      store: new StateStore(fx.dataDir),
+      countries: ["de", "ch"],
+      runner: async (cmd, args) => {
+        calls.push({ cmd, args });
+      },
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    ctx.state.catalogDir = fx.catalogDir;
+    await genMotisConfigRun(ctx);
+    const py = calls.find((c) => c.cmd === "python3");
+    expect(py?.args).toEqual([
+      "./src/generate-motis-config.py",
+      "--import-only",
+      "--skip-missing-files",
+      "de",
+      "ch",
+    ]);
+  });
+
+  it("passes no region arg when countries is empty (global build)", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_OSM);
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const ctx = buildJobContext({
+      dataDir: fx.dataDir,
+      store: new StateStore(fx.dataDir),
+      countries: [],
+      runner: async (cmd, args) => {
+        calls.push({ cmd, args });
+      },
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+    ctx.state.catalogDir = fx.catalogDir;
+    await genMotisConfigRun(ctx);
+    const py = calls.find((c) => c.cmd === "python3");
+    expect(py?.args).toEqual([
+      "./src/generate-motis-config.py",
+      "--import-only",
+      "--skip-missing-files",
+    ]);
+  });
+});
+
 describe("gen-motis-config osm region override", () => {
   it("points osm at the region pbf from OPENMAPX_REGION", async () => {
     process.env.OPENMAPX_REGION = "europe/germany";

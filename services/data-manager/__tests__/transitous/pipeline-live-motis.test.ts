@@ -110,7 +110,7 @@ function motisService(name: string, hostPort: number, hostDataDir: string): stri
     `    container_name: ${name}`,
     "    working_dir: /motis-data",
     '    entrypoint: ["/bin/sh", "-c"]',
-    '    command: ["until [ -f /motis-data/config.yml ]; do sleep 2; done; /motis import && /motis server"]',
+    '    command: ["until [ -f /motis-data/config.yml ]; do sleep 2; done; /motis import && /motis server || { echo failed; while true; do sleep 3600; done; }"]',
     "    ports:",
     `      - "127.0.0.1:${hostPort}:8080"`,
     "    volumes:",

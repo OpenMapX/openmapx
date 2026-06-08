@@ -221,10 +221,18 @@ export const run: StageFn = async (ctx) => {
         message: `generate-motis-config.py not present at ${scriptPath}`,
       } satisfies StageResult;
     }
-    await ctx.runner("python3", ["./src/generate-motis-config.py", "--import-only"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
+    // Pass the configured countries as region args. Without them the upstream
+    // script globs ALL ~120 feed files (every country), tries to resolve feeds
+    // it never fetched, and fails to emit a usable config; scoping it to the
+    // build's countries makes it produce a clean per-region config. Empty
+    // countries → no region arg → all regions (a global deployment).
+    // `--skip-missing-files` drops feeds whose GTFS didn't fetch this cycle so a
+    // single feed failure degrades the build instead of breaking the MOTIS import.
+    await ctx.runner(
+      "python3",
+      ["./src/generate-motis-config.py", "--import-only", "--skip-missing-files", ...ctx.countries],
+      { cwd: catalogDir, stdio: "pipe" },
+    );
     const configPath = join(catalogDir, "out", "config.yml");
     const osmRegionOverridden = applyOsmRegionOverride(configPath, ctx.logger);
     const incrementalRtOverridden = applyIncrementalRtOverride(configPath, ctx.logger);

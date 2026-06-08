@@ -55,10 +55,11 @@ async function generateFeedProxyConfig(
   // `--feed-proxy` flag is set. We run a second invocation so the import
   // config stays clean of GBFS pass-through entries.
   try {
-    await ctx.runner("python3", ["./src/generate-motis-config.py", "--feed-proxy"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
+    await ctx.runner(
+      "python3",
+      ["./src/generate-motis-config.py", "--feed-proxy", "--skip-missing-files", ...ctx.countries],
+      { cwd: catalogDir, stdio: "pipe" },
+    );
   } catch (error) {
     ctx.logger.warn(
       `transitous-pipeline: feed-proxy config generation failed: ${(error as Error).message}`,
@@ -146,10 +147,14 @@ export const run: StageFn = async (ctx) => {
         message: `generate-motis-config.py not present at ${scriptPath}`,
       } satisfies StageResult;
     }
-    await ctx.runner("python3", ["./src/generate-motis-config.py"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
+    // Scope to the build's countries + skip un-fetched feeds (see
+    // gen-motis-config.ts) — without region args the upstream script globs every
+    // feed file and fails.
+    await ctx.runner(
+      "python3",
+      ["./src/generate-motis-config.py", "--skip-missing-files", ...ctx.countries],
+      { cwd: catalogDir, stdio: "pipe" },
+    );
     const configPath = join(catalogDir, "out", "config.yml");
     const incrementalRtOverridden = applyIncrementalRtOverride(configPath, ctx.logger);
 

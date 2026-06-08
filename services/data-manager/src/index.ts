@@ -16,6 +16,7 @@ import {
 } from "./jobs/poi-ingest/otel-metrics.js";
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
+import { parseTransitousCountriesEnv } from "./jobs/transitous/internal.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
 import { StateStore } from "./state.js";
@@ -117,10 +118,7 @@ app
     // dangling cron timers and so the in-process singleFlight controller is
     // fully ready before the first scheduled fire.
     const store = new StateStore(dataDir);
-    const countries = (process.env.TRANSITOUS_COUNTRIES ?? "")
-      .split(",")
-      .map((c) => c.trim())
-      .filter(Boolean);
+    const countries = parseTransitousCountriesEnv();
     cronHandles = setupCron({
       dataDir,
       repoRoot,

@@ -44,6 +44,19 @@ export function normaliseCountries(countries: string[]): string[] {
   return [...new Set(countries.map((country) => country.trim().toLowerCase()).filter(Boolean))];
 }
 
+/**
+ * Parse the `TRANSITOUS_COUNTRIES` env var (comma-separated) into a country
+ * list. Shared by the cron bootstrap and the `/transit/sync` API so a manual
+ * trigger with no explicit countries scopes to the deployment's region instead
+ * of fetching every country.
+ */
+export function parseTransitousCountriesEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  return (env.TRANSITOUS_COUNTRIES ?? "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
 export interface TransitousFeedSource {
   name?: string;
   skip?: boolean;
