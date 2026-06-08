@@ -5,8 +5,15 @@ import type { StageFn, StageResult } from "./types.js";
 
 const DEFAULT_STAGING_URL = "http://localhost:8082";
 const PROBE_TIMEOUT_MS = 5_000;
-const TOTAL_BUDGET_MS = 30_000;
-const HEALTH_POLL_INTERVAL_MS = 1_000;
+// How long to wait for the staging MOTIS to finish importing and bind its
+// server. A full regional import (e.g. Germany with street routing) takes many
+// minutes; the canary's tiny feeds finish in seconds. Override per region/host
+// with MOTIS_IMPORT_TIMEOUT_MS — too short a budget makes motis-health time out
+// mid-import and the pipeline never reaches a healthy staging to promote.
+const DEFAULT_IMPORT_TIMEOUT_MS = 30 * 60_000;
+// Budget for the functional probes once the server is already up (answers fast).
+const FUNCTIONAL_BUDGET_MS = 60_000;
+const HEALTH_POLL_INTERVAL_MS = 2_000;
 
 // Berlin Hauptbahnhof-ish (52.525, 13.369) and Munich Hauptbahnhof (48.140, 11.558)
 // — large German station references that the planet-scale Transitous import
@@ -28,6 +35,13 @@ function parseFloatEnv(name: string, fallback: number): number {
   if (!raw) return fallback;
   const value = Number.parseFloat(raw);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function parseIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function stagingUrl(): string {
@@ -98,12 +112,16 @@ export const run: StageFn = async (ctx) => {
     toLng: parseFloatEnv("MOTIS_HEALTH_PLAN_TO_LNG", DEFAULT_PROBE.planToLng),
   };
 
-  const deadline = Date.now() + TOTAL_BUDGET_MS;
+  // Two budgets: a long one to wait out the staging import (the server only
+  // binds once `motis import` finishes), then a short one for the functional
+  // probes once it's up.
+  const importTimeoutMs = parseIntEnv("MOTIS_IMPORT_TIMEOUT_MS", DEFAULT_IMPORT_TIMEOUT_MS);
+  const importDeadline = Date.now() + importTimeoutMs;
 
-  // MOTIS's dedicated health endpoint is the fast liveness gate — poll it
-  // until the server is up (or the budget runs out), then run the functional
-  // probes that confirm the timetable index and routing engine answer queries.
-  const healthFailure = await pollUntilHealthy(healthUrl(base), deadline, {
+  // MOTIS's dedicated health endpoint is the liveness gate — poll it until the
+  // server is up (or the import budget runs out), then run the functional probes
+  // that confirm the timetable index and routing engine answer queries.
+  const healthFailure = await pollUntilHealthy(healthUrl(base), importDeadline, {
     intervalMs: HEALTH_POLL_INTERVAL_MS,
     probeTimeoutMs: PROBE_TIMEOUT_MS,
   });
@@ -125,8 +143,9 @@ export const run: StageFn = async (ctx) => {
     { name: "plan", url: planUrl(base, plan) },
   ];
 
+  const probeDeadline = Date.now() + FUNCTIONAL_BUDGET_MS;
   for (const p of functionalProbes) {
-    const remaining = deadline - Date.now();
+    const remaining = probeDeadline - Date.now();
     if (remaining <= 0) {
       return {
         stage: "motis-health",
@@ -134,7 +153,7 @@ export const run: StageFn = async (ctx) => {
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
-        message: `motis-health exceeded total budget ${TOTAL_BUDGET_MS}ms before reaching probe "${p.name}"`,
+        message: `motis-health exceeded functional-probe budget ${FUNCTIONAL_BUDGET_MS}ms before reaching probe "${p.name}"`,
       } satisfies StageResult;
     }
     const failure = await probe(p.name, p.url, Math.min(PROBE_TIMEOUT_MS, remaining));
