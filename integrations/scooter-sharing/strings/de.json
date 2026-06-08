@@ -91,11 +91,6 @@
       "dataSent": "Keine Nutzerdaten (gesamter Datensatz wird abgerufen, serverseitig auf Begrenzungsrahmen gefiltert)",
       "dataReceived": "Fahrzeuge mit ID, Koordinaten, Füllstand, Fahrzeugtyp"
     },
-    "link": {
-      "purpose": "Link-E-Scooter (mehrere europäische Städte). Unternehmen eingestellt Dez. 2023.",
-      "dataSent": "Koordinaten (Breitengrad, Längengrad)",
-      "dataReceived": "Fahrzeuge mit ID, Koordinaten, Akkustand, Fahrzeugtyp"
-    },
     "entur-mobility": {
       "purpose": "Anreicherung norwegischer E-Scooter und Mopeds mit Betreiber-Branding, Preisplänen, Verleih-Apps und Geofencing-Zonen über die Entur-Mobility-API",
       "dataSent": "GBFS-Stations- und Fahrzeugkennungen (sowie System-Kennungen für Geofencing) bereits im Kartenausschnitt gefundener Objekte. Keine Nutzerkonto- oder Rohstandortdaten",

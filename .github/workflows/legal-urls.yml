@@ -1,0 +1,44 @@
+name: Legal URLs
+
+on:
+  schedule:
+    # Weekly on Mondays at 05:23 UTC. Dead privacy/license links rot over time
+    # independently of code changes, so this runs on a schedule rather than per
+    # commit/PR — a network check is too flaky to gate the dev flow (a provider
+    # being briefly down would otherwise block unrelated work). The offline
+    # check-legal-tables guard still runs in the regular CI to ensure the URL
+    # fields are present at PR time.
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: legal-urls-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  legal-urls:
+    name: privacy + license URL liveness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check legal URLs
+        # Fails the run (404/410/5xx/DNS failure). Bot-blocks, rate-limits and
+        # transient errors are reported as non-blocking. Run locally with
+        # `pnpm check-legal-urls`.
+        run: pnpm check-legal-urls

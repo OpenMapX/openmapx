@@ -136,7 +136,7 @@
       "name": "GBFS Catalog (MobilityData)",
       "url": "https://github.com/MobilityData/gbfs",
       "license": "CC BY 3.0 (spec); per-operator data licenses",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md",
+      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",

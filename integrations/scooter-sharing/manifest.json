@@ -64,11 +64,6 @@
       "url": "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/map/cars/"
     },
     {
-      "name": "Link/Superpedestrian",
-      "type": "ping",
-      "url": "https://vehicles.linkyour.city/reservation-api/local-vehicles/?latitude=52.52&longitude=13.405&radius=1000"
-    },
-    {
       "name": "Entur Mobility",
       "type": "ping",
       "url": "https://api.entur.io/mobility/v2/graphql"
@@ -93,7 +88,7 @@
       "name": "GBFS Catalog (MobilityData)",
       "url": "https://github.com/MobilityData/gbfs",
       "license": "CC BY 3.0 (spec); per-operator data licenses",
-      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/data-licenses.md",
+      "licenseUrl": "https://github.com/MobilityData/gbfs/blob/master/LICENSE",
       "commercialUse": "yes",
       "providerCountry": "CA",
       "providerPrivacyUrl": "https://mobilitydata.org/privacy-policy/",
@@ -107,24 +102,10 @@
       "name": "Felyx",
       "url": "https://felyx.com/",
       "license": "Proprietary (undocumented API)",
-      "licenseUrl": "https://felyx.com/terms/",
+      "licenseUrl": "https://www.felyx.com/cdn/files/0e66dc4940cea8d358599e7d2c6b9113b3c443aa.pdf",
       "commercialUse": "unknown",
       "providerCountry": "NL",
       "providerPrivacyUrl": "https://cooltra.com/en/privacy-policy/",
-      "endUserExposure": "server-only",
-      "personalData": false,
-      "cookies": false,
-      "dpaAvailable": false
-    },
-    {
-      "sourceId": "link",
-      "name": "Link/Superpedestrian",
-      "url": "https://superpedestrian.com/",
-      "license": "Proprietary (undocumented API; company defunct Dec 2023)",
-      "licenseUrl": "https://superpedestrian.com/legal",
-      "commercialUse": "unknown",
-      "providerCountry": "US",
-      "providerPrivacyUrl": "https://superpedestrian.com/at-eng/privacy-policy",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

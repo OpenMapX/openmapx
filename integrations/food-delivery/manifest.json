@@ -104,7 +104,7 @@
       "licenseUrl": "https://glovoapp.com/docs/en/legal/terms/",
       "commercialUse": "conditional",
       "providerCountry": "ES",
-      "providerPrivacyUrl": "https://glovoapp.com/legal/privacy/",
+      "providerPrivacyUrl": "https://glovoapp.com/docs/en/legal/privacy/",
       "endUserExposure": "direct"
     },
     {
@@ -148,7 +148,7 @@
       "licenseUrl": "https://legal.rappi.com/colombia/terminos-y-condiciones-de-uso-de-plataforma-rappi-2/",
       "commercialUse": "conditional",
       "providerCountry": "CO",
-      "providerPrivacyUrl": "https://legal.rappi.com/colombia/politica-de-privacidad-y-tratamiento-de-datos-personales-rappi-s-a-s/",
+      "providerPrivacyUrl": "https://legal.rappi.com.co/colombia/politica-de-proteccion-y-tratamiento-de-datos-personales-rappi-s-a-s/",
       "endUserExposure": "direct"
     },
     {
@@ -192,7 +192,7 @@
       "licenseUrl": "https://www.talabat.com/uae/terms",
       "commercialUse": "conditional",
       "providerCountry": "AE",
-      "providerPrivacyUrl": "https://www.talabat.com/uae/privacy-policy",
+      "providerPrivacyUrl": "https://www.talabat.com/uae/privacy",
       "endUserExposure": "direct"
     }
   ]

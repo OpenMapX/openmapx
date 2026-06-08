@@ -38,7 +38,7 @@
       "attribution": "Water-level observations from <a href=\"https://www.pegelonline.wsv.de/\">WSV Pegelonline</a>",
       "commercialUse": "yes",
       "providerCountry": "DE",
-      "providerPrivacyUrl": "https://www.pegelonline.wsv.de/gast/datenschutz",
+      "providerPrivacyUrl": "https://www.pegelonline.wsv.de/gast/datenschutzhinweise",
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,

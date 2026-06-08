@@ -1,6 +1,6 @@
 /**
  * Scooter Sharing data source provider.
- * Combines GBFS scooter feeds + Felyx + Link + NRW Mobidrom + MOTIS/Transitous.
+ * Combines GBFS scooter feeds + Felyx + NRW Mobidrom + MOTIS/Transitous.
  * Handles both free-floating vehicles and docked stations.
  */
 
@@ -40,7 +40,6 @@ import type {
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
 import { searchFelyx } from "./felyx-client.js";
-import { searchLink } from "./link-client.js";
 import { searchNrwMobidrom } from "./nrw-mobidrom-client.js";
 
 // In-memory cache for detail lookups
@@ -111,12 +110,11 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
     ];
 
     // Fetch from all sources in parallel
-    const [gbfsResult, swissGbfsResult, felyxResult, linkResult, nrwResult, motisResult] =
+    const [gbfsResult, swissGbfsResult, felyxResult, nrwResult, motisResult] =
       await Promise.allSettled([
         fetchGbfsData(bbox, SCOOTER_FORM_FACTORS, "other"),
         fetchSwissSharedMobilityDataForBbox(bbox, SCOOTER_FORM_FACTORS, "other"),
         searchFelyx(bbox),
-        searchLink(bbox),
         searchNrwMobidrom(bbox),
         fetchMotisRentals(bboxArray, ["scooter_standing", "scooter_seated", "moped"]),
       ]);
@@ -146,7 +144,6 @@ class ScooterSharingProvider implements MobilityDataSourceProvider {
     if (gbfsResult.status === "fulfilled") allVehicles.push(...gbfsResult.value.vehicles);
     if (swissGbfsResult.status === "fulfilled") allVehicles.push(...swissGbfsResult.value.vehicles);
     if (felyxResult.status === "fulfilled") allVehicles.push(...felyxResult.value);
-    if (linkResult.status === "fulfilled") allVehicles.push(...linkResult.value);
     if (nrwResult.status === "fulfilled") allVehicles.push(...nrwResult.value.vehicles);
     if (motisResult.status === "fulfilled") allVehicles.push(...motisResult.value.vehicles);
 

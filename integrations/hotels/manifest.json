@@ -75,7 +75,7 @@
       "licenseUrl": "https://www.hotels.com/lp/b/terms-of-service",
       "commercialUse": "conditional",
       "providerCountry": "US",
-      "providerPrivacyUrl": "https://www.hotels.com/privacy/",
+      "providerPrivacyUrl": "https://www.hotels.com/legal/privacy",
       "endUserExposure": "direct"
     },
     {
@@ -97,7 +97,7 @@
       "licenseUrl": "https://www.trip.com/contents/service-guideline/terms.html?locale=en-xx",
       "commercialUse": "conditional",
       "providerCountry": "SG",
-      "providerPrivacyUrl": "https://pages.trip.com/privacy/privacy-en-xx.html",
+      "providerPrivacyUrl": "https://www.trip.com/contents/service-guideline/privacy-policy.html?locale=en_xx",
       "endUserExposure": "direct"
     },
     {
