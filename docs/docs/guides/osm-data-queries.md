@@ -178,11 +178,20 @@ replication diffs automatically — there's no periodic re-import to schedule.
 
 ## Verifying it works
 
-A minimal query confirms the API is up and the database has data. From the host,
-Overpass is bound to loopback on port 8082:
+A minimal query confirms the API is up. From the host, Overpass is bound to
+loopback on port 8082 — the same `/api/interpreter` endpoint the container's own
+healthcheck probes:
 
 ```bash
 curl 'http://localhost:8082/api/interpreter?data=[out:json];node(1);out;'
+```
+
+That only proves the API answers. To confirm the import actually loaded data,
+ask for real features in a box you know is populated and count what comes back —
+a non-zero count means the database is built and serving:
+
+```bash
+curl -s 'http://localhost:8082/api/interpreter?data=[out:json];node[amenity=cafe](52.5,13.3,52.6,13.5);out;' | jq '.elements | length'
 ```
 
 The status endpoint reports the database timestamp and how current the diffs are:
@@ -191,9 +200,21 @@ The status endpoint reports the database timestamp and how current the diffs are
 curl 'http://localhost:8082/api/status'
 ```
 
-If the response is empty, the import probably hasn't finished — check the logs.
-Inside the stack, OpenMapX reaches the same service at `http://overpass:80`; the
-public port is for your own diagnostics, not for the app.
+If the response is empty or the count is zero, the import probably hasn't
+finished — check the logs. Inside the stack, OpenMapX reaches the same service at
+`http://overpass:80`; the public port is for your own diagnostics, not for the
+app.
+
+To rebuild from a fresh extract rather than wait on diffs, stop the service,
+clear its database directory (a plain bind mount at `data/overpass/db`, not a
+named volume), re-link the new bz2, and start again — the import re-runs on boot:
+
+```bash
+pnpm openmapx services stop overpass
+rm -rf infra/docker/data/overpass/db/*
+pnpm openmapx data link
+pnpm openmapx services start overpass
+```
 
 ## Where to go next
 

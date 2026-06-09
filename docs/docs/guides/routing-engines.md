@@ -134,6 +134,13 @@ on by default:
 - **`build_admins`** — build admin-boundary data, used for country-specific
   routing rules (driving side, access restrictions). Recommended on.
 
+A third, related toggle isn't in the `configSchema` but is set in the manifest's
+container environment: **`build_time_zones`** (also on by default) builds the
+timezone database that backs time-aware departure/arrival routing. Leave it on
+unless you're certain you never pass departure or arrival times. All three
+auxiliary databases are built once during the first-start tile build and reused
+on subsequent starts.
+
 Set these like any service config — environment variable wins, then the admin
 panel, then the schema default. The env-var form is `SERVICE_VALHALLA_<KEY>`:
 
@@ -149,10 +156,18 @@ pnpm openmapx compose render
 pnpm openmapx services recreate valhalla
 ```
 
-The deeper tuning knobs (tile-build concurrency, per-mode service limits) live in
-the bind-mounted config file at `services/valhalla/config/valhalla.json`. The
-[config cascade](../install/managing-services.md#configuring-a-service) explains
-how all of this resolves.
+The deeper tuning knobs live in the bind-mounted config file at
+`services/valhalla/config/valhalla.json`:
+
+- **`mjolnir.concurrency`** (default `8`) — tile-build thread count. Lower it to
+  cap peak memory on a constrained build host; the build slows but uses less RAM.
+- **`service_limits`** — per-mode request ceilings that bound resource use:
+  `auto` max 5,000 km / 20 locations, `bicycle` 500 km, `pedestrian` 250 km,
+  `isochrone` 4 contours up to 120 min. Raise these only if you intend to serve
+  larger queries — they're the guardrails against a single request eating CPU.
+
+The [config cascade](../install/managing-services.md#configuring-a-service)
+explains how all of this resolves.
 
 ## OSRM: build the graph first
 
@@ -200,6 +215,9 @@ pnpm openmapx services start osrm
 
 The container serves on port `5000` using the Multi-Level Dijkstra algorithm
 (`--algorithm mld`), a good balance of preprocessing cost, RAM, and query speed.
+The alternative, Contraction Hierarchies (`ch`), queries faster but costs far
+more RAM and preprocessing time and forfeits the live segment-speed updates MLD
+allows — which is why OpenMapX standardizes on `mld`.
 
 :::note[Planet is refused]
 `services build osrm --region planet` fails by design — a planet OSRM build needs
@@ -211,6 +229,75 @@ OSRM has no incremental update path: to pick up newer OSM data, re-download the
 extract, rebuild the graph, re-link, and restart. While the rebuild runs, the
 live container keeps serving the old data from memory; there's only a brief gap
 during the restart, and driving falls back to Valhalla in the meantime.
+
+### Customizing the car profile
+
+OSRM's routing behavior — speed assumptions per road class, turn penalties,
+access rules — comes entirely from the `car.lua` profile baked into the image at
+`/opt/car.lua`. To change it, mount your own Lua over that path during the build
+(the speed file flag is already wired for traffic overrides):
+
+```bash
+docker run --rm \
+  -v "$(pwd)/infra/docker/data/osrm-graph:/data" \
+  -v "$(pwd)/services/osrm/car.lua:/opt/car.lua:ro" \
+  ghcr.io/project-osrm/osrm-backend:latest \
+  /bin/sh -c "osrm-extract -p /opt/car.lua /data/region.osm.pbf && \
+              osrm-partition /data/region.osrm && \
+              osrm-customize /data/region.osrm"
+```
+
+The profile is hashed into the build cache key alongside the PBF, so changing it
+forces a rebuild even when the data is unchanged. Re-link and restart afterwards.
+
+## Verifying the engine
+
+Once a service reports healthy, probe it directly to confirm it actually routes.
+Both engines bind their host port to `127.0.0.1`, so these run from the Docker
+host itself: Valhalla on `8002`, OSRM on `5000`.
+
+**Valhalla.** The cheapest liveness check is the `/status` endpoint the manifest
+health check already uses — it answers as soon as tiles are loaded:
+
+```bash
+curl -s http://localhost:8002/status | jq
+```
+
+For an end-to-end check, ask for a real route. Valhalla accepts the request as
+JSON on a `GET ?json=` query or a `POST` body; `.trip.summary` carries the
+distance and time:
+
+```bash
+curl -s -X POST http://localhost:8002/route \
+  -H 'Content-Type: application/json' \
+  -d '{"locations":[{"lat":52.52,"lon":13.405},{"lat":48.137,"lon":11.575}],"costing":"auto"}' \
+  | jq '.trip.summary'
+```
+
+Swap `costing` to `bicycle` or `pedestrian` to confirm the non-driving modes,
+and hit `/isochrone` or `/height` the same way if you rely on travel-time
+polygons or elevation profiles.
+
+**OSRM.** OSRM takes coordinates inline as semicolon-separated `lng,lat` pairs.
+A healthy instance returns `"code": "Ok"` with a distance and duration:
+
+```bash
+curl -s 'http://localhost:5000/route/v1/driving/13.405,52.52;11.575,48.137?overview=false' \
+  | jq '.code, .routes[0].distance, .routes[0].duration'
+```
+
+:::note[OSRM has no built-in health check]
+Unlike Valhalla, the OSRM manifest declares no `healthcheck`, so `services status`
+can't tell you whether it's actually serving — only that the container is up. The
+`/route` probe above is the real readiness signal; in the logs, `running and
+waiting for requests` marks the server as ready. To get a Docker-native health
+state, add a `healthcheck` block to `services/osrm/service.json` and re-render.
+:::
+
+A `NoRoute` / `NoSegment` from OSRM, or `No path could be found` from Valhalla,
+almost always means a waypoint fell outside the extract or off a routable road —
+not an engine fault. Widen the region (or use the planet extract on Valhalla) and
+make sure both endpoints sit on a drivable road.
 
 ## How the routing integration finds your engine
 

@@ -209,6 +209,28 @@ The pipeline, its lockfile-pinned Transitous ref, and the cron schedule live in
 the data-manager service; for everyday operation, just leaving `motis-staging`
 enabled gives you a hands-off daily update with a built-in rollback.
 
+A few specifics worth knowing as an operator:
+
+- **Cadence.** The full sync runs on `TRANSITOUS_SYNC_CRON`, default `0 3 * * *`
+  (daily 03:00 UTC — late enough for European publishers' nightly bundles, early
+  enough to land before the morning). A separate staleness sweep
+  (`TRANSITOUS_STALENESS_CHECK_CRON`, default `0 4 * * *`) flags feeds that have
+  stopped updating. Set either to `""`, `disabled`, or `off` to turn it off.
+- **Trigger one by hand.** `curl -X POST http://localhost:3001/api/data-manager/transit/sync`
+  (admin session or `Authorization: Bearer ${DATA_MANAGER_TOKEN}`) kicks off a
+  run immediately; it's single-flight, so a manual call while a sync is already
+  in flight returns the running job's id instead of starting a second one. Track
+  progress at `GET /api/data-manager/transit/jobs`.
+- **Pinned ref.** The active Transitous git ref is pinned in
+  `infra/docker/transitous.lock.json` so an upstream catalog change never
+  surprises a running deployment. Bumping it is deliberate and human-driven:
+  `pnpm openmapx transitous show` to see the current ref, `pnpm openmapx transitous bump`
+  to advance it.
+- **Rollback.** Promote is an atomic directory rename — the fresh build is staged
+  in `data/motis/staging`, swapped over `data/motis/live`, and the old live data
+  is parked at `data/motis/live.previous`. If the primary doesn't come back
+  healthy after the restart, the swap is reverted automatically from that copy.
+
 ## Self-hosting OpenTripPlanner
 
 OTP is the region-scale alternative. Its workflow mirrors MOTIS with one key
@@ -255,7 +277,16 @@ rather than rebuilding. It listens on `8080` inside the network, published to th
 host on `127.0.0.1:8090`. OTP's build (`services/otp/config/build-config.json`)
 and routing (`services/otp/config/router-config.json`) parameters are
 bind-mounted from the service directory — edit them there and rebuild or restart
-to apply.
+to apply. The build step runs with a generous `-Xmx24g` JVM heap by default
+(separate from the runtime container's `-Xmx12g`); a large region that fails the
+build with an `OutOfMemoryError` usually just needs more build heap or fewer
+feeds.
+
+OTP also serves the GraphQL API (one of the reasons to pick it over MOTIS) at
+`/otp/routers/default/index/graphql`, with a built-in GraphiQL explorer at
+`http://localhost:8090/graphiql` for poking at the schema. OpenMapX itself only
+uses the REST v1 plan endpoint, but the GraphQL surface is there for custom
+queries.
 
 After any feed or OSM change, OTP needs the full cycle again:
 
@@ -300,14 +331,38 @@ manifest fields (`consumes`, `bindMounts`, `exposure`) referenced above.
 
 ## Verifying it works
 
-A quick reachability check against the host-published port:
+Start with a reachability check against the host-published port — both engines
+publish on loopback only, so these run on the host itself:
 
 ```bash
-# MOTIS — health endpoint
+# MOTIS — liveness (server is up; says nothing about whether a timetable loaded)
 curl -s http://localhost:8081/api/v1/health
 
 # OTP — router metadata (200 = a graph is loaded)
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8090/otp/routers/default
+```
+
+Liveness is necessary but not sufficient: MOTIS answers `/api/v1/health` the
+moment its server binds, *before* the timetable index is queryable. To confirm
+the import actually succeeded, hit a query endpoint that needs loaded data. These
+are the MOTIS v2 (2.10.x) paths — note the `map/` segment, which is easy to get
+wrong:
+
+```bash
+# Stops in a bbox — empty array means the timetable index hasn't loaded
+curl -s 'http://localhost:8081/api/v1/map/stops?min=52.51,13.36&max=52.54,13.38' | jq 'length'
+
+# Native stop geocode — a name match proves the index is queryable
+curl -s 'http://localhost:8081/api/v1/geocode?text=Berlin+Hbf' | jq '.[0].name'
+
+# A single plan — exercises the routing engine end to end (adjust coordinates to your region)
+curl -s 'http://localhost:8081/api/v1/plan?fromPlace=52.525,13.369&toPlace=48.140,11.558' | jq '.itineraries | length'
+```
+
+For OTP, the equivalent query-level probe is a plan against the REST v1 endpoint:
+
+```bash
+curl -s 'http://localhost:8090/otp/routers/default/plan?fromPlace=48.137,11.575&toPlace=48.142,11.580&mode=TRANSIT,WALK' | jq '.plan.itineraries | length'
 ```
 
 Then plan a real journey from the OpenMapX UI: open the directions panel, switch

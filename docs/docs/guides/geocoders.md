@@ -138,8 +138,12 @@ pnpm openmapx services recreate photon
 
 Runtime cost is roughly 8 GB RAM (the manifest's ceiling) and the index's disk
 footprint; see the Photon row in [Requirements](../install/requirements.md).
-The index is refreshed automatically on a long interval, so it stays current
-without intervention.
+The index is refreshed automatically on a long interval (`UPDATE_INTERVAL`,
+720h/30 days by default) using the `PARALLEL` strategy — it downloads the new
+index alongside the old one and swaps with zero downtime, so it stays current
+without intervention. The catch is disk: a `PARALLEL` refresh briefly needs room
+for two copies of the index, so size the volume for roughly double the planet
+footprint if you let updates run unattended.
 
 **Wire it up.** Enable the `geocoding-photon` integration and put `photon` in the
 provider order. Leave the integration's endpoint blank and it resolves to your
@@ -259,7 +263,7 @@ Elasticsearch refuses to start unless the host's `vm.max_map_count` is at least
 `sudo sysctl -w vm.max_map_count=262144` (persist it in `/etc/sysctl.conf`).
 :::
 
-## Verifying and switching
+## Verifying
 
 Once an engine is running, confirm the chain answers from it by searching in the
 app — the attribution shown beneath suggestions records which provider replied.
@@ -269,6 +273,39 @@ You can also check container health directly:
 pnpm openmapx services status photon       # or nominatim, or the pelias preset
 pnpm openmapx check                        # one-shot status across the stack
 ```
+
+To rule the orchestrator out and confirm the engine itself is serving, query its
+host port directly. Each engine's port is the one its `service.json` binds to
+`127.0.0.1` — so these only work from the Docker host, not the network. Pick the
+block for the engine you're running:
+
+```bash
+# Nominatim (host port 8088). /status reports the import timestamp;
+# a search confirms the index answers.
+curl -fs http://localhost:8088/status
+curl -s 'http://localhost:8088/search?q=Berlin&format=jsonv2' | jq '.[0].display_name'
+```
+
+```bash
+# Photon (host port 2322). This is also its container health probe.
+curl -s 'http://localhost:2322/api?q=Berlin' | jq '.features[0].properties.name'
+```
+
+```bash
+# Pelias — note the API is on host port 4300 (container 4000). Check the
+# backend first: Elasticsearch must be green/yellow before the API will serve.
+curl -s http://localhost:9200/_cluster/health | jq '.status'
+curl -s 'http://localhost:4300/v1/search?text=Berlin&size=1' | jq '.features[0].properties.label'
+curl -fs http://localhost:4100/demo                 # Placeholder (coarse geocoding)
+curl -fs http://localhost:4200/-/health             # PIP (admin point-in-polygon)
+```
+
+An empty Nominatim `/search` or a Pelias result with no `features` means the
+import or build hasn't populated the index yet — tail the logs and wait for it to
+finish. A red Elasticsearch `status` means it never came up healthy; check
+`vm.max_map_count` and disk space first (see the Pelias notes above).
+
+## Switching
 
 Switching engines later is just editing the provider order and enabling the
 other integration — no data migration. And search degrades gracefully: with no
