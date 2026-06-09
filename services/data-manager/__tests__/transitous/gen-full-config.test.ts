@@ -12,6 +12,7 @@ const ENV_KEYS = [
   "MOTIS_ELEVATORS_URL",
   "MOTIS_ELEVATORS_AUTH",
   "MOTIS_OSR_FOOTPATH",
+  "MOTIS_TILES",
   "MOTIS_REGION",
   "OPENMAPX_REGION",
 ] as const;
@@ -75,6 +76,18 @@ timetable:
       path: foo.gtfs.zip
 `;
 
+const TEMPLATE_WITH_TILES = `server:
+  port: 8080
+osm: planet-latest.osm.pbf
+tiles:
+  profile: /opt/motis/tiles-profiles/full.lua
+  coastline: land-polygons-complete-4326.zip
+timetable:
+  datasets:
+    foo:
+      path: foo.gtfs.zip
+`;
+
 describe("gen-full-config osm region override (promote-config parity)", () => {
   it("points the runtime config's osm at the region pbf, matching gen-motis-config", async () => {
     process.env.OPENMAPX_REGION = "europe/germany";
@@ -92,6 +105,30 @@ describe("gen-full-config osm region override (promote-config parity)", () => {
     const result = await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
     expect(result.artifacts).toMatchObject({ osmRegionOverridden: false });
     expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^osm: planet-latest\.osm\.pbf$/m);
+  });
+});
+
+describe("gen-full-config tiles disable (promote-config parity)", () => {
+  it("strips the tiles block by default (stock motis image ships no tiles profile)", async () => {
+    const fx = setupCatalog(TEMPLATE_WITH_TILES);
+    const result = await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
+    expect(result.status).toBe("ok");
+    expect(result.artifacts).toMatchObject({ tilesDisabled: true });
+    const updated = readFileSync(fx.configPath, "utf-8");
+    // The whole block (key + indented children) is gone, neighbours intact.
+    expect(updated).not.toMatch(/^tiles:/m);
+    expect(updated).not.toMatch(/tiles-profiles/);
+    expect(updated).not.toMatch(/land-polygons/);
+    expect(updated).toMatch(/^timetable:/m);
+    expect(updated).toMatch(/^osm:/m);
+  });
+
+  it("keeps the tiles block when MOTIS_TILES=true", async () => {
+    process.env.MOTIS_TILES = "true";
+    const fx = setupCatalog(TEMPLATE_WITH_TILES);
+    const result = await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
+    expect(result.artifacts).toMatchObject({ tilesDisabled: false });
+    expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^tiles:/m);
   });
 });
 

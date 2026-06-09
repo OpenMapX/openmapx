@@ -212,12 +212,64 @@ export function applyOsmRegionOverride(configPath: string, logger: JobLogger): b
   }
 }
 
+/**
+ * Strip the generated config's `tiles:` block unless the operator opts back in
+ * with `MOTIS_TILES=true`.
+ *
+ * Transitous's full (non-`--import-only`) config always emits a `tiles:` section
+ * pointing at `/opt/motis/tiles-profiles/full.lua` plus a `land-polygons-*.zip`
+ * coastline — assets the upstream Transitous deployment ships but the stock
+ * `ghcr.io/motis-project/motis` image does NOT bundle. With them absent the
+ * post-promote `/motis import` fails verification ("tiles profile ... does not
+ * exist") and the server never starts. OpenMapX serves vector tiles from its
+ * own tileserver, not MOTIS, so we drop the block by default; operators who
+ * provision the profile + coastline keep it with `MOTIS_TILES=true`.
+ *
+ * The `--import-only` config has no `tiles:` block, so this is a no-op there —
+ * which is exactly why staging imported cleanly while the promoted live config
+ * (with `tiles:`) did not.
+ *
+ * Returns `true` iff the file was modified (the block was removed).
+ */
+export function applyTilesDisable(configPath: string, logger: JobLogger): boolean {
+  const raw = process.env.MOTIS_TILES?.trim().toLowerCase();
+  if (raw && ["1", "true", "yes", "on"].includes(raw)) return false; // operator keeps tiles
+  if (!existsSync(configPath)) return false;
+  let text: string;
+  try {
+    text = readFileSync(configPath, "utf-8");
+  } catch (error) {
+    logger.warn(
+      `motis-config: could not read ${configPath} to strip tiles: ${(error as Error).message}`,
+    );
+    return false;
+  }
+  // Matches the top-level `tiles:` key plus its indented children, through the
+  // last child's newline (stops at the next non-indented key). Same shape as the
+  // elevators block matcher.
+  const re = /^tiles:.*(?:\n[ \t]+.*)*\n?/m;
+  if (!re.test(text)) return false; // no tiles block (import-only config)
+  const next = text.replace(re, "");
+  if (next === text) return false;
+  try {
+    writeFileSync(configPath, next, "utf-8");
+    logger.info("motis-config: removed tiles block (set MOTIS_TILES=true to keep it)");
+    return true;
+  } catch (error) {
+    logger.warn(
+      `motis-config: could not strip tiles from ${configPath}: ${(error as Error).message}`,
+    );
+    return false;
+  }
+}
+
 /** Flags reported back to the stage's `artifacts` for observability. */
 export interface ConfigOverrideFlags {
   osmRegionOverridden: boolean;
   incrementalRtOverridden: boolean;
   elevatorsOverridden: boolean;
   osrFootpathOverridden: boolean;
+  tilesDisabled: boolean;
 }
 
 /**
@@ -232,5 +284,6 @@ export function applyConfigOverrides(configPath: string, logger: JobLogger): Con
     incrementalRtOverridden: applyIncrementalRtOverride(configPath, logger),
     elevatorsOverridden: applyElevatorsOverride(configPath, logger),
     osrFootpathOverridden: applyOsrFootpathOverride(configPath, logger),
+    tilesDisabled: applyTilesDisable(configPath, logger),
   };
 }

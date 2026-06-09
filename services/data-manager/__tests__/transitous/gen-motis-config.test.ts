@@ -12,6 +12,7 @@ const ENV_KEYS = [
   "MOTIS_ELEVATORS_URL",
   "MOTIS_ELEVATORS_AUTH",
   "MOTIS_OSR_FOOTPATH",
+  "MOTIS_TILES",
   "MOTIS_REGION",
   "OPENMAPX_REGION",
 ] as const;
@@ -229,7 +230,7 @@ describe("gen-motis-config osm region override", () => {
   it("maps the planet region to planet.osm.pbf", async () => {
     process.env.OPENMAPX_REGION = "planet";
     const fx = setupCatalog(TEMPLATE_WITH_OSM);
-    const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
+    await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
     // The template already says planet-latest; planet → planet.osm.pbf is a change.
     expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^osm: planet\.osm\.pbf$/m);
   });
