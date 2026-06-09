@@ -100,6 +100,7 @@ const config: Config = {
           items: [
             {label: 'Home', href: 'https://openmapx.org'},
             {label: 'Open the map', href: 'https://openmapx.com'},
+            {label: 'Roadmap', href: 'https://openmapx.org/roadmap'},
           ],
         },
         {
@@ -107,6 +108,14 @@ const config: Config = {
           items: [
             {label: 'GitHub', href: 'https://github.com/OpenMapX/openmapx'},
             {label: 'Issues', href: 'https://github.com/OpenMapX/openmapx/issues'},
+          ],
+        },
+        {
+          title: 'Legal',
+          items: [
+            {label: 'Privacy Policy', href: 'https://openmapx.org/privacy-policy'},
+            {label: 'Terms', href: 'https://openmapx.org/terms'},
+            {label: 'Legal Notice', href: 'https://openmapx.org/imprint'},
           ],
         },
       ],
