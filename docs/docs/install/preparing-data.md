@@ -42,7 +42,7 @@ network; the CLI reaches it at `http://localhost:4000` by default (override with
 `DATA_MANAGER_URL`). Every command below talks to it on your behalf — you rarely
 call its HTTP API directly.
 
-:::note Authentication
+:::note[Authentication]
 The data-manager's download and link endpoints require the
 `DATA_MANAGER_AUTH_TOKEN` shared secret. The CLI attaches it automatically from
 the environment, so as long as the same token is set in your shell and on the
@@ -66,7 +66,7 @@ omit the argument. (Individual engines also honor service-specific overrides suc
 as `OSRM_REGION` or `MOTIS_REGION` when you want one engine built for a different
 area.)
 
-:::tip Pick the smallest region that covers you
+:::tip[Pick the smallest region that covers you]
 Region size drives almost everything downstream — download time, build time, RAM,
 and disk. A single country is modest; a continent is several times larger; the
 planet is an order of magnitude more. The [Requirements](./requirements.md) page
@@ -126,7 +126,7 @@ pnpm openmapx data add-feed https://example.org/agency-gtfs.zip
 pnpm openmapx data remove-feed agency-gtfs
 ```
 
-:::note Authenticated Transitous feeds
+:::note[Authenticated Transitous feeds]
 Some Transitous sources require API keys. Generate a key template, fill in the
 values you have, then download:
 
@@ -194,7 +194,7 @@ Engines that read raw source data directly — Valhalla, Nominatim, Overpass —
 no build step here; they consume the downloaded extract as-is (Overpass needs a
 one-time format conversion, covered [below](#deriving-secondary-formats)).
 
-:::caution Stop the consumer before rebuilding
+:::caution[Stop the consumer before rebuilding]
 A build stages new files into the directory the running engine reads from. To
 avoid leaving a live container reading a half-swapped state, the build refuses to
 run while the consuming service is up — stop it first

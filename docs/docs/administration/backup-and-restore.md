@@ -65,7 +65,7 @@ a disaster you usually want a *fresh* index from current source data anyway, not
 stale one from an old archive. To rebuild these after a restore, follow
 [Preparing data](../install/preparing-data.md).
 
-:::caution The `.env` file is not in the backup
+:::caution[The `.env` file is not in the backup]
 The backup captures volumes, not your configuration file. `infra/docker/.env`
 holds the secrets the whole stack depends on — `POSTGRES_PASSWORD`,
 `BETTER_AUTH_SECRET`, `OPENMAPX_SECRETS_KEY`, integration API keys, and the rest —
@@ -160,7 +160,7 @@ running target services** if needed, and confirm — the restore runs as a
 background job you can follow in **Activity**. A separate delete action removes a
 snapshot directory entirely and cannot be undone.
 
-:::note After restoring the database
+:::note[After restoring the database]
 The `app-api` container applies pending Drizzle migrations on every boot, so as
 long as you restore a snapshot from a compatible version, the schema is brought
 up to date automatically the next time the API starts. This is also why crossing

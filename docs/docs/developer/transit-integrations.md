@@ -382,7 +382,7 @@ can implement `healthCheck()` on the contract; thin pass-throughs can omit it an
 declare `ctx.registerHealthCheck(...)` at setup instead, or rely on the manifest's
 `healthCheck` probe.
 
-:::tip Keep the capability bitmap honest
+:::tip[Keep the capability bitmap honest]
 The single most common contract bug is a capability flag set `true` with no
 matching method, or a method shipped without flipping its flag. The orchestrator
 dispatches on the flags, so a mismatch means either a method that never gets

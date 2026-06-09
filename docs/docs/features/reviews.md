@@ -108,7 +108,7 @@ In the encrypted modes the unlocked key is held in memory only for the session
 and auto-locks after a period of inactivity, so you re-authenticate before
 signing again.
 
-:::caution Don't lose your key
+:::caution[Don't lose your key]
 Your private key *is* your reviewing identity. If you lose it — and have no
 backup — you can no longer edit or delete your existing reviews, and a new key
 starts a fresh identity. The encrypted modes also mean that if you forget your

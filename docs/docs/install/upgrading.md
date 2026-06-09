@@ -17,7 +17,7 @@ This page covers a normal code/image upgrade. Refreshing the *data* a deployment
 serves — new OSM extracts, GTFS feeds, rebuilt indexes — is a different cadence
 and lives in [Preparing data](./preparing-data.md).
 
-:::tip Back up first
+:::tip[Back up first]
 The very first step of any upgrade is a backup. The
 [Back up first](#1-back-up-first) section below shows the one command that does
 it. Don't skip it — it's the only thing that makes a bad upgrade reversible.
@@ -89,7 +89,7 @@ At this point your checkout is current — new manifests, new CLI behavior, and 
 new database migrations are now on disk — but the running containers are
 unchanged. The next steps roll the running stack forward to match.
 
-:::note Read the release notes
+:::note[Read the release notes]
 Before a major upgrade, skim the project's release notes for breaking changes —
 a renamed environment variable, a new required secret, or a manifest change that
 needs attention. OpenMapX is under active development, so an occasional manual
@@ -141,7 +141,7 @@ pnpm openmapx compose up
 configuration actually changed. Heavy backend engines that didn't change are left
 running untouched.
 
-:::note Pull vs. build
+:::note[Pull vs. build]
 There is no "rebuild the app" step in a normal upgrade. The application images are
 pulled from GHCR — `compose pull` (or the pull baked into `services recreate`) is
 how you get the new version. You only build images yourself if you're doing local
@@ -169,7 +169,7 @@ the error is logged there — this is exactly the situation the
 [pre-upgrade backup](#1-back-up-first) exists to protect against, so restore the
 snapshot before investigating.
 
-:::caution Migrations move forward only
+:::caution[Migrations move forward only]
 Drizzle migrations are forward-only — there is no automatic down-migration. Once a
 new `app-api` has migrated the database, rolling back to an older app image is not
 supported unless you also restore the matching database backup. This is why the

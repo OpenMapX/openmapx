@@ -96,7 +96,7 @@ separate endpoint that returns particulate matter, nitrogen dioxide, ozone,
 sulphur dioxide, carbon monoxide, and both the European and US AQI for a point,
 sourced from Open-Meteo's air-quality model.
 
-:::note License notes
+:::note[License notes]
 Open-Meteo's free tier is licensed for non-commercial use only — commercial
 deployments need a paid Open-Meteo plan. MET Norway and Bright Sky carry their
 own attribution requirements, which OpenMapX surfaces automatically wherever
@@ -147,7 +147,7 @@ radar loop works without any key). See
 [Configuration](../install/configuration.md) for how integration settings and
 secrets resolve in general.
 
-:::note Weather data needs no backend service
+:::note[Weather data needs no backend service]
 Unlike routing or transit, weather has no self-hosted engine to run — every
 provider calls a public forecast API through your server. There's nothing to add
 to your [service selection](../install/managing-services.md); enabling the

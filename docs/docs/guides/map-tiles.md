@@ -101,7 +101,7 @@ region-scale routing engines, TileServer GL is happy with a `planet` archive, so
 worldwide coverage is on the table. See [Requirements](../install/requirements.md)
 for sizing.
 
-:::caution Stop the server before rebuilding
+:::caution[Stop the server before rebuilding]
 The build stages a new `tiles.mbtiles` into the directory the running container
 reads from, so it refuses to run while `tileserver` is up. Stop it first
 (`pnpm openmapx services stop tileserver`), build, then start it again. Rebuilds

@@ -42,7 +42,7 @@ A few notes:
   Docker helper images. You do **not** need `osmium`, `jq`, `unzip`, or similar
   tools installed on the host.
 
-:::note `docker compose`, not `docker-compose`
+:::note[`docker compose`, not `docker-compose`]
 OpenMapX uses Compose v2, which ships as the `docker compose` subcommand of the
 Docker CLI. The standalone v1 `docker-compose` binary is
 [deprecated](https://docs.docker.com/compose/releases/migrate/) and is not
@@ -135,14 +135,14 @@ As a rough planning guide, once you account for the engines you've chosen:
 These are starting points for a host running the common set of engines at that
 scale, not hard minimums. Trim the engine list and the numbers come down quickly.
 
-:::tip Build once, run leaner
+:::tip[Build once, run leaner]
 Several engines need far more RAM to build their indexes than to serve queries
 afterward (Nominatim and Overpass especially). If you're tight on memory, bring
 the heavy engines up one at a time and let each finish its initial import before
 starting the next, rather than building them all in parallel.
 :::
 
-:::caution Disk is SSD, and headroom matters
+:::caution[Disk is SSD, and headroom matters]
 The import and build phases are I/O-heavy and can briefly use far more disk than
 the steady-state figures suggest (Nominatim's import peak is well above its final
 ~330 GB). Use SSD/NVMe storage on a filesystem with proper Unix ownership and

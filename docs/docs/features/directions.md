@@ -113,7 +113,7 @@ The directions panel exposes the tuning knobs that map onto the routing API:
 - **Stops and optimization** — add intermediate waypoints, and ask the engine to
   reorder them into the shortest trip while keeping the first and last fixed.
 
-:::note Transit has its own options
+:::note[Transit has its own options]
 The "prefer modes," "fewer transfers / less walking," wheelchair-accessible, and
 Deutschlandticket-only controls belong to transit journey planning, not
 ground routing. See [Public transit](./public-transit.md).

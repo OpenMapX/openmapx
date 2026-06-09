@@ -49,7 +49,7 @@ A useful way to think about it:
 Because providers are selected per request, running both never hurts: cycling
 and walking always go to Valhalla, driving prefers OSRM and degrades gracefully.
 
-:::tip Planet deployments use Valhalla alone
+:::tip[Planet deployments use Valhalla alone]
 OSRM loads its entire graph into RAM and can't handle a planet extract (the build
 command refuses one outright). For worldwide routing, enable only Valhalla and
 let it serve driving too. See the [routing rows in Requirements](../install/requirements.md#engine-sizing)
@@ -178,7 +178,7 @@ Either form stages the prepared graph (`region.osrm` and its companion files)
 into `data/osrm-graph/`. The build is cached on a hash of the input PBF, so
 re-running it when nothing changed is essentially free.
 
-:::caution Stop OSRM before rebuilding
+:::caution[Stop OSRM before rebuilding]
 The build stages new files into the directory the running container reads from.
 To avoid a half-swapped state, the build **refuses to run while `osrm` is up** —
 stop it first, build, then start it again:
@@ -201,7 +201,7 @@ pnpm openmapx services start osrm
 The container serves on port `5000` using the Multi-Level Dijkstra algorithm
 (`--algorithm mld`), a good balance of preprocessing cost, RAM, and query speed.
 
-:::note Planet is refused
+:::note[Planet is refused]
 `services build osrm --region planet` fails by design — a planet OSRM build needs
 on the order of 200 GB of RAM. The error points you at Valhalla, which handles
 worldwide driving on a fraction of that.

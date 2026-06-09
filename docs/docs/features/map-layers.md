@@ -125,7 +125,7 @@ Two entries in the picker are interactive tools rather than passive layers:
 - **Travel time** — paint an isochrone showing how far you can get within a
   time budget, computed by a Valhalla routing engine.
 
-:::note Overlays follow your integrations
+:::note[Overlays follow your integrations]
 The picker only lists overlays whose integration is enabled and whose required
 services are running. If an overlay you expect is missing, check that its
 integration is enabled and any backend it needs (Overpass, Valhalla, a transit

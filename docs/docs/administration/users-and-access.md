@@ -74,7 +74,7 @@ pnpm openmapx users demote your@email.com   # back to a plain user
 These all run against the database in the `postgis` container, so they work even
 when the web app is down — which is exactly when you tend to need them.
 
-:::note Why the CLI works without logging in
+:::note[Why the CLI works without logging in]
 
 The CLI reaches admin endpoints over the host's loopback interface, which is
 treated as trusted. In production you gate that with a token; the mechanics and
@@ -155,7 +155,7 @@ you stop impersonating.
 The last admin and your own account are protected from deletion; for everything
 else, prefer **Ban** unless you genuinely need the account gone.
 
-:::note Every action is logged
+:::note[Every action is logged]
 
 State-changing user actions — role changes, bans, deletions, session revokes —
 are written to the audit log with who did it and to whom. Review them under

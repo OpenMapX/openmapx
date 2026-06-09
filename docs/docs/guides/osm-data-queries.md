@@ -34,7 +34,7 @@ rate-limited, and occasionally slow or down. Running your own removes the rate
 limit, keeps queries on your own infrastructure, and makes the recreation
 overlays and OSM-backed POI search fast and dependable.
 
-:::note You don't have to self-host this
+:::note[You don't have to self-host this]
 Overpass is one of the heavier services to run (see [Resource cost](#resource-cost)).
 Everything it powers works against the public Overpass servers out of the box, so
 self-hosting is an optimization, not a requirement. Reach for it when the public
@@ -132,7 +132,7 @@ the bytes live on disk once no matter how many services share them. The
 `data update` all-in-one refresh also covers this when Overpass is in your
 selection.
 
-:::tip Pick the smallest region that covers you
+:::tip[Pick the smallest region that covers you]
 You only need Overpass data for the area your instance serves. A single country
 is a few gigabytes of database and an import measured in hours; a continent is
 several times that; the planet is roughly 200 GB and an import that runs more

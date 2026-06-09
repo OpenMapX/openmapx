@@ -70,7 +70,7 @@ continuing will contact Mapillary directly, with a link to Mapillary's privacy
 policy. Once you confirm, the viewer loads and remembers your choice for the
 session.
 
-:::note Two separate tokens
+:::note[Two separate tokens]
 The viewer authenticates with Mapillary from the browser, so it needs a
 **client** token that ships in the public JavaScript bundle. That token is
 deliberately distinct from the **server-side** token used to proxy coverage

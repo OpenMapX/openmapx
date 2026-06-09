@@ -337,7 +337,7 @@ You can validate the manifest at any point without restarting the server:
 pnpm openmapx integrations validate knowledge-sunrise-sunset
 ```
 
-:::note Built-in versus community
+:::note[Built-in versus community]
 An integration under `integrations/` is **built-in**: it runs from workspace
 TypeScript source, needs no build step, and ships in the repository. The rest of
 this page covers turning the same directory into a **community** integration —

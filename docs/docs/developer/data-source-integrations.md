@@ -274,7 +274,7 @@ sharing categories that read GBFS, the
 discovery, fetching, and station-status normalization — build on those rather
 than parsing GBFS by hand.
 
-:::tip Large datasets: ingest instead of fan-out
+:::tip[Large datasets: ingest instead of fan-out]
 When an upstream returns a whole national registry in one request (much of
 parking, the big EV registries), prefer the **POI ingest pipeline** over an
 eager per-request fetch: declare the feed with `ctx.registerPoiSources(...)` so

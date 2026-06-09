@@ -78,7 +78,7 @@ features all work against public endpoints, and the host stays close to the
 ~4 GB core baseline. You can then self-host engines selectively, one at a time,
 as traffic or privacy needs grow.
 
-:::caution Hosted endpoints have trade-offs
+:::caution[Hosted endpoints have trade-offs]
 Public instances come with caveats you must weigh:
 
 - **Privacy.** OpenMapX proxies these calls *through your server* rather than
@@ -128,7 +128,7 @@ pnpm openmapx data download gtfs --countries de,at,ch
 See [Preparing data](../install/preparing-data.md) for the full region and feed
 workflow.
 
-:::note Region scope also unlocks the lighter engines
+:::note[Region scope also unlocks the lighter engines]
 Two of the lightest routing/transit engines, **OSRM** and **OTP**, load their
 entire graph into memory and only work at region scale — they can't fit a
 planet. Choosing a region isn't just cheaper; it's what makes those engines an

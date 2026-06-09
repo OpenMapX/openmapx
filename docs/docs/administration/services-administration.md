@@ -21,7 +21,7 @@ integrations that need them, and the compose renderer turns your enabled
 manifests into a running stack. This page assumes that picture and focuses on the
 web UI.
 
-:::note Two surfaces, one behavior
+:::note[Two surfaces, one behavior]
 The admin panel and the `openmapx` CLI act on the same registry and produce the
 same effects. The full command reference — selection files, presets, rendering,
 builds, exposure — lives in

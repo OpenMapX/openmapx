@@ -154,7 +154,7 @@ require credentials, declared per integration:
 Where a source has no key, it's simply skipped and the others still answer. Keys
 set on an integration follow the usual config cascade — admin panel or `.env`.
 
-:::note Credentials for ingested sources live elsewhere
+:::note[Credentials for ingested sources live elsewhere]
 Sources fetched on a schedule by the `data-manager` service (much of parking and
 the large EV registries) read their credentials from data-manager environment
 variables in `infra/docker/.env`, **not** from the admin panel — the ingest

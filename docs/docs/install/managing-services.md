@@ -114,7 +114,7 @@ When `OPENMAPX_ENABLED_SERVICES` is set, `enable` and `disable` refuse to edit
 the file — the environment variable is the source of truth in that case, and the
 CLI keeps it unambiguous.
 
-:::note Selection is not the same as running
+:::note[Selection is not the same as running]
 Editing the selection changes what *will* be rendered and started. It does not
 touch running containers. Enabling a service is followed by a render and a start
 (below) before it actually comes up.
@@ -286,7 +286,7 @@ The admin panel's **Save & Apply (recreate)** button does the equivalent in one
 click. For the broader picture of what goes in `.env` and how the admin panel
 fits in, see [Configuration](./configuration.md).
 
-:::note Data-manager credentials are separate
+:::note[Data-manager credentials are separate]
 The POI ingest pipeline runs inside the `data-manager` container, which can't
 see the integration host's config cascade. Sources that need API keys (certain
 parking and transit feeds) read them from data-manager environment variables set

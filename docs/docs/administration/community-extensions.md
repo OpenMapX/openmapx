@@ -23,7 +23,7 @@ installed by the same operator into the same stack. This page covers
 *installing* third-party extensions. Writing your own is a separate topic — see
 the Developer section.
 
-:::warning You are running third-party code
+:::warning[You are running third-party code]
 A community extension is code you did not write, running on your server. A
 service is a Docker container you choose to start; an integration's backend runs
 **in-process inside the API server**, with the same filesystem, network, and
@@ -120,7 +120,7 @@ pnpm openmapx repos remove <hash>      # unregister and delete the local clone
 
 Both are also available under **Services → Repositories** in the admin panel.
 
-:::note Removing a repo does not stop its containers
+:::note[Removing a repo does not stop its containers]
 `repos remove` deletes the clone and the database row and reloads the catalog,
 but it does not stop any container that was started from one of its services.
 Stop those services first if you want a clean tear-down. Once a community service

@@ -46,7 +46,7 @@ you build. See [Requirements](../install/requirements.md) for the RAM and disk
 sizing before you commit to a region — region size drives almost every cost
 downstream.
 
-:::tip Pick the smallest region that covers your users
+:::tip[Pick the smallest region that covers your users]
 A single country is modest; a continent is several times larger; the planet is an
 order of magnitude more on every axis (download, build, RAM, disk). OTP can't
 build a planet graph at all — its build step refuses anything over ~50 GB and
@@ -110,7 +110,7 @@ pnpm openmapx data build motis europe/germany
 can omit it. The prepared directory is written to **`data/motis/live`** — the
 plain bind mount the running container reads from.
 
-:::caution Stop the engine before rebuilding
+:::caution[Stop the engine before rebuilding]
 The build stages files into the directory a running container reads. Stop MOTIS
 first so it never sees a half-swapped state:
 

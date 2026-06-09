@@ -47,7 +47,7 @@ is visible, or hit **Refresh** on demand.
 The same snapshot also rolls up into the admin **Overview** dashboard's
 attention list; see [Admin panel](./admin-panel.md) for that landing view.
 
-:::note Status vs. service catalog
+:::note[Status vs. service catalog]
 The status dashboard reports *reachability* — can the API talk to each
 dependency right now. It is not the Docker control plane. To start, stop, or
 inspect a container's lifecycle state, use the service catalog under
@@ -135,7 +135,7 @@ Scrape them at:
 GET /api/internal/metrics
 ```
 
-:::warning Keep the metrics endpoint internal
+:::warning[Keep the metrics endpoint internal]
 The endpoint emits no PII, but the labels reveal operational topology — which
 providers exist and how much traffic each one sees. It is meant to be reachable
 only from inside the Docker network. Restrict it with firewall or reverse-proxy

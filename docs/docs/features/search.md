@@ -137,7 +137,7 @@ your server's address rather than your users'. For where configuration values
 live and how the admin panel relates to environment variables, see
 [Configuration](../install/configuration.md).
 
-:::note A geocoder isn't required to run the map
+:::note[A geocoder isn't required to run the map]
 Search degrades gracefully: with no geocoder configured, the map, coordinate
 input, and Plus Codes still work — you simply won't get name or address
 suggestions until a provider is enabled.

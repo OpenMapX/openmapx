@@ -80,7 +80,7 @@ default. Environment variables always win, which keeps a Docker deployment
 predictable: a value pinned in `infra/docker/.env` can't be silently changed
 from the UI, and the disabled field plus its `env` chip make that visible.
 
-:::note Why a saved value sometimes "won't stick"
+:::note[Why a saved value sometimes "won't stick"]
 If you save a field in the form and it doesn't change, look at its source chip.
 A higher layer — almost always an `env` override in `infra/docker/.env` — is
 taking precedence. Remove that override (or change it there) to let the admin
@@ -156,7 +156,7 @@ integration host loads all bindings once at startup and re-reads them on reload,
 so after changing a binding, reload the integration (or restart the API) for it
 to take effect. Like every admin action, setting a binding is audit-logged.
 
-:::note Bindings are per integration, not global
+:::note[Bindings are per integration, not global]
 The same capability can be bound to different services for different
 integrations. Binding is also the *only* step you take in the panel — you still
 [enable the backing service](./services-administration.md) and render the stack

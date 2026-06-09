@@ -135,7 +135,7 @@ Each photo carries its own attribution, shown in the gallery, and the OSM
 Mapillary and Panoramax coverage also powers the immersive viewer described under
 [Street-level imagery](./street-level-imagery.md).
 
-:::note Every upstream call is proxied
+:::note[Every upstream call is proxied]
 Like the rest of OpenMapX, enrichment requests run through your own server —
 Wikipedia, Wikidata, Flickr, and the rest see your server's address, not your
 users'. Images are fetched through an image proxy on the same server.

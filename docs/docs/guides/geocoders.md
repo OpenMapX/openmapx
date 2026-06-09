@@ -19,7 +19,7 @@ If you only want to understand how search behaves in the app, read
 standing the engines up. For how services and integrations fit together at all,
 see [How it works](../overview/how-it-works.md).
 
-:::note You usually run one
+:::note[You usually run one]
 Photon, Nominatim, and Pelias overlap in purpose — all three geocode
 OpenStreetMap. Running more than one mostly multiplies RAM and disk for little
 gain. Pick the one that matches your needs; the rest of this page helps you
@@ -222,7 +222,7 @@ First bundles, and the Placeholder SQLite store). It runs in an isolated,
 temporary compose project and tears that down when finished — so the build must
 not run while the runtime Pelias services are up. If they are, stop them first.
 
-:::caution Stop the consumers before rebuilding
+:::caution[Stop the consumers before rebuilding]
 The build resets the shared Elasticsearch index and stages new files into the
 directories the runtime containers read. It refuses to run while `pelias`,
 `pelias-placeholder`, or `pelias-pip` are up — stop them, build, then start
@@ -253,7 +253,7 @@ around 100 GB. See the Elasticsearch (Pelias backend) row in
 Set the integration's endpoint to your running Pelias API (there's no public
 default to fall back on).
 
-:::tip Elasticsearch needs a kernel setting
+:::tip[Elasticsearch needs a kernel setting]
 Elasticsearch refuses to start unless the host's `vm.max_map_count` is at least
 `262144`. Set it on the Docker host with
 `sudo sysctl -w vm.max_map_count=262144` (persist it in `/etc/sysctl.conf`).

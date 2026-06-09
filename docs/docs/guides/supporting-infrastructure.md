@@ -64,7 +64,7 @@ there is nothing to keep in sync by hand — they all read it from the one
 variable. See [Configuration](../install/configuration.md) for the full `.env`
 reference.
 
-:::caution Rotating the password
+:::caution[Rotating the password]
 PostgreSQL only reads `POSTGRES_PASSWORD` when it first initializes an empty data
 directory; once the volume holds a database, the password baked into the cluster
 is authoritative and a later change to `.env` would normally be silently ignored.
@@ -186,7 +186,7 @@ certificates are written to `acme.json` inside the `openmapx-traefik-acme` volum
 and renewed automatically ahead of expiry; the volume is backed up so a restore
 brings the certificates back with it. There is nothing to run by hand.
 
-:::note Default exposure
+:::note[Default exposure]
 A fresh deployment serves the stack publicly. The static config ships a
 commented-out basic-auth hook (`dynamic/auth.yml.example`) you can enable to gate
 the whole site behind a username and password while you set things up; without it,

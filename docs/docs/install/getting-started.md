@@ -22,7 +22,7 @@ Before you start, make sure your host meets the [requirements](./requirements.md
 a 64-bit Linux host with Docker Engine, the Compose v2 plugin, Node.js 24+, and
 `pnpm`. The CLI runs the TypeScript sources directly — there's no build step.
 
-:::note `docker compose`, not `docker-compose`
+:::note[`docker compose`, not `docker-compose`]
 OpenMapX uses Compose v2, which ships as the `docker compose` subcommand of the
 Docker CLI. The standalone v1 `docker-compose` binary is not supported.
 :::
@@ -88,7 +88,7 @@ per-integration credentials — is optional at boot and mostly managed from the
 admin panel after the stack is up. For the full reference, see
 [Configuration](./configuration.md).
 
-:::tip Tile provider
+:::tip[Tile provider]
 The default `NEXT_PUBLIC_STYLE_PROVIDER=maptiler` renders maps from MapTiler
 Cloud and needs a `MAPTILER_KEY`. You can leave the key unset for now and add it
 from the admin UI later, or self-host tiles with the `tileserver` service.
@@ -197,7 +197,7 @@ Inspect what's been downloaded at any time:
 pnpm openmapx data status
 ```
 
-:::tip Set a default region once
+:::tip[Set a default region once]
 Set `OPENMAPX_REGION=europe/germany` in `infra/docker/.env` and you can drop the
 positional region from `data download osm` (and the build commands below). A
 region passed on the command line still wins for that one run.
@@ -267,7 +267,7 @@ pnpm openmapx services status            # container state for every service
 pnpm openmapx services logs <id> --follow # tail one service's logs
 ```
 
-:::tip Bring heavy engines up one at a time
+:::tip[Bring heavy engines up one at a time]
 On modest hardware, starting several heavy indexers at once can saturate CPU,
 disk, and RAM. The indexers are independent, so it's usually better to start one,
 wait for it to finish its initial build (CPU and disk I/O quiet down, and

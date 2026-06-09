@@ -35,7 +35,7 @@ A few conventions are worth knowing before the tables:
   `.env` always wins over an admin-stored value. See
   [How it works](../overview/how-it-works.md) for the service/integration model.
 
-:::caution Recreate containers after editing
+:::caution[Recreate containers after editing]
 Changing `.env` only takes effect when the affected containers are recreated.
 Re-run `docker compose up -d` (Compose detects the changed file and recreates
 what's needed) or restart through the CLI's service commands.
@@ -54,7 +54,7 @@ ship the placeholders.
 | `OPENMAPX_HOST_DIR`       | Absolute host path of the OpenMapX repo checkout. The `app-api` container shells out to `docker compose` from inside the container and bind-mounts this path at the same path on both sides, so generated bind sources like `./data` resolve correctly. Find it with `pwd` from the repo root. | **Required** (no default)     |
 | `DOCKER_GID`              | The host's docker-socket group id. Containers that mount the docker socket run as a non-root user and must join this group, or the data-manager's MOTIS import/promote fails with "permission denied". Host-specific — find it with `stat -c %g /var/run/docker.sock`. | **Required**. Default `999`   |
 
-:::note Domain and TLS networking
+:::note[Domain and TLS networking]
 Traefik serves HTTP/3 (QUIC) on UDP/443 and the OpenMapX Docker network is
 dual-stack. For IPv6 to reach published ports, the Docker daemon needs
 `ip6tables` enabled — the default in Docker Engine 27+, otherwise add
@@ -128,7 +128,7 @@ token ships in the browser bundle.
 | `MAPILLARY_TOKEN`         | Server-side Mapillary token used by the `/api/mapillary/*` vector-tile proxy and integrations that fetch Mapillary on the user's behalf. Stays server-side — never expose it in `NEXT_PUBLIC_*`. | Optional. Default unset   |
 | `MAPILLARY_VIEWER_TOKEN`  | Client token for the in-browser Mapillary viewer. Ships in the public JS bundle — use a dedicated read-only OAuth app with a quota you're comfortable exposing. Leave unset to hide the on-map entry point entirely. | Optional. Commented       |
 
-:::caution Two different Mapillary tokens
+:::caution[Two different Mapillary tokens]
 `MAPILLARY_TOKEN` is secret and must never be copied into `MAPILLARY_VIEWER_TOKEN`
 or any `NEXT_PUBLIC_*` variable — Next.js would bundle it into the JavaScript
 the browser downloads.
@@ -229,7 +229,7 @@ Schedules and tuning for the daily Transitous transit-data sync.
 | `TRANSITOUS_SYNC_CRON`                | Cron schedule for the daily Transitous sync. Set to `disabled` to turn it off (e.g. on a staging host where you trigger manually). | Optional. Commented `0 3 * * *` |
 | `TRANSITOUS_FEED_PROXY_RELOAD_CRON`   | Cron schedule for the feed-proxy nginx-reload heartbeat — a safety net against a missed reload during sync. | Optional. Commented `*/15 * * * *` |
 
-:::note Transitous feed-proxy key
+:::note[Transitous feed-proxy key]
 The optional age private key used to decrypt `AGE-ENCRYPTED:` feed values has no
 env variable. Drop the file at `infra/docker/secrets/transitous-feed-proxy.age`
 on the host and re-render compose; the mount is omitted automatically when the
@@ -258,7 +258,7 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `LEGAL_EMAIL`                     | Legal contact email.                                                                                             | Optional. Commented       |
 | `LEGAL_PHONE`                     | Legal contact phone.                                                                                             | Optional. Commented       |
 
-:::tip Legal pages
+:::tip[Legal pages]
 The legal fields are optional but required for complete production
 `/terms` and `/privacy` pages. Leave them blank to omit the corresponding rows.
 :::

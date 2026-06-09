@@ -260,7 +260,7 @@ into one in-memory table that a single catch-all dispatcher consults, so
 restarting the process — re-discovering manifests, re-resolving bindings, and
 re-running `setup()` live.
 
-:::note Production vs. development reload
+:::note[Production vs. development reload]
 In development the host mtime-busts backend module URLs so in-place edits reload.
 In production, Node's ESM loader caches modules permanently, so updating an
 already-loaded community integration requires

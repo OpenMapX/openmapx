@@ -60,7 +60,7 @@ against the running services.
 - **[Getting started](../install/getting-started.md)** — running the stack with
   Docker Compose.
 
-:::note Project status
+:::note[Project status]
 
 OpenMapX is under active development, and so is this documentation. The
 [project wiki](https://github.com/OpenMapX/openmapx/wiki) carries additional

@@ -224,7 +224,7 @@ objects — the framework's `createManifestAttribution()` helper turns
 `dataSources` into the canonical attribution shape so credit metadata lives only
 in the manifest.
 
-:::note Source IDs connect manifests to results
+:::note[Source IDs connect manifests to results]
 A provider tags each result with the `sourceId` it came from, and the host maps
 that back to the manifest entry to render the right license. Keep `sourceId`
 values stable; renaming one orphans existing attribution.
