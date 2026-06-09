@@ -1,11 +1,11 @@
 // integrations/hotels/official.ts
+import { USER_AGENT_CONTACT } from "@openmapx/core";
 import { assertResolvesToPublicIp } from "@openmapx/core/server";
 import type { Logger } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 5000;
 const MAX_BYTES = 800_000;
 const MAX_REDIRECTS = 5;
-const USER_AGENT = "OpenMapX/1.0 (+https://openmapx.org)";
 
 export interface BookingDates {
   checkIn?: string;
@@ -193,7 +193,7 @@ export async function fetchOfficialBookingUrl(
       const res = await fetch(current, {
         redirect: "manual",
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
+        headers: { "User-Agent": USER_AGENT_CONTACT, Accept: "text/html,application/xhtml+xml" },
       });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         const location = res.headers.get("location");

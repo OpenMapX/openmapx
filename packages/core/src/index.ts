@@ -531,8 +531,10 @@ export type { TideExtremaOptions, TideExtreme, TideSample } from "./utils/tideEx
 export { despikeSeries, findTideExtrema } from "./utils/tideExtrema";
 export { timeZoneAt } from "./utils/timezone";
 export {
+  contactDomain,
   USER_AGENT,
   USER_AGENT_ADMIN,
+  USER_AGENT_CONTACT,
   USER_AGENT_TRANSIT,
   userAgent,
 } from "./utils/userAgent";

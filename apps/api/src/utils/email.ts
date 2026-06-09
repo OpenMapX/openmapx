@@ -1,3 +1,4 @@
+import { contactDomain } from "@openmapx/core";
 import { createTransport } from "nodemailer";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
@@ -45,7 +46,7 @@ async function loadEmailConfig(): Promise<EmailConfig> {
   const from = pickString(
     process.env.EMAIL_FROM,
     dbMap.smtpFromAddress,
-    "OpenMapX <noreply@openmapx.org>",
+    `OpenMapX <noreply@${contactDomain()}>`,
   );
 
   const smtpSecureRaw = process.env.SMTP_SECURE;

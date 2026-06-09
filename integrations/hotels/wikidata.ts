@@ -1,4 +1,6 @@
 // integrations/hotels/wikidata.ts
+import { USER_AGENT_CONTACT } from "@openmapx/core";
+
 /** OTA hotel ids resolved from a Wikidata entity (any subset may be present). */
 export interface WikidataOtaIds {
   expedia?: string; // P5651, e.g. "h7172034"
@@ -85,7 +87,7 @@ export async function resolveWikidataOtaIds(
       signal: AbortSignal.timeout(WIKIDATA_TIMEOUT_MS),
       headers: {
         Accept: "application/json",
-        "User-Agent": "OpenMapX/1.0 (+https://openmapx.org)",
+        "User-Agent": USER_AGENT_CONTACT,
       },
     });
     if (!res.ok) return null;
