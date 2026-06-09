@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { healthUrl, mapInitialUrl, mapStopsUrl, planUrl } from "./motis-endpoints.js";
-import { pollUntilHealthy, probe } from "./motis-probe.js";
+import { parseIntEnv, pollUntilHealthy, probe } from "./motis-probe.js";
 import type { StageFn, StageResult } from "./types.js";
 
 const DEFAULT_STAGING_URL = "http://localhost:8082";
@@ -35,13 +35,6 @@ function parseFloatEnv(name: string, fallback: number): number {
   if (!raw) return fallback;
   const value = Number.parseFloat(raw);
   return Number.isFinite(value) ? value : fallback;
-}
-
-function parseIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const value = Number.parseInt(raw, 10);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function stagingUrl(): string {

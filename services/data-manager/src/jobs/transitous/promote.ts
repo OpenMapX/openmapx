@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { PRIMARY_CONTAINER } from "./motis-containers.js";
 import { healthUrl, mapInitialUrl, mapStopsUrl, planUrl } from "./motis-endpoints.js";
-import { DEFAULT_PROBE_TIMEOUT_MS, pollUntilHealthy, probe } from "./motis-probe.js";
+import { DEFAULT_PROBE_TIMEOUT_MS, parseIntEnv, pollUntilHealthy, probe } from "./motis-probe.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const PRIMARY_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
@@ -11,7 +11,12 @@ const STAGING_URL = process.env.MOTIS_STAGING_URL ?? "http://localhost:8082";
 
 const PROBE_TIMEOUT_MS = DEFAULT_PROBE_TIMEOUT_MS;
 const SMOKE_BUDGET_MS = 30_000;
-const RESTART_BUDGET_MS = 5 * 60 * 1000;
+// How long to wait for the primary to come back healthy after the swap+restart.
+// The restarted container re-loads the promoted dataset before it binds its
+// server — for a real region (e.g. Germany) that's several minutes, so a tight
+// budget false-times-out and triggers an unnecessary rollback of a good build.
+// Override with MOTIS_PROMOTE_RESTART_TIMEOUT_MS.
+const RESTART_BUDGET_MS = parseIntEnv("MOTIS_PROMOTE_RESTART_TIMEOUT_MS", 20 * 60 * 1000);
 const RESTART_POLL_INTERVAL_MS = 5_000;
 
 // Smoke-probe targets — the same German station references motis-health uses.

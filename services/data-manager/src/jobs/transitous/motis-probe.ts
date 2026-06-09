@@ -7,6 +7,14 @@
 
 export const DEFAULT_PROBE_TIMEOUT_MS = 5_000;
 
+/** Parse a positive-integer env var (milliseconds), falling back when unset/invalid. */
+export function parseIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export interface ProbeFailure {
   probe: string;
   reason: string;
