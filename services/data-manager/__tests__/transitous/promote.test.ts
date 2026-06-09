@@ -166,6 +166,7 @@ describe("promote stage", () => {
     // freshly-promoted data.
     expect(runnerCalls).toEqual([
       { command: "docker", args: ["stop", "motis"] },
+      { command: "docker", args: ["stop", "motis-staging"] },
       { command: "docker", args: ["restart", "motis"] },
     ]);
 

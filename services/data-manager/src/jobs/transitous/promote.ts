@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { IMPORT_MARKER_FILE } from "./internal.js";
-import { PRIMARY_CONTAINER } from "./motis-containers.js";
+import { PRIMARY_CONTAINER, STAGING_CONTAINER } from "./motis-containers.js";
 import { healthUrl, mapInitialUrl, mapStopsUrl, planUrl } from "./motis-endpoints.js";
 import { DEFAULT_PROBE_TIMEOUT_MS, parseIntEnv, pollUntilHealthy, probe } from "./motis-probe.js";
 import type { JobContext, StageFn, StageResult } from "./types.js";
@@ -109,14 +109,19 @@ async function waitForPrimaryHealthy(deadline: number): Promise<string | null> {
 }
 
 /**
- * Stop the primary container before the rename swap so it never holds a
- * bind-mounted directory that we're about to rename out from under it. Best
- * effort: a not-running / not-yet-created primary (first-ever promotion) makes
- * `docker stop` fail, which is fine — there's nothing to protect.
+ * Stop a container before the rename swap. We stop BOTH the primary and the
+ * staging container: the primary so we don't rename its mount out from under it,
+ * and staging because it holds the very directory we're about to rename into
+ * `live` — if it keeps that bind-mount inode open, the restarted primary ends up
+ * sharing the same data dir with a second MOTIS process and its import hangs
+ * (the server never binds → promote times out → rollback). The next pipeline
+ * cycle's motis-import `docker restart`s staging again. Best effort: a
+ * not-running / not-yet-created container makes `docker stop` fail, which is
+ * fine — there's nothing to protect.
  */
-async function stopPrimary(ctx: JobContext): Promise<void> {
+async function stopContainer(ctx: JobContext, container: string): Promise<void> {
   try {
-    await ctx.runner("docker", ["stop", PRIMARY_CONTAINER], {
+    await ctx.runner("docker", ["stop", container], {
       cwd: ctx.dataDir,
       stdio: "pipe",
     });
@@ -236,11 +241,15 @@ export const run: StageFn = async (ctx) => {
       rmSync(previousDir, { recursive: true, force: true });
     }
 
-    // Stop the primary before touching its data directory so the rename never
-    // happens under a running container holding the old mount (which, on some
-    // bind-mount backends, could leave it serving stale data after restart).
-    // The restart below starts it again against the freshly-promoted data.
-    await stopPrimary(ctx);
+    // Stop BOTH containers before touching the data dirs: the primary so the
+    // rename never happens under its running mount, and staging because it holds
+    // the dir we're about to rename into `live` — leaving it running would make
+    // the restarted primary share the same data inode with a second MOTIS and
+    // its import would hang (server never binds). The restart below brings the
+    // primary back against the freshly-promoted data; the next pipeline cycle
+    // restarts staging.
+    await stopContainer(ctx, PRIMARY_CONTAINER);
+    await stopContainer(ctx, STAGING_CONTAINER);
 
     // First rename: current → previous. If current doesn't exist (first ever
     // promotion) we skip this step and let the staging dir become the live
