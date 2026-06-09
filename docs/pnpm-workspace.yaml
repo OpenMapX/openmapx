@@ -1,3 +1,42 @@
+# Standalone single-package workspace for the docs site.
+#
+# docs/ is intentionally NOT a member of the monorepo's root workspace (its
+# globs don't include docs/). Because docs has its own pnpm-workspace.yaml it
+# becomes its own workspace root, so the monorepo root's settings no longer
+# apply here — the supply-chain hardening below is copied from the root
+# pnpm-workspace.yaml to give the docs build the same protections. (The root's
+# app-specific `overrides` and `publicHoistPattern` are deliberately not copied.)
+packages:
+  - '.'
+
+# Don't run dependency install scripts unless explicitly allowed; never
+# blanket-allow them.
+strictDepBuilds: true
+dangerouslyAllowAllBuilds: false
+
+# Build-script allowlist for docs' own dependencies. Both ship only trivial
+# install scripts the docs build doesn't need (swc's native binding comes from
+# its platform optional-dependency, not this script), so they're skipped
+# (false) — which still explicitly acknowledges them so the strict check passes.
 allowBuilds:
-  '@swc/core': set this to true or false
-  core-js: set this to true or false
+  '@swc/core': false
+  core-js: false
+
+# Reject git/http/file ("exotic") transitive dependencies.
+blockExoticSubdeps: true
+
+# Refuse packages published less than a day ago; don't trust missing timestamps.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+
+# Require provenance/trust evidence and never accept a downgrade in it.
+trustPolicy: no-downgrade
+
+# Pin two transitive Docusaurus deps to provenance-signed releases so the
+# no-downgrade policy is satisfied — their default ranges resolve to older
+# versions published before npm provenance existed. semver 7.x is API-compatible
+# with 6.x; detect-port is only used by `docusaurus start`, not the prod build.
+overrides:
+  "semver": "^7.8.1"
+  "detect-port": "^2.1.0"

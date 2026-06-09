@@ -1,20 +1,36 @@
 # OpenMapX documentation
 
-The OpenMapX documentation site (https://docs.openmapx.com), built with
+The OpenMapX documentation site (https://docs.openmapx.org), built with
 [Docusaurus](https://docusaurus.io/). Content lives in `docs/`; the site is
 fully prerendered to static files.
 
-This package is **not** part of the monorepo's pnpm workspace. Install and run
-it standalone so the workspace's strict install policies don't apply to
-Docusaurus's dependency tree:
+This package is its **own** standalone pnpm workspace (`docs/pnpm-workspace.yaml`),
+deliberately kept out of the monorepo's root workspace. It carries its own copy
+of the root's supply-chain hardening. Run everything from this directory:
 
 ```bash
 cd docs
-pnpm install --ignore-workspace
+pnpm install
 pnpm start          # dev server with live reload
 pnpm build          # static output in ./build
 pnpm serve          # preview the production build
 ```
+
+## Deploy
+
+CI builds and pushes the image to `ghcr.io/medformatik/openmapx-docs:latest` on
+push to `main` (`.github/workflows/docker.yml`, path-filtered to `docs/**`). It
+serves `docs.openmapx.org` as its own Compose project — completely separate from
+the app stack — joining the existing Traefik network. From a repo checkout on
+the host:
+
+```bash
+docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs pull
+docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs up -d
+```
+
+Traefik issues the Let's Encrypt cert automatically (DNS already points at the
+host). See `Dockerfile`, `nginx.conf`, and `deploy/docker-compose.yml`.
 
 ## Brand
 

@@ -49,6 +49,8 @@ jobs:
               - 'package.json'
             transitous-tools:
               - 'services/motis/tools/transitous/**'
+            docs:
+              - 'docs/**'
 
       - id: set
         env:
@@ -56,7 +58,7 @@ jobs:
           FILTER_CHANGES: ${{ steps.filter.outputs.changes }}
         run: |
           if [ "$DISPATCH" = "true" ]; then
-            echo 'apps=["api","web","data-manager","transitous-tools"]' >> "$GITHUB_OUTPUT"
+            echo 'apps=["api","web","data-manager","transitous-tools","docs"]' >> "$GITHUB_OUTPUT"
           else
             echo "apps=${FILTER_CHANGES}" >> "$GITHUB_OUTPUT"
           fi
@@ -100,6 +102,10 @@ jobs:
             transitous-tools)
               echo "context=services/motis/tools/transitous" >> "$GITHUB_OUTPUT"
               echo "dockerfile=services/motis/tools/transitous/Dockerfile" >> "$GITHUB_OUTPUT"
+              ;;
+            docs)
+              echo "context=docs" >> "$GITHUB_OUTPUT"
+              echo "dockerfile=docs/Dockerfile" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "Unknown app: $APP" >&2

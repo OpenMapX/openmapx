@@ -14,7 +14,7 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://docs.openmapx.com',
+  url: 'https://docs.openmapx.org',
   baseUrl: '/',
 
   organizationName: 'OpenMapX',
@@ -43,8 +43,6 @@ const config: Config = {
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/OpenMapX/openmapx/tree/main/docs/',
-          showLastUpdateTime: true,
-          showLastUpdateAuthor: true,
           breadcrumbs: true,
         },
         blog: false,

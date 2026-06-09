@@ -1,0 +1,44 @@
+# Deploy compose for the OpenMapX documentation (docs.openmapx.org).
+#
+# Runs as its OWN compose project, completely separate from the app stack in
+# ~/openmapx (Compose project "docker") and from the landing page in
+# ~/landing-page. It pulls the prebuilt image that CI publishes to GHCR
+# (.github/workflows/docker.yml, on push to main) and only *joins* the app
+# Traefik's network (docker_openmapx) so Traefik can route to it. Nothing in the
+# app or landing deployment is touched.
+#
+# Deploy from the repo checkout on the server (e.g. ~/openmapx):
+#   docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs pull
+#   docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs up -d
+#
+# DNS docs.openmapx.org already points at the host; Traefik issues the
+# Let's Encrypt cert automatically (HTTP-01 challenge, "letsencrypt" resolver).
+services:
+  docs:
+    image: ghcr.io/medformatik/openmapx-docs:latest
+    container_name: openmapx-docs
+    restart: unless-stopped
+    pull_policy: always
+    networks: [openmapx]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: docker_openmapx
+      traefik.http.routers.openmapx-docs.rule: "Host(`docs.openmapx.org`)"
+      traefik.http.routers.openmapx-docs.entrypoints: websecure
+      traefik.http.routers.openmapx-docs.tls.certresolver: letsencrypt
+      # The explicit .service is required: without it Traefik's docker provider
+      # leaves the router unbound and silently drops it (404 + no ACME attempt).
+      traefik.http.routers.openmapx-docs.service: openmapx-docs
+      traefik.http.services.openmapx-docs.loadbalancer.server.port: "80"
+    healthcheck:
+      # 127.0.0.1, not localhost: nginx only listens on IPv4 :80, and localhost
+      # resolves to ::1 first, which would report a false "unhealthy".
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  openmapx:
+    name: docker_openmapx
+    external: true
