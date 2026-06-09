@@ -16,7 +16,7 @@
 [![Turborepo](https://img.shields.io/badge/Turborepo-2-EF4444?logo=turborepo&logoColor=white)](https://turborepo.dev)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](#contributing)
 
-[Documentation (Wiki)](https://github.com/Medformatik/openmapx/wiki) • [Self-Hosting Guide](https://github.com/Medformatik/openmapx/wiki/Self-Hosting-Guide) • [Architecture](https://github.com/Medformatik/openmapx/wiki/Architecture) • [CLI Reference](https://github.com/Medformatik/openmapx/wiki/CLI-Reference) • [Integration System](https://github.com/Medformatik/openmapx/wiki/Integration-System)
+[Documentation](https://docs.openmapx.org) • [Self-Hosting](https://docs.openmapx.org/install/getting-started/) • [Architecture](https://docs.openmapx.org/developer/architecture/) • [CLI Reference](https://docs.openmapx.org/developer/cli-reference/) • [Integration System](https://docs.openmapx.org/developer/integration-system/)
 
 </div>
 
@@ -109,7 +109,7 @@ graph TD
     Martin --> PG
 ```
 
-All containers communicate over the internal `openmapx` Docker network. Only Traefik (and any service that explicitly opts into `exposure.hostPorts`) is reachable from outside the host. See the [Architecture wiki page](https://github.com/Medformatik/openmapx/wiki/Architecture) for the full picture.
+All containers communicate over the internal `openmapx` Docker network. Only Traefik (and any service that explicitly opts into `exposure.hostPorts`) is reachable from outside the host. See the [Architecture documentation](https://docs.openmapx.org/developer/architecture/) for the full picture.
 
 ## CLI
 
@@ -125,7 +125,7 @@ pnpm openmapx users list|create|promote
 pnpm openmapx check                                  # environment + manifest validation
 ```
 
-See the [CLI Reference](https://github.com/Medformatik/openmapx/wiki/CLI-Reference) for every command, flag, and preset.
+See the [CLI Reference](https://docs.openmapx.org/developer/cli-reference/) for every command, flag, and preset.
 
 ## Admin panel
 
@@ -139,7 +139,7 @@ Once the stack is running, `/admin` exposes the full operations surface (gated b
 - **Users** — Better Auth admin (roles, sessions, ban, impersonate)
 - **Audit log, jobs, compose preview, data workflows, status, settings, store, activity**
 
-See [Admin Panel](https://github.com/Medformatik/openmapx/wiki/Admin-Panel) for screenshots and details.
+See the [Admin panel](https://docs.openmapx.org/administration/admin-panel/) documentation for details.
 
 ## Tech stack
 
@@ -161,7 +161,7 @@ Contributions are welcome — bug reports, feature requests, integrations, servi
 1. Open an issue if the change is non-trivial so we can align on scope.
 2. Run `pnpm lint`, `pnpm check-types`, and `pnpm test` locally — the CI workflow runs the same checks.
 3. Use [Conventional Commits](https://www.conventionalcommits.org/) (enforced by Commitlint + Husky).
-4. For new community plugins, see [Community Integrations](https://github.com/Medformatik/openmapx/wiki/Community-Integrations) or [Community Service Repositories](https://github.com/Medformatik/openmapx/wiki/Community-Service-Repositories).
+4. For new community plugins, see [Writing an integration](https://docs.openmapx.org/developer/writing-an-integration/) and [Community extensions](https://docs.openmapx.org/administration/community-extensions/).
 
 ## Acknowledgements
 
