@@ -120,13 +120,13 @@ runtime changes reach both server and client components without a rebuild.
 
 ## Street-level imagery
 
-Mapillary tokens for Street View. One stays server-side; the viewer token ships
-in the browser bundle.
+Mapillary tokens for street-level imagery. One stays server-side; the viewer
+token ships in the browser bundle.
 
 | Variable                  | Description                                                                                                                                 | Required / Default        |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
 | `MAPILLARY_TOKEN`         | Server-side Mapillary token used by the `/api/mapillary/*` vector-tile proxy and integrations that fetch Mapillary on the user's behalf. Stays server-side — never expose it in `NEXT_PUBLIC_*`. | Optional. Default unset   |
-| `MAPILLARY_VIEWER_TOKEN`  | Client token for the in-browser Mapillary viewer (Pegman → Street View). Ships in the public JS bundle — use a dedicated read-only OAuth app with a quota you're comfortable exposing. Leave unset to hide Street View entirely. | Optional. Commented       |
+| `MAPILLARY_VIEWER_TOKEN`  | Client token for the in-browser Mapillary viewer. Ships in the public JS bundle — use a dedicated read-only OAuth app with a quota you're comfortable exposing. Leave unset to hide the on-map entry point entirely. | Optional. Commented       |
 
 :::caution Two different Mapillary tokens
 `MAPILLARY_TOKEN` is secret and must never be copied into `MAPILLARY_VIEWER_TOKEN`
@@ -285,6 +285,6 @@ so the catalogue stays in sync with the live manifests.
   these variables wire together.
 - **[Requirements](./requirements.md)** — host prerequisites and hardware sizing
   for the engines you enable.
-- **Getting started**, **Preparing data**, and **Managing services** — the
-  step-by-step deployment, data-build, and lifecycle walkthroughs *(documentation
-  in progress)*.
+- **[Getting started](./getting-started.md)**, **[Preparing data](./preparing-data.md)**,
+  and **[Managing services](./managing-services.md)** — the step-by-step
+  deployment, data-build, and lifecycle walkthroughs.

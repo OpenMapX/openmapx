@@ -143,11 +143,11 @@ pnpm dev
 
 The web app runs on `http://localhost:3000`.
 
-:::note Optional Street View
-The in-browser Street View viewer needs a Mapillary client token in
+:::note Optional street-level imagery
+The in-browser street-level imagery viewer needs a Mapillary client token in
 `NEXT_PUBLIC_MAPILLARY_TOKEN`. It is bundled into the public JavaScript by
 design — use a dedicated, low-quota Mapillary app for it, never the server-side
-`MAPILLARY_TOKEN`. Leave it unset and the Pegman entry point is simply hidden.
+`MAPILLARY_TOKEN`. Leave it unset and the on-map entry point is simply hidden.
 :::
 
 ## Run both at once

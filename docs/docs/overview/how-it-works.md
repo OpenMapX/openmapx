@@ -89,7 +89,8 @@ imagery, certain regional transit — always proxied through your server.
 
 ## Where to go next
 
-- **Install** — set up your own deployment with Docker Compose *(documentation
-  in progress)*.
-- **Developer** — a deeper look at the architecture and the integration system
-  *(documentation in progress)*.
+- **[Getting started](../install/getting-started.md)** — set up your own
+  deployment with Docker Compose.
+- **[Architecture](../developer/architecture.md)** and the
+  **[integration system](../developer/integration-system.md)** — a deeper look at
+  how OpenMapX is built.

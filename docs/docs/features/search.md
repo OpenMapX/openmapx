@@ -105,7 +105,7 @@ abbreviations** in several languages before they're sent on, so "Aachen Hbf"
 and "Aachen Hauptbahnhof" find the same station regardless of which form you
 type (likewise *Bf* / *Bahnhof*, *Stn* / *Station*, *St-* / *Saint-*). And
 results are **cached** at two layers — a small in-memory cache for hot
-autocomplete prefixes plus a shared Redis cache — keyed on the normalized query
+autocomplete prefixes plus a shared Valkey (Redis-compatible) cache — keyed on the normalized query
 so common searches return without touching an upstream engine. When an upstream
 is briefly unreachable, the app serves slightly stale cached results rather than
 failing the search.

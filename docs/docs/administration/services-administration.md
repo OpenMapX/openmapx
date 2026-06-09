@@ -206,20 +206,19 @@ downloaded, built, and linked, and the one-command refresh — is documented in
 
 A few service-adjacent pages sit alongside this one:
 
-- **Backups** (`/admin/services/backups`) — list, create, restore, and delete the
-  on-disk snapshots under `infra/docker/backups/`. Backups with a missing or
-  malformed manifest are still listed and flagged as corrupt, with restore
-  disabled but delete available so you can clean them up. *(A dedicated
-  backup-and-restore page is in progress.)*
-- **Service repositories** (`/admin/services/repos`) — register, refresh, and
-  remove the community Git repositories that supply extra services, and install
-  community services discovered from them. *(A dedicated community-extensions
-  page is in progress.)*
+- **[Backups](./backup-and-restore.md)** (`/admin/services/backups`) — list,
+  create, restore, and delete the on-disk snapshots under
+  `infra/docker/backups/`. Backups with a missing or malformed manifest are still
+  listed and flagged as corrupt, with restore disabled but delete available so
+  you can clean them up.
+- **[Service repositories](./community-extensions.md)** (`/admin/services/repos`)
+  — register, refresh, and remove the community Git repositories that supply
+  extra services, and install community services discovered from them.
 
 For configuring the *features* that run on top of these services — the geocoding
 and routing orchestrators, transit providers, overlays, and external data
-sources — see the integrations admin page. For health snapshots and the running
-job log, see the monitoring and activity views. *(Both pages are in progress.)*
+sources — see [Integrations & bindings](./integrations-administration.md). For
+health snapshots and the running job log, see [Monitoring](./monitoring.md).
 
 ## Where to go next
 

@@ -129,7 +129,7 @@ A few notes on origins:
 - **Licenses vary by source**, from public-domain and CC BY open data to
   bilateral commercial terms; each source declares its own license and
   attribution in its manifest, which is what feeds the per-view credits and the
-  generated [privacy and terms](../overview/introduction.md) pages.
+  generated `/privacy` and `/terms` pages.
 
 ## Enabling and configuring
 

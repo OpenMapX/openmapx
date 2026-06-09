@@ -241,7 +241,7 @@ graph LR
 3. **Topological sort** — order by each manifest's `dependencies:` so
    orchestrators load before their providers.
 4. **Resolve config** — a five-layer cascade, highest wins: environment variable
-   → encrypted vault → local `config.json` → database (admin UI) → schema
+   → local `config.json` → encrypted vault → database (admin UI) → schema
    default.
 5. **Resolve `requires:`** — match each integration's requirements against the
    service registry and the capability bindings.

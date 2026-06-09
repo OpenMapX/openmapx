@@ -36,7 +36,7 @@ before you confirm.
 
 A **community service repository** is a Git repository that contains one or more
 `<slug>/service.json` manifests at its top level. Each manifest follows the same
-[service manifest](../install/managing-services.md) schema as a built-in service.
+[service manifest](../developer/service-manifest.md) schema as a built-in service.
 Once you register the repository, every valid manifest in it appears in the
 service catalog and can be enabled, rendered, and started just like a first-party
 service.

@@ -282,7 +282,7 @@ pnpm openmapx compose render
 pnpm openmapx services recreate valhalla
 ```
 
-The admin panel's **Save & Apply (restart)** button does the equivalent in one
+The admin panel's **Save & Apply (recreate)** button does the equivalent in one
 click. For the broader picture of what goes in `.env` and how the admin panel
 fits in, see [Configuration](./configuration.md).
 

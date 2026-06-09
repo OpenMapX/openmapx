@@ -200,7 +200,7 @@ everything.
 Pelias is a composite geocoder: a query API in front of Elasticsearch, fed by
 both OpenStreetMap (addresses, venues, streets) and Who's On First
 (administrative boundaries). It's the most capable on structured and
-autocomplete queries, and the most operationally involved — it runs as **five
+autocomplete queries, and the most operationally involved — it runs as **four
 services**: `pelias` (the API), `elasticsearch`, `pelias-placeholder`, and
 `pelias-pip`. The `pelias` preset bundles them.
 

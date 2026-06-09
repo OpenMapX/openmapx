@@ -57,13 +57,13 @@ against the running services.
 
 - **[How it works](./how-it-works.md)** — the architecture, and how services and
   integrations fit together.
-- **Install** — running the stack with Docker Compose *(documentation in
-  progress)*.
+- **[Getting started](../install/getting-started.md)** — running the stack with
+  Docker Compose.
 
 :::note Project status
 
-OpenMapX is under active development, and so is this documentation. Where a page
-is still a stub, the [project wiki](https://github.com/OpenMapX/openmapx/wiki)
-often has more — bearing in mind it can run ahead of or behind the current code.
+OpenMapX is under active development, and so is this documentation. The
+[project wiki](https://github.com/OpenMapX/openmapx/wiki) carries additional
+background — bearing in mind it can run ahead of or behind the current code.
 
 :::

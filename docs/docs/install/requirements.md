@@ -172,5 +172,5 @@ in `.env`.
 
 - **[How it works](../overview/how-it-works.md)** — the service/integration model
   and how a deployment is wired together, so the engine choices above make sense.
-- **Install** — the step-by-step deployment walkthrough *(documentation in
-  progress)*.
+- **[Getting started](./getting-started.md)** — the step-by-step deployment
+  walkthrough.
