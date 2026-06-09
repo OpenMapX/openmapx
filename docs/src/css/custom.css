@@ -1,0 +1,29 @@
+/**
+ * Global styles. The classic template bundles Infima, a CSS framework
+ * designed for content-centric sites. Override Infima variables here.
+ */
+
+/* OpenMapX brand: Material Green (primary = #43A047). */
+:root {
+  --ifm-color-primary: #43a047;
+  --ifm-color-primary-dark: #3d9140;
+  --ifm-color-primary-darker: #388e3c;
+  --ifm-color-primary-darkest: #2e7d32;
+  --ifm-color-primary-light: #4caf50;
+  --ifm-color-primary-lighter: #58b55c;
+  --ifm-color-primary-lightest: #66bb6a;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* A lighter green reads better on the dark background. */
+[data-theme='dark'] {
+  --ifm-color-primary: #81c784;
+  --ifm-color-primary-dark: #66bb6a;
+  --ifm-color-primary-darker: #4caf50;
+  --ifm-color-primary-darkest: #43a047;
+  --ifm-color-primary-light: #a5d6a7;
+  --ifm-color-primary-lighter: #c8e6c9;
+  --ifm-color-primary-lightest: #e8f5e9;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
