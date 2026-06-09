@@ -15,7 +15,7 @@
 # Let's Encrypt cert automatically (HTTP-01 challenge, "letsencrypt" resolver).
 services:
   docs:
-    image: ghcr.io/medformatik/openmapx-docs:latest
+    image: ghcr.io/openmapx/docs:latest
     container_name: openmapx-docs
     restart: unless-stopped
     pull_policy: always

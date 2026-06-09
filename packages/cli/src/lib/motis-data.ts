@@ -31,8 +31,7 @@ export const DEFAULT_TRANSITOUS_REPO_URL = "https://github.com/public-transport/
 // Default to the registry image; ensureTransitousToolsImage falls back to a
 // local docker build when the registry pull fails (offline / private fork).
 export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
-  process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ??
-  "ghcr.io/medformatik/openmapx-transitous-tools:latest";
+  process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ?? "ghcr.io/openmapx/transitous-tools:latest";
 export const OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV = "OPENMAPX_TRANSITOUS_FEED_PROXY_URL";
 export const DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://motis-feed-proxy";
 export const TRANSITOUS_FEED_PROXY_KEY_FILE_ENV = "TRANSITOUS_FEED_PROXY_KEY_FILE";

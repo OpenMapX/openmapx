@@ -4,9 +4,9 @@
 
 **A fully self-hostable, open-data Google Maps alternative — built entirely from open-source services and open data.**
 
-[![CI](https://github.com/Medformatik/openmapx/actions/workflows/ci.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/Medformatik/openmapx/actions/workflows/codeql.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/codeql.yml)
-[![Docker](https://github.com/Medformatik/openmapx/actions/workflows/docker.yml/badge.svg)](https://github.com/Medformatik/openmapx/actions/workflows/docker.yml)
+[![CI](https://github.com/OpenMapX/openmapx/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenMapX/openmapx/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/OpenMapX/openmapx/actions/workflows/codeql.yml/badge.svg)](https://github.com/OpenMapX/openmapx/actions/workflows/codeql.yml)
+[![Docker](https://github.com/OpenMapX/openmapx/actions/workflows/docker.yml/badge.svg)](https://github.com/OpenMapX/openmapx/actions/workflows/docker.yml)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-11-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)

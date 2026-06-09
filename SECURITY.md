@@ -10,10 +10,10 @@ vulnerability report becomes a free attack guide before a fix is shipped.
 Use one of:
 
 1. **GitHub Security Advisory** — open a draft advisory at
-   <https://github.com/Medformatik/openmapx/security/advisories/new>. This is
+   <https://github.com/OpenMapX/openmapx/security/advisories/new>. This is
    the preferred channel.
 2. **Email** — send details to the maintainer listed in the repository's
-   [GitHub `SECURITY` contact](https://github.com/Medformatik/openmapx).
+   [GitHub `SECURITY` contact](https://github.com/OpenMapX/openmapx).
 
 When reporting, please include:
 

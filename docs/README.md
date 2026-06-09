@@ -18,7 +18,7 @@ pnpm serve          # preview the production build
 
 ## Deploy
 
-CI builds and pushes the image to `ghcr.io/medformatik/openmapx-docs:latest` on
+CI builds and pushes the image to `ghcr.io/openmapx/docs:latest` on
 push to `main` (`.github/workflows/docker.yml`, path-filtered to `docs/**`). It
 serves `docs.openmapx.org` as its own Compose project — completely separate from
 the app stack — joining the existing Traefik network. From a repo checkout on

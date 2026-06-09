@@ -6,7 +6,7 @@
   "license": "MIT",
   "quality": "built-in",
   "container": {
-    "image": "ghcr.io/medformatik/openmapx-web",
+    "image": "ghcr.io/openmapx/web",
     "tag": "latest",
     "expose": [3000],
     "environment": {

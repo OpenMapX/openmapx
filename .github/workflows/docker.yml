@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/medformatik/openmapx
+  IMAGE_PREFIX: ghcr.io/openmapx
 
 jobs:
   changes:
@@ -124,7 +124,7 @@ jobs:
       - uses: docker/metadata-action@v6
         id: meta
         with:
-          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.app }}
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest
@@ -155,7 +155,7 @@ jobs:
         if: vars.ENABLE_CODE_SCANNING == 'true'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.app }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.build.outputs.digest }}
           format: sarif
           output: trivy-${{ matrix.app }}.sarif
           severity: CRITICAL,HIGH

@@ -32,7 +32,7 @@ Two things move during an upgrade, and they move independently:
   `git pull`.
 - **The images** — the application containers. The core app services
   (`app-api`, `app-web`, `data-manager`) run **prebuilt images published to the
-  GitHub Container Registry** (`ghcr.io/medformatik/openmapx-*`), pinned to the
+  GitHub Container Registry** (`ghcr.io/openmapx/*`), pinned to the
   `latest` tag in their manifests. They are **not built on your host** — a new
   app version arrives by *pulling* the newer `latest` image, not by rebuilding.
 
