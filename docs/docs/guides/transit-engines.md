@@ -205,11 +205,9 @@ Enable it alongside MOTIS when you want the automated refresh:
 pnpm openmapx services enable motis-staging
 ```
 
-The pipeline, its lockfile-pinned Transitous ref, and the cron schedule are
-documented on the project wiki's
-[MOTIS page](https://github.com/OpenMapX/openmapx/wiki/MOTIS); for everyday
-operation, just leaving `motis-staging` enabled gives you a hands-off daily
-update with a built-in rollback.
+The pipeline, its lockfile-pinned Transitous ref, and the cron schedule live in
+the data-manager service; for everyday operation, just leaving `motis-staging`
+enabled gives you a hands-off daily update with a built-in rollback.
 
 ## Self-hosting OpenTripPlanner
 

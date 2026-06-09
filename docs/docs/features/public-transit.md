@@ -168,9 +168,8 @@ provider that starts failing is automatically taken out of rotation for a short
 cooldown, so one flaky upstream degrades gracefully to the next provider in the
 chain instead of failing the whole request — and recovers on its own when it
 comes back. Operators can inspect per-provider health and reset a cooldown from
-the admin surfaces; the project wiki's
-[Transit Provider Health](https://github.com/OpenMapX/openmapx/wiki/Transit-Provider-Health)
-page documents the window parameters and metrics.
+the admin surfaces; [Monitoring](../administration/monitoring.md) documents the
+window parameters and metrics.
 
 Every result also carries **attribution** for the feeds and operators behind it,
 which OpenMapX de-duplicates and renders as data-source credits in the UI.
@@ -196,7 +195,7 @@ pnpm openmapx services start motis
 MOTIS scales from a single country to the whole planet on one server — pick the
 smallest region that covers your users, since region size drives RAM, disk, and
 import time. The region-only alternative,
-[OpenTripPlanner](https://github.com/OpenMapX/openmapx/wiki/OpenTripPlanner), is
+[OpenTripPlanner](../guides/transit-engines.md), is
 also supported for smaller deployments. See
 [Managing services](../install/managing-services.md) and
 [Preparing data](../install/preparing-data.md) for the full lifecycle, and

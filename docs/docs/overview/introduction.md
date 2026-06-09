@@ -62,8 +62,7 @@ against the running services.
 
 :::note[Project status]
 
-OpenMapX is under active development, and so is this documentation. The
-[project wiki](https://github.com/OpenMapX/openmapx/wiki) carries additional
-background — bearing in mind it can run ahead of or behind the current code.
+OpenMapX is under active development, and so is this documentation — it can run
+slightly ahead of or behind the current code.
 
 :::

@@ -71,8 +71,8 @@ pnpm openmapx backup list                      # show available snapshots
 pnpm openmapx backup restore pre-upgrade       # restore everything
 ```
 
-See the [backup command reference](https://github.com/OpenMapX/openmapx/wiki/CLI-Reference#backup)
-for per-service restore, the version-compatibility check, and `--stop-running`.
+See [Backup & restore](../administration/backup-and-restore.md) for per-service
+restore, the version-compatibility check, and `--stop-running`.
 
 ## 2. Pull the latest code
 
@@ -192,9 +192,10 @@ and any self-hosted engines you run. If a service is stuck, tail its logs:
 pnpm openmapx services logs <id> --follow
 ```
 
-For the full set of after-the-fact checks (per-engine curl probes for Valhalla,
-Nominatim, Photon, Overpass, MOTIS, and TileServer), see the verification commands
-in the [self-hosting guide](https://github.com/OpenMapX/openmapx/wiki/Self-Hosting-Guide#verification).
+For per-engine checks after an upgrade, see the verification steps in the
+relevant guides — [routing engines](../guides/routing-engines.md),
+[geocoders](../guides/geocoders.md), [transit engines](../guides/transit-engines.md),
+and [OSM data queries](../guides/osm-data-queries.md).
 
 ## Reclaiming disk after an upgrade
 

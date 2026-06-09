@@ -208,9 +208,9 @@ manifests and the admin panel:
 - **Flights** (`flights`) — the default search engine to preselect, and an
   optional Skyscanner affiliate id.
 
-For the engine-specific build and tuning details (elevation and admin-boundary
-toggles, region builds, memory needs), the project wiki's **Valhalla** and
-**OSRM** pages go deeper than this feature overview.
+For engine-specific build and tuning details (elevation and admin-boundary
+toggles, region builds, memory needs), see the
+[Self-hosting routing engines](../guides/routing-engines.md) guide.
 
 ## Related features
 
