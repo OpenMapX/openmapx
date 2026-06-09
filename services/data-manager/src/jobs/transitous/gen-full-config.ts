@@ -1,42 +1,9 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildFeedProxyConfig } from "@openmapx/motis-feed-proxy-config";
+import { applyConfigOverrides } from "./config-overrides.js";
 import { FEED_PROXY_CONTAINER } from "./motis-containers.js";
-import type { JobContext, JobLogger, StageFn, StageResult } from "./types.js";
-
-/**
- * Same `incremental_rt_update` post-processor as gen-motis-config.ts.
- * Duplicated rather than imported because both stages independently emit a
- * config.yml and we want the same opt-in to apply to either output without
- * an import cycle. Keep in sync with the upstream copy.
- */
-function applyIncrementalRtOverride(configPath: string, logger: JobLogger): boolean {
-  const raw = process.env.MOTIS_INCREMENTAL_RT_UPDATE;
-  if (raw === undefined) return false;
-  const truthy = ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
-  const falsy = ["0", "false", "no", "off"].includes(raw.trim().toLowerCase());
-  if (!truthy && !falsy) return false;
-  if (!existsSync(configPath)) return false;
-  let text: string;
-  try {
-    text = readFileSync(configPath, "utf-8");
-  } catch {
-    return false;
-  }
-  const desired = truthy ? "true" : "false";
-  const re = /^(\s*incremental_rt_update:\s*)(true|false)\s*$/m;
-  const match = text.match(re);
-  if (!match || match[2] === desired) return false;
-  try {
-    writeFileSync(configPath, text.replace(re, `$1${desired}`), "utf-8");
-    logger.info(
-      `gen-full-config: incremental_rt_update set to ${desired} via MOTIS_INCREMENTAL_RT_UPDATE`,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
+import type { JobContext, StageFn, StageResult } from "./types.js";
 
 const FEED_PROXY_CONF_REL = "motis-feed-proxy/conf/feed-proxy.conf";
 
@@ -156,7 +123,11 @@ export const run: StageFn = async (ctx) => {
       { cwd: catalogDir, stdio: "pipe" },
     );
     const configPath = join(catalogDir, "out", "config.yml");
-    const incrementalRtOverridden = applyIncrementalRtOverride(configPath, ctx.logger);
+    // Apply the SAME post-processors as gen-motis-config so the runtime config
+    // the live MOTIS serves agrees with the import-only config staging built
+    // against — most importantly the `osm:` extract, whose mismatch (a stale
+    // `planet-latest.osm.pbf`) previously failed every post-promote re-import.
+    const overrides = applyConfigOverrides(configPath, ctx.logger);
 
     const feedProxy = await generateFeedProxyConfig(ctx, catalogDir);
 
@@ -169,7 +140,7 @@ export const run: StageFn = async (ctx) => {
       message: "Generated full MOTIS config",
       artifacts: {
         configPath,
-        incrementalRtOverridden,
+        ...overrides,
         feedProxyConfigPath: feedProxy.configPath,
         feedProxyWritten: feedProxy.written,
         feedProxyEntries: feedProxy.entries,
