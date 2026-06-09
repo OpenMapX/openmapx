@@ -1,1 +1,1 @@
-pnpm lint && pnpm check-types && pnpm check-legal-tables && pnpm test
+pnpm lint && pnpm check-types && pnpm check-legal-tables && pnpm check-legal-updated && pnpm check-data-flows && pnpm test

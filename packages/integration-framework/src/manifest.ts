@@ -1,11 +1,6 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import z from "zod/v4";
 
-const publisherSchema = z.object({
-  name: z.string(),
-  url: z.string().optional(),
-});
-
 const dataSourceSchema = z.object({
   // Source matching — connects this entry to provider source values
   sourceId: z.string(),
@@ -13,13 +8,20 @@ const dataSourceSchema = z.object({
   // Identity
   name: z.string(),
   url: z.string(),
+  /**
+   * Actual data-API host(s) this source's requests go to, when they differ from
+   * the registrable domain of `url` (which is usually the human-facing dataset /
+   * open-data portal page). Lets the `check-data-flows` guard recognise a
+   * legitimate, same-controller data host — e.g. a source whose `url` is
+   * `https://data.public.lu/...` but whose feed is fetched from `www.cita.lu`.
+   * Hosts (or registrable domains) only; no scheme/path.
+   */
+  apiHosts: z.array(z.string()).optional(),
 
   // License & Attribution
   license: z.string(),
   licenseUrl: z.string().optional(),
   attribution: z.string().optional(),
-  /** Upstream publisher (e.g. "Entur AS", "Deutsche Bahn AG"). */
-  publisher: publisherSchema.optional(),
   /** Free-form per-source notes (e.g. "via Transitous feed proxy"). */
   notes: z.string().optional(),
   commercialUse: z.enum(["yes", "no", "conditional", "unknown"]).optional(),
@@ -32,10 +34,6 @@ const dataSourceSchema = z.object({
   cookies: z.boolean().optional(),
   dpaAvailable: z.boolean().optional(),
   dpaUrl: z.string().optional(),
-
-  // Dynamic attribution (fetched from endpoint at runtime)
-  dynamic: z.boolean().optional(),
-  dynamicEndpoint: z.string().optional(),
 });
 
 const healthCheckSchema = z.object({
@@ -177,7 +175,6 @@ export function dataSourceToAttribution(ds: IntegrationDataSource): Attribution 
     spdxLicense: ds.license || undefined,
     licenseUrl: ds.licenseUrl,
     attributionText: ds.attribution,
-    publisher: ds.publisher,
     notes: ds.notes,
   };
 }
@@ -210,7 +207,7 @@ export function dataSourceToAttribution(ds: IntegrationDataSource): Attribution 
 export interface ManifestAttributionStore {
   /** Populate the store from a manifest's `dataSources` list. */
   set(dataSources: IntegrationDataSource[]): void;
-  /** All non-dynamic attributions, in manifest order. */
+  /** All attributions, in manifest order. */
   all(): Attribution[];
   /** Look up a single attribution by `sourceId`. */
   bySource(sourceId: string): Attribution | undefined;
@@ -236,7 +233,6 @@ export function createManifestAttribution(): ManifestAttributionStore {
       const nextMap: Record<string, Attribution> = {};
       const nextAll: Attribution[] = [];
       for (const ds of dataSources) {
-        if (ds.dynamic) continue;
         const attr = dataSourceToAttribution(ds);
         nextMap[attr.sourceId] = attr;
         nextAll.push(attr);

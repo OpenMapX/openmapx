@@ -8,8 +8,7 @@ import { useMapAttributions } from "./useMapAttributions";
 
 /**
  * Register an integration's manifest data sources via `useMapAttributions`
- * while `active` is true. Skips entries marked `dynamic` (those are fetched
- * at runtime per-result and surfaced by the consuming map layer instead).
+ * while `active` is true.
  *
  * All credit metadata is sourced from `manifest.json`'s `dataSources` —
  * never hand-rolled — via the shared `dataSourceToAttribution` helper.
@@ -22,7 +21,7 @@ export function useIntegrationAttribution(integrationId: string, active: boolean
   const attributions = useMemo<Attribution[]>(() => {
     if (!active) return [];
     const sources = meta?.dataSources ?? [];
-    return sources.filter((ds) => !ds.dynamic).map(dataSourceToAttribution);
+    return sources.map(dataSourceToAttribution);
   }, [active, meta]);
   useMapAttributions(`integration:${integrationId}`, attributions);
 }
@@ -44,7 +43,6 @@ export function useIntegrationDomainAttribution(domain: string, active: boolean)
     const out: Attribution[] = [];
     for (const meta of members) {
       for (const ds of meta.dataSources ?? []) {
-        if (ds.dynamic) continue;
         out.push(dataSourceToAttribution(ds));
       }
     }

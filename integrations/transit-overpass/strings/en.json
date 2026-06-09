@@ -6,6 +6,11 @@
       "purpose": "Fallback transit stop discovery using OpenStreetMap when no other provider covers the area",
       "dataSent": "Bounding box coordinates",
       "dataReceived": "OSM nodes with name, ref, transport mode tags (train, tram, bus, subway, ferry, etc.)"
+    },
+    "overpass-kumi": {
+      "purpose": "Rate-limit fallback Overpass mirror (Kumi Systems e.U., Austria), used only when the primary Overpass endpoint is rate-limited or unavailable",
+      "dataSent": "The Overpass QL query containing the map-viewport bounding box, sent server-side only when the primary endpoint is unavailable",
+      "dataReceived": "OSM nodes with name, ref, transport mode tags (train, tram, bus, subway, ferry, etc.)"
     }
   }
 }

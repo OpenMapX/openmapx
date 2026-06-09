@@ -47,8 +47,8 @@ interface AfdcResponse {
   alt_fuel_station?: AfdcStation;
 }
 
-const AFDC_NEAREST_URL = "https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json";
-const AFDC_DETAIL_BASE = "https://developer.nlr.gov/api/alt-fuel-stations/v1";
+const AFDC_NEAREST_URL = "https://developer.nrel.gov/api/alt-fuel-stations/v1/nearest.json";
+const AFDC_DETAIL_BASE = "https://developer.nrel.gov/api/alt-fuel-stations/v1";
 const AFDC_STATION_URL = "https://afdc.energy.gov/stations/";
 // US + CA bounding box. Mexico is not meaningfully populated (per dataset review).
 const COVERAGE = { south: 18, west: -180, north: 72, east: -62 };

@@ -22,9 +22,7 @@ import type { AutocompleteResult, CategoryId, LngLat } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
-  buildIntegrationAttribution,
   CATEGORY_DEFINITIONS,
-  combineAttributions,
   coordinateId,
   createPlace,
   decodeShortPlusCode,
@@ -40,7 +38,6 @@ import {
   useAdaptiveDebounce,
   useAirportSearch,
   useAutocomplete,
-  useCapabilities,
   useCategorySearchStore,
   useChipTranslations,
   useCommandPaletteStore,
@@ -71,6 +68,7 @@ import {
 } from "@/lib/launchExplore";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
+import { useGeocodingAttribution } from "@/lib/useGeocodingAttribution";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
 
@@ -203,18 +201,8 @@ export function SearchBar() {
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [registry]);
 
-  // Geocoding attribution — only show providers that are available and healthy
-  const { services: caps } = useCapabilities();
-  const geocodingAttribution = useMemo(() => {
-    const geocoders = registry.getByDomain("geocoding").filter((g) => {
-      const cap = caps[g.id];
-      return cap ? cap.available && cap.healthy : false;
-    });
-    if (geocoders.length === 0) return "";
-    return combineAttributions(
-      geocoders.map((g) => buildIntegrationAttribution(g.dataSources)).filter(Boolean),
-    );
-  }, [registry, caps]);
+  // Geocoding attribution — only credit providers that are available and healthy.
+  const geocodingAttribution = useGeocodingAttribution();
 
   // Clean up blur timeout on unmount
   useEffect(() => {

@@ -262,6 +262,23 @@ export interface IntegrationContext {
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
 
   /**
+   * Source IDs (`dataSources[].sourceId`) currently disallowed by the operator's
+   * data-use policy (non-commercial / grey-area). Orchestrators should skip
+   * providers whose source is in this set and fall back to the next. Empty when
+   * the policy permits everything; absent on hosts that don't enforce a policy.
+   */
+  getDisallowedSourceIds?(): Promise<Set<string>>;
+
+  /**
+   * Integration ids whose data sources are entirely disallowed by the operator's
+   * data-use policy. Orchestrators that key on the integration/provider rather
+   * than a per-item `source` field (transit, knowledge) skip providers belonging
+   * to these integrations and fall back to the next. Empty when the policy permits
+   * everything; absent on hosts that don't enforce a policy.
+   */
+  getDisallowedIntegrationIds?(): Promise<Set<string>>;
+
+  /**
    * Returns the resolved target for a `requires:` entry declared by this integration.
    *
    * @param key - Either a specific service slug ("valhalla") for `{ service: "valhalla" }`

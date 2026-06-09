@@ -95,8 +95,6 @@ interface IntegrationDetailData {
       cookies?: boolean;
       dpaAvailable?: boolean;
       dpaUrl?: string;
-      dynamic?: boolean;
-      dynamicEndpoint?: string;
     }>;
   };
   resolvedConfig: Record<string, { value: unknown; source: ConfigSource }>;
@@ -981,6 +979,33 @@ function HealthTab({
   );
 }
 
+/**
+ * "DPA available" chip — a plain chip, or a link chip opening the DPA when a
+ * `dpaUrl` is declared. The shared props live in one place; the two variants
+ * exist only because MUI types the anchor (`component="a"`) chip differently.
+ */
+function DpaChip({ available, url }: { available?: boolean; url?: string }) {
+  const shared = {
+    label: "DPA available",
+    size: "small" as const,
+    color: (available ? "success" : "default") as "success" | "default",
+    variant: "outlined" as const,
+  };
+  return url ? (
+    <Chip
+      {...shared}
+      component="a"
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      clickable
+      icon={<OpenInNewIcon sx={{ fontSize: "0.85rem" }} />}
+    />
+  ) : (
+    <Chip {...shared} />
+  );
+}
+
 function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
   const sources = data.manifest.dataSources;
   if (!sources?.length) {
@@ -1086,12 +1111,7 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                     color={ds.cookies ? "warning" : "default"}
                     variant="outlined"
                   />
-                  <Chip
-                    label="DPA available"
-                    size="small"
-                    color={ds.dpaAvailable ? "success" : "default"}
-                    variant="outlined"
-                  />
+                  <DpaChip available={ds.dpaAvailable} url={ds.dpaUrl} />
                 </Stack>
               </Stack>
               <Stack
@@ -1131,15 +1151,6 @@ function DataSourcesTab({ data }: { data: IntegrationDetailData }) {
                   </Typography>
                 )}
               </Stack>
-              {ds.dynamic && (
-                <Chip
-                  label="Dynamic attribution"
-                  size="small"
-                  variant="outlined"
-                  color="info"
-                  sx={{ width: "fit-content" }}
-                />
-              )}
             </Stack>
           </CardContent>
         </Card>

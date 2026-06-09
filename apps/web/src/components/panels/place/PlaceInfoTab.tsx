@@ -18,6 +18,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { buildExternalRefs, type ExternalRef } from "./externalIdLinks";
+import { PlaceDataAttribution } from "./PlaceDataAttribution";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
 
 interface Props {
@@ -470,6 +471,8 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
           </Box>
         </>
       )}
+      {/* Credit the geocoding/OSM source of the raw place data shown here (ODbL/CC-BY). */}
+      <PlaceDataAttribution />
     </Box>
   );
 }

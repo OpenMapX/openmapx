@@ -48,7 +48,7 @@
     {
       "sourceId": "db-ris-maps",
       "name": "Deutsche Bahn RIS Maps",
-      "url": "https://apis.deutschebahn.com/",
+      "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/",
       "license": "Proprietary (bilateral license)",
       "licenseUrl": "https://developers.deutschebahn.com/db-api-marketplace/apis/nutzungsbedingungen",
       "commercialUse": "conditional",

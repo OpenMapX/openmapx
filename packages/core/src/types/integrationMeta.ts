@@ -22,8 +22,6 @@ export interface IntegrationDataSource {
   cookies?: boolean;
   dpaAvailable?: boolean;
   dpaUrl?: string;
-  dynamic?: boolean;
-  dynamicEndpoint?: string;
 }
 
 export interface CacheClient {

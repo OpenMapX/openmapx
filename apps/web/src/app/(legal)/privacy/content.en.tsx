@@ -17,7 +17,19 @@ export default function PrivacyContent({
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
 }) {
-  const { name, street, postalCode, city, country, email } = legalConfig;
+  const {
+    name,
+    street,
+    postalCode,
+    city,
+    country,
+    email,
+    supervisoryAuthority,
+    supervisoryAuthorityUrl,
+    hostingProvider,
+    hostingLocations,
+    serverLogRetentionDays,
+  } = legalConfig;
 
   return (
     <Box>
@@ -31,7 +43,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: April 2026
+        Last updated: June 2026
       </Typography>
       <Section title="1. Controller and Contact">
         <Typography>
@@ -108,14 +120,16 @@ export default function PrivacyContent({
         <Typography sx={{ mt: 1 }}>
           This data is processed to ensure the technical operation and security of the service. The
           legal basis is Art. 6(1)(f) GDPR (legitimate interest in providing a secure and functional
-          service). Server logs are automatically deleted after 30 days.
+          service). Server logs are automatically deleted after {serverLogRetentionDays} days.
         </Typography>
-        <Typography sx={{ mt: 1 }}>
-          Our servers are hosted by Hetzner Online GmbH, Industriestr.&nbsp;25, 91710 Gunzenhausen,
-          Germany. Hetzner processes data on our behalf and exclusively according to our
-          instructions (data processor pursuant to Art.&nbsp;28 GDPR). A data processing agreement
-          is in place. Hetzner&apos;s data centers are located in Germany and Finland (EU).
-        </Typography>
+        {hostingProvider && (
+          <Typography sx={{ mt: 1 }}>
+            Our servers are hosted by {hostingProvider}, who processes data on our behalf and
+            exclusively according to our instructions (data processor pursuant to Art.&nbsp;28
+            GDPR). A data processing agreement is in place.
+            {hostingLocations ? ` The data centers are located in ${hostingLocations}.` : ""}
+          </Typography>
+        )}
       </Section>
       <Section title="4. Geolocation Data">
         <Typography>
@@ -621,14 +635,22 @@ export default function PrivacyContent({
         </ul>
         <Typography sx={{ mt: 1 }}>
           To exercise any of these rights, contact us at the email address listed above. You also
-          have the right to lodge a complaint with a supervisory authority (Art. 77 GDPR). The
-          competent supervisory authority is: Landesbeauftragte f&uuml;r Datenschutz und
-          Informationsfreiheit Nordrhein-Westfalen (LDI NRW), Kavalleriestr.&nbsp;2&ndash;4, 40213
-          D&uuml;sseldorf,{" "}
-          <Link href="https://www.ldi.nrw.de" target="_blank" rel="noopener noreferrer">
-            www.ldi.nrw.de
-          </Link>
-          .
+          have the right to lodge a complaint with a supervisory authority (Art. 77 GDPR).
+          {supervisoryAuthority && (
+            <>
+              {" "}
+              The competent supervisory authority is: {supervisoryAuthority}
+              {supervisoryAuthorityUrl && (
+                <>
+                  ,{" "}
+                  <Link href={supervisoryAuthorityUrl} target="_blank" rel="noopener noreferrer">
+                    {supervisoryAuthorityUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
+                  </Link>
+                </>
+              )}
+              .
+            </>
+          )}
         </Typography>
       </Section>
       <Section title="12. Data Retention">
@@ -661,7 +683,8 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>Server logs</strong> — automatically deleted after 30 days.
+              <strong>Server logs</strong> — automatically deleted after {serverLogRetentionDays}{" "}
+              days.
             </Typography>
           </li>
           <li>

@@ -16,18 +16,29 @@ vi.mock("../../../integration-host.js", () => ({
   getIntegrationsByDomain: vi.fn((domain: string) => {
     if (domain === "knowledge") {
       return [
-        { providers: new Map([["knowledge", [mockWikidataSource]]]) },
-        { providers: new Map([["knowledge", [mockWikipediaSource]]]) },
+        { id: "knowledge-wikidata", providers: new Map([["knowledge", [mockWikidataSource]]]) },
+        { id: "knowledge-wikipedia", providers: new Map([["knowledge", [mockWikipediaSource]]]) },
       ];
     }
     return [];
   }),
 }));
 
+// The data-use policy is unit-tested separately; here we drive its result
+// directly. Every test allows all sources (the mock defaults to an empty gated
+// set); the last test flips it to exercise the gating skip in getKnowledgeSources.
+const { gatedIntegrationsMock } = vi.hoisted(() => ({
+  gatedIntegrationsMock: vi.fn(async () => new Set<string>()),
+}));
+vi.mock("../../data-use-policy.js", () => ({ getGatedIntegrationIds: gatedIntegrationsMock }));
+
 let wikidataLookup: ReturnType<typeof vi.fn>;
 let wikipediaLookup: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  // Plain vi.fn()s aren't reset by restoreAllMocks, so clear call history here to
+  // keep per-test call-count assertions (e.g. not.toHaveBeenCalled) reliable.
+  vi.clearAllMocks();
   wikidataLookup = mockWikidataSource.lookup as ReturnType<typeof vi.fn>;
   wikipediaLookup = mockWikipediaSource.lookup as ReturnType<typeof vi.fn>;
 });
@@ -151,5 +162,18 @@ describe("getPlaceKnowledge", () => {
     const { getPlaceKnowledge } = await import("../index.js");
     const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
     expect(result).toEqual({});
+  });
+
+  it("skips knowledge sources from policy-disallowed integrations", async () => {
+    // Gate the wikidata integration; only wikipedia should be consulted + merged.
+    gatedIntegrationsMock.mockResolvedValueOnce(new Set(["knowledge-wikidata"]));
+    wikidataLookup.mockResolvedValueOnce({ description: "Wikidata desc" });
+    wikipediaLookup.mockResolvedValueOnce({ description: "Wikipedia desc" });
+
+    const { getPlaceKnowledge } = await import("../index.js");
+    const result = await getPlaceKnowledge(makePlace({ wikidata: "Q42" }));
+
+    expect(wikidataLookup).not.toHaveBeenCalled();
+    expect(result.description).toBe("Wikipedia desc");
   });
 });

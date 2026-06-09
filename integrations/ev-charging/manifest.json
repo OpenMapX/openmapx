@@ -31,8 +31,8 @@
       },
       "afdcApiKey": {
         "type": "string",
-        "title": "AFDC/NLR API Key",
-        "description": "NREL / National Laboratory of the Rockies developer API key (developer.nlr.gov) covering the AFDC Alternative Fuel Stations dataset for the United States and Canada.",
+        "title": "AFDC/NREL API Key",
+        "description": "NREL (National Renewable Energy Laboratory) developer API key (developer.nrel.gov) covering the AFDC Alternative Fuel Stations dataset for the United States and Canada.",
         "x-openmapx-secret": true
       },
       "nobilApiKey": {
@@ -62,7 +62,7 @@
     {
       "name": "AFDC/NREL (US/CA)",
       "type": "http",
-      "urlTemplate": "https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key=${afdcApiKey}&fuel_type=ELEC&country=all&status=E&access=public&latitude=38.8977&longitude=-77.0365&radius=1&limit=1&format=json",
+      "urlTemplate": "https://developer.nrel.gov/api/alt-fuel-stations/v1/nearest.json?api_key=${afdcApiKey}&fuel_type=ELEC&country=all&status=E&access=public&latitude=38.8977&longitude=-77.0365&radius=1&limit=1&format=json",
       "requiredConfigKeys": ["afdcApiKey"]
     },
     {
@@ -99,6 +99,7 @@
       "sourceId": "ocm",
       "name": "OpenChargeMap",
       "url": "https://api.openchargemap.io/",
+      "apiHosts": ["openchargemap.org"],
       "license": "Mixed: OpenChargeMap-contributed data is CC BY 4.0; imported provider licenses vary",
       "licenseUrl": "https://openchargemap.org/site/about/terms",
       "attribution": "© <a href=\"https://openchargemap.org\" target=\"_blank\" rel=\"noopener noreferrer\">OpenChargeMap</a> and its listed data providers (license varies per provider)",
@@ -114,8 +115,9 @@
       "sourceId": "afdc",
       "name": "NREL Alternative Fuel Stations (AFDC, US/CA)",
       "url": "https://afdc.energy.gov/stations/",
-      "license": "NLR / NREL / Alliance for Sustainable Energy public-data license (free use with attribution; no endorsement)",
-      "licenseUrl": "https://www.nlr.gov/disclaimer",
+      "apiHosts": ["developer.nrel.gov"],
+      "license": "NREL / Alliance for Sustainable Energy public-data license (free use with attribution; no endorsement)",
+      "licenseUrl": "https://www.nrel.gov/disclaimer.html",
       "attribution": "U.S. DOE / NREL / Alliance — Alternative Fuel Stations (afdc.energy.gov/stations)",
       "commercialUse": "yes",
       "providerCountry": "US",
@@ -156,9 +158,25 @@
       "dpaAvailable": false
     },
     {
+      "sourceId": "opendatasoft",
+      "name": "Opendatasoft (France IRVE API platform)",
+      "url": "https://public.opendatasoft.com/",
+      "license": "Licence Ouverte / Open Licence 2.0",
+      "licenseUrl": "https://www.data.gouv.fr/pages/legal/licences/etalab-2.0",
+      "attribution": "France IRVE dataset served via the Opendatasoft public API platform",
+      "commercialUse": "yes",
+      "providerCountry": "FR",
+      "providerPrivacyUrl": "https://legal.opendatasoft.com/en/privacy-policy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
       "sourceId": "switzerland-ev",
       "name": "Charging points for electric cars (SFOE)",
       "url": "https://opendata.swiss/en/dataset/ladestationen-fuer-elektroautos",
+      "apiHosts": ["data.geo.admin.ch"],
       "license": "opendata.swiss terms of use (terms_by_ask)",
       "licenseUrl": "https://opendata.swiss/terms-of-use#terms_by_ask",
       "attribution": "Swiss Federal Office of Energy SFOE and charging infrastructure operators",

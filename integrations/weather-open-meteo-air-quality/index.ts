@@ -54,6 +54,15 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    // Open-Meteo's free tier is non-commercial only; honour the operator's
+    // data-use policy here since this route returns an untagged object the
+    // per-item response filter can't reach.
+    const disallowed = await ctx.getDisallowedIntegrationIds?.();
+    if (disallowed?.has(ctx.id)) {
+      reply.status(204).send(null);
+      return;
+    }
+
     const roundedLat = roundCoord(lat);
     const roundedLng = roundCoord(lng);
     const cacheKey = `aqi:${roundedLat},${roundedLng}`;

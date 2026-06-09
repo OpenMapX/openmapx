@@ -12,11 +12,9 @@ import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttributio
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
 
 export default function TermsContentDe({
-  transitAttribution = [],
   capabilities: _capabilities = {},
   integrations = [],
 }: {
-  transitAttribution?: unknown[];
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
 }) {
@@ -34,7 +32,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: April 2026
+        Zuletzt aktualisiert: Juni 2026
       </Typography>
       <Section title="1. Geltungsbereich und Anbieter">
         <Typography>
@@ -454,7 +452,7 @@ export default function TermsContentDe({
         ))}
 
         <TransitFeedAttribution
-          feeds={transitAttribution as never[]}
+          feeds={[]}
           labels={{
             heading: "GTFS-Nahverkehrsfeeds",
             description:
@@ -560,6 +558,7 @@ interface AttributionRow {
   license: string;
   licenseUrl?: string;
   url?: string;
+  notes?: string;
 }
 
 function AttributionTable({ heading, rows }: { heading: string; rows: AttributionRow[] }) {
@@ -589,7 +588,18 @@ function AttributionTable({ heading, rows }: { heading: string; rows: Attributio
                     row.source
                   )}
                 </TableCell>
-                <TableCell>{row.desc}</TableCell>
+                <TableCell>
+                  {row.desc}
+                  {row.notes && (
+                    <Typography
+                      variant="caption"
+                      component="p"
+                      sx={{ color: "text.secondary", mt: 0.5 }}
+                    >
+                      {row.notes}
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell>
                   {row.licenseUrl ? (
                     <Link href={row.licenseUrl} target="_blank" rel="noopener noreferrer">

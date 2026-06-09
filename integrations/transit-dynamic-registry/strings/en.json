@@ -11,6 +11,11 @@
       "purpose": "Fallback for loading transit registry when JSDelivr is unavailable",
       "dataSent": "No user data (fallback registry source)",
       "dataReceived": "Same provider config JSON as JSDelivr"
+    },
+    "regional-operators": {
+      "purpose": "Regional public-transport journey-planning APIs auto-discovered from the public-transport/transport-apis registry (~85 operators across many countries). Queried only when no hand-crafted provider covers your area.",
+      "dataSent": "Your journey query — origin/destination coordinates and/or stop IDs — forwarded server-side to the matched regional operator's API (HAFAS mgate or OpenTripPlanner). No account or device identifier is included.",
+      "dataReceived": "Stops, departures, and journey itineraries for the requested trip."
     }
   }
 }

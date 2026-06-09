@@ -17,6 +17,7 @@ export interface AttributionRow {
   url: string;
   attributionHtml?: string;
   commercialUse?: string;
+  notes?: string;
 }
 
 const DOMAIN_TO_PRIVACY_SECTION: Record<string, { key: string; labelEn: string; labelDe: string }> =
@@ -225,7 +226,6 @@ export function generateAttributionSectionsFromManifests(
     const desc = localized(integration, locale, "description") || integration.description || "";
 
     for (const ds of sources) {
-      if (ds.dynamic) continue;
       grouped.get(groupKey)?.rows.push({
         source: ds.name,
         desc,
@@ -234,6 +234,7 @@ export function generateAttributionSectionsFromManifests(
         url: ds.url,
         attributionHtml: ds.attribution,
         commercialUse: ds.commercialUse,
+        notes: ds.notes,
       });
     }
   }

@@ -12,9 +12,12 @@ import {
   useDebouncedCallback,
   weatherCodeToInfo,
 } from "@openmapx/core";
+import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import { useCallback, useEffect, useState } from "react";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMap } from "@/lib/MapContext";
+import { useMapAttributions } from "@/lib/useMapAttributions";
 import { WeatherIcon } from "./WeatherIcon";
 import { windDirectionLabel } from "./weatherUtils";
 
@@ -54,18 +57,35 @@ export function WeatherWidget() {
 
   const registry = useIntegrationRegistry();
 
+  // Resolve the integration manifest data source that produced this reading so
+  // the CC-BY publisher (Open-Meteo / Bright Sky / MET Norway) can be credited.
+  const source = data?.source;
+  const weatherMeta = source
+    ? registry
+        .getByDomain("weather")
+        .find((m) => m.dataSources?.some((ds) => ds.sourceId === source))
+    : undefined;
+  const attrText = weatherMeta?.dataSources
+    ? buildSourceAttribution(weatherMeta.dataSources, source ? [source] : []).replace(
+        /<[^>]*>/g,
+        "",
+      )
+    : source;
+
+  // Surface the (attribution-required) weather credit on the on-map attribution
+  // strip while a reading is shown, so it is visible without hovering the widget.
+  const widgetVisible = !isMobile && !!data && zoom >= 8;
+  const weatherAttributions = useMemo<Attribution[]>(() => {
+    if (!widgetVisible || !source) return [];
+    const ds = weatherMeta?.dataSources?.find((d) => d.sourceId === source);
+    return ds ? [dataSourceToAttribution(ds)] : [];
+  }, [widgetVisible, source, weatherMeta]);
+  useMapAttributions("weather", weatherAttributions);
+
   if (isMobile || !data || zoom < 8) return null;
 
   const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
-  const weatherMeta = data.source
-    ? registry
-        .getByDomain("weather")
-        .find((m) => m.dataSources?.some((ds) => ds.sourceId === data.source))
-    : undefined;
-  const attrText = weatherMeta?.dataSources
-    ? buildSourceAttribution(weatherMeta.dataSources, [data.source]).replace(/<[^>]*>/g, "")
-    : data.source;
 
   return (
     <Box

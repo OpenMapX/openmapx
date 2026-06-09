@@ -43,6 +43,11 @@
       "dataSent": "Begrenzungsrahmen-Koordinaten als in_bbox(point_geo, Nord, West, Süd, Ost)-Filter mit Seitennummerierung (limit/offset) – serverseitig pro Kartenabfrage gesendet; kein API-Schlüssel",
       "dataReceived": "Ladepunkt-Datensätze mit Standort, Betreiber/Eigentümer, Steckertypen, Nennleistung, Zugangsbedingungen, Zahlungsmethoden, Preisen, Öffnungszeiten und Barrierefreiheitsmetadaten"
     },
+    "opendatasoft": {
+      "purpose": "Opendatasoft (Opendatasoft SAS, Frankreich) ist die API-Plattform, die den französischen nationalen IRVE-Ladedatensatz hostet und bereitstellt; Anfragen nach französischen Ladepunkten werden von dieser Plattform beantwortet",
+      "dataSent": "Der Begrenzungsrahmen des Kartenausschnitts (als in_bbox(point_geo, Nord, West, Süd, Ost)-Filter mit Seitennummerierung) erreicht die Opendatasoft-Plattform serverseitig; es werden keine Nutzeridentität, kein Konto und kein API-Schlüssel gesendet",
+      "dataReceived": "Ladepunkt-Datensätze aus dem gehosteten IRVE-Datensatz (Standort, Betreiber, Steckertypen, Leistung, Zugang, Zahlung, Preise, Öffnungszeiten)"
+    },
     "switzerland-ev": {
       "purpose": "Schweizer nationaler Ladestationsdatensatz (Bundesamt für Energie BFE) mit öffentlicher Ladeinfrastruktur in der Schweiz",
       "dataSent": "Keine Abfrageparameter – der vollständige nationale OICP-Datensatz (und ein Live-Status-Feed im 5-Minuten-Takt) wird serverseitig regelmäßig in die lokale Datenbank geladen und anschließend lokal nach Begrenzungsrahmen abgefragt; pro Kartenabfrage erreichen den Anbieter keine Nutzerdaten",

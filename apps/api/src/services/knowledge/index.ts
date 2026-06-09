@@ -1,12 +1,17 @@
 import type { KnowledgeProvider, KnowledgeResult, Place } from "@openmapx/core";
 import { getIntegrationsByDomain } from "../../integration-host.js";
+import { getGatedIntegrationIds } from "../data-use-policy.js";
 
 /**
- * Collect knowledge sources from all integrations registered under the "knowledge" domain.
+ * Collect knowledge sources from all integrations registered under the "knowledge"
+ * domain, skipping integrations the data-use policy disallows. Results merge into
+ * one untagged object, so a gated source (e.g. marine weather, sunrise/sunset) has
+ * to be dropped here — the per-item response filter can't reach it.
  */
-function getKnowledgeSources(): KnowledgeProvider[] {
+function getKnowledgeSources(disallowedIntegrations: Set<string>): KnowledgeProvider[] {
   const sources: KnowledgeProvider[] = [];
   for (const integration of getIntegrationsByDomain("knowledge")) {
+    if (disallowedIntegrations.has(integration.id)) continue;
     for (const e of (integration.providers.get("knowledge") ?? []) as KnowledgeProvider[]) {
       sources.push(e);
     }
@@ -23,7 +28,7 @@ function getKnowledgeSources(): KnowledgeProvider[] {
 export async function getPlaceKnowledge(place: Place, lang?: string): Promise<KnowledgeResult> {
   if (!place.osmTags) return {};
 
-  const sources = getKnowledgeSources();
+  const sources = getKnowledgeSources(await getGatedIntegrationIds());
 
   const settled = await Promise.allSettled(
     sources.map((source) =>

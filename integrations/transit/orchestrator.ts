@@ -213,6 +213,38 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   /**
+   * Provider ids whose backing data source the operator's data-use policy
+   * disallows. A transit provider's `id` (e.g. `db`, `dyn:at/oebb…`) is not its
+   * manifest `sourceId`, and transit result items carry `provider` (the prefix),
+   * not a `source` the per-item response filter could strip — so we map gated
+   * sources to the providers their integration registered and skip those in
+   * dispatch, falling back to the next provider.
+   *
+   * An integration's transit providers are gated when ANY of its declared sources
+   * is disallowed. For single-source transit integrations that equals full
+   * gating; it additionally covers the dynamic registry, whose grey-area
+   * `regional-operators` source backs every provider it registers while its other
+   * sources (the JSDelivr/GitHub catalog fetch) stay allowed — without this an
+   * operator who disables grey-area sources would keep querying those operators,
+   * contrary to the toggle's stated effect. Where no allowed provider covers the
+   * region the result is empty, the intended effect of the policy. Returns an
+   * empty set (no filtering) when the policy permits everything.
+   */
+  async function disallowedProviderIds(): Promise<Set<string>> {
+    const disallowedSources = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+    if (disallowedSources.size === 0) return new Set<string>();
+    const ids = new Set<string>();
+    for (const integration of ctx.getIntegrationsByDomain("transit")) {
+      const sources = integration.manifest.dataSources ?? [];
+      if (!sources.some((ds) => disallowedSources.has(ds.sourceId))) continue;
+      for (const p of (integration.providers.get("transit") ?? []) as TransitProvider[]) {
+        ids.add(p.id);
+      }
+    }
+    return ids;
+  }
+
+  /**
    * Build prefix map sorted by priority (lower = higher priority) and return
    * the first provider that both matches the id's prefix AND is currently
    * healthy. When the highest-priority match is in cooldown but another
@@ -226,9 +258,11 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
    * known-disabled upstream and stretching its cooldown (G1 / plan §4.9).
    */
   async function resolveByPrefix(id: string): Promise<TransitProvider | null> {
+    const banned = await disallowedProviderIds();
     const providers = collectProviders().sort((a, b) => a.priority - b.priority);
     for (const provider of providers) {
       if (!id.startsWith(provider.prefix)) continue;
+      if (banned.has(provider.id)) continue;
       if (await providerHealth.isHealthy(provider.id)) return provider;
     }
     return null;
@@ -244,8 +278,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function filterHealthy(providers: TransitProvider[]): Promise<TransitProvider[]> {
-    const checks = await Promise.all(providers.map((p) => providerHealth.isHealthy(p.id)));
-    return providers.filter((_, i) => checks[i]);
+    const banned = await disallowedProviderIds();
+    const allowed = banned.size === 0 ? providers : providers.filter((p) => !banned.has(p.id));
+    const checks = await Promise.all(allowed.map((p) => providerHealth.isHealthy(p.id)));
+    return allowed.filter((_, i) => checks[i]);
   }
 
   async function getProvidersForBbox(bbox: BBox): Promise<TransitProvider[]> {

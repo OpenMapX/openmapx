@@ -1,11 +1,12 @@
 /**
  * Liveness check for the legal URLs declared in integration manifests.
  *
- * Every `manifest.json` data source carries a `providerPrivacyUrl` (privacy
- * policy) and optionally a `licenseUrl` (license text) that the /privacy and
- * /terms pages link to. A dead link there is a real legal/UX problem (we already
- * found one 404'd privacy URL by hand). This script collects those URLs across
- * all integrations, dedupes them, and does an HTTP status check on each.
+ * Every `manifest.json` data source carries a `url` (data portal / homepage) and
+ * `providerPrivacyUrl` (privacy policy), and optionally a `licenseUrl` (license
+ * text) and `dpaUrl` (data-processing agreement) — all of which the /privacy,
+ * /terms, and /licenses pages link to. A dead link there is a real legal/UX
+ * problem (we already found one 404'd privacy URL by hand). This script collects
+ * those URLs across all integrations, dedupes them, and HTTP-checks each.
  *
  * Classification (tuned to catch real rot without crying wolf — many providers
  * bot-block or rate-limit automated probes even though the page is fine):
@@ -20,8 +21,8 @@
  * Each negative HEAD is confirmed with a real GET first, since HEAD is widely
  * mishandled.
  *
- * Covers only the two URL fields above (not the source `url` or `dpaUrl`, and not
- * the few hardcoded URLs in the legal page content).
+ * Covers the `url`, `providerPrivacyUrl`, `licenseUrl`, and `dpaUrl` source fields
+ * (not the few hardcoded URLs in the legal page content).
  *
  * NOTE: this makes real network requests, so it is inherently slower and less
  * deterministic than the offline check-legal-tables guard. Run on demand with
@@ -34,8 +35,8 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
 
-/** The manifest fields this check covers. */
-const URL_FIELDS = ["providerPrivacyUrl", "licenseUrl"] as const;
+/** The manifest data-source URL fields this check covers. */
+const URL_FIELDS = ["url", "providerPrivacyUrl", "licenseUrl", "dpaUrl"] as const;
 type UrlField = (typeof URL_FIELDS)[number];
 
 /** How many requests to run at once, and how long to wait for each. */
@@ -63,8 +64,10 @@ interface UrlResult {
 
 interface ManifestDataSource {
   sourceId?: string;
+  url?: string;
   providerPrivacyUrl?: string;
   licenseUrl?: string;
+  dpaUrl?: string;
 }
 
 /** Collect every (deduped) legal URL declared across the integration manifests. */
@@ -207,7 +210,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(`Checking ${urls.length} unique legal URL(s) (privacy + license)…`);
+  console.log(`Checking ${urls.length} unique legal URL(s) (source, privacy, license, DPA)…`);
   const results = await mapPool(urls, CONCURRENCY, checkUrl);
   const dead = results.filter((r) => r.verdict === "dead");
   const unverified = results.filter((r) => r.verdict === "unverified");
@@ -234,7 +237,7 @@ async function main(): Promise<void> {
 
   console.error(
     `\n✖ Legal URLs: ${dead.length} dead link(s) of ${urls.length} checked.\n` +
-      "  Dead = 404/410/5xx/DNS failure. These privacy/license links render in /privacy and /terms;\n" +
+      "  Dead = 404/410/5xx/DNS failure. These links render in /privacy, /terms, and /licenses;\n" +
       "  fix or replace them in manifest.json.\n",
   );
 

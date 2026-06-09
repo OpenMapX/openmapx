@@ -12,6 +12,9 @@ import {
   getAllIntegrations,
   initIntegrations,
   reloadIntegrations,
+  setDisallowedIntegrationResolver,
+  setDisallowedSourceResolver,
+  setIntegrationsReloadedHook,
   shutdownIntegrations,
 } from "./integration-host";
 import { redis } from "./redis";
@@ -49,6 +52,12 @@ import {
 } from "./services/admin-job-handlers";
 import { serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
+import {
+  filterGatedSources,
+  getGatedIntegrationIds,
+  getGatedSourceIds,
+  invalidateDataUsePolicy,
+} from "./services/data-use-policy";
 import { gtfsManager } from "./services/gtfs/index";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
@@ -186,6 +195,38 @@ server.addHook("onRequest", async (request, reply) => {
     await publicLimit(request, reply);
   }
 });
+
+// Data-use policy: strip results sourced solely from policy-gated sources
+// (non-commercial / grey-area) out of API responses. Admin + the integration
+// registry/metadata endpoints are excluded so they keep listing every source
+// for management and legal disclosure.
+server.addHook("preSerialization", async (request, _reply, payload) => {
+  const path = request.url.split("?")[0];
+  if (
+    path.startsWith("/api/admin") ||
+    path.startsWith("/admin") ||
+    path === "/api/integrations" ||
+    path === "/api/integrations/health" ||
+    path === "/api/transit/registry"
+  ) {
+    return payload;
+  }
+  if (!payload || typeof payload !== "object") return payload;
+  const gated = await getGatedSourceIds();
+  if (gated.size === 0) return payload;
+  return filterGatedSources(payload, gated);
+});
+
+// Let orchestrators (e.g. the weather chain) see the policy-gated source set so
+// they can skip a gated provider and fall back to the next instead of returning
+// data the response filter would only have to strip. The integration-keyed
+// variant serves transit / knowledge, whose items aren't tagged with a `source`.
+setDisallowedSourceResolver(getGatedSourceIds);
+setDisallowedIntegrationResolver(getGatedIntegrationIds);
+// Reloading integrations changes the source set the gated sets are derived from,
+// so drop the policy's memoized gated sets when the registry is rebuilt (the
+// admin settings route already invalidates on a policy-toggle change).
+setIntegrationsReloadedHook(invalidateDataUsePolicy);
 
 // Better Auth handler
 server.route({

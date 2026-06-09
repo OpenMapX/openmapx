@@ -1,10 +1,4 @@
-import {
-  fetchCapabilities,
-  fetchIntegrations,
-  sectionSlug,
-  serverApiUrl,
-} from "@openmapx/core/server";
-import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
+import { fetchCapabilities, fetchIntegrations, sectionSlug } from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
@@ -88,30 +82,6 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-async function fetchDynamicAttribution(integrations: LoadedIntegrationMeta[]): Promise<unknown[]> {
-  const apiUrl = serverApiUrl();
-  const results: unknown[] = [];
-
-  for (const integration of integrations) {
-    for (const ds of integration.dataSources ?? []) {
-      if (!ds.dynamic || !ds.dynamicEndpoint) continue;
-      try {
-        const res = await fetch(`${apiUrl}${ds.dynamicEndpoint}`, {
-          next: { revalidate: 86400 },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) results.push(...data);
-        }
-      } catch {
-        // Dynamic attribution unavailable
-      }
-    }
-  }
-
-  return results;
-}
-
 export default async function TermsPage() {
   const locale = await getLocale();
   const sections = locale === "de" ? sectionsDe : sectionsEn;
@@ -124,15 +94,10 @@ export default async function TermsPage() {
     fetchCapabilities(),
     fetchIntegrations(),
   ]);
-  const transitAttribution = await fetchDynamicAttribution(integrations);
 
   return (
     <LegalPageShell sections={sections}>
-      <Content
-        transitAttribution={transitAttribution}
-        capabilities={capabilities}
-        integrations={integrations}
-      />
+      <Content capabilities={capabilities} integrations={integrations} />
     </LegalPageShell>
   );
 }

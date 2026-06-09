@@ -6,6 +6,11 @@
       "purpose": "Fallback-Haltestellenerkennung über OpenStreetMap, wenn kein anderer Anbieter das Gebiet abdeckt",
       "dataSent": "Begrenzungsrahmen-Koordinaten",
       "dataReceived": "OSM-Knoten mit Name, Referenz, Verkehrsmittel-Tags (Zug, Straßenbahn, Bus, U-Bahn, Fähre etc.)"
+    },
+    "overpass-kumi": {
+      "purpose": "Overpass-Mirror als Fallback bei Ratenbegrenzung (Kumi Systems e.U., Österreich); wird nur verwendet, wenn der primäre Overpass-Endpunkt ratenbegrenzt oder nicht verfügbar ist",
+      "dataSent": "Die Overpass-QL-Abfrage mit dem Begrenzungsrahmen des Kartenausschnitts; serverseitig nur dann gesendet, wenn der primäre Endpunkt nicht verfügbar ist",
+      "dataReceived": "OSM-Knoten mit Name, Referenz, Verkehrsmittel-Tags (Zug, Straßenbahn, Bus, U-Bahn, Fähre etc.)"
     }
   }
 }

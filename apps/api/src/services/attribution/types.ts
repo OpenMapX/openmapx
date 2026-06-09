@@ -1,3 +1,4 @@
+import type { IntegrationDataSource } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 
 /**
@@ -31,26 +32,31 @@ export interface MotisLicenseEntry {
 }
 
 /**
- * Manifest-declared data source — the curated authoritative description from
- * an integration's `manifest.json#dataSources[]`. Mirrors the shape from
- * `@openmapx/integration-framework`'s `IntegrationDataSource`, narrowed to the
- * fields the AttributionIndex actually surfaces (we accept extras at runtime).
+ * Manifest-declared data source — the curated authoritative description from an
+ * integration's `manifest.json#dataSources[]`. Derived from the canonical
+ * `IntegrationDataSource` (the Zod-validated manifest shape) via `Pick`, so its
+ * field types — notably the `commercialUse` / `endUserExposure` enums — can never
+ * drift from the schema. Narrowed to the fields the AttributionIndex surfaces:
+ * `sourceId`/`name` stay required; the rest are optional because the index accepts
+ * partially-populated rows (see `collectManifestDataSources`).
  */
-export interface ManifestDataSource {
-  sourceId: string;
-  name: string;
-  url?: string;
-  license?: string;
-  licenseUrl?: string;
-  attribution?: string;
-  commercialUse?: "yes" | "no" | "depends" | "conditional" | "unknown";
-  providerCountry?: string;
-  providerPrivacyUrl?: string;
-  endUserExposure?: "ui" | "server-only" | "data" | "direct" | "mixed" | "proxied" | "build-time";
-  personalData?: boolean;
-  cookies?: boolean;
-  dpaAvailable?: boolean;
-}
+export type ManifestDataSource = Pick<IntegrationDataSource, "sourceId" | "name"> &
+  Partial<
+    Pick<
+      IntegrationDataSource,
+      | "url"
+      | "license"
+      | "licenseUrl"
+      | "attribution"
+      | "commercialUse"
+      | "providerCountry"
+      | "providerPrivacyUrl"
+      | "endUserExposure"
+      | "personalData"
+      | "cookies"
+      | "dpaAvailable"
+    >
+  >;
 
 /**
  * Fully resolved attribution record returned by the AttributionIndex.

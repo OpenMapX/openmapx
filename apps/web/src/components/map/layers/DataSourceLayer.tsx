@@ -285,7 +285,7 @@ export function DataSourceLayer() {
     if (!activeSource) return [];
     if (searchIsFetching && searchAttributions.length === 0) return [];
     const meta = registry.get(activeSource);
-    const dataSources = (meta?.dataSources ?? []).filter((ds) => !ds.dynamic);
+    const dataSources = meta?.dataSources ?? [];
     const creditedIds = new Set(searchAttributions.map((a) => a.sourceId));
     const filtered = dataSources.filter((ds) => creditedIds.has(ds.sourceId));
     if (filtered.length === 0 && creditedIds.size > 0) {

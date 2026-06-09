@@ -782,6 +782,42 @@ function warnInvalidConfig(
  * the resolved `requiresMap`, per-integration clients, and target `integration`
  * record differ, so the caller supplies those.
  */
+/**
+ * Resolver for the data-use policy's disallowed source set, injected by the host
+ * app (server.ts) to avoid a static import cycle with the policy service. The
+ * IntegrationContext exposes it to orchestrators via `getDisallowedSourceIds`.
+ */
+let disallowedSourceResolver: (() => Promise<Set<string>>) | null = null;
+
+export function setDisallowedSourceResolver(fn: () => Promise<Set<string>>): void {
+  disallowedSourceResolver = fn;
+}
+
+/**
+ * Resolver for the data-use policy's disallowed *integration* set (every data
+ * source fully gated), injected by server.ts alongside the source resolver. The
+ * IntegrationContext exposes it via `getDisallowedIntegrationIds` for transit /
+ * knowledge orchestrators that key on the integration rather than a `source` field.
+ */
+let disallowedIntegrationResolver: (() => Promise<Set<string>>) | null = null;
+
+export function setDisallowedIntegrationResolver(fn: () => Promise<Set<string>>): void {
+  disallowedIntegrationResolver = fn;
+}
+
+/**
+ * Hook run after the integration registry is rebuilt by `reloadIntegrations`,
+ * injected by server.ts to drop caches derived from the integration set — chiefly
+ * the data-use policy's memoized gated source/integration sets, which are computed
+ * from `getAllIntegrations()` and would otherwise stay stale until their own TTL.
+ * Injected (not imported) to avoid a static cycle with the policy service.
+ */
+let integrationsReloadedHook: (() => void) | null = null;
+
+export function setIntegrationsReloadedHook(fn: () => void): void {
+  integrationsReloadedHook = fn;
+}
+
 function buildIntegrationContext(args: {
   id: string;
   manifest: IntegrationManifest;
@@ -899,6 +935,16 @@ function buildIntegrationContext(args: {
     },
     getIntegrationsByDomain(domain: string) {
       return getIntegrationsByDomain(domain);
+    },
+    getDisallowedSourceIds() {
+      return disallowedSourceResolver
+        ? disallowedSourceResolver()
+        : Promise.resolve(new Set<string>());
+    },
+    getDisallowedIntegrationIds() {
+      return disallowedIntegrationResolver
+        ? disallowedIntegrationResolver()
+        : Promise.resolve(new Set<string>());
     },
   };
 }
@@ -1409,6 +1455,10 @@ export async function reloadIntegrations(): Promise<{
   _fastify.log.info(
     `Reloaded integrations: ${integrations.size} total (${enabledCount} enabled), was ${previousCount}`,
   );
+
+  // The data-use policy memoizes gated sets derived from the (now-rebuilt)
+  // registry; drop them so the next request re-derives against the new set.
+  integrationsReloadedHook?.();
 
   return {
     message: "Integrations reloaded",

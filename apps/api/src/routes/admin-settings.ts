@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { appLogger } from "../services/app-logger";
+import { invalidateDataUsePolicy } from "../services/data-use-policy";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
 import { emailTestLimit } from "../utils/rate-limit";
@@ -234,6 +235,27 @@ const SETTING_DEFS: SettingDef[] = [
     default: "",
     showWhen: { key: "styleProvider", equals: "custom" },
   },
+  // Data-Use Policy
+  {
+    group: "policy",
+    key: "allowNonCommercial",
+    label: "Allow non-commercial-only sources",
+    description:
+      "When on (default), data sources whose licence forbids commercial use (e.g. Open-Meteo, RainViewer) are included. Turn off for a commercial deployment unless you hold commercial terms for them.",
+    type: "boolean",
+    env: "OPENMAPX_ALLOW_NONCOMMERCIAL",
+    default: true,
+  },
+  {
+    group: "policy",
+    key: "allowGreyArea",
+    label: "Allow grey-area / undocumented-terms sources",
+    description:
+      "When on (default), data sources with unclear or undocumented usage terms (e.g. unofficial or scraped APIs) are included — most are public APIs whose terms are merely undocumented. Turn off to exclude them (e.g. DB/HAFAS and the regional-transit registry).",
+    type: "boolean",
+    env: "OPENMAPX_ALLOW_GREY_AREA",
+    default: true,
+  },
 ];
 
 type SettingSource = "default" | "database" | "env";
@@ -265,6 +287,7 @@ const GROUP_LABELS: Record<string, string> = {
   auth: "Authentication",
   email: "Email",
   map: "Map",
+  policy: "Data-Use Policy",
 };
 
 function parseEnvValue(raw: string, type: SettingDef["type"]): unknown {
@@ -387,6 +410,9 @@ export async function adminSettingsRoute(app: FastifyInstance) {
       details: { keys: toWrite.map((t) => t.key) },
       request,
     });
+
+    // Policy toggles take effect immediately rather than after the cache TTL.
+    invalidateDataUsePolicy();
 
     const groups = await resolveSettings();
     return { ok: true, groups };

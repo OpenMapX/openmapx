@@ -17,7 +17,19 @@ export default function PrivacyContentDe({
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
 }) {
-  const { name, street, postalCode, city, country, email } = legalConfig;
+  const {
+    name,
+    street,
+    postalCode,
+    city,
+    country,
+    email,
+    supervisoryAuthority,
+    supervisoryAuthorityUrl,
+    hostingProvider,
+    hostingLocations,
+    serverLogRetentionDays,
+  } = legalConfig;
 
   return (
     <Box>
@@ -31,7 +43,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: April 2026
+        Zuletzt aktualisiert: Juni 2026
       </Typography>
       <Section title="1. Verantwortlicher und Kontakt">
         <Typography>
@@ -112,15 +124,17 @@ export default function PrivacyContentDe({
           Diese Daten werden verarbeitet, um den technischen Betrieb und die Sicherheit des Dienstes
           zu gew&auml;hrleisten. Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO
           (berechtigtes Interesse an der Bereitstellung eines sicheren und funktionsf&auml;higen
-          Dienstes). Server-Protokolle werden nach 30&nbsp;Tagen automatisch gel&ouml;scht.
+          Dienstes). Server-Protokolle werden nach {serverLogRetentionDays}&nbsp;Tagen automatisch
+          gel&ouml;scht.
         </Typography>
-        <Typography sx={{ mt: 1 }}>
-          Unsere Server werden von der Hetzner Online GmbH, Industriestr.&nbsp;25, 91710
-          Gunzenhausen, Deutschland, betrieben. Hetzner verarbeitet Daten in unserem Auftrag und
-          ausschlie&szlig;lich nach unserer Weisung (Auftragsverarbeiter gem&auml;&szlig;
-          Art.&nbsp;28 DSGVO). Ein Auftragsverarbeitungsvertrag liegt vor. Die Rechenzentren von
-          Hetzner befinden sich in Deutschland und Finnland (EU).
-        </Typography>
+        {hostingProvider && (
+          <Typography sx={{ mt: 1 }}>
+            Unsere Server werden von {hostingProvider} betrieben. Der Anbieter verarbeitet Daten in
+            unserem Auftrag und ausschlie&szlig;lich nach unserer Weisung (Auftragsverarbeiter
+            gem&auml;&szlig; Art.&nbsp;28 DSGVO). Ein Auftragsverarbeitungsvertrag liegt vor.
+            {hostingLocations ? ` Die Rechenzentren befinden sich in ${hostingLocations}.` : ""}
+          </Typography>
+        )}
       </Section>
       <Section title="4. Standortdaten">
         <Typography>
@@ -684,13 +698,22 @@ export default function PrivacyContentDe({
         <Typography sx={{ mt: 1 }}>
           Um eines dieser Rechte auszu&uuml;ben, kontaktieren Sie uns unter der oben genannten
           E-Mail-Adresse. Sie haben au&szlig;erdem das Recht, Beschwerde bei einer
-          Aufsichtsbeh&ouml;rde einzulegen (Art.&nbsp;77 DSGVO). Zust&auml;ndige
-          Aufsichtsbeh&ouml;rde ist: Landesbeauftragte f&uuml;r Datenschutz und Informationsfreiheit
-          Nordrhein-Westfalen (LDI NRW), Kavalleriestr.&nbsp;2&ndash;4, 40213 D&uuml;sseldorf,{" "}
-          <Link href="https://www.ldi.nrw.de" target="_blank" rel="noopener noreferrer">
-            www.ldi.nrw.de
-          </Link>
-          .
+          Aufsichtsbeh&ouml;rde einzulegen (Art.&nbsp;77 DSGVO).
+          {supervisoryAuthority && (
+            <>
+              {" "}
+              Zust&auml;ndige Aufsichtsbeh&ouml;rde ist: {supervisoryAuthority}
+              {supervisoryAuthorityUrl && (
+                <>
+                  ,{" "}
+                  <Link href={supervisoryAuthorityUrl} target="_blank" rel="noopener noreferrer">
+                    {supervisoryAuthorityUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "")}
+                  </Link>
+                </>
+              )}
+              .
+            </>
+          )}
         </Typography>
       </Section>
       <Section title="12. Datenspeicherung">
@@ -725,8 +748,8 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Server-Protokolle</strong> &mdash; werden nach 30&nbsp;Tagen automatisch
-              gel&ouml;scht.
+              <strong>Server-Protokolle</strong> &mdash; werden nach {serverLogRetentionDays}
+              &nbsp;Tagen automatisch gel&ouml;scht.
             </Typography>
           </li>
           <li>

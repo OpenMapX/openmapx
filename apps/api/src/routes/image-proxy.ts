@@ -12,6 +12,9 @@ const ALLOWED_HOSTS = [
   "commons.wikimedia.org",
   // Mapillary (CDN uses regional subdomains like scontent-fra5-2.xx.fbcdn.net)
   "images.mapillary.com",
+  // Mapillary's own CDN host, used as the thumbnail fallback when the API
+  // doesn't return a `thumb_*_url`. Proxying it keeps the fallback server-side.
+  "scontent.mapillary.com",
   // Mapillary's image CDN is served from Facebook's `xx.fbcdn.net`
   // infrastructure. We deliberately do NOT allow `fbcdn.net` wholesale —
   // that would whitelist arbitrary Facebook-hosted user content. Only

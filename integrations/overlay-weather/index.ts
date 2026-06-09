@@ -1,5 +1,5 @@
 import { USER_AGENT } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -25,7 +25,23 @@ const ALLOWED_OWM_LAYERS = [
 export function setup(ctx: IntegrationContext): void {
   const owmApiKey = ctx.config.owmApiKey as string | undefined;
 
+  // RainViewer is non-commercial-only (commercialUse: "no"). Honour the operator's
+  // data-use policy by gating its proxied radar metadata + tiles at the source
+  // level; OpenWeatherMap (commercialUse: "yes") under this same integration is
+  // unaffected.
+  const radarGated = async (): Promise<boolean> =>
+    ((await ctx.getDisallowedSourceIds?.()) ?? new Set<string>()).has("rainviewer");
+
+  // Send 451 and return true when RainViewer is policy-gated, so each radar route
+  // guards with a single `if (await denyIfRadarGated(reply)) return;` (one message).
+  const denyIfRadarGated = async (reply: Parameters<RouteHandler>[1]): Promise<boolean> => {
+    if (!(await radarGated())) return false;
+    reply.status(451).send({ message: "RainViewer radar disabled by data-use policy" });
+    return true;
+  };
+
   ctx.registerRoute("GET", "/radar/meta", async (_req, reply) => {
+    if (await denyIfRadarGated(reply)) return;
     const cached = await ctx.cache.get<RadarMeta>("weather:radar:meta");
     if (cached) {
       reply.send(cached);
@@ -61,6 +77,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/radar/tile/:z/:x/:y", async (req, reply) => {
+    if (await denyIfRadarGated(reply)) return;
     const framePath = req.query.path;
     if (!framePath) {
       reply.status(400).send({ message: "Missing path query parameter" });
@@ -138,7 +155,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/config", async (_req, reply) => {
     reply.send({
-      radar: true,
+      radar: !(await radarGated()),
       temperature: !!owmApiKey,
       clouds: !!owmApiKey,
       wind: !!owmApiKey,

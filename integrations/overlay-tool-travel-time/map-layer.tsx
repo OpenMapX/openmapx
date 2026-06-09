@@ -6,6 +6,7 @@ import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
+import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
 import { resolveIsochroneMode, type TravelTimeMode, useTravelTimeStore } from "./store";
 
 const SOURCE_ID = "travel-time-source";
@@ -51,6 +52,10 @@ export function TravelTimeLayer() {
   const anchored = useTravelTimeStore((s) => s.anchored);
 
   const draggingRef = useRef(false);
+
+  // Credit the Valhalla/OSM routing source whenever the isochrone overlay is on
+  // the map (manifest declares "Routing © Stadia Maps, © OpenStreetMap contributors").
+  useIntegrationAttribution("overlay-tool-travel-time", isActive);
 
   const { isTransit, isochroneMode } = resolveIsochroneMode(mode);
   const maxMinutes = selectedMinutes.length ? Math.max(...selectedMinutes) : 30;

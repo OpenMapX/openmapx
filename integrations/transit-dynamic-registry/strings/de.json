@@ -11,6 +11,11 @@
       "purpose": "Fallback zum Laden des Transit-Registers, wenn JSDelivr nicht verfügbar ist",
       "dataSent": "Keine Nutzerdaten (Fallback-Registerquelle)",
       "dataReceived": "Gleiche Anbieterkonfigurations-JSON wie JSDelivr"
+    },
+    "regional-operators": {
+      "purpose": "Regionale Fahrplanauskunfts-APIs des öffentlichen Verkehrs, automatisch aus dem public-transport/transport-apis-Register erkannt (~85 Anbieter in vielen Ländern). Nur abgefragt, wenn kein handgepflegter Anbieter Ihr Gebiet abdeckt.",
+      "dataSent": "Ihre Reiseanfrage — Start-/Zielkoordinaten und/oder Haltestellen-IDs — wird serverseitig an die API des passenden regionalen Anbieters (HAFAS mgate oder OpenTripPlanner) weitergeleitet. Es werden keine Konto- oder Gerätekennungen übermittelt.",
+      "dataReceived": "Haltestellen, Abfahrten und Reiseverbindungen für die angefragte Fahrt."
     }
   }
 }

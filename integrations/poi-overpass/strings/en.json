@@ -6,6 +6,11 @@
       "purpose": "Category-based POI search (46 categories, e.g. restaurants, pharmacies, ATMs) using OpenStreetMap data",
       "dataSent": "Bounding box coordinates, POI category (OSM tag filters)",
       "dataReceived": "OSM elements with name, coordinates, tags (address, phone, website, opening_hours, category)"
+    },
+    "overpass-kumi": {
+      "purpose": "Rate-limit fallback Overpass mirror (Kumi Systems e.U., Austria), used only when the primary Overpass endpoint is rate-limited or unavailable",
+      "dataSent": "The Overpass QL query containing the map-viewport bounding box and POI category (OSM tag filters), sent server-side only when the primary endpoint is unavailable",
+      "dataReceived": "OSM elements with name, coordinates, tags (address, phone, website, opening_hours, category)"
     }
   }
 }

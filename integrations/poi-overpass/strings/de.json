@@ -6,6 +6,11 @@
       "purpose": "Kategoriebasierte POI-Suche (46 Kategorien, z.B. Restaurants, Apotheken, Geldautomaten) mit OpenStreetMap-Daten",
       "dataSent": "Begrenzungsrahmen-Koordinaten, POI-Kategorie (OSM-Tag-Filter)",
       "dataReceived": "OSM-Elemente mit Name, Koordinaten, Tags (Adresse, Telefon, Website, Öffnungszeiten, Kategorie)"
+    },
+    "overpass-kumi": {
+      "purpose": "Overpass-Mirror als Fallback bei Ratenbegrenzung (Kumi Systems e.U., Österreich); wird nur verwendet, wenn der primäre Overpass-Endpunkt ratenbegrenzt oder nicht verfügbar ist",
+      "dataSent": "Die Overpass-QL-Abfrage mit dem Begrenzungsrahmen des Kartenausschnitts und der POI-Kategorie (OSM-Tag-Filter); serverseitig nur dann gesendet, wenn der primäre Endpunkt nicht verfügbar ist",
+      "dataReceived": "OSM-Elemente mit Name, Koordinaten, Tags (Adresse, Telefon, Website, Öffnungszeiten, Kategorie)"
     }
   }
 }

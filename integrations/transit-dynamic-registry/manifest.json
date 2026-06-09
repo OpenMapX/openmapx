@@ -67,6 +67,21 @@
       "cookies": false,
       "dpaAvailable": true,
       "dpaUrl": "https://github.com/customer-terms/github-data-protection-agreement"
+    },
+    {
+      "sourceId": "regional-operators",
+      "name": "Regional public-transport operator APIs (transport-apis registry)",
+      "url": "https://github.com/public-transport/transport-apis",
+      "license": "Various (per regional operator)",
+      "licenseUrl": "https://github.com/public-transport/transport-apis",
+      "commercialUse": "unknown",
+      "providerCountry": "Various",
+      "providerPrivacyUrl": "https://github.com/public-transport/transport-apis",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false,
+      "notes": "Auto-discovered from the public-transport/transport-apis registry (~85 regional operators across many countries). Queried server-side only when no hand-crafted provider covers the requested area; this is a category of recipients, not a single controller — see the linked registry for the operator list, each governed by its own terms."
     }
   ],
   "dependencies": ["transit"]

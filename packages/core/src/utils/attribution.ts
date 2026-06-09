@@ -69,7 +69,6 @@ export function buildRuntimeAttributionHtml(attribution: DataSourceAttribution):
 /**
  * Build combined attribution HTML for all data sources of an integration.
  * Joins unique attributions with " · " separator.
- * Skips dynamic attributions (fetched at runtime).
  */
 export function buildIntegrationAttribution(
   dataSources: IntegrationDataSource[] | undefined,
@@ -77,7 +76,6 @@ export function buildIntegrationAttribution(
   if (!dataSources?.length) return "";
   const seen = new Set<string>();
   return dataSources
-    .filter((ds) => !ds.dynamic)
     .map((ds) => buildAttributionHtml(ds))
     .filter((html) => {
       if (seen.has(html)) return false;
@@ -165,7 +163,6 @@ export function buildSourceAttribution(
 
   const seen = new Set<string>();
   return entries
-    .filter((ds) => !ds.dynamic)
     .map((ds) => buildAttributionHtml(ds))
     .filter((html) => {
       if (seen.has(html)) return false;

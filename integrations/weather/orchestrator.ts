@@ -24,11 +24,22 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
     return result;
   }
 
+  /**
+   * Providers in priority order, minus any whose source the operator's data-use
+   * policy currently disallows (a provider's `id` is its `dataSources` sourceId).
+   * The fallback loops walk this list, so a gated provider is skipped and the
+   * next eligible one is tried — exactly like an erroring provider.
+   */
+  async function eligibleProviders(): Promise<WeatherProvider[]> {
+    const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+    return getProviders().filter((p) => !disallowed.has(p.id));
+  }
+
   async function getCurrentWeather(
     coords: LngLat,
     options?: WeatherOptions,
   ): Promise<WeatherResponse | null> {
-    for (const provider of getProviders()) {
+    for (const provider of await eligibleProviders()) {
       try {
         return await provider.getCurrentWeather(coords, options);
       } catch {
@@ -43,7 +54,7 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
     hours: number,
     options?: WeatherOptions,
   ): Promise<HourlyForecastPoint[]> {
-    for (const provider of getProviders()) {
+    for (const provider of await eligibleProviders()) {
       if (!provider.getHourlyForecast) continue;
       try {
         return await provider.getHourlyForecast(coords, hours, options);
@@ -59,7 +70,7 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
     days: number,
     options?: WeatherOptions,
   ): Promise<DailyForecastPoint[]> {
-    for (const provider of getProviders()) {
+    for (const provider of await eligibleProviders()) {
       if (!provider.getDailyForecast) continue;
       try {
         return await provider.getDailyForecast(coords, days, options);

@@ -1,10 +1,11 @@
 "use client";
 
 import { API_ENDPOINTS, apiClient, routeColor } from "@openmapx/core";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TransitRoute } from "@openmapx/mobility-core/transit";
 import type { GeoJSONSource } from "maplibre-gl";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   findVectorLineReference,
   getFirstSymbolLayerId,
@@ -14,6 +15,7 @@ import {
 import { useLayerReanchor } from "@/components/map/layers/useLayerReanchor";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { useMapAttributions } from "@/lib/useMapAttributions";
 import { useTransitStore } from "./store";
 
 const TRANSIT_LAYER_ID = "openmapx-transit-layer";
@@ -41,6 +43,14 @@ export function TransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const showTransit = useTransitStore((s) => s.panelOpen && s.layerVisible);
   useLayerReanchor(TRANSIT_LAYER_ID, showTransit);
+
+  // Runtime publisher credit carried by the MOTIS routes envelope. The manifest
+  // declares no static dataSources (the operated network comes from whatever
+  // feeds back the local/cloud MOTIS instance), so the only correct credit is
+  // the per-response `envelope.attributions`. Register it on the on-map strip
+  // while the operated routes are drawn.
+  const [routeAttributions, setRouteAttributions] = useState<Attribution[]>([]);
+  useMapAttributions("overlay-transit:routes", showTransit ? routeAttributions : []);
 
   useEffect(() => {
     void styleVersion;
@@ -141,6 +151,7 @@ export function TransitLayer() {
     const clearData = () => {
       const src = map.getSource(MOTIS_SOURCE_ID) as GeoJSONSource | undefined;
       src?.setData(EMPTY_FC);
+      setRouteAttributions([]);
     };
 
     const fetchNetwork = async () => {
@@ -173,6 +184,9 @@ export function TransitLayer() {
             geometry: r.geometry as GeoJSON.Geometry,
           }));
         src.setData({ type: "FeatureCollection", features });
+        // Credit the feed publishers for the geometry now on screen; clear when
+        // nothing was drawn so the strip doesn't credit feeds with no visible data.
+        setRouteAttributions(features.length > 0 ? (env.attributions ?? []) : []);
       } catch {
         // Soft-fail: leave the basemap transit lines in place.
       }
