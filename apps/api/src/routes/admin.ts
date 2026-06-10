@@ -115,10 +115,8 @@ async function computeCredentialStatus(integration: {
 }
 
 export async function adminRoute(app: FastifyInstance): Promise<void> {
-  app.addHook("preHandler", async (request, reply) => {
-    const session = await requireAdmin(request, reply);
-    if (!session) return reply;
-    request.adminSession = session;
+  app.addHook("preHandler", async (request, _reply) => {
+    request.adminSession = await requireAdmin(request);
   });
 
   app.get("/admin/overview", async () => {

@@ -13,16 +13,14 @@ export async function registerAdminServiceReposRoutes(
   app: FastifyInstance<any, any, any, any>,
 ): Promise<void> {
   // GET /api/admin/service-repos — list all registered community repos
-  app.get("/api/admin/service-repos", async (req, reply) => {
-    const session = await requireAdmin(req, reply);
-    if (!session) return;
+  app.get("/api/admin/service-repos", async (req, _reply) => {
+    await requireAdmin(req);
     return { repos: await listRepos() };
   });
 
   // POST /api/admin/service-repos/preview — shallow-clone + validate, no DB write
   app.post<{ Body: { url: string } }>("/api/admin/service-repos/preview", async (req, reply) => {
-    const session = await requireAdmin(req, reply);
-    if (!session) return;
+    await requireAdmin(req);
     const { url } = req.body ?? {};
     if (!url) {
       reply.status(400);
@@ -41,8 +39,7 @@ export async function registerAdminServiceReposRoutes(
   app.post<{ Body: { url: string; acknowledgeRisks: boolean } }>(
     "/api/admin/service-repos",
     async (req, reply) => {
-      const session = await requireAdmin(req, reply);
-      if (!session) return;
+      await requireAdmin(req);
       if (!req.body?.acknowledgeRisks) {
         reply.status(400);
         return { error: "acknowledgeRisks flag must be true for community repos" };
@@ -63,8 +60,7 @@ export async function registerAdminServiceReposRoutes(
 
   // DELETE /api/admin/service-repos/:hash — remove repo + cloned directory
   app.delete<{ Params: { hash: string } }>("/api/admin/service-repos/:hash", async (req, reply) => {
-    const session = await requireAdmin(req, reply);
-    if (!session) return;
+    await requireAdmin(req);
     try {
       await removeRepo(req.params.hash);
       return { ok: true };
@@ -78,8 +74,7 @@ export async function registerAdminServiceReposRoutes(
   app.post<{ Params: { hash: string } }>(
     "/api/admin/service-repos/:hash/refresh",
     async (req, reply) => {
-      const session = await requireAdmin(req, reply);
-      if (!session) return;
+      await requireAdmin(req);
       try {
         const row = await refreshRepo(req.params.hash);
         if (!row) {

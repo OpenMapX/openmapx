@@ -1,11 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { and, asc, count, desc, eq } from "drizzle-orm";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
 import { getProviderHealth } from "../services/provider-health/registry.js";
-import { requireAdmin } from "../utils/require-admin.js";
+import { tryAdminSession } from "../utils/require-admin.js";
 import { safeEqual } from "../utils/safe-equal.js";
 
 /**
@@ -57,19 +57,9 @@ async function authenticateDataManager(req: FastifyRequest): Promise<AuthResult>
     return { kind: "token", userId: "service" };
   }
 
-  // Re-enter the admin auth path without writing a 401 yet — we want the
-  // caller to handle that. `requireAdmin` writes to `reply` on failure, so we
-  // synthesise a no-op reply that swallows the status calls.
-  const noopReply: Partial<FastifyReply> & { sent: boolean } = {
-    sent: false,
-    status() {
-      return this as unknown as FastifyReply;
-    },
-    send() {
-      return this as unknown as FastifyReply;
-    },
-  };
-  const session = await requireAdmin(req, noopReply as FastifyReply);
+  // Non-throwing admin check: this resolver reports a denial to its own caller
+  // rather than aborting the request, so it must not send or throw.
+  const session = await tryAdminSession(req);
   if (session) {
     return { kind: "session", userId: session.user.id };
   }

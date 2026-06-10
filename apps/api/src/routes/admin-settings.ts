@@ -352,10 +352,8 @@ async function resolveSettings(): Promise<SettingsGroup[]> {
 }
 
 export async function adminSettingsRoute(app: FastifyInstance) {
-  app.addHook("preHandler", async (request, reply) => {
-    const session = await requireAdmin(request, reply);
-    if (!session) return reply;
-    request.adminSession = session;
+  app.addHook("preHandler", async (request, _reply) => {
+    request.adminSession = await requireAdmin(request);
   });
 
   app.get("/admin/settings", async () => {

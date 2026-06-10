@@ -21,9 +21,9 @@ vi.mock("../../db/index.js", () => {
   };
 });
 
-const requireAdminMock = vi.hoisted(() => vi.fn());
+const tryAdminSessionMock = vi.hoisted(() => vi.fn());
 vi.mock("../../utils/require-admin.js", () => ({
-  requireAdmin: requireAdminMock,
+  tryAdminSession: tryAdminSessionMock,
 }));
 
 const providerHealthMock = vi.hoisted(() => ({
@@ -51,7 +51,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  requireAdminMock.mockReset();
+  tryAdminSessionMock.mockReset();
   providerHealthMock.getAll.mockReset();
   providerHealthMock.getState.mockReset();
   providerHealthMock.reset.mockReset();
@@ -76,13 +76,13 @@ const sampleState: ProviderHealthState = {
 
 describe("GET /data-manager/providers", () => {
   it("returns 401 when no auth is provided", async () => {
-    requireAdminMock.mockResolvedValue(null);
+    tryAdminSessionMock.mockResolvedValue(null);
     const res = await app.inject({ method: "GET", url: "/data-manager/providers" });
     expect(res.statusCode).toBe(401);
   });
 
   it("returns 200 with sorted providers when admin session is present", async () => {
-    requireAdminMock.mockResolvedValue({
+    tryAdminSessionMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
       session: { id: "sess-1" },
     });
@@ -97,7 +97,7 @@ describe("GET /data-manager/providers", () => {
   });
 
   it("accepts service-token authentication", async () => {
-    requireAdminMock.mockResolvedValue(null);
+    tryAdminSessionMock.mockResolvedValue(null);
     providerHealthMock.getAll.mockResolvedValue({});
     const res = await app.inject({
       method: "GET",
@@ -111,7 +111,7 @@ describe("GET /data-manager/providers", () => {
 
 describe("GET /data-manager/providers/:id", () => {
   it("returns 200 + state when the provider exists", async () => {
-    requireAdminMock.mockResolvedValue({
+    tryAdminSessionMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
       session: { id: "sess-1" },
     });
@@ -125,7 +125,7 @@ describe("GET /data-manager/providers/:id", () => {
   });
 
   it("returns 404 when the provider is unknown", async () => {
-    requireAdminMock.mockResolvedValue({
+    tryAdminSessionMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
       session: { id: "sess-1" },
     });
@@ -138,7 +138,7 @@ describe("GET /data-manager/providers/:id", () => {
 
 describe("POST /data-manager/providers/:id/reset", () => {
   it("returns 200 + clears state when admin session is present", async () => {
-    requireAdminMock.mockResolvedValue({
+    tryAdminSessionMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
       session: { id: "sess-1" },
     });
@@ -154,7 +154,7 @@ describe("POST /data-manager/providers/:id/reset", () => {
   });
 
   it("returns 403 when caller authenticates with only a bearer token", async () => {
-    requireAdminMock.mockResolvedValue(null);
+    tryAdminSessionMock.mockResolvedValue(null);
 
     const res = await app.inject({
       method: "POST",
@@ -166,7 +166,7 @@ describe("POST /data-manager/providers/:id/reset", () => {
   });
 
   it("returns 401 when no auth is provided", async () => {
-    requireAdminMock.mockResolvedValue(null);
+    tryAdminSessionMock.mockResolvedValue(null);
 
     const res = await app.inject({
       method: "POST",

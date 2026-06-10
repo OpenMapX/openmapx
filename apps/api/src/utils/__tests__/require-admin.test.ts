@@ -9,7 +9,7 @@ vi.mock("../../auth", () => ({
 }));
 
 // Loaded *after* the mock is registered.
-const { requireAdmin } = await import("../require-admin");
+const { requireAdmin, tryAdminSession } = await import("../require-admin");
 
 beforeEach(() => {
   mockGetSession.mockReset();
@@ -26,9 +26,10 @@ afterEach(() => {
 
 function makeApp() {
   const app = Fastify();
-  app.get("/protected", async (request, reply) => {
-    const session = await requireAdmin(request, reply);
-    if (!session) return;
+  // requireAdmin throws a 401/403 on failure; Fastify's default error handler
+  // turns that into the response, so the route body only runs when admitted.
+  app.get("/protected", async (request) => {
+    const session = await requireAdmin(request);
     return { ok: true, userId: session.user.id };
   });
   return app;
@@ -150,9 +151,8 @@ describe("requireAdmin loopback short-circuit", () => {
     process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
     mockGetSession.mockResolvedValue(null);
     const app = Fastify({ trustProxy: 1 });
-    app.get("/protected", async (request, reply) => {
-      const session = await requireAdmin(request, reply);
-      if (!session) return;
+    app.get("/protected", async (request) => {
+      const session = await requireAdmin(request);
       return { ok: true, userId: session.user.id };
     });
     const res = await app.inject({
@@ -169,5 +169,45 @@ describe("requireAdmin loopback short-circuit", () => {
     // The forged XFF must not even reach the auth lookup as loopback — it
     // falls through to the regular session check, which finds no session.
     expect(mockGetSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("requireAdmin throws (no manual reply)", () => {
+  beforeEach(() => {
+    process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1"; // skip loopback short-circuit
+  });
+
+  it("throws a 401 when there is no session", async () => {
+    mockGetSession.mockResolvedValue(null);
+    await expect(requireAdmin({ headers: {}, socket: {} } as never)).rejects.toMatchObject({
+      statusCode: 401,
+    });
+  });
+
+  it("throws a 403 for an authed non-admin", async () => {
+    mockGetSession.mockResolvedValue({ user: { id: "u1", role: "user" }, session: { id: "s1" } });
+    await expect(requireAdmin({ headers: {}, socket: {} } as never)).rejects.toMatchObject({
+      statusCode: 403,
+    });
+  });
+});
+
+describe("tryAdminSession (non-throwing)", () => {
+  beforeEach(() => {
+    process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1";
+  });
+
+  it("returns null instead of throwing when unauthorized", async () => {
+    mockGetSession.mockResolvedValue(null);
+    expect(await tryAdminSession({ headers: {}, socket: {} } as never)).toBeNull();
+  });
+
+  it("returns the session for an admin", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "admin1", role: "admin" },
+      session: { id: "s1" },
+    });
+    const s = await tryAdminSession({ headers: {}, socket: {} } as never);
+    expect(s?.user.id).toBe("admin1");
   });
 });

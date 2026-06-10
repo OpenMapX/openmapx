@@ -65,9 +65,10 @@
       "OPENMAPX_LOCAL_ADMIN_TOKEN": "${OPENMAPX_LOCAL_ADMIN_TOKEN:-}",
       "ISOCHRONE_PROVIDER": "${ISOCHRONE_PROVIDER:-valhalla}",
       "GITHUB_TOKEN": "${GITHUB_TOKEN:-}",
-      "STORE_CATALOG_URL": "${STORE_CATALOG_URL:-}"
+      "STORE_CATALOG_URL": "${STORE_CATALOG_URL:-}",
+      "NODE_OPTIONS": "${OPENMAPX_API_NODE_OPTIONS:---max-old-space-size=1536}"
     },
-    "memory": "1g",
+    "memory": "2g",
     "restart": "unless-stopped",
     "dependsOn": [
       { "service": "postgis", "condition": "service_healthy" },

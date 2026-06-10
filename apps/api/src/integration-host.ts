@@ -487,9 +487,7 @@ function registerIntegrationRouteDispatcher(
 
     let userId: string | undefined;
     if (matched.route.options?.requireAuth === true) {
-      const authed = await requireAuth(request, reply);
-      if (!authed) return;
-      userId = authed;
+      userId = await requireAuth(request);
     }
 
     await matched.route.handler(
@@ -516,6 +514,13 @@ function registerIntegrationRouteDispatcher(
         },
       },
     );
+
+    // The integration handler sent its response through the shim above and
+    // resolves to undefined; returning the reply hands control back to Fastify
+    // as "already handled". Without it, the resolved-undefined handler races a
+    // second send against the async preSerialization hook → ERR_HTTP_HEADERS_SENT
+    // (see [[project-fastify-return-reply-contract]]).
+    return reply;
   };
 
   fastify.route({ method: [...ROUTE_METHODS], url: "/api/integrations/:id", handler: dispatch });

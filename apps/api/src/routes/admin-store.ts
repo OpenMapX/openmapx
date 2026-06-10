@@ -20,10 +20,8 @@ import { storeInstallLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 
 export async function adminStoreRoute(app: FastifyInstance): Promise<void> {
-  app.addHook("preHandler", async (request, reply) => {
-    const session = await requireAdmin(request, reply);
-    if (!session) return reply;
-    request.adminSession = session;
+  app.addHook("preHandler", async (request, _reply) => {
+    request.adminSession = await requireAdmin(request);
   });
 
   // GET /admin/store/catalog

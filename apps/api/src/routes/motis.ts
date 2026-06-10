@@ -19,7 +19,7 @@ export async function motisRoute(server: FastifyInstance): Promise<void> {
 
   // POST /api/motis/feeds — add a feed by URL or catalog ID
   server.post("/motis/feeds", async (request, reply) => {
-    if (!(await requireAdmin(request, reply))) return;
+    await requireAdmin(request);
     const body = request.body as {
       url?: string;
       catalogId?: string;
@@ -81,7 +81,7 @@ export async function motisRoute(server: FastifyInstance): Promise<void> {
 
   // DELETE /api/motis/feeds/:slug — remove a feed
   server.delete("/motis/feeds/:slug", async (request, reply) => {
-    if (!(await requireAdmin(request, reply))) return;
+    await requireAdmin(request);
     const { slug } = request.params as { slug: string };
     const removed = motisManager.removeFeed(slug);
     if (!removed) return reply.status(404).send({ error: "Feed not found" });
@@ -89,8 +89,8 @@ export async function motisRoute(server: FastifyInstance): Promise<void> {
   });
 
   // POST /api/motis/restarted — mark that MOTIS has been restarted
-  server.post("/motis/restarted", async (request, reply) => {
-    if (!(await requireAdmin(request, reply))) return;
+  server.post("/motis/restarted", async (request, _reply) => {
+    await requireAdmin(request);
     motisManager.markRestarted();
     return { ok: true, message: "Restart acknowledged" };
   });

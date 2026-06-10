@@ -11,9 +11,8 @@ const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
 ];
 
 export const savedRoute: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/saved/lists", async (req, reply) => {
-    const userId = await requireAuth(req, reply);
-    if (!userId) return;
+  fastify.get("/saved/lists", async (req, _reply) => {
+    const userId = await requireAuth(req);
 
     const placeCount = sql<number>`(SELECT COUNT(*) FROM saved_place WHERE saved_place.list_id = saved_list.id)::int`;
 
@@ -71,9 +70,8 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    handler: async (req, reply) => {
-      const userId = await requireAuth(req, reply);
-      if (!userId) return;
+    handler: async (req, _reply) => {
+      const userId = await requireAuth(req);
 
       const body = req.body as { name: string; icon?: string; isPrivate?: boolean };
 
@@ -106,8 +104,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      const userId = await requireAuth(req, reply);
-      if (!userId) return;
+      const userId = await requireAuth(req);
 
       const { id } = req.params as { id: string };
       const body = req.body as {
@@ -155,8 +152,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.delete("/saved/lists/:id", async (req, reply) => {
-    const userId = await requireAuth(req, reply);
-    if (!userId) return;
+    const userId = await requireAuth(req);
 
     const { id } = req.params as { id: string };
 
@@ -180,8 +176,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get("/saved/lists/:id/places", async (req, reply) => {
-    const userId = await requireAuth(req, reply);
-    if (!userId) return;
+    const userId = await requireAuth(req);
 
     const { id } = req.params as { id: string };
 
@@ -220,8 +215,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      const userId = await requireAuth(req, reply);
-      if (!userId) return;
+      const userId = await requireAuth(req);
 
       const { id: listId } = req.params as { id: string };
 
@@ -277,8 +271,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       },
     },
     handler: async (req, reply) => {
-      const userId = await requireAuth(req, reply);
-      if (!userId) return;
+      const userId = await requireAuth(req);
 
       const { id } = req.params as { id: string };
 
@@ -325,8 +318,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.delete("/saved/places/:id", async (req, reply) => {
-    const userId = await requireAuth(req, reply);
-    if (!userId) return;
+    const userId = await requireAuth(req);
 
     const { id } = req.params as { id: string };
 
@@ -353,9 +345,8 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     return { ok: true };
   });
 
-  fastify.get("/saved/labels", async (req, reply) => {
-    const userId = await requireAuth(req, reply);
-    if (!userId) return;
+  fastify.get("/saved/labels", async (req, _reply) => {
+    const userId = await requireAuth(req);
 
     const labels = await db.select().from(labeledPlace).where(eq(labeledPlace.userId, userId));
 
@@ -377,9 +368,8 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    handler: async (req, reply) => {
-      const userId = await requireAuth(req, reply);
-      if (!userId) return;
+    handler: async (req, _reply) => {
+      const userId = await requireAuth(req);
 
       const { label } = req.params as { label: string };
       const body = req.body as {
@@ -431,8 +421,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.delete("/saved/labels/:label", async (req, reply) => {
-    const userId = await requireAuth(req, reply);
-    if (!userId) return;
+    const userId = await requireAuth(req);
 
     const { label } = req.params as { label: string };
 
@@ -449,8 +438,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get<{ Querystring: { placeId: string } }>("/saved/check", async (req, reply) => {
-    const userId = await requireAuth(req, reply);
-    if (!userId) return;
+    const userId = await requireAuth(req);
 
     const { placeId } = req.query;
     if (!placeId) {

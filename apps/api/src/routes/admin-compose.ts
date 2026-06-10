@@ -21,8 +21,7 @@ export async function registerAdminComposeRoutes(
 ): Promise<void> {
   // GET /api/admin/compose/preview — render generated compose YAML from registry
   app.get("/api/admin/compose/preview", async (req, reply) => {
-    const session = await requireAdmin(req, reply);
-    if (!session) return;
+    await requireAdmin(req);
     let registry: ReturnType<typeof getServiceRegistry>;
     try {
       registry = getServiceRegistry();
@@ -59,9 +58,8 @@ export async function registerAdminComposeRoutes(
   });
 
   // POST /api/admin/compose/up — bring the whole stack up
-  app.post("/api/admin/compose/up", async (req, reply) => {
-    const session = await requireAdmin(req, reply);
-    if (!session) return;
+  app.post("/api/admin/compose/up", async (req, _reply) => {
+    await requireAdmin(req);
     await renderAndPersistCompose();
     const hardlinks = await applyHardlinksFromPlan();
     const r = await dockerComposeAction("", "start");
@@ -69,9 +67,8 @@ export async function registerAdminComposeRoutes(
   });
 
   // POST /api/admin/compose/down — stop the whole stack
-  app.post("/api/admin/compose/down", async (req, reply) => {
-    const session = await requireAdmin(req, reply);
-    if (!session) return;
+  app.post("/api/admin/compose/down", async (req, _reply) => {
+    await requireAdmin(req);
     const r = await dockerComposeAction("", "stop");
     return { ok: r.exitCode === 0, stdout: r.stdout };
   });

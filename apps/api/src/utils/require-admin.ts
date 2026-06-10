@@ -1,6 +1,7 @@
 import { fromNodeHeaders } from "better-auth/node";
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
 import { auth } from "../auth";
+import { httpError } from "./http-error.js";
 import { safeEqual } from "./safe-equal.js";
 
 export type AdminSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
@@ -114,10 +115,28 @@ function loopbackSession(): AdminSession {
   } as unknown as AdminSession;
 }
 
+type AdminResolution = { session: AdminSession } | { error: 401 | 403 };
+
 /**
- * Verifies the request has an active session with one of the allowed roles.
- * Replies with 401/403 and returns null on failure.
- * Returns the full session on success so callers can use it for audit logging.
+ * Resolve an admin session without touching the reply: loopback short-circuit
+ * first, then the better-auth session + role check. Returns the failing status
+ * code instead of sending, so both the throwing and non-throwing entry points
+ * can share one code path.
+ */
+async function resolveAdmin(request: FastifyRequest, roles: string[]): Promise<AdminResolution> {
+  if (isLocalAdminRequest(request)) return { session: loopbackSession() };
+
+  const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
+  if (!session) return { error: 401 };
+  if (!session.user.role || !roles.includes(session.user.role)) return { error: 403 };
+  return { session: session as AdminSession };
+}
+
+/**
+ * Require an active session with one of the allowed roles, returning the full
+ * session (for audit logging) or throwing a 401/403 that Fastify's error
+ * handler turns into the response. Throwing means a caller cannot forget to
+ * `return reply` after a failed check.
  *
  * Loopback short-circuit: requests from `127.0.0.1` / `::1` are treated as
  * admin without further auth — the assumption is that anyone with localhost
@@ -128,21 +147,26 @@ function loopbackSession(): AdminSession {
  */
 export async function requireAdmin(
   request: FastifyRequest,
-  reply: FastifyReply,
+  roles: string[] = ["admin"],
+): Promise<AdminSession> {
+  const r = await resolveAdmin(request, roles);
+  if ("error" in r) {
+    throw r.error === 401
+      ? httpError(401, "Authentication required")
+      : httpError(403, "Admin access required");
+  }
+  return r.session;
+}
+
+/**
+ * Non-throwing admin check for callers that must branch on the result rather
+ * than abort the request (e.g. the data-manager proxy, which reports a denial
+ * to its own caller). Returns the session or null; never sends or throws.
+ */
+export async function tryAdminSession(
+  request: FastifyRequest,
   roles: string[] = ["admin"],
 ): Promise<AdminSession | null> {
-  if (isLocalAdminRequest(request)) {
-    return loopbackSession();
-  }
-
-  const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
-  if (!session) {
-    reply.status(401).send({ error: "Authentication required" });
-    return null;
-  }
-  if (!session.user.role || !roles.includes(session.user.role)) {
-    reply.status(403).send({ error: "Admin access required" });
-    return null;
-  }
-  return session as AdminSession;
+  const r = await resolveAdmin(request, roles);
+  return "error" in r ? null : r.session;
 }

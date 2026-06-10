@@ -185,8 +185,7 @@ function validateEncryptedState(body: {
 export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
   /** GET — current envelope state. */
   fastify.get("/reviews/keypair", async (request, reply) => {
-    const userId = await requireAuth(request, reply);
-    if (!userId) return;
+    const userId = await requireAuth(request);
 
     const [row] = await db
       .select()
@@ -228,8 +227,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
 
   /** POST — create the keypair envelope. Rejects if one already exists. */
   fastify.post("/reviews/keypair", async (request, reply) => {
-    const userId = await requireAuth(request, reply);
-    if (!userId) return;
+    const userId = await requireAuth(request);
 
     const [existing] = await db
       .select({ userId: mangroveKeypair.userId })
@@ -313,8 +311,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
    * calling; server only stores the new state.
    */
   fastify.put("/reviews/keypair/wraps", async (request, reply) => {
-    const userId = await requireAuth(request, reply);
-    if (!userId) return;
+    const userId = await requireAuth(request);
 
     const [kp] = await db
       .select({ mode: mangroveKeypair.encryptionMode })
@@ -371,8 +368,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
 
   /** DELETE — wipe keypair + all wraps. Next GET returns 204. */
   fastify.delete("/reviews/keypair", async (request, reply) => {
-    const userId = await requireAuth(request, reply);
-    if (!userId) return;
+    const userId = await requireAuth(request);
     await db.transaction(async (tx) => {
       await tx.delete(mangroveKeypairWrap).where(eq(mangroveKeypairWrap.userId, userId));
       await tx.delete(mangroveKeypair).where(eq(mangroveKeypair.userId, userId));

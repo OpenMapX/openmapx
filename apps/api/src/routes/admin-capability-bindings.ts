@@ -16,9 +16,8 @@ export async function registerCapabilityBindingRoutes(
 ): Promise<void> {
   app.get<{ Params: { integrationId: string } }>(
     "/api/admin/integrations/:integrationId/bindings",
-    async (req, reply) => {
-      const session = await requireAdmin(req, reply);
-      if (!session) return;
+    async (req, _reply) => {
+      await requireAdmin(req);
       const rows = await listBindingsForIntegration(req.params.integrationId);
       return { bindings: rows };
     },
@@ -28,8 +27,7 @@ export async function registerCapabilityBindingRoutes(
     Params: { integrationId: string; capability: string };
     Body: { serviceId: string };
   }>("/api/admin/integrations/:integrationId/bindings/:capability", async (req, reply) => {
-    const session = await requireAdmin(req, reply);
-    if (!session) return;
+    await requireAdmin(req);
     const registry = getServiceRegistry();
     const svc = registry.get(req.body.serviceId);
     if (!svc) {
@@ -51,9 +49,8 @@ export async function registerCapabilityBindingRoutes(
 
   app.delete<{ Params: { integrationId: string; capability: string } }>(
     "/api/admin/integrations/:integrationId/bindings/:capability",
-    async (req, reply) => {
-      const session = await requireAdmin(req, reply);
-      if (!session) return;
+    async (req, _reply) => {
+      await requireAdmin(req);
       await removeBinding({
         integrationId: req.params.integrationId,
         capability: req.params.capability,

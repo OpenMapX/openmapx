@@ -111,6 +111,26 @@ const server = Fastify({
   bodyLimit: 10 * 1024 * 1024,
 });
 
+// Defense in depth against double-sends. If a handler ever writes a reply twice
+// (e.g. sends then returns undefined while an async preSerialization hook is in
+// flight), the second write throws ERR_HTTP_HEADERS_SENT from Fastify's
+// serialization continuation — outside any route try/catch — and would
+// otherwise take the whole process down. The first response already wrote
+// correctly; only the stray second write fails. Survive that one specific error
+// (logged loudly so the offending route still gets found and fixed) while
+// preserving fail-fast for every other uncaught exception.
+process.on("uncaughtException", (err) => {
+  if ((err as NodeJS.ErrnoException).code === "ERR_HTTP_HEADERS_SENT") {
+    server.log.error(
+      { err },
+      "Suppressed ERR_HTTP_HEADERS_SENT (double send) — response dropped, process kept alive",
+    );
+    return;
+  }
+  server.log.fatal({ err }, "Uncaught exception — exiting");
+  process.exit(1);
+});
+
 // Run database migrations on startup (idempotent — skips already-applied migrations)
 const migrationsDir = join(import.meta.dirname ?? ".", "db", "migrations");
 if (existsSync(migrationsDir)) {
@@ -427,9 +447,9 @@ if (loadedCount === 0) {
 server.log.info(`Loaded ${loadedCount} integrations`);
 
 // Debug endpoint: list loaded dynamic transit providers (auth required)
-server.get("/api/transit/registry", async (req, reply) => {
+server.get("/api/transit/registry", async (req) => {
   const { requireAuth } = await import("./utils/require-auth.js");
-  if (!(await requireAuth(req, reply))) return;
+  await requireAuth(req);
   return { entries: registry.listEntries(), count: registry.entryCount };
 });
 

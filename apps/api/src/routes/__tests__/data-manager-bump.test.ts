@@ -20,11 +20,11 @@ vi.mock("../../db/index.js", () => {
   };
 });
 
-// Capture requireAdmin behaviour so we can flip between "session present"
+// Capture tryAdminSession behaviour so we can flip between "session present"
 // and "no session" between tests without spinning up better-auth.
-const requireAdminMock = vi.hoisted(() => vi.fn());
+const tryAdminSessionMock = vi.hoisted(() => vi.fn());
 vi.mock("../../utils/require-admin.js", () => ({
-  requireAdmin: requireAdminMock,
+  tryAdminSession: tryAdminSessionMock,
 }));
 
 const fetchMock = vi.hoisted(() => vi.fn());
@@ -46,7 +46,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   fetchMock.mockReset();
-  requireAdminMock.mockReset();
+  tryAdminSessionMock.mockReset();
 });
 
 afterEach(() => {
@@ -55,7 +55,7 @@ afterEach(() => {
 
 describe("POST /data-manager/transit/bump-transitous-ref", () => {
   it("returns 200 + proxies to data-manager when caller has an admin session", async () => {
-    requireAdminMock.mockResolvedValue({
+    tryAdminSessionMock.mockResolvedValue({
       user: { id: "admin-1", role: "admin" },
       session: { id: "sess-1" },
     });
@@ -88,7 +88,7 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
   });
 
   it("returns 403 when caller authenticates with only a bearer token", async () => {
-    requireAdminMock.mockResolvedValue(null);
+    tryAdminSessionMock.mockResolvedValue(null);
 
     const res = await app.inject({
       method: "POST",
@@ -102,7 +102,7 @@ describe("POST /data-manager/transit/bump-transitous-ref", () => {
   });
 
   it("returns 401 when neither bearer nor admin session is present", async () => {
-    requireAdminMock.mockResolvedValue(null);
+    tryAdminSessionMock.mockResolvedValue(null);
 
     const res = await app.inject({
       method: "POST",

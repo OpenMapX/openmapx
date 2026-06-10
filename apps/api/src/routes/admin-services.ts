@@ -49,10 +49,8 @@ function toIdList(input: unknown): string[] {
 }
 
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
-  app.addHook("preHandler", async (request, reply) => {
-    const session = await requireAdmin(request, reply);
-    if (!session) return reply;
-    request.adminSession = session;
+  app.addHook("preHandler", async (request, _reply) => {
+    request.adminSession = await requireAdmin(request);
   });
 
   // GET /admin/services — list all services from registry with docker ps status

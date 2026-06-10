@@ -20,7 +20,7 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
 
   // Import a feed
   app.post("/gtfs/feeds", async (request, reply) => {
-    if (!(await requireAdmin(request, reply))) return;
+    await requireAdmin(request);
     const body = request.body as {
       url?: string;
       name?: string;
@@ -155,7 +155,7 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
 
   // Remove a feed
   app.delete("/gtfs/feeds/:slug", async (request, reply) => {
-    if (!(await requireAdmin(request, reply))) return;
+    await requireAdmin(request);
     const { slug } = request.params as { slug: string };
     if (!isValidFeedSlug(slug)) {
       return reply.status(400).send({ error: new InvalidFeedSlugError(slug).message });
@@ -171,7 +171,7 @@ export async function gtfsRoute(app: FastifyInstance): Promise<void> {
 
   // Refresh a feed (re-import)
   app.post("/gtfs/feeds/:slug/refresh", async (request, reply) => {
-    if (!(await requireAdmin(request, reply))) return;
+    await requireAdmin(request);
     const { slug } = request.params as { slug: string };
     if (!isValidFeedSlug(slug)) {
       return reply.status(400).send({ error: new InvalidFeedSlugError(slug).message });
