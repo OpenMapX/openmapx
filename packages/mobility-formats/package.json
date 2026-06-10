@@ -14,11 +14,11 @@
     "csv-parse": "^6.2.1",
     "fast-xml-parser": "^5.8.0",
     "gbfs-typescript-types": "^1.0.15",
-    "gtfs-realtime-bindings-transit": "^1.8.10"
+    "gtfs-realtime-bindings-transit": "^1.10.0"
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
+    "@types/node": "^25.9.2",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.8"
   }
 }
