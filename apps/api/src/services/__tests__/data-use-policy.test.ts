@@ -225,4 +225,36 @@ describe("filterGatedSources", () => {
     };
     expect(filterGatedSources(v, gated)).toEqual(v);
   });
+
+  // Regression: drizzle rows carry Date fields (e.g. /api/saved createdAt).
+  // Rebuilding them via Object.keys would turn a Date into `{}` and corrupt the
+  // response; non-plain objects must pass through by reference so they keep
+  // serializing via their own toJSON.
+  it("preserves Date instances and other non-plain objects inside the payload", () => {
+    const createdAt = new Date("2026-06-01T12:00:00Z");
+    const out = filterGatedSources({ lists: [{ id: 1, createdAt, source: "ocm" }] }, gated) as {
+      lists: Array<{ createdAt: Date }>;
+    };
+    expect(out.lists[0]?.createdAt).toBe(createdAt);
+  });
+
+  it("returns the payload by reference when nothing is filtered (no needless clone)", () => {
+    const v = {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { source: "ocm" } }],
+    };
+    expect(filterGatedSources(v, gated)).toBe(v);
+  });
+
+  it("does not mutate the original payload when filtering", () => {
+    const items = [
+      { id: 1, source: "ocm" },
+      { id: 2, source: "gdacs" },
+    ];
+    const wrapper = { items };
+    const out = filterGatedSources(wrapper, gated) as typeof wrapper;
+    expect(out.items).toHaveLength(1);
+    expect(wrapper.items).toHaveLength(2);
+    expect(out).not.toBe(wrapper);
+  });
 });

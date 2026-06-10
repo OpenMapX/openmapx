@@ -4,6 +4,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { registry } from "@integrations/transit-dynamic-registry/registry";
 import { listIdSchemeViews, registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
+import { fromNodeHeaders } from "better-auth/node";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify, { type FastifyError } from "fastify";
 import { auth } from "./auth";
@@ -58,6 +59,7 @@ import {
   getGatedSourceIds,
   getGatedSourceIdsSync,
   invalidateDataUsePolicy,
+  refreshDataUsePolicy,
   startDataUsePolicyRefresh,
 } from "./services/data-use-policy";
 import { gtfsManager } from "./services/gtfs/index";
@@ -275,10 +277,17 @@ server.addHook("preSerialization", (request, _reply, payload, done) => {
 // variant serves transit / knowledge, whose items aren't tagged with a `source`.
 setDisallowedSourceResolver(getGatedSourceIds);
 setDisallowedIntegrationResolver(getGatedIntegrationIds);
-// Reloading integrations changes the source set the gated sets are derived from,
-// so drop the policy's memoized gated sets when the registry is rebuilt (the
-// admin settings route already invalidates on a policy-toggle change).
-setIntegrationsReloadedHook(invalidateDataUsePolicy);
+// Reloading integrations changes the source set the gated sets are derived
+// from, so drop the policy's memoized gated sets when the registry is rebuilt
+// and kick a refresh right away — the synchronous getters behind the response
+// filter serve the last-good sets until a refresh replaces them. (The admin
+// settings route does the same, awaited, on a policy-toggle change.)
+setIntegrationsReloadedHook(() => {
+  invalidateDataUsePolicy();
+  void refreshDataUsePolicy().catch((err) => {
+    server.log.warn(err, "Data-use policy refresh after integration reload failed");
+  });
+});
 
 // Better Auth handler
 server.route({
@@ -345,7 +354,6 @@ await registerAdminComposeRoutes(server);
 
 // Session endpoint
 server.get("/api/me", async (request, reply) => {
-  const { fromNodeHeaders } = await import("better-auth/node");
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(request.headers),
   });

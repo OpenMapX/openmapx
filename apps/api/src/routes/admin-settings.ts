@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { appLogger } from "../services/app-logger";
-import { invalidateDataUsePolicy } from "../services/data-use-policy";
+import { invalidateDataUsePolicy, refreshDataUsePolicy } from "../services/data-use-policy";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
 import { emailTestLimit } from "../utils/rate-limit";
@@ -410,7 +410,12 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     });
 
     // Policy toggles take effect immediately rather than after the cache TTL.
+    // Invalidate alone only marks the cache stale — the synchronous gated-set
+    // getters behind the response filter keep serving the last-good sets until
+    // a refresh lands, so await one here: by the time this response returns,
+    // the new policy is live on every request path.
     invalidateDataUsePolicy();
+    await refreshDataUsePolicy();
 
     const groups = await resolveSettings();
     return { ok: true, groups };

@@ -229,28 +229,49 @@ function itemFullyGated(item: unknown, gated: Set<string>): boolean {
  * Keys on `sourceId` (data-source metadata / attribution) are deliberately NOT
  * matched, so the integration registry and the /privacy + /terms disclosure
  * tables keep listing every source regardless of policy.
+ *
+ * Copy-on-write: subtrees that contain nothing gated are returned by the same
+ * reference, so the common case (gated set non-empty but the payload clean)
+ * costs a walk, not a deep clone of every response. Where something IS removed,
+ * fresh objects are built along that path — the payload may be a reference the
+ * handler still holds (or has cached), so it is never mutated in place.
  */
 export function filterGatedSources<T>(value: T, gated: Set<string>): T {
   if (Array.isArray(value)) {
-    return value
-      .filter((item) => !itemFullyGated(item, gated))
-      .map((item) => filterGatedSources(item, gated)) as unknown as T;
+    let changed = false;
+    const out: unknown[] = [];
+    for (const item of value) {
+      if (itemFullyGated(item, gated)) {
+        changed = true;
+        continue;
+      }
+      const filtered = filterGatedSources(item, gated);
+      if (filtered !== item) changed = true;
+      out.push(filtered);
+    }
+    return (changed ? out : value) as T;
   }
   if (value && typeof value === "object") {
+    // Only recurse into plain objects. Anything with a prototype — Date,
+    // Buffer, class instances — serializes via its own toJSON/serializer and
+    // carries no source-tagged rows; rebuilding it via Object.keys would
+    // corrupt it (a drizzle Date field would become `{}`).
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
     // A standalone object sourced solely from gated sources collapses to null —
     // e.g. a single-source weather `{ source: "open-meteo", … }` response. Uses
     // the same predicate as the array filter, so an object whose provenance is a
     // fully-gated `sources` array or a GeoJSON `properties.source` is caught too.
     if (itemFullyGated(value, gated)) return null as unknown as T;
-    // Rebuild into a fresh object instead of mutating in place: the
-    // preSerialization payload may be a reference the handler still holds (or has
-    // cached in memory), and an in-place strip would corrupt it for later reads.
     const obj = value as Record<string, unknown>;
+    let changed = false;
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(obj)) {
-      out[key] = filterGatedSources(obj[key], gated);
+      const filtered = filterGatedSources(obj[key], gated);
+      if (filtered !== obj[key]) changed = true;
+      out[key] = filtered;
     }
-    return out as unknown as T;
+    return (changed ? out : value) as T;
   }
   return value;
 }
