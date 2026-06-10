@@ -23,11 +23,12 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { httpError } from "@openmapx/integration-framework";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db";
 import { mangroveKeypair, mangroveKeypairWrap } from "../db/schema";
-import { requireAuth } from "../utils/require-auth";
+import { getUserId, requireAuthHook } from "../utils/require-auth";
 
 type EncryptionMode = "unencrypted" | "encrypted";
 type WrapType = "passphrase" | "webauthn";
@@ -92,7 +93,7 @@ function validateWrap(w: WrapInput): {
     });
   }
   if (typeof w.label !== "string" || w.label.length === 0) {
-    throw Object.assign(new Error("wrap.label is required"), { statusCode: 400 });
+    throw httpError(400, "wrap.label is required");
   }
   if (w.wrapType === "webauthn") {
     if (typeof w.identityString !== "string") {
@@ -147,13 +148,13 @@ function validateEncryptedState(body: {
   }
 
   if (!Array.isArray(body.wraps) || body.wraps.length === 0) {
-    throw Object.assign(new Error("At least one wrap is required"), { statusCode: 400 });
+    throw httpError(400, "At least one wrap is required");
   }
   const wraps = body.wraps.map(validateWrap);
 
   const passphraseCount = wraps.filter((w) => w.wrapType === "passphrase").length;
   if (passphraseCount > 1) {
-    throw Object.assign(new Error("At most one passphrase wrap per user"), { statusCode: 400 });
+    throw httpError(400, "At most one passphrase wrap per user");
   }
   const hasPassphrase = passphraseCount === 1;
   const hasWebauthn = wraps.some((w) => w.wrapType === "webauthn");
@@ -183,9 +184,13 @@ function validateEncryptedState(body: {
 }
 
 export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
+  // Every keypair route is per-user; authenticate once here so no handler can
+  // forget the check.
+  fastify.addHook("preHandler", requireAuthHook);
+
   /** GET — current envelope state. */
   fastify.get("/reviews/keypair", async (request, reply) => {
-    const userId = await requireAuth(request);
+    const userId = getUserId(request);
 
     const [row] = await db
       .select()
@@ -227,7 +232,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
 
   /** POST — create the keypair envelope. Rejects if one already exists. */
   fastify.post("/reviews/keypair", async (request, reply) => {
-    const userId = await requireAuth(request);
+    const userId = getUserId(request);
 
     const [existing] = await db
       .select({ userId: mangroveKeypair.userId })
@@ -311,7 +316,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
    * calling; server only stores the new state.
    */
   fastify.put("/reviews/keypair/wraps", async (request, reply) => {
-    const userId = await requireAuth(request);
+    const userId = getUserId(request);
 
     const [kp] = await db
       .select({ mode: mangroveKeypair.encryptionMode })
@@ -368,7 +373,7 @@ export const reviewsKeypairRoute: FastifyPluginAsync = async (fastify) => {
 
   /** DELETE — wipe keypair + all wraps. Next GET returns 204. */
   fastify.delete("/reviews/keypair", async (request, reply) => {
-    const userId = await requireAuth(request);
+    const userId = getUserId(request);
     await db.transaction(async (tx) => {
       await tx.delete(mangroveKeypairWrap).where(eq(mangroveKeypairWrap.userId, userId));
       await tx.delete(mangroveKeypair).where(eq(mangroveKeypair.userId, userId));

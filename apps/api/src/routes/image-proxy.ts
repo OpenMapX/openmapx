@@ -219,6 +219,14 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         return reply;
       } catch (err) {
         req.log.warn({ url, err }, "Image proxy fetch failed");
+        // If the stream failed AFTER headers were flushed (line above), a 502
+        // send would be a double-send (ERR_HTTP_HEADERS_SENT). Abort the socket
+        // so the client sees a truncated response instead, matching the
+        // too-large path above.
+        if (reply.raw.headersSent) {
+          reply.raw.destroy(err instanceof Error ? err : new Error("Image proxy stream failed"));
+          return reply;
+        }
         return reply.status(502).send({ message: "Failed to fetch image" });
       }
     },

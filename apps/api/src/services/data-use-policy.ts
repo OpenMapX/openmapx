@@ -28,27 +28,23 @@ function envBool(name: string): boolean | undefined {
   return v === "true" || v === "1";
 }
 
-let cache: {
+interface PolicyCache {
   value: DataUsePolicy;
   at: number;
-  // Memoized gated sets, derived from the policy + the integration registry.
-  // Recomputed lazily on first use and shared with the same lifetime as the
-  // policy, so the per-response preSerialization hook doesn't re-scan every
-  // integration on each request. Cleared together by invalidateDataUsePolicy().
-  gatedSources?: Set<string>;
-  gatedIntegrations?: Set<string>;
-} | null = null;
-const CACHE_TTL_MS = 30_000;
-
-/** Drop the cached policy (call after an admin settings write). */
-export function invalidateDataUsePolicy(): void {
-  cache = null;
+  // Gated sets derived from the policy + the integration registry, recomputed
+  // together on every refresh so the synchronous getters (used by the hot
+  // per-response preSerialization hook) always have an answer without awaiting.
+  gatedSources: Set<string>;
+  gatedIntegrations: Set<string>;
 }
 
-export async function getDataUsePolicy(): Promise<DataUsePolicy> {
-  const now = Date.now();
-  if (cache && now - cache.at < CACHE_TTL_MS) return cache.value;
+let cache: PolicyCache | null = null;
+let inFlight: Promise<void> | null = null;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+const CACHE_TTL_MS = 30_000;
+const EMPTY: Set<string> = new Set();
 
+async function loadPolicy(): Promise<DataUsePolicy> {
   const envNC = envBool(ENV_NON_COMMERCIAL);
   const envGrey = envBool(ENV_GREY_AREA);
 
@@ -66,12 +62,10 @@ export async function getDataUsePolicy(): Promise<DataUsePolicy> {
     }
   }
 
-  const value: DataUsePolicy = {
+  return {
     allowNonCommercial: envNC ?? dbNC ?? true,
     allowGreyArea: envGrey ?? dbGrey ?? true,
   };
-  cache = { value, at: now };
-  return value;
 }
 
 /**
@@ -79,24 +73,20 @@ export async function getDataUsePolicy(): Promise<DataUsePolicy> {
  * sources when non-commercial is disallowed, and `"unknown"` sources when
  * grey-area is disallowed. Empty when the policy permits both.
  */
-export async function getGatedSourceIds(): Promise<Set<string>> {
-  const policy = await getDataUsePolicy();
-  if (cache?.gatedSources) return cache.gatedSources;
+function computeGatedSources(policy: DataUsePolicy): Set<string> {
   const gated = new Set<string>();
-  if (!(policy.allowNonCommercial && policy.allowGreyArea)) {
-    for (const integration of getAllIntegrations()) {
-      for (const ds of integration.manifest.dataSources ?? []) {
-        const cu = ds.commercialUse;
-        if (
-          (cu === "no" && !policy.allowNonCommercial) ||
-          (cu === "unknown" && !policy.allowGreyArea)
-        ) {
-          gated.add(ds.sourceId);
-        }
+  if (policy.allowNonCommercial && policy.allowGreyArea) return gated;
+  for (const integration of getAllIntegrations()) {
+    for (const ds of integration.manifest.dataSources ?? []) {
+      const cu = ds.commercialUse;
+      if (
+        (cu === "no" && !policy.allowNonCommercial) ||
+        (cu === "unknown" && !policy.allowGreyArea)
+      ) {
+        gated.add(ds.sourceId);
       }
     }
   }
-  if (cache) cache.gatedSources = gated;
   return gated;
 }
 
@@ -109,21 +99,93 @@ export async function getGatedSourceIds(): Promise<Set<string>> {
  * one still-allowed source is kept; its permitted data flows and any gated
  * per-item rows are handled by `filterGatedSources` downstream.
  */
-export async function getGatedIntegrationIds(): Promise<Set<string>> {
-  const gatedSources = await getGatedSourceIds();
-  if (cache?.gatedIntegrations) return cache.gatedIntegrations;
+function computeGatedIntegrations(gatedSources: Set<string>): Set<string> {
   const result = new Set<string>();
-  if (gatedSources.size > 0) {
-    for (const integration of getAllIntegrations()) {
-      const sources = integration.manifest.dataSources ?? [];
-      if (sources.length === 0) continue;
-      if (sources.every((ds) => gatedSources.has(ds.sourceId))) {
-        result.add(integration.id);
-      }
-    }
+  if (gatedSources.size === 0) return result;
+  for (const integration of getAllIntegrations()) {
+    const sources = integration.manifest.dataSources ?? [];
+    if (sources.length === 0) continue;
+    if (sources.every((ds) => gatedSources.has(ds.sourceId))) result.add(integration.id);
   }
-  if (cache) cache.gatedIntegrations = result;
   return result;
+}
+
+/**
+ * Reload the policy from env + DB and recompute the gated sets into the cache.
+ * Side-effect-only so the lazy async path and the background timer can share it.
+ * `loadPolicy` swallows DB errors (falling back to defaults), so this resolves
+ * even when the DB is down.
+ */
+export async function refreshDataUsePolicy(): Promise<void> {
+  const value = await loadPolicy();
+  const gatedSources = computeGatedSources(value);
+  const gatedIntegrations = computeGatedIntegrations(gatedSources);
+  cache = { value, at: Date.now(), gatedSources, gatedIntegrations };
+}
+
+async function ensureFresh(): Promise<PolicyCache> {
+  if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache;
+  inFlight ??= refreshDataUsePolicy().finally(() => {
+    inFlight = null;
+  });
+  await inFlight;
+  return cache as PolicyCache;
+}
+
+/**
+ * Warm the cache once (call before the server starts listening) and start a
+ * background refresh on the same TTL; the interval is `unref`'d so it never
+ * keeps the process alive on its own. The eagerly-warm cache is what lets the
+ * preSerialization hook read the gated set *synchronously* — and a synchronous
+ * hook cannot open the resolve-undefined-races-a-second-send window that an
+ * async one does (see [[project-fastify-return-reply-contract]]).
+ */
+export async function startDataUsePolicyRefresh(): Promise<void> {
+  await refreshDataUsePolicy();
+  if (refreshTimer) return;
+  refreshTimer = setInterval(() => {
+    void refreshDataUsePolicy().catch(() => {
+      // Keep serving the last-good gated sets; the next tick retries.
+    });
+  }, CACHE_TTL_MS);
+  refreshTimer.unref?.();
+}
+
+/**
+ * Mark the cached policy stale so the next async read reloads it. The
+ * last-computed gated sets are deliberately KEPT for the synchronous getters
+ * until a refresh replaces them, so a policy change never opens an
+ * "allow everything" window in the response filter mid-transition. Call after an
+ * admin settings write or an integration reload.
+ */
+export function invalidateDataUsePolicy(): void {
+  if (cache) cache.at = 0;
+}
+
+export async function getDataUsePolicy(): Promise<DataUsePolicy> {
+  return (await ensureFresh()).value;
+}
+
+export async function getGatedSourceIds(): Promise<Set<string>> {
+  return (await ensureFresh()).gatedSources;
+}
+
+export async function getGatedIntegrationIds(): Promise<Set<string>> {
+  return (await ensureFresh()).gatedIntegrations;
+}
+
+/**
+ * Synchronous view of the gated source ids for the per-response
+ * preSerialization hook. Returns the last refreshed set (empty until the first
+ * refresh, which `startDataUsePolicyRefresh` runs before the server listens).
+ */
+export function getGatedSourceIdsSync(): Set<string> {
+  return cache?.gatedSources ?? EMPTY;
+}
+
+/** Synchronous companion to {@link getGatedIntegrationIds}. */
+export function getGatedIntegrationIdsSync(): Set<string> {
+  return cache?.gatedIntegrations ?? EMPTY;
 }
 
 /**

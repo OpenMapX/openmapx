@@ -1,7 +1,7 @@
+import { httpError } from "@openmapx/integration-framework";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyRequest } from "fastify";
 import { auth } from "../auth";
-import { httpError } from "./http-error.js";
 import { safeEqual } from "./safe-equal.js";
 
 export type AdminSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;

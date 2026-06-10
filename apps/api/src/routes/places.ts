@@ -27,6 +27,15 @@ import { getAllIntegrations, isIntegrationScheme } from "../integration-host.js"
 import { getPlaceKnowledge } from "../services/knowledge/index";
 import { buildReviewLinks } from "../services/review-links";
 import { TTL, withCache } from "../utils/cache.js";
+import { createLimiter } from "../utils/concurrency.js";
+
+// Bound concurrent place enrichments. Each enrichPlace runs a heavy fan-out
+// (knowledge sources, photo + review providers, and sometimes multi-MB OSM
+// boundary polygons); a burst of DISTINCT place opens would otherwise run N of
+// them at once and OOM the process. Identical requests already coalesce in
+// withCache, so this caps only the distinct ones. Tunable for high-memory hosts.
+const ENRICH_CONCURRENCY = Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8;
+const enrichLimit = createLimiter(Math.max(1, ENRICH_CONCURRENCY));
 
 /**
  * Merge external identifiers (Wikidata-sourced Yelp / Tripadvisor / Google
@@ -223,7 +232,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
                 };
                 throw err;
               }
-              return enrichPlace(resolved, lang);
+              return enrichLimit(() => enrichPlace(resolved, lang));
             }
             // No resolver registered for this scheme. The coord-fallback
             // below would happily snap to the nearest OSM POI — fine for
@@ -281,7 +290,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             throw err;
           }
 
-          return enrichPlace(place, lang);
+          return enrichLimit(() => enrichPlace(place, lang));
         });
         reply.header("Cache-Control", "public, max-age=86400");
         return result;

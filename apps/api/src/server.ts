@@ -5,7 +5,7 @@ import helmet from "@fastify/helmet";
 import { registry } from "@integrations/transit-dynamic-registry/registry";
 import { listIdSchemeViews, registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import Fastify from "fastify";
+import Fastify, { type FastifyError } from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
 import {
@@ -56,7 +56,9 @@ import {
   filterGatedSources,
   getGatedIntegrationIds,
   getGatedSourceIds,
+  getGatedSourceIdsSync,
   invalidateDataUsePolicy,
+  startDataUsePolicyRefresh,
 } from "./services/data-use-policy";
 import { gtfsManager } from "./services/gtfs/index";
 import { pruneOldRecords } from "./services/health-history";
@@ -70,6 +72,7 @@ import {
   publicApiLimit,
   tilePublicApiLimit,
 } from "./utils/rate-limit";
+import { requireAuth } from "./utils/require-auth.js";
 
 // Trust proxy hops in front of the API. The default deployment terminates TLS
 // at Traefik (one hop) and forwards to this container, so `request.ip` must be
@@ -111,24 +114,46 @@ const server = Fastify({
   bodyLimit: 10 * 1024 * 1024,
 });
 
-// Defense in depth against double-sends. If a handler ever writes a reply twice
-// (e.g. sends then returns undefined while an async preSerialization hook is in
-// flight), the second write throws ERR_HTTP_HEADERS_SENT from Fastify's
-// serialization continuation — outside any route try/catch — and would
-// otherwise take the whole process down. The first response already wrote
-// correctly; only the stray second write fails. Survive that one specific error
-// (logged loudly so the offending route still gets found and fixed) while
-// preserving fail-fast for every other uncaught exception.
-process.on("uncaughtException", (err) => {
-  if ((err as NodeJS.ErrnoException).code === "ERR_HTTP_HEADERS_SENT") {
+// Defense in depth against double-sends. The systemic cause is gone — the
+// data-use-policy preSerialization hook is now synchronous, so a handler that
+// sends then returns undefined no longer races a second send — but a future
+// async hook could re-arm it. If a stray second write ever throws
+// ERR_HTTP_HEADERS_SENT from Fastify's serialization continuation (outside any
+// route try/catch), survive that one error: the first response already wrote
+// correctly; only the stray second write fails. Everything else stays fail-fast.
+//
+// The error can surface on EITHER channel — uncaughtException, or
+// unhandledRejection if any dependency registers its own unhandledRejection
+// listener (which suppresses Node's default promotion to uncaughtException) — so
+// guard both with the same handler.
+function onFatal(err: unknown): void {
+  if ((err as NodeJS.ErrnoException | undefined)?.code === "ERR_HTTP_HEADERS_SENT") {
     server.log.error(
       { err },
       "Suppressed ERR_HTTP_HEADERS_SENT (double send) — response dropped, process kept alive",
     );
     return;
   }
-  server.log.fatal({ err }, "Uncaught exception — exiting");
+  server.log.fatal({ err }, "Fatal uncaught error — exiting");
   process.exit(1);
+}
+process.on("uncaughtException", onFatal);
+process.on("unhandledRejection", onFatal);
+
+// Uniform error body. Throwing handlers/guards (requireAuth/requireAdmin throw
+// httpError, route validation throws with statusCode) would otherwise serialize
+// via Fastify's default to `{ statusCode, error: "<HTTP phrase>", message }` —
+// but every client reads `body.error` for the human-readable text, so a thrown
+// 401 would show "Unauthorized" instead of "Authentication required". Restore
+// the legacy `{ error: <message> }` shape for 4xx (matching the routes that
+// still send it by hand), and never leak an internal 5xx message.
+server.setErrorHandler((error: FastifyError, request, reply) => {
+  const statusCode = error.statusCode ?? 500;
+  if (statusCode >= 500) {
+    request.log.error({ err: error }, "Request error");
+    return reply.status(statusCode).send({ error: "Internal Server Error" });
+  }
+  return reply.status(statusCode).send({ error: error.message });
 });
 
 // Run database migrations on startup (idempotent — skips already-applied migrations)
@@ -220,7 +245,14 @@ server.addHook("onRequest", async (request, reply) => {
 // (non-commercial / grey-area) out of API responses. Admin + the integration
 // registry/metadata endpoints are excluded so they keep listing every source
 // for management and legal disclosure.
-server.addHook("preSerialization", async (request, _reply, payload) => {
+// Callback style (4 params incl. `done`) on purpose: with `done` invoked
+// synchronously, Fastify never yields to the event loop mid-serialization, so a
+// handler that sends then returns undefined can't race a second send. (An async
+// hook — or even a 3-arg hook that returns the payload, which Fastify still
+// awaits by arity — reopens that window and crashes the process.) Reading the
+// gated set from the eagerly-warmed cache keeps every branch synchronous; the
+// set is kept fresh by startDataUsePolicyRefresh() + invalidation.
+server.addHook("preSerialization", (request, _reply, payload, done) => {
   const path = request.url.split("?")[0];
   if (
     path.startsWith("/api/admin") ||
@@ -229,12 +261,12 @@ server.addHook("preSerialization", async (request, _reply, payload) => {
     path === "/api/integrations/health" ||
     path === "/api/transit/registry"
   ) {
-    return payload;
+    return done(null, payload);
   }
-  if (!payload || typeof payload !== "object") return payload;
-  const gated = await getGatedSourceIds();
-  if (gated.size === 0) return payload;
-  return filterGatedSources(payload, gated);
+  if (!payload || typeof payload !== "object") return done(null, payload);
+  const gated = getGatedSourceIdsSync();
+  if (gated.size === 0) return done(null, payload);
+  done(null, filterGatedSources(payload, gated));
 });
 
 // Let orchestrators (e.g. the weather chain) see the policy-gated source set so
@@ -269,10 +301,10 @@ server.route({
       response.headers.forEach((value, key) => {
         reply.header(key, value);
       });
-      reply.send(response.status === 204 ? null : await response.text());
+      return reply.send(response.status === 204 ? null : await response.text());
     } catch (error) {
       server.log.error(error, "Auth error");
-      reply.status(500).send({ error: "Internal authentication error" });
+      return reply.status(500).send({ error: "Internal authentication error" });
     }
   },
 });
@@ -448,10 +480,14 @@ server.log.info(`Loaded ${loadedCount} integrations`);
 
 // Debug endpoint: list loaded dynamic transit providers (auth required)
 server.get("/api/transit/registry", async (req) => {
-  const { requireAuth } = await import("./utils/require-auth.js");
   await requireAuth(req);
   return { entries: registry.listEntries(), count: registry.entryCount };
 });
+
+// Warm the data-use-policy cache now that integrations are loaded, so the
+// synchronous preSerialization hook has the gated set ready before the first
+// request — and start the background refresh.
+await startDataUsePolicyRefresh();
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "0.0.0.0";

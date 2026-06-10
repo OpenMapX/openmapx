@@ -490,6 +490,7 @@ function registerIntegrationRouteDispatcher(
       userId = await requireAuth(request);
     }
 
+    let didSend = false;
     await matched.route.handler(
       {
         query: request.query as Record<string, string>,
@@ -499,10 +500,12 @@ function registerIntegrationRouteDispatcher(
       },
       {
         send: (data) => {
+          didSend = true;
           reply.send(data);
         },
         status: (code) => ({
           send: (data) => {
+            didSend = true;
             reply.status(code).send(data);
           },
         }),
@@ -514,6 +517,18 @@ function registerIntegrationRouteDispatcher(
         },
       },
     );
+
+    // A handler that returns without sending would leave the reply unsent;
+    // `return reply` then hands Fastify an unfulfilled reply and the request
+    // hangs until the socket times out. Fail it loudly instead so a broken
+    // handler surfaces as a 500, not a stuck connection.
+    if (!didSend) {
+      request.log.error(
+        { integrationId: id, path: routePath },
+        "integration handler returned without sending a response",
+      );
+      return reply.status(500).send({ error: "Integration handler produced no response" });
+    }
 
     // The integration handler sent its response through the shim above and
     // resolves to undefined; returning the reply hands control back to Fastify

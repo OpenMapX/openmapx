@@ -100,6 +100,7 @@ export type {
 } from "./contracts/index.js";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
+export { httpError } from "./http-error";
 // Installer exports (`buildIntegration` / `installIntegration` / `listIntegrations`
 // / `removeIntegration` / `validateIntegrationDirectory` and their option/result
 // types) intentionally do NOT live in this barrel. `installer.ts` imports

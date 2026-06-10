@@ -23,9 +23,11 @@ vi.mock("../../integration-host.js", () => ({
 const {
   filterGatedSources,
   getGatedSourceIds,
+  getGatedSourceIdsSync,
   getGatedIntegrationIds,
   getDataUsePolicy,
   invalidateDataUsePolicy,
+  refreshDataUsePolicy,
 } = await import("../data-use-policy.js");
 
 beforeEach(() => {
@@ -136,6 +138,30 @@ describe("getGatedIntegrationIds", () => {
       { id: "x", manifest: { dataSources: [{ sourceId: "a", commercialUse: "no" }] } },
     ]);
     expect((await getGatedIntegrationIds()).size).toBe(0);
+  });
+});
+
+describe("synchronous gated getters (preSerialization hook path)", () => {
+  beforeEach(() => {
+    getAllIntegrationsMock.mockReturnValue([
+      { id: "i-nc", manifest: { dataSources: [{ sourceId: "nc-src", commercialUse: "no" }] } },
+    ]);
+  });
+
+  it("mirrors the async set after a refresh", async () => {
+    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    await refreshDataUsePolicy();
+    expect([...getGatedSourceIdsSync()]).toEqual(["nc-src"]);
+    expect([...(await getGatedSourceIds())]).toEqual(["nc-src"]);
+  });
+
+  it("keeps the last-good set after invalidate — no allow-everything window", async () => {
+    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    await refreshDataUsePolicy();
+    expect(getGatedSourceIdsSync().has("nc-src")).toBe(true);
+    invalidateDataUsePolicy();
+    // Stays gated synchronously until the next refresh repopulates the cache.
+    expect(getGatedSourceIdsSync().has("nc-src")).toBe(true);
   });
 });
 

@@ -14,6 +14,6 @@ export async function internalMetricsRoute(fastify: FastifyInstance): Promise<vo
   fastify.get("/internal/metrics", async (_request, reply) => {
     const metrics = getMetrics();
     const text = await metrics.renderPrometheus();
-    reply.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8").send(text);
+    return reply.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8").send(text);
   });
 }

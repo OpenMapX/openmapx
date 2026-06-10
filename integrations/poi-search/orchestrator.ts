@@ -1,7 +1,7 @@
 import type { BoundingBox } from "@openmapx/core";
 import { OverpassTimeoutError } from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
 import type { PoiSearchProvider, PoiSearchResult } from "./types.js";
 
@@ -40,7 +40,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     options?: { lang?: string },
   ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
     if (typeof category !== "string" || category.length === 0) {
-      throw Object.assign(new Error("Missing or invalid category"), { statusCode: 400 });
+      throw httpError(400, "Missing or invalid category");
     }
 
     const providers = getProviders();
@@ -52,7 +52,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       const presetId = category.slice(PRESET_PREFIX.length);
       const preset = getPresetById(presetId);
       if (!preset) {
-        throw Object.assign(new Error(`Unknown preset: ${presetId}`), { statusCode: 400 });
+        throw httpError(400, `Unknown preset: ${presetId}`);
       }
       osmTags = preset.tags;
       lookupCategory = PRESET_SENTINEL;
@@ -60,7 +60,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
 
     const provider = providers.find((p) => p.categories.includes(lookupCategory));
     if (!provider) {
-      throw Object.assign(new Error(`Unknown category: ${category}`), { statusCode: 400 });
+      throw httpError(400, `Unknown category: ${category}`);
     }
 
     let currentBbox = bbox;
@@ -95,11 +95,11 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     options?: { lang?: string },
   ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
     if (typeof query !== "string" || query.trim().length === 0) {
-      throw Object.assign(new Error("Missing or empty query"), { statusCode: 400 });
+      throw httpError(400, "Missing or empty query");
     }
     const provider = getProviders().find((p) => typeof p.searchText === "function");
     if (!provider?.searchText) {
-      throw Object.assign(new Error("No text-search provider available"), { statusCode: 400 });
+      throw httpError(400, "No text-search provider available");
     }
 
     let currentBbox = bbox;

@@ -18,6 +18,6 @@ export async function internalPoiSourcesRoute(fastify: FastifyInstance): Promise
     const sources = getAllPoiSources();
     const ids = sources.map((s) => s.id).sort();
     const hash = createHash("sha256").update(ids.join("\n")).digest("hex");
-    reply.send({ count: sources.length, hash, ids });
+    return reply.send({ count: sources.length, hash, ids });
   });
 }
