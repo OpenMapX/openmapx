@@ -28,7 +28,7 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 
 - **Complete mapping platform** — geocoding, routing, public transit, live vehicles, street view, POI search, knowledge enrichment, reviews, weather, dozens of overlays
 - **Two-layer plugin system** — *services* (containers: Valhalla, Nominatim, MOTIS, …) and *integrations* (app features: providers, overlays, data sources, tools). Both support community plugins from any Git URL
-- **75+ built-in integrations** across 12 domains and **20+ built-in services** rendered into a generated `docker-compose.yml`
+- **85+ built-in integrations** across roughly a dozen domains and **20+ built-in services** rendered into a generated `docker-compose.yml`
 - **Self-host everything** — no service is mandatory and every external dependency can be replaced by a self-hosted alternative
 - **Open data** — OpenStreetMap, GTFS via Transitous, Wikidata, Wikipedia, Mapillary, NASA, NOAA, ECCC, DWD, MeteoAlarm, OpenAQ, USGS, NPS, and more
 - **Privacy-first** — no third-party analytics; most upstream calls are proxied through your API server, and unavoidable direct browser asset loads are explicitly documented
@@ -62,7 +62,7 @@ graph TD
     Traefik --> Martin["martin :3000<br/>PostGIS vector tiles"]
 
     subgraph "API Server"
-        IntHost["Integration Host<br/>75+ built-in + community"]
+        IntHost["Integration Host<br/>85+ built-in + community"]
         Orchestrators["Domain orchestrators<br/>(geocoding, routing, transit, ...)"]
         SvcRegistry["Service Registry"]
         Bindings["Capability Bindings"]
