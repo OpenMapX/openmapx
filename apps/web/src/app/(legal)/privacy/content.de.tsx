@@ -7,15 +7,18 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import type { Disclosure } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
 
 export default function PrivacyContentDe({
   capabilities: _capabilities = {},
   integrations = [],
+  disclosures = [],
 }: {
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
+  disclosures?: Disclosure[];
 }) {
   const {
     name,
@@ -450,6 +453,56 @@ export default function PrivacyContentDe({
             },
           ]}
         />
+
+        {(() => {
+          const cloudVendors = [
+            ...new Set(
+              disclosures
+                .filter((d) => d.type === "ai-search" && d.cloudActive)
+                .flatMap((d) => d.cloudVendors),
+            ),
+          ];
+          if (cloudVendors.length === 0) return null;
+          return (
+            <>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
+                KI-Anfrageinterpretation (Cloud)
+              </Typography>
+              <ServiceTable
+                rows={[
+                  ...(cloudVendors.includes("anthropic")
+                    ? [
+                        {
+                          service: "Anthropic (Claude)",
+                          purpose:
+                            "Interpretation Ihrer natürlichsprachlichen Suchanfrage in eine strukturierte Suche",
+                          dataSent:
+                            "Ihr Suchanfragetext und ungefährer Kartenmittelpunkt (gerundete Koordinaten)",
+                          endUserExposure: "Nur serverseitig",
+                          country: "USA",
+                          privacy: "https://www.anthropic.com/legal/privacy",
+                        },
+                      ]
+                    : []),
+                  ...(cloudVendors.includes("openai")
+                    ? [
+                        {
+                          service: "OpenAI",
+                          purpose:
+                            "Interpretation Ihrer natürlichsprachlichen Suchanfrage in eine strukturierte Suche",
+                          dataSent:
+                            "Ihr Suchanfragetext und ungefährer Kartenmittelpunkt (gerundete Koordinaten)",
+                          endUserExposure: "Nur serverseitig",
+                          country: "USA",
+                          privacy: "https://openai.com/policies/privacy-policy/",
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </>
+          );
+        })()}
 
         <Typography sx={{ mt: 2 }}>
           <strong>Hinweis zum Datenfluss:</strong> Die Spalte &quot;Datenzugriff&quot; oben zeigt

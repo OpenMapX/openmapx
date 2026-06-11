@@ -1,4 +1,9 @@
-import { fetchCapabilities, fetchIntegrations, sectionSlug } from "@openmapx/core/server";
+import {
+  fetchCapabilities,
+  fetchDisclosures,
+  fetchIntegrations,
+  sectionSlug,
+} from "@openmapx/core/server";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
@@ -10,6 +15,7 @@ const sectionsEn: LegalSection[] = [
   { id: sectionSlug("4. User Accounts"), label: "User Accounts" },
   { id: sectionSlug("5. Acceptable Use"), label: "Acceptable Use" },
   { id: sectionSlug("6. Accuracy and No Warranty"), label: "No Warranty" },
+  { id: "ai-search", label: "AI-Assisted Search" },
   { id: sectionSlug("7. Limitation of Liability"), label: "Liability" },
   { id: sectionSlug("8. Intellectual Property"), label: "Intellectual Property" },
   { id: sectionSlug("9. Privacy"), label: "Privacy" },
@@ -44,6 +50,7 @@ const sectionsDe: LegalSection[] = [
     id: sectionSlug("6. Genauigkeit und Gew\u00e4hrleistungsausschluss"),
     label: "Gew\u00e4hrleistung",
   },
+  { id: "ai-search", label: "KI-gest\u00fctzte Suche" },
   {
     id: sectionSlug("7. Haftungsbeschr\u00e4nkung"),
     label: "Haftung",
@@ -90,14 +97,15 @@ export default async function TermsPage() {
       ? (await import("./content.de")).default
       : (await import("./content.en")).default;
 
-  const [capabilities, integrations] = await Promise.all([
+  const [capabilities, integrations, disclosures] = await Promise.all([
     fetchCapabilities(),
     fetchIntegrations(),
+    fetchDisclosures(),
   ]);
 
   return (
     <LegalPageShell sections={sections}>
-      <Content capabilities={capabilities} integrations={integrations} />
+      <Content capabilities={capabilities} integrations={integrations} disclosures={disclosures} />
     </LegalPageShell>
   );
 }

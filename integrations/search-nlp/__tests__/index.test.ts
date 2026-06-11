@@ -93,6 +93,7 @@ function makeCtx(config: Record<string, unknown>): {
       routes.set(`${method} ${path}`, handler);
     },
     registerHealthCheck: vi.fn(),
+    registerDisclosure: vi.fn(),
   } as unknown as IntegrationContext;
 
   return { ctx, routes, store };

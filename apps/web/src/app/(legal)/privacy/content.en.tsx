@@ -7,15 +7,18 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import type { Disclosure } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
 
 export default function PrivacyContent({
   capabilities: _capabilities = {},
   integrations = [],
+  disclosures = [],
 }: {
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
+  disclosures?: Disclosure[];
 }) {
   const {
     name,
@@ -418,6 +421,56 @@ export default function PrivacyContent({
             },
           ]}
         />
+
+        {(() => {
+          const cloudVendors = [
+            ...new Set(
+              disclosures
+                .filter((d) => d.type === "ai-search" && d.cloudActive)
+                .flatMap((d) => d.cloudVendors),
+            ),
+          ];
+          if (cloudVendors.length === 0) return null;
+          return (
+            <>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mt: 3, mb: 1 }}>
+                AI Query Interpretation (Cloud)
+              </Typography>
+              <ServiceTable
+                rows={[
+                  ...(cloudVendors.includes("anthropic")
+                    ? [
+                        {
+                          service: "Anthropic (Claude)",
+                          purpose:
+                            "Interpret your natural-language search query into a structured search",
+                          dataSent:
+                            "Your search query text and approximate map center (rounded coordinates)",
+                          endUserExposure: "Server-only",
+                          country: "USA",
+                          privacy: "https://www.anthropic.com/legal/privacy",
+                        },
+                      ]
+                    : []),
+                  ...(cloudVendors.includes("openai")
+                    ? [
+                        {
+                          service: "OpenAI",
+                          purpose:
+                            "Interpret your natural-language search query into a structured search",
+                          dataSent:
+                            "Your search query text and approximate map center (rounded coordinates)",
+                          endUserExposure: "Server-only",
+                          country: "USA",
+                          privacy: "https://openai.com/policies/privacy-policy/",
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </>
+          );
+        })()}
 
         <Typography sx={{ mt: 2 }}>
           <strong>Note on data flow:</strong> The &quot;Data Access&quot; column above indicates how

@@ -7,6 +7,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import type { Disclosure } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
@@ -14,9 +15,11 @@ import { generateAttributionSectionsFromManifests } from "../generateLegalSectio
 export default function TermsContent({
   capabilities: _capabilities = {},
   integrations = [],
+  disclosures = [],
 }: {
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
+  disclosures?: Disclosure[];
 }) {
   const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
 
@@ -258,6 +261,22 @@ export default function TermsContent({
           unaffected.
         </Typography>
       </Section>
+      {disclosures.some((d) => d.type === "ai-search" && d.aiActive) && (
+        <Section title="AI-Assisted Search" id="ai-search">
+          <Typography>
+            OpenMapX uses artificial-intelligence models to interpret natural-language search
+            queries — for example, turning &quot;quiet café with outdoor seating near the park&quot;
+            into a structured search. Depending on this deployment&apos;s configuration,
+            interpretation may run on a locally hosted model and/or a third-party cloud model. AI
+            interpretation is probabilistic: it can misunderstand your query, omit relevant results,
+            surface irrelevant ones, or otherwise produce inaccurate or incomplete output. Results
+            are suggestions, not authoritative answers — do not rely on them for safety-, legal-,
+            financial-, or health-critical decisions, and independently verify anything important.
+            The underlying map data, routing, and place information remain subject to the
+            &quot;Accuracy and No Warranty&quot; section above.
+          </Typography>
+        </Section>
+      )}
       <Section title="7. Limitation of Liability">
         <Typography>The operator&apos;s liability is governed as follows:</Typography>
         <ul>

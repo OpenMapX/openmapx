@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
-import type { IntegrationContext, NlpProvider } from "@openmapx/integration-framework";
+import type {
+  AiSearchDisclosure,
+  CloudAiVendor,
+  IntegrationContext,
+  NlpProvider,
+} from "@openmapx/integration-framework";
 import OpenAI from "openai";
 import { createChain } from "./orchestrator";
 import { createClaudeProvider } from "./providers/claude";
@@ -210,8 +215,28 @@ async function ensureOllamaModel(ctx: IntegrationContext): Promise<void> {
   }
 }
 
+export function computeAiSearchDisclosure(ctx: IntegrationContext): AiSearchDisclosure {
+  const chain = (ctx.config.providerChain as string[] | undefined) ?? ["local", "keyword"];
+  const localActive = chain.includes("local");
+  const claudeActive = chain.includes("claude") && Boolean(readString(ctx, "anthropicApiKey"));
+  const openaiActive = chain.includes("openai") && Boolean(readString(ctx, "openaiApiKey"));
+  const cloudVendors: CloudAiVendor[] = [];
+  if (claudeActive) cloudVendors.push("anthropic");
+  if (openaiActive) cloudVendors.push("openai");
+  const cloudActive = cloudVendors.length > 0;
+  return {
+    type: "ai-search",
+    integrationId: "search-nlp",
+    aiActive: localActive || cloudActive,
+    localActive,
+    cloudActive,
+    cloudVendors,
+  };
+}
+
 export function setup(ctx: IntegrationContext): void {
   const providers = __buildProviders(ctx);
+  ctx.registerDisclosure(computeAiSearchDisclosure(ctx));
   const roundDecimals = readNumber(ctx, "roundCoordsDecimals") ?? DEFAULT_ROUND_DECIMALS;
   const intentTtl = readNumber(ctx, "intentCacheTtlSeconds") ?? DEFAULT_INTENT_TTL;
   const rateLimit = readNumber(ctx, "rateLimitPerIpPerHour") ?? DEFAULT_RATE_LIMIT;

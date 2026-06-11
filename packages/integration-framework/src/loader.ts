@@ -1,5 +1,5 @@
 import type { LocaleStrings } from "../strings/index";
-import type { CustomHealthCheckFn } from "./context";
+import type { CustomHealthCheckFn, Disclosure } from "./context";
 import type { IntegrationManifest } from "./manifest";
 
 export type IntegrationStrings = Record<string, Record<string, unknown>>;
@@ -14,6 +14,7 @@ export interface LoadedIntegration {
   providers: Map<string, unknown[]>;
   strings: IntegrationStrings;
   customHealthCheck?: CustomHealthCheckFn;
+  disclosures?: Disclosure[];
   shutdownHandlers: Array<() => Promise<void>>;
 }
 
@@ -38,6 +39,7 @@ export interface LoadedIntegrationMeta {
 export interface IntegrationsResponse {
   integrations: Array<LoadedIntegrationMeta & { isBuiltIn?: boolean }>;
   frameworkStrings: LocaleStrings;
+  disclosures: Disclosure[];
 }
 
 export function toIntegrationMeta(integration: LoadedIntegration): LoadedIntegrationMeta {

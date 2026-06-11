@@ -98,6 +98,25 @@ export interface HealthCheckResult {
 
 export type CustomHealthCheckFn = () => Promise<HealthCheckResult>;
 
+export type CloudAiVendor = "anthropic" | "openai";
+
+/**
+ * A secret-free, server-computed legal disclosure signal surfaced to the
+ * client on /api/integrations. Booleans + vendor names only — never config or
+ * secrets.
+ */
+export interface AiSearchDisclosure {
+  type: "ai-search";
+  integrationId: string;
+  /** Any AI provider (local or cloud) active → show the Terms AI disclaimer. */
+  aiActive: boolean;
+  localActive: boolean;
+  /** A cloud provider configured + in chain → show the Privacy data-transfer row. */
+  cloudActive: boolean;
+  cloudVendors: CloudAiVendor[];
+}
+export type Disclosure = AiSearchDisclosure;
+
 export interface SecretsClient {
   /** Retrieve a decrypted secret from the vault, or null if not stored. */
   get(key: string): Promise<string | null>;
@@ -252,6 +271,7 @@ export interface IntegrationContext {
   registerPoiSources(sources: readonly PoiSource[]): void;
   registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
+  registerDisclosure(disclosure: Disclosure): void;
 
   emit(event: string, data: unknown): void;
   on(event: string, handler: (data: unknown) => void): () => void;

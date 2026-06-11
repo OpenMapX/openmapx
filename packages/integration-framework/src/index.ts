@@ -6,10 +6,13 @@ export {
   registerCommunityModule,
 } from "./community";
 export type {
+  AiSearchDisclosure,
   AttributionIndexHandle,
   CacheClient,
+  CloudAiVendor,
   CustomHealthCheckFn,
   DatabaseClient,
+  Disclosure,
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,

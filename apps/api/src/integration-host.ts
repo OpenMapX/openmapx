@@ -514,6 +514,10 @@ function buildIntegrationContext(args: {
     registerHealthCheck(fn: CustomHealthCheckFn) {
       integration.customHealthCheck = fn;
     },
+    registerDisclosure(disclosure) {
+      if (!integration.disclosures) integration.disclosures = [];
+      integration.disclosures.push(disclosure);
+    },
     emit(event: string, data: unknown) {
       eventBus.emit({
         type: event,
@@ -761,6 +765,9 @@ export async function initIntegrations(
           isBuiltIn: i.isBuiltIn,
         })),
       frameworkStrings: sharedStrings,
+      disclosures: Array.from(integrations.values())
+        .filter((i) => i.enabled)
+        .flatMap((i) => i.disclosures ?? []),
     };
   });
 

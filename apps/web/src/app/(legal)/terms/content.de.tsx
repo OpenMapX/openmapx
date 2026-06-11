@@ -7,6 +7,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import type { Disclosure } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
@@ -14,9 +15,11 @@ import { generateAttributionSectionsFromManifests } from "../generateLegalSectio
 export default function TermsContentDe({
   capabilities: _capabilities = {},
   integrations = [],
+  disclosures = [],
 }: {
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
+  disclosures?: Disclosure[];
 }) {
   const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
 
@@ -275,6 +278,23 @@ export default function TermsContentDe({
           Richtigkeit der angezeigten Daten. Ihre gesetzlichen Rechte bleiben unber&uuml;hrt.
         </Typography>
       </Section>
+      {disclosures.some((d) => d.type === "ai-search" && d.aiActive) && (
+        <Section title="KI-gestützte Suche" id="ai-search">
+          <Typography>
+            OpenMapX verwendet KI-Modelle, um natürlichsprachliche Suchanfragen zu interpretieren —
+            etwa „ruhiges Café mit Außenbereich in der Nähe des Parks" in eine strukturierte Suche
+            zu übersetzen. Je nach Konfiguration dieser Instanz kann die Interpretation auf einem
+            lokal gehosteten Modell und/oder einem Cloud-Modell eines Drittanbieters erfolgen. Die
+            KI-Interpretation ist probabilistisch: Sie kann Ihre Anfrage missverstehen, relevante
+            Ergebnisse auslassen, irrelevante anzeigen oder anderweitig ungenaue oder unvollständige
+            Ausgaben erzeugen. Ergebnisse sind Vorschläge, keine verbindlichen Antworten — verlassen
+            Sie sich bei sicherheits-, rechts-, finanz- oder gesundheitskritischen Entscheidungen
+            nicht darauf und überprüfen Sie wichtige Angaben eigenständig. Die zugrunde liegenden
+            Kartendaten, Routing- und Ortsinformationen unterliegen weiterhin dem Abschnitt
+            „Genauigkeit und Gewährleistungsausschluss" oben.
+          </Typography>
+        </Section>
+      )}
       <Section title="7. Haftungsbeschr&auml;nkung">
         <Typography>Die Haftung des Betreibers bestimmt sich wie folgt:</Typography>
         <ul>
