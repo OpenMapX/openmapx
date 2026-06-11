@@ -9,6 +9,7 @@ const mockLookupByCoords = vi.fn();
 const mockLookupByNameAndCoords = vi.fn();
 const mockLookupByOsmFilters = vi.fn();
 const mockLookupAddressByCoords = vi.fn();
+const mockFetchOsmBoundary = vi.fn();
 
 vi.mock("../../../../../integrations/geocoding/place-lookup.js", () => ({
   lookupByOsmRef: mockLookupByOsmRef,
@@ -16,6 +17,7 @@ vi.mock("../../../../../integrations/geocoding/place-lookup.js", () => ({
   lookupByNameAndCoords: mockLookupByNameAndCoords,
   lookupByOsmFilters: mockLookupByOsmFilters,
   lookupAddressByCoords: mockLookupAddressByCoords,
+  fetchOsmBoundary: mockFetchOsmBoundary,
 }));
 
 // Mock knowledge service
@@ -28,17 +30,21 @@ vi.mock("../../services/knowledge/index.js", () => ({
 
 // Mock photo service
 
+const mockSearchHeroPhotos = vi.fn().mockResolvedValue([]);
+
 vi.mock("@integrations/photos/orchestrator", () => ({
   getPhotoProviders: vi.fn().mockReturnValue([]),
-  searchHeroPhotos: vi.fn().mockResolvedValue([]),
+  searchHeroPhotos: mockSearchHeroPhotos,
   deduplicatePhotos: vi.fn((photos: unknown[]) => photos),
 }));
 
 // Mock reviews orchestrator — `fetchAggregate` would otherwise hit the
 // real Mangrove service via safeAggregate on every `/places/:id` call.
+const mockFetchAggregate = vi.fn().mockResolvedValue(null);
+
 vi.mock("@integrations/reviews/orchestrator", () => ({
   getReviewProviders: vi.fn().mockReturnValue([]),
-  fetchAggregate: vi.fn().mockResolvedValue(null),
+  fetchAggregate: mockFetchAggregate,
 }));
 
 const mockIsIntegrationScheme = vi.fn().mockReturnValue(false);
@@ -478,5 +484,63 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(500);
     const body = res.json();
     expect(body.error).toBe("Internal server error");
+  });
+
+  it("runs boundary, photo, and review calls in parallel within enrichPlace", async () => {
+    // Place with boundary=administrative so all three downstream paths are active.
+    const adminPlace = {
+      ...MOCK_PLACE,
+      ids: { osm: "relation/62422" },
+      osmTags: { boundary: "administrative", name: "Berlin" },
+    };
+    mockLookupByOsmRef.mockResolvedValue(adminPlace);
+    mockGetPlaceKnowledge.mockResolvedValue({
+      externalIds: {},
+      photos: [],
+    });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    const startTimes: Record<string, number> = {};
+
+    // Stagger resolution: boundary=30ms, photos=20ms, reviews=10ms.
+    // If run sequentially the total would be ≥60ms; the start-time spread
+    // tells us they actually overlap without relying on wall-clock duration.
+    mockFetchOsmBoundary.mockImplementation(() => {
+      startTimes.boundary = Date.now();
+      return new Promise((resolve) =>
+        setTimeout(() => resolve({ boundary: null, boundingBox: null }), 30),
+      );
+    });
+    mockSearchHeroPhotos.mockImplementation(() => {
+      startTimes.photos = Date.now();
+      return new Promise((resolve) => setTimeout(() => resolve([]), 20));
+    });
+    mockFetchAggregate.mockImplementation(() => {
+      startTimes.reviews = Date.now();
+      return new Promise((resolve) => setTimeout(() => resolve(null), 10));
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/places/${encodeURIComponent("osm:node/12345")}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // Response shape is unchanged.
+    expect(body).toMatchObject({ id: "osm:node/12345", name: adminPlace.name });
+
+    // All three mocks must have been called.
+    expect(mockFetchOsmBoundary).toHaveBeenCalled();
+    expect(mockSearchHeroPhotos).toHaveBeenCalled();
+    expect(mockFetchAggregate).toHaveBeenCalled();
+
+    // All three must have started before the shortest one (10ms) resolved.
+    // Parallel: all starts occur before any resolution — spread is near zero.
+    // Sequential: starts would be separated by at least one delay (≥10ms).
+    const spread =
+      Math.max(startTimes.boundary, startTimes.photos, startTimes.reviews) -
+      Math.min(startTimes.boundary, startTimes.photos, startTimes.reviews);
+    expect(spread).toBeLessThan(10);
   });
 });

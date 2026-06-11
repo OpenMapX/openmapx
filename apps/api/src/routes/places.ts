@@ -120,15 +120,6 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
 
-  // For administrative areas (cities, regions, countries), fetch the real OSM
-  // boundary outline so the client can draw a dashed border and fit the map to
-  // the whole area — mirroring Google Maps' city highlight. Gated on the
-  // `boundary=administrative` OSM tag so we never pull polygons for POIs.
-  const adminBoundary =
-    enriched.osmTags?.boundary === "administrative" && enriched.ids?.osm
-      ? await fetchOsmBoundary(enriched.ids.osm, lang)
-      : null;
-
   if (enriched.openingHours && !enriched.openingHoursInfo) {
     enriched.openingHoursInfo = buildOpeningHoursInfo(enriched.openingHours, {
       lat: enriched.coordinates[1],
@@ -139,18 +130,20 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   const allIntegrations = getAllIntegrations();
   const photoProviders = getPhotoProviders(allIntegrations);
   const reviewProviders = getReviewProviders(allIntegrations);
-  const heroPhotos = enriched.osmTags
-    ? await searchHeroPhotos(enriched.osmTags, photoProviders)
-    : [];
-  const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
   const [plng, plat] = enriched.coordinates;
-  const reviewStats = await safeAggregate(
-    plat,
-    plng,
-    enriched.name,
-    enriched.ids?.osm,
-    reviewProviders,
-  );
+
+  // The three downstream calls are mutually independent: run them in parallel.
+  // fetchOsmBoundary is gated on boundary=administrative so we never pull
+  // polygons for POIs — mirroring Google Maps' city highlight.
+  // If a future step consumes another step's output, move it outside this call.
+  const [adminBoundary, heroPhotos, reviewStats] = await Promise.all([
+    enriched.osmTags?.boundary === "administrative" && enriched.ids?.osm
+      ? fetchOsmBoundary(enriched.ids.osm, lang)
+      : Promise.resolve(null),
+    enriched.osmTags ? searchHeroPhotos(enriched.osmTags, photoProviders) : Promise.resolve([]),
+    safeAggregate(plat, plng, enriched.name, enriched.ids?.osm, reviewProviders),
+  ]);
+  const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
   return {
     ...enriched,
     ...knowledge,
