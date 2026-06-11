@@ -1,5 +1,5 @@
 import { createConnection } from "node:net";
-import { USER_AGENT } from "@openmapx/core";
+import { USER_AGENT, validatePublicUrl } from "@openmapx/core";
 import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
 import { recordHealthResult } from "./health-history";
 import { serviceUrl } from "./service-registry";
@@ -133,6 +133,18 @@ async function executeSingleHealthCheck(
     const url = new URL(hc.url.startsWith("tcp://") ? hc.url : `tcp://${hc.url}`);
     const host = url.hostname;
     const port = Number(url.port) || 5432;
+    try {
+      validatePublicUrl(`http://${host}`);
+    } catch {
+      return {
+        id,
+        name,
+        category,
+        url: `${host}:${port}`,
+        status: "down",
+        error: "health-check host not allowed (non-public host)",
+      };
+    }
     const result = await tcpCheck(host, port);
     return {
       id,
@@ -156,6 +168,7 @@ async function executeSingleHealthCheck(
   //     doesn't actually use).
   let checkUrl: string;
   let unsatisfiedService: string | null = null;
+  const serviceHosts = new Set<string>();
   function resolvePlaceholder(key: string): string {
     if (key.startsWith("service:")) {
       const serviceId = key.slice("service:".length);
@@ -163,6 +176,11 @@ async function executeSingleHealthCheck(
       if (!url) {
         unsatisfiedService = unsatisfiedService ?? serviceId;
         return "";
+      }
+      try {
+        serviceHosts.add(new URL(url).host);
+      } catch {
+        // serviceUrl returns a well-formed URL; ignore theoretical parse failure
       }
       return url;
     }
@@ -204,6 +222,33 @@ async function executeSingleHealthCheck(
     interpolatedHeaders[k] = v.replace(/\$\{([\w:]+)\}/g, (_, key: string) =>
       resolvePlaceholder(key),
     );
+  }
+
+  // SSRF guard: a manifest-controlled health-check URL must not target an
+  // internal/loopback/link-local host. Registered `service:` hosts are exempt
+  // (they are SUPPOSED to be internal); everything else (manifest-literal or
+  // ${config}-derived) is validated. Comparing the FINAL host against the set
+  // of service-substituted hosts prevents smuggling an internal IP past the
+  // guard by also referencing a service elsewhere in the template.
+  let hostExempt = false;
+  try {
+    hostExempt = serviceHosts.has(new URL(checkUrl).host);
+  } catch {
+    hostExempt = false;
+  }
+  if (!hostExempt) {
+    try {
+      validatePublicUrl(checkUrl);
+    } catch {
+      return {
+        id,
+        name,
+        category,
+        url: displayUrl,
+        status: "down",
+        error: "health-check URL not allowed (non-public host)",
+      };
+    }
   }
 
   const start = Date.now();
