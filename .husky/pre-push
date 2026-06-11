@@ -1,0 +1,4 @@
+# Full test suite before anything leaves the machine. Needs Docker for the
+# testcontainers-based suites; skip those with SKIP_TESTCONTAINERS=1 if the
+# daemon isn't running.
+pnpm test

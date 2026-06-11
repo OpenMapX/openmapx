@@ -52,8 +52,19 @@ pnpm check-types    # tsc across the workspace
 pnpm test           # Vitest
 ```
 
-The pre-commit hook runs all three locally. If a check is slow, run only
-the affected workspace (`pnpm -F @openmapx/core test`).
+Git hooks enforce a two-stage local gate:
+
+- **pre-commit** — fast checks only: `pnpm lint`, `pnpm check-types`, and the
+  legal/data-flow audits (`check-legal-tables`, `check-legal-updated`,
+  `check-data-flows`). No Docker required; typically completes in under a
+  minute.
+- **pre-push** — full test suite (`pnpm test`). Requires Docker for the
+  testcontainers-based suites; set `SKIP_TESTCONTAINERS=1` to bypass those
+  when the daemon isn't running.
+
+CI re-runs lint, types, and the full test suite on every push and PR, so the
+safety net is always present. If a check is slow, run only the affected
+workspace (`pnpm -F @openmapx/core test`).
 
 ### Code style
 
