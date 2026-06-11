@@ -35,6 +35,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Cache benefits check-types only (lint/test don't run through turbo);
+      # revisit if root scripts move under turbo.
+      - name: Restore Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Lint commit messages (PR only)
         if: github.event_name == 'pull_request'
         run: pnpm exec commitlint --from "${BASE_SHA}" --to "${HEAD_SHA}" --verbose
