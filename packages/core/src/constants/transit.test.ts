@@ -5,6 +5,8 @@ import {
   DEUTSCHLANDTICKET_MOTIS_MODES,
   preferredModesToMotis,
   rankItineraries,
+  TRANSIT_ACCESS_MOTIS_MODES,
+  TRANSIT_ACCESS_OPTIONS,
 } from "./transit";
 
 function itin(partial: Partial<TripItinerary>): TripItinerary {
@@ -100,5 +102,48 @@ describe("rankItineraries", () => {
   it("'lessWalking' sorts by walk distance then duration", () => {
     const ranked = rankItineraries(list, "lessWalking");
     expect(ranked.map((i) => i.walkDistance)).toEqual([50, 100, 800]);
+  });
+});
+
+describe("TRANSIT_ACCESS_MOTIS_MODES", () => {
+  // MOTIS v2.10.2 (validated live in spike 016) rejects BIKE_RENTAL with HTTP 500
+  // ("enum ModeEnum: unknown value BIKE_RENTAL"). The correct shared-mobility enum
+  // is RENTAL. This guard stops a regression that would 500 every bike-access plan.
+  it("never uses the invalid BIKE_RENTAL enum (MOTIS rejects it)", () => {
+    for (const mode of TRANSIT_ACCESS_OPTIONS) {
+      const m = TRANSIT_ACCESS_MOTIS_MODES[mode];
+      const all = [
+        ...(m.preTransitModes ?? []),
+        ...(m.postTransitModes ?? []),
+        ...(m.directModes ?? []),
+      ];
+      expect(all).not.toContain("BIKE_RENTAL");
+    }
+  });
+
+  it("walk sends no pre/post/direct modes (MOTIS default)", () => {
+    expect(TRANSIT_ACCESS_MOTIS_MODES.walk).toEqual({});
+  });
+
+  it("bike uses BIKE + RENTAL for access legs and direct", () => {
+    expect(TRANSIT_ACCESS_MOTIS_MODES.bike).toEqual({
+      preTransitModes: ["BIKE", "RENTAL"],
+      postTransitModes: ["BIKE", "RENTAL"],
+      directModes: ["BIKE", "RENTAL"],
+    });
+  });
+
+  it("car uses CAR_PARKING for access (park-and-ride) and CAR for direct", () => {
+    expect(TRANSIT_ACCESS_MOTIS_MODES.car).toEqual({
+      preTransitModes: ["CAR_PARKING"],
+      postTransitModes: ["CAR_PARKING"],
+      directModes: ["CAR"],
+    });
+  });
+
+  it("every access option has a mapping entry", () => {
+    for (const mode of TRANSIT_ACCESS_OPTIONS) {
+      expect(TRANSIT_ACCESS_MOTIS_MODES[mode]).toBeDefined();
+    }
   });
 });
