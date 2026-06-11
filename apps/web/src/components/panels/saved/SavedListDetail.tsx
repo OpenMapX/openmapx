@@ -4,6 +4,7 @@ import data from "@emoji-mart/data";
 import Picker from "@emoji-mart/react";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DownloadIcon from "@mui/icons-material/Download";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ShareIcon from "@mui/icons-material/Share";
@@ -43,6 +44,7 @@ import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
 import { shareCurrentUrl } from "@/lib/deepLink";
+import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
 import { useMap } from "@/lib/MapContext";
 import { TEAL, TEAL_LIGHT } from "@/lib/theme";
@@ -76,6 +78,7 @@ export function SavedListDetail() {
   const [noteEditId, setNoteEditId] = useState<string | null>(null);
   const [noteValue, setNoteValue] = useState("");
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState(tCommon("copied"));
 
   const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     setMenuAnchor(e.currentTarget);
@@ -180,7 +183,22 @@ export function SavedListDetail() {
 
   const handleShare = async () => {
     const result = await shareCurrentUrl({ title: resolveListName(list.name) });
-    if (result === "copied") setSnackbarOpen(true);
+    if (result === "copied") {
+      setSnackbarMessage(tCommon("copied"));
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleExport = async (format: "gpx" | "geojson" | "kml") => {
+    handleMenuClose();
+    if (!list) return;
+    const ext = format === "geojson" ? "geojson" : format;
+    try {
+      await exportSavedList(list.id, format, `${resolveListName(list.name)}.${ext}`);
+    } catch {
+      setSnackbarMessage(t("exportFailed"));
+      setSnackbarOpen(true);
+    }
   };
 
   return (
@@ -441,6 +459,24 @@ export function SavedListDetail() {
             <ListItemText>{t("removeIcon")}</ListItemText>
           </MenuItem>
         )}
+        <MenuItem onClick={() => handleExport("gpx")}>
+          <ListItemIcon>
+            <DownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t("exportAsGpx")}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleExport("geojson")}>
+          <ListItemIcon>
+            <DownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t("exportAsGeoJson")}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleExport("kml")}>
+          <ListItemIcon>
+            <DownloadIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t("exportAsKml")}</ListItemText>
+        </MenuItem>
         <MenuItem onClick={handleDeleteStart}>
           <ListItemIcon>
             <DeleteIcon fontSize="small" />
@@ -483,7 +519,7 @@ export function SavedListDetail() {
         open={snackbarOpen}
         autoHideDuration={2500}
         onClose={() => setSnackbarOpen(false)}
-        message={tCommon("copied")}
+        message={snackbarMessage}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
     </Box>

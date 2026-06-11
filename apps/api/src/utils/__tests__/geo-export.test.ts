@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type ExportPlace, placesToGeoJson, placesToGpx, placesToKml } from "../geo-export.js";
+import {
+  type ExportPlace,
+  exportFilename,
+  placesToGeoJson,
+  placesToGpx,
+  placesToKml,
+} from "../geo-export.js";
 
 const TWO_PLACES: ExportPlace[] = [
   {
@@ -120,5 +126,19 @@ describe("XML escaping", () => {
     expect(kml).toContain("<name>Café &amp; &lt;bar&gt; &quot;x&quot;</name>");
     expect(kml).toContain("<description>a &lt; b &amp; c &gt; d</description>");
     expect(kml).not.toContain("<bar>");
+  });
+});
+
+describe("exportFilename", () => {
+  it("maps sentinel default lists to fixed slugs", () => {
+    expect(exportFilename("$favorites", "gpx")).toBe("favorites.gpx");
+    expect(exportFilename("$wantToGo", "geojson")).toBe("want-to-go.geojson");
+    expect(exportFilename("$starredPlaces", "kml")).toBe("starred-places.kml");
+  });
+  it("slugifies a user list name", () => {
+    expect(exportFilename("My Trip 2026!", "gpx")).toBe("my-trip-2026.gpx");
+  });
+  it("falls back to 'list' when the name slugifies to empty", () => {
+    expect(exportFilename("!!!", "kml")).toBe("list.kml");
   });
 });

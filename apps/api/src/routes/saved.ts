@@ -2,6 +2,16 @@ import { and, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
 import { labeledPlace, savedList, savedPlace } from "../db/schema";
+import {
+  EXPORT_CONTENT_TYPE,
+  EXPORT_EXTENSION,
+  type ExportFormat,
+  type ExportPlace,
+  exportFilename,
+  placesToGeoJson,
+  placesToGpx,
+  placesToKml,
+} from "../utils/geo-export";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 
 const DEFAULT_LISTS: { name: string; icon: string; sortOrder: number }[] = [
@@ -202,6 +212,68 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
     return { places };
   });
+
+  fastify.get<{ Params: { id: string }; Querystring: { format?: ExportFormat } }>(
+    "/saved/lists/:id/export",
+    {
+      schema: {
+        querystring: {
+          type: "object",
+          properties: {
+            format: { type: "string", enum: ["gpx", "geojson", "kml"], default: "geojson" },
+          },
+        },
+      },
+      handler: async (req, reply) => {
+        const userId = getUserId(req);
+        const { id } = req.params;
+        const format = (req.query.format ?? "geojson") as ExportFormat;
+
+        const list = await db
+          .select({ id: savedList.id, name: savedList.name })
+          .from(savedList)
+          .where(and(eq(savedList.id, id), eq(savedList.userId, userId)))
+          .limit(1);
+
+        if (list.length === 0) {
+          return reply.status(404).send({ error: "List not found" });
+        }
+
+        const rows = await db
+          .select()
+          .from(savedPlace)
+          .where(eq(savedPlace.listId, id))
+          .orderBy(savedPlace.sortOrder);
+
+        const places: ExportPlace[] = rows.map((p) => ({
+          name: p.name,
+          lat: p.lat,
+          lng: p.lng,
+          address: p.address,
+          note: p.note,
+          placeId: p.placeId,
+        }));
+
+        const body =
+          format === "geojson"
+            ? JSON.stringify(placesToGeoJson(places))
+            : format === "gpx"
+              ? placesToGpx(places)
+              : placesToKml(places);
+
+        const asciiName = exportFilename(list[0].name, format);
+        const utf8Name = `${encodeURIComponent(list[0].name.replace(/^\$/, ""))}.${EXPORT_EXTENSION[format]}`;
+
+        return reply
+          .type(`${EXPORT_CONTENT_TYPE[format]}; charset=utf-8`)
+          .header(
+            "Content-Disposition",
+            `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
+          )
+          .send(body);
+      },
+    },
+  );
 
   fastify.post("/saved/lists/:id/places", {
     schema: {

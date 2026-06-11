@@ -113,3 +113,43 @@ export function placesToKml(places: ExportPlace[]): string {
   lines.push("</kml>");
   return `${lines.join("\n")}\n`;
 }
+
+/** The file formats we can export to (mirrors the import trio). */
+export type ExportFormat = "gpx" | "geojson" | "kml";
+
+/** The file extension for each format. */
+export const EXPORT_EXTENSION: Record<ExportFormat, string> = {
+  gpx: "gpx",
+  geojson: "geojson",
+  kml: "kml",
+};
+
+/** The MIME type for each format (charset appended by the route). */
+export const EXPORT_CONTENT_TYPE: Record<ExportFormat, string> = {
+  gpx: "application/gpx+xml",
+  geojson: "application/geo+json",
+  kml: "application/vnd.google-earth.kml+xml",
+};
+
+/** Sentinel default-list names → fixed ASCII slugs (no i18n on the API side). */
+const DEFAULT_LIST_SLUGS: Record<string, string> = {
+  $favorites: "favorites",
+  $wantToGo: "want-to-go",
+  $starredPlaces: "starred-places",
+};
+
+/**
+ * Build a safe ASCII filename (with extension) for an exported list. Default
+ * lists use a fixed slug; user lists are slugified from their name. Falls back
+ * to `list` when slugification empties the name (e.g. a name of only symbols).
+ */
+export function exportFilename(listName: string, format: ExportFormat): string {
+  const ext = EXPORT_EXTENSION[format];
+  const fixed = DEFAULT_LIST_SLUGS[listName];
+  if (fixed) return `${fixed}.${ext}`;
+  const slug = listName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${slug || "list"}.${ext}`;
+}
