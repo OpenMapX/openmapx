@@ -28,6 +28,31 @@ rules, follow the dedicated guides once you have the basics here:
 - [Transit integrations](./transit-integrations.md) — stops, departures, trip
   planning, vehicle positions, and alerts.
 
+## Quick start: scaffold
+
+The fastest way to start a new built-in integration is the scaffold generator.
+It copies `integrations/_template/` into a new `integrations/<id>/` directory
+and substitutes the `__ID__` and `__DOMAIN__` tokens throughout all files:
+
+```bash
+pnpm openmapx integrations scaffold my-feature --domain knowledge
+```
+
+This creates:
+
+```
+integrations/my-feature/
+  manifest.json      pre-filled with id and domain tokens replaced
+  index.ts           example setup(ctx) with a GET /ping route and cache usage
+  package.json       workspace member (renamed from package.json.template)
+  strings/
+    en.json          localized name + description stubs
+```
+
+After scaffolding, run `pnpm install` once so pnpm picks up the new workspace
+package, then continue with [Write the manifest](#write-the-manifest) to fill
+in your real data sources, health check URL, and author info.
+
 ## Scaffold the directory
 
 An integration is just a directory. While you are developing, create it under

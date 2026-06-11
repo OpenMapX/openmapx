@@ -1,4 +1,12 @@
-import { existsSync, readdirSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   buildIntegration,
@@ -45,6 +53,66 @@ export function formatIntegrationsTable(rows: IntegrationSummary[]): string {
   );
 }
 
+const VALID_ID = /^[a-z][a-z0-9-]*$/;
+const TEMPLATE_DIR = "_template";
+
+export interface ScaffoldOptions {
+  id: string;
+  domain?: string;
+  integrationsDir: string;
+}
+
+export function scaffoldIntegration({ id, domain, integrationsDir }: ScaffoldOptions): string {
+  if (!VALID_ID.test(id)) {
+    throw new Error(
+      `Invalid integration id "${id}". Must start with a lowercase letter and contain only lowercase letters, digits, and hyphens.`,
+    );
+  }
+
+  const destDir = join(integrationsDir, id);
+  if (existsSync(destDir)) {
+    throw new Error(
+      `Integration "${id}" already exists at ${destDir}. Choose a different id or remove the existing directory.`,
+    );
+  }
+
+  const templateDir = join(integrationsDir, TEMPLATE_DIR);
+  if (!existsSync(templateDir)) {
+    throw new Error(
+      `Template directory not found at ${templateDir}. Make sure the repo is complete.`,
+    );
+  }
+
+  const domainToken = domain ?? "__DOMAIN__";
+
+  mkdirSync(destDir, { recursive: true });
+  cpSync(templateDir, destDir, { recursive: true });
+
+  substituteTokensInDir(destDir, id, domainToken);
+
+  const pkgTemplate = join(destDir, "package.json.template");
+  if (existsSync(pkgTemplate)) {
+    renameSync(pkgTemplate, join(destDir, "package.json"));
+  }
+
+  return destDir;
+}
+
+function substituteTokensInDir(dir: string, id: string, domain: string): void {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      substituteTokensInDir(fullPath, id, domain);
+    } else if (entry.isFile()) {
+      const content = readFileSync(fullPath, "utf-8");
+      const replaced = content.replaceAll("__ID__", id).replaceAll("__DOMAIN__", domain);
+      if (replaced !== content) {
+        writeFileSync(fullPath, replaced, "utf-8");
+      }
+    }
+  }
+}
+
 function streamLog(line: string, stream: "stdout" | "stderr"): void {
   if (stream === "stderr") log.warn(line);
   else log.dim(line);
@@ -54,6 +122,36 @@ export function registerIntegrationsCommands(program: Command): void {
   const integrations = program
     .command("integrations")
     .description("Manage community integrations under custom_integrations/");
+
+  integrations
+    .command("scaffold <id>")
+    .description(
+      "Scaffold a new built-in integration under integrations/<id>/ from the _template directory",
+    )
+    .option("--domain <domain>", "Primary domain for the integration (e.g. knowledge, weather)")
+    .action((id: string, options: { domain?: string }) => {
+      const paths = repoPaths();
+      try {
+        const destDir = scaffoldIntegration({
+          id,
+          domain: options.domain,
+          integrationsDir: paths.integrationsDir,
+        });
+        log.ok(`Scaffolded integration ${kleur.bold(id)} at ${destDir}`);
+        log.info("");
+        log.info("Next steps:");
+        log.dim(
+          `  1. Fill in manifest.json — add dataSources[], update healthCheck.url, set author.`,
+        );
+        log.dim(`  2. Implement setup(ctx) in index.ts.`);
+        log.dim(`  3. Run pnpm install to pick up the new workspace package.`);
+        log.dim(`  4. Start the API (pnpm dev) — the host loads it automatically.`);
+        log.dim(`  5. Read the full walkthrough: docs/docs/developer/writing-an-integration.md`);
+      } catch (err) {
+        log.err(`scaffold failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
 
   integrations
     .command("list")

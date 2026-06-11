@@ -1,0 +1,23 @@
+{
+  "id": "__ID__",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "license": "MIT",
+  "documentation": "https://example.com/api",
+  "domains": ["__DOMAIN__"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "quality": "community",
+  "category": "Knowledge",
+  "healthCheck": {
+    "type": "http",
+    "url": "https://example.com/health"
+  },
+  "dataSources": []
+}
