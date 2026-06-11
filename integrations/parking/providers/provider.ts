@@ -9,6 +9,7 @@ import { CATEGORY_FILTERS } from "@openmapx/core";
 import {
   createManifestAttribution,
   isInColdStart,
+  type Logger,
   type MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -150,7 +151,12 @@ class ParkingDataSourceProvider implements MobilityDataSourceProvider {
     return attribution.all();
   }
 
+  private log: Logger | null = null;
   private facilityCache = new Map<string, ParkingFacility>();
+
+  setLogger(logger: Logger): void {
+    this.log = logger;
+  }
 
   private cacheFacility(facility: ParkingFacility): void {
     if (this.facilityCache.size >= MAX_CACHE_SIZE) {
@@ -171,6 +177,19 @@ class ParkingDataSourceProvider implements MobilityDataSourceProvider {
     const results = await Promise.allSettled(
       PARKING_SOURCE_REGISTRY.map((source) => source.search(bbox)),
     );
+
+    let allRejected = true;
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.status === "rejected") {
+        this.log?.warn(`parking source ${PARKING_SOURCE_REGISTRY[i].id} failed`, r.reason);
+      } else {
+        allRejected = false;
+      }
+    }
+    if (allRejected && this.log) {
+      this.log.error("all parking sources failed");
+    }
 
     const allFacilities = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
     const deduped = deduplicateParking(allFacilities);
@@ -247,6 +266,13 @@ class ParkingDataSourceProvider implements MobilityDataSourceProvider {
     const enrichResults = await Promise.allSettled(
       PARKING_SOURCE_REGISTRY.map((source) => source.search(bbox)),
     );
+
+    for (let i = 0; i < enrichResults.length; i++) {
+      const r = enrichResults[i];
+      if (r.status === "rejected") {
+        this.log?.warn(`parking source ${PARKING_SOURCE_REGISTRY[i].id} failed`, r.reason);
+      }
+    }
 
     const nearby = enrichResults.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 
@@ -333,3 +359,7 @@ class ParkingDataSourceProvider implements MobilityDataSourceProvider {
 }
 
 export const parkingProvider = new ParkingDataSourceProvider();
+
+export function setLogger(logger: Logger): void {
+  parkingProvider.setLogger(logger);
+}
