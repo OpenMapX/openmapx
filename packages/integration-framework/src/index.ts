@@ -23,6 +23,11 @@ export type {
   RouteOptions,
   SecretsClient,
 } from "./context";
+export {
+  assertProviderSatisfiesContract,
+  assertRealtimeProviderContract,
+  assertTransitProviderContract,
+} from "./contracts/assert-contract";
 export type {
   AutocompleteResult,
   CurrentWeather,
@@ -97,11 +102,6 @@ export type {
   WeatherOptions,
   WeatherProvider,
   WeatherResponse,
-} from "./contracts/index.js";
-export {
-  assertProviderSatisfiesContract,
-  assertRealtimeProviderContract,
-  assertTransitProviderContract,
 } from "./contracts/index.js";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
