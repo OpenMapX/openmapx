@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { adminFetch } from "../lib/admin-fetch";
 import { log, table } from "../lib/output";
@@ -17,6 +18,38 @@ interface RepoRow {
   lastSha: string | null;
   autoUpdate: boolean;
   createdAt: string;
+}
+
+export type AckDecision = "proceed" | "prompt" | "refuse";
+
+/**
+ * Decide how `repos add` should obtain risk acknowledgment.
+ * - `--yes` given → proceed (operator acknowledged on the command line).
+ * - interactive TTY → prompt the operator.
+ * - non-interactive without `--yes` → refuse (never silently acknowledge).
+ */
+export function resolveAckDecision(opts: { yes?: boolean; isTty: boolean }): AckDecision {
+  if (opts.yes) return "proceed";
+  if (!opts.isTty) return "refuse";
+  return "prompt";
+}
+
+async function confirmRepoRisk(): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (
+      await rl.question(
+        "Community service code runs as containers and integration backends run " +
+          "in-process with full secrets/env access. Only add repos you trust.\n" +
+          "Register this repository? [y/N] ",
+      )
+    )
+      .trim()
+      .toLowerCase();
+    return answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
 }
 
 export function registerReposCommands(program: Command): void {
@@ -57,7 +90,23 @@ export function registerReposCommands(program: Command): void {
   repos
     .command("add <url>")
     .description("Register a community service repository from a Git URL")
-    .action(async (url: string) => {
+    .option("-y, --yes", "Acknowledge that community repo code runs with container/API privileges")
+    .action(async (url: string, opts: { yes?: boolean }) => {
+      const decision = resolveAckDecision({ yes: opts.yes, isTty: process.stdin.isTTY === true });
+      if (decision === "refuse") {
+        log.err(
+          "Refusing to register without acknowledgment. Re-run with --yes to confirm " +
+            "you trust this repo's code (it runs with container/API privileges).",
+        );
+        process.exit(1);
+      }
+      if (decision === "prompt") {
+        const ok = await confirmRepoRisk();
+        if (!ok) {
+          log.info("Aborted — repository not registered.");
+          return;
+        }
+      }
       const res = await adminFetch(`${API}/api/admin/service-repos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
