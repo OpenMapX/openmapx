@@ -140,11 +140,18 @@ export function applyNoCloud(providers: NlpProvider[]): NlpProvider[] {
   return [...local, keywordProvider];
 }
 
-function intentCacheKey(query: string, center: [number, number], decimals: number): string {
+export function intentCacheKey(
+  query: string,
+  center: [number, number],
+  decimals: number,
+  chainId: string,
+  noCloud: boolean,
+): string {
   const normalized = query.trim().toLowerCase().replace(/\s+/g, " ");
   const lng = center[0].toFixed(decimals);
   const lat = center[1].toFixed(decimals);
-  return `nlp:intent:${createHash("sha256").update(`${normalized}|${lng},${lat}`).digest("hex").slice(0, 32)}`;
+  const material = `${normalized}|${lng},${lat}|${chainId}|${noCloud ? "nc" : "cl"}`;
+  return `nlp:intent:${createHash("sha256").update(material).digest("hex").slice(0, 32)}`;
 }
 
 /**
@@ -265,8 +272,13 @@ export function setup(ctx: IntegrationContext): void {
     const chain = createChain(active);
     const parseCtx: ParseContext = { mapCenter, mapBbox, lang };
 
+    const noCloudEffective = noCloud || strictPrivacy;
+    const chainId = (
+      (ctx.config.providerChain as string[] | undefined) ?? ["local", "keyword"]
+    ).join(",");
+
     let cached = true;
-    const key = intentCacheKey(query, mapCenter, roundDecimals);
+    const key = intentCacheKey(query, mapCenter, roundDecimals, chainId, noCloudEffective);
 
     try {
       const result = await ctx.cache.withCache(key, intentTtl, async () => {
