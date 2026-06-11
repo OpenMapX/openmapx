@@ -35,14 +35,21 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
+    const providers = getMatchingProviders(bbox).filter((provider) => provider.getVehiclePositions);
     const results = await Promise.allSettled(
-      getMatchingProviders(bbox)
-        .filter((provider) => provider.getVehiclePositions)
-        .map(async (provider) => {
-          const result = await provider.getVehiclePositions?.(bbox);
-          return result?.data ?? [];
-        }),
+      providers.map(async (provider) => {
+        const result = await provider.getVehiclePositions?.(bbox);
+        return result?.data ?? [];
+      }),
     );
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === "rejected") {
+        ctx.log.warn(
+          `live-transit source ${providers[i].id} failed`,
+          (results[i] as PromiseRejectedResult).reason,
+        );
+      }
+    }
     const vehicles = results.flatMap((result) =>
       result.status === "fulfilled" ? result.value : [],
     );
@@ -53,14 +60,21 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {
+    const providers = getMatchingProviders(bbox).filter((provider) => provider.getAlertsForBbox);
     const results = await Promise.allSettled(
-      getMatchingProviders(bbox)
-        .filter((provider) => provider.getAlertsForBbox)
-        .map(async (provider) => {
-          const result = await provider.getAlertsForBbox?.(bbox);
-          return result?.data ?? [];
-        }),
+      providers.map(async (provider) => {
+        const result = await provider.getAlertsForBbox?.(bbox);
+        return result?.data ?? [];
+      }),
     );
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === "rejected") {
+        ctx.log.warn(
+          `live-transit source ${providers[i].id} failed`,
+          (results[i] as PromiseRejectedResult).reason,
+        );
+      }
+    }
     return dedupeById(
       results.flatMap((result) => (result.status === "fulfilled" ? result.value : [])),
     );

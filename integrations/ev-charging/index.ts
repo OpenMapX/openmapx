@@ -7,7 +7,7 @@ import { declarePoiSources } from "./poi-sources.js";
 import { setAfdcApiKey } from "./providers/afdc.js";
 import { setNobilApiKey } from "./providers/nobil.js";
 import { setOcmApiKey } from "./providers/ocm.js";
-import { evChargingProvider, setManifestDataSources } from "./providers/provider.js";
+import { evChargingProvider, setLogger, setManifestDataSources } from "./providers/provider.js";
 import { initRuntime } from "./runtime.js";
 
 export function setup(ctx: IntegrationContext): void {
@@ -18,6 +18,7 @@ export function setup(ctx: IntegrationContext): void {
   setOcmApiKey(ctx.config.apiKey as string | undefined);
   setAfdcApiKey(ctx.config.afdcApiKey as string | undefined);
   setNobilApiKey(ctx.config.nobilApiKey as string | undefined);
+  setLogger(ctx.log);
   setManifestDataSources(ctx.manifest.dataSources ?? []);
   ctx.registerPoiSources(declarePoiSources());
   ctx.registerMobilityDataSource(evChargingProvider);

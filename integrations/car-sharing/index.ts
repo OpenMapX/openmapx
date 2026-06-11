@@ -7,7 +7,7 @@ import { registerPlaceResolver } from "@openmapx/place-ids";
 import { bielefeldClient } from "./providers/bielefeld-client.js";
 import { cambioClient } from "./providers/cambio-client.js";
 import { carSharingProvider, setManifestDataSources } from "./providers/provider.js";
-import { registerCarSharingClient } from "./providers/registry.js";
+import { registerCarSharingClient, setCarSharingLogger } from "./providers/registry.js";
 import { stadtteilAutoClient } from "./providers/stadtteilauto-client.js";
 import { wuppertalClient } from "./providers/wuppertal-client.js";
 
@@ -18,6 +18,7 @@ export function setup(ctx: IntegrationContext): void {
   if (motis?.url) setSharedMobilityMotisUrl(motis.url);
   if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
 
+  setCarSharingLogger(ctx.log);
   registerCarSharingClient(cambioClient);
   registerCarSharingClient(stadtteilAutoClient);
   registerCarSharingClient(wuppertalClient);

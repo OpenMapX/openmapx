@@ -9,6 +9,7 @@ import { CATEGORY_FILTERS } from "@openmapx/core";
 import {
   createManifestAttribution,
   isInColdStart,
+  type Logger,
   type MobilityDataSourceProvider,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -78,6 +79,12 @@ class EvChargingProvider implements MobilityDataSourceProvider {
     return attribution.all();
   }
 
+  private log: Logger | null = null;
+
+  setLogger(logger: Logger): void {
+    this.log = logger;
+  }
+
   private stationCache = new Map<string, EvChargingStation>();
 
   private cacheStation(station: EvChargingStation): void {
@@ -103,9 +110,19 @@ class EvChargingProvider implements MobilityDataSourceProvider {
       EV_CHARGING_SOURCE_REGISTRY.map((source) => source.search(bbox, filters)),
     );
 
-    const allStations = results.flatMap((result) =>
-      result.status === "fulfilled" ? result.value : [],
-    );
+    let rejectedCount = 0;
+    const allStations = results.flatMap((result, i) => {
+      if (result.status === "fulfilled") return result.value;
+      rejectedCount++;
+      this.log?.warn(
+        `ev-charging source ${EV_CHARGING_SOURCE_REGISTRY[i].id} failed`,
+        result.reason,
+      );
+      return [];
+    });
+    if (rejectedCount > 0 && rejectedCount === results.length) {
+      this.log?.error("all ev-charging sources failed");
+    }
     const merged = deduplicateChargingStations(allStations);
     for (const station of merged) this.cacheStation(station);
     const mapped = merged.map(mapStationToResult);
@@ -156,7 +173,14 @@ class EvChargingProvider implements MobilityDataSourceProvider {
     const results = await Promise.allSettled(
       EV_CHARGING_SOURCE_REGISTRY.map((source) => source.search(bbox)),
     );
-    const nearby = results.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+    const nearby = results.flatMap((result, i) => {
+      if (result.status === "fulfilled") return result.value;
+      this.log?.warn(
+        `ev-charging source ${EV_CHARGING_SOURCE_REGISTRY[i].id} failed`,
+        result.reason,
+      );
+      return [];
+    });
     const merged = deduplicateChargingStations([station, ...nearby]);
     const ids = new Set([station.id, ...(station.sourceItemIds ?? [])]);
 
@@ -173,3 +197,7 @@ class EvChargingProvider implements MobilityDataSourceProvider {
 }
 
 export const evChargingProvider = new EvChargingProvider();
+
+export function setLogger(logger: Logger): void {
+  evChargingProvider.setLogger(logger);
+}

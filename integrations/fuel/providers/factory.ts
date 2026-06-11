@@ -1,4 +1,5 @@
 import type { BoundingBox } from "@openmapx/core";
+import type { Logger } from "@openmapx/integration-framework";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
 import { AustriaService } from "./austria.service";
 import { FranceService } from "./france.service";
@@ -11,6 +12,12 @@ const ALL_PROVIDERS: FuelPriceProvider[] = [
   new SpainService(),
   new AustriaService(),
 ];
+
+let log: Logger | null = null;
+
+export function setFuelLogger(logger: Logger): void {
+  log = logger;
+}
 
 // Populated by setup(ctx) from the resolved integration config cascade.
 let _tankerkoenigKey: string | undefined;
@@ -74,8 +81,15 @@ export async function searchFuelStations(bbox: BoundingBox): Promise<FuelStation
     if (r.status === "fulfilled") {
       stations.push(...r.value);
     } else {
-      console.warn(`[fuel] Provider ${providers[i].name} failed:`, r.reason?.message ?? r.reason);
+      log?.warn(`fuel source ${providers[i].name} failed`, r.reason);
     }
+  }
+  if (
+    providers.length > 0 &&
+    stations.length === 0 &&
+    results.every((r) => r.status === "rejected")
+  ) {
+    log?.error("all fuel sources failed");
   }
 
   return stations.length > 0 ? deduplicate(stations) : null;

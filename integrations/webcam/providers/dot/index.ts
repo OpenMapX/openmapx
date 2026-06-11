@@ -4,6 +4,7 @@ import type {
   DataSourceDetailSection,
   DataSourceResult,
 } from "@openmapx/core";
+import type { Logger } from "@openmapx/integration-framework";
 import {
   type I18nToken,
   sharedT,
@@ -16,6 +17,12 @@ import { az, fl, ga, id as idaho, la, ma, pa, sc, ut } from "./ibi511.js";
 import { ny } from "./ny.js";
 import { or } from "./or.js";
 import { bboxOverlaps, filterByBbox, type StateDotConfig } from "./types.js";
+
+let log: Logger | null = null;
+
+export function setDotLogger(logger: Logger): void {
+  log = logger;
+}
 
 /**
  * Registry of all state DOT camera adapters.
@@ -52,10 +59,16 @@ export async function searchDot(bbox: BoundingBox): Promise<RawWebcam[]> {
   );
 
   const allCams: RawWebcam[] = [];
-  for (const result of results) {
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
     if (result.status === "fulfilled") {
       allCams.push(...result.value);
+    } else {
+      log?.warn(`webcam source ${overlapping[i].sourceId} failed`, result.reason);
     }
+  }
+  if (overlapping.length > 0 && results.every((r) => r.status === "rejected")) {
+    log?.error("all webcam sources failed");
   }
 
   return filterByBbox(allCams, bbox);
