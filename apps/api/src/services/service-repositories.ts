@@ -210,10 +210,27 @@ export async function refreshRepo(hash: string): Promise<ServiceRepositoryRow | 
 
   const target = join(communityDir(), hash);
   const git = simpleGit(target);
+  // Capture the clone's current commit BEFORE updating, so a failed
+  // validation can roll the working tree back to the last-known-good state.
+  const prevSha = (await git.revparse(["HEAD"])).trim();
   await git.fetch();
   await git.reset(["--hard", "origin/HEAD"]);
-  const sha = (await git.revparse(["HEAD"])).trim();
 
+  // Re-validate every manifest after the update — same guard registerRepo
+  // applies at registration. An upstream push (or repo compromise) must not
+  // land manifests the registry would reject. On failure, roll the clone back
+  // to prevSha and do NOT advance lastSha, so the next render keeps consuming
+  // the last validated commit.
+  const failed = readPreviewsFromClone(target).filter((p) => p.validationErrors.length > 0);
+  if (failed.length > 0) {
+    await git.reset(["--hard", prevSha]);
+    throw new InvalidGitUrlError(
+      `Refusing to refresh: ${failed.length} service(s) failed validation: ` +
+        failed.map((f) => `${f.slug}: ${f.validationErrors.join("; ")}`).join(" | "),
+    );
+  }
+
+  const sha = (await git.revparse(["HEAD"])).trim();
   const [updated] = await db
     .update(serviceRepository)
     .set({ lastFetchedAt: new Date(), lastSha: sha })
