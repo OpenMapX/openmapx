@@ -5,12 +5,10 @@ import {
   type CacheClient,
   type CustomHealthCheckFn,
   type HttpClient,
-  type HttpClientOptions,
   type IntegrationContext,
   IntegrationEventBus,
   type IntegrationManifest,
   type IntegrationStrings,
-  type LiveStoreClient,
   type LoadedIntegration,
   type Logger,
   PLATFORM_VERSION,
@@ -26,10 +24,26 @@ import {
 } from "@openmapx/integration-framework/installer";
 import { sharedStrings } from "@openmapx/integration-framework/strings";
 import { registerPoiSources as registerPoiSourcesInStore } from "@openmapx/poi-source-registry";
-import { eq } from "drizzle-orm";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { db, sql as pgClient } from "./db";
-import { integrationConfig } from "./db/schema";
+import type { FastifyInstance } from "fastify";
+import { sql as pgClient } from "./db";
+import {
+  createCacheClient,
+  createHttpClient,
+  createLiveStoreClient,
+  createLogger,
+} from "./integration-clients";
+import {
+  type ConfigSource,
+  type ConfigValueWithSource,
+  resolveConfig,
+  resolveConfigWithSources,
+  warnInvalidConfig,
+} from "./integration-config";
+import {
+  registerIntegrationRoute,
+  registerIntegrationRouteDispatcher,
+  resetIntegrationRoutes,
+} from "./integration-routes";
 import { redis } from "./redis";
 import {
   AttributionIndex,
@@ -49,11 +63,11 @@ import {
   ProviderHealth,
   setProviderHealth,
 } from "./services/provider-health/registry";
-import { getSecret, isSecretsConfigured, resolveVaultSecrets } from "./services/secrets";
+import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
-import { httpCacheKey } from "./utils/http-cache-key";
-import { createIntegrationLogger } from "./utils/integration-logger";
-import { requireAuth } from "./utils/require-auth";
+
+export type { ConfigSource, ConfigValueWithSource };
+export { resolveConfigWithSources };
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
@@ -62,133 +76,13 @@ const integrations = new Map<string, LoadedIntegration>();
 
 export type IntegrationDirectoryInput = string | { directory: string; isBuiltIn: boolean };
 type NormalizedIntegrationDirectory = { directory: string; isBuiltIn: boolean };
-type RegisteredIntegrationRoute = {
-  integrationId: string;
-  method: string;
-  path: string;
-  handler: RouteHandler;
-  options?: RouteOptions;
-  score: number;
-};
-
-const integrationRoutes: RegisteredIntegrationRoute[] = [];
-const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
-// biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
-let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
 
 // Stored for reload support
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _fastify: FastifyInstance<any, any, any, any> | null = null;
 let _integrationDirs: NormalizedIntegrationDirectory[] = [];
 
-function createHttpClient(_log: Logger): HttpClient {
-  return {
-    async get<T>(url: string, options?: HttpClientOptions): Promise<T> {
-      const u = new URL(url);
-      if (options?.params) {
-        for (const [k, v] of Object.entries(options.params)) {
-          if (v !== undefined) u.searchParams.set(k, String(v));
-        }
-      }
-
-      if (options?.cache?.ttl && redis) {
-        const cacheKey = httpCacheKey(u.toString(), options?.headers);
-        try {
-          const cached = await redis.get(cacheKey);
-          if (cached) return JSON.parse(cached) as T;
-        } catch {
-          // cache miss
-        }
-
-        const res = await fetch(u.toString(), { headers: options?.headers });
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-        const data = (await res.json()) as T;
-        redis.setex(cacheKey, options.cache.ttl, JSON.stringify(data)).catch(() => {});
-        return data;
-      }
-
-      const res = await fetch(u.toString(), { headers: options?.headers });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return (await res.json()) as T;
-    },
-
-    async post<T>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T> {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...options?.headers },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return (await res.json()) as T;
-    },
-  };
-}
-
-function createCacheClient(prefix: string): CacheClient {
-  return {
-    async get<T>(key: string): Promise<T | null> {
-      if (!redis) return null;
-      const val = await redis.get(`int:${prefix}:${key}`);
-      return val ? (JSON.parse(val) as T) : null;
-    },
-    async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
-      if (!redis) return;
-      const k = `int:${prefix}:${key}`;
-      if (ttlSeconds) {
-        await redis.setex(k, ttlSeconds, JSON.stringify(value));
-      } else {
-        await redis.set(k, JSON.stringify(value));
-      }
-    },
-    async del(key: string): Promise<void> {
-      if (!redis) return;
-      await redis.del(`int:${prefix}:${key}`);
-    },
-    async withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
-      if (redis) {
-        const k = `int:${prefix}:${key}`;
-        try {
-          const cached = await redis.get(k);
-          if (cached) return JSON.parse(cached) as T;
-        } catch {
-          // cache miss
-        }
-        const result = await fn();
-        redis.setex(k, ttlSeconds, JSON.stringify(result)).catch(() => {});
-        return result;
-      }
-      return fn();
-    },
-  };
-}
-
-/**
- * Reader for the cross-process `poi:live:<sourceId>` keyspace that
- * `services/data-manager`'s `write-live` stage populates. The keys are
- * deliberately NOT integration-namespaced — data-manager has no notion of
- * integration ids, only the source ids in `@openmapx/poi-source-registry`.
- * Prefixing here would silently miss every write.
- *
- * Process-scoped (one client shared across all integrations); per-key
- * isolation already happens via `@openmapx/poi-source-registry` ensuring
- * source ids are globally unique.
- */
-function createLiveStoreClient(): LiveStoreClient {
-  return {
-    async hmget<T>(key: string, fields: readonly string[]): Promise<(T | null)[]> {
-      if (!redis) return fields.map(() => null);
-      if (fields.length === 0) return [];
-      const values = await redis.hmget(key, ...fields);
-      return values.map((v) => (v ? (JSON.parse(v) as T) : null));
-    },
-  };
-}
-
-const liveStore: LiveStoreClient = createLiveStoreClient();
-
-function createLogger(integrationId: string, fastify: FastifyInstance): Logger {
-  return createIntegrationLogger(integrationId, fastify);
-}
+const liveStore = createLiveStoreClient();
 
 function buildGtfsDeps() {
   return {
@@ -244,110 +138,6 @@ function injectRuntimeConfig(config: Record<string, unknown>): Record<string, un
   };
 }
 
-export type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
-
-export interface ConfigValueWithSource {
-  value: unknown;
-  source: ConfigSource;
-}
-
-export async function resolveConfigWithSources(
-  manifest: IntegrationManifest,
-  directory: string,
-): Promise<Record<string, ConfigValueWithSource>> {
-  const result: Record<string, ConfigValueWithSource> = {};
-  const schema = manifest.configSchema as Record<string, unknown> | undefined;
-  const knownKeys = new Set<string>();
-  // Uppercased config key → canonical (original-case) key. Used to match env
-  // vars like `INTEGRATION_PHOTOS_FLICKR_APIKEY` against configSchema key
-  // `apiKey` without forcing operators to lowercase the suffix (or forcing
-  // schema authors to pick all-lowercase keys).
-  const upperToKey = new Map<string, string>();
-
-  if (schema) {
-    const props = (schema.properties ?? schema) as Record<string, { default?: unknown }>;
-    for (const [key, def] of Object.entries(props)) {
-      if (key === "type" || key === "properties") continue;
-      knownKeys.add(key);
-      upperToKey.set(key.toUpperCase(), key);
-      if (def && typeof def === "object" && "default" in def && def.default !== undefined) {
-        result[key] = { value: def.default, source: "default" };
-      }
-    }
-  }
-
-  if (knownKeys.size === 0) return result;
-
-  try {
-    const [row] = await db
-      .select({ config: integrationConfig.config })
-      .from(integrationConfig)
-      .where(eq(integrationConfig.integrationId, manifest.id))
-      .limit(1);
-    if (row?.config && typeof row.config === "object") {
-      for (const [key, value] of Object.entries(row.config as Record<string, unknown>)) {
-        if (knownKeys.has(key)) result[key] = { value, source: "database" };
-      }
-    }
-  } catch {
-    // DB not available
-  }
-
-  // 3. Apply vault secrets
-  try {
-    const vaultSecrets = await resolveVaultSecrets(manifest.id);
-    for (const [key, value] of Object.entries(vaultSecrets)) {
-      if (knownKeys.has(key)) result[key] = { value, source: "vault" };
-    }
-  } catch {
-    // vault unavailable
-  }
-
-  const configJsonPath = join(directory, "config.json");
-  if (existsSync(configJsonPath)) {
-    try {
-      const fileConfig = JSON.parse(readFileSync(configJsonPath, "utf-8"));
-      if (typeof fileConfig === "object" && fileConfig !== null) {
-        for (const [key, value] of Object.entries(fileConfig as Record<string, unknown>)) {
-          if (knownKeys.has(key)) result[key] = { value, source: "config.json" };
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Env layer — highest priority. Pattern: `INTEGRATION_<ID>_<KEY>` (upper-cased
-  // id with hyphens replaced by underscores, then the upper-cased config key).
-  // Matching is case-insensitive on the configSchema key so both snake_case
-  // and camelCase keys work (`apiKey` matches `INTEGRATION_X_APIKEY`).
-  const prefix = `INTEGRATION_${manifest.id.replace(/-/g, "_").toUpperCase()}_`;
-  for (const [envKey, envVal] of Object.entries(process.env)) {
-    if (envVal === undefined) continue;
-    if (!envKey.startsWith(prefix)) continue;
-    const rest = envKey.slice(prefix.length);
-    const canonical = upperToKey.get(rest);
-    if (canonical) result[canonical] = { value: envVal, source: "env" };
-  }
-
-  return result;
-}
-
-async function resolveConfig(
-  manifest: {
-    id: string;
-    configSchema?: Record<string, unknown>;
-  },
-  directory: string,
-): Promise<Record<string, unknown>> {
-  const withSources = await resolveConfigWithSources(manifest as IntegrationManifest, directory);
-  const config: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(withSources)) {
-    config[key] = entry.value;
-  }
-  return config;
-}
-
 function normalizeIntegrationDirs(
   dirs: IntegrationDirectoryInput[],
 ): NormalizedIntegrationDirectory[] {
@@ -356,195 +146,6 @@ function normalizeIntegrationDirs(
       ? { directory: entry, isBuiltIn: !entry.includes("custom_integrations") }
       : entry,
   );
-}
-
-// Mini-router for integration-defined paths. Fastify can't re-register routes
-// at runtime (which we need for reload), so a single Fastify route catches
-// `/api/integrations/:id/*` and dispatches here. Supported pattern subset:
-//   - literal segments: `/foo/bar`
-//   - named params: `:name` (one segment)
-//   - trailing wildcard: `*` (matches the rest of the path, exposed as `*`)
-// Not supported: regex constraints, optional segments, multi-segment globs
-// in the middle of a path. Integrations needing more should compose multiple
-// `registerRoute` calls.
-
-function normalizeRoutePath(path: string): string {
-  const withSlash = path.startsWith("/") ? path : `/${path}`;
-  return withSlash.length > 1 && withSlash.endsWith("/") ? withSlash.slice(0, -1) : withSlash;
-}
-
-function routeScore(path: string): number {
-  if (path === "/") return 0;
-  return path
-    .slice(1)
-    .split("/")
-    .reduce((score, segment) => {
-      if (segment === "*") return score;
-      if (!segment.includes(":")) return score + 10;
-      return score + (segment.replace(/:[A-Za-z_$][\w$]*/g, "").length > 0 ? 6 : 4);
-    }, path.length);
-}
-
-function registerIntegrationRoute(
-  integrationId: string,
-  method: string,
-  path: string,
-  handler: RouteHandler,
-  options?: RouteOptions,
-): void {
-  integrationRoutes.push({
-    integrationId,
-    method: method.toUpperCase(),
-    path: normalizeRoutePath(path),
-    handler,
-    options,
-    score: routeScore(path),
-  });
-  integrationRoutes.sort((a, b) => b.score - a.score);
-}
-
-function resetIntegrationRoutes(): void {
-  integrationRoutes.length = 0;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function decodeParam(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function matchRoutePath(pattern: string, path: string): Record<string, string> | null {
-  const patternSegments = pattern === "/" ? [] : pattern.slice(1).split("/");
-  const pathSegments = path === "/" ? [] : path.slice(1).split("/");
-  const params: Record<string, string> = {};
-
-  for (let i = 0; i < patternSegments.length; i++) {
-    const patternSegment = patternSegments[i];
-    if (patternSegment === "*") {
-      params["*"] = decodeParam(pathSegments.slice(i).join("/"));
-      return params;
-    }
-
-    const pathSegment = pathSegments[i];
-    if (pathSegment === undefined) return null;
-
-    const names: string[] = [];
-    const regexSource = escapeRegex(patternSegment ?? "").replace(
-      /:([A-Za-z_$][\w$]*)/g,
-      (_full, name: string) => {
-        names.push(name);
-        return "([^/]+)";
-      },
-    );
-    const match = pathSegment.match(new RegExp(`^${regexSource}$`));
-    if (!match) return null;
-    for (let j = 0; j < names.length; j++) {
-      const captured = match[j + 1];
-      if (captured !== undefined) params[names[j] as string] = decodeParam(captured);
-    }
-  }
-
-  return patternSegments.length === pathSegments.length ? params : null;
-}
-
-function findIntegrationRoute(
-  integrationId: string,
-  method: string,
-  path: string,
-): { route: RegisteredIntegrationRoute; params: Record<string, string> } | null {
-  const normalizedMethod = method.toUpperCase() === "HEAD" ? "GET" : method.toUpperCase();
-  const normalizedPath = normalizeRoutePath(path);
-  for (const route of integrationRoutes) {
-    if (route.integrationId !== integrationId || route.method !== normalizedMethod) continue;
-    const params = matchRoutePath(route.path, normalizedPath);
-    if (params) return { route, params };
-  }
-  return null;
-}
-
-function registerIntegrationRouteDispatcher(
-  // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
-  fastify: FastifyInstance<any, any, any, any>,
-): void {
-  if (_routeDispatcherFastify === fastify) return;
-  _routeDispatcherFastify = fastify;
-
-  const dispatch = async (request: FastifyRequest, reply: FastifyReply) => {
-    const params = request.params as { id?: string; "*"?: string };
-    const id = params.id;
-    if (!id) return reply.status(404).send({ error: "Not found" });
-    const integration = integrations.get(id);
-    if (!integration?.enabled) return reply.status(404).send({ error: "Not found" });
-
-    const routePath = params["*"] ? `/${params["*"]}` : "/";
-    const matched = findIntegrationRoute(id, request.method, routePath);
-    if (!matched) return reply.status(404).send({ error: "Not found" });
-
-    let userId: string | undefined;
-    if (matched.route.options?.requireAuth === true) {
-      userId = await requireAuth(request);
-    }
-
-    let didSend = false;
-    await matched.route.handler(
-      {
-        query: request.query as Record<string, string>,
-        params: matched.params,
-        body: request.body,
-        userId,
-      },
-      {
-        send: (data) => {
-          didSend = true;
-          reply.send(data);
-        },
-        status: (code) => ({
-          send: (data) => {
-            didSend = true;
-            reply.status(code).send(data);
-          },
-        }),
-        header: (name, value) => {
-          reply.header(name, value);
-        },
-        type: (contentType) => {
-          reply.type(contentType);
-        },
-      },
-    );
-
-    // A handler that returns without sending would leave the reply unsent;
-    // `return reply` then hands Fastify an unfulfilled reply and the request
-    // hangs until the socket times out. Fail it loudly instead so a broken
-    // handler surfaces as a 500, not a stuck connection.
-    if (!didSend) {
-      request.log.error(
-        { integrationId: id, path: routePath },
-        "integration handler returned without sending a response",
-      );
-      return reply.status(500).send({ error: "Integration handler produced no response" });
-    }
-
-    // The integration handler sent its response through the shim above and
-    // resolves to undefined; returning the reply hands control back to Fastify
-    // as "already handled". Without it, the resolved-undefined handler races a
-    // second send against the async preSerialization hook → ERR_HTTP_HEADERS_SENT
-    // (see [[project-fastify-return-reply-contract]]).
-    return reply;
-  };
-
-  fastify.route({ method: [...ROUTE_METHODS], url: "/api/integrations/:id", handler: dispatch });
-  fastify.route({
-    method: [...ROUTE_METHODS],
-    url: "/api/integrations/:id/*",
-    handler: dispatch,
-  });
 }
 
 async function discoverManifests(
@@ -766,34 +367,6 @@ function buildIntegrationDb(manifest: IntegrationManifest, raw: unknown): Integr
       return result as T;
     },
   };
-}
-
-/**
- * Emits advisory warnings for required/enum config keys that violate the
- * manifest's `configSchema`. Never blocks load. Shared by cold start and reload.
- */
-function warnInvalidConfig(
-  manifest: IntegrationManifest,
-  config: Record<string, unknown>,
-  id: string,
-  warn: (msg: string) => void,
-): void {
-  const configSchema = manifest.configSchema as Record<string, unknown> | undefined;
-  if (!configSchema?.properties) return;
-  const props = configSchema.properties as Record<
-    string,
-    { type?: string; enum?: unknown[]; required?: boolean }
-  >;
-  for (const [key, def] of Object.entries(props)) {
-    if (def.required && config[key] === undefined) {
-      warn(`Integration ${id}: missing required config key "${key}"`);
-    }
-    if (def.enum && config[key] !== undefined && !def.enum.includes(config[key])) {
-      warn(
-        `Integration ${id}: config "${key}" value "${config[key]}" not in allowed values: ${def.enum.join(", ")}`,
-      );
-    }
-  }
 }
 
 /**
@@ -1230,7 +803,7 @@ export async function initIntegrations(
     return { timestamp: new Date().toISOString(), services: results };
   });
 
-  registerIntegrationRouteDispatcher(fastify);
+  registerIntegrationRouteDispatcher(fastify, integrations);
 
   // Reload endpoint — re-discovers and re-initializes integrations (dev only)
   if (process.env.NODE_ENV !== "production") {
