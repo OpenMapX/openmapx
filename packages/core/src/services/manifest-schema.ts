@@ -63,6 +63,25 @@ const ALLOWED_CAPS = new Set([
   "SYS_TIME",
 ]);
 
+// Capabilities that community and community-verified services may request.
+// Excludes all capabilities that can trivially escape a container or affect
+// the host kernel/devices: SYS_ADMIN, SYS_PTRACE, SYS_TIME, SYS_CHROOT,
+// NET_ADMIN, MKNOD, DAC_READ_SEARCH, IPC_LOCK, AUDIT_WRITE.
+// SYS_ADMIN must never appear here — it is a well-known container-escape primitive.
+const COMMUNITY_SAFE_CAPS = new Set([
+  "CHOWN",
+  "DAC_OVERRIDE",
+  "FOWNER",
+  "FSETID",
+  "KILL",
+  "NET_BIND_SERVICE",
+  "NET_RAW",
+  "SETFCAP",
+  "SETGID",
+  "SETPCAP",
+  "SETUID",
+]);
+
 function pathHasParentEscape(path: string): boolean {
   return path.split("/").includes("..");
 }
@@ -354,11 +373,21 @@ export function validateServiceManifest(raw: unknown): ManifestValidationResult 
   const m = result.data as ServiceManifest;
   const errors: string[] = [];
 
-  if (m.quality === "community" && m.container.networkMode === "host") {
+  if (m.quality !== "built-in" && m.container.networkMode === "host") {
     errors.push("container.networkMode: 'host' is not allowed for community services");
   }
-  if (m.quality === "community" && m.container.privileged) {
+  if (m.quality !== "built-in" && m.container.privileged) {
     errors.push("container.privileged is not allowed for community services");
+  }
+  if (m.quality !== "built-in") {
+    for (const cap of m.container.capAdd ?? []) {
+      if (!COMMUNITY_SAFE_CAPS.has(cap)) {
+        errors.push(`container.capAdd: '${cap}' is not allowed for community services`);
+      }
+    }
+    if (m.container.devices?.length) {
+      errors.push("container.devices are not allowed for community services");
+    }
   }
   if (m.exposure?.proxy?.enabled && !m.container.expose?.length) {
     errors.push(

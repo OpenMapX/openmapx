@@ -383,6 +383,90 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(false);
   });
 
+  describe("community / community-verified capability and device gating", () => {
+    it("rejects community service with SYS_ADMIN in capAdd", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "community",
+        container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/capAdd/);
+      expect(result.errors.join(" ")).toMatch(/SYS_ADMIN/);
+    });
+
+    it("accepts community service with NET_BIND_SERVICE in capAdd", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "community",
+        container: { ...validMinimal.container, capAdd: ["NET_BIND_SERVICE"] },
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it("rejects community service with devices declared", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "community",
+        container: { ...validMinimal.container, devices: ["/dev/mem"] },
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/devices/);
+    });
+
+    it("rejects community-verified service with privileged: true", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "community-verified",
+        container: { ...validMinimal.container, privileged: true },
+      });
+      expect(result.valid).toBe(false);
+    });
+
+    it("rejects community-verified service with SYS_ADMIN in capAdd", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "community-verified",
+        container: { ...validMinimal.container, capAdd: ["SYS_ADMIN"] },
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/capAdd/);
+    });
+
+    it("rejects community-verified service with devices declared", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "community-verified",
+        container: { ...validMinimal.container, devices: ["/dev/mem"] },
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(" ")).toMatch(/devices/);
+    });
+
+    it("accepts community-verified service with NET_BIND_SERVICE in capAdd", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "community-verified",
+        container: { ...validMinimal.container, capAdd: ["NET_BIND_SERVICE"] },
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it("accepts built-in service with privileged, SYS_ADMIN capAdd, and devices", () => {
+      const result = validateServiceManifest({
+        ...validMinimal,
+        quality: "built-in",
+        container: {
+          ...validMinimal.container,
+          privileged: true,
+          capAdd: ["SYS_ADMIN"],
+          devices: ["/dev/mem"],
+        },
+      });
+      expect(result.valid).toBe(true);
+    });
+  });
+
   describe("produces / consumes instance ids", () => {
     it("accepts valid instance ids on produces and consumes", () => {
       const result = validateServiceManifest({
