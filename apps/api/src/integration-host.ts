@@ -51,6 +51,7 @@ import {
 } from "./services/provider-health/registry";
 import { getSecret, isSecretsConfigured, resolveVaultSecrets } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
+import { httpCacheKey } from "./utils/http-cache-key";
 import { createIntegrationLogger } from "./utils/integration-logger";
 import { requireAuth } from "./utils/require-auth";
 
@@ -91,7 +92,7 @@ function createHttpClient(_log: Logger): HttpClient {
       }
 
       if (options?.cache?.ttl && redis) {
-        const cacheKey = `int:http:${u.toString()}`;
+        const cacheKey = httpCacheKey(u.toString(), options?.headers);
         try {
           const cached = await redis.get(cacheKey);
           if (cached) return JSON.parse(cached) as T;
