@@ -1,0 +1,16 @@
+{
+  "id": "secret-needer",
+  "version": "1.0.0",
+  "author": "Test",
+  "license": "MIT",
+  "domains": ["knowledge"],
+  "quality": "built-in",
+  "configSchema": {
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "x-openmapx-secret": true
+      }
+    }
+  }
+}

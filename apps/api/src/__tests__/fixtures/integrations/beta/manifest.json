@@ -1,0 +1,17 @@
+{
+  "id": "beta",
+  "version": "1.0.0",
+  "author": "Test",
+  "license": "MIT",
+  "domains": ["knowledge"],
+  "dependencies": ["alpha"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "quality": "built-in"
+}
