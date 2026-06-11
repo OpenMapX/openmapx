@@ -153,6 +153,7 @@ at runtime. The integration model is documented in
 
 | Command | Description |
 | --- | --- |
+| `integrations scaffold <id>` | Scaffold a new first-party integration under `integrations/<id>` from `integrations/_template/`, substituting the `__ID__`/`__DOMAIN__` tokens. Flag: `--domain <domain>`. Run `pnpm install` afterwards so pnpm picks up the new workspace package. See [Writing an integration](./writing-an-integration.md#quick-start-scaffold). |
 | `integrations list` | List installed community integrations. Flag: `--include-built-in` also lists the first-party integrations under `integrations/`. |
 | `integrations install <source>` | Install from a Git URL, local path, or prebuilt artifact. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`, `--no-build`. |
 | `integrations remove <id>` | Remove a community integration. |
