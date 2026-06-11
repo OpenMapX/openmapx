@@ -63,3 +63,7 @@ overrides:
   # (apps/api, data-manager) at boot. 4.21.0 is the known-good version. Pin until
   # the regression is fixed upstream (https://github.com/privatenumber/tsx).
   "tsx": "4.21.0"
+
+# typescript: held at 5.x — TS6 not yet adopted (native-transition
+# compatibility; see commit fa94ecce). Bump deliberately, not via routine
+# dep upgrades. No override entry needed while every workspace declares ^5.

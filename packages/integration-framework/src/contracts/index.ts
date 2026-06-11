@@ -1,3 +1,8 @@
+export {
+  assertProviderSatisfiesContract,
+  assertRealtimeProviderContract,
+  assertTransitProviderContract,
+} from "./assert-contract.js";
 export type {
   AutocompleteResult,
   GeocodingProvider,

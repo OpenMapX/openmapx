@@ -98,6 +98,11 @@ export type {
   WeatherProvider,
   WeatherResponse,
 } from "./contracts/index.js";
+export {
+  assertProviderSatisfiesContract,
+  assertRealtimeProviderContract,
+  assertTransitProviderContract,
+} from "./contracts/index.js";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
 export { httpError } from "./http-error";

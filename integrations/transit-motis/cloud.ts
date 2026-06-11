@@ -44,7 +44,7 @@ export function setupCloud(ctx: IntegrationContext): void {
       },
       departures: true,
       arrivals: true,
-      routes: { lookup: false, forStop: false, stops: false, geometry: true },
+      routes: { lookup: false, forStop: false, stops: false, geometry: false },
       planning: false,
       vehiclePositions: false,
       vehicleJourney: true,

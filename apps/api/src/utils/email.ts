@@ -151,6 +151,10 @@ export async function sendMail(opts: MailOptions): Promise<void> {
       return sendViaLettermint(opts, config);
     case "smtp":
       return sendViaSmtp(opts, config);
+    default: {
+      const _exhaustive: never = config.provider;
+      throw new Error(`Unknown email provider: ${String(_exhaustive)}`);
+    }
   }
 }
 
