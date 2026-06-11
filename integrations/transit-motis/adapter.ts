@@ -113,7 +113,7 @@ export async function getReachable(
         const stop = normalizeStop(instance, rp.place as Place);
         return {
           ...stop,
-          reachMinutes: rp.duration != null ? Math.round(rp.duration / 60) : undefined,
+          reachMinutes: rp.duration ?? undefined,
           reachTransfers: rp.k != null ? Math.max(0, rp.k - 1) : undefined,
         };
       });
