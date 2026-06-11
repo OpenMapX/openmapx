@@ -83,6 +83,18 @@ export type {
   Waypoint,
 } from "./routing-provider.js";
 export type {
+  NlpProvider,
+  NlpProviderId,
+  ParseContext,
+  SearchIntent,
+  SpatialConstraint,
+  TimeConstraint,
+} from "./search-nlp-provider.js";
+export {
+  isPlausibleNlSearch,
+  NL_CONFIDENCE_FLOOR,
+} from "./search-nlp-provider.js";
+export type {
   ProviderAttribution,
   TimetableEntry,
   TransitCapabilities,

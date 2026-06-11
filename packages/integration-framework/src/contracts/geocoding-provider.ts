@@ -21,7 +21,15 @@ export interface AutocompleteResult {
   label: string;
   sublabel?: string;
   coordinates?: LngLat;
-  type: "address" | "poi" | "street" | "region" | "category" | "transit_stop" | "labeled_place";
+  type:
+    | "address"
+    | "poi"
+    | "street"
+    | "region"
+    | "category"
+    | "transit_stop"
+    | "labeled_place"
+    | "nlp_search";
   /** SVG path `d` attribute for the icon (used for category suggestions). */
   iconPath?: string;
   /** iD preset icon key (e.g. "maki-ice-cream", "temaki-helicopter").
@@ -33,6 +41,8 @@ export interface AutocompleteResult {
   rawCategory?: string;
   /** Label key for labeled places (e.g. "home", "work", or custom). */
   labelKey?: string;
+  /** Parsed intent, present only when type is "nlp_search". */
+  nlpIntent?: import("./search-nlp-provider").SearchIntent;
 }
 
 export interface GeocodingProvider {

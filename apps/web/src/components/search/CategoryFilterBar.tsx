@@ -23,6 +23,7 @@ import {
   useCategorySearchStore,
   useDataSourceStore,
   useExploreResults,
+  useNlpSearchStore,
   useOpeningHoursStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
@@ -30,6 +31,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TEAL } from "@/lib/theme";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
+import { NlpUnmappedNotice } from "./NlpFilterChips";
 
 // Display order: Mon–Sun; JS day indices
 const DAYS: { key: string; idx: number }[] = [
@@ -117,6 +119,15 @@ export function CategoryFilterBar() {
   const facetSelections = useCategoryFacetStore((s) => s.selections);
   const toggleFacet = useCategoryFacetStore((s) => s.toggleFacet);
   const activeSource = useDataSourceStore((s) => s.activeSource);
+  // NLP search: surface attributes that couldn't be mapped to a structured
+  // filter (e.g. "best", "instagrammable") so the user knows they aren't
+  // narrowing the results.
+  const isNlpActive = useNlpSearchStore((s) => s.isNlpActive);
+  const nlpUnmapped = useNlpSearchStore((s) => s.intent?.unmapped_attributes);
+  const unmappedNotice =
+    isNlpActive && nlpUnmapped && nlpUnmapped.length > 0 ? (
+      <NlpUnmappedNotice attributes={nlpUnmapped} />
+    ) : null;
   const { rawResults, dominantCategory } = useExploreResults();
   // In text mode there is no active category chip — reuse the facets of the
   // category that the results predominantly belong to (e.g. "McDonald's" →
@@ -170,7 +181,12 @@ export function CategoryFilterBar() {
     );
   }
 
-  if (!effectiveCategory || !HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory)) return null;
+  // No opening-times toolbar for this category, but an NLP search may still
+  // have unmapped attributes worth surfacing on its own row.
+  if (!effectiveCategory || !HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory)) {
+    if (!unmappedNotice) return null;
+    return <Box sx={{ ...floatingToolbarSx, pointerEvents: "none" }}>{unmappedNotice}</Box>;
+  }
 
   const isFiltered = openingHoursFilter !== "any";
   const label = chipLabel(openingHoursFilter, openAtDay, openAtHour, t);
@@ -405,6 +421,8 @@ export function CategoryFilterBar() {
           />
         </>
       )}
+      {/* Unmapped NLP attributes drop to their own line below the chip row. */}
+      {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
     </Box>
   );
 }

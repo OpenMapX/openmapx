@@ -125,5 +125,47 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     }
   }
 
-  return { search, searchText, getProviders };
+  async function searchFiltered(
+    category: unknown,
+    attributes: Record<string, string>,
+    bbox: BoundingBox,
+    options?: { lang?: string },
+  ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+    if (typeof category !== "string" || category.length === 0) {
+      throw Object.assign(new Error("Missing or invalid category"), { statusCode: 400 });
+    }
+    const provider = getProviders().find(
+      (p) => typeof p.searchFiltered === "function" && p.categories.includes(category),
+    );
+    if (!provider?.searchFiltered) {
+      throw Object.assign(new Error(`No filtered-search provider for category: ${category}`), {
+        statusCode: 400,
+      });
+    }
+    let currentBbox = bbox;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const results = await provider.searchFiltered(category, attributes, currentBbox, {
+          lang: options?.lang,
+        });
+        for (const r of results) {
+          if (r.openingHours && !r.openingHoursInfo) {
+            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
+              lat: r.coordinates[1],
+              lon: r.coordinates[0],
+            });
+          }
+        }
+        return { results, partial: attempt > 0 };
+      } catch (err) {
+        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
+          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  return { search, searchText, searchFiltered, getProviders };
 }

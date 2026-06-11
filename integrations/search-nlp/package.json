@@ -1,0 +1,25 @@
+{
+  "name": "@openmapx/integration-search-nlp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "default": "./index.ts"
+    },
+    "./types": {
+      "types": "./types.ts",
+      "default": "./types.ts"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "openai": "^6.39.1",
+    "zod": "^4.4.3"
+  }
+}

@@ -282,6 +282,13 @@ const containerSchema = z.object({
     .refine((caps) => caps.every((c) => ALLOWED_CAPS.has(c) || c === "ALL"), "unknown capability")
     .optional(),
   devices: z.array(z.string().regex(/^\/dev\/[a-zA-Z0-9_\-/]+$/)).optional(),
+  gpu: z
+    .object({
+      driver: z.string().default("nvidia"),
+      count: z.union([z.number().int().positive(), z.literal("all")]).default("all"),
+      capabilities: z.array(z.string()).default(["gpu"]),
+    })
+    .optional(),
   privileged: z.boolean().optional(),
   networkMode: z.enum(["bridge", "host"]).optional(),
   memory: z.string().optional(),

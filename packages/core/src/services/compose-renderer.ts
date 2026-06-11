@@ -294,7 +294,14 @@ export interface ComposeServiceSnippet {
   healthcheck?: Record<string, unknown>;
   depends_on?: Record<string, { condition: string }>;
   logging?: { driver: string; options?: Record<string, string> };
-  deploy?: { resources?: { limits?: { memory?: string } } };
+  deploy?: {
+    resources?: {
+      limits?: { memory?: string };
+      reservations?: {
+        devices?: Array<{ driver: string; count: number | "all"; capabilities: string[] }>;
+      };
+    };
+  };
 }
 
 export function renderServiceSnippet(
@@ -431,7 +438,16 @@ export function renderServiceSnippet(
   }
 
   if (c.logging) snippet.logging = c.logging;
-  if (c.memory) snippet.deploy = { resources: { limits: { memory: c.memory } } };
+  if (c.memory || c.gpu) {
+    const resources: NonNullable<NonNullable<typeof snippet.deploy>["resources"]> = {};
+    if (c.memory) resources.limits = { memory: c.memory };
+    if (c.gpu) {
+      resources.reservations = {
+        devices: [{ driver: c.gpu.driver, count: c.gpu.count, capabilities: c.gpu.capabilities }],
+      };
+    }
+    snippet.deploy = { resources };
+  }
 
   return snippet;
 }

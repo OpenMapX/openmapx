@@ -2,6 +2,7 @@ import type { BoundingBox } from "@openmapx/core";
 import {
   CATEGORY_FILTERS,
   searchByCategory,
+  searchByCategoryWithAttributes,
   searchByOsmTags,
   searchByText,
   setOverpassUrl,
@@ -34,6 +35,17 @@ const overpassProvider: PoiSearchProvider = {
   },
   async searchText(query: string, bbox: BoundingBox): Promise<PoiSearchResult[]> {
     return searchByText(query, bbox);
+  },
+  async searchFiltered(
+    category: string,
+    attributes: Record<string, string>,
+    bbox: BoundingBox,
+  ): Promise<PoiSearchResult[]> {
+    const filters = CATEGORY_FILTERS[category];
+    if (!filters) {
+      throw Object.assign(new Error(`Unknown category: ${category}`), { statusCode: 400 });
+    }
+    return searchByCategoryWithAttributes(filters, attributes, bbox);
   },
 };
 

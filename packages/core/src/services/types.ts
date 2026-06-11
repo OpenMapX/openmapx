@@ -193,6 +193,7 @@ export interface ServiceContainer {
   capAdd?: string[];
   capDrop?: string[];
   devices?: string[];
+  gpu?: { driver: string; count: number | "all"; capabilities: string[] };
   privileged?: boolean;
   networkMode?: "bridge" | "host";
   memory?: string;

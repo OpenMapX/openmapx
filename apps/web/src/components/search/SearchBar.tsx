@@ -18,7 +18,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { formatShortcut, getPlatform, parseShortcut } from "@openmapx/command-palette";
-import type { AutocompleteResult, CategoryId, LngLat } from "@openmapx/core";
+import type { AutocompleteResult, BoundingBox, CategoryId, LngLat } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
@@ -47,6 +47,8 @@ import {
   useGeocoding,
   useLabeledPlaces,
   useMenuStore,
+  useNlpSearch,
+  useNlpSearchStore,
   usePlaceStore,
   usePresetSuggest,
   useSavedPlacesStore,
@@ -54,6 +56,7 @@ import {
   useSidebarStore,
   useStopSearch,
 } from "@openmapx/core";
+import { isPlausibleNlSearch } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { useQueryClient } from "@tanstack/react-query";
@@ -61,16 +64,20 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatarButton } from "@/components/auth/AccountAvatarButton";
 import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
+import { NlpConsentDialog } from "@/components/ui/NlpConsentDialog";
+import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/ui/nlpConsent";
 import {
   launchExploreFromPlace,
   launchExploreTextSearch,
   launchTextSearch,
 } from "@/lib/launchExplore";
 import { useMap } from "@/lib/MapContext";
+import { classifyQuery } from "@/lib/queryClassifier";
 import { TEAL } from "@/lib/theme";
 import { useGeocodingAttribution } from "@/lib/useGeocodingAttribution";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
+import { NlpSearchCard } from "./NlpSearchCard";
 
 /** Pre-parsed once at module load — the shortcut never changes, no need to
  *  re-parse it on every SearchBar render. */
@@ -177,6 +184,43 @@ export function SearchBar() {
   const { data: presetData } = usePresetSuggest(debouncedQuery, locale);
   const { data: airportSearchData } = useAirportSearch(debouncedQuery, 5);
   const { data: chipTranslations = {} } = useChipTranslations(locale);
+
+  // NLP search — dual-path. The classifier flags natural-language queries
+  // ("vegan restaurants open now near me"); geocode/autocomplete keep running
+  // in parallel and are NOT gated on this, so a misclassification just loses
+  // the additive AI card while normal search behaves exactly as before.
+  const isNl = useMemo(() => classifyQuery(debouncedQuery) === "nl", [debouncedQuery]);
+  // Snapshot the current viewport for the parse request. These are cheap ref
+  // reads; the hook's query key rounds the center so tiny pans don't refetch.
+  const mapCenterRaw = mapRef.current?.getCenter();
+  const mapCenter: LngLat | null = mapCenterRaw ? [mapCenterRaw.lng, mapCenterRaw.lat] : null;
+  const mapBoundsRaw = mapRef.current?.getBounds();
+  const mapBbox: BoundingBox | null = mapBoundsRaw
+    ? {
+        west: mapBoundsRaw.getWest(),
+        south: mapBoundsRaw.getSouth(),
+        east: mapBoundsRaw.getEast(),
+        north: mapBoundsRaw.getNorth(),
+      }
+    : null;
+
+  // Cloud consent gating: when the user has declined cloud providers, re-issue
+  // the parse with noCloud:true so the server falls back to local/keyword.
+  // Lazy init from localStorage so a returning decliner never triggers a cloud
+  // call or the consent dialog on subsequent sessions.
+  const [nlpNoCloud, setNlpNoCloud] = useState(() => isNlpCloudDeclined());
+  // consentGranted tracks local acceptance within this session so the card
+  // renders immediately after the user clicks "Enable" without a re-fetch.
+  const [consentGranted, setConsentGranted] = useState(false);
+
+  const { data: nlpData } = useNlpSearch(
+    debouncedQuery,
+    mapCenter,
+    mapBbox,
+    isNl,
+    locale,
+    nlpNoCloud,
+  );
 
   // Stop search — slower debounce to reduce transit API load
   const rawStopQuery = query.trim().length >= 2 ? query.trim() : "";
@@ -470,8 +514,67 @@ export function SearchBar() {
 
   if (directionsOpen) return null;
 
+  // Activate an NLP search: the card was clicked. `activate()` already
+  // populates the opening-hours + facet stores from the intent, so we only
+  // need to kick off the existing category-search pipeline (active category +
+  // viewport bbox); those stores then narrow the rendered results/markers
+  // client-side, mirroring a normal category search.
+  // TODO: wire the server-side /filtered endpoint as an optimization so the
+  // backend pre-filters by attributes instead of relying on client narrowing.
+  const handleActivateNlp = () => {
+    if (!nlpData) return;
+    const { intent, resolvedBbox, provider } = nlpData;
+    if (intent.categories.length === 0) return; // guarded by isPlausibleNlSearch
+    useNlpSearchStore.getState().activate(intent, resolvedBbox, provider);
+    // TODO: multi-category — v1 activates only the first category.
+    const firstCategory = intent.categories[0];
+    // Data-source-backed categories (e.g. ev_charging, fuel) have no Overpass
+    // CATEGORY_FILTERS entry; routing them to the Overpass category panel would
+    // 400. Mirror the normal select path and dispatch them to the data-source
+    // panel instead. Detection reuses the same `dataSourceCategories` list.
+    const dsMatch = dataSourceCategories.find((ds) => ds.id === firstCategory);
+    if (dsMatch) {
+      clearCategory();
+      setActiveSource(dsMatch.id);
+      useSidebarStore.getState().openSidebar(PANEL.DATASOURCE);
+    } else {
+      setActiveCategory(firstCategory as Parameters<typeof setActiveCategory>[0]);
+      useCategorySearchStore.getState().setSearchBbox(resolvedBbox);
+      useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
+    }
+    setIsFocused(false);
+    inputRef.current?.blur();
+  };
+
   const effectiveSuggestions = nearbyMode ? nearbySuggestions : displaySuggestions;
-  const showDropdown = isFocused && effectiveSuggestions.length > 0;
+  // The NLP card is additive and only shown for plausible natural-language
+  // intents (confidence + at least one category). It never replaces the
+  // parallel geocode/autocomplete suggestions below it.
+  const nlpIntent = nlpData?.intent;
+  const nlpProvider = nlpData?.provider;
+  const isCloudProvider = nlpProvider === "claude" || nlpProvider === "openai";
+  // Cloud consent: suppress the card if the result came from a cloud provider
+  // and the user has not yet consented (either via localStorage or this session).
+  const storedConsent = hasNlpConsent();
+  const consentOk = !isCloudProvider || consentGranted || storedConsent;
+  const showNlpCard =
+    !nearbyMode && nlpIntent !== undefined && isPlausibleNlSearch(nlpIntent) && consentOk;
+  const showConsentDialog =
+    !nearbyMode &&
+    nlpIntent !== undefined &&
+    isPlausibleNlSearch(nlpIntent) &&
+    isCloudProvider &&
+    !consentGranted &&
+    !storedConsent;
+  const nlpCard =
+    showNlpCard && nlpData ? (
+      <NlpSearchCard
+        intent={nlpData.intent}
+        provider={nlpData.provider}
+        onActivate={handleActivateNlp}
+      />
+    ) : null;
+  const showDropdown = isFocused && (effectiveSuggestions.length > 0 || showNlpCard);
 
   const tryOpenTransitStop = async (coords: LngLat, name: string): Promise<boolean> => {
     try {
@@ -724,6 +827,20 @@ export function SearchBar() {
 
   return (
     <>
+      {showConsentDialog && nlpProvider && (
+        <NlpConsentDialog
+          open
+          provider={nlpProvider}
+          onAccept={() => {
+            setNlpConsent(true);
+            setConsentGranted(true);
+          }}
+          onDecline={() => {
+            setNlpConsent(false);
+            setNlpNoCloud(true);
+          }}
+        />
+      )}
       {/* Full-screen backdrop on mobile while the search is focused — the
           bar and results panel float on this white surface, hiding the map
           and bottom sheet underneath. */}
@@ -991,6 +1108,7 @@ export function SearchBar() {
                   overflowY: "auto",
                 }}
               >
+                {nlpCard}
                 <AutocompleteDropdown
                   suggestions={effectiveSuggestions}
                   onSelect={handleSelectAny}
@@ -1071,6 +1189,7 @@ export function SearchBar() {
             />
           ) : showDropdown ? (
             <>
+              {nlpCard}
               <AutocompleteDropdown
                 suggestions={effectiveSuggestions}
                 onSelect={handleSelectAny}

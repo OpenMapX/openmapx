@@ -78,4 +78,5 @@ export const API_ENDPOINTS = {
   savedLabels: "/api/saved/labels",
   savedCheck: "/api/saved/check",
   capabilities: "/api/capabilities",
+  nlpParse: "/api/integrations/search-nlp/parse",
 } as const;

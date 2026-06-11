@@ -84,7 +84,13 @@
     "travelTime": "Reisezeit",
     "onlyWithinReach": "Nur erreichbarer Bereich",
     "minutesShort": "{minutes} Min.",
-    "updateOnMapMove": "Ergebnisse beim Bewegen der Karte aktualisieren"
+    "updateOnMapMove": "Ergebnisse beim Bewegen der Karte aktualisieren",
+    "aiPoweredSearch": "KI-gestützte Suche",
+    "couldNotFilterBy": "Konnte nicht filtern nach:",
+    "nlpConsentTitle": "KI-gestützte Suche aktivieren?",
+    "nlpConsentBody": "Deine Suchanfrage und dein ungefährer Standort werden an {provider} gesendet, um natürlichsprachige Suchen zu interpretieren. Es werden keine persönlichen Daten übertragen.",
+    "enable": "Aktivieren",
+    "noThanks": "Nein danke"
   },
   "map": {
     "myLocation": "Mein Standort",

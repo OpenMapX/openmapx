@@ -213,6 +213,7 @@ export {
 export { useMergedPlace } from "./hooks/useMergedPlace";
 export { type NearestAirportHit, useNearestAirports } from "./hooks/useNearestAirports";
 export { useNeighborhoods } from "./hooks/useNeighborhoods";
+export { type NlpParseResponse, useNlpSearch } from "./hooks/useNlpSearch";
 export { useOfficialBookingUrl } from "./hooks/useOfficialBookingUrl";
 export { useOptimizeRoute } from "./hooks/useOptimizeRoute";
 export { useOverlayExclusion } from "./hooks/useOverlayExclusion";
@@ -317,6 +318,7 @@ export { useMapStore } from "./stores/mapStore";
 export { useMenuStore } from "./stores/menuStore";
 export type { NavKind, TransitReplanOptions } from "./stores/navigationStore";
 export { useNavigationStore } from "./stores/navigationStore";
+export { useNlpSearchStore } from "./stores/nlpSearchStore";
 export type { OpeningHoursFilter } from "./stores/openingHoursStore";
 export { useOpeningHoursStore } from "./stores/openingHoursStore";
 export type { OverlayEntry, OverlayId } from "./stores/overlayRegistry";
@@ -395,6 +397,7 @@ export {
 } from "./types/placeIds";
 export type { RestaurantMenu } from "./types/restaurantMenu";
 export type { LabeledPlace, SavedList, SavedPlace } from "./types/saved";
+export type { SearchIntent, SpatialConstraint, TimeConstraint } from "./types/search";
 export { isCityOrSmaller } from "./utils/administrativePlace";
 export {
   buildAttributionHtml,
@@ -505,8 +508,10 @@ export type {
 } from "./utils/overpass/types";
 export type { OsmFilter } from "./utils/overpass.service";
 export {
+  buildCategoryWithAttributesQuery,
   CATEGORY_FILTERS,
   searchByCategory,
+  searchByCategoryWithAttributes,
   searchByOsmTags,
   searchByText,
 } from "./utils/overpass.service";

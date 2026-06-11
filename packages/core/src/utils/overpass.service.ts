@@ -356,6 +356,48 @@ export async function searchByOsmTags(
   return mapOverpassElements(data.elements);
 }
 
+/** Escape backslash and double-quote so a literal value can be safely embedded inside `"..."`. */
+function escapeOverpassLiteral(s: string): string {
+  return s.replace(/[\\"]/g, "\\$&");
+}
+
+function buildAttributePredicates(attributes: Record<string, string>): string {
+  return Object.entries(attributes)
+    .map(([key, value]) =>
+      key === "cuisine"
+        ? `["${escapeOverpassLiteral(key)}"~"${escapeOverpassRegex(value)}"]`
+        : `["${escapeOverpassLiteral(key)}"="${escapeOverpassLiteral(value)}"]`,
+    )
+    .join("");
+}
+
+export function buildCategoryWithAttributesQuery(
+  filters: OsmFilter[],
+  attributes: Record<string, string>,
+  bbox: BoundingBox,
+): string {
+  const { south, west, north, east } = bbox;
+  const bboxStr = `${south},${west},${north},${east}`;
+  const attrs = buildAttributePredicates(attributes);
+  const lines = filters
+    .flatMap((f) => [
+      `node["${f.key}"="${f.value}"]${attrs}(${bboxStr});`,
+      `way["${f.key}"="${f.value}"]${attrs}(${bboxStr});`,
+    ])
+    .join("\n  ");
+  return `[out:json][timeout:15];\n(\n  ${lines}\n);\nout center ${MAX_RESULTS};`;
+}
+
+export async function searchByCategoryWithAttributes(
+  filters: OsmFilter[],
+  attributes: Record<string, string>,
+  bbox: BoundingBox,
+): Promise<CategoryPlaceResult[]> {
+  const query = buildCategoryWithAttributesQuery(filters, attributes, bbox);
+  const data = await overpassQuery(query);
+  return mapOverpassElements(data.elements);
+}
+
 // POI tag keys a free-text name search is scoped to, so we match named places
 // (shops, venues, …) rather than streets, boundaries or address-only nodes.
 const TEXT_SEARCH_KEYS = ["amenity", "shop", "tourism", "leisure", "office", "healthcare"] as const;

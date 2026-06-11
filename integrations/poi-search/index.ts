@@ -105,6 +105,89 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
+  ctx.registerRoute("GET", "/filtered", async (req, reply) => {
+    const { category, tags, south, west, north, east, lang } = req.query as {
+      category?: string;
+      tags?: string;
+      south?: string;
+      west?: string;
+      north?: string;
+      east?: string;
+      lang?: string;
+    };
+
+    if (!category) {
+      reply.status(400).send({ error: "Missing category parameter" });
+      return;
+    }
+
+    let attributes: Record<string, string> = {};
+    if (tags) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(tags);
+      } catch {
+        reply.status(400).send({ error: "Invalid tags parameter: must be valid JSON" });
+        return;
+      }
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        reply.status(400).send({ error: "Invalid tags: must be a JSON object" });
+        return;
+      }
+      // Every tag value must be a string — non-string values (e.g. numbers)
+      // would otherwise reach escapeOverpassLiteral and throw an unhandled 500.
+      if (!Object.values(parsed).every((v) => typeof v === "string")) {
+        reply.status(400).send({ error: "Invalid tags: values must be strings" });
+        return;
+      }
+      attributes = parsed as Record<string, string>;
+    }
+
+    const bbox = {
+      south: Number.parseFloat(south ?? ""),
+      west: Number.parseFloat(west ?? ""),
+      north: Number.parseFloat(north ?? ""),
+      east: Number.parseFloat(east ?? ""),
+    };
+    for (const [key, val] of Object.entries(bbox)) {
+      if (!Number.isFinite(val)) {
+        reply.status(400).send({ error: `Invalid bbox parameter: ${key}` });
+        return;
+      }
+    }
+
+    const bboxRounded = {
+      east: round(bbox.east, 2),
+      north: round(bbox.north, 2),
+      south: round(bbox.south, 2),
+      west: round(bbox.west, 2),
+    };
+    const sortedTagKey = Object.keys(attributes)
+      .sort()
+      .map((k) => `${k}=${attributes[k]}`)
+      .join(",");
+    const cacheKey = `filtered:${category}:${sortedTagKey}:${bboxRounded.south},${bboxRounded.west},${bboxRounded.north},${bboxRounded.east}`;
+
+    try {
+      const result = await ctx.cache.withCache(cacheKey, 300, () =>
+        orchestrator.searchFiltered(category, attributes, bbox, { lang }),
+      );
+      reply.header("Cache-Control", "public, max-age=300");
+      reply.send(result);
+    } catch (err) {
+      if (err instanceof OverpassTimeoutError) {
+        reply.status(422).send({ error: "area_too_large" });
+        return;
+      }
+      const e = err as { statusCode?: number; message: string };
+      if (e.statusCode === 400) {
+        reply.status(400).send({ error: e.message });
+        return;
+      }
+      throw err;
+    }
+  });
+
   ctx.registerRoute("GET", "/preset-suggest", async (req, reply) => {
     const { q, lang, limit } = req.query as { q?: string; lang?: string; limit?: string };
 

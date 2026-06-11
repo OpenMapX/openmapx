@@ -23,7 +23,7 @@ describe("hotel providers", () => {
   it("booking link carries ss, dates, occupancy, geo", () => {
     const p = getHotelProvider("booking");
     expect(p).toBeDefined();
-    const url = p!.build(q, {});
+    const url = (p ?? throwMissing("booking")).build(q, {});
     expect(url).toContain("https://www.booking.com/searchresults.html?");
     expect(url).toContain("checkin=2026-05-31");
     expect(url).toContain("checkout=2026-06-01");
@@ -33,12 +33,14 @@ describe("hotel providers", () => {
   });
 
   it("booking aid is appended when configured", () => {
-    const url = getHotelProvider("booking")!.build(q, { bookingAid: "123456" });
+    const url = (getHotelProvider("booking") ?? throwMissing("booking")).build(q, {
+      bookingAid: "123456",
+    });
     expect(url).toContain("aid=123456");
   });
 
   it("expedia uses Hotel-Search with dates + occupancy", () => {
-    const url = getHotelProvider("expedia")!.build(q, {});
+    const url = (getHotelProvider("expedia") ?? throwMissing("expedia")).build(q, {});
     expect(url).toContain("https://www.expedia.com/Hotel-Search?");
     expect(url).toContain("startDate=2026-05-31");
     expect(url).toContain("endDate=2026-06-01");
@@ -47,7 +49,7 @@ describe("hotel providers", () => {
   });
 
   it("affiliate template wraps the destination URL", () => {
-    const url = getHotelProvider("expedia")!.build(q, {
+    const url = (getHotelProvider("expedia") ?? throwMissing("expedia")).build(q, {
       affiliateTemplates: { expedia: "https://go.aff/?u={url}" },
     });
     expect(url.startsWith("https://go.aff/?u=")).toBe(true);

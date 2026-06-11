@@ -67,7 +67,10 @@ export type {
   MatchShapeMatch,
   MatchTracePoint,
   MobilityDataSourceProvider,
+  NlpProvider,
+  NlpProviderId,
   OsmIdentity,
+  ParseContext,
   PhotoProvider,
   PhotoQuery,
   PoiSearchProvider,
@@ -90,7 +93,10 @@ export type {
   RouteStep,
   RoutingOptions,
   RoutingProvider,
+  SearchIntent,
   SearchResult,
+  SpatialConstraint,
+  TimeConstraint,
   TimetableEntry,
   TransitCapabilities,
   TransitProvider,
@@ -103,6 +109,7 @@ export type {
   WeatherProvider,
   WeatherResponse,
 } from "./contracts/index.js";
+export { isPlausibleNlSearch, NL_CONFIDENCE_FLOOR } from "./contracts/index.js";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
 export { httpError } from "./http-error";

@@ -39,5 +39,13 @@ export interface PoiSearchProvider {
     bbox: BoundingBox,
     options?: { lang?: string },
   ): Promise<PoiSearchResult[]>;
+  /** Category search with additional OSM attribute filters (AND semantics).
+   *  Optional — providers that support attribute-level filtering implement it. */
+  searchFiltered?(
+    category: string,
+    attributes: Record<string, string>,
+    bbox: BoundingBox,
+    options?: { lang?: string },
+  ): Promise<PoiSearchResult[]>;
   getDetail?(poiId: string): Promise<Place | null>;
 }

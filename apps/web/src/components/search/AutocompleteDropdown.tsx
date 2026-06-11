@@ -1,5 +1,6 @@
 "use client";
 
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import CategoryIcon from "@mui/icons-material/Category";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import FlagIcon from "@mui/icons-material/Flag";
@@ -37,6 +38,7 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
   category: <CategoryIcon sx={{ fontSize: 20, color: TEAL }} />,
   transit_stop: <DirectionsTransitIcon sx={{ fontSize: 20, color: TEAL }} />,
   labeled_place: <FlagIcon sx={{ fontSize: 20, color: TEAL }} />,
+  nlp_search: <AutoAwesomeIcon sx={{ fontSize: 20, color: TEAL }} />,
 };
 
 function CategorySvgIcon({ path }: { path: string }) {

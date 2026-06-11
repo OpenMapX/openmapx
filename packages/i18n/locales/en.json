@@ -84,7 +84,13 @@
     "travelTime": "Travel time",
     "onlyWithinReach": "Only within reach",
     "minutesShort": "{minutes} min",
-    "updateOnMapMove": "Update results when moving map"
+    "updateOnMapMove": "Update results when moving map",
+    "aiPoweredSearch": "AI-powered search",
+    "couldNotFilterBy": "Could not filter by:",
+    "nlpConsentTitle": "Enable AI-powered search?",
+    "nlpConsentBody": "Your search query and approximate location will be sent to {provider} to interpret natural-language searches. No personal information is included.",
+    "enable": "Enable",
+    "noThanks": "No thanks"
   },
   "map": {
     "myLocation": "My location",

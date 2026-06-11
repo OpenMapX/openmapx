@@ -209,6 +209,7 @@ const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/places(\/|$|\?)/,
   /^\/api\/image-proxy(\/|$|\?)/,
   /^\/api\/winter-sports(\/|$)/,
+  /^\/api\/integrations\/search-nlp(\/|$|\?)/,
 ];
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);

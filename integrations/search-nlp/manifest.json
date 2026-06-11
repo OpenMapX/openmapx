@@ -1,0 +1,39 @@
+{
+  "id": "search-nlp",
+  "name": "Natural-Language Search",
+  "version": "1.0.0",
+  "license": "MIT",
+  "quality": "built-in",
+  "domains": ["search-nlp"],
+  "backend": { "routes": true },
+  "category": "Geocoding",
+  "requires": [{ "service": "local-ai", "optional": true }],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "providerChain": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["local", "claude", "openai", "keyword"] },
+        "default": ["local", "keyword"],
+        "title": "Provider chain (ordered, with auto-fallback)"
+      },
+      "localTimeoutMs": { "type": "integer", "default": 10000 },
+      "cloudTimeoutMs": { "type": "integer", "default": 3000 },
+      "ollamaEndpoint": { "type": "string", "format": "url" },
+      "ollamaModel": { "type": "string", "default": "gemma3:4b-it-qat" },
+      "claudeModel": { "type": "string", "default": "claude-haiku-4-5-20251001" },
+      "anthropicApiKey": { "type": "string", "format": "password", "x-openmapx-secret": true },
+      "openaiModel": { "type": "string", "default": "gpt-4o-mini" },
+      "openaiApiKey": { "type": "string", "format": "password", "x-openmapx-secret": true },
+      "privacyMode": {
+        "type": "string",
+        "enum": ["strict", "consent", "open"],
+        "default": "consent"
+      },
+      "roundCoordsDecimals": { "type": "integer", "default": 2 },
+      "intentCacheTtlSeconds": { "type": "integer", "default": 86400 },
+      "rateLimitPerIpPerHour": { "type": "integer", "default": 200 }
+    }
+  }
+}

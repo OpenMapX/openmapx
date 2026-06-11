@@ -1,0 +1,35 @@
+{
+  "id": "local-ai",
+  "name": "Local AI (Ollama)",
+  "version": "1.0.0",
+  "description": "Self-hosted LLM inference (Ollama) for natural-language search parsing.",
+  "license": "MIT",
+  "quality": "built-in",
+  "homepage": "https://ollama.com/",
+  "container": {
+    "image": "ollama/ollama",
+    "tag": "latest",
+    "expose": [11434],
+    "environment": {
+      "OLLAMA_KEEP_ALIVE": "${OLLAMA_KEEP_ALIVE:-30m}",
+      "OLLAMA_MAX_LOADED_MODELS": "${OLLAMA_MAX_LOADED_MODELS:-1}"
+    },
+    "memory": "${LOCAL_AI_MEMORY:-8g}",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/api/tags",
+      "port": 11434,
+      "interval": "30s",
+      "timeout": "5s",
+      "retries": 5,
+      "startPeriod": "60s"
+    }
+  },
+  "provides": ["llm-inference"],
+  "volumes": [{ "name": "openmapx-ollama", "mountAt": "/root/.ollama", "backup": false }],
+  "exposure": {
+    "hostPorts": [{ "container": 11434, "host": 11434, "bindAddress": "127.0.0.1" }]
+  },
+  "ui": { "category": "infrastructure" }
+}
