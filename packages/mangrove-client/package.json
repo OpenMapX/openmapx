@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/mangrove-client",
+  "license": "Apache-2.0",
   "version": "1.0.0",
   "description": "Open Reviews Standard (Mangrove) keypair, encryption, WebAuthn, and signing primitives for OpenMapX",
   "private": true,

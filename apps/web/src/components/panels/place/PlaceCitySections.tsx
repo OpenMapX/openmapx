@@ -173,7 +173,7 @@ function DeferUntilVisible({ children }: { children: ReactNode }) {
 }
 
 /**
- * Google-Maps-style city panel sections — Quick facts, Hotels and
+ * City panel sections — Quick facts, Hotels and
  * Neighborhoods — rendered only for administrative areas of size city or
  * smaller. Each sub-section self-hides when it has no data. Hotels and
  * Neighborhoods each fire an Overpass query on mount, so they're deferred

@@ -1,0 +1,13 @@
+# URLs lychee should not check (regex, one per line).
+
+# Local / example hosts that only resolve inside a deployment.
+^https?://localhost
+^https?://127\.0\.0\.1
+^https?://0\.0\.0\.0
+^https?://([a-z0-9-]+\.)*example\.(com|org)
+
+# Badge endpoint is generated on first Scorecard run; 404s until then.
+^https://api\.scorecard\.dev/
+
+# Private repo paths (security advisories, settings) require auth.
+^https://github\.com/OpenMapX/openmapx/security/

@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/command-palette",
+  "license": "AGPL-3.0-or-later",
   "version": "1.0.0",
   "description": "Keyboard shortcut sequence matcher and command palette primitives for OpenMapX",
   "private": true,

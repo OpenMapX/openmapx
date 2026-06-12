@@ -2,11 +2,12 @@
 
 # OpenMapX
 
-**A fully self-hostable, open-data Google Maps alternative — built entirely from open-source services and open data.**
+**A fully self-hostable, open-data mapping platform — built entirely from open-source services and open data.**
 
 [![CI](https://github.com/OpenMapX/openmapx/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenMapX/openmapx/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/OpenMapX/openmapx/actions/workflows/codeql.yml/badge.svg)](https://github.com/OpenMapX/openmapx/actions/workflows/codeql.yml)
 [![Docker](https://github.com/OpenMapX/openmapx/actions/workflows/docker.yml/badge.svg)](https://github.com/OpenMapX/openmapx/actions/workflows/docker.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/OpenMapX/openmapx/badge)](https://scorecard.dev/viewer/?uri=github.com/OpenMapX/openmapx)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24-43853d?logo=node.js&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-11-f69220?logo=pnpm&logoColor=white)](https://pnpm.io)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -171,4 +172,6 @@ OpenMapX stands on a huge stack of open data and open-source software. Special t
 
 ## License
 
-A `LICENSE` file has not yet been added to this repository. Until one is published, all rights are reserved by the author. Please open an issue if you intend to use, fork, or redistribute the code.
+The OpenMapX product is licensed under **[AGPL-3.0-or-later](LICENSE)**; its reusable libraries (selected `packages/*`) are **Apache-2.0**. See [LICENSING.md](LICENSING.md) for the breakdown and rationale, and [CLA.md](CLA.md) for the Contributor License Agreement.
+
+The **OpenMapX name and logo are trademarks** and are not covered by the code licenses — see the [Trademark Policy](https://openmapx.org/trademark).

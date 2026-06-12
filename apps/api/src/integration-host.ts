@@ -65,6 +65,7 @@ import {
 } from "./services/provider-health/registry";
 import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
+import { getEmailDisclosure } from "./utils/email";
 
 export type { ConfigSource, ConfigValueWithSource };
 export { resolveConfigWithSources };
@@ -757,6 +758,15 @@ export async function initIntegrations(
 
   // Register the /api/integrations endpoint
   fastify.get("/api/integrations", async () => {
+    const disclosures = Array.from(integrations.values())
+      .filter((i) => i.enabled)
+      .flatMap((i) => i.disclosures ?? []);
+    try {
+      disclosures.push(await getEmailDisclosure());
+    } catch (err) {
+      // Don't fail the whole endpoint if the email disclosure can't be resolved.
+      fastify.log.warn({ err }, "email disclosure unavailable; omitting from /api/integrations");
+    }
     return {
       integrations: Array.from(integrations.values())
         .filter((i) => i.enabled)
@@ -765,9 +775,7 @@ export async function initIntegrations(
           isBuiltIn: i.isBuiltIn,
         })),
       frameworkStrings: sharedStrings,
-      disclosures: Array.from(integrations.values())
-        .filter((i) => i.enabled)
-        .flatMap((i) => i.disclosures ?? []),
+      disclosures,
     };
   });
 

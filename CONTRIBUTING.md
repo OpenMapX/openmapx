@@ -1,9 +1,14 @@
 # Contributing to OpenMapX
 
 Thanks for your interest in contributing. OpenMapX is a community-driven,
-self-hostable Google Maps alternative built entirely from open data and
+self-hostable mapping platform built entirely from open data and
 open-source services. There's lots of surface area, which means lots of
 ways to help.
+
+Have a usage question or an idea to discuss? Please start in
+[GitHub Discussions](https://github.com/OpenMapX/openmapx/discussions) rather
+than the issue tracker — see [SUPPORT.md](SUPPORT.md). All participation is
+covered by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ways to contribute
 
@@ -12,12 +17,14 @@ ways to help.
 - **Feature requests** — open an issue describing the use case before opening
   a PR for anything non-trivial.
 - **Integrations** — most user-visible behavior lives in `integrations/`.
-  See the [Integration System docs](docs/INTEGRATIONS.md) for the manifest
-  format and the runtime contract.
+  See the [Integration System](https://docs.openmapx.org/developer/integration-system/)
+  and [Writing an integration](https://docs.openmapx.org/developer/writing-an-integration/)
+  docs for the manifest format and the runtime contract.
 - **Services** — backend daemons declared in `services/<slug>/service.json`.
   See the README's "Two plugin systems" section.
-- **Documentation** — README, the docs in `docs/`, and the GitHub wiki all
-  welcome improvements.
+- **Documentation** — the README and the docs site (sources in `docs/`,
+  published to [docs.openmapx.org](https://docs.openmapx.org)) both welcome
+  improvements.
 - **Translations** — strings live in `packages/i18n/`. Run
   `pnpm check-translations` to verify completeness.
 
@@ -39,8 +46,9 @@ pnpm dev          # apps/web + apps/api in dev mode (Turborepo)
 ```
 
 The Docker stack (PostGIS, Martin, MOTIS, Pelias, etc.) is rendered on
-demand from the manifests. See `infra/docker/manage.sh` or the wiki's
-self-hosting guide.
+demand from the manifests via the `openmapx` CLI (`pnpm openmapx compose
+render` / `up`). See the [CLI reference](https://docs.openmapx.org/developer/cli-reference/)
+and the [self-hosting guide](https://docs.openmapx.org/install/getting-started/).
 
 ## Quality bar
 
@@ -55,9 +63,9 @@ pnpm test           # Vitest
 Git hooks enforce a two-stage local gate:
 
 - **pre-commit** — fast checks only: `pnpm lint`, `pnpm check-types`, and the
-  legal/data-flow audits (`check-legal-tables`, `check-legal-updated`,
-  `check-data-flows`). No Docker required; typically completes in under a
-  minute.
+  legal/license/data-flow audits (`check-legal-tables`, `check-legal-updated`,
+  `check-data-flows`, `check-license-metadata`). No Docker required; typically
+  completes in under a minute.
 - **pre-push** — full test suite (`pnpm test`). Requires Docker for the
   testcontainers-based suites; set `SKIP_TESTCONTAINERS=1` to bypass those
   when the daemon isn't running.
@@ -83,7 +91,7 @@ enforced by commitlint via Husky and by the `pr-title` GitHub Action.
 
 Examples:
 
-```
+```text
 feat(transit-hafas): add support for DB long-distance services
 fix(routing): handle empty Valhalla isochrone response
 docs(readme): clarify community integration install flow
@@ -91,8 +99,8 @@ docs(readme): clarify community integration install flow
 
 ### Changesets
 
-User-facing changes to publishable packages (currently just `@openmapx/core`
-under `packages/core/`) must include a changeset, otherwise CI fails:
+User-facing changes to publishable packages must include a changeset, otherwise
+CI fails:
 
 ```bash
 pnpm exec changeset
@@ -111,12 +119,6 @@ pnpm exec changeset --empty
 App- and service-only changes (under `apps/`, `services/`, `integrations/`)
 are skipped automatically because those packages are marked `private`.
 
-For convenience, install the
-[Changeset Bot GitHub App](https://github.com/apps/changeset-bot) on the
-repository. It posts a comment on each PR showing whether a changeset is
-present and offers a one-click "Add changeset" link. The bot is
-complementary to the CI gate — the App comments, the workflow blocks.
-
 ## Pull request workflow
 
 1. Fork and create a feature branch off `main`.
@@ -127,6 +129,29 @@ complementary to the CI gate — the App comments, the workflow blocks.
 5. A maintainer reviews. Squash-merge is the default; we keep the merged
    PR's title and summary as the squash commit message, so make both
    accurate.
+
+## Licensing and the CLA
+
+OpenMapX uses a two-license split: the product is AGPL-3.0-or-later and the
+reusable libraries are Apache-2.0. See [LICENSING.md](LICENSING.md) for the full
+breakdown.
+
+Contributions are accepted under a Contributor License Agreement
+([CLA.md](CLA.md)). You keep ownership of your contributions; the CLA grants the
+maintainer the rights needed to keep the project sustainable, including offering
+a commercial license alongside the AGPL.
+
+You don't sign anything by hand. When you open your first pull request, an
+automated assistant comments asking you to confirm you agree to the CLA by
+replying:
+
+```text
+I have read the CLA Document and I hereby sign the CLA
+```
+
+Your agreement is recorded against your GitHub account and applies to future
+contributions, so you only confirm once. If you contribute as part of your job,
+make sure you're authorized to agree on your own or your employer's behalf.
 
 ## Reporting security issues
 

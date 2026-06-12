@@ -7,10 +7,12 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import Link from "@mui/material/Link";
@@ -39,6 +41,11 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sign-up requires explicit acceptance of the Terms and Privacy Policy.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Sign-up is blocked until the Terms/Privacy checkbox is ticked. Gates both
+  // the email submit and the OAuth buttons, and guards both handlers.
+  const signupBlocked = mode === "sign-up" && !acceptedTerms;
 
   // 2FA state
   const [totpCode, setTotpCode] = useState("");
@@ -60,6 +67,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
     setUseBackupCode(false);
     setResetOtp("");
     setNewPassword("");
+    setAcceptedTerms(false);
   };
 
   const toggleMode = () => {
@@ -75,6 +83,10 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (signupBlocked) {
+      setError(t("mustAcceptTerms"));
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -212,6 +224,10 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
   };
 
   const handleOAuthSignIn = async (providerId: string, providerName: string) => {
+    if (signupBlocked) {
+      setError(t("mustAcceptTerms"));
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -504,11 +520,41 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 </Typography>
               )}
 
+              {mode === "sign-up" && (
+                <FormControlLabel
+                  sx={{ mt: 0.5, mb: 0.5, alignItems: "flex-start" }}
+                  control={
+                    <Checkbox
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      size="small"
+                      sx={{ py: 0, mr: 0.5 }}
+                    />
+                  }
+                  label={
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                      {t.rich("acceptTerms", {
+                        terms: (chunks) => (
+                          <Link href="/terms" target="_blank" rel="noopener noreferrer">
+                            {chunks}
+                          </Link>
+                        ),
+                        privacy: (chunks) => (
+                          <Link href="/privacy" target="_blank" rel="noopener noreferrer">
+                            {chunks}
+                          </Link>
+                        ),
+                      })}
+                    </Typography>
+                  }
+                />
+              )}
+
               <Button
                 type="submit"
                 variant="contained"
                 fullWidth
-                disabled={loading}
+                disabled={loading || signupBlocked}
                 sx={{ mt: 1, mb: 2, py: 1.2, fontWeight: 600 }}
               >
                 {loading ? (
@@ -553,7 +599,7 @@ export function AuthDialog({ open, onClose }: AuthDialogProps) {
                 variant="outlined"
                 fullWidth
                 onClick={() => handleOAuthSignIn(provider.providerId, provider.name)}
-                disabled={loading}
+                disabled={loading || signupBlocked}
                 sx={{
                   mb: 1.5,
                   py: 1,

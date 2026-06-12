@@ -1104,6 +1104,8 @@
     "signInWithPasskey": "Mit Passkey anmelden",
     "continueWith": "Weiter mit {provider}",
     "oauthDirectDisclosure": "Drittanbieter-Anmeldung leitet Ihren Browser zu diesem Anbieter weiter; dabei kann er Ihre IP-Adresse erhalten.",
+    "acceptTerms": "Ich stimme den <terms>Nutzungsbedingungen</terms> und der <privacy>Datenschutzerklärung</privacy> zu.",
+    "mustAcceptTerms": "Bitte akzeptieren Sie die Nutzungsbedingungen und die Datenschutzerklärung, um fortzufahren.",
     "noAccount": "Noch kein Konto?",
     "haveAccount": "Bereits ein Konto?",
     "signUpFailed": "Registrierung fehlgeschlagen",

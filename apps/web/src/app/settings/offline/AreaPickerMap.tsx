@@ -14,7 +14,7 @@ type GeoJSONSource = maplibregl.GeoJSONSource;
 const BOUNDARY_SOURCE = "picker-boundary-source";
 const BOUNDARY_FILL = "picker-boundary-fill";
 const BOUNDARY_LINE = "picker-boundary-line";
-// Google-style muted red, matching PlaceBoundaryLayer's area highlight.
+// Muted red, matching PlaceBoundaryLayer's area highlight.
 const BOUNDARY_COLOR = "#A52714";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -67,8 +67,8 @@ function applyBoundary(map: maplibregl.Map | null, boundary: AreaGeometry | null
 
 /**
  * Mini MapLibre instance used as the bbox picker. Whatever the user has visible
- * is the area they'll download — a simple, gesture-driven picker that mirrors
- * how Google Maps' "download offline area" works. An optional `fitBbox` lets a
+ * is the area they'll download — a simple, gesture-driven "download offline
+ * area" picker. An optional `fitBbox` lets a
  * search result frame the map automatically, and `boundary` highlights the
  * selected admin area's outline so it's clear what's being captured.
  */

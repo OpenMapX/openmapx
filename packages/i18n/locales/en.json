@@ -1104,6 +1104,8 @@
     "signInWithPasskey": "Sign in with passkey",
     "continueWith": "Continue with {provider}",
     "oauthDirectDisclosure": "Third-party sign-in redirects your browser to that provider, so they may receive your IP address.",
+    "acceptTerms": "I agree to the <terms>Terms of Use</terms> and <privacy>Privacy Policy</privacy>.",
+    "mustAcceptTerms": "Please accept the Terms of Use and Privacy Policy to continue.",
     "noAccount": "Don\u2019t have an account?",
     "haveAccount": "Already have an account?",
     "signUpFailed": "Sign up failed",

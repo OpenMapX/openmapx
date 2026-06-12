@@ -109,8 +109,8 @@ function FoodRow({
 }
 
 /**
- * Restaurant Menu + "Place an order" rows for the place overview, mirroring
- * Google Maps. Both are pure hand-offs (see
+ * Restaurant Menu + "Place an order" rows for the place overview. Both are
+ * pure hand-offs (see
  * docs/plans/restaurant-menus-and-delivery.md): the Menu row links to the
  * restaurant's own menu (OSM `website:menu` tag, else a crawl of its site); the
  * order row opens a region-filtered "Continue with" list of delivery platforms,

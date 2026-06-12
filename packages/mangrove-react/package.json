@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/mangrove-react",
+  "license": "Apache-2.0",
   "version": "1.0.0",
   "description": "React hooks for the Mangrove Open Reviews Standard — keypair lifecycle, review submission, image upload, and place review queries. Transport-agnostic via dependency injection.",
   "private": true,

@@ -13,6 +13,8 @@ export type {
   CustomHealthCheckFn,
   DatabaseClient,
   Disclosure,
+  EmailDisclosure,
+  EmailProvider,
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,
@@ -25,6 +27,7 @@ export type {
   RouteHandler,
   RouteOptions,
   SecretsClient,
+  TransferSafeguard,
 } from "./context";
 export {
   assertProviderSatisfiesContract,

@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/presets",
+  "license": "Apache-2.0",
   "version": "1.0.0",
   "description": "OSM preset matcher, chip translations, and tag-set helpers built on iD's tagging schema for OpenMapX",
   "private": true,

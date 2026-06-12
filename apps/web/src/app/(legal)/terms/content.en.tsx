@@ -21,7 +21,7 @@ export default function TermsContent({
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
   disclosures?: Disclosure[];
 }) {
-  const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
+  const { name, street, postalCode, city, country, email } = legalConfig;
 
   return (
     <Box>
@@ -35,7 +35,7 @@ export default function TermsContent({
           mb: 4,
         }}
       >
-        Last updated: June 2026
+        Last updated: June 12, 2026
       </Typography>
       <Section title="1. Scope and Provider">
         <Typography>
@@ -477,9 +477,9 @@ export default function TermsContent({
           These Terms are governed by the laws of the Federal Republic of Germany, excluding the UN
           Convention on Contracts for the International Sale of Goods (CISG). If you are a consumer
           within the EU, you also retain the protection of mandatory provisions of the law of your
-          country of residence. The exclusive jurisdiction for all disputes arising from or in
-          connection with these Terms shall be {jurisdictionCity}, Germany, unless mandatory
-          consumer protection laws provide otherwise.
+          country of residence. Venue is determined by the applicable statutory rules; in
+          particular, as a consumer you may bring proceedings at your place of residence and may
+          only be sued there.
         </Typography>
       </Section>
       <Section title="15. Changes to These Terms">

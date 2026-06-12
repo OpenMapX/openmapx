@@ -17,6 +17,7 @@
     "check-legal-tables": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-tables.ts",
     "check-legal-updated": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-updated.ts",
     "check-legal-urls": "pnpm -C packages/cli exec tsx ../../scripts/check-legal-urls.ts",
+    "check-license-metadata": "pnpm -C packages/cli exec tsx ../../scripts/check-license-metadata.ts",
     "openmapx": "pnpm -C packages/cli exec tsx src/index.ts"
   },
   "devDependencies": {

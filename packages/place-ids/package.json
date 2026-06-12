@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/place-ids",
+  "license": "Apache-2.0",
   "version": "1.0.0",
   "description": "Place-ID scheme registry, resolvers, and external-platform URL builders for OpenMapX",
   "private": true,

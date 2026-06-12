@@ -165,7 +165,7 @@ worth understanding:
   it ships itself (see below) and points only its *vector source* at your tiles,
   via `NEXT_PUBLIC_TILES_URL` (a TileJSON endpoint your tile server exposes, e.g.
   `…/tiles/data/openmapx.json`). Fonts come from `NEXT_PUBLIC_MAP_STYLE_URL/fonts`
-  when that's set. This is the route that gives you the Google-Maps-like look on
+  when that's set. This is the route that gives you a polished street-map look on
   top of your own tiles.
 
 When neither `mapStyleUrl` nor the openmapx provider is configured, the app falls

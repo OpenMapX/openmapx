@@ -32,7 +32,7 @@ export function routeColor(
 
 /**
  * Single-select "first/last mile" access mode for intermodal transit planning,
- * mirroring Google Maps' "Bike + Transit" / park-and-ride options. `walk` is the
+ * the "Bike + Transit" / park-and-ride options. `walk` is the
  * MOTIS default (no pre/post modes set). `bike`/`car` request access legs to and
  * from stops plus a `direct` (door-to-door) option so a pure bike/drive
  * alternative shows up next to the transit itineraries.
@@ -65,7 +65,7 @@ export const TRANSIT_ACCESS_MOTIS_MODES: Record<TransitAccessMode, TransitAccess
 
 /**
  * User-facing transit mode preferences shown in the "Prefer" column of the
- * Route options panel (mirrors Google Maps). A selection acts as an allow-list:
+ * Route options panel. A selection acts as an allow-list:
  * MOTIS treats `transitModes` as a hard filter, so checking Bus + Train returns
  * only bus and train journeys. With nothing checked we send the `TRANSIT`
  * meta-mode (all modes, no restriction).
@@ -116,7 +116,7 @@ export function preferredModesToMotis(keys: TransitPreferKey[]): string[] | unde
  * AERIAL_LIFT are kept in — most that surface in transit routing are ÖPNV
  * services (e.g. HVV ferries, Stuttgart Zahnradbahn).
  *
- * This is a vehicle-category approximation, matching Google Maps and DB's
+ * This is a vehicle-category approximation, matching DB's
  * "Nur Nahverkehr" filter. It does not honour the handful of IC
  * "Nahverkehrsfreigabe" route exceptions where DB accepts the ticket on
  * specific long-distance segments, so those connections are hidden.
@@ -149,7 +149,7 @@ export function applyDeutschlandticketFilter(modes: string[] | undefined): strin
 }
 
 /**
- * Single-select route optimisation, mirroring Google Maps' "Routes" column.
+ * Single-select route optimisation — the "Routes" column.
  * `wheelchair` maps to MOTIS `pedestrianProfile=WHEELCHAIR`; `fewerTransfers`
  * and `lessWalking` re-rank the Pareto front MOTIS returns (see
  * {@link rankItineraries}); `best` keeps the engine's own order.

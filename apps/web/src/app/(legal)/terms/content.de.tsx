@@ -21,7 +21,7 @@ export default function TermsContentDe({
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
   disclosures?: Disclosure[];
 }) {
-  const { name, street, postalCode, city, country, email, jurisdictionCity } = legalConfig;
+  const { name, street, postalCode, city, country, email } = legalConfig;
 
   return (
     <Box>
@@ -35,7 +35,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: Juni 2026
+        Zuletzt aktualisiert: 12. Juni 2026
       </Typography>
       <Section title="1. Geltungsbereich und Anbieter">
         <Typography>
@@ -521,9 +521,8 @@ export default function TermsContentDe({
           Diese Bedingungen unterliegen dem Recht der Bundesrepublik Deutschland unter Ausschluss
           des UN-Kaufrechts (CISG). Sind Sie Verbraucher innerhalb der EU, genie&szlig;en Sie
           zus&auml;tzlich den Schutz zwingender Bestimmungen des Rechts Ihres Wohnsitzlandes.
-          Ausschlie&szlig;licher Gerichtsstand f&uuml;r alle Streitigkeiten aus oder im Zusammenhang
-          mit diesen Bedingungen ist {jurisdictionCity}, Deutschland, sofern nicht zwingende
-          Verbraucherschutzgesetze etwas anderes vorsehen.
+          F&uuml;r den Gerichtsstand gelten die gesetzlichen Vorschriften; insbesondere k&ouml;nnen
+          Sie als Verbraucher an Ihrem Wohnsitz Klage erheben und nur dort verklagt werden.
         </Typography>
       </Section>
       <Section title="15. &Auml;nderungen dieser Bedingungen">

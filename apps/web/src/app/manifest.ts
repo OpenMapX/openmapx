@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "OpenMapX",
     short_name: "OpenMapX",
-    description: "Open-data maps — a Google Maps alternative",
+    description: "Self-hostable, open-data maps — search, directions, and transit",
     start_url: "/",
     scope: "/",
     display: "standalone",

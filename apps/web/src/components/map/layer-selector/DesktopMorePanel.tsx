@@ -58,7 +58,6 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
       sx={{
         px: 1.5,
         py: 1.2,
-        fontFamily: '"Google Sans", "Roboto", "Arial", sans-serif',
       }}
     >
       <Box

@@ -1,0 +1,30 @@
+name: Dependency Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write # for the summary comment
+
+jobs:
+  dependency-review:
+    name: review dependencies
+    runs-on: ubuntu-latest
+    # The dependency-review API requires a public repo (or GitHub Advanced
+    # Security). Skip while the repo is private so PRs don't fail on a 403.
+    if: ${{ !github.event.repository.private }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Dependency review
+        uses: actions/dependency-review-action@v5
+        with:
+          # Block PRs that introduce known-vulnerable dependencies.
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+          # License policy note: the product is AGPL-3.0-or-later (copyleft deps are
+          # fine there) while the packages/* substrate is Apache-2.0. dependency-review
+          # cannot scope a policy per package, so we surface licenses for review rather
+          # than hard-deny. Once you've confirmed it won't flag intended copyleft deps
+          # (e.g. the LGPL `opening_hours`), you can enforce a boundary by uncommenting:
+          # deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0

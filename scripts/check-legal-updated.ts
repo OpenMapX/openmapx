@@ -43,8 +43,13 @@ const PAGES: Page[] = [
   },
 ];
 
-/** Matches the date line in either locale, e.g. "Last updated: April 2026". */
-const DATE_LINE = /(?:Last updated|Zuletzt aktualisiert):\s*([A-Za-zäöüÄÖÜ]+)\s+(\d{4})/;
+/** EN format: "June 12, 2026" (month day, year). */
+const EN_DATE = /Last updated:\s*([A-Za-zäöüÄÖÜ]+)\s+(\d{1,2}),?\s+(\d{4})/;
+/** DE format: "12. Juni 2026" (day. month year). */
+const DE_DATE = /Zuletzt aktualisiert:\s*(\d{1,2})\.\s+([A-Za-zäöüÄÖÜ]+)\s+(\d{4})/;
+
+/** A line is a "date line" iff it parses as a valid date in either locale. */
+const isDateLine = (line: string) => EN_DATE.test(line) || DE_DATE.test(line);
 
 /** English + German month names → 1-12 (shared spellings like "April" listed once). */
 const MONTHS: Record<string, number> = {
@@ -72,19 +77,33 @@ const MONTHS: Record<string, number> = {
 
 const problems: string[] = [];
 
-function parseDate(text: string, label: string): { y: number; m: number; raw: string } | null {
-  const match = text.match(DATE_LINE);
-  if (!match) {
-    problems.push(`${label}: no "Last updated: <Month YYYY>" line found`);
+function parseDate(
+  text: string,
+  label: string,
+): { y: number; m: number; d: number; raw: string } | null {
+  const en = text.match(EN_DATE);
+  const de = text.match(DE_DATE);
+  let day: number;
+  let monthName: string;
+  let year: string;
+  if (en) {
+    monthName = en[1];
+    day = Number(en[2]);
+    year = en[3];
+  } else if (de) {
+    day = Number(de[1]);
+    monthName = de[2];
+    year = de[3];
+  } else {
+    problems.push(`${label}: no "Last updated: <day Month YYYY>" line found`);
     return null;
   }
-  const [, monthName, year] = match;
   const m = MONTHS[monthName.toLowerCase()];
   if (!m) {
     problems.push(`${label}: unrecognized month "${monthName}"`);
     return null;
   }
-  return { y: Number(year), m, raw: `${monthName} ${year}` };
+  return { y: Number(year), m, d: day, raw: `${day} ${monthName} ${year}` };
 }
 
 /** Staged file list, or null when git/staged info is unavailable. */
@@ -112,7 +131,7 @@ function dateLineChangedInStaged(file: string): boolean {
     });
     return diff
       .split("\n")
-      .some((line) => (line.startsWith("+") || line.startsWith("-")) && DATE_LINE.test(line));
+      .some((line) => (line.startsWith("+") || line.startsWith("-")) && isDateLine(line));
   } catch {
     return false;
   }
@@ -133,7 +152,11 @@ function main(): void {
     const deDate = parseDate(readFileSync(dePath, "utf8"), page.files.de);
 
     // Locale drift: EN and DE must agree on the date.
-    if (enDate && deDate && (enDate.y !== deDate.y || enDate.m !== deDate.m)) {
+    if (
+      enDate &&
+      deDate &&
+      (enDate.y !== deDate.y || enDate.m !== deDate.m || enDate.d !== deDate.d)
+    ) {
       problems.push(
         `${page.key}: EN and DE "Last updated" disagree (${enDate.raw} vs ${deDate.raw}) — keep both locales in sync.`,
       );

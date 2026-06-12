@@ -20,7 +20,6 @@ export const legalConfig = {
   country: process.env.LEGAL_COUNTRY ?? "",
   email: process.env.LEGAL_EMAIL ?? "",
   phone: process.env.LEGAL_PHONE ?? "",
-  jurisdictionCity: process.env.LEGAL_JURISDICTION_CITY ?? "",
   // Location-dependent privacy facts. The supervisory authority and hosting
   // provider vary by jurisdiction / hosting setup, so they live in env rather
   // than hardcoded in the privacy page; an empty value omits the corresponding

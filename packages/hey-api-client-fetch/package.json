@@ -1,5 +1,6 @@
 {
   "name": "@hey-api/client-fetch",
+  "license": "MIT",
   "version": "0.4.4",
   "private": true,
   "type": "module",

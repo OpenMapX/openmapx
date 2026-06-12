@@ -26,8 +26,8 @@ import { HotelRateOptions } from "./HotelRateOptions";
 import { HotelSearchControls } from "./HotelSearchControls";
 
 /**
- * "Check availability" / compare-prices hand-off for lodging places, mirroring
- * Google Maps' hotel Overview block. Tier 1 is a pure deep-link hand-off (see
+ * "Check availability" / compare-prices hand-off for lodging places. Tier 1
+ * is a pure deep-link hand-off (see
  * docs/plans/hotel-prices-and-booking.md): the button opens a dialog with a
  * date/occupancy picker and a region-filtered OTA compare list. Self-hides for
  * non-lodging places or when no providers resolve.

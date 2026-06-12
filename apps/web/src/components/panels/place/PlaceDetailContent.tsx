@@ -228,7 +228,7 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
 
   const showPrices = isLodging(place);
   // City (or smaller) admin areas get a compact weather + local-time readout in
-  // the header, mirroring Google Maps' city panel.
+  // the header.
   const showHeaderWeather = isCityOrSmaller(place);
   // Tab indices: Overview=0, Reviews=1, [Prices=2 if hotel], Info=last.
   const pricesIndex = showPrices ? 2 : -1;

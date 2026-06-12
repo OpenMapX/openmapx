@@ -16,7 +16,20 @@ export interface AiSearchDisclosure {
   cloudActive: boolean;
   cloudVendors: CloudAiVendor[];
 }
-export type Disclosure = AiSearchDisclosure;
+
+export type EmailProvider = "emaillabs" | "lettermint" | "smtp";
+export type TransferSafeguard = "eea" | "adequacy" | "dpf" | "scc" | "none";
+
+export interface EmailDisclosure {
+  type: "email";
+  provider: EmailProvider;
+  vendorName: string;
+  countryCode: string;
+  privacyUrl?: string;
+  transfer: TransferSafeguard;
+}
+
+export type Disclosure = AiSearchDisclosure | EmailDisclosure;
 
 interface IntegrationsApiResponse {
   integrations: LoadedIntegrationMeta[];

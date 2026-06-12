@@ -14,7 +14,7 @@ interface Props {
 
 /**
  * Compact weather + local-time readout shown in the header of a city place
- * panel (mirrors Google Maps: sun icon, "Clear · 14°C", local time). Renders
+ * panel (sun icon, "Clear · 14°C", local time). Renders
  * nothing until weather data is available, so it never reserves empty space.
  */
 export function PlaceHeaderWeather({ lat, lng }: Props) {

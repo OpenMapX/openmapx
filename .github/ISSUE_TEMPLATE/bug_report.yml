@@ -1,34 +1,78 @@
-name: Bug report
+name: 🐛 Bug report
 description: Report a defect in OpenMapX
+title: "[Bug]: "
 labels: [bug, needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report. Please fill out as much as you can — incomplete reports get bounced.
-        For security issues, do **not** file a public issue; see [SECURITY.md](../blob/main/SECURITY.md).
+        Thanks for taking the time to file a bug. Please fill out as much as you can —
+        incomplete reports are slower to act on and may be closed.
+
+        - 🔒 **Security issue?** Do **not** file it here — see [SECURITY.md](https://github.com/OpenMapX/openmapx/blob/main/SECURITY.md).
+        - ❓ **Question or idea?** Please use [Discussions](https://github.com/OpenMapX/openmapx/discussions) instead.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched [existing issues](https://github.com/OpenMapX/openmapx/issues?q=is%3Aissue) and this isn't a duplicate.
+          required: true
+        - label: I'm on the latest `main` or the most recent release (older versions aren't patched).
+          required: true
+        - label: This is a bug in OpenMapX itself, not in an upstream service (Valhalla, Nominatim, MOTIS, …) or a third-party API.
+          required: true
   - type: textarea
     id: what-happened
     attributes:
       label: What happened?
-      description: What did you do, what did you expect, what did you observe?
+      description: A clear, concise description of the bug — what you expected and what actually occurred.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
       placeholder: |
-        Steps:
-        1.
-        2.
-        3.
-        Expected:
-        Actual:
+        1. Go to '...'
+        2. Search for '...' / enable service '...' / run `openmapx ...`
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      options:
+        - Self-hosted deployment (Docker Compose)
+        - Local development (`pnpm dev`)
+        - Hosted app (openmapx.com)
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected area
+      description: Which part of OpenMapX? Pick the closest.
+      options:
+        - Web app (apps/web)
+        - API gateway (apps/api)
+        - Admin panel
+        - A specific integration (integrations/*)
+        - A specific service / container (services/*)
+        - CLI (`openmapx`)
+        - Data pipeline (data-manager / MOTIS / Transitous)
+        - Documentation
+        - Other / not sure
     validations:
       required: true
   - type: input
-    id: component
+    id: component-id
     attributes:
-      label: Affected component
-      description: Which app, service, integration, or CLI command?
-      placeholder: "apps/web, integrations/transit-hafas, packages/cli `openmapx services up`, ..."
-    validations:
-      required: true
+      label: Specific integration / service id
+      description: If the area above is an integration or service, name it.
+      placeholder: "integrations/transit-hafas, services/valhalla, …"
   - type: input
     id: version
     attributes:
@@ -36,22 +80,30 @@ body:
       description: Tag, release, or short SHA from `git rev-parse --short HEAD`.
     validations:
       required: true
+  - type: input
+    id: last-working
+    attributes:
+      label: Last working version
+      description: If this used to work, the last version/commit where it did (helps us bisect). Leave blank if unknown.
   - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: OS, Node version, pnpm version, browser (if web), Docker version (if self-hosted), which services / integrations enabled.
+      description: Required for self-hosted and local-dev reports. You can skip it for the hosted app.
       placeholder: |
         OS: macOS 15.0 / Ubuntu 24.04
         Node: 24.x
         pnpm: 11.x
-        Browser: Chrome 132
-        Services enabled: postgis, martin, valhalla, ...
-    validations:
-      required: true
+        Browser: Chrome 132 (if a web issue)
+        Docker: 27.x (if self-hosted)
+        Services enabled: postgis, martin, valhalla, motis, …
+        Integrations enabled: geocoding-photon, routing-valhalla, …
+      render: text
   - type: textarea
     id: logs
     attributes:
-      label: Logs / screenshots
-      description: Paste any relevant log output (redact secrets) or attach screenshots.
+      label: Relevant logs and/or screenshots
+      description: |
+        Paste relevant log output (`openmapx logs <service>`, browser console, API errors) or attach screenshots.
+        **Redact secrets, tokens, and `.env` values.**
       render: shell

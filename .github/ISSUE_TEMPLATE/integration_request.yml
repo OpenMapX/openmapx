@@ -1,0 +1,99 @@
+name: 🧩 New integration / provider
+description: Request (or propose to build) support for a new data provider, source, or backend service
+title: "[Integration]: "
+labels: [enhancement, integration, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        OpenMapX integrates data providers (geocoders, routers, transit feeds, weather, POI
+        sources, reviews, photos, …) and backend services. Use this form to request one, or to
+        propose building it yourself.
+
+        Helpful background: [Integration system](https://docs.openmapx.org/developer/integration-system/)
+        · [Writing an integration](https://docs.openmapx.org/developer/writing-an-integration/).
+  - type: input
+    id: provider-name
+    attributes:
+      label: Provider / source name
+      placeholder: "e.g. Stadia Maps, GTFS feed for SNCF, Overpass, OpenWeatherMap"
+    validations:
+      required: true
+  - type: input
+    id: provider-url
+    attributes:
+      label: Provider website
+      placeholder: "https://…"
+    validations:
+      required: true
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Domain
+      description: What kind of data or capability does it provide?
+      multiple: true
+      options:
+        - Geocoding / search
+        - Routing / directions
+        - Public transit (transit / live-transit)
+        - Mobility (bike / car / scooter sharing, parking, fuel)
+        - Weather / air quality
+        - POI / places
+        - Map overlay (raster/vector layer)
+        - Photos / street-level imagery
+        - Reviews
+        - Knowledge / enrichment
+        - A backend service / container (services/*)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: api-docs
+    attributes:
+      label: API / data documentation
+      description: Link to the API reference, GTFS feed, or data format docs.
+      placeholder: "https://…"
+  - type: dropdown
+    id: auth
+    attributes:
+      label: Access requirements
+      options:
+        - Fully open — no key required
+        - Free API key required
+        - Paid / metered API key required
+        - Self-hosted backend (runs as a service container)
+        - Unknown
+    validations:
+      required: true
+  - type: input
+    id: coverage
+    attributes:
+      label: Geographic coverage
+      description: Global, or specific countries / regions?
+      placeholder: "e.g. Global, Germany only, Nordic countries"
+  - type: textarea
+    id: licensing
+    attributes:
+      label: Data license & attribution terms
+      description: |
+        **Important.** OpenMapX is built on open data and tracks attribution per source. What license
+        or terms of use govern the data, and what attribution does it require? Link the terms if you can.
+      placeholder: "e.g. ODbL (requires '© OpenStreetMap contributors'), CC-BY-4.0, proprietary ToS at …"
+    validations:
+      required: true
+  - type: input
+    id: existing-service
+    attributes:
+      label: Maps to an existing service?
+      description: If this provider is served by a backend already in `services/` (e.g. Valhalla, Pelias, MOTIS), name it.
+      placeholder: "services/valhalla"
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Would you like to build it?
+      options:
+        - "Yes — I'd like to open a PR"
+        - "Maybe, with some guidance"
+        - "No — just requesting"
+    validations:
+      required: true

@@ -7,8 +7,8 @@ sidebar_position: 1
 
 # OpenMapX
 
-OpenMapX is a fully self-hostable mapping platform — an open alternative to
-Google Maps, assembled from open-source services and open data. It gives you a
+OpenMapX is a fully self-hostable mapping platform, assembled from
+open-source services and open data. It gives you a
 modern map application — place search, directions, public-transit routing, map
 layers, and street-level imagery — that runs entirely on infrastructure you
 control.

@@ -75,7 +75,7 @@ export function NavigationView() {
   const nextStep = route ? route.steps[upcomingIndex + 1] : undefined;
   const awaitingFix = status !== "arrived" && !progress;
   const distanceToManeuver = progress?.distanceToNextManeuver ?? step?.distance ?? 0;
-  // Only surface lane guidance as the maneuver approaches, mirroring Google.
+  // Only surface lane guidance as the maneuver approaches.
   const showLanes =
     !!step?.lanes && distanceToManeuver <= navOptionsForMode(mode).laneGuidanceMeters;
   const distanceRemaining = progress?.distanceRemaining ?? route?.distance ?? 0;

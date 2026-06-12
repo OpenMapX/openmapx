@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 /**
  * Hides its children while live navigation is active (status !== "idle").
  * Used to clear the map chrome (search bar, category chips, weather, account
- * avatar) during turn-by-turn navigation, mirroring Google Maps' nav layout.
+ * avatar) during turn-by-turn navigation.
  */
 export function HideDuringNavigation({ children }: { children: ReactNode }) {
   const navigating = useNavigationStore((s) => s.status !== "idle");

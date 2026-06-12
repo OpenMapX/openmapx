@@ -13,7 +13,7 @@ const SOURCE_ID = "place-boundary-source";
 const LAYER_FILL = "place-boundary-fill";
 const LAYER_LINE = "place-boundary-line";
 
-// Google-style muted red for the administrative boundary outline.
+// Muted red for the administrative boundary outline.
 const BOUNDARY_COLOR = "#A52714";
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -39,7 +39,7 @@ function bboxFromGeometry(geometry: AreaGeometry): BBox {
 /**
  * Draws the administrative-boundary outline of the selected place (city,
  * region, country) as a dashed red border with a faint fill, and fits the map
- * to the whole area once per selection — mirroring Google Maps' city highlight.
+ * to the whole area once per selection.
  *
  * The boundary geometry is supplied by `/api/places/:id` (see the server's
  * `enrichPlace`). We re-read it through `usePlaceDetails` with the same query

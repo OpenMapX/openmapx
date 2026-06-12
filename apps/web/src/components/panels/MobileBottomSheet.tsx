@@ -9,7 +9,7 @@ import { haptics } from "@/lib/haptics";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
 import { useVisualViewport } from "@/lib/useVisualViewport";
 
-// Snap heights as fractions of viewport — Google-Maps-style three-step sheet.
+// Snap heights as fractions of viewport — a three-step sheet.
 const SNAP_FRACTIONS = [0.3, 0.65, 0.95] as const;
 const DEFAULT_SNAP_INDEX = 1;
 

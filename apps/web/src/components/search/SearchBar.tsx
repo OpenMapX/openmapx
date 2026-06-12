@@ -664,7 +664,7 @@ export function SearchBar() {
       return;
     }
     // A precise location match (address/street/region) or a transit stop
-    // navigates straight to that place, like Google. A named-POI query (or no
+    // navigates straight to that place. A named-POI query (or no
     // geocode match) opens the viewport-scoped text results panel instead.
     const first = geocodeData?.[0];
     const isTransit = Boolean(first?.rawCategory && isTransitRawCategory(first.rawCategory));

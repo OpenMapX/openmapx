@@ -115,7 +115,28 @@ export interface AiSearchDisclosure {
   cloudActive: boolean;
   cloudVendors: CloudAiVendor[];
 }
-export type Disclosure = AiSearchDisclosure;
+
+export type EmailProvider = "emaillabs" | "lettermint" | "smtp";
+/** Art. 44+ transfer safeguard for a non-EEA recipient. */
+export type TransferSafeguard = "eea" | "adequacy" | "dpf" | "scc" | "none";
+
+/**
+ * The transactional-email provider currently active for this instance, so the
+ * Privacy Policy can name the correct processor. Vendor metadata only — never
+ * keys or SMTP credentials.
+ */
+export interface EmailDisclosure {
+  type: "email";
+  provider: EmailProvider;
+  /** Human-readable vendor name; empty for an unnamed self-hosted SMTP server. */
+  vendorName: string;
+  /** ISO 3166-1 alpha-2 country code for localization ("PL", "NL", "US"); empty if unknown. */
+  countryCode: string;
+  privacyUrl?: string;
+  transfer: TransferSafeguard;
+}
+
+export type Disclosure = AiSearchDisclosure | EmailDisclosure;
 
 export interface SecretsClient {
   /** Retrieve a decrypted secret from the vault, or null if not stored. */

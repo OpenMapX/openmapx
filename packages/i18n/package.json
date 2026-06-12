@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/i18n",
+  "license": "AGPL-3.0-or-later",
   "version": "1.0.0",
   "private": true,
   "main": "./index.ts",

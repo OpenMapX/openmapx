@@ -41,7 +41,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "OpenMapX",
-  description: "Open-data maps — a Google Maps alternative",
+  description: "Self-hostable, open-data maps — search, directions, and transit",
   applicationName: "OpenMapX",
   appleWebApp: {
     capable: true,

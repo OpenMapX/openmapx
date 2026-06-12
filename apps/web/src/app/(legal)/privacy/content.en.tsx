@@ -9,7 +9,9 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { Disclosure } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
+import { emailCountryName, emailTransferNote } from "../emailDisclosure";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
+import { privacyTitles } from "./sections";
 
 export default function PrivacyContent({
   capabilities: _capabilities = {},
@@ -33,6 +35,7 @@ export default function PrivacyContent({
     hostingLocations,
     serverLogRetentionDays,
   } = legalConfig;
+  const T = privacyTitles("en");
 
   return (
     <Box>
@@ -46,9 +49,9 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: June 2026
+        Last updated: June 12, 2026
       </Typography>
-      <Section title="1. Controller and Contact">
+      <Section title={T.controller}>
         <Typography>
           The controller responsible for data processing on this website within the meaning of the
           General Data Protection Regulation (GDPR) is:
@@ -62,8 +65,13 @@ export default function PrivacyContent({
           <br />
           Email: <Link href={`mailto:${email}`}>{email}</Link>
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          We are not legally required to appoint a Data Protection Officer and have therefore not
+          designated one. For any data-protection matters, you can reach us at the email address
+          above.
+        </Typography>
       </Section>
-      <Section title="2. Overview of Data Processing">
+      <Section title={T.overview}>
         <Typography>
           OpenMapX is an open-data mapping platform. We are committed to minimizing the personal
           data we process. We do <strong>not</strong> use any analytics, tracking, or advertising
@@ -98,7 +106,7 @@ export default function PrivacyContent({
           </li>
         </ul>
       </Section>
-      <Section title="3. Hosting and Server Logs">
+      <Section title={T.hosting}>
         <Typography>
           When you visit OpenMapX, your browser automatically transmits certain technical data to
           our server. This may include:
@@ -134,7 +142,7 @@ export default function PrivacyContent({
           </Typography>
         )}
       </Section>
-      <Section title="4. Geolocation Data">
+      <Section title={T.geolocation}>
         <Typography>
           OpenMapX may request your device&apos;s location only when you explicitly click the
           &quot;My Location&quot; button. Your browser will ask for permission before sharing this
@@ -159,7 +167,7 @@ export default function PrivacyContent({
           prompt).
         </Typography>
       </Section>
-      <Section title="5. User Accounts">
+      <Section title={T.accounts}>
         <Typography>
           You can use OpenMapX without creating an account. If you choose to register, we process:
         </Typography>
@@ -263,7 +271,7 @@ export default function PrivacyContent({
           synchronization) cannot be provided.
         </Typography>
       </Section>
-      <Section title="6. Reviews (Mangrove Open Reviews Standard)">
+      <Section title={T.reviews}>
         <Typography>
           OpenMapX integrates the{" "}
           <Link href="https://mangrove.reviews/" target="_blank" rel="noopener noreferrer">
@@ -338,10 +346,12 @@ export default function PrivacyContent({
           given when you accept the in-app Terms/Privacy checkboxes in the review dialog and press
           &ldquo;Publish&rdquo;). You may withdraw future consent at any time by not publishing
           further reviews; already-published reviews cannot be unpublished unilaterally because of
-          the decentralized design of the system.
+          the decentralized design of the system. Where your review is thereby transferred to
+          aggregators in countries outside the European Economic Area (EEA), that transfer is based
+          on your explicit consent pursuant to Art.&nbsp;49(1)(a) GDPR.
         </Typography>
       </Section>
-      <Section title="7. Third-Party Services and Data Transfers">
+      <Section title={T.thirdParty}>
         <Typography>
           To provide its mapping features, OpenMapX sends requests to various third-party APIs. When
           you use a feature, certain data (typically map viewport coordinates, search queries, or
@@ -425,9 +435,9 @@ export default function PrivacyContent({
         {(() => {
           const cloudVendors = [
             ...new Set(
-              disclosures
-                .filter((d) => d.type === "ai-search" && d.cloudActive)
-                .flatMap((d) => d.cloudVendors),
+              disclosures.flatMap((d) =>
+                d.type === "ai-search" && d.cloudActive ? d.cloudVendors : [],
+              ),
             ),
           ];
           if (cloudVendors.length === 0) return null;
@@ -468,6 +478,12 @@ export default function PrivacyContent({
                     : []),
                 ]}
               />
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                These providers are based in the USA. The transfer is made on the basis of the EU
+                Standard Contractual Clauses (Art.&nbsp;46(2)(c) GDPR); where a provider is
+                certified under the EU-U.S. Data Privacy Framework, the transfer additionally relies
+                on the European Commission&apos;s adequacy decision.
+              </Typography>
             </>
           );
         })()}
@@ -535,7 +551,7 @@ export default function PrivacyContent({
           interest in providing the mapping service you are using).
         </Typography>
       </Section>
-      <Section title="8. Cookies and Local Storage">
+      <Section title={T.cookies}>
         <Typography>
           OpenMapX uses first-party storage mechanisms only. Storage that is necessary for the
           service is used without a consent banner. The optional recent map-data cache is disabled
@@ -604,7 +620,7 @@ export default function PrivacyContent({
           first-party setting rather than a tracking banner.
         </Typography>
       </Section>
-      <Section title="9. Server-Side Caching and Databases">
+      <Section title={T.caching}>
         <Typography>
           To improve performance and reduce load on third-party APIs, our server caches API
           responses in Redis (an in-memory data store). Cached data typically includes map search
@@ -619,7 +635,7 @@ export default function PrivacyContent({
           database schemas. None of this data constitutes personal data of end users.
         </Typography>
       </Section>
-      <Section title="10. Email Communication">
+      <Section title={T.email}>
         <Typography>If you register an account, we may send transactional emails for:</Typography>
         <ul>
           <li>
@@ -632,14 +648,38 @@ export default function PrivacyContent({
             <Typography>Two-factor authentication codes</Typography>
           </li>
         </ul>
-        <Typography sx={{ mt: 1 }}>
-          These emails are sent via an SMTP server and contain only information necessary for the
-          respective action. We do not send newsletters or marketing emails. The legal basis is
-          Art.&nbsp;6(1)(b) GDPR (performance of a contract / provision of the service you
-          requested).
-        </Typography>
+        {(() => {
+          const email = disclosures.find((d) => d.type === "email");
+          const country = email ? emailCountryName(email.countryCode, "en") : "";
+          const transferNote = email ? emailTransferNote(email.transfer, "en") : "";
+          return (
+            <Typography sx={{ mt: 1 }}>
+              {email?.vendorName ? (
+                <>
+                  These emails are sent via {email.vendorName}
+                  {country ? ` (${country})` : ""} &mdash; a service provider acting on our behalf
+                  and strictly on our instructions (a processor under Art.&nbsp;28 GDPR)
+                  {email.privacyUrl ? (
+                    <>
+                      {" "}
+                      <Link href={email.privacyUrl} target="_blank" rel="noopener noreferrer">
+                        (privacy notice)
+                      </Link>
+                    </>
+                  ) : null}
+                  .{transferNote ? ` ${transferNote}` : ""}{" "}
+                </>
+              ) : (
+                <>These emails are sent via an SMTP server we operate or commission. </>
+              )}
+              They contain only information necessary for the respective action. We do not send
+              newsletters or marketing emails. The legal basis is Art.&nbsp;6(1)(b) GDPR
+              (performance of a contract / provision of the service you requested).
+            </Typography>
+          );
+        })()}
       </Section>
-      <Section title="11. Your Rights Under the GDPR">
+      <Section title={T.rights}>
         <Typography>You have the following rights regarding your personal data:</Typography>
         <ul>
           <li>
@@ -705,8 +745,12 @@ export default function PrivacyContent({
             </>
           )}
         </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>No automated decision-making.</strong> We do not use your personal data for
+          automated decision-making, including profiling, within the meaning of Art.&nbsp;22 GDPR.
+        </Typography>
       </Section>
-      <Section title="12. Data Retention">
+      <Section title={T.retention}>
         <Typography>We retain personal data only as long as necessary:</Typography>
         <ul>
           <li>
@@ -753,7 +797,7 @@ export default function PrivacyContent({
           </li>
         </ul>
       </Section>
-      <Section title="13. Security">
+      <Section title={T.security}>
         <Typography>
           We implement appropriate technical and organizational measures to protect your data,
           including encrypted connections (TLS/HTTPS), hashed passwords (using modern key-derivation
@@ -770,14 +814,14 @@ export default function PrivacyContent({
           choosing one of the encrypted modes and never sharing your passphrase.
         </Typography>
       </Section>
-      <Section title="14. Children's Privacy">
+      <Section title={T.children}>
         <Typography>
           OpenMapX is not directed at children under the age of 16. We do not knowingly collect
           personal data from children. If you believe that a child has provided us with personal
           data, please contact us so we can delete it.
         </Typography>
       </Section>
-      <Section title="15. Changes to This Policy">
+      <Section title={T.changes}>
         <Typography>
           We may update this privacy policy from time to time. The current version is always
           available at <Link href="/privacy">/privacy</Link>. Material changes will be indicated by

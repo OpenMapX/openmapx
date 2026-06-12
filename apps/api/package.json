@@ -20,7 +20,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@better-auth/expo": "^1.6.15",
     "@better-auth/i18n": "^1.6.15",

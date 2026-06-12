@@ -1,0 +1,46 @@
+name: CLA Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+# pull_request_target runs in the context of the base repo, so the signature
+# file can be written back. Keep the token scopes minimal.
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    name: check / record signature
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: CLA Assistant
+        if: >
+          (github.event.comment.body == 'recheck' ||
+           github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') ||
+          github.event_name == 'pull_request_target'
+        uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A classic PAT (repo scope) or fine-grained token with Contents:write
+          # on the signatures repo. Store it as the CLA_SIGNATURES_TOKEN secret.
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_SIGNATURES_TOKEN }}
+        with:
+          path-to-document: https://github.com/OpenMapX/openmapx/blob/main/CLA.md
+          # Where accepted signatures are recorded. Defaults to this repo; set
+          # remote-organization-name / remote-repository-name to use a private
+          # repo instead.
+          path-to-signatures: signatures/cla/v1.json
+          branch: cla-signatures
+          create-file-commit-message: "chore(cla): create signature file"
+          signed-commit-message: "chore(cla): $contributorName signed the CLA in #$pullRequestNo"
+          custom-pr-sign-comment: I have read the CLA Document and I hereby sign the CLA
+          custom-allsigned-prcomment: All contributors have signed the CLA. ✅
+          # Bots and the maintainer never need to sign.
+          allowlist: Medformatik,dependabot[bot],renovate[bot],*[bot]

@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/integration-framework",
+  "license": "Apache-2.0",
   "version": "1.0.0",
   "description": "Manifest validation, registry, installer, and runtime context for OpenMapX integrations",
   "private": true,

@@ -1,0 +1,16 @@
+# Code owners for OpenMapX.
+# These owners are automatically requested for review on matching pull requests.
+# See https://docs.github.com/repositories/managing-your-repositories-permissions/about-code-owners
+#
+# More specific rules below override earlier ones for a given path.
+
+# Default owner for everything in the repo.
+*                       @Medformatik
+
+# Governance / legal / community-health files warrant extra care.
+/LICENSE                @Medformatik
+/LICENSING.md           @Medformatik
+/CLA.md                 @Medformatik
+/CODE_OF_CONDUCT.md     @Medformatik
+/SECURITY.md            @Medformatik
+/.github/               @Medformatik

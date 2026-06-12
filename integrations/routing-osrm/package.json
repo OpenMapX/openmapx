@@ -1,5 +1,6 @@
 {
   "name": "@openmapx/integration-routing-osrm",
+  "license": "AGPL-3.0-or-later",
   "version": "1.0.0",
   "private": true,
   "type": "module",

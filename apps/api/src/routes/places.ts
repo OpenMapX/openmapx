@@ -134,7 +134,7 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
 
   // The three downstream calls are mutually independent: run them in parallel.
   // fetchOsmBoundary is gated on boundary=administrative so we never pull
-  // polygons for POIs — mirroring Google Maps' city highlight.
+  // polygons for POIs — only admin areas get a boundary highlight.
   // If a future step consumes another step's output, move it outside this call.
   const [adminBoundary, heroPhotos, reviewStats] = await Promise.all([
     enriched.osmTags?.boundary === "administrative" && enriched.ids?.osm

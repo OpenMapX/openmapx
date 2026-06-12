@@ -1,4 +1,5 @@
 import { contactDomain } from "@openmapx/core";
+import type { EmailDisclosure, TransferSafeguard } from "@openmapx/integration-framework";
 import { createTransport } from "nodemailer";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
@@ -156,6 +157,73 @@ export async function sendMail(opts: MailOptions): Promise<void> {
       throw new Error(`Unknown email provider: ${String(_exhaustive)}`);
     }
   }
+}
+
+const TRANSFER_SAFEGUARDS = ["eea", "adequacy", "dpf", "scc", "none"] as const;
+
+/**
+ * Static processor metadata for the named (non-SMTP) email providers, kept here
+ * next to the provider definitions so a new provider can't be added without its
+ * Art. 28 disclosure — the Record is exhaustive over Provider.
+ */
+const PROVIDER_DISCLOSURE: Record<
+  Exclude<Provider, "smtp">,
+  Omit<EmailDisclosure, "type" | "provider">
+> = {
+  emaillabs: {
+    vendorName: "EmailLabs (Vercom S.A.)",
+    countryCode: "PL",
+    privacyUrl: "https://emaillabs.io/en/privacy-policy/",
+    transfer: "eea",
+  },
+  lettermint: {
+    vendorName: "Lettermint",
+    countryCode: "NL",
+    privacyUrl: "https://lettermint.co/privacy-policy",
+    transfer: "eea",
+  },
+};
+
+function envTransfer(): TransferSafeguard {
+  const raw = process.env.LEGAL_EMAIL_PROVIDER_TRANSFER?.trim().toLowerCase() ?? "";
+  return (TRANSFER_SAFEGUARDS as readonly string[]).includes(raw)
+    ? (raw as TransferSafeguard)
+    : "none";
+}
+
+/** Build the legal email-processor disclosure for the active provider. */
+export function buildEmailDisclosure(provider: Provider): EmailDisclosure {
+  if (provider !== "smtp") {
+    return { type: "email", provider, ...PROVIDER_DISCLOSURE[provider] };
+  }
+  // Self-hosted SMTP: operator-described via env (LEGAL_EMAIL_PROVIDER_*).
+  return {
+    type: "email",
+    provider: "smtp",
+    vendorName: process.env.LEGAL_EMAIL_PROVIDER_NAME?.trim() ?? "",
+    countryCode: (process.env.LEGAL_EMAIL_PROVIDER_COUNTRY?.trim() ?? "").toUpperCase(),
+    privacyUrl: process.env.LEGAL_EMAIL_PROVIDER_PRIVACY_URL?.trim() || undefined,
+    transfer: envTransfer(),
+  };
+}
+
+let disclosureCache: { value: EmailDisclosure; at: number } | null = null;
+const DISCLOSURE_TTL_MS = 60_000;
+
+/**
+ * The active email provider as a legal disclosure for the Privacy Policy, cached
+ * briefly so the shared /api/integrations endpoint doesn't read system_settings
+ * on every request. Admin changes apply within the TTL.
+ */
+export async function getEmailDisclosure(): Promise<EmailDisclosure> {
+  const now = Date.now();
+  if (disclosureCache && now - disclosureCache.at < DISCLOSURE_TTL_MS) {
+    return disclosureCache.value;
+  }
+  const { provider } = await loadEmailConfig();
+  const value = buildEmailDisclosure(provider);
+  disclosureCache = { value, at: now };
+  return value;
 }
 
 export type { EmailConfig };

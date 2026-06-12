@@ -18,8 +18,8 @@ import { HotelRateOptions } from "./HotelRateOptions";
 import { HotelSearchControls } from "./HotelSearchControls";
 
 /**
- * The "Prices" tab for lodging places — Google Maps' "Compare prices /
- * All options" surface. Date/occupancy state is shared with the Overview block
+ * The "Prices" tab for lodging places — a "Compare prices / All options"
+ * surface. Date/occupancy state is shared with the Overview block
  * via useHotelSearchStore. Tier 1 lists OTAs with hand-off links (no prices).
  * Tier 2 (when liveEnabled) adds a live "from €X / night" badge and editable
  * currency + guest-nationality controls.

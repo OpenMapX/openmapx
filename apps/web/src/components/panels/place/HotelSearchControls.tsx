@@ -86,8 +86,8 @@ function Stepper({
 
 /**
  * Check-in/check-out + occupancy controls, bound to the shared
- * useHotelSearchStore so the Overview block and Prices tab stay in sync
- * (mirrors Google). Date inputs mirror FlightPanel's native date controls.
+ * useHotelSearchStore so the Overview block and Prices tab stay in sync.
+ * Date inputs mirror FlightPanel's native date controls.
  */
 export function HotelSearchControls() {
   const t = useTranslations("place");

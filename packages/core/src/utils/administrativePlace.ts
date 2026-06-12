@@ -2,8 +2,8 @@ import type { Place } from "../types/place";
 
 /**
  * OSM `place=*` values that denote a populated settlement of size "city or
- * smaller" — i.e. the level at which Google Maps shows weather, hotels and
- * neighbourhoods in the place panel. Deliberately excludes `country`, `state`,
+ * smaller" — i.e. the level at which the place panel shows weather, hotels and
+ * neighbourhoods. Deliberately excludes `country`, `state`,
  * `region`, `province`, `county`, etc.
  */
 const CITY_OR_SMALLER_PLACE = new Set([

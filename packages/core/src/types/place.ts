@@ -136,7 +136,7 @@ export interface Place extends Identified {
   /**
    * Administrative-boundary outline (Polygon/MultiPolygon, lng/lat coordinates)
    * for places that are admin areas (cities, regions, countries). Drawn on the
-   * map as a dashed border, mirroring Google Maps' city highlight.
+   * map as a dashed border to highlight the area.
    */
   boundary?: AreaGeometry;
   /**
