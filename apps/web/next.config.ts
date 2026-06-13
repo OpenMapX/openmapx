@@ -4,10 +4,27 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
-// Conservative security headers. CSP is intentionally permissive on connect/img
-// because the app loads tiles and overlays from many self-hosted and external
-// providers configured at runtime; tightening it further requires reading the
-// active integration list. The headers below are framework-agnostic safe defaults.
+// Enforced now: object/base/frame/form hardening. Resource directives stay
+// permissive because tiles and overlays load from many runtime-configured
+// origins (self-hosted + external). A nonce-based strict `script-src` that
+// would also block `javascript:`-URI XSS is a deferred follow-up — it needs
+// per-request nonces (in proxy.ts) and browser verification of every map layer.
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "style-src 'self' 'unsafe-inline'",
+  "worker-src 'self' blob:",
+  "connect-src 'self' https: http: ws: wss: data: blob:",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+].join("; ");
+
+// Security headers applied to every route. CSP enforces object/base/frame/form
+// hardening now; resource directives stay permissive (see comment above).
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
@@ -17,6 +34,7 @@ const securityHeaders = [
     value: "camera=(), microphone=(), geolocation=(self), interest-cohort=()",
   },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Content-Security-Policy", value: contentSecurityPolicy },
 ];
 
 const nextConfig: NextConfig = {
