@@ -13,6 +13,7 @@ import type {
   TidesResponse,
   WaterLevelObservation,
 } from "@openmapx/core";
+import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { SectionLabel } from "../shared/SectionLabel";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
@@ -124,7 +125,7 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
         >
           {t("attribution")}: ©{" "}
           <Link
-            href={attributionSource.url}
+            href={safeHref(attributionSource.url)}
             target="_blank"
             rel="noopener noreferrer"
             underline="hover"
@@ -137,7 +138,7 @@ export function PlaceTidesContent({ data }: { data: TidesResponse }) {
               {" ("}
               {attributionSource.licenseUrl ? (
                 <Link
-                  href={attributionSource.licenseUrl}
+                  href={safeHref(attributionSource.licenseUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
                   underline="hover"

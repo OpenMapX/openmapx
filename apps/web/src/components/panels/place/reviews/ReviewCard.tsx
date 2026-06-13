@@ -16,7 +16,7 @@ import ListItemText from "@mui/material/ListItemText";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
-import { proxyImageUrl, type Review } from "@openmapx/core";
+import { proxyImageUrl, type Review, safeHref } from "@openmapx/core";
 import { fingerprintPem } from "@openmapx/mangrove-client";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
@@ -139,7 +139,7 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
               <Box
                 key={img.src}
                 component="a"
-                href={img.src}
+                href={safeHref(img.src)}
                 target="_blank"
                 rel="noopener noreferrer"
                 sx={{
@@ -205,7 +205,7 @@ export function ReviewCard({ review, currentUserPem, onEdit, onDelete, onReport 
         {hasAction && <Divider />}
         <MenuItem
           component="a"
-          href={licenseUrl}
+          href={safeHref(licenseUrl)}
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => setMenuAnchor(null)}

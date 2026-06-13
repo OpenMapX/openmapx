@@ -8,7 +8,13 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
-import { buildSourceAttribution, type Place, type Review, useSession } from "@openmapx/core";
+import {
+  buildSourceAttribution,
+  type Place,
+  type Review,
+  safeHref,
+  useSession,
+} from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { usePlaceReviews, useReviewAggregate, useUserKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
@@ -171,7 +177,7 @@ export function PlaceReviewsTab({ place }: Props) {
             <Box
               key={link.platform}
               component="a"
-              href={link.url}
+              href={safeHref(link.url)}
               target="_blank"
               rel="noopener noreferrer"
               sx={{

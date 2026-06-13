@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "@mui/material/Link";
-import type { PlacePhoto } from "@openmapx/core";
+import { type PlacePhoto, safeHref } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 
 interface Props {
@@ -29,7 +29,12 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
       {photo.author && (
         <>
           {photo.authorUrl ? (
-            <Link href={photo.authorUrl} target="_blank" rel="noopener noreferrer" sx={linkSx}>
+            <Link
+              href={safeHref(photo.authorUrl)}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={linkSx}
+            >
               {photo.author}
             </Link>
           ) : (
@@ -39,7 +44,7 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
         </>
       )}
       {sourceUrl ? (
-        <Link href={sourceUrl} target="_blank" rel="noopener noreferrer" sx={linkSx}>
+        <Link href={safeHref(sourceUrl)} target="_blank" rel="noopener noreferrer" sx={linkSx}>
           {sourceName}
         </Link>
       ) : (
@@ -49,7 +54,12 @@ export function PhotoAttribution({ photo, color = "#fff" }: Props) {
         <>
           {" / "}
           {photo.licenseUrl ? (
-            <Link href={photo.licenseUrl} target="_blank" rel="noopener noreferrer" sx={linkSx}>
+            <Link
+              href={safeHref(photo.licenseUrl)}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={linkSx}
+            >
               {photo.license}
             </Link>
           ) : (

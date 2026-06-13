@@ -25,6 +25,7 @@ import {
   formatDuration,
   geocodeStopAsPlace,
   PANEL,
+  safeHref,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
@@ -393,7 +394,7 @@ export function TransitDetailsView({
                           </Typography>
                           {leg.rental.bookingUrl && (
                             <Link
-                              href={leg.rental.bookingUrl}
+                              href={safeHref(leg.rental.bookingUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               variant="caption"
@@ -489,7 +490,7 @@ export function TransitDetailsView({
                           </Typography>
                           {leg.flex.bookingUrl && (
                             <Link
-                              href={leg.flex.bookingUrl}
+                              href={safeHref(leg.flex.bookingUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               variant="caption"

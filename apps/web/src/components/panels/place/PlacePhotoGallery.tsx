@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import {
   type PlacePhoto,
   proxyImageUrl,
+  safeHref,
   useMapClickStore,
   usePlacePhotos,
   usePlaceStore,
@@ -259,7 +260,7 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
                   </Typography>
                   {selectedPhoto.pageUrl && (
                     <Link
-                      href={selectedPhoto.pageUrl}
+                      href={safeHref(selectedPhoto.pageUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       sx={{ color: "#fff", display: "flex" }}

@@ -448,7 +448,7 @@ export {
 } from "./utils/fetchWithRedirects";
 export { buildFlightOpenUrl } from "./utils/flightLink";
 export { isFoodPlace, resolveOsmMenuUrl } from "./utils/foodPlace";
-export { escapeHtml, formatTime, relativeTime, sanitizeUrl } from "./utils/format";
+export { escapeHtml, formatTime, relativeTime, safeHref, sanitizeUrl } from "./utils/format";
 export {
   formatArea,
   formatDistance,

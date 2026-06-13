@@ -21,6 +21,7 @@ import {
   type DataSourceDetail,
   type DataSourceDetailSection,
   pickIntegrationForSources,
+  safeHref,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Translatable } from "@openmapx/integration-framework/strings";
@@ -273,7 +274,12 @@ function DetailAttribution({ attribution }: { attribution: DataSourceAttribution
     <Box component="span">
       ©{" "}
       {providerUrl ? (
-        <Link href={providerUrl} target="_blank" rel="noopener noreferrer" color="inherit">
+        <Link
+          href={safeHref(providerUrl)}
+          target="_blank"
+          rel="noopener noreferrer"
+          color="inherit"
+        >
           {attribution.text}
         </Link>
       ) : (
@@ -284,7 +290,12 @@ function DetailAttribution({ attribution }: { attribution: DataSourceAttribution
           <>
             {" "}
             (
-            <Link href={licenseUrl} target="_blank" rel="noopener noreferrer" color="inherit">
+            <Link
+              href={safeHref(licenseUrl)}
+              target="_blank"
+              rel="noopener noreferrer"
+              color="inherit"
+            >
               {attribution.license}
             </Link>
             )
@@ -346,7 +357,7 @@ export function DataSourceSections({ detail, domain }: Props) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {detail.operator.url ? (
               <Link
-                href={detail.operator.url}
+                href={safeHref(detail.operator.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 underline="hover"

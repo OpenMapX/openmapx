@@ -12,6 +12,7 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
+import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
@@ -244,7 +245,7 @@ export function PlaceHarborFacilities({ harbourId, lat, lng, name, category }: P
           >
             ©{" "}
             <Link
-              href={attributionSource.url}
+              href={safeHref(attributionSource.url)}
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"

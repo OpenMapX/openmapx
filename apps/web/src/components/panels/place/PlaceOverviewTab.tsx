@@ -36,6 +36,7 @@ import {
   computePlusCode,
   isCityOrSmaller,
   plusCodeUrl,
+  safeHref,
   shortenPlusCode,
   useDeleteLabel,
   useIsSaved,
@@ -572,7 +573,7 @@ export function PlaceOverviewTab({
                 copyLabel={t("copyWebsite")}
               >
                 <Link
-                  href={place.website}
+                  href={safeHref(place.website)}
                   target="_blank"
                   rel="noopener noreferrer"
                   variant="body2"
@@ -595,7 +596,7 @@ export function PlaceOverviewTab({
           {place.wikipediaUrl && (
             <DetailRow icon={<ArticleIcon sx={{ fontSize: 22 }} />}>
               <Link
-                href={place.wikipediaUrl}
+                href={safeHref(place.wikipediaUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
                 variant="body2"

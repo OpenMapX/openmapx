@@ -48,6 +48,7 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import {
@@ -467,7 +468,7 @@ function Linkified({ text, color = "inherit" }: { text: string; color?: string }
         return isHttpUrl(part) ? (
           <Link
             key={key}
-            href={part}
+            href={safeHref(part)}
             target="_blank"
             rel="noopener noreferrer"
             underline="hover"
@@ -1099,7 +1100,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
               <DetailItem icon={<BusinessIcon sx={{ fontSize: 20 }} />}>
                 {url ? (
                   <Link
-                    href={url}
+                    href={safeHref(url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     variant="body2"
@@ -1133,7 +1134,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
               <DetailItem icon={<StorefrontIcon sx={{ fontSize: 20 }} />}>
                 {url ? (
                   <Link
-                    href={url}
+                    href={safeHref(url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     variant="body2"
@@ -1329,7 +1330,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
               <Tooltip key={label} title={label}>
                 <IconButton
                   component="a"
-                  href={url}
+                  href={safeHref(url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   size="small"

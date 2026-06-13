@@ -16,7 +16,7 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
-import { type PricingPlanEntry, proxyImageUrl } from "@openmapx/core";
+import { type PricingPlanEntry, proxyImageUrl, safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
@@ -171,7 +171,7 @@ function KeyValueRow({ row }: { row: (string | number)[] }) {
       </Typography>
       {isLink ? (
         <Link
-          href={valueStr}
+          href={safeHref(valueStr)}
           target="_blank"
           rel="noopener noreferrer"
           underline="hover"
@@ -314,7 +314,7 @@ function ImageSection({ section }: { section: StructuredSection }) {
   );
   return section.linkUrl ? (
     <Link
-      href={section.linkUrl}
+      href={safeHref(section.linkUrl)}
       target="_blank"
       rel="noopener noreferrer"
       sx={{ display: "block", mb: 1 }}

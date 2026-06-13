@@ -16,6 +16,7 @@ import type {
   AirportRunwayInfo,
   AirportType,
 } from "@openmapx/core";
+import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { TEAL } from "@/lib/theme";
 import { SectionLabel } from "../shared/SectionLabel";
@@ -212,7 +213,7 @@ export function PlaceAirportInfo({ airport }: Props) {
           >
             {t("attribution")}: ©{" "}
             <Link
-              href={attributionSource.url}
+              href={safeHref(attributionSource.url)}
               target="_blank"
               rel="noopener noreferrer"
               underline="hover"
@@ -225,7 +226,7 @@ export function PlaceAirportInfo({ airport }: Props) {
                 {" ("}
                 {attributionSource.licenseUrl ? (
                   <Link
-                    href={attributionSource.licenseUrl}
+                    href={safeHref(attributionSource.licenseUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     underline="hover"
@@ -334,12 +335,12 @@ function LinkRow({
   children,
 }: {
   icon: React.ReactNode;
-  href: string;
+  href: string | undefined;
   children: React.ReactNode;
 }) {
   return (
     <Link
-      href={href}
+      href={safeHref(href)}
       target="_blank"
       rel="noopener noreferrer"
       underline="hover"
