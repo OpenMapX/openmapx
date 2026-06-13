@@ -23,7 +23,6 @@ const ATTRIBUTION_WIRES = [
   "useAttributionFromHooks",
   "AttributionStrip",
   "SectionAttribution",
-  "PlaceDataAttribution",
   // Shared raster-tile wrapper; it registers its `attributions` prop internally
   // via useMapAttributions, so referencing it counts as wiring.
   "RasterBaseLayer",

@@ -59,7 +59,6 @@ import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
 import { PlaceCitySections } from "./PlaceCitySections";
-import { PlaceDataAttribution } from "./PlaceDataAttribution";
 import { PlaceFoodActions } from "./PlaceFoodActions";
 import { PlaceHarborFacilities } from "./PlaceHarborFacilities";
 import { PlaceHotelActions } from "./PlaceHotelActions";
@@ -839,8 +838,6 @@ export function PlaceOverviewTab({
           name={place.name}
         />
       )}
-      {/* Credit the source of the core place data (ODbL requires visible OSM attribution). */}
-      <PlaceDataAttribution place={place} />
     </>
   );
 }
