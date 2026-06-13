@@ -4,6 +4,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TransitDetailsView } from "./TransitDetailsView";
 
+vi.mock("@/lib/useDateTimeFormat", () => ({
+  useDateTimeFormat: () => ({
+    time: (v: string | number | Date) => String(v),
+    date: (v: string | number | Date) => String(v),
+    dateTime: (v: string | number | Date) => String(v),
+  }),
+}));
+
 vi.mock("next-intl", () => ({
   useLocale: () => "en",
   useTranslations: (namespace: string) => (key: string, values?: Record<string, unknown>) => {

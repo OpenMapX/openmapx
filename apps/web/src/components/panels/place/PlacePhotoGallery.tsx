@@ -22,11 +22,12 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { PhotoAttribution } from "./PhotoAttribution";
 
 interface Props {
@@ -41,7 +42,7 @@ interface Props {
 export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng }: Props) {
   const tc = useTranslations("common");
   const tp = useTranslations("photoGallery");
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const { flyTo } = useMap();
   const setClickedLngLat = useMapClickStore((s) => s.setClickedLngLat);
@@ -250,7 +251,7 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
                   </Typography>
                   {selectedPhoto.capturedAt && (
                     <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)" }}>
-                      {formatDate(selectedPhoto.capturedAt, locale)}
+                      {fmt.date(selectedPhoto.capturedAt)}
                     </Typography>
                   )}
                 </Box>
@@ -590,16 +591,4 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
       }}
     />
   );
-}
-
-function formatDate(iso: string, locale?: string): string {
-  try {
-    return new Date(iso).toLocaleDateString(locale ?? "en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
 }

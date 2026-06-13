@@ -24,9 +24,9 @@ import { useLocale, useTranslations } from "next-intl";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
-import { formatTime } from "@/lib/formatTime";
 import { TEAL, TEAL_HEX } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { formatCo2Emission } from "../../../lib/formatCo2";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {
@@ -123,7 +123,7 @@ function LiveStopTime({
   tripId?: string;
   stopId?: string;
 }) {
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const { data: journey } = useVehicleJourney(tripId ?? null);
   const stop = stopId ? journey?.stops.find((s) => s.stopId === stopId) : undefined;
   const delayMin = stop ? Math.round((stop.delaySeconds ?? 0) / 60) : 0;
@@ -131,13 +131,12 @@ function LiveStopTime({
 
   const displayTime =
     hasDelay && stop
-      ? formatTime(
+      ? fmt.time(
           stop.expectedDeparture ??
             stop.expectedArrival ??
             stop.scheduledDeparture ??
             stop.scheduledArrival ??
             scheduledTime,
-          locale,
         )
       : scheduledTime;
 
@@ -241,17 +240,12 @@ export function TransitItineraryCard({
   const tt = useTranslations("transit");
   const tNav = useTranslations("navigation");
   const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const startTransitNavigation = useNavigationStore((s) => s.startTransitNavigation);
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
-  const startTime = new Date(itinerary.startTime).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const endTime = new Date(itinerary.endTime).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const startTime = fmt.time(itinerary.startTime);
+  const endTime = fmt.time(itinerary.endTime);
   const metaBits: string[] = [];
   if (itinerary.transfers > 0) metaBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {

@@ -3,9 +3,9 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { timeZoneAt, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
-import { useLocale } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { WeatherIcon } from "@/components/weather/WeatherIcon";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface Props {
   lat: number;
@@ -18,7 +18,7 @@ interface Props {
  * nothing until weather data is available, so it never reserves empty space.
  */
 export function PlaceHeaderWeather({ lat, lng }: Props) {
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const { data } = useCurrentWeather(lat, lng);
   const [now, setNow] = useState(() => new Date());
 
@@ -36,11 +36,7 @@ export function PlaceHeaderWeather({ lat, lng }: Props) {
 
   const { current } = data;
   const info = weatherCodeToInfo(current.weatherCode, current.isDay);
-  const localTime = now.toLocaleTimeString(locale, {
-    hour: "numeric",
-    minute: "2-digit",
-    ...(timeZone ? { timeZone } : {}),
-  });
+  const localTime = fmt.time(now, { timeZone: timeZone ?? undefined });
 
   return (
     <Box

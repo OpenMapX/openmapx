@@ -15,12 +15,13 @@ import {
   useVehicleJourney,
 } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { haptics } from "@/lib/haptics";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { TEAL_HEX } from "@/lib/theme";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { ArrivalCard } from "./ArrivalCard";
 
@@ -129,7 +130,7 @@ export function TransitNavigationView() {
   const stopNavigation = useNavigationStore((s) => s.stopNavigation);
 
   const t = useTranslations("navigation");
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const active = status !== "idle" && status !== "arrived" && kind === "transit";
 
   // Hooks must run before any early return.
@@ -150,10 +151,7 @@ export function TransitNavigationView() {
   const currentLegIndex = Math.min(transitProgress?.currentLegIndex ?? 0, legs.length - 1);
   const currentLeg = legs[currentLegIndex] as TripLeg | undefined;
 
-  const arrivalTime = new Date(itinerary.endTime).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const arrivalTime = fmt.time(itinerary.endTime);
 
   return (
     <Box

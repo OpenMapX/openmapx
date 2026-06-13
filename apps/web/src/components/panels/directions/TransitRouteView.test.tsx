@@ -2,6 +2,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TransitItineraryCard } from "./TransitRouteView";
 
+vi.mock("@/lib/useDateTimeFormat", () => ({
+  useDateTimeFormat: () => ({
+    time: (v: string | number | Date) => String(v),
+    date: (v: string | number | Date) => String(v),
+    dateTime: (v: string | number | Date) => String(v),
+  }),
+}));
+
 vi.mock("next-intl", () => ({
   useTranslations: (namespace: string) => (key: string, values?: Record<string, unknown>) => {
     if (namespace === "directions" && key === "transfers") {

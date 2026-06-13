@@ -11,6 +11,13 @@ vi.mock("@openmapx/core", () => ({
   formatMeasurementDistance: (m: number, sys: string) =>
     sys === "imperial" ? `${m} ft` : `${m} m`,
 }));
+vi.mock("@/lib/useDateTimeFormat", () => ({
+  useDateTimeFormat: () => ({
+    time: (v: string | number | Date) => String(v),
+    date: (v: string | number | Date) => String(v),
+    dateTime: (v: string | number | Date) => String(v),
+  }),
+}));
 
 import { NavBottomBar } from "./NavBottomBar";
 

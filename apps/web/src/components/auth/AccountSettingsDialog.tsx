@@ -31,9 +31,10 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
 import { authClient, getInitials, oauthProviders, proxyImageUrl } from "@openmapx/core";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import { MangroveAccountSection } from "./MangroveAccountSection";
 
@@ -46,7 +47,7 @@ interface AccountSettingsDialogProps {
 export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDialogProps) {
   const t = useTranslations("account");
   const tc = useTranslations("common");
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const fullScreen = useFullScreenOnMobile();
   const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
   const [name, setName] = useState(user.name);
@@ -1066,9 +1067,7 @@ export function AccountSettingsDialog({ open, onClose, user }: AccountSettingsDi
                 <ListItemText
                   primary={pk.name ?? t("passkey")}
                   secondary={
-                    pk.createdAt
-                      ? t("addedDate", { date: new Date(pk.createdAt).toLocaleDateString(locale) })
-                      : undefined
+                    pk.createdAt ? t("addedDate", { date: fmt.date(pk.createdAt) }) : undefined
                   }
                 />
               </ListItem>

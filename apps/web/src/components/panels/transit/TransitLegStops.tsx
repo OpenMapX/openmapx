@@ -6,8 +6,9 @@ import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Typography from "@mui/material/Typography";
 import { useVehicleJourney } from "@openmapx/core";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface TransitLegStopsProps {
   tripId?: string;
@@ -21,7 +22,7 @@ interface TransitLegStopsProps {
 
 export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: TransitLegStopsProps) {
   const tc = useTranslations("common");
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const [expanded, setExpanded] = useState(false);
   // Fetch eagerly — React Query deduplicates with any other useVehicleJourney(tripId) call
   const { data: journey } = useVehicleJourney(tripId ?? null);
@@ -103,12 +104,7 @@ export function TransitLegStops({ tripId, stopCount, fromStopId, toStopId }: Tra
               stop.expectedArrival ??
               stop.scheduledDeparture ??
               stop.scheduledArrival;
-            const timeStr = time
-              ? new Date(time).toLocaleTimeString(locale, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "";
+            const timeStr = time ? fmt.time(time) : "";
             const delaySec = stop.delaySeconds ?? 0;
             const delayMin = Math.round(delaySec / 60);
 

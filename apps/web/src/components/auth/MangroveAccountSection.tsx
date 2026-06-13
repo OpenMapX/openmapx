@@ -43,6 +43,7 @@ import {
 } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { MangroveExportDialog } from "./MangroveExportDialog";
 import { MangroveSetupWizard } from "./MangroveSetupWizard";
 import { MangroveUnlockDialog } from "./MangroveUnlockDialog";
@@ -52,6 +53,7 @@ const MANGROVE_HOME_URL = "https://mangrove.reviews/";
 export function MangroveAccountSection() {
   const t = useTranslations("account");
   const tc = useTranslations("common");
+  const fmt = useDateTimeFormat();
   const { publicPem, needsSetup, needsUnlock } = useUserKeypair();
   const state = useKeypairState();
   const addWrap = useAddWrap();
@@ -272,7 +274,7 @@ export function MangroveAccountSection() {
                           />
                         </Box>
                       }
-                      secondary={new Date(w.createdAt).toLocaleDateString()}
+                      secondary={fmt.date(w.createdAt)}
                     />
                     <ListItemSecondaryAction>
                       <Stack

@@ -58,6 +58,7 @@ import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 function toDateTimeLocalString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -69,6 +70,7 @@ export function DirectionsPanelContent() {
   const tc = useTranslations("common");
   const tp = useTranslations("place");
   const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const {
     waypoints,
     origin,
@@ -615,8 +617,8 @@ export function DirectionsPanelContent() {
                   {transitTimeMode === "now"
                     ? t("departNow")
                     : transitTimeMode === "depart"
-                      ? `${t("departAt")} ${transitDepartureTime instanceof Date ? transitDepartureTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`
-                      : `${t("arriveBy")} ${transitArrivalTime instanceof Date ? transitArrivalTime.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}`}
+                      ? `${t("departAt")} ${transitDepartureTime instanceof Date ? fmt.time(transitDepartureTime) : ""}`
+                      : `${t("arriveBy")} ${transitArrivalTime instanceof Date ? fmt.time(transitArrivalTime) : ""}`}
                 </Typography>
                 <ExpandMoreIcon
                   sx={{ fontSize: 18, color: transitTimeMode !== "now" ? TEAL : "text.primary" }}

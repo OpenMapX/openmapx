@@ -427,6 +427,15 @@ export {
 } from "./utils/commons-metadata";
 export { haversineDistance } from "./utils/coordinates";
 export { applyClientSideFilters, splitFilters } from "./utils/dataSourceFilters";
+export {
+  type CalendarDateOptions,
+  type ClockTimeOptions,
+  type DateFormat,
+  formatCalendarDate,
+  formatClockTime,
+  formatDateAndTime,
+  type TimeFormat,
+} from "./utils/dateTimeFormat";
 export { buildDeliveryOpenUrl } from "./utils/deliveryLink";
 export {
   buildElevationProfile,

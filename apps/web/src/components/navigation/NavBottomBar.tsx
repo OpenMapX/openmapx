@@ -15,8 +15,9 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import { formatDuration, formatMeasurementDistance } from "@openmapx/core";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface Props {
   distanceRemaining: number;
@@ -44,12 +45,9 @@ export function NavBottomBar({
   units,
 }: Props) {
   const t = useTranslations("navigation");
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const etaTime = new Date(etaEpochMs).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const etaTime = fmt.time(etaEpochMs);
 
   const closeMenu = () => setMenuAnchor(null);
 

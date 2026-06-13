@@ -6,21 +6,12 @@ import Typography from "@mui/material/Typography";
 import { useSunTimes } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface Props {
   lat: number;
   lng: number;
   enabled?: boolean;
-}
-
-function formatTime(isoString: string, timezone: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: timezone,
-  });
 }
 
 function formatDayLength(seconds: number): string {
@@ -31,6 +22,7 @@ function formatDayLength(seconds: number): string {
 
 export function PlaceSunTimes({ lat, lng, enabled = true }: Props) {
   const t = useTranslations("sunTimes");
+  const dtf = useDateTimeFormat();
   const { data, isLoading } = useSunTimes(lat, lng, enabled);
 
   if (isLoading)
@@ -44,7 +36,7 @@ export function PlaceSunTimes({ lat, lng, enabled = true }: Props) {
   if (!data) return null;
 
   const tz = data.timezone;
-  const fmt = (iso: string) => formatTime(iso, tz);
+  const fmt = (iso: string) => dtf.time(iso, { timeZone: tz });
 
   return (
     <Box sx={{ py: 1 }}>

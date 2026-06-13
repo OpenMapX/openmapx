@@ -15,6 +15,7 @@ import type {
 } from "@openmapx/core";
 import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { SectionLabel } from "../shared/SectionLabel";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
@@ -171,12 +172,13 @@ function NextEventBlock({
 }) {
   const isHigh = event.type === "H";
   const Icon = isHigh ? KeyboardArrowUpIcon : KeyboardArrowDownIcon;
+  const fmt = useDateTimeFormat();
   return (
     <Box>
       <Typography sx={{ fontSize: 12, color: "text.secondary" }}>{label}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
         <Icon sx={{ fontSize: 18, color: isHigh ? "success.main" : "text.secondary" }} />
-        <Typography sx={{ fontWeight: 600, fontSize: 16 }}>{formatTime(event.parsed)}</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 16 }}>{fmt.time(event.parsed)}</Typography>
       </Box>
       <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
         {t("heightFt", { ft: event.valueFt })}
@@ -227,6 +229,7 @@ function EventRow({
   t: ReturnType<typeof useTranslations>;
 }) {
   const isHigh = event.type === "H";
+  const fmt = useDateTimeFormat();
   return (
     <>
       <Box
@@ -257,7 +260,7 @@ function EventRow({
           color: isPast ? "text.disabled" : "text.primary",
         }}
       >
-        {formatTime(event.parsed)}
+        {fmt.time(event.parsed)}
       </Box>
       <Box
         component="span"
@@ -483,14 +486,6 @@ function parseLocalTime(timeStr: string): Date {
   const [y, m, d] = datePart.split("-").map(Number);
   const [hh, mm] = timePart.split(":").map(Number);
   return new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0);
-}
-
-function formatTime(d: Date): string {
-  return d.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 function todayLocalDate(): Date {

@@ -9,12 +9,12 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { routeColor, useRouteAlerts, useVehicleJourney } from "@openmapx/core";
 import type { MergedDeparture, TripRemark } from "@openmapx/mobility-core/transit";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { formatTime } from "@/lib/formatTime";
 import { TEAL } from "@/lib/theme";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { PanelDetailHeader } from "../shared/PanelDetailHeader";
 import { AlertsBanner } from "./AlertsBanner";
 import { RemarkChip } from "./RemarkChip";
@@ -29,7 +29,7 @@ interface TripDetailViewProps {
 export function TripDetailView({ departure, onBack, clearSearchBar = false }: TripDetailViewProps) {
   const t = useTranslations("transit");
   const tc = useTranslations("common");
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const journeyQuery = useVehicleJourney(departure.tripId || null, departure.tripIds);
   const { data: journey, isLoading, isError, refetch } = journeyQuery;
   const alertsQuery = useRouteAlerts(departure.route.id);
@@ -81,7 +81,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 color: isCanceled ? "text.disabled" : "text.secondary",
               }}
             >
-              {formatTime(departure.scheduledAt, locale)}
+              {fmt.time(departure.scheduledAt)}
             </Typography>
             {isDelayed && !isCanceled && departure.expectedAt && (
               <Typography
@@ -91,7 +91,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                   color: "error.main",
                 }}
               >
-                {formatTime(departure.expectedAt, locale)}
+                {fmt.time(departure.expectedAt)}
               </Typography>
             )}
             {isCanceled && (
@@ -389,7 +389,7 @@ export function TripDetailView({ departure, onBack, clearSearchBar = false }: Tr
                 stop.expectedArrival ??
                 stop.scheduledDeparture ??
                 stop.scheduledArrival;
-              const timeStr = time ? formatTime(time, locale) : "";
+              const timeStr = time ? fmt.time(time) : "";
               // Only treat as realtime when delaySeconds is explicitly provided (not undefined)
               const isRealtime = stop.delaySeconds !== undefined;
               const delaySec = stop.delaySeconds ?? 0;

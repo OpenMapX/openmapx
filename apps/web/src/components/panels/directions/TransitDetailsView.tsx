@@ -53,8 +53,8 @@ import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useMap } from "@/lib/MapContext";
 import { TEAL } from "@/lib/theme";
-
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 /**
  * Per-mode rendering for non-transit street legs (walk + intermodal bike/car
@@ -124,6 +124,7 @@ export function TransitDetailsView({
   const tc = useTranslations("common");
   const tt = useTranslations("transit");
   const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const [activeLegDep, setActiveLegDep] = useState<MergedDeparture | null>(null);
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo } = useMap();
@@ -145,14 +146,8 @@ export function TransitDetailsView({
       },
     );
   }
-  const startTime = new Date(itinerary.startTime).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const endTime = new Date(itinerary.endTime).toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const startTime = fmt.time(itinerary.startTime);
+  const endTime = fmt.time(itinerary.endTime);
   const summaryBits: string[] = [];
   if (itinerary.transfers > 0) summaryBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
@@ -260,14 +255,8 @@ export function TransitDetailsView({
       {/* Timeline */}
       <Box sx={{ pl: 1, pr: 2, py: 1 }}>
         {itinerary.legs.map((leg, i) => {
-          const legStartTime = new Date(leg.startTime).toLocaleTimeString(locale, {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          const legEndTime = new Date(leg.endTime).toLocaleTimeString(locale, {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
+          const legStartTime = fmt.time(leg.startTime);
+          const legEndTime = fmt.time(leg.endTime);
           const isWalk = leg.mode === "walking";
           // Non-transit street legs (walk + intermodal bike/car access) share the
           // compact dashed-line rendering; `street` is set only for those.
@@ -527,10 +516,7 @@ export function TransitDetailsView({
                                 fontSize: 12,
                               }}
                             >
-                              {new Date(alt.startTime).toLocaleTimeString(locale, {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              {fmt.time(alt.startTime)}
                             </Box>
                           ))}
                         </Box>

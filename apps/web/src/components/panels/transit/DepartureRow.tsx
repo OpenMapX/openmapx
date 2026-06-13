@@ -7,9 +7,9 @@ import ButtonBase from "@mui/material/ButtonBase";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Departure, TripRemark } from "@openmapx/mobility-core/transit";
-import { useLocale, useTranslations } from "next-intl";
-import { formatTime } from "@/lib/formatTime";
+import { useTranslations } from "next-intl";
 import { OCCUPANCY_COLOR, OCCUPANCY_KEY } from "@/lib/transitOccupancy";
+import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { REMARK_PRIORITY, RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";
 
@@ -32,7 +32,7 @@ export function DepartureRow({
   hasAlert = false,
 }: DepartureRowProps) {
   const t = useTranslations("transit");
-  const locale = useLocale();
+  const fmt = useDateTimeFormat();
   const isDelayed = departure.delaySeconds != null && departure.delaySeconds > 60;
   const isCanceled = departure.canceled === true;
   const hasRemarks = departure.remarks && departure.remarks.length > 0;
@@ -91,7 +91,7 @@ export function DepartureRow({
               color: isCanceled ? "text.disabled" : "text.primary",
             }}
           >
-            {formatTime(departure.scheduledAt, locale)}
+            {fmt.time(departure.scheduledAt)}
           </Typography>
           {isDelayed && !isCanceled && departure.expectedAt && (
             <Typography
@@ -101,7 +101,7 @@ export function DepartureRow({
                 color: "error.main",
               }}
             >
-              {formatTime(departure.expectedAt, locale)}
+              {fmt.time(departure.expectedAt)}
             </Typography>
           )}
           {isCanceled && (

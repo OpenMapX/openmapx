@@ -1,6 +1,7 @@
 "use client";
 
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -10,6 +11,7 @@ import ImageIcon from "@mui/icons-material/Image";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import LinkIcon from "@mui/icons-material/Link";
 import PrintIcon from "@mui/icons-material/Print";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
 import StorageIcon from "@mui/icons-material/Storage";
 import StraightenIcon from "@mui/icons-material/Straighten";
@@ -27,7 +29,17 @@ import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import { PANEL, useMenuStore, useSession, useSettingsStore, useSidebarStore } from "@openmapx/core";
+import {
+  type DateFormat,
+  formatCalendarDate,
+  formatClockTime,
+  PANEL,
+  type TimeFormat,
+  useMenuStore,
+  useSession,
+  useSettingsStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, useRef, useState } from "react";
@@ -41,6 +53,23 @@ import { setLocaleAndReload } from "@/lib/setLocale";
 
 const DRAWER_WIDTH = 280;
 
+// Fixed sample instant (Dec 31, 2025, 13:05 local) used to preview each
+// date/time format option as a secondary line in the Settings menu.
+const SAMPLE_DATETIME = new Date(2025, 11, 31, 13, 5);
+
+const TIME_FORMAT_OPTIONS: { value: TimeFormat; labelKey: string }[] = [
+  { value: "auto", labelKey: "timeFormatAuto" },
+  { value: "12h", labelKey: "timeFormat12h" },
+  { value: "24h", labelKey: "timeFormat24h" },
+];
+
+const DATE_FORMAT_OPTIONS: { value: DateFormat; labelKey: string }[] = [
+  { value: "auto", labelKey: "dateFormatAuto" },
+  { value: "dmy", labelKey: "dateFormatDmy" },
+  { value: "mdy", labelKey: "dateFormatMdy" },
+  { value: "ymd", labelKey: "dateFormatYmd" },
+];
+
 export function HamburgerMenu() {
   const t = useTranslations("menu");
   const tCommon = useTranslations("common");
@@ -53,8 +82,14 @@ export function HamburgerMenu() {
   const [langOpen, setLangOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [unitsOpen, setUnitsOpen] = useState(false);
+  const [timeFmtOpen, setTimeFmtOpen] = useState(false);
+  const [dateFmtOpen, setDateFmtOpen] = useState(false);
   const units = useSettingsStore((s) => s.units);
   const setUnits = useSettingsStore((s) => s.setUnits);
+  const timeFormat = useSettingsStore((s) => s.timeFormat);
+  const setTimeFormat = useSettingsStore((s) => s.setTimeFormat);
+  const dateFormat = useSettingsStore((s) => s.dateFormat);
+  const setDateFormat = useSettingsStore((s) => s.setDateFormat);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
@@ -300,6 +335,66 @@ export function HamburgerMenu() {
                     {u === units ? <CheckIcon fontSize="small" /> : null}
                   </ListItemIcon>
                   <ListItemText primary={t(u === "metric" ? "unitsMetric" : "unitsImperial")} />
+                </ListItemButton>
+              ))}
+            </List>
+          </Collapse>
+
+          <ListItemButton sx={{ height: 48 }} onClick={() => setTimeFmtOpen((prev) => !prev)}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <ScheduleIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("timeFormat")} />
+          </ListItemButton>
+
+          <Collapse in={timeFmtOpen}>
+            <List disablePadding>
+              {TIME_FORMAT_OPTIONS.map((opt) => (
+                <ListItemButton
+                  key={opt.value}
+                  sx={{ pl: 4 }}
+                  onClick={() => setTimeFormat(opt.value)}
+                >
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    {opt.value === timeFormat ? <CheckIcon fontSize="small" /> : null}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={t(opt.labelKey)}
+                    secondary={formatClockTime(SAMPLE_DATETIME, {
+                      locale,
+                      timeFormat: opt.value,
+                    })}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          </Collapse>
+
+          <ListItemButton sx={{ height: 48 }} onClick={() => setDateFmtOpen((prev) => !prev)}>
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <CalendarMonthIcon />
+            </ListItemIcon>
+            <ListItemText primary={t("dateFormat")} />
+          </ListItemButton>
+
+          <Collapse in={dateFmtOpen}>
+            <List disablePadding>
+              {DATE_FORMAT_OPTIONS.map((opt) => (
+                <ListItemButton
+                  key={opt.value}
+                  sx={{ pl: 4 }}
+                  onClick={() => setDateFormat(opt.value)}
+                >
+                  <ListItemIcon sx={{ minWidth: 28 }}>
+                    {opt.value === dateFormat ? <CheckIcon fontSize="small" /> : null}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={t(opt.labelKey)}
+                    secondary={formatCalendarDate(SAMPLE_DATETIME, {
+                      locale,
+                      dateFormat: opt.value,
+                    })}
+                  />
                 </ListItemButton>
               ))}
             </List>
