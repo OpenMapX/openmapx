@@ -17,9 +17,8 @@
     "memory": "${LOCAL_AI_MEMORY:-8g}",
     "restart": "unless-stopped",
     "healthcheck": {
-      "type": "http",
-      "path": "/api/tags",
-      "port": 11434,
+      "type": "exec",
+      "command": ["ollama", "list"],
       "interval": "30s",
       "timeout": "5s",
       "retries": 5,
