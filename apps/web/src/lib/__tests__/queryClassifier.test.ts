@@ -44,4 +44,24 @@ describe("classifyQuery", () => {
     // "best" was removed from adjective list; geocoding runs in parallel anyway
     expect(classifyQuery("best pizza in town")).toBe("geocode");
   });
+
+  it('classifies German proximity queries as "nl"', () => {
+    // The exact query that regressed in Aachen.
+    expect(classifyQuery("Schulen in meiner Nähe")).toBe("nl");
+    expect(classifyQuery("Restaurants in der Nähe")).toBe("nl");
+    expect(classifyQuery("Apotheken in der Umgebung")).toBe("nl");
+  });
+
+  it('classifies German question/quality/time queries as "nl"', () => {
+    expect(classifyQuery("Wo ist die nächste Tankstelle?")).toBe("nl");
+    expect(classifyQuery("günstige Hotels mit Parkplatz")).toBe("nl");
+    expect(classifyQuery("Supermarkt jetzt geöffnet")).toBe("nl");
+    expect(classifyQuery("vegane Restaurants mit Außenbereich")).toBe("nl");
+  });
+
+  it('still classifies German place names as "geocode"', () => {
+    expect(classifyQuery("Aachen")).toBe("geocode");
+    expect(classifyQuery("Karlsruhe Hauptbahnhof")).toBe("geocode");
+    expect(classifyQuery("Müllerstraße 5, Berlin")).toBe("geocode");
+  });
 });

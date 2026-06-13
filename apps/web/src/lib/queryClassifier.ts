@@ -11,6 +11,14 @@ const NL_SIGNALS: RegExp[] = [
   /\b(with (outdoor|wifi|parking)|vegan|vegetarian|gluten.?free|halal|kosher)\b/i,
   /\b(and|or)\b.*\b(cafe|bar|shop|restaurant|coffee)\b/i,
   /\b(charge my|get coffee|eat lunch|grab a)\b/i,
+  // German signals — the app ships en+de and users in DE type German queries
+  // (e.g. "Schulen in meiner Nähe"). Kept precise to avoid matching place names.
+  /^(wo|finde|zeige?|gibt es|welche[rsn]?|suche)\b/i,
+  /\b(ruhig|günstig|guenstig|billig|gemütlich|gemuetlich|romantisch|barrierefrei|rollstuhlgerecht)\b/i,
+  /\b(in (der|meiner) n[äa]he|n[äa]he|umgebung|umkreis|nahegelegen|in der umgebung)\b/i,
+  /\b(jetzt geöffnet|jetzt geoeffnet|geöffnet|geoeffnet|rund um die uhr|24 ?stunden|heute geöffnet)\b/i,
+  /\b(mit (außenbereich|aussenbereich|wlan|parkplatz|terrasse|sitzplätzen)|vegan|vegetarisch|glutenfrei|halal|koscher)\b/i,
+  /\b(und|oder)\b.*\b(café|cafe|bar|laden|geschäft|geschaeft|restaurant|kneipe|bäckerei)\b/i,
 ];
 
 export function classifyQuery(query: string): "nl" | "geocode" | "coordinate" {
