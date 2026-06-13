@@ -1,24 +1,16 @@
 "use client";
 
 import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
-import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
-import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
 import DownloadForOfflineIcon from "@mui/icons-material/DownloadForOffline";
 import HistoryIcon from "@mui/icons-material/History";
 import ImageIcon from "@mui/icons-material/Image";
-import LightModeIcon from "@mui/icons-material/LightMode";
 import LinkIcon from "@mui/icons-material/Link";
 import PrintIcon from "@mui/icons-material/Print";
-import ScheduleIcon from "@mui/icons-material/Schedule";
-import SettingsBrightnessIcon from "@mui/icons-material/SettingsBrightness";
+import SettingsIcon from "@mui/icons-material/Settings";
 import StorageIcon from "@mui/icons-material/Storage";
-import StraightenIcon from "@mui/icons-material/Straighten";
-import TranslateIcon from "@mui/icons-material/Translate";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import Box from "@mui/material/Box";
-import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
@@ -27,69 +19,28 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
-import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
-import {
-  type DateFormat,
-  formatCalendarDate,
-  formatClockTime,
-  PANEL,
-  type TimeFormat,
-  useMenuStore,
-  useSession,
-  useSettingsStore,
-  useSidebarStore,
-} from "@openmapx/core";
+import { PANEL, useMenuStore, useSession, useSidebarStore } from "@openmapx/core";
 import Link from "next/link";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { type ChangeEvent, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { InstallEntry, IosInstallHintDialog } from "@/components/pwa/InstallEntry";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { StorageDialog } from "@/components/settings/StorageDialog";
-import { localeNames, locales } from "@/i18n/config";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { IMPORT_ACCEPT, importGeoFromFile } from "@/lib/importGeoFile";
-import { setLocaleAndReload } from "@/lib/setLocale";
 
 const DRAWER_WIDTH = 280;
-
-// Fixed sample instant (Dec 31, 2025, 13:05 local) used to preview each
-// date/time format option as a secondary line in the Settings menu.
-const SAMPLE_DATETIME = new Date(2025, 11, 31, 13, 5);
-
-const TIME_FORMAT_OPTIONS: { value: TimeFormat; labelKey: string }[] = [
-  { value: "auto", labelKey: "timeFormatAuto" },
-  { value: "12h", labelKey: "timeFormat12h" },
-  { value: "24h", labelKey: "timeFormat24h" },
-];
-
-const DATE_FORMAT_OPTIONS: { value: DateFormat; labelKey: string }[] = [
-  { value: "auto", labelKey: "dateFormatAuto" },
-  { value: "dmy", labelKey: "dateFormatDmy" },
-  { value: "mdy", labelKey: "dateFormatMdy" },
-  { value: "ymd", labelKey: "dateFormatYmd" },
-];
 
 export function HamburgerMenu() {
   const t = useTranslations("menu");
   const tCommon = useTranslations("common");
-  const locale = useLocale();
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
-  const { mode, setMode } = useColorScheme();
   const { data: session } = useSession();
   const isSignedIn = !!session?.user?.id;
-  const [langOpen, setLangOpen] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
-  const [unitsOpen, setUnitsOpen] = useState(false);
-  const [timeFmtOpen, setTimeFmtOpen] = useState(false);
-  const [dateFmtOpen, setDateFmtOpen] = useState(false);
-  const units = useSettingsStore((s) => s.units);
-  const setUnits = useSettingsStore((s) => s.setUnits);
-  const timeFormat = useSettingsStore((s) => s.timeFormat);
-  const setTimeFormat = useSettingsStore((s) => s.setTimeFormat);
-  const dateFormat = useSettingsStore((s) => s.dateFormat);
-  const setDateFormat = useSettingsStore((s) => s.setDateFormat);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [storageOpen, setStorageOpen] = useState(false);
@@ -116,11 +67,6 @@ export function HamburgerMenu() {
       return;
     }
     useSidebarStore.getState().openSidebar(PANEL.SAVED);
-  };
-
-  const handleLanguageChange = (newLocale: string) => {
-    if (newLocale === locale) return;
-    setLocaleAndReload(newLocale);
   };
 
   const handleShareMap = async () => {
@@ -266,139 +212,12 @@ export function HamburgerMenu() {
         <Divider />
 
         <List disablePadding>
-          <ListItemButton sx={{ height: 48 }} onClick={() => setLangOpen((prev) => !prev)}>
+          <ListItemButton sx={{ height: 48 }} onClick={() => setSettingsOpen(true)}>
             <ListItemIcon sx={{ minWidth: 40 }}>
-              <TranslateIcon />
+              <SettingsIcon />
             </ListItemIcon>
-            <ListItemText primary={t("language")} />
+            <ListItemText primary={t("settings")} />
           </ListItemButton>
-
-          <Collapse in={langOpen}>
-            <List disablePadding>
-              {locales.map((l) => (
-                <ListItemButton
-                  key={l}
-                  sx={{ height: 44, pl: 4 }}
-                  onClick={() => handleLanguageChange(l)}
-                >
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    {l === locale ? <CheckIcon fontSize="small" /> : null}
-                  </ListItemIcon>
-                  <ListItemText primary={localeNames[l] ?? l} />
-                </ListItemButton>
-              ))}
-            </List>
-          </Collapse>
-
-          <ListItemButton sx={{ height: 48 }} onClick={() => setThemeOpen((prev) => !prev)}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              {mode === "dark" ? (
-                <DarkModeIcon />
-              ) : mode === "light" ? (
-                <LightModeIcon />
-              ) : (
-                <SettingsBrightnessIcon />
-              )}
-            </ListItemIcon>
-            <ListItemText primary={t("theme")} />
-          </ListItemButton>
-
-          <Collapse in={themeOpen}>
-            <List disablePadding>
-              {(["light", "dark", "system"] as const).map((m) => (
-                <ListItemButton key={m} sx={{ height: 44, pl: 4 }} onClick={() => setMode(m)}>
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    {m === mode ? <CheckIcon fontSize="small" /> : null}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={t(
-                      m === "light" ? "themeLight" : m === "dark" ? "themeDark" : "themeSystem",
-                    )}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          </Collapse>
-
-          <ListItemButton sx={{ height: 48 }} onClick={() => setUnitsOpen((prev) => !prev)}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <StraightenIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("units")} />
-          </ListItemButton>
-
-          <Collapse in={unitsOpen}>
-            <List disablePadding>
-              {(["metric", "imperial"] as const).map((u) => (
-                <ListItemButton key={u} sx={{ height: 44, pl: 4 }} onClick={() => setUnits(u)}>
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    {u === units ? <CheckIcon fontSize="small" /> : null}
-                  </ListItemIcon>
-                  <ListItemText primary={t(u === "metric" ? "unitsMetric" : "unitsImperial")} />
-                </ListItemButton>
-              ))}
-            </List>
-          </Collapse>
-
-          <ListItemButton sx={{ height: 48 }} onClick={() => setTimeFmtOpen((prev) => !prev)}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <ScheduleIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("timeFormat")} />
-          </ListItemButton>
-
-          <Collapse in={timeFmtOpen}>
-            <List disablePadding>
-              {TIME_FORMAT_OPTIONS.map((opt) => (
-                <ListItemButton
-                  key={opt.value}
-                  sx={{ pl: 4 }}
-                  onClick={() => setTimeFormat(opt.value)}
-                >
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    {opt.value === timeFormat ? <CheckIcon fontSize="small" /> : null}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={t(opt.labelKey)}
-                    secondary={formatClockTime(SAMPLE_DATETIME, {
-                      locale,
-                      timeFormat: opt.value,
-                    })}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          </Collapse>
-
-          <ListItemButton sx={{ height: 48 }} onClick={() => setDateFmtOpen((prev) => !prev)}>
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <CalendarMonthIcon />
-            </ListItemIcon>
-            <ListItemText primary={t("dateFormat")} />
-          </ListItemButton>
-
-          <Collapse in={dateFmtOpen}>
-            <List disablePadding>
-              {DATE_FORMAT_OPTIONS.map((opt) => (
-                <ListItemButton
-                  key={opt.value}
-                  sx={{ pl: 4 }}
-                  onClick={() => setDateFormat(opt.value)}
-                >
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    {opt.value === dateFormat ? <CheckIcon fontSize="small" /> : null}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={t(opt.labelKey)}
-                    secondary={formatCalendarDate(SAMPLE_DATETIME, {
-                      locale,
-                      dateFormat: opt.value,
-                    })}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          </Collapse>
         </List>
 
         <Divider />
@@ -439,6 +258,7 @@ export function HamburgerMenu() {
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
       <AuthDialog open={authOpen} onClose={() => setAuthOpen(false)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <StorageDialog open={storageOpen} onClose={() => setStorageOpen(false)} />
       <IosInstallHintDialog open={iosHintOpen} onClose={() => setIosHintOpen(false)} />
     </>

@@ -1185,6 +1185,8 @@
   },
   "settings": {
     "title": "Einstellungen",
+    "appearance": "Darstellung",
+    "languageAndRegion": "Sprache & Region",
     "offline": "Offline-Karten",
     "offlineDescription": "Lade Kartenbereiche herunter, um sie ohne Internetverbindung zu verwenden.",
     "downloadNewArea": "Neuen Bereich herunterladen",
@@ -1472,6 +1474,7 @@
     "dateFormatDmy": "Tag.Monat.Jahr",
     "dateFormatMdy": "Monat/Tag/Jahr",
     "dateFormatYmd": "Jahr-Monat-Tag",
+    "settings": "Einstellungen",
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
     "imprint": "Impressum"

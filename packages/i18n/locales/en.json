@@ -1185,6 +1185,8 @@
   },
   "settings": {
     "title": "Settings",
+    "appearance": "Appearance",
+    "languageAndRegion": "Language & region",
     "offline": "Offline maps",
     "offlineDescription": "Download map areas to use without an internet connection.",
     "downloadNewArea": "Download a new area",
@@ -1472,6 +1474,7 @@
     "dateFormatDmy": "Day.Month.Year",
     "dateFormatMdy": "Month/Day/Year",
     "dateFormatYmd": "Year-Month-Day",
+    "settings": "Settings",
     "privacy": "Privacy",
     "terms": "Terms",
     "imprint": "Imprint"
