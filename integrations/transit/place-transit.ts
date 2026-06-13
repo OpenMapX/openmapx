@@ -355,14 +355,17 @@ export function createPlaceTransit(
 
     // Map: "(mode):(shortName)" -> best MergedRoute candidate
     const byKey = new Map<string, MergedRoute>();
-    const allAttribs: Attribution[][] = [stopsRes.attributions];
+    // Attribute only providers that actually returned routes — NOT the stop-search
+    // fan-out, which queries every provider (and the dynamic registry's whole
+    // operator catalog) regardless of whether they contribute displayed lines.
+    const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (let i = 0; i < stops.length; i++) {
       const result = routeResults[i];
       if (result.status !== "fulfilled") continue;
       const providerName = stops[i].provider;
-      allAttribs.push(result.value.attributions);
+      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
 
       for (const route of result.value.data) {
@@ -478,7 +481,7 @@ export function createPlaceTransit(
       const result = results[i];
       if (result.status !== "fulfilled") continue;
       const stopProvider = stops[i].provider;
-      allAttribs.push(result.value.attributions);
+      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
 
       for (const dep of result.value.data as DepartureWithFeed[]) {
@@ -559,11 +562,8 @@ export function createPlaceTransit(
     );
     return {
       data: merged.data,
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        stopsRes.attributions,
-        merged.attributions,
-      ),
+      // Attribute only the timetable results, not the stop-search fan-out.
+      attributions: merged.attributions,
       freshness: mergeFreshness(stopsRes.freshness, merged.freshness),
     };
   }
@@ -583,11 +583,8 @@ export function createPlaceTransit(
     );
     return {
       data: merged.data,
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        stopsRes.attributions,
-        merged.attributions,
-      ),
+      // Attribute only the timetable results, not the stop-search fan-out.
+      attributions: merged.attributions,
       freshness: mergeFreshness(stopsRes.freshness, merged.freshness),
     };
   }
@@ -636,12 +633,13 @@ export function createPlaceTransit(
       stops.map((s) => orchestrator.getStopAlerts(s.id)),
     );
     const byId = new Map<string, ServiceAlert>();
-    const allAttribs: Attribution[][] = [stopsRes.attributions];
+    // Attribute only providers that returned alerts, not the stop-search fan-out.
+    const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (const result of alertResults) {
       if (result.status !== "fulfilled") continue;
-      allAttribs.push(result.value.attributions);
+      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
       for (const alert of result.value.data) {
         const existing = byId.get(alert.id);
@@ -706,12 +704,13 @@ export function createPlaceTransit(
 
     const facResults = await Promise.allSettled(stops.map((s) => orchestrator.getFacilities(s.id)));
     const byId = new Map<string, Facility>();
-    const allAttribs: Attribution[][] = [stopsRes.attributions];
+    // Attribute only providers that returned facilities, not the stop-search fan-out.
+    const allAttribs: Attribution[][] = [];
     const allFresh: Freshness[] = [stopsRes.freshness];
 
     for (const result of facResults) {
       if (result.status !== "fulfilled") continue;
-      allAttribs.push(result.value.attributions);
+      if (result.value.data.length > 0) allAttribs.push(result.value.attributions);
       allFresh.push(result.value.freshness);
       for (const fac of result.value.data) {
         if (!byId.has(fac.id)) byId.set(fac.id, fac);
