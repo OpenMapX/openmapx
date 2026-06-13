@@ -184,12 +184,7 @@ export function PlaceTransitSection({
             </ButtonBase>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
               {modeRoutes.slice(0, MAX_BADGES_PER_MODE).map((route) => {
-                const tooltipTitle = route.providers
-                  .map((p) => {
-                    const matched = mergedAttributions.find((a) => a.sourceId === p);
-                    return matched?.name ?? p;
-                  })
-                  .join(" · ");
+                const tooltipTitle = (route.providerNames ?? route.providers).join(" · ");
                 return (
                   <Tooltip key={route.id} title={tooltipTitle} placement="top" arrow>
                     <span>

@@ -569,6 +569,12 @@ export interface TransitStopInfrastructure {
 /** A transit route merged across multiple providers. */
 export interface MergedRoute extends TransitRoute {
   providers: string[];
+  /**
+   * Human-readable names for {@link providers}, resolved from each provider's
+   * attribution (e.g. "ms" → "MOTIS (self-hosted)"). Provider ids and attribution
+   * sourceIds live in different namespaces, so the UI cannot derive these itself.
+   */
+  providerNames?: string[];
   /** Suggested stop ID to resolve route stop sequences for providers lacking route-stops APIs. */
   hintStopId?: string;
 }

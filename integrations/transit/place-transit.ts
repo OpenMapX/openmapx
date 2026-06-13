@@ -1,6 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import { diceSimilarity, haversineMeters } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
 import {
   expandSearchQuery,
   getQueryVariants,
@@ -80,6 +80,25 @@ function mergeAttributions(
     }
   }
   return out;
+}
+
+/**
+ * Resolve a route's raw provider ids (e.g. "ms", "db", "dyn:at/oebb") to
+ * human-readable names from each provider's static attribution, mirroring the
+ * prefix matching the orchestrator uses elsewhere. Provider ids and attribution
+ * sourceIds are separate namespaces, so the UI can't derive these itself. Falls
+ * back to the raw id when a provider declares no attribution.
+ */
+function resolveProviderNames(providers: TransitProvider[], ids: string[]): string[] {
+  const names: string[] = [];
+  for (const id of ids) {
+    const match = providers.find(
+      (p) => p.id === id || id === p.prefix.replace(/:$/, "") || id.startsWith(p.prefix),
+    );
+    const name = match?.attribution[0]?.name ?? id;
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
 }
 
 function mergeFreshness(...lists: Freshness[]): Freshness {
@@ -381,6 +400,12 @@ export function createPlaceTransit(
       if (a.mode !== b.mode) return a.mode.localeCompare(b.mode);
       return a.shortName.localeCompare(b.shortName);
     });
+
+    // Resolve provider ids to human-readable names for the line-badge tooltip.
+    const providerDefs = orchestrator.collectProviders();
+    for (const route of merged) {
+      route.providerNames = resolveProviderNames(providerDefs, route.providers);
+    }
 
     const attributions = mergeAttributions(ctx.attributionIndex, ...allAttribs);
     const freshness = mergeFreshness(...allFresh);
