@@ -73,12 +73,10 @@ export function LineDetail({
   const { data: stops, isLoading: stopsLoading } = stopsQuery;
   const alertsQuery = useRouteAlerts(routeId);
   const { data: alerts } = alertsQuery;
-  const mergedAttributions = useAttributionFromHooks(
-    routeQuery,
-    stopsQuery,
-    alertsQuery,
-    linkedStopsQuery,
-  );
+  // Attribute only the line's displayed data (route, stop sequence, alerts).
+  // linkedStopsQuery is plumbing for hintStopId and carries the unfiltered
+  // stop-search fan-out, so it is intentionally excluded here.
+  const mergedAttributions = useAttributionFromHooks(routeQuery, stopsQuery, alertsQuery);
 
   const lineColor = routeColor(route, PRIMARY_BLUE);
 
@@ -233,6 +231,7 @@ export function LineDetail({
         attributions={mergedAttributions}
         variant="panel-header"
         label={tc("dataSources")}
+        maxVisible={3}
       />
     </Box>
   );
