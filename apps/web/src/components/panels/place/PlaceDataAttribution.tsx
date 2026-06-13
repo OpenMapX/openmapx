@@ -1,22 +1,23 @@
 "use client";
 
 import Typography from "@mui/material/Typography";
+import type { Place } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useGeocodingAttribution } from "@/lib/useGeocodingAttribution";
+import { buildPlaceCoreAttribution } from "@/lib/placeCoreAttribution";
 
 /**
- * Attribution for a place's core data — name, address, opening hours, and raw OSM
- * tags — which is produced by the active geocoding providers. Those are
- * overwhelmingly OpenStreetMap-based (Nominatim / Photon / Overpass / MapTiler),
- * and OSM's ODbL (plus other geocoder licenses) requires the credit to be visible
- * wherever the data is shown. Other parts of the panel carry their own credit
- * (knowledge facts, photos, and the data-source detail sections), so this only
- * covers the otherwise-uncredited core fields. Mirrors the geocoding credit the
- * search dropdown already shows (same `useGeocodingAttribution` hook).
+ * Attribution for a place's core data — name, address, opening hours, and raw
+ * OSM tags. The credit is derived from the place itself (see
+ * {@link buildPlaceCoreAttribution}) so each place is credited only to the
+ * source that produced it: OSM-backed places show the ODbL OpenStreetMap
+ * credit, while transit-stop places are credited by the transit section
+ * instead of having every installed geocoder's source listed here. Other
+ * parts of the panel (knowledge facts, photos, data-source detail sections)
+ * carry their own credit.
  */
-export function PlaceDataAttribution() {
+export function PlaceDataAttribution({ place }: { place: Place }) {
   const tc = useTranslations("common");
-  const html = useGeocodingAttribution();
+  const html = buildPlaceCoreAttribution(place);
 
   if (!html) return null;
 
@@ -32,7 +33,7 @@ export function PlaceDataAttribution() {
       }}
     >
       {tc("data")}:{" "}
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML built from integration manifests */}
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML built from a fixed OSM credit string */}
       <span dangerouslySetInnerHTML={{ __html: html }} />
     </Typography>
   );

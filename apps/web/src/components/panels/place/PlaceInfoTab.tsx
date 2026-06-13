@@ -471,8 +471,8 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
           </Box>
         </>
       )}
-      {/* Credit the geocoding/OSM source of the raw place data shown here (ODbL/CC-BY). */}
-      <PlaceDataAttribution />
+      {/* Credit the source of the raw place data shown here (ODbL requires visible OSM attribution). */}
+      <PlaceDataAttribution place={place} />
     </Box>
   );
 }

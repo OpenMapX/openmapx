@@ -839,8 +839,8 @@ export function PlaceOverviewTab({
           name={place.name}
         />
       )}
-      {/* Credit the geocoding/OSM source of the core place data (ODbL/CC-BY require visible attribution). */}
-      <PlaceDataAttribution />
+      {/* Credit the source of the core place data (ODbL requires visible OSM attribution). */}
+      <PlaceDataAttribution place={place} />
     </>
   );
 }
