@@ -73,7 +73,7 @@ import {
   launchTextSearch,
 } from "@/lib/launchExplore";
 import { useMap } from "@/lib/MapContext";
-import { classifyQuery } from "@/lib/queryClassifier";
+import { isConfidentPlaceMatch } from "@/lib/placeMatch";
 import { TEAL } from "@/lib/theme";
 import { useGeocodingAttribution } from "@/lib/useGeocodingAttribution";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
@@ -186,11 +186,9 @@ export function SearchBar() {
   const { data: airportSearchData } = useAirportSearch(debouncedQuery, 5);
   const { data: chipTranslations = {} } = useChipTranslations(locale);
 
-  // NLP search — dual-path. The classifier flags natural-language queries
-  // ("vegan restaurants open now near me"); geocode/autocomplete keep running
-  // in parallel and are NOT gated on this, so a misclassification just loses
-  // the additive AI card while normal search behaves exactly as before.
-  const isNl = useMemo(() => classifyQuery(debouncedQuery) === "nl", [debouncedQuery]);
+  // NLP search fires on submit whenever the query does NOT resolve to a
+  // confident place match (see handleSubmit). No keyword classifier — the
+  // geocode-confidence gate decides navigate-vs-search, language-agnostically.
   // Snapshot the current viewport for the parse request. These are cheap ref
   // reads; the hook's query key rounds the center so tiny pans don't refetch.
   const mapCenterRaw = mapRef.current?.getCenter();
@@ -222,7 +220,7 @@ export function SearchBar() {
     debouncedQuery,
     mapCenter,
     mapBbox,
-    isNl && nlpSubmitted,
+    nlpSubmitted,
     locale,
     nlpNoCloud,
   );
@@ -673,54 +671,63 @@ export function SearchBar() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Natural-language query → trigger the LLM parse now (submit-gated). Keep
-    // the dropdown open so the loading row and AI card render; the card drives
-    // the actual search when activated. Don't fall through to geocode/text search.
-    if (!nearbyMode && mapCenter && mapBbox && classifyQuery(query.trim()) === "nl") {
-      setNlpSubmitted(true);
-      setIsFocused(true);
-      return;
-    }
-    inputRef.current?.blur();
     if (nearbyMode) {
+      inputRef.current?.blur();
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
       return;
     }
     if (syntheticResult) {
+      inputRef.current?.blur();
       handleSelect(syntheticResult);
       return;
     }
-    // A precise location match (address/street/region) or a transit stop
-    // navigates straight to that place. A named-POI query (or no
-    // geocode match) opens the viewport-scoped text results panel instead.
+    // Navigate straight to a place ONLY when the top geocode result confidently
+    // matches the query (its label covers most of what was typed) and is a
+    // precise location or transit stop. A low-relevance match (e.g. "Glen Park,
+    // Indiana" for "Park mit See in Aachen") must NOT teleport the user — it
+    // falls through to the NL parse below instead.
     const first = geocodeData?.[0];
-    const isTransit = Boolean(first?.rawCategory && isTransitRawCategory(first.rawCategory));
-    if (first && (first.type !== "poi" || isTransit)) {
-      // Area results (cities/regions/countries) are framed by PlaceBoundaryLayer,
-      // which fits the map to the admin boundary — flying to a fixed zoom first
-      // would just cause a zoom-in-then-out jump.
-      if (first.type !== "region") flyTo(first.coordinates, 15);
-      const firstPlace = createPlace({
-        ...idsFromPrimaryOrCoords(first.id, first.coordinates),
-        name: first.label,
-        address: first.label,
-        coordinates: first.coordinates,
-        category: first.type,
-        rawCategory: first.rawCategory,
-      });
-      if (isTransit) {
-        void tryOpenTransitStop(first.coordinates, first.label).then((found) => {
-          if (!found) {
-            setSelectedPlace(firstPlace);
-            useSidebarStore.getState().openSidebar(PANEL.PLACE);
-          }
+    if (first) {
+      const isTransit = Boolean(first.rawCategory && isTransitRawCategory(first.rawCategory));
+      const isPreciseType = first.type !== "poi" || isTransit;
+      if (isPreciseType && isConfidentPlaceMatch(query.trim(), first)) {
+        inputRef.current?.blur();
+        // Area results (cities/regions/countries) are framed by PlaceBoundaryLayer,
+        // which fits the map to the admin boundary — flying to a fixed zoom first
+        // would just cause a zoom-in-then-out jump.
+        if (first.type !== "region") flyTo(first.coordinates, 15);
+        const firstPlace = createPlace({
+          ...idsFromPrimaryOrCoords(first.id, first.coordinates),
+          name: first.label,
+          address: first.label,
+          coordinates: first.coordinates,
+          category: first.type,
+          rawCategory: first.rawCategory,
         });
-      } else {
-        setSelectedPlace(firstPlace);
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
+        if (isTransit) {
+          void tryOpenTransitStop(first.coordinates, first.label).then((found) => {
+            if (!found) {
+              setSelectedPlace(firstPlace);
+              useSidebarStore.getState().openSidebar(PANEL.PLACE);
+            }
+          });
+        } else {
+          setSelectedPlace(firstPlace);
+          useSidebarStore.getState().openSidebar(PANEL.PLACE);
+        }
+        return;
       }
+    }
+    // Not a confident place match → run the NL parse and keep the dropdown open
+    // (place candidates + AI card) so the user disambiguates. Never auto-navigate
+    // to a low-relevance geocode result.
+    if (mapCenter && mapBbox) {
+      setNlpSubmitted(true);
+      setIsFocused(true);
       return;
     }
+    // No viewport available yet (rare) → viewport free-text search floor.
+    inputRef.current?.blur();
     if (q.trim().length > 0) {
       launchTextSearch(mapRef.current, q);
     }
