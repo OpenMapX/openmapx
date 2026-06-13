@@ -8,7 +8,7 @@ const NL_SIGNALS: RegExp[] = [
   /\b(quiet|cheap|cozy|romantic|accessible|wheelchair)\b/i,
   /\b(near|close to|within|around|next to|by the|between)\b/i,
   /\b(open now|open late|open on|24 ?hour|open sunday|open monday)\b/i,
-  /\b(with (outdoor|wifi|parking)|vegan|vegetarian|gluten.?free|halal|kosher)\b/i,
+  /\b(with(out)?|vegan|vegetarian|gluten.?free|halal|kosher)\b/i,
   /\b(and|or)\b.*\b(cafe|bar|shop|restaurant|coffee)\b/i,
   /\b(charge my|get coffee|eat lunch|grab a)\b/i,
   // German signals — the app ships en+de and users in DE type German queries
@@ -17,7 +17,7 @@ const NL_SIGNALS: RegExp[] = [
   /\b(ruhig|günstig|guenstig|billig|gemütlich|gemuetlich|romantisch|barrierefrei|rollstuhlgerecht)\b/i,
   /\b(in (der|meiner) n[äa]he|n[äa]he|umgebung|umkreis|nahegelegen|in der umgebung)\b/i,
   /\b(jetzt geöffnet|jetzt geoeffnet|geöffnet|geoeffnet|rund um die uhr|24 ?stunden|heute geöffnet)\b/i,
-  /\b(mit (außenbereich|aussenbereich|wlan|parkplatz|terrasse|sitzplätzen)|vegan|vegetarisch|glutenfrei|halal|koscher)\b/i,
+  /\b(mit|ohne|vegan|vegetarisch|glutenfrei|halal|koscher)\b/i,
   /\b(und|oder)\b.*\b(café|cafe|bar|laden|geschäft|geschaeft|restaurant|kneipe|bäckerei)\b/i,
 ];
 

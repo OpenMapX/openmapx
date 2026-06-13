@@ -64,4 +64,19 @@ describe("classifyQuery", () => {
     expect(classifyQuery("Karlsruhe Hauptbahnhof")).toBe("geocode");
     expect(classifyQuery("Müllerstraße 5, Berlin")).toBe("geocode");
   });
+
+  it('classifies "with"/"mit" compositional queries as "nl"', () => {
+    // The exact query that regressed to a far-away geocode match in Aachen.
+    expect(classifyQuery("Park mit See in Aachen")).toBe("nl");
+    expect(classifyQuery("cafe with a view")).toBe("nl");
+    expect(classifyQuery("Restaurant ohne Sitzplätze")).toBe("nl");
+    expect(classifyQuery("restaurants without a dress code")).toBe("nl");
+  });
+
+  it('does not match "mit"/"with" inside place names', () => {
+    // Word-boundary anchored: these must stay "geocode".
+    expect(classifyQuery("Berlin Mitte")).toBe("geocode");
+    expect(classifyQuery("Schmitt Bakery")).toBe("geocode");
+    expect(classifyQuery("Whitby")).toBe("geocode");
+  });
 });

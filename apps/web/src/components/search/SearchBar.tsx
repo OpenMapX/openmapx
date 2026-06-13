@@ -992,6 +992,10 @@ export function SearchBar() {
                   type="submit"
                   size="small"
                   aria-label={t("searchAriaLabel")}
+                  // Don't let the button steal focus from the input — otherwise
+                  // the blur handler collapses the suggestions/AI card on click,
+                  // unlike pressing Enter (which keeps focus). The click still submits.
+                  onMouseDown={(e) => e.preventDefault()}
                   sx={{ display: { xs: "none", sm: "inline-flex" } }}
                 >
                   <SearchIcon sx={{ fontSize: 22, color: "text.secondary" }} />
