@@ -1,7 +1,7 @@
 ---
 title: Places & enrichment
 description: The place detail panel — name, hours, contact, photos, and reviews — and the open-data sources that enrich it.
-sidebar_position: 6
+sidebar_position: 7
 ---
 
 # Places & enrichment
@@ -37,7 +37,7 @@ Below the header, a row of round **action buttons** is always present:
 | Action         | What it does                                                                 |
 | -------------- | ---------------------------------------------------------------------------- |
 | **Directions** | Sets this place as the destination and opens the [directions panel](./directions.md) |
-| **Save**       | Adds the place to one of your saved lists (sign-in required)                  |
+| **Save**       | Adds the place to one of your [saved lists](./saved-places.md) (sign-in required) |
 | **Nearby**     | Opens the Explore box centered on this place to find what's around it         |
 | **Share**      | Copies a deep link to the place (uses the native share sheet where available) |
 
@@ -160,6 +160,8 @@ plugin model and how integrations resolve against backend services, see
 
 - **[Search & autocomplete](./search.md)** — how a place is found and resolved
   before the panel opens, including category and POI search.
+- **[Saved places](./saved-places.md)** — the Save button's lists and labels, and
+  exporting a list as GPX, GeoJSON, or KML.
 - **[Directions](./directions.md)** — the Directions action drops you into route
   planning with this place as the destination.
 - **[Public transit](./public-transit.md)** — the transit section of a place with

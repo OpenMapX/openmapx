@@ -188,6 +188,57 @@ otherwise any up makes it up. Probe history is retained, so the
 [Monitoring](./monitoring.md) view can show trends rather than just the current
 state.
 
+:::note[Health checks must target public hosts]
+The integration-health endpoint can be reached anonymously, so a manifest's
+`healthCheck` URL or TCP target must resolve to a public host. A check pointed at
+a loopback, link-local, or private-range address (`127.0.0.1`, `169.254.169.254`,
+…) is rejected and reported as down. Built-in `service:` targets are exempt —
+they're meant to be internal.
+:::
+
+## Data-use policy
+
+Some data sources carry licence terms a commercial deployment may not be able to
+honour. Each source declares a `commercialUse` stance in its manifest, and
+OpenMapX lets an operator gate the two restrictive classes:
+
+- **Non-commercial sources** (`commercialUse: "no"`) — for example Open-Meteo's
+  free tier.
+- **Grey-area sources** (`commercialUse: "unknown"`) — public APIs whose terms
+  are merely undocumented.
+
+Both are **allowed by default**, since the project's reference deployment is
+non-commercial. A commercial operator can disallow either class from
+`/admin/settings`, or with the `OPENMAPX_ALLOW_NONCOMMERCIAL` /
+`OPENMAPX_ALLOW_GREY_AREA` environment variables (env wins over the panel, and a
+change takes effect immediately). When a class is disallowed, orchestrators skip
+the affected providers and a response filter strips any data that came solely
+from a gated source — so a gated source is never queried and never reaches the
+map.
+
+:::note[Disclosure tables still list every source]
+Disabling a source removes its *data* from results, but the `/privacy` and
+`/terms` source-disclosure tables continue to list every source the build ships,
+so the published licence and privacy metadata stays complete.
+:::
+
+## AI-assisted search disclosure
+
+When [natural-language search](../features/natural-language-search.md) is active,
+OpenMapX adds disclosures to its legal pages automatically, based on what is
+actually enabled:
+
+- `/terms` shows an **AI-assisted search** reliability disclaimer whenever any AI
+  provider is active. The local provider is on by default, so this normally
+  appears.
+- `/privacy` adds a **cloud data-transfer** row naming each active cloud AI vendor
+  (Anthropic, OpenAI) — shown only when you have configured a cloud provider and
+  placed it in the search chain. With the local-only default, nothing is
+  transferred and no row appears.
+
+The signal is computed server-side from booleans and vendor names only; API keys
+are never exposed.
+
 ## Bulk operations
 
 Configuring features one page at a time is tedious on a fresh deployment, so the

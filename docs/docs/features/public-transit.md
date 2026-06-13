@@ -1,7 +1,7 @@
 ---
 title: Public transit
 description: Door-to-door public-transit journey planning, departures, route preferences, and live vehicles — backed by a MOTIS-first chain of self-hosted and regional providers.
-sidebar_position: 3
+sidebar_position: 4
 ---
 
 # Public transit

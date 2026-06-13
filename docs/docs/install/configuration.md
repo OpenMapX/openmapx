@@ -48,7 +48,7 @@ ship the placeholders.
 
 | Variable                  | Description                                                                                                                             | Required / Default            |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `DOMAIN`                  | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, and tile-server URLs. Point both an A and an AAAA record at the host. | Default `localhost`           |
+| `DOMAIN`                  | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, tile-server URLs, and the outbound contact identity (the contact address in third-party User-Agent strings and the email `From` fallback). Point both an A and an AAAA record at the host. | Default `localhost`           |
 | `ACME_EMAIL`              | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                   | Default `admin@example.com`   |
 | `POSTGRES_PASSWORD`       | Password for the PostgreSQL/PostGIS database (used by `postgis`, `app-api`, and `data-manager`). Compose refuses to start if unset. Generate with `openssl rand -hex 32`. | **Required**                  |
 | `OPENMAPX_HOST_DIR`       | Absolute host path of the OpenMapX repo checkout. The `app-api` container shells out to `docker compose` from inside the container and bind-mounts this path at the same path on both sides, so generated bind sources like `./data` resolve correctly. Find it with `pwd` from the repo root. | **Required** (no default)     |
@@ -248,7 +248,7 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `AUDIT_LOG_RETENTION_DAYS`        | Days to keep admin audit-log entries before the daily prune.                                                     | Optional. Commented `90`  |
 | `ADMIN_JOB_RETENTION_DAYS`        | Days to keep finished admin jobs (in-flight jobs are never pruned).                                              | Optional. Commented `30`  |
 | `GITHUB_TOKEN`                    | GitHub API token — raises the Transitous catalog fetch rate limit from 60 to 5000 req/h. Needed only on multi-tenant hosts. | Optional. Commented       |
-| `STORE_CATALOG_URL`               | Community-service catalog URL for `openmapx repos add`.                                                          | Optional. Commented `https://openmapx.org/api/store/catalog.json` |
+| `STORE_CATALOG_URL`               | Catalog URL for the community-integration **Store** — the JSON list of installable integrations shown under `/admin/store`. | Optional. Commented `https://raw.githubusercontent.com/openmapx/community-integrations/main/catalog.json` |
 | `LEGAL_NAME`                      | Operator legal name shown on `/terms` and `/privacy`.                                                            | Optional. Commented       |
 | `LEGAL_STREET`                    | Operator street address.                                                                                         | Optional. Commented       |
 | `LEGAL_POSTAL_CODE`               | Operator postal code.                                                                                            | Optional. Commented       |
@@ -257,11 +257,56 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `LEGAL_JURISDICTION_CITY`         | City of legal jurisdiction.                                                                                      | Optional. Commented       |
 | `LEGAL_EMAIL`                     | Legal contact email.                                                                                             | Optional. Commented       |
 | `LEGAL_PHONE`                     | Legal contact phone.                                                                                             | Optional. Commented       |
+| `LEGAL_SUPERVISORY_AUTHORITY`     | Data-protection supervisory authority (name + address) named on `/privacy`. Leave blank to omit the sentence.    | Optional. Commented       |
+| `LEGAL_SUPERVISORY_AUTHORITY_URL` | URL of the supervisory authority above.                                                                          | Optional. Commented       |
+| `LEGAL_HOSTING_PROVIDER`          | Hosting provider (name + address) disclosed on `/privacy`. Leave blank to omit.                                  | Optional. Commented       |
+| `LEGAL_HOSTING_LOCATIONS`         | Human-readable hosting locations shown on `/privacy`, e.g. `Germany and Finland (EU)`.                           | Optional. Commented       |
+| `LEGAL_SERVER_LOG_RETENTION_DAYS` | Days server logs are retained, stated on `/privacy`. Must be a whole number; a non-numeric value is ignored.     | Optional. Default `30`    |
 
 :::tip[Legal pages]
 The legal fields are optional but required for complete production
 `/terms` and `/privacy` pages. Leave them blank to omit the corresponding rows.
 :::
+
+## Data-use policy
+
+Each data source declares whether it may be used commercially. By default the
+stack serves **everything** — the reference deployment is non-commercial — but a
+commercial operator can exclude licence-restricted sources. These are resolved
+env-first, then the admin toggle at `/admin/settings`, then the default, and have
+no entry in `.env.example`; set them only if you need to restrict. See
+[Data-use policy](../administration/integrations-administration.md#data-use-policy)
+for what each class covers.
+
+| Variable                       | Description                                                                                                       | Required / Default        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `OPENMAPX_ALLOW_NONCOMMERCIAL` | Set to `false`/`0` to exclude sources whose licence forbids commercial use (`commercialUse: "no"`). Overrides the admin toggle. | Optional. Default `true`  |
+| `OPENMAPX_ALLOW_GREY_AREA`     | Set to `false`/`0` to exclude sources with unclear or undocumented terms (`commercialUse: "unknown"`). Overrides the admin toggle. | Optional. Default `true`  |
+
+## Natural-language search
+
+[Natural-language search](../features/natural-language-search.md) (the
+`search-nlp` integration) is configured at `/admin/integrations`, not in `.env`.
+It is **cloud-off by default**: the provider chain is `local, keyword`, and a
+cloud model is used only when it is both listed in the chain and given an API
+key. If you'd rather pin its config from the environment, use the
+per-integration override form below (`INTEGRATION_SEARCH_NLP_<KEY>`) — scalar
+keys map cleanly; the `providerChain` array is best set from the admin UI.
+
+| Variable                                   | Description                                                                                       | Required / Default                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `INTEGRATION_SEARCH_NLP_PRIVACYMODE`       | `strict` (cloud disabled server-side), `consent` (cloud behind explicit opt-in), or `open`.       | Default `consent`                   |
+| `INTEGRATION_SEARCH_NLP_OLLAMAMODEL`       | Local LLM served by the `local-ai` (Ollama) service; pulled automatically on first start.         | Default `gemma3:4b-it-qat`          |
+| `INTEGRATION_SEARCH_NLP_OLLAMAENDPOINT`    | Ollama base URL. Defaults to the `local-ai` service URL when that service is enabled.             | Default `http://localhost:11434`    |
+| `INTEGRATION_SEARCH_NLP_ANTHROPICAPIKEY`   | Anthropic key. Required to activate the `claude` cloud provider; without it the provider is skipped. | Optional. Default unset          |
+| `INTEGRATION_SEARCH_NLP_CLAUDEMODEL`       | Anthropic model id for the `claude` provider.                                                     | Default `claude-haiku-4-5-20251001` |
+| `INTEGRATION_SEARCH_NLP_OPENAIAPIKEY`      | OpenAI key. Required to activate the `openai` cloud provider; without it the provider is skipped.  | Optional. Default unset             |
+| `INTEGRATION_SEARCH_NLP_OPENAIMODEL`       | OpenAI model id for the `openai` provider.                                                         | Default `gpt-4o-mini`               |
+
+To run the local model, enable the **`local-ai`** backend service (Ollama). Its
+container tuning uses the usual per-service form — `LOCAL_AI_MEMORY` (default
+`8g`), `OLLAMA_KEEP_ALIVE` (default `30m`), `OLLAMA_MAX_LOADED_MODELS` (default
+`1`).
 
 ## Per-integration and per-service overrides
 

@@ -47,7 +47,7 @@ In the admin panel, open **Services → Repositories → Add repository** and pa
 the Git URL. The same flow is available from the CLI:
 
 ```bash
-pnpm openmapx repos add https://github.com/someone/openmapx-services-foo
+pnpm openmapx repos add https://github.com/someone/openmapx-services-foo --yes
 pnpm openmapx repos list
 ```
 
@@ -78,15 +78,20 @@ service will do to your host:
 
 If any manifest in the repository fails validation, the whole repository is
 refused — there are no partial installs. When the preview is clean, you confirm
-by checking the acknowledgment box (the CLI sets the equivalent
-`acknowledgeRisks` flag automatically), and the action is recorded in the audit
-log.
+by checking the acknowledgment box. The CLI requires the same acknowledgment:
+`repos add` proceeds only with `--yes` or an interactive confirmation, and refuses
+in a non-interactive session — so a copy-pasted command can't silently register a
+repo. Either way, the action is recorded in the audit log.
 
 The manifest validator also constrains what a community service may request:
-`quality` must be `community` (or `community-verified`), and a community manifest
-may **not** use `@`-prefixed bind mounts (no Docker socket, no cross-service file
-sharing), `networkMode: "host"`, or `privileged: true`. Plain relative-path bind
-mounts under the service's own directory are fine.
+`quality` must be `community` (or `community-verified`), and such a manifest may
+**not** use `@`-prefixed bind mounts (no Docker socket, no cross-service file
+sharing), `networkMode: "host"`, `privileged: true`, host device pass-through, or
+any escape-class Linux capability (`SYS_ADMIN`, `SYS_PTRACE`, `NET_ADMIN`, and
+similar) — only a safe capability subset (`NET_BIND_SERVICE`, `CHOWN`,
+`SETUID`/`SETGID`, …) is allowed. Plain relative-path bind mounts under the
+service's own directory are fine. `community-verified` is held to the exact same
+rules.
 
 ### Where they land on disk
 

@@ -1,7 +1,7 @@
 ---
 title: Weather
 description: Current conditions and forecasts for any point on the map, plus marine and tide data on the coast — served through a configurable provider chain.
-sidebar_position: 9
+sidebar_position: 11
 ---
 
 # Weather

@@ -1,7 +1,7 @@
 ---
 title: Street-level imagery
 description: Browse ground-level photos on the map, powered by Mapillary's open imagery platform.
-sidebar_position: 5
+sidebar_position: 6
 ---
 
 # Street-level imagery

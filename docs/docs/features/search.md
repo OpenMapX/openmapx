@@ -26,6 +26,7 @@ the things you might type without a separate mode:
 | A place or business name           | Matching addresses, POIs, streets, and regions                 |
 | A street address                   | The pinpointed location, with the formatted address            |
 | A category word ("coffee", "fuel") | A category search that plots every match in the current view   |
+| A plain-language question          | A parsed intent that runs the matching category, filter, area, and hours search |
 | A transit stop name                | The stop, with its line modes, opening straight to the stop    |
 | An airport name or IATA/ICAO code  | The airport, opening its detail panel (runways, frequencies)   |
 | Latitude/longitude or a Plus Code  | A pin at those exact coordinates                               |
@@ -48,6 +49,12 @@ or public Overpass endpoint) and shrinks the search area automatically if the
 query would otherwise time out. Free-text searches scoped to the visible map
 ("`bakery near me`") run through the same path. Category results carry opening
 hours and other place metadata, which feeds the [place panel](./places.md).
+
+For queries that read like a question rather than a place name — "quiet vegan
+cafe with wifi open now" — OpenMapX can parse the sentence into a structured
+search and run it for you. That's a feature of its own, local-first and with an
+optional cloud assist: see
+[Natural-language search](./natural-language-search.md).
 
 ### Reverse geocoding
 

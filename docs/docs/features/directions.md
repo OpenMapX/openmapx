@@ -1,7 +1,7 @@
 ---
 title: Directions & navigation
 description: Door-to-door routing for driving, cycling, and walking, with route options, turn-by-turn navigation, elevation, and a flights deep-link.
-sidebar_position: 2
+sidebar_position: 3
 ---
 
 # Directions & navigation

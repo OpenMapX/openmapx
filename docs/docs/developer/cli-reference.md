@@ -140,9 +140,15 @@ model behind installing third-party services.
 | Command | Description |
 | --- | --- |
 | `repos list` | List registered service repositories (URL, hash, last SHA, last fetch). |
-| `repos add <url>` | Register a community service repository from a Git URL. |
+| `repos add <url>` | Register a community service repository from a Git URL. Requires risk acknowledgment — pass `-y, --yes`, or answer the interactive prompt. Flag: `-y, --yes`. |
 | `repos remove <hash>` | Unregister a repository and remove its local clone. |
-| `repos refresh <hash>` | `git fetch` + `reset --hard` a registered repository. |
+| `repos refresh <hash>` | `git fetch` + `reset --hard` a registered repository, then re-validate every manifest; on failure the working tree is rolled back and the prior commit kept. |
+
+Because community code runs with container (and, for integrations, in-process
+API) privileges, `repos add` will not register a repository without an explicit
+risk acknowledgment: in an interactive terminal it prompts for confirmation; in a
+script or CI it refuses (exit 1, before any clone) unless you pass `--yes`. A
+copy-pasted command can never silently register a repo.
 
 ## `integrations`
 

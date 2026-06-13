@@ -1,7 +1,7 @@
 ---
 title: Reviews
 description: Read and write place reviews over Mangrove, an open and federated review network where you hold your own signing key.
-sidebar_position: 8
+sidebar_position: 10
 ---
 
 # Reviews

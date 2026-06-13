@@ -1,7 +1,7 @@
 ---
 title: Mobility & live data
 description: Live points of interest on the map — EV chargers, fuel prices, parking, shared bikes and scooters, car-sharing, and traffic webcams, drawn from open mobility data.
-sidebar_position: 7
+sidebar_position: 9
 ---
 
 # Mobility & live data

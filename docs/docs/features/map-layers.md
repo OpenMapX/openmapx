@@ -1,7 +1,7 @@
 ---
 title: Map layers & overlays
 description: Switch the base map style and toggle thematic overlays — traffic, weather, hazards, recreation, and more — each contributed by an integration.
-sidebar_position: 4
+sidebar_position: 5
 ---
 
 # Map layers & overlays
