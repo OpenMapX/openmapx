@@ -1,5 +1,6 @@
 import { USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
+import { envString } from "../utils/env.js";
 
 const CYCLOSM_SUBDOMAINS = ["a", "b", "c"] as const;
 let cyclOSMSubdomainIndex = 0;
@@ -77,9 +78,10 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      const baseUrl =
-        process.env.CYCLOSM_TILE_URL ??
-        "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png";
+      const baseUrl = envString(
+        "CYCLOSM_TILE_URL",
+        "https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+      );
 
       const sub = nextCyclOSMSubdomain();
       const url = baseUrl
@@ -123,8 +125,10 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
       }
       const [z, x, y] = coords;
 
-      const baseUrl =
-        process.env.OPENTOPOMAP_TILE_URL ?? "https://tile.opentopomap.org/{z}/{x}/{y}.png";
+      const baseUrl = envString(
+        "OPENTOPOMAP_TILE_URL",
+        "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+      );
 
       const url = baseUrl
         .replace("{z}", String(z))
@@ -167,9 +171,10 @@ export const tilesRoute: FastifyPluginAsync = async (fastify) => {
       }
       const [z, x, y] = coords;
 
-      const baseUrl =
-        process.env.WAYMARKED_CYCLING_TILE_URL ??
-        "https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png";
+      const baseUrl = envString(
+        "WAYMARKED_CYCLING_TILE_URL",
+        "https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png",
+      );
 
       const url = baseUrl
         .replace("{z}", String(z))

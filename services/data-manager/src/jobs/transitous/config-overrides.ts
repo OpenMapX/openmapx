@@ -183,7 +183,7 @@ export function applyOsrFootpathOverride(configPath: string, logger: JobLogger):
  * Returns `true` iff the file was modified.
  */
 export function applyOsmRegionOverride(configPath: string, logger: JobLogger): boolean {
-  const region = (process.env.MOTIS_REGION ?? process.env.OPENMAPX_REGION)?.trim();
+  const region = process.env.MOTIS_REGION?.trim() || process.env.OPENMAPX_REGION?.trim();
   if (!region) return false;
   if (!existsSync(configPath)) return false;
   let text: string;

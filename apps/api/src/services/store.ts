@@ -12,6 +12,7 @@ import { db } from "../db";
 import { installedIntegration } from "../db/schema";
 import { reloadIntegrations } from "../integration-host";
 import { redis } from "../redis";
+import { envString } from "../utils/env.js";
 import type { JobContext } from "./job-runner";
 
 // Single sentinel-based root resolver shared with the CLI. Honours
@@ -21,9 +22,10 @@ export const ROOT_DIR = findRepoRoot();
 
 // Catalog
 
-const DEFAULT_CATALOG_URL =
-  process.env.STORE_CATALOG_URL ??
-  "https://raw.githubusercontent.com/openmapx/community-integrations/main/catalog.json";
+const DEFAULT_CATALOG_URL = envString(
+  "STORE_CATALOG_URL",
+  "https://raw.githubusercontent.com/openmapx/community-integrations/main/catalog.json",
+);
 
 const CATALOG_CACHE_KEY = "store:catalog";
 const CATALOG_CACHE_TTL = 60 * 60 * 24; // 24 hours

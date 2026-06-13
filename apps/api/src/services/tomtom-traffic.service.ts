@@ -1,11 +1,12 @@
 import { USER_AGENT } from "@openmapx/core";
+import { envString } from "../utils/env.js";
 import type { TrafficProvider, TrafficTile } from "./traffic.provider";
 import { TrafficProviderHttpError } from "./traffic.provider";
 
-const TOMTOM_TRAFFIC_BASE_URL = process.env.TOMTOM_TRAFFIC_URL ?? "https://api.tomtom.com";
-const TOMTOM_TRAFFIC_STYLE = process.env.TOMTOM_TRAFFIC_STYLE ?? "relative-delay";
-const TOMTOM_TRAFFIC_VERSION = process.env.TOMTOM_TRAFFIC_VERSION ?? "4";
-const TOMTOM_TRAFFIC_TILE_SIZE = process.env.TOMTOM_TRAFFIC_TILE_SIZE ?? "256";
+const TOMTOM_TRAFFIC_BASE_URL = envString("TOMTOM_TRAFFIC_URL", "https://api.tomtom.com");
+const TOMTOM_TRAFFIC_STYLE = envString("TOMTOM_TRAFFIC_STYLE", "relative-delay");
+const TOMTOM_TRAFFIC_VERSION = envString("TOMTOM_TRAFFIC_VERSION", "4");
+const TOMTOM_TRAFFIC_TILE_SIZE = envString("TOMTOM_TRAFFIC_TILE_SIZE", "256");
 const TOMTOM_TRAFFIC_THICKNESS = process.env.TOMTOM_TRAFFIC_THICKNESS;
 
 function getTomTomTrafficKey(): string {

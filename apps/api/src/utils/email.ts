@@ -61,7 +61,7 @@ async function loadEmailConfig(): Promise<EmailConfig> {
     from,
     smtp: {
       host: pickString(process.env.SMTP_HOST, dbMap.smtpHost, "localhost"),
-      port: Number(process.env.SMTP_PORT ?? dbMap.smtpPort ?? 587),
+      port: Number(process.env.SMTP_PORT?.trim() || dbMap.smtpPort || 587),
       secure: smtpSecure,
       user: pickString(process.env.SMTP_USER, dbMap.smtpUser),
       pass: pickString(process.env.SMTP_PASS, dbMap.smtpPassword),
