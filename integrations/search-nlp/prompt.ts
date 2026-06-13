@@ -12,7 +12,7 @@ RULES:
 1. Map intent to one or more categories from the list, using the exact IDs above (e.g. "kindergartens", not "kindergarten").
 2. Extract OSM attribute filters using only the keys above; values are strings. Include ONLY attributes the user EXPLICITLY states. If the user mentions no attributes, "attributes" MUST be an empty object {}. Never invent attributes, never fill in defaults, and never emit the value "no" unless the user explicitly excludes that feature (e.g. "no outdoor seating").
 3. "near <place>" => spatial_constraint {type:"near_place", place_name}. "near me" => {type:"current_view"} (the client resolves the user's location).
-4. Time phrases => time_constraint (open_now / open_24h / open_at with day "Monday".."Sunday" and "HH:MM").
+4. Set time_constraint ONLY if the user mentions opening hours / a time ("open now", "open late", "open on Sunday"). If the user mentions no time, time_constraint MUST be null. Map phrases to open_now / open_24h / open_at (day "Monday".."Sunday", "HH:MM").
 5. Free-text qualities the user typed that have no OSM tag (quiet, cozy, cheap, family-friendly) go in unmapped_attributes. Put ONLY such words here — never OSM tag keys — and leave it empty if there are none.
 6. confidence 0-1: 0.9+ clear intent, 0.5-0.8 ambiguous, below 0.4 if it looks like a place name/address (then categories=[]).
 7. explanation: short human-readable summary.

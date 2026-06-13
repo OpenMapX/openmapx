@@ -94,6 +94,17 @@ describe("useNlpSearchStore", () => {
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
         expect(useOpeningHoursStore.getState().openingHoursFilter).toBe("any");
       });
+
+      it("ignores a time_constraint for a category without an hours filter (e.g. schools)", () => {
+        // A hallucinated open_now on a schools search must NOT apply — schools
+        // carry no opening_hours, so the filter would drop every result.
+        const intent = makeIntent({
+          categories: ["schools"],
+          time_constraint: { type: "open_now" },
+        });
+        useNlpSearchStore.getState().activate(intent, bbox, "openai");
+        expect(useOpeningHoursStore.getState().openingHoursFilter).toBe("any");
+      });
     });
 
     describe("facet population from attributes", () => {

@@ -1,3 +1,4 @@
+import { HOURS_FILTER_CATEGORY_IDS } from "@integrations/poi-search/types";
 import { create } from "zustand";
 import type { BoundingBox } from "../types/geometry";
 import type { SearchIntent } from "../types/search";
@@ -29,6 +30,11 @@ interface NlpSearchState {
 function applyTimeConstraint(intent: SearchIntent): void {
   const tc = intent.time_constraint;
   if (!tc) return;
+  // Only categories that support an opening-hours filter can be narrowed by
+  // time. Without this, a hallucinated "open_now" silently filters away every
+  // result for categories that carry no opening_hours (e.g. schools).
+  const activeCategory = intent.categories[0];
+  if (!activeCategory || !HOURS_FILTER_CATEGORY_IDS.has(activeCategory)) return;
   const oh = useOpeningHoursStore.getState();
   if (tc.type === "open_now") {
     oh.setOpeningHoursFilter("open_now");
