@@ -35,6 +35,7 @@ import { imageProxyRoute } from "./routes/image-proxy";
 import { internalMetricsRoute } from "./routes/internal-metrics";
 import { internalPoiSourcesRoute } from "./routes/internal-poi-sources";
 import { isochroneRoute } from "./routes/isochrone";
+import { legalConfigRoute } from "./routes/legal-config";
 import { maptilerRoute } from "./routes/maptiler";
 import { motisRoute } from "./routes/motis";
 import { neighborhoodsRoute } from "./routes/neighborhoods";
@@ -324,6 +325,9 @@ server.get("/health", async () => ({ status: "ok" }));
 
 // Capabilities (service availability)
 await server.register(capabilitiesRoute, { prefix: "/api" });
+
+// Public legal facts for the /privacy page (hosting provider, etc.)
+await server.register(legalConfigRoute, { prefix: "/api" });
 
 // Routes
 await server.register(placesRoute, { prefix: "/api" });

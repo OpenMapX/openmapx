@@ -256,6 +256,59 @@ const SETTING_DEFS: SettingDef[] = [
     env: "OPENMAPX_ALLOW_GREY_AREA",
     default: true,
   },
+  // Legal pages — facts published on /privacy that vary by hosting setup.
+  // Resolved env > database > default like every other setting here, then
+  // read by the public /legal-config endpoint that the privacy page fetches.
+  {
+    group: "legal",
+    key: "legalHostingProvider",
+    label: "Hosting Provider",
+    description:
+      "Company that hosts this instance's servers. Named in the privacy policy's hosting section as the data processor (Art. 28 GDPR). Leave blank to omit that sentence.",
+    type: "string",
+    env: "LEGAL_HOSTING_PROVIDER",
+    default: "",
+  },
+  {
+    group: "legal",
+    key: "legalHostingLocations",
+    label: "Hosting Data-Center Locations",
+    description:
+      'Where the hosting data centers are located (e.g. "Germany, Finland"). Appended to the hosting sentence on /privacy. Leave blank to omit.',
+    type: "string",
+    env: "LEGAL_HOSTING_LOCATIONS",
+    default: "",
+  },
+  {
+    group: "legal",
+    key: "legalSupervisoryAuthority",
+    label: "Data-Protection Supervisory Authority",
+    description:
+      "Name of the competent data-protection supervisory authority, shown in the privacy policy's GDPR-rights section. Leave blank to omit that sentence.",
+    type: "string",
+    env: "LEGAL_SUPERVISORY_AUTHORITY",
+    default: "",
+  },
+  {
+    group: "legal",
+    key: "legalSupervisoryAuthorityUrl",
+    label: "Supervisory Authority URL",
+    description:
+      "Link to the supervisory authority named above. Rendered next to it on /privacy. Leave blank to show just the name.",
+    type: "string",
+    env: "LEGAL_SUPERVISORY_AUTHORITY_URL",
+    default: "",
+  },
+  {
+    group: "legal",
+    key: "legalServerLogRetentionDays",
+    label: "Server-Log Retention (days)",
+    description:
+      "How long server access logs are kept before automatic deletion. Stated verbatim in the privacy policy. Must be a positive whole number; defaults to 30.",
+    type: "number",
+    env: "LEGAL_SERVER_LOG_RETENTION_DAYS",
+    default: 30,
+  },
 ];
 
 type SettingSource = "default" | "database" | "env";
@@ -288,6 +341,7 @@ const GROUP_LABELS: Record<string, string> = {
   email: "Email",
   map: "Map",
   policy: "Data-Use Policy",
+  legal: "Legal",
 };
 
 function parseEnvValue(raw: string, type: SettingDef["type"]): unknown {
@@ -296,7 +350,7 @@ function parseEnvValue(raw: string, type: SettingDef["type"]): unknown {
   return raw;
 }
 
-async function resolveSettings(): Promise<SettingsGroup[]> {
+export async function resolveSettings(): Promise<SettingsGroup[]> {
   const dbRows = await db.select().from(systemSettings);
   const dbMap = Object.fromEntries(dbRows.map((r) => [r.key, r.value]));
 

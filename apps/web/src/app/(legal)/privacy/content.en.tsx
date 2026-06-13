@@ -7,7 +7,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import type { Disclosure } from "@openmapx/core/server";
+import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { emailCountryName, emailTransferNote } from "../emailDisclosure";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
@@ -17,10 +17,12 @@ export default function PrivacyContent({
   capabilities: _capabilities = {},
   integrations = [],
   disclosures = [],
+  legal,
 }: {
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
   disclosures?: Disclosure[];
+  legal?: PublicLegalConfig;
 }) {
   const {
     name,
@@ -29,12 +31,21 @@ export default function PrivacyContent({
     city,
     country,
     email,
-    supervisoryAuthority,
-    supervisoryAuthorityUrl,
-    hostingProvider,
-    hostingLocations,
-    serverLogRetentionDays,
+    supervisoryAuthority: supervisoryAuthorityEnv,
+    supervisoryAuthorityUrl: supervisoryAuthorityUrlEnv,
+    hostingProvider: hostingProviderEnv,
+    hostingLocations: hostingLocationsEnv,
+    serverLogRetentionDays: serverLogRetentionDaysEnv,
   } = legalConfig;
+  // Hosting, supervisory authority and log retention resolve env > admin-
+  // database > default in app-api and arrive via `legal`. Fall back to the
+  // web-process env (legalConfig) only when the API is unreachable during SSR,
+  // so a configured value still renders.
+  const hostingProvider = legal?.hostingProvider || hostingProviderEnv;
+  const hostingLocations = legal?.hostingLocations || hostingLocationsEnv;
+  const supervisoryAuthority = legal?.supervisoryAuthority || supervisoryAuthorityEnv;
+  const supervisoryAuthorityUrl = legal?.supervisoryAuthorityUrl || supervisoryAuthorityUrlEnv;
+  const serverLogRetentionDays = legal?.serverLogRetentionDays ?? serverLogRetentionDaysEnv;
   const T = privacyTitles("en");
 
   return (
@@ -49,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: June 12, 2026
+        Last updated: June 14, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>

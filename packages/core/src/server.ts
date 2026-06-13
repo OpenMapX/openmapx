@@ -22,6 +22,7 @@ export {
   fetchDisclosures,
   fetchIntegrations,
 } from "./api/integrations";
+export { fetchLegalConfig, type PublicLegalConfig } from "./api/legal-config";
 export { serverApiUrl } from "./api/server-url";
 // Git clone helpers (shared by community service repos + community integrations)
 export {

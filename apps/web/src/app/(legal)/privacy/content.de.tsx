@@ -7,7 +7,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import type { Disclosure } from "@openmapx/core/server";
+import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server";
 import { legalConfig, sectionSlug } from "@openmapx/core/server";
 import { emailCountryName, emailTransferNote } from "../emailDisclosure";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
@@ -17,10 +17,12 @@ export default function PrivacyContentDe({
   capabilities: _capabilities = {},
   integrations = [],
   disclosures = [],
+  legal,
 }: {
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
   disclosures?: Disclosure[];
+  legal?: PublicLegalConfig;
 }) {
   const {
     name,
@@ -29,12 +31,21 @@ export default function PrivacyContentDe({
     city,
     country,
     email,
-    supervisoryAuthority,
-    supervisoryAuthorityUrl,
-    hostingProvider,
-    hostingLocations,
-    serverLogRetentionDays,
+    supervisoryAuthority: supervisoryAuthorityEnv,
+    supervisoryAuthorityUrl: supervisoryAuthorityUrlEnv,
+    hostingProvider: hostingProviderEnv,
+    hostingLocations: hostingLocationsEnv,
+    serverLogRetentionDays: serverLogRetentionDaysEnv,
   } = legalConfig;
+  // Hosting-Anbieter/Standorte, Aufsichtsbehörde und Log-Aufbewahrung werden in
+  // app-api als env > Admin-Datenbank > Default aufgelöst und kommen über
+  // `legal`. Fallback auf die Web-Prozess-Env (legalConfig) nur, wenn die API
+  // beim SSR nicht erreichbar ist.
+  const hostingProvider = legal?.hostingProvider || hostingProviderEnv;
+  const hostingLocations = legal?.hostingLocations || hostingLocationsEnv;
+  const supervisoryAuthority = legal?.supervisoryAuthority || supervisoryAuthorityEnv;
+  const supervisoryAuthorityUrl = legal?.supervisoryAuthorityUrl || supervisoryAuthorityUrlEnv;
+  const serverLogRetentionDays = legal?.serverLogRetentionDays ?? serverLogRetentionDaysEnv;
   const T = privacyTitles("de");
 
   return (
@@ -49,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 12. Juni 2026
+        Zuletzt aktualisiert: 14. Juni 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
