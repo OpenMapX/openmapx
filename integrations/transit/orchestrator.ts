@@ -103,6 +103,17 @@ function mergeAttributions(
   return out;
 }
 
+/**
+ * Keep only the fan-out results that actually returned data, for building
+ * attribution lists. Providers are queried broadly (by prefix/coverage), so the
+ * raw result set includes providers that matched the area but returned nothing —
+ * e.g. the per-operator dynamic-registry providers that don't serve the place.
+ * Crediting those would attribute data they never contributed.
+ */
+function resultsWithData<T>(results: MobilityResult<T[]>[]): MobilityResult<T[]>[] {
+  return results.filter((r) => r.data.length > 0);
+}
+
 /** Pick the earliest fetchedAt and the strongest realtime/stale signal. */
 function mergeFreshness(...lists: Freshness[]): Freshness {
   if (lists.length === 0) return freshnessNow();
@@ -326,7 +337,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: filtered,
-      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        ...resultsWithData(ok).map((r) => r.attributions),
+      ),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -427,7 +441,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        ...resultsWithData(ok).map((r) => r.attributions),
+      ),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -495,7 +512,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        ...resultsWithData(ok).map((r) => r.attributions),
+      ),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -520,7 +540,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        ...resultsWithData(ok).map((r) => r.attributions),
+      ),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -656,7 +679,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       .filter((v): v is MobilityResult<TransitRoute[]> => v != null);
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        ...resultsWithData(ok).map((r) => r.attributions),
+      ),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
@@ -907,7 +933,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       .filter((v): v is MobilityResult<TransitStop[]> => v != null);
     return {
       data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(ctx.attributionIndex, ...ok.map((r) => r.attributions)),
+      attributions: mergeAttributions(
+        ctx.attributionIndex,
+        ...resultsWithData(ok).map((r) => r.attributions),
+      ),
       freshness: mergeFreshness(...ok.map((r) => r.freshness)),
     };
   }
