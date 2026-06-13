@@ -296,6 +296,7 @@ export function PlaceTransitSection({
         attributions={mergedAttributions}
         variant="inline"
         label={tc("dataSources")}
+        maxVisible={3}
       />
     </Box>
   );

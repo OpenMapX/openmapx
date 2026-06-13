@@ -59,7 +59,9 @@
     "stopsCount": "{count} stop{count, plural, one {} other {s}}",
     "stationsInView": "{count} station{count, plural, one {} other {s}} in view",
     "share": "Share",
-    "dataSources": "Data sources"
+    "dataSources": "Data sources",
+    "showMore": "+{count} more",
+    "showLess": "Show less"
   },
   "search": {
     "placeholder": "Search OpenMapX",

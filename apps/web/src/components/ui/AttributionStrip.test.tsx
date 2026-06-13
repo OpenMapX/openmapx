@@ -1,7 +1,18 @@
+// @vitest-environment jsdom
+
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AttributionStrip } from "./AttributionStrip";
+
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string, values?: Record<string, unknown>) => {
+    if (key === "showMore") return `+${String(values?.count ?? 0)} more`;
+    if (key === "showLess") return "Show less";
+    return key;
+  },
+}));
 
 const delfi: Attribution = {
   sourceId: "delfi-de",
@@ -41,6 +52,16 @@ describe("AttributionStrip", () => {
     expect(markup.match(/data-source-id="tfl"/g)?.length).toBe(1);
   });
 
+  it("collapses chips that render identically (same name + license)", () => {
+    // Two distinct registry feeds both crediting the same agency.
+    const dbRegio: Attribution = { sourceId: "dyn:de/db-regio", name: "Deutsche Bahn AG" };
+    const dbSmart: Attribution = { sourceId: "dyn:de/db-smartrbl", name: "Deutsche Bahn AG" };
+    const markup = renderToStaticMarkup(<AttributionStrip attributions={[dbRegio, dbSmart]} />);
+    expect(markup.match(/data-source-id=/g)?.length).toBe(1);
+    expect(markup).toContain('data-source-id="dyn:de/db-regio"');
+    expect(markup).not.toContain('data-source-id="dyn:de/db-smartrbl"');
+  });
+
   it("falls back to /licenses anchor when attribution has no url", () => {
     const markup = renderToStaticMarkup(<AttributionStrip attributions={[tfl]} />);
     expect(markup).toContain("/licenses#source-tfl");
@@ -66,5 +87,31 @@ describe("AttributionStrip", () => {
     );
     expect(markup).not.toContain("<a ");
     expect(markup).toContain("DELFI");
+  });
+
+  it("collapses to maxVisible with a toggle that expands and collapses", () => {
+    const items: Attribution[] = [
+      { sourceId: "a", name: "Alpha" },
+      { sourceId: "b", name: "Bravo" },
+      { sourceId: "c", name: "Charlie" },
+      { sourceId: "d", name: "Delta" },
+    ];
+    const { container } = render(<AttributionStrip attributions={items} maxVisible={2} />);
+    expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
+    const toggle = container.querySelector("button");
+    expect(toggle?.textContent).toBe("+2 more");
+
+    fireEvent.click(toggle as HTMLButtonElement);
+    expect(container.querySelectorAll("[data-source-id]").length).toBe(4);
+    expect(container.querySelector("button")?.textContent).toBe("Show less");
+
+    fireEvent.click(container.querySelector("button") as HTMLButtonElement);
+    expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
+  });
+
+  it("renders no toggle when item count is within maxVisible", () => {
+    const { container } = render(<AttributionStrip attributions={[delfi, tfl]} maxVisible={3} />);
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.querySelectorAll("[data-source-id]").length).toBe(2);
   });
 });

@@ -5,7 +5,8 @@ import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import type { JSX } from "react";
+import { useTranslations } from "next-intl";
+import { type JSX, useState } from "react";
 
 /**
  * Visual variant for the AttributionStrip.
@@ -28,6 +29,12 @@ export interface AttributionStripProps {
    *   - Fall back to the in-app `/licenses` page anchored to this sourceId.
    */
   navigable?: boolean;
+  /**
+   * When set and the deduped list exceeds it, only this many chips render by
+   * default, followed by a "+N more" toggle that reveals the rest. Keeps long
+   * attribution lists (e.g. a transit hub served by many feeds) compact.
+   */
+  maxVisible?: number;
 }
 
 function chipHref(attr: Attribution): string {
@@ -35,12 +42,26 @@ function chipHref(attr: Attribution): string {
   return `/licenses#source-${encodeURIComponent(attr.sourceId)}`;
 }
 
-function dedupBySourceId(attributions: Attribution[]): Attribution[] {
-  const seen = new Set<string>();
+function displayLabel(attr: Attribution): string {
+  return attr.spdxLicense ? `${attr.name} · ${attr.spdxLicense}` : attr.name;
+}
+
+/**
+ * Dedupe by sourceId, then collapse chips that would render identically (same
+ * name + license). Distinct feeds operated by the same agency — e.g. two HAFAS
+ * registry instances both crediting "Deutsche Bahn AG" — otherwise show as
+ * duplicate chips even though they read the same.
+ */
+function dedupeForDisplay(attributions: Attribution[]): Attribution[] {
+  const seenIds = new Set<string>();
+  const seenLabels = new Set<string>();
   const out: Attribution[] = [];
   for (const a of attributions) {
-    if (!a?.sourceId || seen.has(a.sourceId)) continue;
-    seen.add(a.sourceId);
+    if (!a?.sourceId || seenIds.has(a.sourceId)) continue;
+    seenIds.add(a.sourceId);
+    const label = displayLabel(a);
+    if (seenLabels.has(label)) continue;
+    seenLabels.add(label);
     out.push(a);
   }
   return out;
@@ -59,12 +80,18 @@ export function AttributionStrip({
   variant = "inline",
   label,
   navigable = true,
+  maxVisible,
 }: AttributionStripProps): JSX.Element | null {
+  const tc = useTranslations("common");
+  const [expanded, setExpanded] = useState(false);
   if (!attributions || attributions.length === 0) return null;
-  const items = dedupBySourceId(attributions);
+  const items = dedupeForDisplay(attributions);
   if (items.length === 0) return null;
 
   const isPanelHeader = variant === "panel-header";
+  const collapsible = typeof maxVisible === "number" && items.length > maxVisible;
+  const visibleItems = collapsible && !expanded ? items.slice(0, maxVisible) : items;
+  const hiddenCount = items.length - visibleItems.length;
 
   const containerSx = {
     display: "flex",
@@ -98,8 +125,8 @@ export function AttributionStrip({
           {label}
         </Typography>
       )}
-      {items.map((attr, idx) => {
-        const labelText = attr.spdxLicense ? `${attr.name} · ${attr.spdxLicense}` : attr.name;
+      {visibleItems.map((attr, idx) => {
+        const labelText = displayLabel(attr);
         const tooltip = attr.attributionText ?? attr.publisher?.name ?? attr.url ?? attr.name;
         const chipSx = {
           display: "inline-flex",
@@ -145,6 +172,27 @@ export function AttributionStrip({
           </Tooltip>
         );
       })}
+      {collapsible && (
+        <Typography
+          component="button"
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          sx={{
+            border: 0,
+            background: "none",
+            cursor: "pointer",
+            p: 0,
+            fontFamily: "inherit",
+            fontSize,
+            lineHeight: 1.4,
+            fontWeight: 500,
+            color: "text.secondary",
+            "&:hover": { textDecoration: "underline" },
+          }}
+        >
+          {expanded ? tc("showLess") : tc("showMore", { count: hiddenCount })}
+        </Typography>
+      )}
     </Box>
   );
 }
