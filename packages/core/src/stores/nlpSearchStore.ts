@@ -44,14 +44,23 @@ function applyTimeConstraint(intent: SearchIntent): void {
 function applyFacets(intent: SearchIntent): void {
   const facets = useCategoryFacetStore.getState();
   const attrs = intent.attributes;
+  // Only apply facets that actually belong to the category being searched.
+  // Models (especially small local ones) can emit attributes the user never
+  // asked for; without this scope a hallucinated food/dietary attribute would
+  // get applied to e.g. a "schools" search and filter every result away.
+  const activeCategory = intent.categories[0];
+  if (!activeCategory) return;
   for (const facet of CATEGORY_FACETS) {
+    if (!facet.categoryIds.has(activeCategory)) continue;
     const value = attrs[facet.tag];
     if (value === undefined) continue;
     if (facet.type === "toggle") {
       if ((facet.matchValues ?? []).includes(value)) {
         facets.setMultiFacet(facet.id, ["on"]);
       }
-    } else {
+    } else if (value !== "no") {
+      // Multi facets (e.g. cuisine) take the value verbatim — skip the model's
+      // default "no", which would filter to a nonexistent value (zero results).
       facets.setMultiFacet(facet.id, [value]);
     }
   }

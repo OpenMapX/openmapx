@@ -132,6 +132,30 @@ describe("useNlpSearchStore", () => {
         useNlpSearchStore.getState().activate(intent, bbox, "openai");
         expect(useCategoryFacetStore.getState().selections.wheelchairAccessible).toBeUndefined();
       });
+
+      it("ignores facets not scoped to the active category (e.g. food attrs on a schools search)", () => {
+        // Reproduces the Aachen bug: a small model hallucinated a full attribute
+        // set for "Schulen in meiner Nähe"; none of these apply to schools, so
+        // no facet should be set and the schools results must not be filtered.
+        const intent = makeIntent({
+          categories: ["schools"],
+          attributes: {
+            outdoor_seating: "no",
+            wheelchair: "limited",
+            internet_access: "wlan",
+            cuisine: "no",
+            "diet:vegan": "yes",
+          },
+        });
+        useNlpSearchStore.getState().activate(intent, bbox, "openai");
+        expect(Object.keys(useCategoryFacetStore.getState().selections)).toHaveLength(0);
+      });
+
+      it("skips a multi facet whose value is the model default 'no'", () => {
+        const intent = makeIntent({ categories: ["restaurants"], attributes: { cuisine: "no" } });
+        useNlpSearchStore.getState().activate(intent, bbox, "openai");
+        expect(useCategoryFacetStore.getState().selections.cuisine).toBeUndefined();
+      });
     });
   });
 

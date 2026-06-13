@@ -33,6 +33,27 @@ import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 import { NlpUnmappedNotice } from "./NlpFilterChips";
 
+// Recognized OSM attribute keys (base form). A small model sometimes echoes
+// these into `unmapped_attributes` instead of leaving them out — they aren't
+// genuinely "unmapped", so they're stripped from the notice.
+const KNOWN_OSM_ATTRIBUTE_KEYS = new Set([
+  "outdoor_seating",
+  "wheelchair",
+  "internet_access",
+  "cuisine",
+  "diet",
+  "takeaway",
+  "delivery",
+  "drive_through",
+  "smoking",
+  "dog",
+  "fee",
+  "payment",
+  "live_music",
+  "organic",
+  "distance",
+]);
+
 // Display order: Mon–Sun; JS day indices
 const DAYS: { key: string; idx: number }[] = [
   { key: "monday", idx: 1 },
@@ -123,11 +144,22 @@ export function CategoryFilterBar() {
   // filter (e.g. "best", "instagrammable") so the user knows they aren't
   // narrowing the results.
   const isNlpActive = useNlpSearchStore((s) => s.isNlpActive);
-  const nlpUnmapped = useNlpSearchStore((s) => s.intent?.unmapped_attributes);
+  const nlpRawUnmapped = useNlpSearchStore((s) => s.intent?.unmapped_attributes);
+  const nlpAttributes = useNlpSearchStore((s) => s.intent?.attributes);
+  // Keep only genuine free-text qualities ("cozy", "best") — drop anything that
+  // is a recognized OSM tag key or already present in `attributes` (small models
+  // duplicate/echo the tag vocabulary here), and dedupe.
+  const nlpUnmapped = useMemo(() => {
+    if (!nlpRawUnmapped) return [];
+    const attrKeys = new Set(Object.keys(nlpAttributes ?? {}));
+    return [
+      ...new Set(
+        nlpRawUnmapped.filter((a) => !attrKeys.has(a) && !KNOWN_OSM_ATTRIBUTE_KEYS.has(a)),
+      ),
+    ];
+  }, [nlpRawUnmapped, nlpAttributes]);
   const unmappedNotice =
-    isNlpActive && nlpUnmapped && nlpUnmapped.length > 0 ? (
-      <NlpUnmappedNotice attributes={nlpUnmapped} />
-    ) : null;
+    isNlpActive && nlpUnmapped.length > 0 ? <NlpUnmappedNotice attributes={nlpUnmapped} /> : null;
   const { rawResults, dominantCategory } = useExploreResults();
   // In text mode there is no active category chip — reuse the facets of the
   // category that the results predominantly belong to (e.g. "McDonald's" →

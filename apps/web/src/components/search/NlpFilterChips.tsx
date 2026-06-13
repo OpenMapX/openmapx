@@ -17,11 +17,19 @@ export function NlpUnmappedNotice({ attributes }: { attributes: string[] }) {
   return (
     <Box
       sx={{
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
         gap: 0.75,
         color: "text.secondary",
         pointerEvents: "auto",
+        // Give the notice an opaque pill background — it floats over the map, so
+        // without this the muted caption is nearly unreadable against the tiles.
+        bgcolor: "background.paper",
+        px: 1.25,
+        py: 0.5,
+        borderRadius: 2,
+        boxShadow: 2,
+        maxWidth: "100%",
       }}
     >
       <InfoOutlinedIcon sx={{ fontSize: 16, flexShrink: 0 }} />
