@@ -8,6 +8,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
+import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import InputBase from "@mui/material/InputBase";
@@ -212,12 +213,16 @@ export function SearchBar() {
   // consentGranted tracks local acceptance within this session so the card
   // renders immediately after the user clicks "Enable" without a re-fetch.
   const [consentGranted, setConsentGranted] = useState(false);
+  // The natural-language parse is expensive on this deployment (~10-20s CPU
+  // inference), so it fires only when the user submits (Enter / search button),
+  // never per keystroke. Any edit to the query resets this (see handleChange).
+  const [nlpSubmitted, setNlpSubmitted] = useState(false);
 
-  const { data: nlpData } = useNlpSearch(
+  const { data: nlpData, isFetching: nlpFetching } = useNlpSearch(
     debouncedQuery,
     mapCenter,
     mapBbox,
-    isNl,
+    isNl && nlpSubmitted,
     locale,
     nlpNoCloud,
   );
@@ -574,7 +579,18 @@ export function SearchBar() {
         onActivate={handleActivateNlp}
       />
     ) : null;
-  const showDropdown = isFocused && (effectiveSuggestions.length > 0 || showNlpCard);
+  // While a submitted NL query is parsing, show a loading row so the user gets
+  // feedback during the (slow) inference instead of a frozen-looking bar.
+  const nlpPending = nlpSubmitted && nlpFetching && !nlpData;
+  const nlpLoadingCard = nlpPending ? (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.5 }}>
+      <CircularProgress size={18} />
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+        {t("aiUnderstanding")}
+      </Typography>
+    </Box>
+  ) : null;
+  const showDropdown = isFocused && (effectiveSuggestions.length > 0 || showNlpCard || nlpPending);
 
   const tryOpenTransitStop = async (coords: LngLat, name: string): Promise<boolean> => {
     try {
@@ -649,11 +665,22 @@ export function SearchBar() {
         setActiveSource(null);
       }
     }
+    // Editing the query invalidates any pending/previous NL parse — it must be
+    // re-submitted to fire again (keeps the slow parse off the keystroke path).
+    if (nlpSubmitted) setNlpSubmitted(false);
     setQuery(newValue);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Natural-language query → trigger the LLM parse now (submit-gated). Keep
+    // the dropdown open so the loading row and AI card render; the card drives
+    // the actual search when activated. Don't fall through to geocode/text search.
+    if (!nearbyMode && mapCenter && mapBbox && classifyQuery(query.trim()) === "nl") {
+      setNlpSubmitted(true);
+      setIsFocused(true);
+      return;
+    }
     inputRef.current?.blur();
     if (nearbyMode) {
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
@@ -1108,6 +1135,7 @@ export function SearchBar() {
                   overflowY: "auto",
                 }}
               >
+                {nlpLoadingCard}
                 {nlpCard}
                 <AutocompleteDropdown
                   suggestions={effectiveSuggestions}
@@ -1189,6 +1217,7 @@ export function SearchBar() {
             />
           ) : showDropdown ? (
             <>
+              {nlpLoadingCard}
               {nlpCard}
               <AutocompleteDropdown
                 suggestions={effectiveSuggestions}

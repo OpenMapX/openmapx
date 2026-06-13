@@ -86,6 +86,7 @@
     "minutesShort": "{minutes} min",
     "updateOnMapMove": "Update results when moving map",
     "aiPoweredSearch": "AI-powered search",
+    "aiUnderstanding": "Understanding your search…",
     "couldNotFilterBy": "Could not filter by:",
     "nlpConsentTitle": "Enable AI-powered search?",
     "nlpConsentBody": "Your search query and approximate location will be sent to {provider} to interpret natural-language searches. No personal information is included.",
