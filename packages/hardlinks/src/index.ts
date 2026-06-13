@@ -17,11 +17,26 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
+function canonicalizeExisting(p: string): string {
+  let dir = resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    if (existsSync(dir)) {
+      return tail.length ? join(realpathSync(dir), ...tail) : realpathSync(dir);
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return tail.length ? join(dir, ...tail) : dir;
+    tail.unshift(basename(dir));
+    dir = parent;
+  }
+}
 
 export interface HardlinkEntry {
   source: string;
@@ -78,8 +93,9 @@ function stripDataPrefix(p: string): string {
 }
 
 function assertWithinRoot(label: string, pathAbs: string, rootDir: string): void {
-  const rootAbs = resolve(rootDir);
-  const rel = relative(rootAbs, pathAbs);
+  const rootAbs = canonicalizeExisting(rootDir);
+  const real = canonicalizeExisting(pathAbs);
+  const rel = relative(rootAbs, real);
   if (rel === "") return;
   if (rel.startsWith("..") || isAbsolute(rel)) {
     throw new Error(`hardlink ${label} "${pathAbs}" escapes the data root "${rootAbs}"`);

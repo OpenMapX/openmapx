@@ -7,18 +7,33 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchWithRedirects, isValidFeedSlug, USER_AGENT, validatePublicUrl } from "@openmapx/core";
 import { repoPaths, safeDownload } from "@openmapx/core/server";
 import { gtfsDate, parseCsv, streamCsvBatches } from "./csv";
 import { sql } from "./db";
 import { invalidateSchemaCaches } from "./queries";
+
+function canonicalizeExisting(p: string): string {
+  let dir = resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    if (existsSync(dir)) {
+      return tail.length ? join(realpathSync(dir), ...tail) : realpathSync(dir);
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return tail.length ? join(dir, ...tail) : dir;
+    tail.unshift(basename(dir));
+    dir = parent;
+  }
+}
 
 function assertValidGtfsSchema(schema: string): void {
   if (!schema.startsWith("gtfs_") || !isValidFeedSlug(schema.slice("gtfs_".length))) {
@@ -48,10 +63,10 @@ function resolveCanonicalGtfsDir(): string {
   }
 }
 
-const CANONICAL_GTFS_DIR = resolveCanonicalGtfsDir();
+const CANONICAL_GTFS_DIR = canonicalizeExisting(resolveCanonicalGtfsDir());
 
 function assertLocalPathSafe(rawPath: string): void {
-  const resolved = resolve(rawPath);
+  const resolved = canonicalizeExisting(rawPath);
   // Require the resolved path to be either CANONICAL_GTFS_DIR itself
   // (impossible — it's a directory, not a file) or a child. The trailing
   // separator guard prevents `…/data/gtfs-evil/feed.zip` from sneaking past

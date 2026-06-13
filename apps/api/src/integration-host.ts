@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   type CacheClient,
@@ -66,6 +66,20 @@ import {
 import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { getEmailDisclosure } from "./utils/email";
+
+function canonicalizeExisting(p: string): string {
+  let dir = resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    if (existsSync(dir)) {
+      return tail.length ? join(realpathSync(dir), ...tail) : realpathSync(dir);
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return tail.length ? join(dir, ...tail) : dir;
+    tail.unshift(basename(dir));
+    dir = parent;
+  }
+}
 
 export type { ConfigSource, ConfigValueWithSource };
 export { resolveConfigWithSources };
@@ -788,13 +802,19 @@ export async function initIntegrations(
         return reply.status(404).send({ error: "Not found" });
       }
       const fileName = req.params["*"];
-      if (!fileName || fileName.includes("..")) {
+      if (!fileName) {
         return reply.status(400).send({ error: "Invalid path" });
       }
       const filePath =
         fileName === "index.js"
           ? integrationFrontendBundlePath(integration.directory)
           : join(integration.directory, "dist", "frontend", fileName);
+      const realRoot = canonicalizeExisting(integration.directory);
+      const realFile = canonicalizeExisting(filePath);
+      const rel = relative(realRoot, realFile);
+      if (rel.startsWith("..") || isAbsolute(rel)) {
+        return reply.status(400).send({ error: "Invalid path" });
+      }
       if (!existsSync(filePath)) {
         return reply.status(404).send({ error: "Bundle not found" });
       }
