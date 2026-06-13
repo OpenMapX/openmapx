@@ -37,11 +37,11 @@ import type {
 } from "@openmapx/integration-framework";
 import {
   type AttributionRow,
-  DOMAIN_TO_ATTRIBUTION_SECTION,
-  DOMAIN_TO_PRIVACY_SECTION,
+  DOMAIN_TO_SECTION_KEY,
   generateAttributionSectionsFromManifests,
   generatePrivacySectionsFromManifests,
   legalSectionDomain,
+  legalSectionStrings,
   type PrivacyServiceRow,
 } from "../apps/web/src/app/(legal)/generateLegalSections.ts";
 
@@ -238,25 +238,44 @@ function checkStructure(it: DiscoveredIntegration): string[] {
 }
 
 /**
- * Section headings come from DOMAIN_TO_{PRIVACY,ATTRIBUTION}_SECTION in
- * generateLegalSections.ts, not the i18n catalogs — so check-translations never
- * sees them, and the cell-emptiness checks above only look at row data. A
- * contributing integration whose domain is absent from a map renders the raw,
- * untranslated domain string (e.g. "live-transit") as its heading in every
- * locale. Flag any such uncovered domain so it can't ship silently.
+ * Section headings + exposure labels resolve through DOMAIN_TO_SECTION_KEY to the
+ * i18n catalog (`legal.privacySections.<key>`, `legal.attributionSections.<key>`,
+ * `legal.exposure.<value>`). The cell-emptiness checks above only look at row
+ * data, and a heading falls back to the raw key when its catalog entry is
+ * missing — so assert every contributing domain maps to a section key whose
+ * catalog entries exist, and every exposure value used has a catalog label.
+ * (check-translations separately guarantees en/de parity for the strings.)
  */
 function checkHeadings(it: DiscoveredIntegration): string[] {
   const problems: string[] = [];
+  const legal = legalSectionStrings("en");
   const domain = legalSectionDomain({ domains: it.manifest.domains ?? [] });
-  if (!(domain in DOMAIN_TO_PRIVACY_SECTION)) {
+  const key = DOMAIN_TO_SECTION_KEY[domain];
+  if (!key) {
     problems.push(
-      `domain "${domain}" has no Privacy section heading — add it to DOMAIN_TO_PRIVACY_SECTION in generateLegalSections.ts`,
+      `domain "${domain}" has no section key — add it to DOMAIN_TO_SECTION_KEY in generateLegalSections.ts`,
     );
+  } else {
+    if (!(key in legal.privacySections)) {
+      problems.push(
+        `Privacy heading missing — add legal.privacySections.${key} to the i18n catalog`,
+      );
+    }
+    if (!(key in legal.attributionSections)) {
+      problems.push(
+        `Terms heading missing — add legal.attributionSections.${key} to the i18n catalog`,
+      );
+    }
   }
-  if (!(domain in DOMAIN_TO_ATTRIBUTION_SECTION)) {
-    problems.push(
-      `domain "${domain}" has no Terms attribution heading — add it to DOMAIN_TO_ATTRIBUTION_SECTION in generateLegalSections.ts`,
-    );
+  const exposures = new Set(
+    (it.manifest.dataSources ?? [])
+      .map((ds) => ds.endUserExposure)
+      .filter((e): e is string => typeof e === "string" && e.length > 0),
+  );
+  for (const exposure of exposures) {
+    if (!(exposure in legal.exposure)) {
+      problems.push(`exposure label missing — add legal.exposure.${exposure} to the i18n catalog`);
+    }
   }
   return problems;
 }

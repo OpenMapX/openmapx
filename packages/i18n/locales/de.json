@@ -1136,7 +1136,52 @@
     "privacyDescription": "Datenschutzerkl\u00e4rung f\u00fcr OpenMapX \u2014 wie wir Ihre Daten gem\u00e4\u00df der DSGVO verarbeiten.",
     "termsDescription": "Nutzungsbedingungen f\u00fcr OpenMapX.",
     "openSourceLicensesDescription": "Lizenzen der Open-Source-Abh\u00e4ngigkeiten, die OpenMapX verwendet.",
-    "account": "Konto"
+    "account": "Konto",
+    "privacySections": {
+      "geocoding": "Geokodierung",
+      "routing": "Routing",
+      "transit": "\u00d6ffentlicher Nahverkehr",
+      "mapOverlays": "Karten\u00fcberlagerungen",
+      "dataSources": "Datenquellen",
+      "streetView": "Stra\u00dfenansicht",
+      "photos": "Ortsfotos",
+      "knowledge": "Ortswissen",
+      "poiSearch": "Interessenpunkt-Suche",
+      "weather": "Wetter",
+      "reviews": "Bewertungen",
+      "liveTransit": "Live-Nahverkehr",
+      "transitDataCatalogs": "Nahverkehrsdaten-Kataloge",
+      "flights": "Fl\u00fcge",
+      "hotels": "Hotels",
+      "foodDelivery": "Essenslieferung",
+      "restaurantMenus": "Restaurant-Speisekarten"
+    },
+    "attributionSections": {
+      "geocoding": "Kartendaten und Geokodierung",
+      "routing": "Routing",
+      "transit": "\u00d6ffentlicher Nahverkehr",
+      "mapOverlays": "Karten\u00fcberlagerungen und Daten",
+      "dataSources": "Datenquellen",
+      "streetView": "Stra\u00dfenansicht",
+      "photos": "Ortsfotos",
+      "knowledge": "Ortswissen",
+      "poiSearch": "Interessenpunkt-Suche",
+      "weather": "Wetter",
+      "reviews": "Bewertungen",
+      "liveTransit": "Live-Nahverkehr",
+      "transitDataCatalogs": "Nahverkehrsdaten-Kataloge",
+      "flights": "Fl\u00fcge",
+      "hotels": "Hotels",
+      "foodDelivery": "Essenslieferung",
+      "restaurantMenus": "Restaurant-Speisekarten"
+    },
+    "exposure": {
+      "direct": "Direkt (Browser)",
+      "mixed": "Gemischt",
+      "proxied": "\u00dcber Server (Proxy)",
+      "server-only": "Nur Server",
+      "build-time": "Nur zur Build-Zeit"
+    }
   },
   "settings": {
     "title": "Einstellungen",

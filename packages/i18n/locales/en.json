@@ -1136,7 +1136,52 @@
     "privacyDescription": "Privacy policy for OpenMapX describing how we handle your data in accordance with the GDPR.",
     "termsDescription": "Terms of service and conditions of use for OpenMapX.",
     "openSourceLicensesDescription": "Open source dependency licenses used by OpenMapX.",
-    "account": "Account"
+    "account": "Account",
+    "privacySections": {
+      "geocoding": "Geocoding",
+      "routing": "Routing",
+      "transit": "Public Transit",
+      "mapOverlays": "Map Overlays",
+      "dataSources": "Data Sources",
+      "streetView": "Street-Level Imagery",
+      "photos": "Place Photos",
+      "knowledge": "Place Knowledge",
+      "poiSearch": "Point of Interest Search",
+      "weather": "Weather",
+      "reviews": "Reviews",
+      "liveTransit": "Live Transit",
+      "transitDataCatalogs": "Transit Data Catalogs",
+      "flights": "Flights",
+      "hotels": "Hotels",
+      "foodDelivery": "Food Delivery",
+      "restaurantMenus": "Restaurant Menus"
+    },
+    "attributionSections": {
+      "geocoding": "Map Data and Geocoding",
+      "routing": "Routing",
+      "transit": "Public Transit",
+      "mapOverlays": "Map Overlays and Data",
+      "dataSources": "Data Sources",
+      "streetView": "Street-Level Imagery",
+      "photos": "Place Photos",
+      "knowledge": "Place Knowledge",
+      "poiSearch": "Point of Interest Search",
+      "weather": "Weather",
+      "reviews": "Reviews",
+      "liveTransit": "Live Transit",
+      "transitDataCatalogs": "Transit Data Catalogs",
+      "flights": "Flights",
+      "hotels": "Hotels",
+      "foodDelivery": "Food Delivery",
+      "restaurantMenus": "Restaurant Menus"
+    },
+    "exposure": {
+      "direct": "Direct (browser)",
+      "mixed": "Mixed",
+      "proxied": "Proxied (server)",
+      "server-only": "Server-only",
+      "build-time": "Build-time only"
+    }
   },
   "settings": {
     "title": "Settings",

@@ -1,3 +1,5 @@
+import deCatalog from "@openmapx/i18n/locales/de.json";
+import enCatalog from "@openmapx/i18n/locales/en.json";
 import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
 
 export interface PrivacyServiceRow {
@@ -20,140 +22,56 @@ export interface AttributionRow {
   notes?: string;
 }
 
-export const DOMAIN_TO_PRIVACY_SECTION: Record<
-  string,
-  { key: string; labelEn: string; labelDe: string }
-> = {
-  geocoding: { key: "geocoding", labelEn: "Geocoding", labelDe: "Geokodierung" },
-  routing: { key: "routing", labelEn: "Routing", labelDe: "Routing" },
-  transit: { key: "transit", labelEn: "Public Transit", labelDe: "Öffentlicher Nahverkehr" },
-  "map-overlay": {
-    key: "mapOverlays",
-    labelEn: "Map Overlays",
-    labelDe: "Kartenüberlagerungen",
-  },
-  "data-source": {
-    key: "dataSources",
-    labelEn: "Data Sources",
-    labelDe: "Datenquellen",
-  },
-  "street-view": {
-    key: "streetView",
-    labelEn: "Street-Level Imagery",
-    labelDe: "Straßenansicht",
-  },
-  photos: { key: "photos", labelEn: "Place Photos", labelDe: "Ortsfotos" },
-  knowledge: {
-    key: "knowledge",
-    labelEn: "Place Knowledge",
-    labelDe: "Ortswissen",
-  },
-  "poi-search": {
-    key: "poiSearch",
-    labelEn: "Point of Interest Search",
-    labelDe: "Interessenpunkt-Suche",
-  },
-  weather: {
-    key: "weather",
-    labelEn: "Weather",
-    labelDe: "Wetter",
-  },
-  reviews: {
-    key: "reviews",
-    labelEn: "Reviews",
-    labelDe: "Bewertungen",
-  },
-  "live-transit": {
-    key: "liveTransit",
-    labelEn: "Live Transit",
-    labelDe: "Live-Nahverkehr",
-  },
-  "gtfs-catalog": {
-    key: "transitDataCatalogs",
-    labelEn: "Transit Data Catalogs",
-    labelDe: "Nahverkehrsdaten-Kataloge",
-  },
-  "flight-search": { key: "flights", labelEn: "Flights", labelDe: "Flüge" },
-  "hotel-search": { key: "hotels", labelEn: "Hotels", labelDe: "Hotels" },
-  "food-delivery": {
-    key: "foodDelivery",
-    labelEn: "Food Delivery",
-    labelDe: "Essenslieferung",
-  },
-  "restaurant-menu": {
-    key: "restaurantMenus",
-    labelEn: "Restaurant Menus",
-    labelDe: "Restaurant-Speisekarten",
-  },
+/**
+ * Maps an integration domain to its legal-table section key. The key indexes the
+ * localized headings in the shared i18n catalog (`legal.privacySections.<key>`,
+ * `legal.attributionSections.<key>`) — so the heading STRINGS live with every
+ * other translation and are covered by `check-translations`' en/de parity check,
+ * while only the structural domain→key mapping stays in code. Domains absent here
+ * have no section heading; `scripts/check-legal-tables.ts` blocks that.
+ */
+export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
+  geocoding: "geocoding",
+  routing: "routing",
+  transit: "transit",
+  "map-overlay": "mapOverlays",
+  "data-source": "dataSources",
+  "street-view": "streetView",
+  photos: "photos",
+  knowledge: "knowledge",
+  "poi-search": "poiSearch",
+  weather: "weather",
+  reviews: "reviews",
+  "live-transit": "liveTransit",
+  "gtfs-catalog": "transitDataCatalogs",
+  "flight-search": "flights",
+  "hotel-search": "hotels",
+  "food-delivery": "foodDelivery",
+  "restaurant-menu": "restaurantMenus",
 };
 
-export const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe: string }> =
-  {
-    geocoding: {
-      heading: "Map Data and Geocoding",
-      headingDe: "Kartendaten und Geokodierung",
-    },
-    routing: { heading: "Routing", headingDe: "Routing" },
-    transit: {
-      heading: "Public Transit",
-      headingDe: "Öffentlicher Nahverkehr",
-    },
-    "map-overlay": {
-      heading: "Map Overlays and Data",
-      headingDe: "Kartenüberlagerungen und Daten",
-    },
-    "data-source": {
-      heading: "Data Sources",
-      headingDe: "Datenquellen",
-    },
-    "street-view": {
-      heading: "Street-Level Imagery",
-      headingDe: "Straßenansicht",
-    },
-    photos: { heading: "Place Photos", headingDe: "Ortsfotos" },
-    knowledge: {
-      heading: "Place Knowledge",
-      headingDe: "Ortswissen",
-    },
-    "poi-search": {
-      heading: "Point of Interest Search",
-      headingDe: "Interessenpunkt-Suche",
-    },
-    weather: {
-      heading: "Weather",
-      headingDe: "Wetter",
-    },
-    reviews: {
-      heading: "Reviews",
-      headingDe: "Bewertungen",
-    },
-    "live-transit": {
-      heading: "Live Transit",
-      headingDe: "Live-Nahverkehr",
-    },
-    "gtfs-catalog": {
-      heading: "Transit Data Catalogs",
-      headingDe: "Nahverkehrsdaten-Kataloge",
-    },
-    "flight-search": { heading: "Flights", headingDe: "Flüge" },
-    "hotel-search": { heading: "Hotels", headingDe: "Hotels" },
-    "food-delivery": {
-      heading: "Food Delivery",
-      headingDe: "Essenslieferung",
-    },
-    "restaurant-menu": {
-      heading: "Restaurant Menus",
-      headingDe: "Restaurant-Speisekarten",
-    },
-  };
+/** The `legal` catalog sub-objects this module resolves headings + labels from. */
+export interface LegalSectionStrings {
+  privacySections: Record<string, string>;
+  attributionSections: Record<string, string>;
+  exposure: Record<string, string>;
+}
 
-const EXPOSURE_LABELS: Record<string, { en: string; de: string }> = {
-  direct: { en: "Direct (browser)", de: "Direkt (Browser)" },
-  mixed: { en: "Mixed", de: "Gemischt" },
-  proxied: { en: "Proxied (server)", de: "Über Server (Proxy)" },
-  "server-only": { en: "Server-only", de: "Nur Server" },
-  "build-time": { en: "Build-time only", de: "Nur zur Build-Zeit" },
+// The generators run both in the Next.js pages (where next-intl is available)
+// and in scripts/check-legal-tables.ts (a plain tsx script with no React
+// runtime), so they can't use the next-intl `t()` API. Instead they read the
+// same locale catalogs next-intl loads — keeping a single source of truth — and
+// resolve by locale. `as unknown` bridges the JSON's literal-keyed type to the
+// open Record shape these helpers index dynamically.
+const LEGAL_STRINGS: Record<string, LegalSectionStrings> = {
+  en: (enCatalog as unknown as { legal: LegalSectionStrings }).legal,
+  de: (deCatalog as unknown as { legal: LegalSectionStrings }).legal,
 };
+
+/** Resolve the legal section strings for a locale, falling back to English. */
+export function legalSectionStrings(locale: string): LegalSectionStrings {
+  return LEGAL_STRINGS[locale] ?? LEGAL_STRINGS.en;
+}
 
 /**
  * Resolve a localized per-source string from `integration.strings[locale].dataSources`,
@@ -194,11 +112,10 @@ function localized(integration: LoadedIntegrationMeta, locale: string, path: str
 }
 
 /**
- * Domain that decides an integration's legal-table section heading. Exported so
- * the completeness checker (scripts/check-legal-tables.ts) can assert every
- * contributing domain has a real heading in {@link DOMAIN_TO_PRIVACY_SECTION}
- * and {@link DOMAIN_TO_ATTRIBUTION_SECTION} instead of silently falling back to
- * the raw, untranslated domain string.
+ * Domain that decides an integration's legal-table section. Exported so the
+ * completeness checker (scripts/check-legal-tables.ts) resolves the same
+ * domain → {@link DOMAIN_TO_SECTION_KEY} → catalog heading chain the generators
+ * use, instead of silently falling back to the raw, untranslated domain string.
  */
 export function legalSectionDomain(integration: Pick<LoadedIntegrationMeta, "domains">): string {
   return integration.domains[0] ?? "map-overlay";
@@ -208,6 +125,11 @@ export function generatePrivacySectionsFromManifests(
   integrations: LoadedIntegrationMeta[],
   locale: string,
 ): { key: string; labelEn: string; labelDe: string; rows: PrivacyServiceRow[] }[] {
+  // Headings are returned for both locales (the per-locale content.{en,de}.tsx
+  // documents each pick their field); only row content + exposure follow `locale`.
+  const en = legalSectionStrings("en");
+  const de = legalSectionStrings("de");
+  const strings = legalSectionStrings(locale);
   const grouped = new Map<
     string,
     { key: string; labelEn: string; labelDe: string; rows: PrivacyServiceRow[] }
@@ -220,24 +142,24 @@ export function generatePrivacySectionsFromManifests(
     if (!sources?.length) continue;
 
     const domain = legalSectionDomain(integration);
-    const sectionMeta = DOMAIN_TO_PRIVACY_SECTION[domain] ?? {
-      key: domain,
-      labelEn: domain,
-      labelDe: domain,
-    };
+    const key = DOMAIN_TO_SECTION_KEY[domain] ?? domain;
 
-    if (!grouped.has(sectionMeta.key)) {
-      grouped.set(sectionMeta.key, { ...sectionMeta, rows: [] });
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        key,
+        labelEn: en.privacySections[key] ?? key,
+        labelDe: de.privacySections[key] ?? key,
+        rows: [],
+      });
     }
 
     for (const ds of sources) {
       const service = ds.name || localized(integration, locale, "name") || integration.name;
       const exposure = ds.endUserExposure
-        ? (EXPOSURE_LABELS[ds.endUserExposure]?.[locale === "de" ? "de" : "en"] ??
-          ds.endUserExposure)
+        ? (strings.exposure[ds.endUserExposure] ?? ds.endUserExposure)
         : "";
 
-      grouped.get(sectionMeta.key)?.rows.push({
+      grouped.get(key)?.rows.push({
         service,
         purpose:
           localizedDataSourceField(integration, locale, ds.sourceId, "purpose") ||
@@ -258,6 +180,9 @@ export function generateAttributionSectionsFromManifests(
   integrations: LoadedIntegrationMeta[],
   locale: string,
 ): { heading: string; headingDe: string; rows: AttributionRow[] }[] {
+  // Headings are returned for both locales (content.{en,de}.tsx pick their field).
+  const en = legalSectionStrings("en");
+  const de = legalSectionStrings("de");
   const grouped = new Map<string, { heading: string; headingDe: string; rows: AttributionRow[] }>();
 
   for (const integration of integrations) {
@@ -267,20 +192,20 @@ export function generateAttributionSectionsFromManifests(
     if (!sources?.length) continue;
 
     const domain = legalSectionDomain(integration);
-    const sectionMeta = DOMAIN_TO_ATTRIBUTION_SECTION[domain] ?? {
-      heading: domain,
-      headingDe: domain,
-    };
+    const key = DOMAIN_TO_SECTION_KEY[domain] ?? domain;
 
-    const groupKey = sectionMeta.heading;
-    if (!grouped.has(groupKey)) {
-      grouped.set(groupKey, { ...sectionMeta, rows: [] });
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        heading: en.attributionSections[key] ?? key,
+        headingDe: de.attributionSections[key] ?? key,
+        rows: [],
+      });
     }
 
     const desc = localized(integration, locale, "description") || integration.description || "";
 
     for (const ds of sources) {
-      grouped.get(groupKey)?.rows.push({
+      grouped.get(key)?.rows.push({
         source: ds.name,
         desc,
         license: ds.license,
