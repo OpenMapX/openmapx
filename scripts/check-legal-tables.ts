@@ -37,8 +37,11 @@ import type {
 } from "@openmapx/integration-framework";
 import {
   type AttributionRow,
+  DOMAIN_TO_ATTRIBUTION_SECTION,
+  DOMAIN_TO_PRIVACY_SECTION,
   generateAttributionSectionsFromManifests,
   generatePrivacySectionsFromManifests,
+  legalSectionDomain,
   type PrivacyServiceRow,
 } from "../apps/web/src/app/(legal)/generateLegalSections.ts";
 
@@ -234,6 +237,30 @@ function checkStructure(it: DiscoveredIntegration): string[] {
   return problems;
 }
 
+/**
+ * Section headings come from DOMAIN_TO_{PRIVACY,ATTRIBUTION}_SECTION in
+ * generateLegalSections.ts, not the i18n catalogs — so check-translations never
+ * sees them, and the cell-emptiness checks above only look at row data. A
+ * contributing integration whose domain is absent from a map renders the raw,
+ * untranslated domain string (e.g. "live-transit") as its heading in every
+ * locale. Flag any such uncovered domain so it can't ship silently.
+ */
+function checkHeadings(it: DiscoveredIntegration): string[] {
+  const problems: string[] = [];
+  const domain = legalSectionDomain({ domains: it.manifest.domains ?? [] });
+  if (!(domain in DOMAIN_TO_PRIVACY_SECTION)) {
+    problems.push(
+      `domain "${domain}" has no Privacy section heading — add it to DOMAIN_TO_PRIVACY_SECTION in generateLegalSections.ts`,
+    );
+  }
+  if (!(domain in DOMAIN_TO_ATTRIBUTION_SECTION)) {
+    problems.push(
+      `domain "${domain}" has no Terms attribution heading — add it to DOMAIN_TO_ATTRIBUTION_SECTION in generateLegalSections.ts`,
+    );
+  }
+  return problems;
+}
+
 function main(): void {
   const integrations = discoverIntegrations(INTEGRATIONS_DIR);
   const contributing = integrations.filter((it) => it.manifest.dataSources?.length);
@@ -242,6 +269,13 @@ function main(): void {
   for (const it of integrations) {
     const problems = checkStructure(it);
     if (problems.length) structuralByDir.set(it.dir, problems);
+  }
+  // Heading coverage is only meaningful for integrations that actually render rows.
+  for (const it of contributing) {
+    const headingProblems = checkHeadings(it);
+    if (headingProblems.length) {
+      structuralByDir.set(it.dir, [...(structuralByDir.get(it.dir) ?? []), ...headingProblems]);
+    }
   }
 
   const rowIssues: RowIssue[] = [];

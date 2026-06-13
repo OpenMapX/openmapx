@@ -20,89 +20,132 @@ export interface AttributionRow {
   notes?: string;
 }
 
-const DOMAIN_TO_PRIVACY_SECTION: Record<string, { key: string; labelEn: string; labelDe: string }> =
-  {
-    geocoding: { key: "geocoding", labelEn: "Geocoding", labelDe: "Geokodierung" },
-    routing: { key: "routing", labelEn: "Routing", labelDe: "Routing" },
-    transit: { key: "transit", labelEn: "Public Transit", labelDe: "Öffentlicher Nahverkehr" },
-    "map-overlay": {
-      key: "mapOverlays",
-      labelEn: "Map Overlays",
-      labelDe: "Kartenüberlagerungen",
-    },
-    "data-source": {
-      key: "dataSources",
-      labelEn: "Data Sources",
-      labelDe: "Datenquellen",
-    },
-    "street-view": {
-      key: "streetView",
-      labelEn: "Street-Level Imagery",
-      labelDe: "Straßenansicht",
-    },
-    photos: { key: "photos", labelEn: "Place Photos", labelDe: "Ortsfotos" },
-    knowledge: {
-      key: "knowledge",
-      labelEn: "Place Knowledge",
-      labelDe: "Ortswissen",
-    },
-    "poi-search": {
-      key: "poiSearch",
-      labelEn: "Point of Interest Search",
-      labelDe: "Interessenpunkt-Suche",
-    },
-    weather: {
-      key: "weather",
-      labelEn: "Weather",
-      labelDe: "Wetter",
-    },
-    reviews: {
-      key: "reviews",
-      labelEn: "Reviews",
-      labelDe: "Bewertungen",
-    },
-  };
-
-const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe: string }> = {
-  geocoding: {
-    heading: "Map Data and Geocoding",
-    headingDe: "Kartendaten und Geokodierung",
-  },
-  routing: { heading: "Routing", headingDe: "Routing" },
-  transit: {
-    heading: "Public Transit",
-    headingDe: "Öffentlicher Nahverkehr",
-  },
+export const DOMAIN_TO_PRIVACY_SECTION: Record<
+  string,
+  { key: string; labelEn: string; labelDe: string }
+> = {
+  geocoding: { key: "geocoding", labelEn: "Geocoding", labelDe: "Geokodierung" },
+  routing: { key: "routing", labelEn: "Routing", labelDe: "Routing" },
+  transit: { key: "transit", labelEn: "Public Transit", labelDe: "Öffentlicher Nahverkehr" },
   "map-overlay": {
-    heading: "Map Overlays and Data",
-    headingDe: "Kartenüberlagerungen und Daten",
+    key: "mapOverlays",
+    labelEn: "Map Overlays",
+    labelDe: "Kartenüberlagerungen",
   },
   "data-source": {
-    heading: "Data Sources",
-    headingDe: "Datenquellen",
+    key: "dataSources",
+    labelEn: "Data Sources",
+    labelDe: "Datenquellen",
   },
   "street-view": {
-    heading: "Street-Level Imagery",
-    headingDe: "Straßenansicht",
+    key: "streetView",
+    labelEn: "Street-Level Imagery",
+    labelDe: "Straßenansicht",
   },
-  photos: { heading: "Place Photos", headingDe: "Ortsfotos" },
+  photos: { key: "photos", labelEn: "Place Photos", labelDe: "Ortsfotos" },
   knowledge: {
-    heading: "Place Knowledge",
-    headingDe: "Ortswissen",
+    key: "knowledge",
+    labelEn: "Place Knowledge",
+    labelDe: "Ortswissen",
   },
   "poi-search": {
-    heading: "Point of Interest Search",
-    headingDe: "Interessenpunkt-Suche",
+    key: "poiSearch",
+    labelEn: "Point of Interest Search",
+    labelDe: "Interessenpunkt-Suche",
   },
   weather: {
-    heading: "Weather",
-    headingDe: "Wetter",
+    key: "weather",
+    labelEn: "Weather",
+    labelDe: "Wetter",
   },
   reviews: {
-    heading: "Reviews",
-    headingDe: "Bewertungen",
+    key: "reviews",
+    labelEn: "Reviews",
+    labelDe: "Bewertungen",
+  },
+  "live-transit": {
+    key: "liveTransit",
+    labelEn: "Live Transit",
+    labelDe: "Live-Nahverkehr",
+  },
+  "gtfs-catalog": {
+    key: "transitDataCatalogs",
+    labelEn: "Transit Data Catalogs",
+    labelDe: "Nahverkehrsdaten-Kataloge",
+  },
+  "flight-search": { key: "flights", labelEn: "Flights", labelDe: "Flüge" },
+  "hotel-search": { key: "hotels", labelEn: "Hotels", labelDe: "Hotels" },
+  "food-delivery": {
+    key: "foodDelivery",
+    labelEn: "Food Delivery",
+    labelDe: "Essenslieferung",
+  },
+  "restaurant-menu": {
+    key: "restaurantMenus",
+    labelEn: "Restaurant Menus",
+    labelDe: "Restaurant-Speisekarten",
   },
 };
+
+export const DOMAIN_TO_ATTRIBUTION_SECTION: Record<string, { heading: string; headingDe: string }> =
+  {
+    geocoding: {
+      heading: "Map Data and Geocoding",
+      headingDe: "Kartendaten und Geokodierung",
+    },
+    routing: { heading: "Routing", headingDe: "Routing" },
+    transit: {
+      heading: "Public Transit",
+      headingDe: "Öffentlicher Nahverkehr",
+    },
+    "map-overlay": {
+      heading: "Map Overlays and Data",
+      headingDe: "Kartenüberlagerungen und Daten",
+    },
+    "data-source": {
+      heading: "Data Sources",
+      headingDe: "Datenquellen",
+    },
+    "street-view": {
+      heading: "Street-Level Imagery",
+      headingDe: "Straßenansicht",
+    },
+    photos: { heading: "Place Photos", headingDe: "Ortsfotos" },
+    knowledge: {
+      heading: "Place Knowledge",
+      headingDe: "Ortswissen",
+    },
+    "poi-search": {
+      heading: "Point of Interest Search",
+      headingDe: "Interessenpunkt-Suche",
+    },
+    weather: {
+      heading: "Weather",
+      headingDe: "Wetter",
+    },
+    reviews: {
+      heading: "Reviews",
+      headingDe: "Bewertungen",
+    },
+    "live-transit": {
+      heading: "Live Transit",
+      headingDe: "Live-Nahverkehr",
+    },
+    "gtfs-catalog": {
+      heading: "Transit Data Catalogs",
+      headingDe: "Nahverkehrsdaten-Kataloge",
+    },
+    "flight-search": { heading: "Flights", headingDe: "Flüge" },
+    "hotel-search": { heading: "Hotels", headingDe: "Hotels" },
+    "food-delivery": {
+      heading: "Food Delivery",
+      headingDe: "Essenslieferung",
+    },
+    "restaurant-menu": {
+      heading: "Restaurant Menus",
+      headingDe: "Restaurant-Speisekarten",
+    },
+  };
 
 const EXPOSURE_LABELS: Record<string, { en: string; de: string }> = {
   direct: { en: "Direct (browser)", de: "Direkt (Browser)" },
@@ -150,6 +193,17 @@ function localized(integration: LoadedIntegrationMeta, locale: string, path: str
   return typeof current === "string" ? current : "";
 }
 
+/**
+ * Domain that decides an integration's legal-table section heading. Exported so
+ * the completeness checker (scripts/check-legal-tables.ts) can assert every
+ * contributing domain has a real heading in {@link DOMAIN_TO_PRIVACY_SECTION}
+ * and {@link DOMAIN_TO_ATTRIBUTION_SECTION} instead of silently falling back to
+ * the raw, untranslated domain string.
+ */
+export function legalSectionDomain(integration: Pick<LoadedIntegrationMeta, "domains">): string {
+  return integration.domains[0] ?? "map-overlay";
+}
+
 export function generatePrivacySectionsFromManifests(
   integrations: LoadedIntegrationMeta[],
   locale: string,
@@ -165,7 +219,7 @@ export function generatePrivacySectionsFromManifests(
     const sources = integration.dataSources;
     if (!sources?.length) continue;
 
-    const domain = integration.domains[0] ?? "map-overlay";
+    const domain = legalSectionDomain(integration);
     const sectionMeta = DOMAIN_TO_PRIVACY_SECTION[domain] ?? {
       key: domain,
       labelEn: domain,
@@ -212,7 +266,7 @@ export function generateAttributionSectionsFromManifests(
     const sources = integration.dataSources;
     if (!sources?.length) continue;
 
-    const domain = integration.domains[0] ?? "map-overlay";
+    const domain = legalSectionDomain(integration);
     const sectionMeta = DOMAIN_TO_ATTRIBUTION_SECTION[domain] ?? {
       heading: domain,
       headingDe: domain,
