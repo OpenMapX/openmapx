@@ -13,6 +13,46 @@ export interface ConfigValueWithSource {
   source: ConfigSource;
 }
 
+/**
+ * Env vars are always strings, but `configSchema` keys can be typed (integer,
+ * number, boolean, array). Coerce the raw string to the declared type so
+ * numeric/boolean knobs set via `INTEGRATION_<ID>_<KEY>` reach integrations as
+ * the right type — otherwise consumers that type-check (e.g. `typeof === "number"`)
+ * silently drop the override and fall back to defaults. Unknown/`string` types
+ * pass through unchanged; values that can't be coerced fall back to the raw string.
+ */
+export function coerceEnvValue(raw: string, type: string | undefined): unknown {
+  switch (type) {
+    case "integer":
+    case "number": {
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : raw;
+    }
+    case "boolean": {
+      const v = raw.trim().toLowerCase();
+      if (v === "true" || v === "1" || v === "yes") return true;
+      if (v === "false" || v === "0" || v === "no") return false;
+      return raw;
+    }
+    case "array": {
+      const t = raw.trim();
+      if (t.startsWith("[")) {
+        try {
+          return JSON.parse(t);
+        } catch {
+          // not JSON — fall back to comma-separated parsing
+        }
+      }
+      return t
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    }
+    default:
+      return raw;
+  }
+}
+
 export async function resolveConfigWithSources(
   manifest: IntegrationManifest,
   directory: string,
@@ -25,13 +65,22 @@ export async function resolveConfigWithSources(
   // `apiKey` without forcing operators to lowercase the suffix (or forcing
   // schema authors to pick all-lowercase keys).
   const upperToKey = new Map<string, string>();
+  // Canonical key → JSON-schema declared type. Used to coerce env-string values
+  // to the type the integration expects (env vars are always strings).
+  const keyTypes = new Map<string, string>();
 
   if (schema) {
-    const props = (schema.properties ?? schema) as Record<string, { default?: unknown }>;
+    const props = (schema.properties ?? schema) as Record<
+      string,
+      { default?: unknown; type?: unknown }
+    >;
     for (const [key, def] of Object.entries(props)) {
       if (key === "type" || key === "properties") continue;
       knownKeys.add(key);
       upperToKey.set(key.toUpperCase(), key);
+      if (def && typeof def === "object" && typeof def.type === "string") {
+        keyTypes.set(key, def.type);
+      }
       if (def && typeof def === "object" && "default" in def && def.default !== undefined) {
         result[key] = { value: def.default, source: "default" };
       }
@@ -89,7 +138,9 @@ export async function resolveConfigWithSources(
     if (!envKey.startsWith(prefix)) continue;
     const rest = envKey.slice(prefix.length);
     const canonical = upperToKey.get(rest);
-    if (canonical) result[canonical] = { value: envVal, source: "env" };
+    if (canonical) {
+      result[canonical] = { value: coerceEnvValue(envVal, keyTypes.get(canonical)), source: "env" };
+    }
   }
 
   return result;
