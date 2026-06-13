@@ -6,7 +6,7 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, proxyImageUrl, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AccountMenu } from "./AccountMenu";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
 import { AuthDialog } from "./AuthDialog";
@@ -28,7 +28,16 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const avatarRef = useRef<HTMLButtonElement>(null);
 
-  const user = session?.user ?? null;
+  // Render the settled signed-out state until mounted, so the first client
+  // render matches the server HTML. better-auth resolves the session
+  // asynchronously; a session that lands between SSR and hydration would
+  // otherwise change the avatar's session-derived styles (bgcolor/opacity) and
+  // trip a hydration mismatch on its emotion-generated class.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const user = mounted ? (session?.user ?? null) : null;
+  const pending = mounted ? isPending : false;
   const avatarSrc = user?.image ? proxyImageUrl(user.image) : undefined;
 
   const handleAvatarClick = () => {
@@ -60,7 +69,7 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
               cursor: "pointer",
               border: "none",
               fontFamily: "inherit",
-              opacity: isPending ? 0.5 : 1,
+              opacity: pending ? 0.5 : 1,
             },
             ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
           ]}
