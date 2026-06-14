@@ -17,7 +17,9 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
+import { useNavSimStore } from "./navSimStore";
 import { useNavigationVoice } from "./useNavigationVoice";
+import { useSimulatedPosition } from "./useSimulatedPosition";
 
 const freshTick = (): NavTickState => ({
   deviationHistory: [],
@@ -159,6 +161,20 @@ export function useNavigationEngine(): void {
     tickRef.current = freshTick();
   }, [activeRoute]);
 
+  // Opt into the navigation simulator from the URL (`?navsim=1`) once on mount.
+  // It swaps synthetic fixes for real geolocation so the full pipeline can be
+  // QA'd without driving; off by default and never reachable in normal use.
+  const setSimEnabled = useNavSimStore((s) => s.setEnabled);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("navsim") === "1") setSimEnabled(true);
+  }, [setSimEnabled]);
+
   const active = useNavigationStore((s) => s.status !== "idle" && s.status !== "arrived");
-  useWatchPosition(active, onFix);
+  const simEnabled = useNavSimStore((s) => s.enabled);
+  // Exactly one position source is live: real geolocation, or — when the
+  // simulator is enabled — synthetic fixes. Both hooks are always called; the
+  // inactive one is a no-op.
+  useWatchPosition(active && !simEnabled, onFix);
+  useSimulatedPosition(active, onFix);
 }

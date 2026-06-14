@@ -23,6 +23,7 @@ import { LaneGuidance } from "./LaneGuidance";
 import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
 import { NavBottomSheet } from "./NavBottomSheet";
+import { NavSimControl } from "./NavSimControl";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
 export function NavigationView() {
@@ -126,6 +127,7 @@ export function NavigationView() {
         justifyContent: "space-between",
       }}
     >
+      <NavSimControl />
       {status === "arrived" ? (
         <Box
           sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
