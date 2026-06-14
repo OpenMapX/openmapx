@@ -26,7 +26,13 @@
     "overview": "Routenübersicht",
     "moreOptions": "Weitere Optionen",
     "rerouteFailed": "Keine neue Route gefunden. Wird erneut versucht…",
-    "then": "Dann {instruction}"
+    "then": "Dann {instruction}",
+    "alertSpeedCamera": "Blitzer",
+    "alertRailwayCrossing": "Bahnübergang",
+    "alertStop": "Stoppschild",
+    "alertPedestrianCrossing": "Fußgängerüberweg",
+    "alertTrafficCalming": "Bremsschwelle",
+    "alertTunnel": "Tunnel"
   },
   "common": {
     "close": "Schließen",
@@ -1192,6 +1198,8 @@
     "voiceTimingEarly": "Früh",
     "voiceTimingNormal": "Normal",
     "voiceTimingLate": "Spät",
+    "speedCameraAlerts": "Blitzer-Warnungen",
+    "speedCameraAlertsHint": "Vor Blitzern warnen. In Ländern, in denen solche Warnungen nicht erlaubt sind, deaktiviert.",
     "offline": "Offline-Karten",
     "offlineDescription": "Lade Kartenbereiche herunter, um sie ohne Internetverbindung zu verwenden.",
     "downloadNewArea": "Neuen Bereich herunterladen",

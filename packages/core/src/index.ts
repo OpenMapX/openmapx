@@ -86,6 +86,7 @@ export {
   fetchDirections,
 } from "./api/directions";
 export { API_ENDPOINTS } from "./api/endpoints";
+export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./api/roadAlerts";
 export { fetchSpeedLimit } from "./api/speedLimit";
 export { fetchTrafficSignals } from "./api/trafficSignals";
 // Auth
@@ -249,6 +250,9 @@ export {
 } from "./hooks/useTides";
 // Navigation
 export {
+  type ActiveAlert,
+  brakingDistanceMeters,
+  CAMERA_RESTRICTED_COUNTRIES,
   computeProgress,
   computeTransitProgress,
   cumulativeDistances,
@@ -264,8 +268,12 @@ export {
   OVER_SPEED_TOLERANCE_KMH,
   positionAt,
   processFix,
+  type RoadAlert,
+  type RoadAlertType,
   remainingWaypoints,
+  selectActiveAlert,
   shouldReroute,
+  shouldWarnCamera,
   signalCoordKey,
   simulatePositions,
   snapToRoute,

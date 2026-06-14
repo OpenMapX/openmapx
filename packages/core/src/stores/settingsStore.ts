@@ -7,6 +7,7 @@ const UNITS_STORAGE_KEY = "openmapx:unitSystem";
 const TIME_FORMAT_STORAGE_KEY = "openmapx:timeFormat";
 const DATE_FORMAT_STORAGE_KEY = "openmapx:dateFormat";
 const VOICE_TIMING_STORAGE_KEY = "openmapx:voiceGuidanceTiming";
+const SPEED_CAMERA_ALERTS_STORAGE_KEY = "openmapx:speedCameraAlerts";
 
 const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
@@ -44,6 +45,12 @@ function readVoiceTiming(): VoiceGuidanceTiming {
   return VOICE_TIMINGS.includes(v as VoiceGuidanceTiming) ? (v as VoiceGuidanceTiming) : "normal";
 }
 
+// Speed-camera alerts are opt-in (default off): they're legally restricted in
+// some countries and a privacy-sensitive feature, so the user must enable them.
+function readSpeedCameraAlerts(): boolean {
+  return getStorage().getString(SPEED_CAMERA_ALERTS_STORAGE_KEY) === "true";
+}
+
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
@@ -56,6 +63,9 @@ interface SettingsState {
   /** How early navigation voice prompts fire. */
   voiceGuidanceTiming: VoiceGuidanceTiming;
   setVoiceGuidanceTiming: (t: VoiceGuidanceTiming) => void;
+  /** Opt-in speed-camera approach alerts (off by default; region-gated downstream). */
+  speedCameraAlerts: boolean;
+  setSpeedCameraAlerts: (v: boolean) => void;
   /**
    * Re-read the persisted preferences from storage. The store is created at
    * module-eval time, which can run before the platform storage adapter is
@@ -86,11 +96,17 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(VOICE_TIMING_STORAGE_KEY, voiceGuidanceTiming);
     set({ voiceGuidanceTiming });
   },
+  speedCameraAlerts: readSpeedCameraAlerts(),
+  setSpeedCameraAlerts: (speedCameraAlerts) => {
+    getStorage().setString(SPEED_CAMERA_ALERTS_STORAGE_KEY, String(speedCameraAlerts));
+    set({ speedCameraAlerts });
+  },
   hydrate: () =>
     set({
       units: readUnits(),
       timeFormat: readTimeFormat(),
       dateFormat: readDateFormat(),
       voiceGuidanceTiming: readVoiceTiming(),
+      speedCameraAlerts: readSpeedCameraAlerts(),
     }),
 }));

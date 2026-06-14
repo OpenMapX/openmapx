@@ -16,9 +16,11 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { useMapOptional } from "@/lib/MapContext";
+import { useNavAlerts } from "@/lib/navigation/useNavAlerts";
 import { useNavCamera } from "@/lib/navigation/useNavCamera";
 import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
+import { AlertWidget } from "./AlertWidget";
 import { ArrivalCard } from "./ArrivalCard";
 import { LaneGuidance } from "./LaneGuidance";
 import { ManeuverBanner } from "./ManeuverBanner";
@@ -54,6 +56,7 @@ export function NavigationView() {
   useNavigationEngine();
   useNavCamera();
   useWakeLock(active && keepScreenOn);
+  const activeAlert = useNavAlerts();
 
   const [rerouteToastOpen, setRerouteToastOpen] = useState(false);
   useEffect(() => {
@@ -160,6 +163,7 @@ export function NavigationView() {
               />
             )}
             {showLanes && step?.lanes && <LaneGuidance lanes={step.lanes} />}
+            {activeAlert && <AlertWidget alert={activeAlert} />}
             {rerouting && (
               <Box
                 role="status"

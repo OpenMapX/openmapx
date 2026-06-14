@@ -1,8 +1,69 @@
 import { createHash } from "node:crypto";
-import type { TravelMode } from "@openmapx/core";
+import { overpassQuerySafe, type TravelMode } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { createRoutingOrchestrator } from "./orchestrator.js";
 import { parseDateTime, parseTravelMode } from "./validation.js";
+
+/** A raw (un-projected) approach alert from OSM, returned by /navigation/alerts. */
+interface RawRoadAlert {
+  id: string;
+  type: "speed_camera" | "railway_crossing" | "stop" | "traffic_calming";
+  lat: number;
+  lng: number;
+  speedLimitKmh?: number;
+}
+
+/**
+ * A route bounding box wider than this (deg², ~a large region) is skipped: a
+ * single Overpass query over a cross-country corridor would time out, and the
+ * alerts wouldn't fit on screen anyway.
+ */
+const MAX_ALERT_BBOX_DEG2 = 0.6;
+
+/** Parse an OSM `maxspeed` tag to km/h, or undefined when not a plain number. */
+function parseMaxspeedKmh(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** Map Overpass nodes to raw approach alerts, by their distinguishing OSM tags. */
+function mapAlertElements(
+  elements: {
+    type: string;
+    id: number;
+    lat?: number;
+    lon?: number;
+    tags?: Record<string, string>;
+  }[],
+): RawRoadAlert[] {
+  const out: RawRoadAlert[] = [];
+  for (const el of elements) {
+    if (el.type !== "node" || el.lat === undefined || el.lon === undefined) continue;
+    const tags = el.tags ?? {};
+    let type: RawRoadAlert["type"] | null = null;
+    let speedLimitKmh: number | undefined;
+    if (tags.highway === "speed_camera") {
+      type = "speed_camera";
+      speedLimitKmh = parseMaxspeedKmh(tags.maxspeed);
+    } else if (tags.railway === "level_crossing") {
+      type = "railway_crossing";
+    } else if (tags.highway === "stop") {
+      type = "stop";
+    } else if (tags.traffic_calming) {
+      type = "traffic_calming";
+    }
+    if (!type) continue;
+    out.push({
+      id: `${type}:${el.id}`,
+      type,
+      lat: el.lat,
+      lng: el.lon,
+      ...(speedLimitKmh ? { speedLimitKmh } : {}),
+    });
+  }
+  return out;
+}
 
 /** Round a number to a fixed number of decimal places. */
 function round(value: number, decimals: number): number {
@@ -383,6 +444,48 @@ export function setup(ctx: IntegrationContext): void {
     } catch (err) {
       ctx.log.error("map matching failed", err as Error);
       reply.status(502).send({ error: "Map matching unavailable" });
+    }
+  });
+
+  /**
+   * GET /navigation/alerts — approach alerts (speed cameras, level crossings,
+   * stop signs, traffic calming) from OSM within a bounding box, for the live
+   * navigation alert layer. Static-ish, so cached for a day. Bounding boxes
+   * larger than {@link MAX_ALERT_BBOX_DEG2} return empty to avoid Overpass
+   * timeouts on long routes. Speed-camera legality is enforced client-side.
+   */
+  ctx.registerRoute("GET", "/navigation/alerts", async (req, reply) => {
+    const { bbox } = req.query;
+    if (typeof bbox !== "string") {
+      reply.status(400).send({ error: "bbox required as 'south,west,north,east'" });
+      return;
+    }
+    const parts = bbox.split(",").map(Number);
+    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) {
+      reply.status(400).send({ error: "bbox must be four numbers: south,west,north,east" });
+      return;
+    }
+    const [south, west, north, east] = parts;
+    if (Math.abs(north - south) * Math.abs(east - west) > MAX_ALERT_BBOX_DEG2) {
+      reply.send({ alerts: [] }); // corridor too large to query in one go
+      return;
+    }
+
+    const key = hashKey(
+      "cache:nav:alerts",
+      parts.map((n) => round(n, 3)),
+    );
+    try {
+      const result = await ctx.cache.withCache(key, 86_400, async () => {
+        const b = `${south},${west},${north},${east}`;
+        const query = `[out:json][timeout:25];(node["highway"="speed_camera"](${b});node["railway"="level_crossing"](${b});node["highway"="stop"](${b});node["traffic_calming"](${b}););out body;`;
+        const data = await overpassQuerySafe(query, null);
+        return { alerts: data ? mapAlertElements(data.elements) : [] };
+      });
+      reply.header("Cache-Control", "public, max-age=86400");
+      reply.send(result);
+    } catch {
+      reply.send({ alerts: [] }); // optional layer: never fail navigation over it
     }
   });
 }

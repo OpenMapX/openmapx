@@ -26,7 +26,13 @@
     "overview": "Route overview",
     "moreOptions": "More options",
     "rerouteFailed": "Couldn't find a new route. Retrying…",
-    "then": "Then {instruction}"
+    "then": "Then {instruction}",
+    "alertSpeedCamera": "Speed camera",
+    "alertRailwayCrossing": "Railway crossing",
+    "alertStop": "Stop sign",
+    "alertPedestrianCrossing": "Pedestrian crossing",
+    "alertTrafficCalming": "Speed bump",
+    "alertTunnel": "Tunnel"
   },
   "common": {
     "close": "Close",
@@ -1192,6 +1198,8 @@
     "voiceTimingEarly": "Early",
     "voiceTimingNormal": "Normal",
     "voiceTimingLate": "Late",
+    "speedCameraAlerts": "Speed-camera alerts",
+    "speedCameraAlertsHint": "Warn about speed cameras ahead. Off in countries where such warnings aren't permitted.",
     "offline": "Offline maps",
     "offlineDescription": "Download map areas to use without an internet connection.",
     "downloadNewArea": "Download a new area",

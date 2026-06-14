@@ -8,6 +8,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
+import Switch from "@mui/material/Switch";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import {
@@ -93,6 +94,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setDateFormat = useSettingsStore((s) => s.setDateFormat);
   const voiceGuidanceTiming = useSettingsStore((s) => s.voiceGuidanceTiming);
   const setVoiceGuidanceTiming = useSettingsStore((s) => s.setVoiceGuidanceTiming);
+  const speedCameraAlerts = useSettingsStore((s) => s.speedCameraAlerts);
+  const setSpeedCameraAlerts = useSettingsStore((s) => s.setSpeedCameraAlerts);
   const fullScreen = useFullScreenOnMobile();
 
   return (
@@ -208,6 +211,17 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               ))}
             </Select>
           </SettingRow>
+          <SettingRow label={ts("speedCameraAlerts")}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Switch
+                checked={speedCameraAlerts}
+                onChange={(e) => setSpeedCameraAlerts(e.target.checked)}
+              />
+            </Box>
+          </SettingRow>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {ts("speedCameraAlertsHint")}
+          </Typography>
         </Section>
       </DialogContent>
     </Dialog>

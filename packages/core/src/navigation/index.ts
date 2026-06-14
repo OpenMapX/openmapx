@@ -1,4 +1,13 @@
 export {
+  type ActiveAlert,
+  brakingDistanceMeters,
+  CAMERA_RESTRICTED_COUNTRIES,
+  type RoadAlert,
+  type RoadAlertType,
+  selectActiveAlert,
+  shouldWarnCamera,
+} from "./alerts";
+export {
   cumulativeDistances,
   type DeadReckonOptions,
   type DeadReckonTarget,
