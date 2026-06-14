@@ -40,11 +40,35 @@ export interface RerouteOpts {
   debounceMs: number;
 }
 
+/**
+ * Speed-adaptive voice-cue scheduling. Each stage fires a fixed time ahead of
+ * the maneuver: `farMeters`/`nearMeters` are the trigger distances at
+ * `refSpeedMps` and scale UP (never down) with the current speed, so a cue that
+ * lands ~400 m before a turn in town lands ~1 km before it on a motorway.
+ * `ttsDelaySeconds` pads each trigger so the sentence finishes before the turn.
+ */
+export interface VoiceScheduleConfig {
+  /** "Prepare" (far) cue distance, metres, at/below refSpeedMps. */
+  farMeters: number;
+  /** "Turn-in" (near) cue distance, metres, at/below refSpeedMps. */
+  nearMeters: number;
+  /** Speed (m/s) the far/near distances are tuned for; above it they scale up. */
+  refSpeedMps: number;
+  /** Lead time (s) for the imminent "now" cue. */
+  nowSeconds: number;
+  /** Floor (m) for the "now" cue so it still fires when nearly stopped. */
+  nowFloorMeters: number;
+  /** Extra lead (s) per cue covering TTS spin-up + speaking time. */
+  ttsDelaySeconds: number;
+}
+
 export interface NavTickOptions {
   mode: TravelMode;
   accuracyCapMeters: number;
   reroute: RerouteOpts;
-  voiceThresholds: { far: number; near: number };
+  voice: VoiceScheduleConfig;
+  /** Scales every voice trigger earlier (>1) or later (<1) per user preference. */
+  announceMultiplier: number;
   arrivalThresholdMeters: number;
   /** Show lane guidance only within this distance (m) of the next maneuver. */
   laneGuidanceMeters: number;

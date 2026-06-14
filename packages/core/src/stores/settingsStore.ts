@@ -6,9 +6,24 @@ import type { DateFormat, TimeFormat } from "../utils/dateTimeFormat";
 const UNITS_STORAGE_KEY = "openmapx:unitSystem";
 const TIME_FORMAT_STORAGE_KEY = "openmapx:timeFormat";
 const DATE_FORMAT_STORAGE_KEY = "openmapx:dateFormat";
+const VOICE_TIMING_STORAGE_KEY = "openmapx:voiceGuidanceTiming";
 
 const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
+
+/**
+ * How early navigation voice prompts fire. `normal` keeps the tuned defaults;
+ * `early` announces sooner (more reaction time), `late` closer to the maneuver.
+ */
+export type VoiceGuidanceTiming = "early" | "normal" | "late";
+const VOICE_TIMINGS: readonly VoiceGuidanceTiming[] = ["early", "normal", "late"];
+
+/** Multiplier applied to voice-cue trigger distances per timing preference. */
+export const VOICE_TIMING_MULTIPLIER: Record<VoiceGuidanceTiming, number> = {
+  early: 1.5,
+  normal: 1,
+  late: 0.6,
+};
 
 function readUnits(): UnitSystem {
   return getStorage().getString(UNITS_STORAGE_KEY) === "imperial" ? "imperial" : "metric";
@@ -24,6 +39,11 @@ function readDateFormat(): DateFormat {
   return DATE_FORMATS.includes(v as DateFormat) ? (v as DateFormat) : "auto";
 }
 
+function readVoiceTiming(): VoiceGuidanceTiming {
+  const v = getStorage().getString(VOICE_TIMING_STORAGE_KEY);
+  return VOICE_TIMINGS.includes(v as VoiceGuidanceTiming) ? (v as VoiceGuidanceTiming) : "normal";
+}
+
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
@@ -33,6 +53,9 @@ interface SettingsState {
   /** Calendar-date rendering preference (`auto` follows the locale). */
   dateFormat: DateFormat;
   setDateFormat: (f: DateFormat) => void;
+  /** How early navigation voice prompts fire. */
+  voiceGuidanceTiming: VoiceGuidanceTiming;
+  setVoiceGuidanceTiming: (t: VoiceGuidanceTiming) => void;
   /**
    * Re-read the persisted preferences from storage. The store is created at
    * module-eval time, which can run before the platform storage adapter is
@@ -58,6 +81,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(DATE_FORMAT_STORAGE_KEY, dateFormat);
     set({ dateFormat });
   },
+  voiceGuidanceTiming: readVoiceTiming(),
+  setVoiceGuidanceTiming: (voiceGuidanceTiming) => {
+    getStorage().setString(VOICE_TIMING_STORAGE_KEY, voiceGuidanceTiming);
+    set({ voiceGuidanceTiming });
+  },
   hydrate: () =>
-    set({ units: readUnits(), timeFormat: readTimeFormat(), dateFormat: readDateFormat() }),
+    set({
+      units: readUnits(),
+      timeFormat: readTimeFormat(),
+      dateFormat: readDateFormat(),
+      voiceGuidanceTiming: readVoiceTiming(),
+    }),
 }));

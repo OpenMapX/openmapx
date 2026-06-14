@@ -2,13 +2,14 @@ import {
   type FixInput,
   fetchDirections,
   fetchSpeedLimit,
-  formatMeasurementDistance,
+  formatSpokenDistance,
   type LngLat,
   type NavTickState,
   navOptionsForMode,
   processFix,
   useNavigationStore,
   useSettingsStore,
+  VOICE_TIMING_MULTIPLIER,
   type VoiceCue,
 } from "@openmapx/core";
 import along from "@turf/along";
@@ -48,7 +49,7 @@ export function useNavigationEngine(): void {
           ? (step.verbalPre ?? step.instruction)
           : (step.verbalAlert ?? step.verbalPre ?? step.instruction);
       const units = useSettingsStore.getState().units;
-      const distanceStr = formatMeasurementDistance(cue.distance, units);
+      const distanceStr = formatSpokenDistance(cue.distance, units);
       const text =
         cue.tier === "now"
           ? spoken
@@ -65,6 +66,9 @@ export function useNavigationEngine(): void {
       if ((status !== "navigating" && status !== "rerouting") || !route) return;
 
       const opts = navOptionsForMode(mode);
+      // Shift voice-cue timing earlier/later per the user's preference.
+      opts.announceMultiplier =
+        VOICE_TIMING_MULTIPLIER[useSettingsStore.getState().voiceGuidanceTiming];
       const result = processFix(route, fix, tickRef.current, opts);
       tickRef.current = result.nextState;
       // Surface noisy GPS: fixes dropped for poor accuracy flag "Weak GPS"; a

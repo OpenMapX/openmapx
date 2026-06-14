@@ -9,7 +9,15 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         mode,
         accuracyCapMeters: 40,
         reroute: { thresholdMeters: 25, consecutiveFixes: 3, debounceMs: 8_000 },
-        voiceThresholds: { far: 150, near: 50 },
+        voice: {
+          farMeters: 150,
+          nearMeters: 50,
+          refSpeedMps: 1.4, // ~5 km/h
+          nowSeconds: 3,
+          nowFloorMeters: 12,
+          ttsDelaySeconds: 1,
+        },
+        announceMultiplier: 1,
         arrivalThresholdMeters: 20,
         laneGuidanceMeters: 80,
       };
@@ -18,7 +26,15 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         mode,
         accuracyCapMeters: 50,
         reroute: { thresholdMeters: 30, consecutiveFixes: 3, debounceMs: 10_000 },
-        voiceThresholds: { far: 250, near: 100 },
+        voice: {
+          farMeters: 250,
+          nearMeters: 100,
+          refSpeedMps: 5.5, // ~20 km/h
+          nowSeconds: 2.5,
+          nowFloorMeters: 18,
+          ttsDelaySeconds: 1.5,
+        },
+        announceMultiplier: 1,
         arrivalThresholdMeters: 25,
         laneGuidanceMeters: 200,
       };
@@ -27,7 +43,15 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         mode: "driving",
         accuracyCapMeters: 60,
         reroute: { thresholdMeters: 45, consecutiveFixes: 3, debounceMs: 10_000 },
-        voiceThresholds: { far: 400, near: 200 },
+        voice: {
+          farMeters: 400,
+          nearMeters: 200,
+          refSpeedMps: 14, // ~50 km/h
+          nowSeconds: 2.5,
+          nowFloorMeters: 30,
+          ttsDelaySeconds: 1.5,
+        },
+        announceMultiplier: 1,
         arrivalThresholdMeters: 35,
         laneGuidanceMeters: 500,
       };

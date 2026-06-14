@@ -334,7 +334,11 @@ export {
 export { usePlaceStore } from "./stores/placeStore";
 export { useSavedPlacesStore } from "./stores/savedPlacesStore";
 export { useSearchStore } from "./stores/searchStore";
-export { useSettingsStore } from "./stores/settingsStore";
+export {
+  useSettingsStore,
+  VOICE_TIMING_MULTIPLIER,
+  type VoiceGuidanceTiming,
+} from "./stores/settingsStore";
 export { useSidebarStore } from "./stores/sidebarStore";
 export type { DeliveryProviderInfo, DeliverySearchParams } from "./types/delivery";
 export type {
@@ -464,6 +468,7 @@ export {
   formatDistance,
   formatDuration,
   formatMeasurementDistance,
+  formatSpokenDistance,
   getInitials,
 } from "./utils/formatting";
 export {

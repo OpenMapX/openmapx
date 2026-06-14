@@ -8,10 +8,12 @@ describe("navOptionsForMode", () => {
     );
   });
 
-  it("provides voice thresholds and an arrival threshold for every ground mode", () => {
+  it("provides voice config and an arrival threshold for every ground mode", () => {
     for (const m of ["driving", "walking", "cycling"] as const) {
       const o = navOptionsForMode(m);
-      expect(o.voiceThresholds.far).toBeGreaterThan(o.voiceThresholds.near);
+      expect(o.voice.farMeters).toBeGreaterThan(o.voice.nearMeters);
+      expect(o.voice.refSpeedMps).toBeGreaterThan(0);
+      expect(o.announceMultiplier).toBe(1);
       expect(o.arrivalThresholdMeters).toBeGreaterThan(0);
     }
   });

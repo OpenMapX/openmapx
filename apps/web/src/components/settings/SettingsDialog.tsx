@@ -17,6 +17,7 @@ import {
   type TimeFormat,
   type UnitSystem,
   useSettingsStore,
+  type VoiceGuidanceTiming,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
@@ -39,6 +40,12 @@ const DATE_FORMAT_OPTIONS: { value: DateFormat; labelKey: string }[] = [
   { value: "dmy", labelKey: "dateFormatDmy" },
   { value: "mdy", labelKey: "dateFormatMdy" },
   { value: "ymd", labelKey: "dateFormatYmd" },
+];
+
+const VOICE_TIMING_OPTIONS: { value: VoiceGuidanceTiming; labelKey: string }[] = [
+  { value: "early", labelKey: "voiceTimingEarly" },
+  { value: "normal", labelKey: "voiceTimingNormal" },
+  { value: "late", labelKey: "voiceTimingLate" },
 ];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -84,6 +91,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setTimeFormat = useSettingsStore((s) => s.setTimeFormat);
   const dateFormat = useSettingsStore((s) => s.dateFormat);
   const setDateFormat = useSettingsStore((s) => s.setDateFormat);
+  const voiceGuidanceTiming = useSettingsStore((s) => s.voiceGuidanceTiming);
+  const setVoiceGuidanceTiming = useSettingsStore((s) => s.setVoiceGuidanceTiming);
   const fullScreen = useFullScreenOnMobile();
 
   return (
@@ -178,6 +187,23 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                     locale,
                     dateFormat: o.value,
                   })}`}
+                </MenuItem>
+              ))}
+            </Select>
+          </SettingRow>
+        </Section>
+
+        <Section title={ts("navigation")}>
+          <SettingRow label={ts("voiceGuidanceTiming")}>
+            <Select
+              size="small"
+              fullWidth
+              value={voiceGuidanceTiming}
+              onChange={(e) => setVoiceGuidanceTiming(e.target.value as VoiceGuidanceTiming)}
+            >
+              {VOICE_TIMING_OPTIONS.map((o) => (
+                <MenuItem key={o.value} value={o.value}>
+                  {ts(o.labelKey)}
                 </MenuItem>
               ))}
             </Select>

@@ -89,7 +89,9 @@ export function processFix(
         step,
         upcomingIndex,
         prog.distanceToNextManeuver,
-        opts.voiceThresholds,
+        speedMps,
+        opts.voice,
+        opts.announceMultiplier,
         state.spokenCues,
       );
 

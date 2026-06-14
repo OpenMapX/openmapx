@@ -38,6 +38,23 @@ export function formatMeasurementDistance(metres: number, system: UnitSystem = "
   return `${(metres / 1000).toFixed(2)} km`;
 }
 
+/**
+ * Format a distance for spoken guidance: coarser, TTS-friendly rounding so the
+ * voice says "in 450 metres" / "in 1.2 kilometres" instead of reading out
+ * "437 metres" or "1.23 kilometres". Keep {@link formatMeasurementDistance} for
+ * the precise on-screen countdown.
+ */
+export function formatSpokenDistance(metres: number, system: UnitSystem = "metric"): string {
+  if (system === "imperial") {
+    const feet = metres * FEET_PER_METRE;
+    if (feet < 1000) return `${Math.max(50, Math.round(feet / 50) * 50)} ft`;
+    return `${(Math.round((feet / FEET_PER_MILE) * 10) / 10).toFixed(1)} mi`;
+  }
+  if (metres < 100) return `${Math.max(10, Math.round(metres / 10) * 10)} m`;
+  if (metres < 1000) return `${Math.round(metres / 50) * 50} m`;
+  return `${(Math.round(metres / 100) / 10).toFixed(1)} km`;
+}
+
 export function formatArea(squareMetres: number, system: UnitSystem = "metric"): string {
   if (system === "imperial") {
     const sqFt = squareMetres * SQ_FEET_PER_SQ_METRE;
