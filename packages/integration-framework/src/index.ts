@@ -66,6 +66,7 @@ export type {
   KnowledgeProvider,
   KnowledgeResult,
   ManeuverLane,
+  ManeuverSign,
   MatchEdge,
   MatchOptions,
   MatchPoint,

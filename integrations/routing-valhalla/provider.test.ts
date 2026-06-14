@@ -4,6 +4,7 @@ import {
   transformTraceEdge,
   valhallaLanes,
   valhallaManeuverType,
+  valhallaSign,
 } from "./provider.js";
 
 describe("valhallaManeuverType", () => {
@@ -143,5 +144,34 @@ describe("valhallaLanes", () => {
 describe("TRACE_ATTRIBUTE_FILTER", () => {
   it("requests the node.traffic_signal attribute", () => {
     expect(TRACE_ATTRIBUTE_FILTER).toContain("node.traffic_signal");
+  });
+});
+
+describe("valhallaSign", () => {
+  it("returns undefined when there is no sign", () => {
+    expect(valhallaSign(undefined)).toBeUndefined();
+  });
+
+  it("maps exit number / branch / toward / name elements to text arrays", () => {
+    expect(
+      valhallaSign({
+        exit_number_elements: [{ text: "21" }, { text: "21A" }],
+        exit_branch_elements: [{ text: "A 57" }],
+        exit_toward_elements: [{ text: "Köln" }, { text: "Bonn" }],
+        exit_name_elements: [{ text: "Aéroport" }],
+      }),
+    ).toEqual({
+      exitNumbers: ["21", "21A"],
+      exitBranches: ["A 57"],
+      exitToward: ["Köln", "Bonn"],
+      exitNames: ["Aéroport"],
+    });
+  });
+
+  it("omits empty element groups and returns undefined when all are empty", () => {
+    expect(valhallaSign({ exit_number_elements: [] })).toBeUndefined();
+    expect(valhallaSign({ exit_toward_elements: [{ text: "Köln" }] })).toEqual({
+      exitToward: ["Köln"],
+    });
   });
 });

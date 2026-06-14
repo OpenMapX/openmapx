@@ -6,6 +6,7 @@ import type { DirectionsResult, MatchResult, RoutingProvider, TravelMode } from 
 function makeProvider(
   modes: TravelMode[],
   opts: {
+    id?: string;
     failing?: boolean;
     supportsMatch?: boolean;
     supportsTimeAware?: boolean;
@@ -13,7 +14,7 @@ function makeProvider(
   } = {},
 ): RoutingProvider {
   const provider: RoutingProvider = {
-    id: "test-provider",
+    id: opts.id ?? "test-provider",
     supportedModes: modes,
     supportsTimeAware: opts.supportsTimeAware,
     getRoute: vi.fn(async () => {
@@ -70,6 +71,22 @@ describe("routing orchestrator getRoutingProviders", () => {
     const orch = createRoutingOrchestrator(ctx);
     const list = orch.getRoutingProviders("driving");
     expect(list.map((p) => p.integrationId)).toEqual(["routing-osrm", "routing-valhalla"]);
+  });
+
+  it("prefers Valhalla over OSRM for driving even when OSRM registers first", () => {
+    const osrm = makeProvider(["driving"], { id: "osrm" });
+    const val = makeProvider(["walking", "cycling", "driving"], { id: "valhalla" });
+    const ctx = makeCtx([
+      { id: "routing-osrm", provider: osrm },
+      { id: "routing-valhalla", provider: val },
+    ]);
+    const orch = createRoutingOrchestrator(ctx);
+    // Driving prefers Valhalla (richer voice/lane data); OSRM stays as fallback.
+    expect(orch.getRoutingProviders("driving").map((p) => p.integrationId)).toEqual([
+      "routing-valhalla",
+      "routing-osrm",
+    ]);
+    expect(orch.getRoutingProvider("driving")?.integrationId).toBe("routing-valhalla");
   });
 
   it("returns only providers that support the requested mode", () => {

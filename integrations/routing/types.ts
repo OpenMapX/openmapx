@@ -7,6 +7,7 @@ export type {
   IsochroneResult,
   IsochroneTravelMode,
   ManeuverLane,
+  ManeuverSign,
   MatchEdge,
   MatchOptions,
   MatchPoint,

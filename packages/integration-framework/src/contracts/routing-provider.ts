@@ -28,6 +28,18 @@ export interface ManeuverLane {
   active?: string;
 }
 
+/** Interchange signage for a maneuver, when the engine supplies it. */
+export interface ManeuverSign {
+  /** Exit numbers, e.g. ["21", "21A"]. */
+  exitNumbers?: string[];
+  /** Branch road refs the exit leads to, e.g. ["A 57", "B 9"]. */
+  exitBranches?: string[];
+  /** "Toward" destinations, e.g. ["Köln", "Bonn"]. */
+  exitToward?: string[];
+  /** Named exits, e.g. ["Aéroport"]. */
+  exitNames?: string[];
+}
+
 export interface RouteStep {
   instruction: string;
   distance: number;
@@ -39,6 +51,25 @@ export interface RouteStep {
   speedLimit?: number;
   /** Lane guidance at the maneuver, when known. */
   lanes?: ManeuverLane[];
+  /**
+   * Engine-authored spoken phrasing, when available (Valhalla `verbal_*`). These
+   * are tuned for text-to-speech — they spell out road refs ("U.S. 2 22"),
+   * append the next cue, and read more naturally than the on-screen
+   * `instruction`. The navigation voice prefers them and falls back to
+   * `instruction` when absent, so engines that don't supply them still work.
+   */
+  /** Advance warning, spoken well before the maneuver ("Turn right onto Main Street"). */
+  verbalAlert?: string;
+  /** Spoken just before the maneuver; may chain the following cue. */
+  verbalPre?: string;
+  /** Spoken just after the maneuver ("Continue on Main Street for 2 miles"). */
+  verbalPost?: string;
+  /** Brief variant for small screens / terse announcements. */
+  verbalSuccinct?: string;
+  /** Roundabout exit ordinal (1-based), when this is a roundabout maneuver. */
+  roundaboutExitCount?: number;
+  /** Interchange signage (exit number / branch / toward), when known. */
+  sign?: ManeuverSign;
 }
 
 export interface RouteLeg {

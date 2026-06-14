@@ -7,6 +7,34 @@ export interface ResolvedProvider {
   integrationId: string;
 }
 
+/**
+ * Per-mode provider preference, by `provider.id`. Driving prefers Valhalla's
+ * `auto` costing: it returns localized, voice-optimized instructions
+ * (`verbal_*`), roundabout exit counts and lane data that OSRM does not, for a
+ * better turn-by-turn experience. OSRM stays in the chain as a fast fallback.
+ * Modes without an entry keep integration-registration order.
+ */
+const MODE_PROVIDER_PREFERENCE: Partial<Record<TravelMode, string[]>> = {
+  driving: ["valhalla", "osrm"],
+};
+
+/**
+ * Stable-sort matching providers by the mode's preference: preferred ids first
+ * (in listed order), everything else keeps registration order.
+ */
+function orderByPreference(entries: ResolvedProvider[], mode: TravelMode): ResolvedProvider[] {
+  const pref = MODE_PROVIDER_PREFERENCE[mode];
+  if (!pref) return entries;
+  const rank = (id: string): number => {
+    const i = pref.indexOf(id);
+    return i === -1 ? pref.length : i;
+  };
+  return entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => rank(a.entry.provider.id) - rank(b.entry.provider.id) || a.index - b.index)
+    .map(({ entry }) => entry);
+}
+
 export function createRoutingOrchestrator(ctx: IntegrationContext) {
   function collectProviders(): ResolvedProvider[] {
     const routingIntegrations = ctx.getIntegrationsByDomain("routing");
@@ -43,10 +71,7 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     mode: TravelMode,
     filters: ProviderFilters = {},
   ): ResolvedProvider | null {
-    for (const entry of collectProviders()) {
-      if (matches(entry.provider, mode, filters)) return entry;
-    }
-    return null;
+    return getRoutingProviders(mode, filters)[0] ?? null;
   }
 
   /**
@@ -59,14 +84,17 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     mode: TravelMode,
     filters: ProviderFilters = {},
   ): ResolvedProvider[] {
-    return collectProviders().filter((e) => matches(e.provider, mode, filters));
+    return orderByPreference(
+      collectProviders().filter((e) => matches(e.provider, mode, filters)),
+      mode,
+    );
   }
 
   function getOptimizeProvider(
     mode: TravelMode,
     filters: ProviderFilters = {},
   ): ResolvedProvider | null {
-    const providers = collectProviders();
+    const providers = orderByPreference(collectProviders(), mode);
 
     for (const entry of providers) {
       if (entry.provider.optimizeRoute && matches(entry.provider, mode, filters)) return entry;

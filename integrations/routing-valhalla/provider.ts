@@ -8,6 +8,7 @@ import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@
 import { decodePolyline } from "@openmapx/core";
 import type {
   ManeuverLane,
+  ManeuverSign,
   MatchEdge,
   MatchOptions,
   MatchPoint,
@@ -62,6 +63,19 @@ interface ValhallaLaneRaw {
   valid?: ValhallaLaneFlag;
 }
 
+/** A single signage element on a Valhalla maneuver's `sign`. */
+interface ValhallaSignElement {
+  text: string;
+  consecutive_count?: number;
+}
+
+interface ValhallaSign {
+  exit_number_elements?: ValhallaSignElement[];
+  exit_branch_elements?: ValhallaSignElement[];
+  exit_toward_elements?: ValhallaSignElement[];
+  exit_name_elements?: ValhallaSignElement[];
+}
+
 interface ValhallaManeuver {
   type: number;
   instruction: string;
@@ -71,6 +85,14 @@ interface ValhallaManeuver {
   end_shape_index: number;
   street_names?: string[];
   lanes?: ValhallaLaneRaw[];
+  // Voice-optimized phrasings + signage. Present in the standard narrative
+  // output; absent on engines/old builds — consumers fall back gracefully.
+  verbal_transition_alert_instruction?: string;
+  verbal_pre_transition_instruction?: string;
+  verbal_post_transition_instruction?: string;
+  verbal_succinct_transition_instruction?: string;
+  roundabout_exit_count?: number;
+  sign?: ValhallaSign;
 }
 
 interface ValhallaLeg {
@@ -219,6 +241,25 @@ export function valhallaLanes(maneuver: ValhallaManeuver): ManeuverLane[] | unde
   });
 }
 
+/** Map a Valhalla maneuver `sign` to the normalized {@link ManeuverSign}. Exported for testing. */
+export function valhallaSign(sign: ValhallaSign | undefined): ManeuverSign | undefined {
+  if (!sign) return undefined;
+  const texts = (els: ValhallaSignElement[] | undefined): string[] | undefined => {
+    const list = els?.map((e) => e.text).filter((t): t is string => Boolean(t));
+    return list && list.length > 0 ? list : undefined;
+  };
+  const out: ManeuverSign = {};
+  const exitNumbers = texts(sign.exit_number_elements);
+  const exitBranches = texts(sign.exit_branch_elements);
+  const exitToward = texts(sign.exit_toward_elements);
+  const exitNames = texts(sign.exit_name_elements);
+  if (exitNumbers) out.exitNumbers = exitNumbers;
+  if (exitBranches) out.exitBranches = exitBranches;
+  if (exitToward) out.exitToward = exitToward;
+  if (exitNames) out.exitNames = exitNames;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function transformLeg(leg: ValhallaLeg): RouteLeg {
   const coords = decodePolyline(leg.shape, 6);
   const steps: RouteStep[] = leg.maneuvers.map((m) => ({
@@ -228,6 +269,12 @@ function transformLeg(leg: ValhallaLeg): RouteLeg {
     coordinates: coords.slice(m.begin_shape_index, m.end_shape_index + 1),
     maneuver: valhallaManeuverType(m.type),
     lanes: valhallaLanes(m),
+    verbalAlert: m.verbal_transition_alert_instruction,
+    verbalPre: m.verbal_pre_transition_instruction,
+    verbalPost: m.verbal_post_transition_instruction,
+    verbalSuccinct: m.verbal_succinct_transition_instruction,
+    roundaboutExitCount: m.roundabout_exit_count,
+    sign: valhallaSign(m.sign),
   }));
 
   const firstNamed = leg.maneuvers.find((m) => m.street_names && m.street_names.length > 0);

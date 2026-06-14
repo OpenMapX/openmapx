@@ -39,13 +39,20 @@ export function useNavigationEngine(): void {
 
   const speakCue = useCallback(
     (cue: VoiceCue) => {
-      const instruction = cue.step.instruction;
+      // Prefer the engine's voice-optimized phrasing (Valhalla `verbal_*`): the
+      // "now" cue uses the pre-transition line, earlier cues the advance alert.
+      // Fall back to the on-screen instruction for engines that omit them.
+      const step = cue.step;
+      const spoken =
+        cue.tier === "now"
+          ? (step.verbalPre ?? step.instruction)
+          : (step.verbalAlert ?? step.verbalPre ?? step.instruction);
       const units = useSettingsStore.getState().units;
       const distanceStr = formatMeasurementDistance(cue.distance, units);
       const text =
         cue.tier === "now"
-          ? instruction
-          : t("voiceUpcoming", { distance: distanceStr, instruction });
+          ? spoken
+          : t("voiceUpcoming", { distance: distanceStr, instruction: spoken });
       speak(text);
     },
     [speak, t],
