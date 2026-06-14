@@ -8,7 +8,7 @@ import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
+import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 
 export function MapCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -18,6 +18,7 @@ export function MapCanvas() {
   const { mode, systemMode } = useColorScheme();
   const resolvedMode = mode === "system" ? systemMode : mode;
   const mapStyle = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
+  const variant: MapStyleVariant = resolvedMode === "dark" ? "dark" : "light";
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: mapStyle intentionally excluded — style changes handled by the style-swap effect below
@@ -45,7 +46,7 @@ export function MapCanvas() {
         if (destroyed || !containerRef.current) return;
         style =
           env.styleProvider === "openmapx"
-            ? await loadOpenMapXStyle(env)
+            ? await loadOpenMapXStyle(env, variant)
             : await loadMaptilerStyle(mapStyle, env);
       } catch (err) {
         console.error("Failed to initialize map", err);
@@ -150,7 +151,9 @@ export function MapCanvas() {
     initialStyleRef.current = mapStyle;
 
     const loadStyle =
-      env.styleProvider === "openmapx" ? loadOpenMapXStyle(env) : loadMaptilerStyle(mapStyle, env);
+      env.styleProvider === "openmapx"
+        ? loadOpenMapXStyle(env, variant)
+        : loadMaptilerStyle(mapStyle, env);
     loadStyle
       .then((s) => {
         map.setStyle(s as maplibregl.StyleSpecification);
@@ -159,7 +162,7 @@ export function MapCanvas() {
       .catch((err) => {
         console.error("Failed to swap map style", err);
       });
-  }, [env, mapStyle, mapRef, mapReady, notifyStyleReload]);
+  }, [env, mapStyle, variant, mapRef, mapReady, notifyStyleReload]);
 
   // Update map label language when locale changes
   useEffect(() => {

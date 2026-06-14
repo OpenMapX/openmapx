@@ -578,19 +578,18 @@ function DownloadAreaDialog({ open, onClose, onSaved }: DownloadDialogProps) {
     };
 
     try {
-      // Resolve every style variant the user might switch to at runtime.
-      // MapCanvas picks bright-v2 in light mode and streets-v2-dark in dark
-      // mode; caching both keeps the area usable across theme switches and
-      // after the runtime SWR caches expire. The openmapx provider is a
-      // single style today.
+      // Resolve every style variant the user might switch to at runtime, so the
+      // downloaded area stays usable across light/dark theme switches and after
+      // the runtime SWR caches expire. Our own style ships light + dark; the
+      // MapTiler provider has bright-v2 + streets-v2-dark.
       const styles =
         env.styleProvider === "openmapx"
-          ? [
-              {
-                url: "/styles/openmapx-streets.json",
-                json: (await loadOpenMapXStyle(env)) as Record<string, unknown>,
-              },
-            ]
+          ? await Promise.all(
+              (["light", "dark"] as const).map(async (v) => ({
+                url: `/styles/${v === "dark" ? "openmapx-dark" : "openmapx-streets"}.json`,
+                json: (await loadOpenMapXStyle(env, v)) as Record<string, unknown>,
+              })),
+            )
           : await Promise.all(
               (["bright-v2", "streets-v2-dark"] as const).map(async (variant) => {
                 const url = maptilerStyleUrl(variant, env);

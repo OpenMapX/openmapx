@@ -83,6 +83,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
   const { mode, systemMode } = useColorScheme();
   const resolvedMode = mode === "system" ? systemMode : mode;
   const styleName = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
+  const variant = resolvedMode === "dark" ? "dark" : "light";
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: initialCenter / initialZoom intentionally captured at mount only — re-creating the map on every prop change would lose the user's pan/zoom state mid-selection.
   useEffect(() => {
@@ -95,7 +96,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       if (destroyed || !containerRef.current) return;
       const style =
         env.styleProvider === "openmapx"
-          ? await loadOpenMapXStyle(env)
+          ? await loadOpenMapXStyle(env, variant)
           : await loadMaptilerStyle(styleName, env);
       if (destroyed || !containerRef.current) return;
       map = new maplibregl.Map({
@@ -150,7 +151,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       map?.remove();
       mapRef.current = null;
     };
-  }, [env, styleName, onChange]);
+  }, [env, styleName, variant, onChange]);
 
   // Frame the map to an externally-provided bbox (e.g. a searched admin area).
   // The ensuing `moveend` re-emits the viewport bbox, so the download captures

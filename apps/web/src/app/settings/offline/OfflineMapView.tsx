@@ -92,6 +92,7 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
   const { mode, systemMode } = useColorScheme();
   const resolvedMode = mode === "system" ? systemMode : mode;
   const styleName = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
+  const variant = resolvedMode === "dark" ? "dark" : "light";
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: areas/fitTo captured at mount — this is a snapshot viewer, not a live editor; callers remount it per selection.
   useEffect(() => {
@@ -106,7 +107,7 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
       if (destroyed || !containerRef.current) return;
       const style =
         env.styleProvider === "openmapx"
-          ? await loadOpenMapXStyle(env)
+          ? await loadOpenMapXStyle(env, variant)
           : await loadMaptilerStyle(styleName, env);
       if (destroyed || !containerRef.current) return;
       map = new maplibregl.Map({
@@ -150,7 +151,7 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
       destroyed = true;
       map?.remove();
     };
-  }, [env, styleName]);
+  }, [env, styleName, variant]);
 
   return (
     <Box

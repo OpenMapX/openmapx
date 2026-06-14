@@ -40,7 +40,7 @@ export function buildClientEnv(): ClientEnv {
     mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? "",
     tilesUrl: process.env.NEXT_PUBLIC_TILES_URL ?? "",
     styleProvider:
-      (process.env.NEXT_PUBLIC_STYLE_PROVIDER as "maptiler" | "openmapx") || "maptiler",
+      (process.env.NEXT_PUBLIC_STYLE_PROVIDER as "maptiler" | "openmapx") || "openmapx",
     trafficMinZoom,
     trafficTileUrlTemplate:
       process.env.NEXT_PUBLIC_TRAFFIC_TILE_URL_TEMPLATE ||

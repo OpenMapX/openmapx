@@ -11,6 +11,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Modal from "@mui/material/Modal";
+import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import {
   type PlacePhoto,
@@ -513,6 +514,8 @@ function MobileThumbnail({
 /** Small MapLibre minimap showing the photo capture location. */
 function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onClick?: () => void }) {
   const env = useEnv();
+  const { mode, systemMode } = useColorScheme();
+  const variant = (mode === "system" ? systemMode : mode) === "dark" ? "dark" : "light";
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<{ map: unknown; marker: unknown } | null>(null);
 
@@ -531,7 +534,7 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
       const [{ default: maplibregl }, style] = await Promise.all([
         import("maplibre-gl"),
         env.styleProvider === "openmapx"
-          ? loadOpenMapXStyle(env)
+          ? loadOpenMapXStyle(env, variant)
           : loadMaptilerStyle("bright-v2", env),
       ]);
       if (cancelled || !el) return;

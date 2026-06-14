@@ -111,19 +111,51 @@ export async function loadMaptilerStyle(
  * area picker, the offline preview, and the place mini-map. Both
  * `loadMaptilerStyle` and `loadOpenMapXStyle` blank the style's own source
  * `attribution`, so these strings are the single source of truth for credits on
- * those maps. OSM is always credited; the vendor depends on the active style
- * provider. Rendered from the shared {@link OSM_ATTRIBUTION} et al. so the
- * credit metadata can't drift from the main map's.
+ * those maps. Credits (see {@link baseMapVectorCredits}): OSM (data) +
+ * OpenMapTiles (our OSM-Bright-derived style — CC-BY 4.0 design + the schema)
+ * always, plus MapTiler when their hosted tiles are used. Rendered from the
+ * shared {@link OSM_ATTRIBUTION} et al. so the metadata can't drift from the
+ * main map's.
  */
 export function baseMapCustomAttribution(env: ClientEnv): string[] {
-  const vendor = env.styleProvider === "openmapx" ? OPENMAPTILES_ATTRIBUTION : MAPTILER_ATTRIBUTION;
-  return [creditHtml(OSM_ATTRIBUTION), creditHtml(vendor)];
+  return baseMapVectorCredits(env).map(creditHtml);
 }
 
-export async function loadOpenMapXStyle(env: ClientEnv): Promise<Record<string, unknown>> {
-  const res = await fetch("/styles/openmapx-streets.json");
+/**
+ * The vector base-map credits owed for our style, in display order:
+ * - OpenStreetMap — the underlying data (ODbL).
+ * - OpenMapTiles — our style derives from OSM Bright, whose design is CC-BY 4.0
+ *   and requires a visible "© OpenMapTiles" credit; the tile schema is theirs too.
+ * - MapTiler — only when the deployment renders MapTiler's hosted `v3-openmaptiles`
+ *   tiles (the default); a self-hosted tileserver drops it.
+ */
+export function baseMapVectorCredits(env: ClientEnv): Attribution[] {
+  const credits = [OSM_ATTRIBUTION, OPENMAPTILES_ATTRIBUTION];
+  if (!usesSelfHostedTiles(env)) credits.push(MAPTILER_ATTRIBUTION);
+  return credits;
+}
+
+/** Which OpenMapX style variant to load — keyed on the resolved colour scheme. */
+export type MapStyleVariant = "light" | "dark";
+
+/**
+ * Whether the deployment serves its own (OpenMapTiles) vector tiles rather than
+ * MapTiler's. Drives the vendor attribution: self-hosted ⇒ © OpenMapTiles,
+ * otherwise ⇒ © MapTiler (who hosts the `v3-openmaptiles` tiles our style uses
+ * by default). OSM is credited separately in all cases.
+ */
+export function usesSelfHostedTiles(env: ClientEnv): boolean {
+  return Boolean(env.tilesUrl || env.mapStyleUrl);
+}
+
+export async function loadOpenMapXStyle(
+  env: ClientEnv,
+  variant: MapStyleVariant = "light",
+): Promise<Record<string, unknown>> {
+  const file = variant === "dark" ? "openmapx-dark.json" : "openmapx-streets.json";
+  const res = await fetch(`/styles/${file}`);
   if (!res.ok) {
-    throw new Error(`Failed to load OpenMapX style: HTTP ${res.status}`);
+    throw new Error(`Failed to load OpenMapX style "${variant}": HTTP ${res.status}`);
   }
   const style = await res.json();
 
