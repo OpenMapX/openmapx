@@ -7,7 +7,7 @@ const MAX_BBOX_SPAN = 1.0;
 const CACHE_TTL_SHORT = 300;
 const CACHE_TTL_LONG = 3600;
 
-function classifyShelterType(rawType: string): string {
+export function classifyShelterType(rawType: string): string {
   const t = rawType.toLowerCase();
   if (t.includes("cabane") || t.includes("bivouac") || t.includes("abri")) return "cabane";
   if (t.includes("refuge") || t.includes("gardé")) return "refuge";

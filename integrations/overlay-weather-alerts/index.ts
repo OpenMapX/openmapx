@@ -99,13 +99,13 @@ interface FeatureCollection {
 
 const VALID_SEVERITIES = new Set(["Extreme", "Severe", "Moderate", "Minor", "Unknown"]);
 
-function normalizeSeverity(raw: string | undefined | null): string {
+export function normalizeSeverity(raw: string | undefined | null): string {
   if (!raw) return "Unknown";
   const capitalized = raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
   return VALID_SEVERITIES.has(capitalized) ? capitalized : "Unknown";
 }
 
-function isExpired(expires: string | null | undefined): boolean {
+export function isExpired(expires: string | null | undefined): boolean {
   if (!expires) return false;
   const t = new Date(expires).getTime();
   return !Number.isNaN(t) && t < Date.now();
@@ -122,7 +122,7 @@ async function fetchWithTimeout(url: string, headers?: Record<string, string>): 
 }
 
 // NOAA Weather Alerts
-async function fetchNOAA(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
+export async function fetchNOAA(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
   const res = await fetchWithTimeout(NOAA_URL, {
     "User-Agent": USER_AGENT,
     Accept: "application/geo+json",
@@ -167,7 +167,7 @@ async function fetchNOAA(log: IntegrationContext["log"]): Promise<NormalizedFeat
 }
 
 // ECCC (Environment and Climate Change Canada)
-async function fetchECCC(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
+export async function fetchECCC(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
   const res = await fetchWithTimeout(ECCC_URL, { "User-Agent": USER_AGENT });
   if (!res.ok) {
     log.warn(`ECCC API returned ${res.status}`);
@@ -218,7 +218,7 @@ async function fetchECCC(log: IntegrationContext["log"]): Promise<NormalizedFeat
 }
 
 // DWD GeoServer WFS
-async function fetchDWD(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
+export async function fetchDWD(log: IntegrationContext["log"]): Promise<NormalizedFeature[]> {
   const res = await fetchWithTimeout(DWD_URL);
   if (!res.ok) {
     log.warn(`DWD WFS returned ${res.status}`);

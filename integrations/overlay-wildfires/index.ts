@@ -32,13 +32,13 @@ interface FireFeatureCollection {
   features: FireFeature[];
 }
 
-function parseAcqDateTime(date: string, time: string): number {
+export function parseAcqDateTime(date: string, time: string): number {
   const h = time.padStart(4, "0").slice(0, 2);
   const m = time.padStart(4, "0").slice(2, 4);
   return new Date(`${date}T${h}:${m}:00Z`).getTime();
 }
 
-function csvToGeoJSON(csv: string, source: string): FireFeatureCollection {
+export function csvToGeoJSON(csv: string, source: string): FireFeatureCollection {
   const lines = csv.trim().split("\n");
   if (lines.length < 2) return { type: "FeatureCollection", features: [] };
 

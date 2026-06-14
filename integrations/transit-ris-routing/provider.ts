@@ -95,7 +95,7 @@ const CATEGORY_MODE: Record<string, TransportMode> = {
 
 // ISO-8601 duration parsing (PT1H23M40S → seconds)
 
-function parseDuration(iso: string | undefined): number {
+export function parseDuration(iso: string | undefined): number {
   if (!iso) return 0;
   const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso);
   if (!m) return 0;
@@ -116,7 +116,7 @@ const LANG_MAP: Record<string, string> = {
   pl: "PL",
 };
 
-function mapLang(lang?: string): string {
+export function mapLang(lang?: string): string {
   if (!lang) return "EN";
   return LANG_MAP[lang.toLowerCase()] ?? "EN";
 }
@@ -158,7 +158,7 @@ function resolveStopEvent(event?: RisStopEvent): {
   };
 }
 
-function mapLeg(leg: RisLeg): TripLeg | null {
+export function mapLeg(leg: RisLeg): TripLeg | null {
   // Skip CONNECT legs (transfer evaluation entries, not visual legs)
   if (leg.type === "CONNECT") return null;
 
@@ -194,7 +194,7 @@ function mapLeg(leg: RisLeg): TripLeg | null {
   return result;
 }
 
-function mapTrip(trip: RisTrip): TripItinerary {
+export function mapTrip(trip: RisTrip): TripItinerary {
   const legs = (trip.legs ?? []).map(mapLeg).filter((l): l is TripLeg => l !== null);
   const startTime = legs[0]?.startTime ?? "";
   const endTime = legs[legs.length - 1]?.endTime ?? "";

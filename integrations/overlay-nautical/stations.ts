@@ -116,7 +116,7 @@ async function loadIocStations(
 
 // ISO-3166 alpha-3 → alpha-2 for the ~30 codes IOC uses heavily. Falls back to
 // undefined (rather than a wrong guess) for unknown codes.
-function iso3to2(code: string | undefined): string | undefined {
+export function iso3to2(code: string | undefined): string | undefined {
   if (!code) return undefined;
   const map: Record<string, string> = {
     AUS: "AU",

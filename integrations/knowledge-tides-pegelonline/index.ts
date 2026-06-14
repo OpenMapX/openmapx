@@ -70,7 +70,7 @@ interface TidesResponse {
   currentLevel?: { time: string; valueFt: number };
 }
 
-function reformatPegelTime(stamp: string): string {
+export function reformatPegelTime(stamp: string): string {
   // Pegelonline returns "2026-05-18T06:15:00+02:00" (German local with
   // offset). Preserve the offset so the place-panel parser detects the ISO
   // form and renders in the viewer's browser-local zone. Stripping it left
@@ -110,7 +110,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   return stations;
 }
 
-async function fetchMeasurements(uuid: string): Promise<PegelMeasurement[]> {
+export async function fetchMeasurements(uuid: string): Promise<PegelMeasurement[]> {
   // P1D = last 24 h. Resulting payload can be large (1-min resolution); we
   // resample to 15-min steps to match the existing NOAA curve density.
   const raw = await fetchJson<PegelMeasurement[]>(
@@ -126,7 +126,7 @@ async function fetchMeasurements(uuid: string): Promise<PegelMeasurement[]> {
  * hysteresis detector so sensor noise / flat plateaus don't produce spurious
  * extrema. Threshold: 5 cm or 12 % of the observed range, whichever is larger.
  */
-function deriveExtrema(curve: Array<{ time: string; valueCm: number }>): TideEvent[] {
+export function deriveExtrema(curve: Array<{ time: string; valueCm: number }>): TideEvent[] {
   const samples = curve.map((p) => ({ time: p.time, value: p.valueCm }));
   return findTideExtrema(samples, { minDelta: 5, relativeDelta: 0.12 }).map((e) => ({
     time: e.time,

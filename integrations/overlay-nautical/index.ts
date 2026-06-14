@@ -206,7 +206,7 @@ async function fetchAndCacheTile(
   return buf;
 }
 
-function parseHarbourJsonp(text: string): HarborFeature[] {
+export function parseHarbourJsonp(text: string): HarborFeature[] {
   // Format: `putHarbourMarker(id, lng, lat, name, wikiUrl, category);` per line.
   const re =
     /putHarbourMarker\(\s*(\d+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*(\d+)\s*\)/g;

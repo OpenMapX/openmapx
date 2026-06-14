@@ -39,7 +39,7 @@ export interface TrailDetail extends TrailSummary {
   tags: Record<string, string>;
 }
 
-function mapSummary(r: WaymarkedSearchResult): TrailSummary {
+export function mapSummary(r: WaymarkedSearchResult): TrailSummary {
   return {
     type: "relation",
     id: r.id,

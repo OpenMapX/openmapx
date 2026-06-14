@@ -51,24 +51,24 @@ interface USGSFeatureCollection {
   features: USGSFeature[];
 }
 
-function magnitudeToThreshold(minMagnitude: number): string {
+export function magnitudeToThreshold(minMagnitude: number): string {
   if (minMagnitude >= 4.5) return "4.5";
   if (minMagnitude >= 2.5) return "2.5";
   if (minMagnitude >= 1.0) return "1.0";
   return "all";
 }
 
-function buildFeedUrl(timeRange: string, threshold: string): string {
+export function buildFeedUrl(timeRange: string, threshold: string): string {
   return `${USGS_FEED_BASE}/${threshold}_${timeRange}.geojson`;
 }
 
-function depthCategory(depth: number): string {
+export function depthCategory(depth: number): string {
   if (depth < 70) return "shallow";
   if (depth < 300) return "intermediate";
   return "deep";
 }
 
-function magLabel(mag: number): string {
+export function magLabel(mag: number): string {
   if (mag < 2.0) return "Micro";
   if (mag < 4.0) return "Minor";
   if (mag < 5.0) return "Light";
@@ -78,14 +78,14 @@ function magLabel(mag: number): string {
   return "Great";
 }
 
-function ageCategory(ageMs: number): string {
+export function ageCategory(ageMs: number): string {
   if (ageMs < 3_600_000) return "recent";
   if (ageMs < 86_400_000) return "today";
   if (ageMs < 604_800_000) return "this_week";
   return "older";
 }
 
-function enrichFeatures(fc: USGSFeatureCollection): USGSFeatureCollection {
+export function enrichFeatures(fc: USGSFeatureCollection): USGSFeatureCollection {
   const now = Date.now();
   return {
     ...fc,

@@ -23,7 +23,7 @@ const HOURLY_FIELDS = [
   "sea_level_height_msl",
 ].join(",");
 
-interface OpenMeteoMarineResponse {
+export interface OpenMeteoMarineResponse {
   latitude?: number;
   longitude?: number;
   hourly?: {
@@ -46,7 +46,7 @@ interface OpenMeteoMarineResponse {
   reason?: string;
 }
 
-interface MarineHourlyPoint {
+export interface MarineHourlyPoint {
   time: string;
   waveHeightM?: number;
   waveDirectionDeg?: number;
@@ -96,7 +96,7 @@ interface MarineResponse {
   source: "open-meteo-marine";
 }
 
-function douglasFromWaveHeight(waveHeightM: number | undefined): DouglasState {
+export function douglasFromWaveHeight(waveHeightM: number | undefined): DouglasState {
   if (waveHeightM === undefined) return "calm-glassy";
   if (waveHeightM <= 0) return "calm-glassy";
   if (waveHeightM <= 0.1) return "calm-rippled";
@@ -120,7 +120,7 @@ function pickNumber(arr: Array<number | null> | undefined, idx: number): number 
   return v === null || v === undefined ? undefined : v;
 }
 
-function parseHourly(data: OpenMeteoMarineResponse): MarineHourlyPoint[] {
+export function parseHourly(data: OpenMeteoMarineResponse): MarineHourlyPoint[] {
   const h = data.hourly;
   if (!h?.time) return [];
   return h.time.map((time, i) => ({
@@ -140,7 +140,7 @@ function parseHourly(data: OpenMeteoMarineResponse): MarineHourlyPoint[] {
   }));
 }
 
-function buildCurrent(hourly: MarineHourlyPoint[]): MarineCurrent | null {
+export function buildCurrent(hourly: MarineHourlyPoint[]): MarineCurrent | null {
   if (hourly.length === 0) return null;
   // Find the hour closest to "now" — Open-Meteo returns hourly aligned to UTC.
   const now = Date.now();
