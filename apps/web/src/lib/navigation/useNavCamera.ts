@@ -28,6 +28,19 @@ const SETTLE_MS = ENTER_EASE_MS + 20;
 const POS_TAU = 0.45;
 const MAX_LEAD = 1.5;
 const BEARING_TAU = 0.35;
+// Auto-zoom eases gently (large tau) toward a speed-derived zoom; a manual zoom
+// gesture pauses it for a cooldown so the camera never fights the user.
+const ZOOM_TAU = 1.6;
+const USER_ZOOM_COOLDOWN_MS = 8_000;
+
+/**
+ * Target follow-zoom for a ground speed: close in when slow/stopped, pull back
+ * at speed to show more road ahead. ~17 at a standstill → ~14 at motorway speed.
+ */
+function targetZoomForSpeed(speedMps: number): number {
+  const z = 17 - (Math.max(speedMps, 0) / 33) * 3;
+  return Math.max(14, Math.min(17, z));
+}
 
 // A bold navigation chevron, seated in a white disc, pointing "up" (north) at
 // rotation 0. Created with rotationAlignment: "map" and rotated by the travel
@@ -101,7 +114,12 @@ export function useNavCamera(): void {
   const settleUntilRef = useRef(0);
   // Last camera pose applied via jumpTo; lets the per-frame loop skip a redundant
   // camera transform + repaint while the puck is stationary (e.g. at a light).
-  const lastCamRef = useRef<{ lng: number; lat: number; bearing: number } | null>(null);
+  const lastCamRef = useRef<{ lng: number; lat: number; bearing: number; zoom: number } | null>(
+    null,
+  );
+  // Eased follow-zoom, and the time until which a recent manual zoom pauses auto-zoom.
+  const displayedZoomRef = useRef<number | null>(null);
+  const userZoomUntilRef = useRef(0);
 
   const active = status === "navigating" || status === "rerouting";
 
@@ -144,6 +162,7 @@ export function useNavCamera(): void {
     bearingRef.current = null;
     targetRef.current = null;
     lastCamRef.current = null;
+    displayedZoomRef.current = null;
   }, [route]);
 
   // Record each new fix as the dead-reckoning target, stamped with its arrival
@@ -171,15 +190,18 @@ export function useNavCamera(): void {
       displayedRef.current = prog.alongMeters;
       bearingRef.current = prog.bearing;
     }
+    const enterZoom = Math.max(map.getZoom(), NAV_ENTER_ZOOM);
     map.easeTo(
       {
-        zoom: Math.max(map.getZoom(), NAV_ENTER_ZOOM),
+        zoom: enterZoom,
         pitch: PITCH[mode] ?? 0,
         padding: followPadding(map),
         duration: ENTER_EASE_MS,
       },
       { programmatic: true },
     );
+    // Seed the eased follow-zoom so the per-frame loop continues from here.
+    displayedZoomRef.current = enterZoom;
     settleUntilRef.current = performance.now() + SETTLE_MS;
   }, [mapRef, active, cameraMode, mode]);
 
@@ -229,15 +251,29 @@ export function useNavCamera(): void {
         // follow frame rather than fighting the easeTo / the user's gesture.
         lastCamRef.current = null;
       } else {
+        // Speed-adaptive zoom, eased — unless the user just zoomed, in which
+        // case hold their zoom and only track it so auto-zoom resumes smoothly.
+        const nowZoom = map.getZoom();
+        let zoom = nowZoom;
+        if (now < userZoomUntilRef.current) {
+          displayedZoomRef.current = nowZoom;
+        } else {
+          const speed = useNavigationStore.getState().progress?.speedMps ?? 0;
+          const base = displayedZoomRef.current ?? nowZoom;
+          const zAlpha = 1 - Math.exp(-Math.max(dt, 0) / ZOOM_TAU);
+          displayedZoomRef.current = base + (targetZoomForSpeed(speed) - base) * zAlpha;
+          zoom = displayedZoomRef.current;
+        }
         const last = lastCamRef.current;
         const moved =
           !last ||
           Math.abs(point[0] - last.lng) > 1e-6 ||
           Math.abs(point[1] - last.lat) > 1e-6 ||
-          Math.abs(((brg - last.bearing + 540) % 360) - 180) > 0.05;
+          Math.abs(((brg - last.bearing + 540) % 360) - 180) > 0.05 ||
+          Math.abs(zoom - last.zoom) > 0.004;
         if (moved) {
-          map.jumpTo({ center: point as LngLat, bearing: brg }, { programmatic: true });
-          lastCamRef.current = { lng: point[0], lat: point[1], bearing: brg };
+          map.jumpTo({ center: point as LngLat, bearing: brg, zoom }, { programmatic: true });
+          lastCamRef.current = { lng: point[0], lat: point[1], bearing: brg, zoom };
         }
       }
     };
@@ -262,11 +298,19 @@ export function useNavCamera(): void {
       if (e?.programmatic) return;
       useNavigationStore.getState().setCameraMode("free");
     };
+    // A manual zoom keeps follow mode but pauses auto-zoom for a cooldown so the
+    // camera doesn't immediately undo the user's pinch.
+    const onUserZoom = (e: { programmatic?: boolean }) => {
+      if (e?.programmatic) return;
+      userZoomUntilRef.current = performance.now() + USER_ZOOM_COOLDOWN_MS;
+    };
     map.on("dragstart", onUserGesture);
     map.on("rotatestart", onUserGesture);
+    map.on("zoomstart", onUserZoom);
     return () => {
       map.off("dragstart", onUserGesture);
       map.off("rotatestart", onUserGesture);
+      map.off("zoomstart", onUserZoom);
     };
   }, [mapRef, active]);
 }
