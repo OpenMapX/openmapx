@@ -81,12 +81,12 @@ export function MapControls() {
         <Tooltip title={tNav("searchAlongRoute")} placement="left">
           <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
             <IconButton
-              size="medium"
+              size="small"
               onClick={openRouteSearch}
-              sx={{ width: 40, height: 40 }}
+              sx={{ width: 36, height: 36 }}
               aria-label={tNav("searchAlongRoute")}
             >
-              <SearchIcon sx={{ fontSize: 22, color: "primary.main" }} />
+              <SearchIcon sx={{ fontSize: 18, color: "primary.main" }} />
             </IconButton>
           </Paper>
         </Tooltip>

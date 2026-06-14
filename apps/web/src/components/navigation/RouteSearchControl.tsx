@@ -134,7 +134,8 @@ export function RouteSearchControl() {
         />
       )}
 
-      {/* Category picker sheet (also reachable while results are shown, to switch). */}
+      {/* Category picker sheet at the top (over the maneuver banner while open);
+          the POI card and center/clear controls stay at the bottom. */}
       {open && (
         <Paper
           elevation={8}
@@ -143,7 +144,7 @@ export function RouteSearchControl() {
             position: "fixed",
             left: "50%",
             transform: "translateX(-50%)",
-            bottom: "calc(var(--omx-safe-bottom) + 8px)",
+            top: "calc(var(--omx-safe-top) + 8px)",
             width: { xs: "calc(100% - 16px)", sm: 480 },
             borderRadius: 3,
             zIndex: 1350,
