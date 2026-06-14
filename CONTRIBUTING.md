@@ -71,8 +71,40 @@ Git hooks enforce a two-stage local gate:
   when the daemon isn't running.
 
 CI re-runs lint, types, and the full test suite on every push and PR, so the
-safety net is always present. If a check is slow, run only the affected
-workspace (`pnpm -F @openmapx/core test`).
+safety net is always present.
+
+### Testing
+
+Tests run from a single root `vitest.config.ts`, split into two projects —
+`node` (API, integrations, packages, services, scripts) and `web` (the Next.js
+app and React-bound packages, in jsdom). There are no per-package Vitest configs
+or `test` scripts; always run from the repo root:
+
+```bash
+pnpm test                            # whole suite
+pnpm test --project web              # scope to one environment (web | node)
+pnpm exec vitest run packages/core   # scope by path or test-name substring
+pnpm test:coverage                   # V8 coverage report (written to coverage/)
+```
+
+Conventions:
+
+- **Co-locate** tests as `*.test.ts(x)` next to the code (or a sibling
+  `__tests__/`). Web/React and `packages/core` hook tests get jsdom
+  automatically; a node-only test that lives under `apps/web` can opt out with a
+  `// @vitest-environment node` pragma.
+- **Use the shared toolkits** rather than re-rolling mocks:
+  `@openmapx/integration-framework/testing` (`createMockIntegrationContext`,
+  `fakeHttpClient`, `loadFixture`), `apps/api/src/test` (`buildTestApp`,
+  `createDbMock`, `mockRequireAuth`), and `apps/web/src/test` (`createFakeMap`,
+  `renderHookWithQuery`, `mockNextIntl`).
+- **Integration providers**: stub the HTTP layer (`vi.stubGlobal("fetch", …)`
+  for global-fetch providers, or `fakeHttpClient` through a mock context) and
+  assert the mapped output against a captured fixture. Pull pure mappers out and
+  test them table-driven; prefer adding `export` to a helper over moving it.
+- **Capability contracts** are enforced repo-wide by
+  `apps/api/src/services/__tests__/provider-contract-conformance.test.ts`: a
+  provider that declares a capability must implement its method.
 
 ### Code style
 

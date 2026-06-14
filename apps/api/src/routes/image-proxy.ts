@@ -63,7 +63,13 @@ const ALLOWED_HOSTS = [
   "511pa.com", // Pennsylvania 511 (covers www.511pa.com)
 ];
 
-function isAllowedHost(hostname: string): boolean {
+/**
+ * True only when `hostname` exactly matches an allowlisted host or is a
+ * subdomain of one (the leading `.` in `endsWith` enforces the label boundary,
+ * so `upload.wikimedia.org.attacker.com` and `xupload.wikimedia.org` are
+ * rejected). Exported for direct SSRF-allowlist testing.
+ */
+export function isAllowedHost(hostname: string): boolean {
   return ALLOWED_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`));
 }
 

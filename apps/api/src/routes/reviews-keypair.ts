@@ -65,7 +65,7 @@ function isCoord(v: unknown): v is string {
   return typeof v === "string" && v.length > 0 && v.length <= MAX_JWK_COORD_CHARS;
 }
 
-function isMangrovePublicJwk(v: unknown): v is Record<string, unknown> {
+export function isMangrovePublicJwk(v: unknown): v is Record<string, unknown> {
   if (!v || typeof v !== "object") return false;
   const jwk = v as Record<string, unknown>;
   if (jwk.kty !== "EC" || jwk.crv !== "P-256") return false;
@@ -78,11 +78,11 @@ function isMangrovePublicJwk(v: unknown): v is Record<string, unknown> {
   return true;
 }
 
-function isMangrovePrivateJwk(v: unknown): v is Record<string, unknown> {
+export function isMangrovePrivateJwk(v: unknown): v is Record<string, unknown> {
   return isMangrovePublicJwk(v) && isCoord((v as Record<string, unknown>).d);
 }
 
-function validateWrap(w: WrapInput): {
+export function validateWrap(w: WrapInput): {
   wrapType: WrapType;
   label: string;
   identityString: string | null;
@@ -120,7 +120,7 @@ interface EncryptedState {
   wraps: ReturnType<typeof validateWrap>[];
 }
 
-function validateEncryptedState(body: {
+export function validateEncryptedState(body: {
   passphraseCiphertext?: string | null;
   recipientsCiphertext?: string | null;
   wraps?: WrapInput[];

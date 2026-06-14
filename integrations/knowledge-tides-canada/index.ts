@@ -86,7 +86,7 @@ interface TidesResponse {
   met?: never;
 }
 
-function normalizeIwlsTimestamp(iso: string): string {
+export function normalizeIwlsTimestamp(iso: string): string {
   // IWLS returns ISO-8601 UTC like "2026-05-18T03:20:00Z". Keep the `T` and
   // trailing `Z` so the place panel's parser can detect the UTC marker and
   // display the event in the user's browser-local time. Stripping the `Z`
@@ -136,7 +136,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   return stations;
 }
 
-async function fetchHiloEvents(stationId: string): Promise<TideEvent[]> {
+export async function fetchHiloEvents(stationId: string): Promise<TideEvent[]> {
   // 48-hour window starting at today UTC midnight is enough to populate the
   // "today" + "tomorrow" sections of the place-panel widget.
   const start = new Date();
@@ -174,7 +174,9 @@ async function fetchHiloEvents(stationId: string): Promise<TideEvent[]> {
   return events;
 }
 
-async function fetchCurve(stationId: string): Promise<Array<{ time: string; valueFt: number }>> {
+export async function fetchCurve(
+  stationId: string,
+): Promise<Array<{ time: string; valueFt: number }>> {
   // 30-min sampled curve over the next 24h.
   const start = new Date();
   start.setUTCHours(0, 0, 0, 0);
@@ -191,7 +193,7 @@ async function fetchCurve(stationId: string): Promise<Array<{ time: string; valu
   }));
 }
 
-async function fetchLatestObservation(
+export async function fetchLatestObservation(
   stationId: string,
 ): Promise<{ time: string; valueFt: number } | null> {
   // Last hour of observed water-level. IWLS returns 1-min resolution; we

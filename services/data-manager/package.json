@@ -8,8 +8,7 @@
     "dev": "node --env-file=.env --watch --import tsx/esm src/index.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
-    "check-types": "tsc --noEmit",
-    "test": "vitest run"
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@openmapx/db-schema": "workspace:^",

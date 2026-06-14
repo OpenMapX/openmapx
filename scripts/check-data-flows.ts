@@ -24,7 +24,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
@@ -159,7 +159,7 @@ function readJson<T>(path: string): T | null {
 }
 
 /** Lowercase registrable domain (eTLD+1) for a hostname. */
-function registrable(host: string): string {
+export function registrable(host: string): string {
   const h = host.toLowerCase().replace(/\.$/, "");
   const parts = h.split(".");
   if (parts.length <= 2) return h;
@@ -168,7 +168,7 @@ function registrable(host: string): string {
 }
 
 /** Is this an own-infra / test / non-routable host we should ignore? */
-function isInternalHost(host: string): boolean {
+export function isInternalHost(host: string): boolean {
   const h = host.toLowerCase();
   if (!h.includes(".")) return true; // single-label docker service name (app-api, nominatim, …)
   if (h === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(h)) return true;
@@ -181,11 +181,11 @@ function isInternalHost(host: string): boolean {
  * data flow. Strips block comments wholesale, and line comments only when the
  * `//` isn't part of a `://` scheme (so real URLs in string literals survive).
  */
-function stripComments(content: string): string {
+export function stripComments(content: string): string {
   return content.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 }
 
-function extractHosts(content: string): Set<string> {
+export function extractHosts(content: string): Set<string> {
   const hosts = new Set<string>();
   const src = stripComments(content);
   for (const m of src.matchAll(HOST_RE)) {
@@ -378,7 +378,7 @@ function imageProxyAllowedHosts(): Set<string> {
 }
 
 /** Does a host match an image-proxy allowlist entry (host or subdomain)? */
-function proxyAllows(host: string, allow: Set<string>): boolean {
+export function proxyAllows(host: string, allow: Set<string>): boolean {
   const h = host.toLowerCase();
   for (const a of allow) if (h === a || h.endsWith(`.${a}`)) return true;
   return false;
@@ -542,4 +542,8 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+// Only run the gate when executed directly (CLI / pre-commit), so importing this
+// module for its pure helpers (registrable, isInternalHost, …) is side-effect-free.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main();
+}

@@ -51,6 +51,10 @@ export function createRepoVitestAliases(repoRoot: string) {
       replacement: resolve(repoRoot, "packages/mobility-formats/index.ts"),
     },
     {
+      find: /^@openmapx\/integration-framework\/testing$/,
+      replacement: resolve(repoRoot, "packages/integration-framework/src/testing/index.ts"),
+    },
+    {
       find: /^@openmapx\/integration-framework$/,
       replacement: resolve(repoRoot, "packages/integration-framework/src/index.ts"),
     },

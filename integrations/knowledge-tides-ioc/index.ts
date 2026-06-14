@@ -75,7 +75,7 @@ interface TidesResponse {
   currentLevel?: { time: string; valueFt: number };
 }
 
-function reformatIocTime(stime: string): string {
+export function reformatIocTime(stime: string): string {
   // IOC publishes `stime` in UTC without a TZ marker (e.g. "2026-05-17 22:30:00").
   // Convert to ISO-8601 with `Z` so the place-panel parser detects UTC and
   // renders the event in the viewer's browser-local zone. Returning the
@@ -122,7 +122,7 @@ async function loadStations(ctx: IntegrationContext): Promise<CachedStation[]> {
   return stations;
 }
 
-async function fetchObservations(stationCode: string): Promise<IocDataPoint[]> {
+export async function fetchObservations(stationCode: string): Promise<IocDataPoint[]> {
   // `period` is in days; 1 day = the last 24 h of observations.
   const url = `${BASE}?query=data&code=${encodeURIComponent(stationCode)}&format=json&period=1`;
   const raw = await fetchJson<IocDataPoint[]>(url);
@@ -147,7 +147,7 @@ async function fetchObservations(stationCode: string): Promise<IocDataPoint[]> {
  * hysteresis detector so sensor noise / flat plateaus don't produce spurious
  * extrema. Threshold: 3 cm or 12 % of the observed range, whichever is larger.
  */
-function deriveExtrema(curve: Array<{ time: string; value: number }>): TideEvent[] {
+export function deriveExtrema(curve: Array<{ time: string; value: number }>): TideEvent[] {
   return findTideExtrema(curve, { minDelta: 0.03, relativeDelta: 0.12 }).map((e) => ({
     time: e.time,
     type: e.type,

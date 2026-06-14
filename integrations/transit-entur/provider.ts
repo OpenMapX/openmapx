@@ -1161,13 +1161,13 @@ function withEnturPrefix(rawId: string): string {
   return `${ENTUR_PREFIX}${rawId}`;
 }
 
-function stripKnownPrefix(id: string): string {
+export function stripKnownPrefix(id: string): string {
   if (id.startsWith(ENTUR_PREFIX)) return id.slice(ENTUR_PREFIX.length);
   if (id.startsWith("nsr:")) return `${NSR_PREFIX}${id.slice(4)}`;
   return id;
 }
 
-function buildStopIdentity(rawId: string): Pick<TransitStop, "primaryScheme" | "ids"> {
+export function buildStopIdentity(rawId: string): Pick<TransitStop, "primaryScheme" | "ids"> {
   const ids: Record<string, string> = { entur: rawId };
   let primaryScheme = "entur";
   if (rawId.startsWith(NSR_PREFIX)) {
@@ -1177,7 +1177,7 @@ function buildStopIdentity(rawId: string): Pick<TransitStop, "primaryScheme" | "
   return { primaryScheme, ids };
 }
 
-function encodeServiceJourneyId(serviceJourneyId: string, date?: string): string {
+export function encodeServiceJourneyId(serviceJourneyId: string, date?: string): string {
   return withEnturPrefix(
     date && /^\d{4}-\d{2}-\d{2}$/.test(date)
       ? `${date}${DAY_TOKEN_SEPARATOR}${serviceJourneyId}`
@@ -1185,7 +1185,7 @@ function encodeServiceJourneyId(serviceJourneyId: string, date?: string): string
   );
 }
 
-function decodeServiceJourneyId(token: string): { serviceJourneyId: string; date?: string } {
+export function decodeServiceJourneyId(token: string): { serviceJourneyId: string; date?: string } {
   const raw = stripKnownPrefix(token);
   const separatorIndex = raw.indexOf(DAY_TOKEN_SEPARATOR);
   if (separatorIndex > 0) {
@@ -1200,15 +1200,15 @@ function decodeServiceJourneyId(token: string): { serviceJourneyId: string; date
   return { serviceJourneyId: raw };
 }
 
-function isQuayId(rawId: string): boolean {
+export function isQuayId(rawId: string): boolean {
   return rawId.includes(":Quay:");
 }
 
-function isTruthyString(value: string | null | undefined): value is string {
+export function isTruthyString(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function toTransportMode(mode: string | null | undefined): TransportMode {
+export function toTransportMode(mode: string | null | undefined): TransportMode {
   const normalized = (mode ?? "").toLowerCase();
   switch (normalized) {
     case "rail":
@@ -1238,7 +1238,7 @@ function toTransportMode(mode: string | null | undefined): TransportMode {
   }
 }
 
-function collectStopModes(
+export function collectStopModes(
   transportModes?: Array<string | null> | null,
   categories?: string[] | null,
   featureModes?: Array<Record<string, string | null>> | null,
@@ -1262,7 +1262,7 @@ function collectStopModes(
   return modes.size > 0 ? [...modes] : ["bus"];
 }
 
-function toOccupancyLevel(raw: string | null | undefined): OccupancyLevel | undefined {
+export function toOccupancyLevel(raw: string | null | undefined): OccupancyLevel | undefined {
   switch (raw) {
     case "empty":
     case "manySeatsAvailable":
@@ -1282,7 +1282,7 @@ function toOccupancyLevel(raw: string | null | undefined): OccupancyLevel | unde
   }
 }
 
-function toAlertSeverity(raw: string | null | undefined): AlertSeverity {
+export function toAlertSeverity(raw: string | null | undefined): AlertSeverity {
   switch (raw) {
     case "verySevere":
       return "critical";
@@ -1295,7 +1295,9 @@ function toAlertSeverity(raw: string | null | undefined): AlertSeverity {
   }
 }
 
-function pickLocalizedText(values: EnturMultilingualText[] | null | undefined): string | undefined {
+export function pickLocalizedText(
+  values: EnturMultilingualText[] | null | undefined,
+): string | undefined {
   if (!values?.length) return undefined;
   const normalized = values.filter((value) => isTruthyString(value.value));
   for (const lang of ["en", "eng"]) {
@@ -1309,16 +1311,16 @@ function pickLocalizedText(values: EnturMultilingualText[] | null | undefined): 
   return normalized[0]?.value ?? undefined;
 }
 
-function nsrTextValue(value: NsrTextValue | null | undefined): string | undefined {
+export function nsrTextValue(value: NsrTextValue | null | undefined): string | undefined {
   return isTruthyString(value?.value) ? value.value : undefined;
 }
 
-function normalizeColor(color: string | null | undefined): string | undefined {
+export function normalizeColor(color: string | null | undefined): string | undefined {
   if (!isTruthyString(color)) return undefined;
   return color.replace(/^#/, "");
 }
 
-function dedupeById<T extends { id: string }>(items: T[]): T[] {
+export function dedupeById<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   const result: T[] = [];
   for (const item of items) {
@@ -1329,12 +1331,12 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
   return result;
 }
 
-function datePartFromIso(value: string | null | undefined): string | undefined {
+export function datePartFromIso(value: string | null | undefined): string | undefined {
   if (!isTruthyString(value)) return undefined;
   return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : undefined;
 }
 
-function shiftDate(date: string, days: number): string {
+export function shiftDate(date: string, days: number): string {
   const base = new Date(`${date}T00:00:00Z`);
   base.setUTCDate(base.getUTCDate() + days);
   return base.toISOString().slice(0, 10);
@@ -1353,7 +1355,7 @@ function dateCandidates(preferredDate?: string): string[] {
   );
 }
 
-function calculateDelaySeconds(
+export function calculateDelaySeconds(
   aimed: string | null | undefined,
   expected: string | null | undefined,
 ): number | undefined {
@@ -1453,7 +1455,7 @@ function isInsideBbox(bbox: BBox, longitude: number, latitude: number): boolean 
   return longitude >= bbox[0] && longitude <= bbox[2] && latitude >= bbox[1] && latitude <= bbox[3];
 }
 
-function normalizeLine(line: EnturLine | null | undefined): TransitRoute | null {
+export function normalizeLine(line: EnturLine | null | undefined): TransitRoute | null {
   if (!line?.id) return null;
   return {
     id: withEnturPrefix(line.id),
@@ -1466,7 +1468,7 @@ function normalizeLine(line: EnturLine | null | undefined): TransitRoute | null 
   };
 }
 
-function normalizeStopPlace(
+export function normalizeStopPlace(
   stopPlace: EnturStopPlaceSummary | null | undefined,
 ): TransitStop | null {
   if (
@@ -2022,13 +2024,13 @@ function nsrArray<T>(value: T | T[] | null | undefined): T[] {
   return value != null ? [value] : [];
 }
 
-function nsrRefValue(value: NsrRef | null | undefined): string | undefined {
+export function nsrRefValue(value: NsrRef | null | undefined): string | undefined {
   if (isTruthyString(value?.ref)) return value.ref;
   if (isTruthyString(value?.value?.ref)) return value.value.ref;
   return undefined;
 }
 
-function nsrPrivateCodeValue(value: NsrPrivateCode | null | undefined): string | undefined {
+export function nsrPrivateCodeValue(value: NsrPrivateCode | null | undefined): string | undefined {
   return isTruthyString(value?.value) ? value.value : undefined;
 }
 
@@ -2039,7 +2041,7 @@ function nsrPointLocation(point: NsrPoint | null | undefined): { lat: number; ln
   return { lat: latitude, lng: longitude };
 }
 
-function ensureClosedRing(coordinates: [number, number][]): [number, number][] {
+export function ensureClosedRing(coordinates: [number, number][]): [number, number][] {
   if (coordinates.length === 0) return coordinates;
   const [firstLng, firstLat] = coordinates[0];
   const [lastLng, lastLat] = coordinates[coordinates.length - 1];
@@ -2047,7 +2049,9 @@ function ensureClosedRing(coordinates: [number, number][]): [number, number][] {
   return [...coordinates, [firstLng, firstLat]];
 }
 
-function nsrCoordinatesFromPosList(value: number[] | null | undefined): [number, number][] | null {
+export function nsrCoordinatesFromPosList(
+  value: number[] | null | undefined,
+): [number, number][] | null {
   if (!Array.isArray(value) || value.length < 6 || value.length % 2 !== 0) return null;
   const coordinates: [number, number][] = [];
   for (let index = 0; index < value.length; index += 2) {
@@ -2129,7 +2133,7 @@ function nsrRecordGeometry(
   return nsrPolygonGeometry(polygon) ?? nsrMultiSurfaceGeometry(multiSurface);
 }
 
-function humanizeNsrEnum(value: string | null | undefined): string | undefined {
+export function humanizeNsrEnum(value: string | null | undefined): string | undefined {
   if (!isTruthyString(value)) return undefined;
   return value
     .toLowerCase()
@@ -2137,7 +2141,7 @@ function humanizeNsrEnum(value: string | null | undefined): string | undefined {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatTransportModes(modes: TransportMode[]): string {
+export function formatTransportModes(modes: TransportMode[]): string {
   return modes.map((mode) => humanizeNsrEnum(mode) ?? mode).join(", ");
 }
 
@@ -2453,7 +2457,7 @@ function mergePlatformDetails(items: TransitPlatformDetail[]): TransitPlatformDe
   return Array.from(merged.values());
 }
 
-function parkingKindFromVehicleTypes(
+export function parkingKindFromVehicleTypes(
   vehicleTypes: string[],
   parkingType?: string | null,
 ): TransitStopParking["kind"] {

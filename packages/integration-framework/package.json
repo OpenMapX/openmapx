@@ -23,10 +23,13 @@
     "./strings": {
       "types": "./strings/index.ts",
       "default": "./strings/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./src/testing/index.ts"
     }
   },
   "scripts": {
-    "test": "vitest run",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

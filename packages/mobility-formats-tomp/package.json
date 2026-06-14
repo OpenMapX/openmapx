@@ -8,7 +8,6 @@
   "types": "./index.ts",
   "sideEffects": false,
   "scripts": {
-    "test": "vitest run",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

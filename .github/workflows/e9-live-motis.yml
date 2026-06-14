@@ -41,7 +41,9 @@ jobs:
         run: docker pull ghcr.io/motis-project/motis:latest
 
       - name: Run live MOTIS pipeline test
-        run: pnpm -C services/data-manager test pipeline-live-motis
+        # Runs from the repo root against the single root Vitest config; the
+        # positional arg filters to the one matching test file.
+        run: pnpm exec vitest run pipeline-live-motis
 
       - name: Upload data-manager logs on failure
         if: failure()

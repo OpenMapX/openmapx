@@ -1,0 +1,221 @@
+import { describe, expect, it } from "vitest";
+import { getSecretFields, validateConfigBody } from "../validate-config-body";
+
+const schema = {
+  properties: {
+    apiKey: {
+      type: "string",
+      title: "API Key",
+      description: "Provider API key",
+      "x-openmapx-secret": true,
+      "x-openmapx-sharedSecretName": "PROVIDER_KEY",
+    },
+    sharedToken: {
+      type: "string",
+      "x-openmapx-secret": true,
+    },
+    baseUrl: { type: "string" },
+    timeoutMs: { type: "integer" },
+    ratio: { type: "number" },
+    debug: { type: "boolean" },
+    mode: { type: "string", enum: ["fast", "slow"] },
+    enabled: { type: "boolean" },
+  },
+};
+
+describe("getSecretFields", () => {
+  it("extracts only fields marked x-openmapx-secret", () => {
+    const fields = getSecretFields(schema);
+    expect(fields.map((f) => f.key).sort()).toEqual(["apiKey", "sharedToken"]);
+  });
+
+  it("uses the field title and description when present", () => {
+    const fields = getSecretFields(schema);
+    const apiKey = fields.find((f) => f.key === "apiKey");
+    expect(apiKey).toEqual({
+      key: "apiKey",
+      title: "API Key",
+      description: "Provider API key",
+      sharedSecretName: "PROVIDER_KEY",
+    });
+  });
+
+  it("falls back to the key as title when no title is set", () => {
+    const fields = getSecretFields(schema);
+    const shared = fields.find((f) => f.key === "sharedToken");
+    expect(shared).toEqual({
+      key: "sharedToken",
+      title: "sharedToken",
+      description: undefined,
+      sharedSecretName: undefined,
+    });
+  });
+
+  it("returns an empty array when configSchema is undefined", () => {
+    expect(getSecretFields(undefined)).toEqual([]);
+  });
+
+  it("returns an empty array when there are no secret fields", () => {
+    expect(getSecretFields({ properties: { plain: { type: "string" } } })).toEqual([]);
+  });
+
+  it("reads properties directly when the schema is not wrapped under properties", () => {
+    const fields = getSecretFields({ token: { type: "string", "x-openmapx-secret": true } });
+    expect(fields.map((f) => f.key)).toEqual(["token"]);
+  });
+
+  it("skips reserved keys and non-object definitions", () => {
+    const fields = getSecretFields({
+      properties: {
+        type: { "x-openmapx-secret": true },
+        properties: { "x-openmapx-secret": true },
+        bogus: null,
+        real: { "x-openmapx-secret": true },
+      },
+    } as Record<string, unknown>);
+    expect(fields.map((f) => f.key)).toEqual(["real"]);
+  });
+});
+
+describe("validateConfigBody body shape rejection", () => {
+  it("rejects a null body", () => {
+    const result = validateConfigBody(null, schema);
+    expect(result.errors).toEqual(["Body must be a JSON object"]);
+    expect(result.updates).toEqual({});
+  });
+
+  it("rejects a non-object body", () => {
+    expect(validateConfigBody("nope", schema).errors).toEqual(["Body must be a JSON object"]);
+    expect(validateConfigBody(42, schema).errors).toEqual(["Body must be a JSON object"]);
+  });
+
+  it("rejects an array body", () => {
+    const result = validateConfigBody([{ baseUrl: "x" }], schema);
+    expect(result.errors).toEqual(["Body must be a JSON object"]);
+  });
+
+  it("accepts an empty object with no updates and no errors", () => {
+    const result = validateConfigBody({}, schema);
+    expect(result).toEqual({ updates: {}, errors: [] });
+  });
+});
+
+describe("validateConfigBody valid values", () => {
+  it("accepts well-typed values across all supported types", () => {
+    const result = validateConfigBody(
+      {
+        baseUrl: "https://example.com",
+        timeoutMs: 5000,
+        ratio: 0.5,
+        debug: true,
+        mode: "fast",
+      },
+      schema,
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.updates).toEqual({
+      baseUrl: "https://example.com",
+      timeoutMs: 5000,
+      ratio: 0.5,
+      debug: true,
+      mode: "fast",
+    });
+  });
+
+  it("ignores the reserved type and properties keys without erroring", () => {
+    const result = validateConfigBody(
+      { type: "object", properties: {}, baseUrl: "https://x.test" },
+      schema,
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.updates).toEqual({ baseUrl: "https://x.test" });
+  });
+});
+
+describe("validateConfigBody unknown and type errors", () => {
+  it("rejects an unknown config key", () => {
+    const result = validateConfigBody({ nope: 1 }, schema);
+    expect(result.errors).toEqual(['Unknown config key: "nope"']);
+    expect(result.updates).toEqual({});
+  });
+
+  it("rejects a non-boolean for a boolean field", () => {
+    expect(validateConfigBody({ debug: "true" }, schema).errors).toEqual([
+      '"debug" must be a boolean',
+    ]);
+  });
+
+  it("rejects a non-number for number and integer fields", () => {
+    expect(validateConfigBody({ ratio: "1.5" }, schema).errors).toEqual([
+      '"ratio" must be a number',
+    ]);
+    expect(validateConfigBody({ timeoutMs: "5000" }, schema).errors).toEqual([
+      '"timeoutMs" must be a number',
+    ]);
+  });
+
+  it("rejects a non-string for a string field", () => {
+    expect(validateConfigBody({ baseUrl: 123 }, schema).errors).toEqual([
+      '"baseUrl" must be a string',
+    ]);
+  });
+
+  it("rejects a value outside an enum", () => {
+    expect(validateConfigBody({ mode: "turbo" }, schema).errors).toEqual([
+      '"mode" must be one of: fast, slow',
+    ]);
+  });
+
+  it("collects multiple errors and keeps the valid update", () => {
+    const result = validateConfigBody({ debug: "x", baseUrl: "ok", nope: 1 }, schema);
+    expect(result.errors).toEqual(['"debug" must be a boolean', 'Unknown config key: "nope"']);
+    expect(result.updates).toEqual({ baseUrl: "ok" });
+  });
+});
+
+describe("validateConfigBody secret handling", () => {
+  it("rejects secret fields by default", () => {
+    const result = validateConfigBody({ apiKey: "leaked" }, schema);
+    expect(result.errors).toEqual(['"apiKey" is a secret field — use the credentials API instead']);
+    expect(result.updates).toEqual({});
+  });
+
+  it("allows secret fields through when rejectSecrets is false", () => {
+    const result = validateConfigBody({ apiKey: "value" }, schema, { rejectSecrets: false });
+    expect(result.errors).toEqual([]);
+    expect(result.updates).toEqual({ apiKey: "value" });
+  });
+});
+
+describe("validateConfigBody enabled handling", () => {
+  it("rejects the enabled key by default", () => {
+    const result = validateConfigBody({ enabled: true }, schema);
+    expect(result.errors).toEqual(['"enabled" must be set via the enable/disable endpoints']);
+    expect(result.updates).toEqual({});
+  });
+
+  it("allows the enabled key when rejectEnabled is false", () => {
+    const result = validateConfigBody({ enabled: false }, schema, { rejectEnabled: false });
+    expect(result.errors).toEqual([]);
+    expect(result.updates).toEqual({ enabled: false });
+  });
+});
+
+describe("validateConfigBody schema variations", () => {
+  it("treats every key as unknown when configSchema is undefined", () => {
+    const result = validateConfigBody({ anything: 1 }, undefined);
+    expect(result.errors).toEqual(['Unknown config key: "anything"']);
+  });
+
+  it("reads properties directly when the schema is not wrapped under properties", () => {
+    const result = validateConfigBody({ host: "h" }, { host: { type: "string" } });
+    expect(result.errors).toEqual([]);
+    expect(result.updates).toEqual({ host: "h" });
+  });
+
+  it("accepts any value type when the field def has no type", () => {
+    const result = validateConfigBody({ freeform: { nested: true } }, { freeform: {} });
+    expect(result.errors).toEqual([]);
+    expect(result.updates).toEqual({ freeform: { nested: true } });
+  });
+});

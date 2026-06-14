@@ -13,10 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "auth:generate": "npx @better-auth/cli@latest generate --config ./src/auth.ts --output ./src/db/auth-schema.ts --yes",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "auth:generate": "npx @better-auth/cli@latest generate --config ./src/auth.ts --output ./src/db/auth-schema.ts --yes"
   },
   "keywords": [],
   "author": "",

@@ -209,9 +209,19 @@ Tooling notes:
   two-space indent, double quotes, a 100-column line width, and import
   organization. `pnpm format` rewrites files; `pnpm lint` checks without
   writing.
-- **Vitest** runs the tests. The root `pnpm test` covers the API, web,
-  integrations, packages, and services. Within `apps/api` you also get
-  `pnpm test:watch` and `pnpm test:coverage`.
+- **Vitest** runs the tests from a single root config (`vitest.config.ts`),
+  split into two projects: `node` (API, integrations, packages, services) and
+  `web` (the Next.js app and React-bound packages, in jsdom). All test commands
+  run from the repo root:
+  - `pnpm test` — run the whole suite once
+  - `pnpm test:watch` — watch mode
+  - `pnpm test:coverage` — run with a V8 coverage report (written to `coverage/`)
+  - `pnpm test --project web` / `--project node` — scope to one environment
+  - `pnpm exec vitest run <path-or-name>` — scope to specific files (e.g.
+    `pnpm exec vitest run packages/core`)
+
+  There are intentionally no per-package Vitest configs or `test` scripts —
+  scope a run with a path/name filter instead of `pnpm -C <pkg> test`.
 - **Type-checking** is per-package via `pnpm check-types`. The API and web both
   type-check their integration and service-worker configs in addition to the
   main project.

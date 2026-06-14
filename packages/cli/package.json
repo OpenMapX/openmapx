@@ -8,8 +8,7 @@
     "openmapx": "src/index.ts"
   },
   "scripts": {
-    "check-types": "tsc --noEmit",
-    "test": "vitest run"
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@openmapx/core": "workspace:*",

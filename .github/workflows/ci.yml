@@ -56,7 +56,18 @@ jobs:
 
       - run: pnpm check-types
 
-      - run: pnpm test
+      # Collect coverage repo-wide but non-gating for now (no thresholds) to
+      # establish an honest baseline; the report is uploaded as an artifact.
+      - run: pnpm test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Require changeset for publishable-package changes (PR only)
         if: github.event_name == 'pull_request'

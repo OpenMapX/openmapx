@@ -54,7 +54,7 @@ interface PeliasResponse {
  * otherwise wrap under a `pelias-<source>:` scheme so the id still round-
  * trips through `parseId` without colliding with other schemes.
  */
-function makeIdFromGid(gid: string): string {
+export function makeIdFromGid(gid: string): string {
   const [source, _layer, ...rest] = gid.split(":");
   const inner = rest.join(":");
   if (source === "openstreetmap" && /^(node|way|relation)\/\d+/.test(inner)) {
@@ -63,7 +63,7 @@ function makeIdFromGid(gid: string): string {
   return `pelias-${source}:${inner || gid}`;
 }
 
-function mapLayer(layer: string): SearchResult["type"] {
+export function mapLayer(layer: string): SearchResult["type"] {
   if (layer === "venue") return "poi";
   if (layer === "address") return "address";
   if (layer === "street") return "street";

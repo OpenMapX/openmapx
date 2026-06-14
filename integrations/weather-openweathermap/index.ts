@@ -12,7 +12,7 @@ import type { WeatherProvider } from "@openmapx/integration-weather/types";
 const BASE = "https://api.openweathermap.org/data/2.5";
 
 /** Map OWM weather condition IDs to WMO codes (approximation). */
-function owmIdToWmo(id: number): number {
+export function owmIdToWmo(id: number): number {
   if (id >= 200 && id < 300) return id >= 230 ? 95 : 96;
   if (id >= 300 && id < 400) return id <= 311 ? 51 : 55;
   if (id >= 500 && id < 600) {

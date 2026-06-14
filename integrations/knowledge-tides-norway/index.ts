@@ -25,7 +25,7 @@ const TIDES_TTL = 6 * 60 * 60;
 const MAX_STATION_DISTANCE_KM = 50; // Norway has only ~30 stations; widen the radius
 const CM_TO_FT = 0.0328084;
 
-interface CachedStation {
+export interface CachedStation {
   code: string;
   name: string;
   lat: number;
@@ -47,7 +47,7 @@ interface TidesResponse {
   timeZone: "lst_ldt";
 }
 
-function isoTimeFromKartverket(stamp: string): string {
+export function isoTimeFromKartverket(stamp: string): string {
   // Kartverket returns "2026-05-18T05:24:00+01:00" — keep the offset so the
   // place-panel parser picks the ISO branch in `parseLocalTime` and renders
   // the event in the user's browser-local zone. Dropping the offset made the
@@ -106,7 +106,7 @@ function buildDateWindow(): { from: string; to: string } {
   };
 }
 
-async function fetchHilo(station: CachedStation): Promise<TideEvent[]> {
+export async function fetchHilo(station: CachedStation): Promise<TideEvent[]> {
   const { from, to } = buildDateWindow();
   const url =
     `${BASE}?lat=${station.lat}&lon=${station.lng}` +
@@ -130,7 +130,7 @@ async function fetchHilo(station: CachedStation): Promise<TideEvent[]> {
   return events;
 }
 
-async function fetchCurve(
+export async function fetchCurve(
   station: CachedStation,
 ): Promise<Array<{ time: string; valueFt: number }>> {
   const { from, to } = buildDateWindow();

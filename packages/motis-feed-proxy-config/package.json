@@ -8,7 +8,6 @@
   "types": "./src/build.ts",
   "sideEffects": false,
   "scripts": {
-    "test": "vitest run",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {

@@ -13,7 +13,6 @@
     }
   },
   "scripts": {
-    "test": "vitest run",
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {

@@ -22,10 +22,6 @@
     "start": {
       "cache": false,
       "persistent": true
-    },
-    "test": {
-      "dependsOn": ["^build"],
-      "inputs": ["src/**/*.ts", "vitest.config.ts"]
     }
   }
 }

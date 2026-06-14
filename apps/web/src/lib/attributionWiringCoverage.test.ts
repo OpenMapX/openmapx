@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Pure filesystem static-analysis guardrail — no DOM. Runs in node even though
+// it lives under apps/web (the `web` Vitest project defaults to jsdom, whose
+// `import.meta.url` is not a file: URL and breaks fileURLToPath below).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

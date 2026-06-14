@@ -20,8 +20,10 @@ interface VitestMockFunction {
   mock: { calls: unknown[][] };
   mockImplementation(implementation: VitestMockImplementation): VitestMockFunction;
   mockResolvedValue(value: unknown): VitestMockFunction;
+  mockRejectedValue(value: unknown): VitestMockFunction;
   mockReturnValue(value: unknown): VitestMockFunction;
   mockReset(): VitestMockFunction;
+  mockClear(): VitestMockFunction;
 }
 
 type VitestMockFactory = (importOriginal: <T = unknown>() => Promise<T>) => unknown;
@@ -43,5 +45,6 @@ declare module "vitest" {
     importActual<T = unknown>(id: string): Promise<T>;
     stubGlobal(name: string, value: unknown): void;
     unstubAllGlobals(): void;
+    clearAllMocks(): void;
   };
 }

@@ -10,6 +10,8 @@
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "OPENMAPX_SKIP_SLOW_CRYPTO=1 vitest run --coverage",
     "prepare": "husky",
     "redis:flush": "docker exec docker-redis-1 redis-cli FLUSHALL",
     "check-translations": "pnpm -C packages/i18n exec tsx scripts/check-translations.ts",
@@ -26,10 +28,10 @@
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "husky": "^9.1.7",
-    "lint-staged": "^17.0.7",
     "turbo": "^2.9.16",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.8"
   },
   "packageManager": "pnpm@11.1.2+sha512.415a1cc25974731e75455c1468371be74c5aa5fb7621b50d4056d222451609f11412f23fd602e6169f1e060466641f798597e1be961a10688836a67b16569499",
   "engines": {
