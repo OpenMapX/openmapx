@@ -35,14 +35,12 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "esbuild": "^0.28.0",
-    "react": "19.2.7",
     "react-dom": "19.2.7",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
   },
   "peerDependencies": {
-    "esbuild": "^0.28.0",
-    "react": ">=19"
+    "esbuild": "^0.28.0"
   },
   "peerDependenciesMeta": {
     "esbuild": {
@@ -60,6 +58,7 @@
     "better-auth": "^1.6.15",
     "js-yaml": "^4.2.0",
     "opening_hours": "^3.13.0",
+    "react": "19.2.7",
     "tz-lookup": "^6.1.25",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"

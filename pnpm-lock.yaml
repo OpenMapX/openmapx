@@ -1571,6 +1571,9 @@ importers:
       opening_hours:
         specifier: ^3.13.0
         version: 3.13.0(typescript@5.9.3)
+      react:
+        specifier: 19.2.7
+        version: 19.2.7
       tz-lookup:
         specifier: ^6.1.25
         version: 6.1.25
@@ -1596,9 +1599,6 @@ importers:
       esbuild:
         specifier: '>=0.28.1'
         version: 0.28.1
-      react:
-        specifier: 19.2.7
-        version: 19.2.7
       react-dom:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
