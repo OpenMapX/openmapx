@@ -81,6 +81,27 @@ describe("navigationStore", () => {
     expect(useNavigationStore.getState().activeRouteIndex).toBe(1);
   });
 
+  it("addStop swaps in the through-route and persists the new waypoints", () => {
+    const store = useNavigationStore.getState();
+    store.startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+    store.applyProgress({ alongMeters: 10 } as NavProgress);
+    const viaRoute = { ...route, distance: 321 } as Route;
+    const newWaypoints: [number, number][] = [
+      [0.2, 0.2],
+      [0.5, 0.5],
+      [1, 1],
+    ];
+    store.addStop(viaRoute, newWaypoints);
+    const s = useNavigationStore.getState();
+    expect(s.status).toBe("navigating");
+    expect(s.route?.distance).toBe(321);
+    expect(s.destinationWaypoints).toEqual(newWaypoints);
+    expect(s.progress).toBeNull();
+  });
+
   it("applyReroute swaps the route and returns to navigating", () => {
     const store = useNavigationStore.getState();
     store.startGroundNavigation(route, "driving", [

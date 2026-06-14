@@ -32,7 +32,19 @@
     "alertStop": "Stop sign",
     "alertPedestrianCrossing": "Pedestrian crossing",
     "alertTrafficCalming": "Speed bump",
-    "alertTunnel": "Tunnel"
+    "alertTunnel": "Tunnel",
+    "searchAlongRoute": "Search along route",
+    "rsFuel": "Fuel",
+    "rsRestaurants": "Restaurants",
+    "rsCafes": "Cafés",
+    "rsSupermarkets": "Supermarkets",
+    "rsParking": "Parking",
+    "rsHotels": "Hotels",
+    "rsCenter": "Center",
+    "rsClear": "Clear",
+    "rsAdd": "Add",
+    "rsCancel": "Cancel",
+    "rsDetour": "+{minutes} min detour"
   },
   "common": {
     "close": "Close",

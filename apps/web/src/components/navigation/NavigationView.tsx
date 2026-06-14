@@ -27,6 +27,7 @@ import { ManeuverBanner } from "./ManeuverBanner";
 import { NavBottomBar } from "./NavBottomBar";
 import { NavBottomSheet } from "./NavBottomSheet";
 import { NavSimControl } from "./NavSimControl";
+import { RouteSearchControl } from "./RouteSearchControl";
 import { SpeedLimitBadge } from "./SpeedLimitBadge";
 
 export function NavigationView() {
@@ -140,6 +141,7 @@ export function NavigationView() {
         </Box>
       ) : (
         <>
+          <RouteSearchControl />
           <Box
             sx={{
               pointerEvents: "auto",

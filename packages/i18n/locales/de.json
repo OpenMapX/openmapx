@@ -32,7 +32,19 @@
     "alertStop": "Stoppschild",
     "alertPedestrianCrossing": "Fußgängerüberweg",
     "alertTrafficCalming": "Bremsschwelle",
-    "alertTunnel": "Tunnel"
+    "alertTunnel": "Tunnel",
+    "searchAlongRoute": "Entlang der Route suchen",
+    "rsFuel": "Tankstellen",
+    "rsRestaurants": "Restaurants",
+    "rsCafes": "Cafés",
+    "rsSupermarkets": "Supermärkte",
+    "rsParking": "Parkplätze",
+    "rsHotels": "Hotels",
+    "rsCenter": "Zentrieren",
+    "rsClear": "Löschen",
+    "rsAdd": "Hinzufügen",
+    "rsCancel": "Abbrechen",
+    "rsDetour": "+{minutes} Min. Umweg"
   },
   "common": {
     "close": "Schließen",

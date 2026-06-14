@@ -251,6 +251,8 @@ export {
 // Navigation
 export {
   type ActiveAlert,
+  type AlongRouteOptions,
+  type AlongRoutePoi,
   brakingDistanceMeters,
   CAMERA_RESTRICTED_COUNTRIES,
   computeProgress,
@@ -266,12 +268,14 @@ export {
   navOptionsForMode,
   nextVoiceCue,
   OVER_SPEED_TOLERANCE_KMH,
+  poiAlongRoute,
   positionAt,
   processFix,
   type RoadAlert,
   type RoadAlertType,
   remainingWaypoints,
   resolveRecommendedLanes,
+  routeAheadBounds,
   selectActiveAlert,
   shouldReroute,
   shouldWarnCamera,

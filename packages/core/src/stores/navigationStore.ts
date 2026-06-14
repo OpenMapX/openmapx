@@ -78,6 +78,12 @@ interface NavigationState {
   ) => void;
   /** Switch the followed route to one of `routes` (an alternative shown on the map). */
   selectRoute: (index: number) => void;
+  /**
+   * Swap in a freshly-planned route that now routes through a newly-added stop,
+   * persisting the new waypoint list so later reroutes keep the stop. Clears
+   * stale progress like a reroute.
+   */
+  addStop: (route: Route, waypoints: LngLat[]) => void;
   startTransitNavigation: (itinerary: TripItinerary, replanOptions?: TransitReplanOptions) => void;
   applyTransitProgress: (p: TransitProgress) => void;
   setTransitRerouteNeeded: (v: boolean) => void;
@@ -147,6 +153,16 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       const next = s.routes[index];
       if (!next || index === s.activeRouteIndex) return {};
       return { route: next, activeRouteIndex: index, progress: null, offRoute: false };
+    }),
+  addStop: (route, waypoints) =>
+    set({
+      status: "navigating",
+      route,
+      routes: [route],
+      activeRouteIndex: 0,
+      destinationWaypoints: waypoints,
+      progress: null,
+      offRoute: false,
     }),
   startTransitNavigation: (itinerary, replanOptions) =>
     set({

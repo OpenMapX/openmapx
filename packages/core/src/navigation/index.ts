@@ -20,6 +20,12 @@ export { navOptionsForMode } from "./options";
 export { processFix } from "./processFix";
 export { computeProgress, upcomingManeuverIndex } from "./progress";
 export { remainingWaypoints, shouldReroute, updateOffRouteScore } from "./reroute";
+export {
+  type AlongRouteOptions,
+  type AlongRoutePoi,
+  poiAlongRoute,
+  routeAheadBounds,
+} from "./searchAlongRoute";
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
 export { isOverSpeed, OVER_SPEED_TOLERANCE_KMH } from "./speedAlert";
