@@ -4,7 +4,6 @@ import AddLocationAltIcon from "@mui/icons-material/AddLocationAlt";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
-import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -21,6 +20,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useMapOptional } from "@/lib/MapContext";
+import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useRouteSearch } from "@/lib/navigation/useRouteSearch";
 import { TEAL } from "@/lib/theme";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
@@ -66,25 +66,30 @@ function Glyph({ path, size = 24 }: { path: string; size?: number }) {
 }
 
 /**
- * "Search along route": a search button that opens a category picker; choosing a
- * category drops POI pins along the route ahead (each with an estimated detour);
- * tapping a pin offers to add it as a stop, which re-plans the trip. Reuses the
- * Explore category search via {@link useRouteSearch}.
+ * "Search along route" picker sheet, result pins and POI card. The entry button
+ * lives in the map control stack (see {@link MapControls}); this component reacts
+ * to {@link useRouteSearchStore}. Choosing a category drops POI pins along the
+ * route ahead (each with an estimated detour); tapping one offers to add it as a
+ * stop, which re-plans the trip. Reuses the Explore category search via
+ * {@link useRouteSearch}.
  */
 export function RouteSearchControl() {
   const t = useTranslations("navigation");
   const mapCtx = useMapOptional();
-  const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<SearchCategory | null>(null);
+  const open = useRouteSearchStore((s) => s.open);
+  const categoryKey = useRouteSearchStore((s) => s.categoryKey);
+  const closePicker = useRouteSearchStore((s) => s.closePicker);
+  const setCategoryKey = useRouteSearchStore((s) => s.setCategoryKey);
+  const resetStore = useRouteSearchStore((s) => s.reset);
   const [selected, setSelected] = useState<AlongRoutePoi<CategoryPlace> | null>(null);
   const [adding, setAdding] = useState(false);
 
-  const { results, isLoading, addStop } = useRouteSearch(category?.key ?? null);
+  const category = CATEGORIES.find((c) => c.key === categoryKey) ?? null;
+  const { results, isLoading, addStop } = useRouteSearch(categoryKey);
 
   const reset = () => {
-    setCategory(null);
+    resetStore();
     setSelected(null);
-    setOpen(false);
   };
 
   const handleSelect = (poi: AlongRoutePoi<CategoryPlace>) => {
@@ -119,27 +124,18 @@ export function RouteSearchControl() {
 
   return (
     <>
-      {/* Entry button — hidden once the picker or results are showing. */}
-      {!open && !category && (
-        <Paper
-          elevation={4}
-          sx={{
-            pointerEvents: "auto",
-            position: "fixed",
-            right: 8,
-            bottom: "calc(var(--omx-safe-bottom) + 188px)",
-            borderRadius: "50%",
-            zIndex: 1350,
-          }}
-        >
-          <IconButton aria-label={t("searchAlongRoute")} onClick={() => setOpen(true)}>
-            <SearchIcon />
-          </IconButton>
-        </Paper>
+      {/* Result pins stay rendered whenever a category is active. */}
+      {category && (
+        <RouteSearchResultsLayer
+          results={results}
+          iconPath={category.iconPath}
+          categoryKey={category.key}
+          onSelect={handleSelect}
+        />
       )}
 
-      {/* Category picker sheet. */}
-      {open && !category && (
+      {/* Category picker sheet (also reachable while results are shown, to switch). */}
+      {open && (
         <Paper
           elevation={8}
           sx={{
@@ -155,28 +151,19 @@ export function RouteSearchControl() {
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-            <IconButton size="small" onClick={() => setOpen(false)} aria-label={t("end")}>
+            <IconButton size="small" onClick={closePicker} aria-label={t("rsCancel")}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
               {t("searchAlongRoute")}
             </Typography>
           </Box>
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 1,
-            }}
-          >
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1 }}>
             {CATEGORIES.map((c) => (
               <Box
                 key={c.key}
                 component="button"
-                onClick={() => {
-                  setCategory(c);
-                  setOpen(false);
-                }}
+                onClick={() => setCategoryKey(c.key)}
                 sx={{
                   cursor: "pointer",
                   border: "1px solid",
@@ -202,110 +189,98 @@ export function RouteSearchControl() {
         </Paper>
       )}
 
-      {/* Results: pins + (no selection) center/clear controls, or the POI card. */}
-      {category && (
-        <>
-          <RouteSearchResultsLayer
-            results={results}
-            iconPath={category.iconPath}
-            categoryKey={category.key}
-            onSelect={handleSelect}
-          />
+      {/* Center / Clear controls while showing results (no POI selected). */}
+      {category && !open && !selected && (
+        <Box
+          sx={{
+            pointerEvents: "auto",
+            position: "fixed",
+            left: "50%",
+            transform: "translateX(-50%)",
+            bottom: "calc(var(--omx-safe-bottom) + 180px)",
+            display: "flex",
+            gap: 1,
+            zIndex: 1350,
+          }}
+        >
+          <Button
+            variant="contained"
+            color="inherit"
+            startIcon={isLoading ? <CircularProgress size={16} /> : <MyLocationIcon />}
+            onClick={handleCenter}
+            sx={{ bgcolor: "background.paper", borderRadius: 99, color: TEAL }}
+          >
+            {t("rsCenter")}
+          </Button>
+          <Button
+            variant="contained"
+            color="inherit"
+            startIcon={<CloseIcon />}
+            onClick={reset}
+            sx={{ bgcolor: "background.paper", borderRadius: 99, color: "text.primary" }}
+          >
+            {t("rsClear")}
+          </Button>
+        </Box>
+      )}
 
-          {!selected && (
+      {/* Selected POI card. */}
+      {category && !open && selected && (
+        <Paper
+          elevation={8}
+          sx={{
+            pointerEvents: "auto",
+            position: "fixed",
+            left: "50%",
+            transform: "translateX(-50%)",
+            bottom: "calc(var(--omx-safe-bottom) + 8px)",
+            width: { xs: "calc(100% - 16px)", sm: 420 },
+            borderRadius: 3,
+            zIndex: 1350,
+            p: 2,
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
             <Box
               sx={{
-                pointerEvents: "auto",
-                position: "fixed",
-                left: "50%",
-                transform: "translateX(-50%)",
-                bottom: "calc(var(--omx-safe-bottom) + 180px)",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: TEAL,
+                color: "#fff",
                 display: "flex",
-                gap: 1,
-                zIndex: 1350,
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
               }}
             >
-              <Button
-                variant="contained"
-                color="inherit"
-                startIcon={isLoading ? <CircularProgress size={16} /> : <MyLocationIcon />}
-                onClick={handleCenter}
-                sx={{ bgcolor: "background.paper", borderRadius: 99, color: TEAL }}
-              >
-                {t("rsCenter")}
-              </Button>
-              <Button
-                variant="contained"
-                color="inherit"
-                startIcon={<CloseIcon />}
-                onClick={reset}
-                sx={{ bgcolor: "background.paper", borderRadius: 99, color: "text.primary" }}
-              >
-                {t("rsClear")}
-              </Button>
+              <Glyph path={category.iconPath} size={22} />
             </Box>
-          )}
-
-          {selected && (
-            <Paper
-              elevation={8}
-              sx={{
-                pointerEvents: "auto",
-                position: "fixed",
-                left: "50%",
-                transform: "translateX(-50%)",
-                bottom: "calc(var(--omx-safe-bottom) + 8px)",
-                width: { xs: "calc(100% - 16px)", sm: 420 },
-                borderRadius: 3,
-                zIndex: 1350,
-                p: 2,
-              }}
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+                {selected.place.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {t("rsDetour", { minutes: Math.max(1, Math.round(selected.detourSeconds / 60)) })}
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
+            <Button onClick={() => setSelected(null)} color="inherit">
+              {t("rsCancel")}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={
+                adding ? <CircularProgress size={16} color="inherit" /> : <AddLocationAltIcon />
+              }
+              disabled={adding}
+              onClick={handleAdd}
             >
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
-                <Box
-                  sx={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: "50%",
-                    bgcolor: TEAL,
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Glyph path={category.iconPath} size={22} />
-                </Box>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
-                    {selected.place.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t("rsDetour", {
-                      minutes: Math.max(1, Math.round(selected.detourSeconds / 60)),
-                    })}
-                  </Typography>
-                </Box>
-              </Box>
-              <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
-                <Button onClick={() => setSelected(null)} color="inherit">
-                  {t("rsCancel")}
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={
-                    adding ? <CircularProgress size={16} color="inherit" /> : <AddLocationAltIcon />
-                  }
-                  disabled={adding}
-                  onClick={handleAdd}
-                >
-                  {t("rsAdd")}
-                </Button>
-              </Box>
-            </Paper>
-          )}
-        </>
+              {t("rsAdd")}
+            </Button>
+          </Box>
+        </Paper>
       )}
     </>
   );
