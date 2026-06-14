@@ -978,6 +978,7 @@ export function DirectionsPanelContent() {
                   onSelect={() => setActiveRouteIndex(i)}
                   onDetails={() => setDetailsRouteIndex(i)}
                   units={units}
+                  alternatives={data.routes.filter((_, idx) => idx !== i)}
                 />
                 {i < data.routes.length - 1 && <Divider />}
               </Box>

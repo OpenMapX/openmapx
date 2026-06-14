@@ -44,6 +44,9 @@ interface NavigationState {
   kind: NavKind;
   mode: TravelMode;
   route: Route | null;
+  /** Active route plus its alternatives, so the user can switch mid-trip. */
+  routes: Route[];
+  activeRouteIndex: number;
   destinationWaypoints: LngLat[];
   progress: NavProgress | null;
   offRoute: boolean;
@@ -67,7 +70,14 @@ interface NavigationState {
   /** User's resolved transit options, snapshotted for on-trip replans. */
   transitReplanOptions: TransitReplanOptions | null;
 
-  startGroundNavigation: (route: Route, mode: TravelMode, waypoints: LngLat[]) => void;
+  startGroundNavigation: (
+    route: Route,
+    mode: TravelMode,
+    waypoints: LngLat[],
+    alternatives?: Route[],
+  ) => void;
+  /** Switch the followed route to one of `routes` (an alternative shown on the map). */
+  selectRoute: (index: number) => void;
   startTransitNavigation: (itinerary: TripItinerary, replanOptions?: TransitReplanOptions) => void;
   applyTransitProgress: (p: TransitProgress) => void;
   setTransitRerouteNeeded: (v: boolean) => void;
@@ -98,7 +108,9 @@ const INITIAL = {
   status: "idle" as NavStatus,
   kind: "ground" as NavKind,
   mode: "driving" as TravelMode,
-  route: null,
+  route: null as Route | null,
+  routes: [] as Route[],
+  activeRouteIndex: 0,
   destinationWaypoints: [] as LngLat[],
   progress: null,
   offRoute: false,
@@ -117,14 +129,24 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   voiceEnabled: readBoolPref(VOICE_STORAGE_KEY, true),
   keepScreenOn: readBoolPref(KEEP_SCREEN_ON_STORAGE_KEY, true),
 
-  startGroundNavigation: (route, mode, waypoints) =>
+  startGroundNavigation: (route, mode, waypoints, alternatives = []) =>
     set({
       ...INITIAL,
       status: "navigating",
       kind: "ground",
       mode,
       route,
+      routes: [route, ...alternatives],
+      activeRouteIndex: 0,
       destinationWaypoints: waypoints,
+    }),
+  // Switch the followed route to a shown alternative. Clears progress (it belongs
+  // to the old geometry) like a reroute; the engine/camera reset on route identity.
+  selectRoute: (index) =>
+    set((s) => {
+      const next = s.routes[index];
+      if (!next || index === s.activeRouteIndex) return {};
+      return { route: next, activeRouteIndex: index, progress: null, offRoute: false };
     }),
   startTransitNavigation: (itinerary, replanOptions) =>
     set({

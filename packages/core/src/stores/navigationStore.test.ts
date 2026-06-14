@@ -52,6 +52,35 @@ describe("navigationStore", () => {
     expect(s.cameraMode).toBe("follow");
   });
 
+  it("carries alternatives and switches the active route", () => {
+    const alt = { ...route, distance: 555 } as Route;
+    const store = useNavigationStore.getState();
+    store.startGroundNavigation(
+      route,
+      "driving",
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      [alt],
+    );
+    expect(useNavigationStore.getState().routes).toHaveLength(2);
+    expect(useNavigationStore.getState().activeRouteIndex).toBe(0);
+
+    store.applyProgress({ alongMeters: 42 } as NavProgress);
+    store.selectRoute(1);
+    const s = useNavigationStore.getState();
+    expect(s.activeRouteIndex).toBe(1);
+    expect(s.route?.distance).toBe(555);
+    expect(s.progress).toBeNull(); // stale progress dropped on switch
+
+    // Out-of-range / same-index selections are no-ops.
+    store.selectRoute(1);
+    expect(useNavigationStore.getState().activeRouteIndex).toBe(1);
+    store.selectRoute(9);
+    expect(useNavigationStore.getState().activeRouteIndex).toBe(1);
+  });
+
   it("applyReroute swaps the route and returns to navigating", () => {
     const store = useNavigationStore.getState();
     store.startGroundNavigation(route, "driving", [

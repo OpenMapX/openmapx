@@ -28,6 +28,7 @@ export function RouteCard({
   onSelect,
   onDetails,
   units,
+  alternatives = [],
 }: {
   route: Route;
   index: number;
@@ -35,6 +36,8 @@ export function RouteCard({
   onSelect: () => void;
   onDetails: () => void;
   units: "metric" | "imperial";
+  /** The other routes, carried into navigation so they can be switched to mid-trip. */
+  alternatives?: Route[];
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
@@ -49,7 +52,7 @@ export function RouteCard({
     // await hands control back to the event loop.
     primeSpeechSynthesis();
     await requestHeadingPermission();
-    startGroundNavigation(route, route.mode, coords);
+    startGroundNavigation(route, route.mode, coords, alternatives);
   };
 
   const dist =
