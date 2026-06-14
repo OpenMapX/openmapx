@@ -16,9 +16,10 @@ import {
   type CategoryId,
   type CategoryPlace,
   geoJsonBBox,
+  useNavigationStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMapOptional } from "@/lib/MapContext";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { useRouteSearch } from "@/lib/navigation/useRouteSearch";
@@ -81,11 +82,54 @@ export function RouteSearchControl() {
   const closePicker = useRouteSearchStore((s) => s.closePicker);
   const setCategoryKey = useRouteSearchStore((s) => s.setCategoryKey);
   const resetStore = useRouteSearchStore((s) => s.reset);
+  const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const [selected, setSelected] = useState<AlongRoutePoi<CategoryPlace> | null>(null);
   const [adding, setAdding] = useState(false);
 
   const category = CATEGORIES.find((c) => c.key === categoryKey) ?? null;
   const { results, isLoading, addStop } = useRouteSearch(categoryKey);
+
+  /** Frame the POIs (plus the current position) in the current top-down view. */
+  const fitToResults = () => {
+    const coords = results.map((r) => r.place.coordinates);
+    const snapped = useNavigationStore.getState().progress?.snapped;
+    if (snapped) coords.push(snapped);
+    if (coords.length === 0) return;
+    const box = geoJsonBBox({ type: "MultiPoint", coordinates: coords } as GeoJSON.MultiPoint);
+    if (box) {
+      mapCtx?.fitBounds(
+        [
+          [box[0], box[1]],
+          [box[2], box[3]],
+        ],
+        80,
+      );
+    }
+  };
+
+  // While searching, leave the 3D follow camera for a north-up, top-down
+  // overview so the spread of POIs along the route is visible; restore follow
+  // (which re-tilts and resumes tracking) when the search is cleared.
+  const searching = categoryKey !== null;
+  const fittedRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run on enter/exit of search only.
+  useEffect(() => {
+    if (!searching) return;
+    fittedRef.current = false;
+    setCameraMode("free");
+    mapCtx?.resetBearing(); // ease bearing + pitch to 0 (north-up, top-down)
+    return () => setCameraMode("follow");
+  }, [searching]);
+
+  // Frame the results once they arrive for this search (not on every position
+  // update, which would keep yanking the camera while the user pans).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fit once per search session.
+  useEffect(() => {
+    if (searching && !fittedRef.current && results.length > 0) {
+      fittedRef.current = true;
+      fitToResults();
+    }
+  }, [searching, results]);
 
   const reset = () => {
     resetStore();
@@ -98,20 +142,7 @@ export function RouteSearchControl() {
   };
 
   const handleCenter = () => {
-    if (results.length === 0) return;
-    const box = geoJsonBBox({
-      type: "MultiPoint",
-      coordinates: results.map((r) => r.place.coordinates),
-    } as GeoJSON.MultiPoint);
-    if (box) {
-      mapCtx?.fitBounds(
-        [
-          [box[0], box[1]],
-          [box[2], box[3]],
-        ],
-        80,
-      );
-    }
+    fitToResults();
   };
 
   const handleAdd = async () => {
