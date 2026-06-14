@@ -15,6 +15,7 @@ export {
   stepDeadReckon,
 } from "./deadReckon";
 export { eta } from "./eta";
+export { resolveRecommendedLanes } from "./lanes";
 export { navOptionsForMode } from "./options";
 export { processFix } from "./processFix";
 export { computeProgress, upcomingManeuverIndex } from "./progress";

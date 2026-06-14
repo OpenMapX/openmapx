@@ -162,7 +162,9 @@ export function NavigationView() {
                 units={units}
               />
             )}
-            {showLanes && step?.lanes && <LaneGuidance lanes={step.lanes} />}
+            {showLanes && step?.lanes && (
+              <LaneGuidance lanes={step.lanes} maneuver={step.maneuver} />
+            )}
             {activeAlert && <AlertWidget alert={activeAlert} />}
             {rerouting && (
               <Box

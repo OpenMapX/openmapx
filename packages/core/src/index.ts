@@ -271,6 +271,7 @@ export {
   type RoadAlert,
   type RoadAlertType,
   remainingWaypoints,
+  resolveRecommendedLanes,
   selectActiveAlert,
   shouldReroute,
   shouldWarnCamera,

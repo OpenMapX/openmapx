@@ -1,8 +1,12 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import type { ManeuverLane } from "@openmapx/core";
-import { laneIndicationIcon, normalizeLaneToken } from "@/lib/navigation/maneuverIcon";
+import { type ManeuverLane, resolveRecommendedLanes } from "@openmapx/core";
+import {
+  laneIndicationIcon,
+  type Maneuver,
+  normalizeLaneToken,
+} from "@/lib/navigation/maneuverIcon";
 
 /**
  * Turn-lane guidance: one cell per lane, with an overlaid arrow for each allowed
@@ -11,8 +15,11 @@ import { laneIndicationIcon, normalizeLaneToken } from "@/lib/navigation/maneuve
  * is drawn brightest, other arrows mid, and arrows in lanes you must not take
  * are dimmed. A lane with no real indication (`none`) renders as a blank cell.
  */
-export function LaneGuidance({ lanes }: { lanes?: ManeuverLane[] }) {
-  if (!lanes || lanes.length === 0) return null;
+export function LaneGuidance({ lanes, maneuver }: { lanes?: ManeuverLane[]; maneuver?: Maneuver }) {
+  // Trust the engine's valid/active lanes; otherwise recommend them from the
+  // maneuver (exact → same-side → unrestricted) so under-tagged lanes still light up.
+  const resolved = resolveRecommendedLanes(lanes, maneuver?.modifier);
+  if (resolved.length === 0) return null;
   return (
     <Box
       sx={{
@@ -24,7 +31,7 @@ export function LaneGuidance({ lanes }: { lanes?: ManeuverLane[] }) {
         borderRadius: 2,
       }}
     >
-      {lanes.map((lane, i) => {
+      {resolved.map((lane, i) => {
         const arrows = lane.indications
           .map((ind) => ({ ind, icon: laneIndicationIcon(ind) }))
           .filter((a): a is { ind: string; icon: NonNullable<typeof a.icon> } => a.icon !== null);
