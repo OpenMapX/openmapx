@@ -262,6 +262,7 @@ export {
   nextVoiceCue,
   positionAt,
   processFix,
+  remainingWaypoints,
   shouldReroute,
   signalCoordKey,
   simulatePositions,
@@ -269,6 +270,7 @@ export {
   stepDeadReckon,
   stopsUntilAlight,
   upcomingManeuverIndex,
+  updateOffRouteScore,
   windowGeometry,
 } from "./navigation";
 export type { TransitProgress } from "./navigation/transitProgress";

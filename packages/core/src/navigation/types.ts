@@ -35,9 +35,14 @@ export interface NavProgress extends ProgressResult {
 }
 
 export interface RerouteOpts {
+  /** Base off-route deviation threshold (m); widened by GPS accuracy at runtime. */
   thresholdMeters: number;
-  consecutiveFixes: number;
-  debounceMs: number;
+  /** Accrued off-route score at which a reroute fires. */
+  scoreThreshold: number;
+  /** Initial debounce between reroutes (ms); grows on repeats, resets on route. */
+  backoffBaseMs: number;
+  /** Upper bound on the reroute debounce (ms). */
+  backoffMaxMs: number;
 }
 
 /**
@@ -64,7 +69,12 @@ export interface VoiceScheduleConfig {
 
 export interface NavTickOptions {
   mode: TravelMode;
+  /** Reject fixes worse than this (m) — a sanity gate, not the off-route test. */
   accuracyCapMeters: number;
+  /** Fixes worse than this (m) are still used but flag "weak GPS". */
+  weakGpsMeters: number;
+  /** Ground speed (m/s) above which the traveller counts as moving. */
+  minMovingSpeedMps: number;
   reroute: RerouteOpts;
   voice: VoiceScheduleConfig;
   /** Scales every voice trigger earlier (>1) or later (<1) per user preference. */
@@ -83,13 +93,26 @@ export interface FixInput {
 }
 
 export interface NavTickState {
-  deviationHistory: number[];
+  /**
+   * Accrued off-route evidence: +2 per off-route fix while moving, +1 while
+   * slow/stopped, with an extra bump when heading the wrong way; reset to 0 once
+   * back on route. A reroute fires when it reaches `reroute.scoreThreshold`.
+   */
+  offRouteScore: number;
   lastRerouteAtMs: number | null;
+  /** Current reroute debounce (ms); grows on repeat reroutes, resets on route. 0 = use base. */
+  rerouteBackoffMs: number;
   spokenCues: string[];
   /** Snapped arc-length of the previous fix, m — for the speed fallback. */
   lastAlongMeters?: number;
   /** Timestamp of the previous fix, ms — for the speed fallback. */
   lastFixMs?: number;
+  /** Previous raw fix position — for deriving the motion bearing when GPS heading is absent. */
+  lastRaw?: LngLat;
+  /** Previous perpendicular deviation (m) — for the stationary-jitter dead-band. */
+  lastDeviation?: number;
+  /** Timestamp a sustained U-turn started (ms), else null. */
+  uTurnSinceMs?: number | null;
 }
 
 export interface VoiceCue {
@@ -105,6 +128,8 @@ export interface NavTickResult {
   progress: NavProgress | null;
   /** True when the fix was discarded because its accuracy exceeded the cap. */
   accuracyRejected: boolean;
+  /** True when the fix was accepted but noisy (accuracy worse than weakGpsMeters). */
+  weakGps: boolean;
   offRoute: boolean;
   needsReroute: boolean;
   arrived: boolean;

@@ -1,33 +1,70 @@
 import type { Route } from "@integrations/routing/types";
 import type { LngLat } from "../types/geometry";
+import { haversineDistance } from "../utils/coordinates";
 import { eta } from "./eta";
 import { computeProgress, upcomingManeuverIndex } from "./progress";
-import { shouldReroute } from "./reroute";
+import { shouldReroute, updateOffRouteScore } from "./reroute";
 import { snapToRoute } from "./snap";
 import type { FixInput, NavTickOptions, NavTickResult, NavTickState } from "./types";
 import { nextVoiceCue } from "./voiceCue";
 
-const HISTORY_LIMIT = 6;
+const toRad = (d: number): number => (d * Math.PI) / 180;
+
+/** Initial great-circle bearing a→b, degrees clockwise from north. */
+function bearingBetween(a: LngLat, b: LngLat): number {
+  const dLng = toRad(b[0] - a[0]);
+  const y = Math.sin(dLng) * Math.cos(toRad(b[1]));
+  const x =
+    Math.cos(toRad(a[1])) * Math.sin(toRad(b[1])) -
+    Math.sin(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
 
 /** Initial bearing (deg clockwise from north) of the route segment at `segmentIndex`. */
 function bearingAt(geometry: LngLat[], segmentIndex: number): number {
   if (geometry.length < 2) return 0;
   const i = Math.max(0, Math.min(segmentIndex, geometry.length - 2));
-  const [lng1, lat1] = geometry[i];
-  const [lng2, lat2] = geometry[i + 1];
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLng = toRad(lng2 - lng1);
-  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
-  const x =
-    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  return bearingBetween(geometry[i], geometry[i + 1]);
+}
+
+/** Smallest absolute angle (deg, 0–180) between two bearings. */
+function angularDiff(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+/** Heading-vs-route angle past which the traveller is going the wrong way. */
+const WRONG_DIRECTION_DEG = 90;
+/** Heading-vs-route angle that counts as a U-turn. */
+const U_TURN_DEG = 135;
+/** A U-turn must persist this long (ms) before it forces a reroute on its own. */
+const U_TURN_SUSTAIN_MS = 10_000;
+/** Minimum raw movement (m) between fixes to trust a derived motion bearing. */
+const MIN_MOTION_METERS = 3;
+
+/**
+ * The direction the traveller is actually moving (deg clockwise from north), or
+ * null when it can't be told. Prefers the GPS-reported heading; otherwise
+ * derives it from the raw movement between fixes, but only once they're far
+ * enough apart to be meaningful.
+ */
+function motionBearing(fix: FixInput, lastRaw: LngLat | undefined, moving: boolean): number | null {
+  if (!moving) return null;
+  if (fix.heading != null && fix.heading >= 0) return fix.heading;
+  if (lastRaw && haversineDistance(lastRaw, fix.coords) >= MIN_MOTION_METERS) {
+    return bearingBetween(lastRaw, fix.coords);
+  }
+  return null;
 }
 
 /**
  * Process one GPS fix against the active route. Pure: returns the new progress,
  * off-route / reroute / arrival flags, an optional voice cue, and the next tick
- * state (deviation history + spoken-cue keys). Rejected fixes return progress=null.
+ * state. Fixes worse than the sanity accuracy cap are rejected (progress=null);
+ * merely-noisy fixes are kept but flag `weakGps` and widen the off-route
+ * envelope. Off-route evidence accrues into a speed-weighted score (escalating
+ * when heading the wrong way / U-turning) that, once high enough and past a
+ * growing back-off, asks for a reroute.
  */
 export function processFix(
   route: Route,
@@ -39,6 +76,7 @@ export function processFix(
     return {
       progress: null,
       accuracyRejected: true,
+      weakGps: true,
       offRoute: false,
       needsReroute: false,
       arrived: false,
@@ -47,6 +85,7 @@ export function processFix(
     };
   }
 
+  const weakGps = fix.accuracy > opts.weakGpsMeters;
   const snap = snapToRoute(route.geometry, fix.coords);
   const prog = computeProgress(route, snap.alongMeters);
 
@@ -65,11 +104,40 @@ export function processFix(
     }
   }
 
-  const deviationHistory = [...state.deviationHistory, snap.deviationMeters].slice(-HISTORY_LIMIT);
-  const offRoute = snap.deviationMeters > opts.reroute.thresholdMeters;
+  // Off-route test, with the threshold widened by the fix's reported accuracy so
+  // a noisy fix in an urban canyon doesn't read as a deviation.
+  const offRoute = snap.deviationMeters > opts.reroute.thresholdMeters + fix.accuracy;
+  const moving = speedMps > opts.minMovingSpeedMps;
+
+  // Compare the travel heading to the route's heading here to spot wrong-way
+  // travel and U-turns, which escalate / force a reroute ahead of the score.
+  const routeBearing = bearingAt(route.geometry, snap.segmentIndex);
+  const heading = motionBearing(fix, state.lastRaw, moving);
+  const bearingOff = heading === null ? null : angularDiff(heading, routeBearing);
+  const wrongDirection = offRoute && bearingOff !== null && bearingOff > WRONG_DIRECTION_DEG;
+  const uTurnNow = bearingOff !== null && bearingOff > U_TURN_DEG;
+  const uTurnSinceMs = uTurnNow ? (state.uTurnSinceMs ?? fix.timestampMs) : null;
+  const sustainedUTurn =
+    uTurnSinceMs !== null && fix.timestampMs - uTurnSinceMs >= U_TURN_SUSTAIN_MS;
+
+  const score = updateOffRouteScore(
+    state.offRouteScore,
+    offRoute,
+    moving,
+    wrongDirection,
+    snap.deviationMeters,
+    state.lastDeviation,
+  );
+  // A sustained U-turn forces the decision even before the score builds up.
+  const decisionScore = sustainedUTurn ? Math.max(score, opts.reroute.scoreThreshold) : score;
+  // Heading the wrong way collapses the back-off so the reroute can fire now.
+  const currentBackoff =
+    state.rerouteBackoffMs > 0 ? state.rerouteBackoffMs : opts.reroute.backoffBaseMs;
+  const decisionBackoff = wrongDirection ? opts.reroute.backoffBaseMs : currentBackoff;
   const needsReroute = shouldReroute(
-    deviationHistory,
+    decisionScore,
     state.lastRerouteAtMs,
+    decisionBackoff,
     fix.timestampMs,
     opts.reroute,
   );
@@ -97,6 +165,17 @@ export function processFix(
 
   const spokenCues = cue ? [...state.spokenCues, cue.key] : state.spokenCues;
 
+  // Grow the back-off on each reroute, reset it once back on route (or to allow
+  // a prompt wrong-direction reroute), otherwise hold it.
+  let nextBackoff: number;
+  if (needsReroute) {
+    nextBackoff = Math.min(currentBackoff * 1.5, opts.reroute.backoffMaxMs);
+  } else if (!offRoute || wrongDirection) {
+    nextBackoff = opts.reroute.backoffBaseMs;
+  } else {
+    nextBackoff = currentBackoff;
+  }
+
   return {
     progress: {
       ...prog,
@@ -104,20 +183,25 @@ export function processFix(
       alongMeters: snap.alongMeters,
       deviationMeters: snap.deviationMeters,
       etaEpochMs: eta(prog.durationRemaining, fix.timestampMs),
-      bearing: bearingAt(route.geometry, snap.segmentIndex),
+      bearing: routeBearing,
       speedMps,
     },
     accuracyRejected: false,
+    weakGps,
     offRoute,
     needsReroute,
     arrived,
     voiceCue: cue,
     nextState: {
-      deviationHistory,
+      offRouteScore: needsReroute ? 0 : score,
       lastRerouteAtMs: needsReroute ? fix.timestampMs : state.lastRerouteAtMs,
+      rerouteBackoffMs: nextBackoff,
       spokenCues,
       lastAlongMeters: snap.alongMeters,
       lastFixMs: fix.timestampMs,
+      lastRaw: fix.coords,
+      lastDeviation: snap.deviationMeters,
+      uTurnSinceMs: needsReroute ? null : uTurnSinceMs,
     },
   };
 }

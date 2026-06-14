@@ -7,8 +7,15 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
     case "walking":
       return {
         mode,
-        accuracyCapMeters: 40,
-        reroute: { thresholdMeters: 25, consecutiveFixes: 3, debounceMs: 8_000 },
+        accuracyCapMeters: 100,
+        weakGpsMeters: 40,
+        minMovingSpeedMps: 0.4,
+        reroute: {
+          thresholdMeters: 25,
+          scoreThreshold: 6,
+          backoffBaseMs: 3_000,
+          backoffMaxMs: 30_000,
+        },
         voice: {
           farMeters: 150,
           nearMeters: 50,
@@ -24,8 +31,15 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
     case "cycling":
       return {
         mode,
-        accuracyCapMeters: 50,
-        reroute: { thresholdMeters: 30, consecutiveFixes: 3, debounceMs: 10_000 },
+        accuracyCapMeters: 150,
+        weakGpsMeters: 50,
+        minMovingSpeedMps: 0.8,
+        reroute: {
+          thresholdMeters: 30,
+          scoreThreshold: 8,
+          backoffBaseMs: 3_000,
+          backoffMaxMs: 60_000,
+        },
         voice: {
           farMeters: 250,
           nearMeters: 100,
@@ -41,8 +55,15 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
     default:
       return {
         mode: "driving",
-        accuracyCapMeters: 60,
-        reroute: { thresholdMeters: 45, consecutiveFixes: 3, debounceMs: 10_000 },
+        accuracyCapMeters: 200,
+        weakGpsMeters: 60,
+        minMovingSpeedMps: 1.5,
+        reroute: {
+          thresholdMeters: 45,
+          scoreThreshold: 10,
+          backoffBaseMs: 3_000,
+          backoffMaxMs: 120_000,
+        },
         voice: {
           farMeters: 400,
           nearMeters: 200,

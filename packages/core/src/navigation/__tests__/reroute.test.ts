@@ -1,23 +1,88 @@
 import { describe, expect, it } from "vitest";
-import { shouldReroute } from "../reroute";
+import { remainingWaypoints, shouldReroute, updateOffRouteScore } from "../reroute";
 
-const opts = { thresholdMeters: 40, consecutiveFixes: 3, debounceMs: 10_000 };
+const opts = {
+  thresholdMeters: 45,
+  scoreThreshold: 10,
+  backoffBaseMs: 3_000,
+  backoffMaxMs: 120_000,
+};
+
+describe("updateOffRouteScore", () => {
+  it("resets to 0 when back on route", () => {
+    expect(updateOffRouteScore(8, false, true, false, 5, 5)).toBe(0);
+  });
+
+  it("adds 2 per fix while moving off route", () => {
+    expect(updateOffRouteScore(0, true, true, false, 60, undefined)).toBe(2);
+  });
+
+  it("adds only 1 per fix while slow/stopped off route", () => {
+    expect(updateOffRouteScore(0, true, false, false, 60, undefined)).toBe(1);
+  });
+
+  it("adds an extra point when heading the wrong way", () => {
+    expect(updateOffRouteScore(0, true, true, true, 60, undefined)).toBe(3);
+  });
+
+  it("ignores stationary jitter (tiny deviation change while stopped)", () => {
+    expect(updateOffRouteScore(4, true, false, false, 60.2, 60)).toBe(4);
+  });
+});
 
 describe("shouldReroute", () => {
-  it("returns false until enough consecutive off-route fixes", () => {
-    expect(shouldReroute([50, 50], null, 0, opts)).toBe(false);
+  it("is false below the score threshold", () => {
+    expect(shouldReroute(9, null, opts.backoffBaseMs, 0, opts)).toBe(false);
   });
 
-  it("returns true after N consecutive fixes over threshold", () => {
-    expect(shouldReroute([50, 60, 55], null, 0, opts)).toBe(true);
+  it("is true at the threshold with no prior reroute", () => {
+    expect(shouldReroute(10, null, opts.backoffBaseMs, 0, opts)).toBe(true);
   });
 
-  it("returns false when any of the last N is under threshold", () => {
-    expect(shouldReroute([50, 10, 55], null, 0, opts)).toBe(false);
+  it("respects the back-off window since the last reroute", () => {
+    expect(shouldReroute(10, 1_000, 5_000, 4_000, opts)).toBe(false); // 3 s < 5 s
+    expect(shouldReroute(10, 1_000, 5_000, 7_000, opts)).toBe(true); // 6 s > 5 s
+  });
+});
+
+describe("remainingWaypoints", () => {
+  // Due-east line; 0.001° ≈ 111 m at the equator.
+  const geometry: [number, number][] = [
+    [0, 0],
+    [0.001, 0],
+    [0.002, 0],
+    [0.003, 0],
+  ];
+
+  it("re-anchors the origin for a simple A→B route", () => {
+    const wps = remainingWaypoints(
+      geometry,
+      [
+        [0, 0],
+        [0.003, 0],
+      ],
+      [0.0015, 0],
+      150,
+    );
+    expect(wps).toEqual([
+      [0.0015, 0],
+      [0.003, 0],
+    ]);
   });
 
-  it("respects the debounce window", () => {
-    expect(shouldReroute([50, 60, 55], 1_000, 5_000, opts)).toBe(false); // 4s < 10s
-    expect(shouldReroute([50, 60, 55], 1_000, 12_000, opts)).toBe(true); // 11s > 10s
+  it("drops passed intermediate stops but always keeps the destination", () => {
+    // Mids at ~111 m and ~222 m; we're ~150 m along → the first is behind us.
+    const dest: [number, number][] = [
+      [0, 0],
+      [0.001, 0],
+      [0.002, 0],
+      [0.003, 0],
+    ];
+    const wps = remainingWaypoints(geometry, dest, [0.0015, 0], 150);
+    expect(wps).toEqual([
+      [0.0015, 0],
+      [0.002, 0],
+      [0.003, 0],
+    ]);
   });
 });

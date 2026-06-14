@@ -7,6 +7,7 @@ import {
   type NavTickState,
   navOptionsForMode,
   processFix,
+  remainingWaypoints,
   useNavigationStore,
   useSettingsStore,
   VOICE_TIMING_MULTIPLIER,
@@ -23,8 +24,9 @@ import { useNavigationVoice } from "./useNavigationVoice";
 import { useSimulatedPosition } from "./useSimulatedPosition";
 
 const freshTick = (): NavTickState => ({
-  deviationHistory: [],
+  offRouteScore: 0,
   lastRerouteAtMs: null,
+  rerouteBackoffMs: 0,
   spokenCues: [],
 });
 
@@ -77,7 +79,7 @@ export function useNavigationEngine(): void {
         if (result.accuracyRejected) store.setWeakGps(true);
         return;
       }
-      store.setWeakGps(false);
+      store.setWeakGps(result.weakGps);
 
       store.applyProgress(result.progress);
       store.setOffRoute(result.offRoute);
@@ -127,10 +129,14 @@ export function useNavigationEngine(): void {
         haptics.warn();
         store.beginReroute();
         const from = result.progress.snapped;
-        // NOTE: keeps all original waypoints except the origin. For multi-stop
-        // routes this can re-include already-passed intermediate stops on
-        // reroute; precise waypoint-progress tracking is a future refinement.
-        const waypoints = [from, ...destinationWaypoints.slice(1)];
+        // Re-anchor at the current position and drop intermediate stops already
+        // behind us, so a multi-stop reroute doesn't route back to a passed stop.
+        const waypoints = remainingWaypoints(
+          route.geometry,
+          destinationWaypoints,
+          from,
+          result.progress.alongMeters,
+        );
         fetchDirections({ waypoints, mode, lang: locale })
           .then((res) => {
             // Bail out if navigation ended (stopped or arrived) while the

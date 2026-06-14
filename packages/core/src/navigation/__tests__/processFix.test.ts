@@ -24,7 +24,12 @@ const route = {
 } as unknown as Route;
 
 const opts = navOptionsForMode("driving");
-const emptyState: NavTickState = { deviationHistory: [], lastRerouteAtMs: null, spokenCues: [] };
+const emptyState: NavTickState = {
+  offRouteScore: 0,
+  lastRerouteAtMs: null,
+  rerouteBackoffMs: 0,
+  spokenCues: [],
+};
 
 describe("processFix", () => {
   it("rejects fixes worse than the accuracy cap", () => {
@@ -105,7 +110,7 @@ describe("processFix", () => {
       rerouteFlags.push(last.needsReroute);
     }
     expect(last?.offRoute).toBe(true);
-    expect(state.deviationHistory.length).toBeGreaterThan(0);
+    expect(state.lastRerouteAtMs).not.toBeNull();
     expect(rerouteFlags.some(Boolean)).toBe(true);
   });
 

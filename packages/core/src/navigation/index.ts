@@ -9,7 +9,7 @@ export { eta } from "./eta";
 export { navOptionsForMode } from "./options";
 export { processFix } from "./processFix";
 export { computeProgress, upcomingManeuverIndex } from "./progress";
-export { shouldReroute } from "./reroute";
+export { remainingWaypoints, shouldReroute, updateOffRouteScore } from "./reroute";
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
 export {

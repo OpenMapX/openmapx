@@ -66,11 +66,19 @@ describe("useNavigationEngine", () => {
     const route2 = { ...route, distance: 999 } as Route;
     fetchDirections.mockResolvedValue({ routes: [route2], activeRouteIndex: 0 });
     renderHook(() => useNavigationEngine());
-    // 3 consecutive far-off fixes
+    // Enough moving, off-route fixes (each ~222 m off the line) to accrue the
+    // off-route score past the reroute threshold. They advance east, parallel to
+    // the route, so this reads as a deviation rather than a wrong-way turn.
+    const offFixes: FixInput[] = [
+      { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
+      { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
+      { coords: [0.0014, 0.002], accuracy: 5, speed: 15, timestampMs: 3000 },
+      { coords: [0.0016, 0.002], accuracy: 5, speed: 15, timestampMs: 4000 },
+      { coords: [0.0018, 0.002], accuracy: 5, speed: 15, timestampMs: 5000 },
+      { coords: [0.002, 0.002], accuracy: 5, speed: 15, timestampMs: 6000 },
+    ];
     await act(async () => {
-      fixHandler?.({ coords: [0.001, 0.002], accuracy: 5, timestampMs: 1000 });
-      fixHandler?.({ coords: [0.0015, 0.002], accuracy: 5, timestampMs: 2000 });
-      fixHandler?.({ coords: [0.002, 0.002], accuracy: 5, timestampMs: 3000 });
+      for (const f of offFixes) fixHandler?.(f);
       await Promise.resolve();
       await Promise.resolve();
     });
