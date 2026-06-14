@@ -28,10 +28,12 @@ const SETTLE_MS = ENTER_EASE_MS + 20;
 const POS_TAU = 0.45;
 const MAX_LEAD = 1.5;
 const BEARING_TAU = 0.35;
-// Auto-zoom eases gently (large tau) toward a speed-derived zoom; a manual zoom
-// gesture pauses it for a cooldown so the camera never fights the user.
+// Auto-zoom eases gently toward a speed-derived zoom — until the user takes
+// zoom control. While a user camera gesture is in flight the follow loop is
+// suspended (it must not run jumpTo, which calls stop() and would cancel the
+// gesture) until this long after the last user camera event.
 const ZOOM_TAU = 1.6;
-const USER_ZOOM_COOLDOWN_MS = 8_000;
+const USER_CAM_SUSPEND_MS = 350;
 
 /**
  * Target follow-zoom for a ground speed: close in when slow/stopped, pull back
@@ -117,9 +119,12 @@ export function useNavCamera(): void {
   const lastCamRef = useRef<{ lng: number; lat: number; bearing: number; zoom: number } | null>(
     null,
   );
-  // Eased follow-zoom, and the time until which a recent manual zoom pauses auto-zoom.
+  // Eased follow-zoom; whether the user has taken manual zoom control (then the
+  // loop follows at their zoom instead of auto-zooming); and the time until
+  // which a recent user camera gesture suspends the follow loop.
   const displayedZoomRef = useRef<number | null>(null);
-  const userZoomUntilRef = useRef(0);
+  const userZoomedRef = useRef(false);
+  const userCamActivityUntilRef = useRef(0);
 
   const active = status === "navigating" || status === "rerouting";
 
@@ -190,7 +195,11 @@ export function useNavCamera(): void {
       displayedRef.current = prog.alongMeters;
       bearingRef.current = prog.bearing;
     }
-    const enterZoom = Math.max(map.getZoom(), NAV_ENTER_ZOOM);
+    // Respect a user-chosen zoom on re-entry (recenter); otherwise establish the
+    // default follow zoom.
+    const enterZoom = userZoomedRef.current
+      ? map.getZoom()
+      : Math.max(map.getZoom(), NAV_ENTER_ZOOM);
     map.easeTo(
       {
         zoom: enterZoom,
@@ -246,20 +255,24 @@ export function useNavCamera(): void {
         .addTo(map);
 
       const camMode = useNavigationStore.getState().cameraMode;
-      if (camMode !== "follow" || now < settleUntilRef.current) {
-        // Released, or still settling the enter-ease: re-center on the next
-        // follow frame rather than fighting the easeTo / the user's gesture.
+      if (
+        camMode !== "follow" ||
+        now < settleUntilRef.current ||
+        now < userCamActivityUntilRef.current
+      ) {
+        // Released, still settling the enter-ease, or the user is actively
+        // panning/zooming: do NOT run jumpTo — it calls stop() and would cancel
+        // the user's gesture or zoom animation. Re-center on the next free frame.
         lastCamRef.current = null;
       } else {
-        // Speed-adaptive zoom, eased — unless the user just zoomed, in which
-        // case hold their zoom and only track it so auto-zoom resumes smoothly.
-        const nowZoom = map.getZoom();
-        let zoom = nowZoom;
-        if (now < userZoomUntilRef.current) {
-          displayedZoomRef.current = nowZoom;
-        } else {
+        // Follow center + bearing. Auto-zoom toward the speed-derived target,
+        // unless the user has taken zoom control — then leave zoom untouched so
+        // navigation continues at their chosen zoom.
+        const commandZoom = !userZoomedRef.current;
+        let zoom = map.getZoom();
+        if (commandZoom) {
           const speed = useNavigationStore.getState().progress?.speedMps ?? 0;
-          const base = displayedZoomRef.current ?? nowZoom;
+          const base = displayedZoomRef.current ?? zoom;
           const zAlpha = 1 - Math.exp(-Math.max(dt, 0) / ZOOM_TAU);
           displayedZoomRef.current = base + (targetZoomForSpeed(speed) - base) * zAlpha;
           zoom = displayedZoomRef.current;
@@ -270,9 +283,11 @@ export function useNavCamera(): void {
           Math.abs(point[0] - last.lng) > 1e-6 ||
           Math.abs(point[1] - last.lat) > 1e-6 ||
           Math.abs(((brg - last.bearing + 540) % 360) - 180) > 0.05 ||
-          Math.abs(zoom - last.zoom) > 0.004;
+          (commandZoom && Math.abs(zoom - last.zoom) > 0.004);
         if (moved) {
-          map.jumpTo({ center: point as LngLat, bearing: brg, zoom }, { programmatic: true });
+          const camOpts: maplibregl.CameraOptions = { center: point as LngLat, bearing: brg };
+          if (commandZoom) camOpts.zoom = zoom;
+          map.jumpTo(camOpts, { programmatic: true });
           lastCamRef.current = { lng: point[0], lat: point[1], bearing: brg, zoom };
         }
       }
@@ -281,36 +296,56 @@ export function useNavCamera(): void {
     return () => cancelAnimationFrame(raf);
   }, [active, mapRef]);
 
-  // Hide the puck and release the follow padding when not actively navigating.
+  // Hide the puck and release the follow padding when not actively navigating;
+  // also clear user-control state so the next trip starts in auto-follow.
   useEffect(() => {
     if (!active) {
       markerRef.current?.remove();
       mapRef?.current?.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      userZoomedRef.current = false;
+      userCamActivityUntilRef.current = 0;
     }
   }, [active, mapRef]);
 
-  // A real user pan/rotate gesture releases the camera; our own programmatic
-  // easeTo/jumpTo pass `{ programmatic: true }` so they don't trip this.
+  // Honour user camera gestures during navigation. A pan/rotate/pitch releases
+  // follow (the recenter control resumes it); a zoom keeps following but hands
+  // zoom control to the user. While any gesture is in flight the follow loop is
+  // suspended so it can't fight it. Our own programmatic moves pass
+  // `{ programmatic: true }` and are ignored.
   useEffect(() => {
     const map = mapRef?.current;
     if (!map || !active) return;
-    const onUserGesture = (e: { programmatic?: boolean }) => {
+    const suspend = () => {
+      userCamActivityUntilRef.current = performance.now() + USER_CAM_SUSPEND_MS;
+    };
+    const onPanRotatePitch = (e?: { programmatic?: boolean }) => {
       if (e?.programmatic) return;
+      suspend();
       useNavigationStore.getState().setCameraMode("free");
     };
-    // A manual zoom keeps follow mode but pauses auto-zoom for a cooldown so the
-    // camera doesn't immediately undo the user's pinch.
-    const onUserZoom = (e: { programmatic?: boolean }) => {
+    const onZoomStart = (e?: { programmatic?: boolean }) => {
       if (e?.programmatic) return;
-      userZoomUntilRef.current = performance.now() + USER_ZOOM_COOLDOWN_MS;
+      userZoomedRef.current = true;
+      suspend();
     };
-    map.on("dragstart", onUserGesture);
-    map.on("rotatestart", onUserGesture);
-    map.on("zoomstart", onUserZoom);
+    // Continuous events keep the loop suspended for the whole gesture.
+    const onUserMove = (e?: { programmatic?: boolean }) => {
+      if (e?.programmatic) return;
+      suspend();
+    };
+    map.on("dragstart", onPanRotatePitch);
+    map.on("rotatestart", onPanRotatePitch);
+    map.on("pitchstart", onPanRotatePitch);
+    map.on("zoomstart", onZoomStart);
+    map.on("zoom", onUserMove);
+    map.on("move", onUserMove);
     return () => {
-      map.off("dragstart", onUserGesture);
-      map.off("rotatestart", onUserGesture);
-      map.off("zoomstart", onUserZoom);
+      map.off("dragstart", onPanRotatePitch);
+      map.off("rotatestart", onPanRotatePitch);
+      map.off("pitchstart", onPanRotatePitch);
+      map.off("zoomstart", onZoomStart);
+      map.off("zoom", onUserMove);
+      map.off("move", onUserMove);
     };
   }, [mapRef, active]);
 }
