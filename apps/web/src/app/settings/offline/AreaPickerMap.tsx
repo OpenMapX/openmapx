@@ -6,7 +6,7 @@ import type { AreaGeometry } from "@openmapx/core";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
-import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
+import { baseMapCustomAttribution, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import type { OfflineAreaBbox } from "@/lib/offlineAreas";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
@@ -96,14 +96,14 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       const style =
         env.styleProvider === "openmapx"
           ? await loadOpenMapXStyle(env)
-          : maptilerStyleUrl(styleName, env);
+          : await loadMaptilerStyle(styleName, env);
       if (destroyed || !containerRef.current) return;
       map = new maplibregl.Map({
         container: containerRef.current,
         style: style as string | maplibregl.StyleSpecification,
         center: initialCenter,
         zoom: initialZoom,
-        attributionControl: false,
+        attributionControl: { compact: true, customAttribution: baseMapCustomAttribution(env) },
         canvasContextAttributes: { antialias: true },
         // Keep the picker north-up: a rotated/pitched viewport makes the
         // downloaded bounding box (always axis-aligned) confusing to reason about.
@@ -140,7 +140,10 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
       map.on("moveend", emit);
     };
 
-    void init();
+    // `loadMaptilerStyle`/`loadOpenMapXStyle` reject on a failed style fetch;
+    // swallow it (leave the container empty) rather than emit an unhandled
+    // rejection — same degradation as the place mini-map.
+    void init().catch(() => {});
 
     return () => {
       destroyed = true;

@@ -65,8 +65,10 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatarButton } from "@/components/auth/AccountAvatarButton";
 import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { NlpConsentDialog } from "@/components/ui/NlpConsentDialog";
 import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/ui/nlpConsent";
+import { attributionsForProviders } from "@/lib/attributionForProviders";
 import {
   launchExploreFromPlace,
   launchExploreTextSearch,
@@ -75,7 +77,6 @@ import {
 import { useMap } from "@/lib/MapContext";
 import { isConfidentPlaceMatch } from "@/lib/placeMatch";
 import { TEAL } from "@/lib/theme";
-import { useGeocodingAttribution } from "@/lib/useGeocodingAttribution";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
 import { NlpSearchCard } from "./NlpSearchCard";
@@ -247,9 +248,6 @@ export function SearchBar() {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
   }, [registry]);
-
-  // Geocoding attribution — only credit providers that are available and healthy.
-  const geocodingAttribution = useGeocodingAttribution();
 
   // Clean up blur timeout on unmount
   useEffect(() => {
@@ -550,6 +548,18 @@ export function SearchBar() {
   };
 
   const effectiveSuggestions = nearbyMode ? nearbySuggestions : displaySuggestions;
+  // Credit only the geocoder(s) that actually produced the suggestions on
+  // screen. Each geocoded item carries its serving integration id
+  // (AutocompleteResult.provider, tagged by the geocoding orchestrator);
+  // category / NLP / labeled / preset suggestions have none, so a dropdown
+  // without geocoded results shows no geocoder credit — rather than the old
+  // behaviour of crediting every healthy geocoder regardless of who served.
+  // Plain const (not a hook): this sits below an early return, and the lookup
+  // is a handful of registry reads that <AttributionStrip> dedupes downstream.
+  const geocodingAttributions = attributionsForProviders(
+    registry,
+    new Set(effectiveSuggestions.map((s) => s.provider)),
+  );
   // The NLP card is additive and only shown for plausible natural-language
   // intents (confidence + at least one category). It never replaces the
   // parallel geocode/autocomplete suggestions below it.
@@ -1153,20 +1163,10 @@ export function SearchBar() {
                   onSelect={handleSelectAny}
                   highlightedIndex={highlightedIndex}
                 />
-                {geocodingAttribution && (
-                  <Typography
-                    variant="caption"
-                    // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
-                    dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
-                    sx={{
-                      color: "text.secondary",
-                      display: "block",
-                      p: 0.5,
-                      textAlign: "center",
-                      fontSize: 10.5,
-                      "& a": { color: "text.secondary", textDecoration: "underline" },
-                    }}
-                  />
+                {geocodingAttributions.length > 0 && (
+                  <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 0.5 }}>
+                    <AttributionStrip attributions={geocodingAttributions} variant="inline" />
+                  </Box>
                 )}
               </Box>
             </>
@@ -1235,20 +1235,10 @@ export function SearchBar() {
                 onSelect={handleSelectAny}
                 highlightedIndex={highlightedIndex}
               />
-              {geocodingAttribution && (
-                <Typography
-                  variant="caption"
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from geocoding provider
-                  dangerouslySetInnerHTML={{ __html: geocodingAttribution }}
-                  sx={{
-                    color: "text.secondary",
-                    display: "block",
-                    p: 1,
-                    textAlign: "center",
-                    fontSize: 10.5,
-                    "& a": { color: "text.secondary", textDecoration: "underline" },
-                  }}
-                />
+              {geocodingAttributions.length > 0 && (
+                <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 1 }}>
+                  <AttributionStrip attributions={geocodingAttributions} variant="inline" />
+                </Box>
               )}
             </>
           ) : showSkeleton ? (

@@ -23,15 +23,21 @@ export async function fetchReviews(
 ): Promise<Review[]> {
   if (providers.length === 0) return [];
 
-  const settled = await Promise.allSettled(providers.map((p) => p.getReviews(subject)));
+  // Keep each provider paired with its results so we can stamp `source` (the
+  // provider that actually returned the review) — that's what lets the UI
+  // credit only the sources whose reviews are shown rather than every
+  // installed review provider.
+  const settled = await Promise.allSettled(
+    providers.map((p) => p.getReviews(subject).then((reviews) => ({ id: p.id, reviews }))),
+  );
   const seen = new Set<string>();
   const merged: Review[] = [];
   for (const result of settled) {
     if (result.status !== "fulfilled") continue;
-    for (const review of result.value) {
+    for (const review of result.value.reviews) {
       if (seen.has(review.id)) continue;
       seen.add(review.id);
-      merged.push(review);
+      merged.push(review.source ? review : { ...review, source: result.value.id });
     }
   }
   merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -56,7 +62,9 @@ export async function fetchAggregate(
   };
   for (const p of providers) {
     try {
-      return await p.getAggregate(subject);
+      const aggregate = await p.getAggregate(subject);
+      // Stamp the producing provider so the UI credits the aggregate's source.
+      return aggregate.source ? aggregate : { ...aggregate, source: p.id };
     } catch {
       // fall through to next provider
     }

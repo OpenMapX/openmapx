@@ -22,6 +22,12 @@ export interface ReviewAggregate {
   quality: number;
   /** Convenience: quality / 20 (0..5). */
   stars: number;
+  /**
+   * `ReviewProvider.id` (= manifest `sourceId`, e.g. "mangrove") of the provider
+   * that produced this aggregate. Tagged by the orchestrator so the UI credits
+   * only the review source whose data is shown, not every installed provider.
+   */
+  source?: string;
 }
 
 export interface ReviewAuthor {
@@ -70,6 +76,12 @@ export interface Review {
   /** If `action` targets another review, that review's id (= signature). */
   targetId?: string;
   metadata?: ReviewMetadata;
+  /**
+   * `ReviewProvider.id` (= manifest `sourceId`, e.g. "mangrove") of the provider
+   * that returned this review. Tagged by the orchestrator so the UI credits only
+   * the review source(s) whose data is shown, not every installed provider.
+   */
+  source?: string;
 }
 
 /** A pluggable review source. */

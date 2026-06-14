@@ -5,7 +5,7 @@ import { useColorScheme } from "@mui/material/styles";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useEnv } from "@/lib/EnvProvider";
-import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
+import { baseMapCustomAttribution, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import type { OfflineArea, OfflineAreaBbox } from "@/lib/offlineAreas";
 
 const RECT_SOURCE = "offline-areas-source";
@@ -107,14 +107,14 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
       const style =
         env.styleProvider === "openmapx"
           ? await loadOpenMapXStyle(env)
-          : maptilerStyleUrl(styleName, env);
+          : await loadMaptilerStyle(styleName, env);
       if (destroyed || !containerRef.current) return;
       map = new maplibregl.Map({
         container: containerRef.current,
         style: style as string | maplibregl.StyleSpecification,
         center: frame ? [(frame.west + frame.east) / 2, (frame.south + frame.north) / 2] : [0, 20],
         zoom: frame ? 6 : 1,
-        attributionControl: false,
+        attributionControl: { compact: true, customAttribution: baseMapCustomAttribution(env) },
         canvasContextAttributes: { antialias: true },
         // North-up only: the download rectangles are axis-aligned.
         dragRotate: false,
@@ -141,7 +141,10 @@ export function OfflineMapView({ areas, fitTo, height = 360 }: Props) {
       });
     };
 
-    void init();
+    // `loadMaptilerStyle`/`loadOpenMapXStyle` reject on a failed style fetch;
+    // swallow it (leave the container empty) rather than emit an unhandled
+    // rejection — same degradation as the place mini-map.
+    void init().catch(() => {});
 
     return () => {
       destroyed = true;

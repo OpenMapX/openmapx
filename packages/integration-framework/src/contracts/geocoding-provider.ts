@@ -9,11 +9,20 @@ export interface SearchResult {
   confidence: number;
   /** Raw category string from the geocoding provider (e.g. "transit_station", "railway/station"). */
   rawCategory?: string;
+  /**
+   * Integration ID of the geocoder that actually produced this result (e.g.
+   * "geocoding-maptiler"). Tagged by the orchestrator so attribution can credit
+   * the served provider rather than every geocoder in the configured chain.
+   * See `integrations/geocoding/orchestrator.ts`.
+   */
+  provider?: string;
 }
 
 export interface ReverseGeocodingResult {
   address: string;
   city: string;
+  /** Integration ID of the geocoder that produced this result (see `SearchResult.provider`). */
+  provider?: string;
 }
 
 export interface AutocompleteResult {
@@ -43,6 +52,13 @@ export interface AutocompleteResult {
   labelKey?: string;
   /** Parsed intent, present only when type is "nlp_search". */
   nlpIntent?: import("./search-nlp-provider").SearchIntent;
+  /**
+   * Integration ID of the geocoder that actually produced this suggestion (e.g.
+   * "geocoding-photon"). Tagged by the orchestrator so attribution can credit
+   * the served provider rather than every geocoder in the configured chain.
+   * See `integrations/geocoding/orchestrator.ts`.
+   */
+  provider?: string;
 }
 
 export interface GeocodingProvider {

@@ -8,20 +8,16 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
-import {
-  buildSourceAttribution,
-  type Place,
-  type Review,
-  safeHref,
-  useSession,
-} from "@openmapx/core";
+import { type Place, type Review, safeHref, useSession } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { usePlaceReviews, useReviewAggregate, useUserKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { MangroveSetupWizard } from "@/components/auth/MangroveSetupWizard";
 import { MangroveUnlockDialog } from "@/components/auth/MangroveUnlockDialog";
+import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { attributionsForSources } from "@/lib/attributionForProviders";
 import { DeleteReviewDialog } from "./reviews/DeleteReviewDialog";
 import { ReportAbuseDialog } from "./reviews/ReportAbuseDialog";
 import { ReviewAggregate } from "./reviews/ReviewAggregate";
@@ -55,17 +51,18 @@ export function PlaceReviewsTab({ place }: Props) {
   });
   const reviewsQuery = usePlaceReviews<Review>(lat, lng, place.name, { osmId: place.ids?.osm });
 
-  // Attribution pulled from each review provider's manifest `dataSources`
-  // (same pattern as PlaceWeather, DataSourceSections, etc.). Today we show
-  // every registered provider; when `Review` gains a per-item `source` field
-  // we can switch to per-review filtering via `buildSourceAttribution(ds, [source])`.
-  const allDataSources = registry.getByDomain("reviews").flatMap((m) => m.dataSources ?? []);
-  const attributionHtml = allDataSources.length
-    ? buildSourceAttribution(
-        allDataSources,
-        allDataSources.map((ds) => ds.sourceId),
-      )
-    : "";
+  // Credit only the review source(s) whose data is actually shown: the
+  // providers that returned reviews, plus the aggregate's provider when a
+  // rating summary is displayed. Each carries a `source` (= manifest sourceId)
+  // tagged by the reviews orchestrator. An unknown source resolves to no
+  // credit (never a domain-wide fallback), so nothing shown ⇒ nothing credited.
+  const reviewAttributions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of reviewsQuery.data ?? []) if (r.source) ids.add(r.source);
+    const agg = aggregateQuery.data;
+    if (agg?.source && agg.count > 0) ids.add(agg.source);
+    return attributionsForSources(registry, ids);
+  }, [registry, reviewsQuery.data, aggregateQuery.data]);
 
   const [writeOpen, setWriteOpen] = useState(false);
   const [editReview, setEditReview] = useState<Review | null>(null);
@@ -202,20 +199,12 @@ export function PlaceReviewsTab({ place }: Props) {
           ))}
         </>
       )}
-      {attributionHtml && (
+      {reviewAttributions.length > 0 && (
         <>
           <Divider sx={{ mt: 2, mb: 1 }} />
-          <Typography
-            variant="caption"
-            align="center"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted attribution HTML from integration manifests
-            dangerouslySetInnerHTML={{ __html: attributionHtml }}
-            sx={{
-              color: "text.secondary",
-              display: "block",
-              "& a": { color: "text.secondary" },
-            }}
-          />
+          <Box sx={{ display: "flex", justifyContent: "center" }}>
+            <AttributionStrip attributions={reviewAttributions} variant="inline" />
+          </Box>
         </>
       )}
       <WriteReviewDialog

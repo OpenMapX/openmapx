@@ -26,7 +26,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
-import { loadOpenMapXStyle, maptilerStyleUrl } from "@/lib/map";
+import { baseMapCustomAttribution, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { PhotoAttribution } from "./PhotoAttribution";
 
@@ -532,7 +532,7 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
         import("maplibre-gl"),
         env.styleProvider === "openmapx"
           ? loadOpenMapXStyle(env)
-          : Promise.resolve(maptilerStyleUrl("bright-v2", env)),
+          : loadMaptilerStyle("bright-v2", env),
       ]);
       if (cancelled || !el) return;
 
@@ -542,7 +542,7 @@ function GalleryMinimap({ lng, lat, onClick }: { lng: number; lat: number; onCli
         center: [lng, lat],
         zoom: 16,
         interactive: false,
-        attributionControl: false,
+        attributionControl: { compact: true, customAttribution: baseMapCustomAttribution(env) },
       });
 
       const marker = new maplibregl.Marker({ color: "#e53935" }).setLngLat([lng, lat]).addTo(map);

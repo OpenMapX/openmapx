@@ -55,6 +55,7 @@ import { TransitItineraryCard } from "@/components/panels/directions/TransitRout
 import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { TEAL } from "@/lib/theme";
 import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
@@ -246,38 +247,21 @@ export function DirectionsPanelContent() {
     detailsRouteIndex !== null ? (data?.routes[detailsRouteIndex] ?? null) : null;
 
   const routingAttributions = useMemo<Attribution[]>(() => {
-    function toAttributions(
-      sources:
-        | Array<{
-            sourceId: string;
-            name: string;
-            url?: string;
-            license?: string;
-            licenseUrl?: string;
-            attribution?: string;
-          }>
-        | undefined,
-    ): Attribution[] {
-      if (!sources) return [];
-      return sources.map((s) => ({
-        sourceId: s.sourceId,
-        name: s.name,
-        url: s.url,
-        spdxLicense: s.license,
-        licenseUrl: s.licenseUrl,
-        attributionText: s.attribution,
-      }));
-    }
+    // Credit the routing engine that actually served the route. `data.provider`
+    // is the integration id stamped on every successful response (see
+    // integrations/routing/index.ts). Only when it is somehow absent AND the
+    // deployment has a single healthy routing provider — i.e. the served engine
+    // is unambiguous — do we fall back to it; with several healthy engines we
+    // credit none rather than guess the wrong one (OSM stays credited by the
+    // always-on base-map control regardless).
     if (data?.provider) {
-      const meta = registry.get(data.provider);
-      if (meta) return toAttributions(meta.dataSources);
+      return attributionsForProviders(registry, [data.provider]);
     }
-    const routingIntegrations = registry.getByDomain("routing").filter((r) => {
+    const healthy = registry.getByDomain("routing").filter((r) => {
       const cap = caps[r.id];
       return cap ? cap.available && cap.healthy : false;
     });
-    if (!routingIntegrations.length) return [];
-    return toAttributions(routingIntegrations[0].dataSources);
+    return healthy.length === 1 ? attributionsForProviders(registry, [healthy[0].id]) : [];
   }, [registry, caps, data?.provider]);
 
   const getCachedTime = (m: TravelMode): string | undefined => {

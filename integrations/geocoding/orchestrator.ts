@@ -73,12 +73,22 @@ function parseProviderList(): ProviderName[] {
   return valid;
 }
 
-export interface GeocodingProviderWithMeta extends GeocodingProvider {
-  /** Integration ID of the last provider that produced results. */
-  lastProvider?: string;
+/**
+ * Stamp each result with the integration ID of the geocoder that produced it.
+ * This travels with the data through the response and the Redis/in-memory
+ * caches, so downstream attribution credits the served provider rather than
+ * every provider in the chain — and being carried per-item it is immune to the
+ * cross-request races a shared "last provider" field would suffer. Only fills
+ * the tag when absent so a pre-tagging provider wins.
+ */
+function tagProvider<T extends { provider?: string }>(results: T[], integrationId: string): T[] {
+  for (const r of results) {
+    if (r && r.provider === undefined) r.provider = integrationId;
+  }
+  return results;
 }
 
-let cached: GeocodingProviderWithMeta | null = null;
+let cached: GeocodingProvider | null = null;
 
 /**
  * Returns a GeocodingProvider that tries each configured provider in order.
@@ -87,10 +97,10 @@ let cached: GeocodingProviderWithMeta | null = null;
  * The first provider is tried; on failure the next one is used, and so on.
  * A single value (e.g. "maptiler") works as before.
  *
- * Providers are resolved from the integration framework at call time.
- * After each call, `lastProvider` contains the integration ID that produced results.
+ * Providers are resolved from the integration framework at call time. Each
+ * result carries a `provider` tag (the serving integration ID) via tagProvider.
  */
-export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProviderWithMeta {
+export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider {
   if (cached) return cached;
 
   const names = parseProviderList();
@@ -111,36 +121,32 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
 
   if (chain.length === 1) {
     const single = chain[0];
-    const self: GeocodingProviderWithMeta = {
+    cached = {
       ...single.provider,
-      lastProvider: single.integrationId,
       async geocode(query, lang, proximity) {
-        self.lastProvider = single.integrationId;
-        return single.provider.geocode(query, lang, proximity);
+        return tagProvider(
+          await single.provider.geocode(query, lang, proximity),
+          single.integrationId,
+        );
       },
       async autocomplete(query, lang) {
-        self.lastProvider = single.integrationId;
-        return single.provider.autocomplete(query, lang);
+        return tagProvider(await single.provider.autocomplete(query, lang), single.integrationId);
       },
       async reverseGeocode(lat, lng, lang) {
-        self.lastProvider = single.integrationId;
-        return single.provider.reverseGeocode(lat, lng, lang);
+        const result = await single.provider.reverseGeocode(lat, lng, lang);
+        if (result && result.provider === undefined) result.provider = single.integrationId;
+        return result;
       },
     };
-    cached = self;
     return cached;
   }
 
-  const self: GeocodingProviderWithMeta = {
-    lastProvider: chain[0].integrationId,
+  cached = {
     async geocode(query, lang, proximity) {
       for (let i = 0; i < chain.length; i++) {
         try {
           const results = await chain[i].provider.geocode(query, lang, proximity);
-          if (results.length > 0) {
-            self.lastProvider = chain[i].integrationId;
-            return results;
-          }
+          if (results.length > 0) return tagProvider(results, chain[i].integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;
         }
@@ -151,10 +157,7 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       for (let i = 0; i < chain.length; i++) {
         try {
           const results = await chain[i].provider.autocomplete(query, lang);
-          if (results.length > 0) {
-            self.lastProvider = chain[i].integrationId;
-            return results;
-          }
+          if (results.length > 0) return tagProvider(results, chain[i].integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;
         }
@@ -166,7 +169,7 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
         try {
           const result = await chain[i].provider.reverseGeocode(lat, lng, lang);
           if (result) {
-            self.lastProvider = chain[i].integrationId;
+            if (result.provider === undefined) result.provider = chain[i].integrationId;
             return result;
           }
         } catch (err) {
@@ -176,7 +179,6 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       return null;
     },
   };
-  cached = self;
 
   return cached;
 }
