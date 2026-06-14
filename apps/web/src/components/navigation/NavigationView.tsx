@@ -7,6 +7,7 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   geoJsonBBox,
+  isOverSpeed,
   navOptionsForMode,
   upcomingManeuverIndex,
   useNavigationStore,
@@ -200,7 +201,11 @@ export function NavigationView() {
           <Box sx={{ display: "flex", flexDirection: "column" }}>
             {currentSpeedLimit !== null && (
               <Box sx={{ pointerEvents: "auto", alignSelf: "flex-start", pl: 2, pb: 1 }}>
-                <SpeedLimitBadge speedLimit={currentSpeedLimit} units={units} />
+                <SpeedLimitBadge
+                  speedLimit={currentSpeedLimit}
+                  units={units}
+                  over={isOverSpeed(progress?.speedMps ?? 0, currentSpeedLimit)}
+                />
               </Box>
             )}
             {navBar &&

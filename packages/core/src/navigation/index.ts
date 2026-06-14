@@ -12,6 +12,7 @@ export { computeProgress, upcomingManeuverIndex } from "./progress";
 export { remainingWaypoints, shouldReroute, updateOffRouteScore } from "./reroute";
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
+export { isOverSpeed, OVER_SPEED_TOLERANCE_KMH } from "./speedAlert";
 export {
   extractTrafficSignals,
   type GeometryWindow,
