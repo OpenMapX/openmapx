@@ -15,6 +15,7 @@ import {
   useNavigationStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
+import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { TEAL } from "@/lib/theme";
 import { requestHeadingPermission } from "@/lib/useHeading";
 
@@ -44,6 +45,9 @@ export function RouteCard({
   const handleStart = async () => {
     const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
     if (coords.length < 2) return;
+    // Unlock TTS inside the user gesture (iOS Safari requirement) before any
+    // await hands control back to the event loop.
+    primeSpeechSynthesis();
     await requestHeadingPermission();
     startGroundNavigation(route, route.mode, coords);
   };
