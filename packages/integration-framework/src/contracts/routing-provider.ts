@@ -87,6 +87,16 @@ export interface Route {
   legs: RouteLeg[];
   steps: RouteStep[];
   mode: TravelMode;
+  /**
+   * Posted speed limit (km/h) per geometry segment, aligned 1:1 to `geometry`:
+   * `segmentSpeedLimits[i]` is the limit on the segment from `geometry[i]` to
+   * `geometry[i+1]`, so its length is `geometry.length - 1`. `null` where the
+   * limit is unknown. Lets navigation read the live limit for the segment the
+   * user is on (`snap.segmentIndex`) straight from the route — no per-fix
+   * map-match. Populated by engines that return per-segment `maxspeed`
+   * annotations (OSRM); omitted otherwise.
+   */
+  segmentSpeedLimits?: (number | null)[];
   /** Human-readable summary of the primary road, e.g. "via A57" */
   summary?: string;
   /** Elevation values (metres) at regular intervals along the route */

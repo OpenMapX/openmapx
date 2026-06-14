@@ -3,6 +3,9 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
+import type { NavRecording } from "@openmapx/core";
+import { useRef } from "react";
+import { useNavRecordingStore } from "@/lib/navigation/navRecordingStore";
 import { SIM_SPEED_PRESETS, useNavSimStore } from "@/lib/navigation/navSimStore";
 
 const PLAYBACK_RATES = [1, 2, 4] as const;
@@ -21,6 +24,39 @@ export function NavSimControl() {
   const setSpeedMps = useNavSimStore((s) => s.setSpeedMps);
   const setPlaybackRate = useNavSimStore((s) => s.setPlaybackRate);
   const toggleOffRoute = useNavSimStore((s) => s.toggleOffRoute);
+
+  const recording = useNavRecordingStore((s) => s.recording);
+  const fixCount = useNavRecordingStore((s) => s.fixCount);
+  const loaded = useNavRecordingStore((s) => s.loaded);
+  const replaying = useNavRecordingStore((s) => s.replaying);
+  const startRecording = useNavRecordingStore((s) => s.startRecording);
+  const stopRecording = useNavRecordingStore((s) => s.stopRecording);
+  const loadRecording = useNavRecordingStore((s) => s.loadRecording);
+  const startReplay = useNavRecordingStore((s) => s.startReplay);
+  const stopReplay = useNavRecordingStore((s) => s.stopReplay);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-loading the same file
+    if (!file) return;
+    try {
+      const rec = JSON.parse(await file.text()) as NavRecording;
+      // Validate the shape the replayer relies on (a 2+ point route geometry and
+      // at least one fix); normalize a missing reroutes list. A truncated/edited
+      // file is ignored rather than crashing replay — this is a dev aid.
+      const valid =
+        Array.isArray(rec?.fixes) &&
+        rec.fixes.length > 0 &&
+        Array.isArray(rec?.route?.geometry) &&
+        rec.route.geometry.length >= 2;
+      if (valid) {
+        loadRecording({ ...rec, reroutes: Array.isArray(rec.reroutes) ? rec.reroutes : [] });
+      }
+    } catch {
+      // Ignore malformed files — this is a dev aid.
+    }
+  };
 
   if (!enabled) return null;
 
@@ -73,6 +109,32 @@ export function NavSimControl() {
         color={offsetMeters > 0 ? "warning" : "default"}
         onClick={toggleOffRoute}
       />
+
+      <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.5, mt: 0.5 }}>
+        RECORD / REPLAY
+      </Typography>
+      <Chip
+        label={recording ? `recording… (${fixCount})` : "record"}
+        size="small"
+        color={recording ? "error" : "default"}
+        onClick={recording ? stopRecording : startRecording}
+      />
+      <Box sx={{ display: "flex", gap: 0.5 }}>
+        <Chip label="load…" size="small" onClick={() => fileRef.current?.click()} />
+        <Chip
+          label={replaying ? "stop" : "replay"}
+          size="small"
+          color={replaying ? "warning" : loaded ? "primary" : "default"}
+          disabled={!loaded}
+          onClick={replaying ? stopReplay : startReplay}
+        />
+      </Box>
+      {loaded && (
+        <Typography variant="caption" sx={{ opacity: 0.7 }}>
+          loaded: {loaded.fixes.length} fixes
+        </Typography>
+      )}
+      <input ref={fileRef} type="file" accept="application/json" hidden onChange={onFile} />
     </Box>
   );
 }

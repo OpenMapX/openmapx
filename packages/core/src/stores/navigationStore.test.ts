@@ -119,6 +119,18 @@ describe("navigationStore", () => {
     expect(useNavigationStore.getState().progress).toBeNull();
   });
 
+  it("clears live speed limits on reroute (they index the old geometry)", () => {
+    const store = useNavigationStore.getState();
+    store.startGroundNavigation(route, "driving", [
+      [0, 0],
+      [1, 1],
+    ]);
+    store.setLiveSpeedLimits([50, 70, 70]);
+    expect(useNavigationStore.getState().liveSpeedLimits).toEqual([50, 70, 70]);
+    store.applyReroute({ ...route, distance: 200 } as Route);
+    expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
+  });
+
   it("completeArrival then stop resets", () => {
     const store = useNavigationStore.getState();
     store.startGroundNavigation(route, "driving", [

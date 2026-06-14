@@ -19,6 +19,18 @@ export { resolveRecommendedLanes } from "./lanes";
 export { navOptionsForMode } from "./options";
 export { processFix } from "./processFix";
 export { computeProgress, upcomingManeuverIndex } from "./progress";
+export {
+  extractTimeline,
+  freshNavTickState,
+  NAV_RECORDING_VERSION,
+  type NavRecording,
+  type RecordedReroute,
+  type ReplayStep,
+  replayRecording,
+  SIGNAL_LOST_GAP_MS,
+  type TimelineEvent,
+  type TimelineEventType,
+} from "./recording";
 export { remainingWaypoints, shouldReroute, updateOffRouteScore } from "./reroute";
 export {
   type AlongRouteOptions,
@@ -29,6 +41,7 @@ export {
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
 export { isOverSpeed, OVER_SPEED_TOLERANCE_KMH } from "./speedAlert";
+export { matchSpeedLimitsByPoint, pickSpeedLimit } from "./speedLimits";
 export {
   extractTrafficSignals,
   type GeometryWindow,

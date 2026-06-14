@@ -39,8 +39,14 @@ interface OsrmIntersection {
   lanes?: OsrmLane[];
 }
 
+interface OsrmMaxspeed {
+  speed?: number;
+  unit?: string;
+  unknown?: boolean;
+}
+
 interface OsrmAnnotation {
-  maxspeed?: { speed?: number; unit?: string; unknown?: boolean }[];
+  maxspeed?: OsrmMaxspeed[];
 }
 
 interface OsrmStep {
@@ -59,6 +65,9 @@ interface OsrmLeg {
   distance: number;
   duration: number;
   steps: OsrmStep[];
+  // Standard OSRM attaches the `annotations=maxspeed` data to the LEG (one entry
+  // per overview-geometry segment), not to individual steps.
+  annotation?: OsrmAnnotation;
 }
 
 interface OsrmRoute {
@@ -128,12 +137,76 @@ function osrmLanes(step: OsrmStep): ManeuverLane[] | undefined {
   });
 }
 
+/** Normalize one OSRM maxspeed entry to km/h, or null when unknown/absent. */
+function normalizeMaxspeed(entry: OsrmMaxspeed | undefined): number | null {
+  if (!entry || entry.unknown || typeof entry.speed !== "number") return null;
+  return entry.unit === "mph" ? Math.round(entry.speed * 1.609) : entry.speed;
+}
+
 /** First known maxspeed annotation, normalized to km/h. */
 function osrmSpeedLimit(step: OsrmStep): number | undefined {
   const entry = step.annotation?.maxspeed?.find((m) => typeof m.speed === "number" && !m.unknown);
   if (!entry || typeof entry.speed !== "number") return undefined;
   if (entry.unit === "mph") return Math.round(entry.speed * 1.609);
   return entry.speed; // km/h
+}
+
+/**
+ * Posted speed limit (km/h) for each geometry segment of a step, aligned to the
+ * step's `geometry.length - 1` segments. OSRM's `maxspeed` annotation is already
+ * per-segment, so this normalizes each entry (mph→km/h, unknown→null) and pads
+ * with null if the annotation is shorter than the segment count.
+ */
+export function osrmSegmentSpeedLimits(step: OsrmStep): (number | null)[] {
+  const segments = Math.max(0, step.geometry.coordinates.length - 1);
+  const maxspeed = step.annotation?.maxspeed;
+  return Array.from({ length: segments }, (_, i) => normalizeMaxspeed(maxspeed?.[i]));
+}
+
+/** Normalize a maxspeed annotation array (mph→km/h, unknown→null) per segment. */
+function normalizeMaxspeedArray(maxspeed: OsrmMaxspeed[] | undefined): (number | null)[] {
+  return (maxspeed ?? []).map(normalizeMaxspeed);
+}
+
+/**
+ * Per-segment speed limits for a whole OSRM route, aligned to the overview
+ * geometry (`coords - 1`). Reads the leg-level `annotation.maxspeed` (where
+ * standard OSRM puts it) first, falling back to per-step annotation for servers
+ * that attach it to steps. Returns undefined when neither is present or the
+ * lengths don't line up (then navigation uses the per-step `speedLimit` or the
+ * live map-match instead). Exported for testing.
+ */
+export function osrmRouteSegmentSpeedLimits(r: OsrmRoute): (number | null)[] | undefined {
+  const expectedLen = r.geometry.coordinates.length - 1;
+  return (
+    joinSegmentSpeedLimits(
+      r.legs.map((leg) => normalizeMaxspeedArray(leg.annotation?.maxspeed)),
+      expectedLen,
+    ) ??
+    joinSegmentSpeedLimits(
+      r.legs.flatMap((leg) => leg.steps).map(osrmSegmentSpeedLimits),
+      expectedLen,
+    )
+  );
+}
+
+/**
+ * Concatenate per-step segment-limit arrays into one route-aligned array. The
+ * concatenation is the route's per-segment limit because consecutive OSRM steps
+ * share a boundary coordinate but not a segment, so each step contributes
+ * exactly `coords - 1` segments and the total equals the overview geometry's
+ * segment count. Returns undefined when the total doesn't match `expectedLen`
+ * (the overview diverged — fall back to per-step `speedLimit`) or when every
+ * segment is unknown (a useless all-null array).
+ */
+export function joinSegmentSpeedLimits(
+  perStep: (number | null)[][],
+  expectedLen: number,
+): (number | null)[] | undefined {
+  const flat = perStep.flat();
+  if (flat.length !== expectedLen) return undefined;
+  if (flat.every((v) => v === null)) return undefined;
+  return flat;
 }
 
 /**
@@ -175,6 +248,11 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
   const legSummary = r.legs[0]?.summary ?? "";
   const summary = legSummary ? `via ${legSummary}` : undefined;
 
+  // Per-segment limits aligned to the overview geometry (leg annotation, with a
+  // per-step fallback). Lets navigation read the limit for the exact segment the
+  // user is on instead of one stale value per (often long) step.
+  const segmentSpeedLimits = osrmRouteSegmentSpeedLimits(r);
+
   return {
     distance: r.distance,
     duration: r.duration,
@@ -182,6 +260,7 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
     legs,
     steps,
     mode,
+    segmentSpeedLimits,
     summary,
   };
 }

@@ -5,6 +5,7 @@ import { eta } from "./eta";
 import { computeProgress, upcomingManeuverIndex } from "./progress";
 import { shouldReroute, updateOffRouteScore } from "./reroute";
 import { snapToRoute } from "./snap";
+import { advanceStepGate } from "./stepGate";
 import type { FixInput, NavTickOptions, NavTickResult, NavTickState } from "./types";
 import { nextVoiceCue } from "./voiceCue";
 
@@ -72,7 +73,14 @@ export function processFix(
   state: NavTickState,
   opts: NavTickOptions,
 ): NavTickResult {
-  if (fix.accuracy > opts.accuracyCapMeters) {
+  // Reject fixes that are too inaccurate or have a non-finite coordinate: a
+  // NaN/Infinity longitude or latitude would throw in the snap and otherwise
+  // poison every downstream distance with NaN.
+  if (
+    fix.accuracy > opts.accuracyCapMeters ||
+    !Number.isFinite(fix.coords[0]) ||
+    !Number.isFinite(fix.coords[1])
+  ) {
     return {
       progress: null,
       accuracyRejected: true,
@@ -87,7 +95,21 @@ export function processFix(
 
   const weakGps = fix.accuracy > opts.weakGpsMeters;
   const snap = snapToRoute(route.geometry, fix.coords);
-  const prog = computeProgress(route, snap.alongMeters);
+  // Gate which step is shown/announced on maneuver completion, so the banner
+  // doesn't flip before the turn is made and a brief forward GPS jump can't skip
+  // a step. The gate is monotonic; arrival (below) stays distance-based so it's
+  // never blocked by the gate.
+  const gate = advanceStepGate(
+    route,
+    snap.alongMeters,
+    {
+      committedStepIndex: state.committedStepIndex ?? 0,
+      reachedStepEnd: state.reachedStepEnd ?? false,
+    },
+    opts.stepGateEntryMeters,
+    opts.stepGateExitMeters,
+  );
+  const prog = computeProgress(route, snap.alongMeters, gate.committedStepIndex);
 
   // Prefer the GPS-reported ground speed; otherwise estimate it from how far we
   // moved along the route since the previous fix. Feeds the follow camera's
@@ -142,26 +164,39 @@ export function processFix(
     opts.reroute,
   );
 
+  // Arrival: within the threshold of the destination AND the gate has committed
+  // to the final travel step. We key on the gate index (not the final step's
+  // distance) because real engines append a 0-distance "arrive" maneuver — using
+  // `distanceRemaining <= lastStep.distance` would collapse to `<= 0` and only
+  // fire when snapped exactly at the route end. `committedStepIndex >= lastIndex
+  // - 1` reaches true on the last travel step, so a multi-step route can't
+  // false-arrive near the start.
+  const lastIndex = route.steps.length - 1;
   const arrived =
-    prog.currentStepIndex === route.steps.length - 1 &&
-    prog.distanceRemaining <= opts.arrivalThresholdMeters;
+    prog.distanceRemaining <= opts.arrivalThresholdMeters &&
+    gate.committedStepIndex >= lastIndex - 1;
 
   // Announce the UPCOMING maneuver (at the end of the current step), not the one
   // already performed at the start of it. distanceToNextManeuver counts down to
   // exactly this maneuver.
   const upcomingIndex = upcomingManeuverIndex(prog.currentStepIndex, route.steps.length);
   const step = route.steps[upcomingIndex];
-  const cue = arrived
-    ? null
-    : nextVoiceCue(
-        step,
-        upcomingIndex,
-        prog.distanceToNextManeuver,
-        speedMps,
-        opts.voice,
-        opts.announceMultiplier,
-        state.spokenCues,
-      );
+  // Suppress voice while off the route: the snapped distance-to-maneuver is a
+  // phantom (a laterally-far fix still projects onto the line somewhere), so any
+  // countdown read off it would be wrong. The off-route/reroute UI is the right
+  // cue instead; normal cues resume on return.
+  const cue =
+    arrived || offRoute
+      ? null
+      : nextVoiceCue(
+          step,
+          upcomingIndex,
+          prog.distanceToNextManeuver,
+          speedMps,
+          opts.voice,
+          opts.announceMultiplier,
+          state.spokenCues,
+        );
 
   const spokenCues = cue ? [...state.spokenCues, cue.key] : state.spokenCues;
 
@@ -182,6 +217,7 @@ export function processFix(
       snapped: snap.snapped,
       alongMeters: snap.alongMeters,
       deviationMeters: snap.deviationMeters,
+      segmentIndex: snap.segmentIndex,
       etaEpochMs: eta(prog.durationRemaining, fix.timestampMs),
       bearing: routeBearing,
       speedMps,
@@ -202,6 +238,8 @@ export function processFix(
       lastRaw: fix.coords,
       lastDeviation: snap.deviationMeters,
       uTurnSinceMs: needsReroute ? null : uTurnSinceMs,
+      committedStepIndex: gate.committedStepIndex,
+      reachedStepEnd: gate.reachedStepEnd,
     },
   };
 }

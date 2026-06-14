@@ -60,6 +60,14 @@ interface NavigationState {
   rerouteFailedNonce: number;
   cameraMode: CameraMode;
   currentSpeedLimit: number | null;
+  /**
+   * Posted speed limit (km/h) per `route.geometry` index, accumulated up front
+   * from the route's windowed map-match for engines that don't carry per-segment
+   * limits on the route (Valhalla). Indexed by `progress.segmentIndex`; null
+   * entries / null array mean unknown. Reset on every route change because the
+   * indices belong to the old geometry.
+   */
+  liveSpeedLimits: (number | null)[] | null;
   voiceEnabled: boolean;
   keepScreenOn: boolean;
   // Transit follow-along state (only populated when kind === "transit").
@@ -91,6 +99,7 @@ interface NavigationState {
   replaceItinerary: (itinerary: TripItinerary) => void;
   applyProgress: (progress: NavProgress) => void;
   setSpeedLimit: (v: number | null) => void;
+  setLiveSpeedLimits: (v: (number | null)[] | null) => void;
   setOffRoute: (v: boolean) => void;
   setWeakGps: (v: boolean) => void;
   signalRerouteFailed: () => void;
@@ -124,6 +133,7 @@ const INITIAL = {
   rerouteFailedNonce: 0,
   cameraMode: "follow" as CameraMode,
   currentSpeedLimit: null,
+  liveSpeedLimits: null as (number | null)[] | null,
   itinerary: null as TripItinerary | null,
   transitProgress: null as TransitProgress | null,
   transitRerouteNeeded: false,
@@ -152,7 +162,13 @@ export const useNavigationStore = create<NavigationState>((set) => ({
     set((s) => {
       const next = s.routes[index];
       if (!next || index === s.activeRouteIndex) return {};
-      return { route: next, activeRouteIndex: index, progress: null, offRoute: false };
+      return {
+        route: next,
+        activeRouteIndex: index,
+        progress: null,
+        offRoute: false,
+        liveSpeedLimits: null,
+      };
     }),
   addStop: (route, waypoints) =>
     set({
@@ -163,6 +179,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       destinationWaypoints: waypoints,
       progress: null,
       offRoute: false,
+      liveSpeedLimits: null,
     }),
   startTransitNavigation: (itinerary, replanOptions) =>
     set({
@@ -181,6 +198,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
     set({ itinerary, transitProgress: null, transitRerouteNeeded: false }),
   applyProgress: (progress) => set({ progress }),
   setSpeedLimit: (currentSpeedLimit) => set({ currentSpeedLimit }),
+  setLiveSpeedLimits: (liveSpeedLimits) => set({ liveSpeedLimits }),
   setOffRoute: (offRoute) => set({ offRoute }),
   setWeakGps: (weakGps) => set({ weakGps }),
   signalRerouteFailed: () => set((s) => ({ rerouteFailedNonce: s.rerouteFailedNonce + 1 })),
@@ -188,7 +206,8 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   // Clear progress: it belongs to the OLD route. Leaving the previous route's
   // (larger) alongMeters in place would mislead every progress consumer for one
   // render against the new, often shorter, geometry until the next fix arrives.
-  applyReroute: (route) => set({ status: "navigating", route, offRoute: false, progress: null }),
+  applyReroute: (route) =>
+    set({ status: "navigating", route, offRoute: false, progress: null, liveSpeedLimits: null }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   toggleVoice: () =>
     set((s) => {

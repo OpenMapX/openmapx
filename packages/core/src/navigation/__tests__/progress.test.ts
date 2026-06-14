@@ -39,6 +39,24 @@ describe("computeProgress", () => {
     expect(p.distanceRemaining).toBe(150);
   });
 
+  it("computes distances for a forced step index (the step-advance gate)", () => {
+    // At 150 m the snapped position is in step 1, but the gate may still hold
+    // step 0 (maneuver not yet completed): distances are then measured to the
+    // end of step 0.
+    const p = computeProgress(route, 150, 0);
+    expect(p.currentStepIndex).toBe(0);
+    expect(p.distanceToNextManeuver).toBe(0); // end of step 0 (100) - 150, clamped
+    expect(p.distanceRemaining).toBe(150); // geometric, gate-independent
+  });
+
+  it("keeps durationRemaining geometric when the gate forces an earlier step", () => {
+    // The gate forcing step 0 at along=150 must not add step 1's full duration
+    // on top of the part of step 1 already driven — ETA stays geometric.
+    const forced = computeProgress(route, 150, 0);
+    const geometric = computeProgress(route, 150);
+    expect(forced.durationRemaining).toBe(geometric.durationRemaining);
+  });
+
   it("computes duration remaining as partial current step + later steps", () => {
     const p = computeProgress(route, 150); // half of step 1 left + step 2
     expect(p.durationRemaining).toBeCloseTo(30, 5); // 10 + 20

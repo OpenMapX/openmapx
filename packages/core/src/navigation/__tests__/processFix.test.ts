@@ -43,6 +43,17 @@ describe("processFix", () => {
     expect(r.accuracyRejected).toBe(true);
   });
 
+  it("rejects a fix with a non-finite coordinate (would poison the snap)", () => {
+    const r = processFix(
+      route,
+      { coords: [Number.NaN, 0], accuracy: 5, timestampMs: 0 },
+      emptyState,
+      opts,
+    );
+    expect(r.progress).toBeNull();
+    expect(r.accuracyRejected).toBe(true);
+  });
+
   it("does not flag accuracyRejected for an acceptable fix", () => {
     const r = processFix(
       route,
@@ -66,6 +77,24 @@ describe("processFix", () => {
     expect(r.progress?.etaEpochMs).toBeGreaterThan(1000);
     // Route runs due east, so the travel bearing should be ~90°.
     expect(r.progress?.bearing).toBeCloseTo(90, 0);
+  });
+
+  it("exposes the route-geometry segment index of the snapped position", () => {
+    // Geometry is [0,0]→[0.002,0]→[0.004,0]: two segments (0 and 1).
+    const onFirst = processFix(
+      route,
+      { coords: [0.001, 0], accuracy: 5, timestampMs: 1000 },
+      emptyState,
+      opts,
+    );
+    expect(onFirst.progress?.segmentIndex).toBe(0);
+    const onSecond = processFix(
+      route,
+      { coords: [0.003, 0], accuracy: 5, timestampMs: 1000 },
+      emptyState,
+      opts,
+    );
+    expect(onSecond.progress?.segmentIndex).toBe(1);
   });
 
   it("uses the GPS-reported speed when present", () => {
@@ -114,10 +143,77 @@ describe("processFix", () => {
     expect(rerouteFlags.some(Boolean)).toBe(true);
   });
 
+  it("suppresses voice cues while off the route (phantom distance)", () => {
+    // ~222 m north of the start: off the route, but it snaps to the start so the
+    // distance-to-maneuver would otherwise be in voice-cue range.
+    const r = processFix(
+      route,
+      { coords: [0, 0.002], accuracy: 5, timestampMs: 0 },
+      emptyState,
+      opts,
+    );
+    expect(r.offRoute).toBe(true);
+    expect(r.voiceCue).toBeNull();
+  });
+
+  it("holds the step through a brief jump past the maneuver, advancing only after the exit", () => {
+    // Approach the maneuver at the end of step 0 (~222 m).
+    const f1 = processFix(
+      route,
+      { coords: [0.00193, 0], accuracy: 5, timestampMs: 0 },
+      emptyState,
+      opts,
+    );
+    expect(f1.progress?.currentStepIndex).toBe(0);
+    // ~2 m past it — within the 5 m exit window: must NOT flip to step 1 yet.
+    const f2 = processFix(
+      route,
+      { coords: [0.00202, 0], accuracy: 5, timestampMs: 1000 },
+      f1.nextState,
+      opts,
+    );
+    expect(f2.progress?.currentStepIndex).toBe(0);
+    // ~10 m past it — beyond the exit: now advance.
+    const f3 = processFix(
+      route,
+      { coords: [0.0021, 0], accuracy: 5, timestampMs: 2000 },
+      f2.nextState,
+      opts,
+    );
+    expect(f3.progress?.currentStepIndex).toBe(1);
+  });
+
   it("arrives near the destination", () => {
     const r = processFix(
       route,
       { coords: [0.004, 0], accuracy: 5, timestampMs: 5000 },
+      emptyState,
+      opts,
+    );
+    expect(r.arrived).toBe(true);
+  });
+
+  it("arrives within the threshold on a route whose final step has 0 distance", () => {
+    // Real Valhalla/OSRM routes end with a 0-distance 'arrive' maneuver.
+    const geom: [number, number][] = [
+      [0, 0],
+      [0.0018, 0], // ~200 m east
+    ];
+    const arriveRoute = {
+      distance: 200,
+      duration: 30,
+      geometry: geom,
+      legs: [],
+      mode: "driving",
+      steps: [
+        { instruction: "Head east", distance: 200, duration: 30, coordinates: geom },
+        { instruction: "Arrive", distance: 0, duration: 0, coordinates: [geom[1], geom[1]] },
+      ],
+    } as unknown as Route;
+    // ~198 m along → ~2 m from the destination, well inside the 35 m threshold.
+    const r = processFix(
+      arriveRoute,
+      { coords: [0.00178, 0], accuracy: 5, timestampMs: 1000 },
       emptyState,
       opts,
     );

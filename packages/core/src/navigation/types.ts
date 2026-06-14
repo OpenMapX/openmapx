@@ -23,6 +23,12 @@ export interface NavProgress extends ProgressResult {
   snapped: LngLat;
   alongMeters: number;
   deviationMeters: number;
+  /**
+   * Index of the `route.geometry` segment the snapped position lies on (0-based,
+   * up to `geometry.length - 2`). Lets consumers read per-segment route data —
+   * e.g. `route.segmentSpeedLimits[segmentIndex]` — for the user's exact spot.
+   */
+  segmentIndex: number;
   etaEpochMs: number;
   /** Travel direction at the snapped position, degrees clockwise from north. */
   bearing: number;
@@ -82,6 +88,10 @@ export interface NavTickOptions {
   arrivalThresholdMeters: number;
   /** Show lane guidance only within this distance (m) of the next maneuver. */
   laneGuidanceMeters: number;
+  /** Step-advance gate: come within this distance (m) of a step's end (entry). */
+  stepGateEntryMeters: number;
+  /** Step-advance gate: then travel this far (m) past it before advancing (exit). */
+  stepGateExitMeters: number;
 }
 
 export interface FixInput {
@@ -113,6 +123,10 @@ export interface NavTickState {
   lastDeviation?: number;
   /** Timestamp a sustained U-turn started (ms), else null. */
   uTurnSinceMs?: number | null;
+  /** Step currently committed by the step-advance gate (monotonic). */
+  committedStepIndex?: number;
+  /** Whether the committed step's end has been approached (gate entry phase). */
+  reachedStepEnd?: boolean;
 }
 
 export interface VoiceCue {

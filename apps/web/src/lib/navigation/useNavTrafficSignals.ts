@@ -1,6 +1,6 @@
 import {
   cumulativeDistances,
-  fetchTrafficSignals,
+  fetchRouteMatchWindow,
   type LngLat,
   signalCoordKey,
   useNavigationStore,
@@ -13,22 +13,41 @@ const MAX_TRACE_POINTS = 4500;
 /** Fetch the next window once the driver is within this far of its end (m). */
 const PREFETCH_METERS = 2000;
 
+/** Write a window's per-point speed limits into the route-indexed array at `start`. */
+function writeLimits(arr: (number | null)[], start: number, perPoint: (number | null)[]): void {
+  for (let j = 0; j < perPoint.length; j++) {
+    const idx = start + j;
+    if (idx < arr.length && perPoint[j] !== null) arr[idx] = perPoint[j];
+  }
+}
+
 /**
- * Traffic-signal coordinates along the active route. Fetches the first window
- * when the route is set (or replaced on reroute) and advances the window as the
- * driver nears its end, accumulating signals. The icon layer is the only
- * consumer, so the data lives here rather than in the global nav store.
+ * Road attributes along the active route, fetched up front from the route's
+ * windowed map-match. Returns the traffic-signal coordinates (the icon layer's
+ * only input) and, as a side effect, publishes the posted speed limit per
+ * `route.geometry` index into the navigation store (`liveSpeedLimits`) so the
+ * engine can read the live limit for the segment the user is on without polling
+ * per fix — both ride a single /match request per window.
+ *
+ * The first window is fetched when the route is set (or replaced on reroute) and
+ * later windows are prefetched as the driver nears each window's end. On a route
+ * longer than one window (>4500 pts), a position in a not-yet-fetched window
+ * (e.g. after a large forward GPS jump) reports an unknown limit until the window
+ * is prefetched — an accepted trade-off for dropping the per-fix map-match poll.
  */
 export function useNavTrafficSignals(): LngLat[] {
   const route = useNavigationStore((s) => s.route);
   const alongMeters = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
   const mode = useNavigationStore((s) => s.mode);
+  const setLiveSpeedLimits = useNavigationStore((s) => s.setLiveSpeedLimits);
 
   const [signals, setSignals] = useState<LngLat[]>([]);
   const windowRef = useRef({ nextStart: 0, endMeters: 0, done: true });
   const fetchingRef = useRef(false);
+  // Speed limits accumulated across windows, indexed by route.geometry point.
+  const limitsRef = useRef<(number | null)[]>([]);
   // Bumped on every route change so a fetch still in flight from the previous
-  // route can't apply its (now stale) signals to the new one.
+  // route can't apply its (now stale) attributes to the new one.
   const genRef = useRef(0);
 
   // Cumulative distances along the route, computed once per route and reused by
@@ -42,23 +61,30 @@ export function useNavTrafficSignals(): LngLat[] {
     fetchingRef.current = false;
     if (!route || route.geometry.length < 2) {
       setSignals([]);
+      setLiveSpeedLimits(null);
+      limitsRef.current = [];
       windowRef.current = { nextStart: 0, endMeters: 0, done: true };
       return;
     }
     const gen = genRef.current;
+    limitsRef.current = new Array(route.geometry.length).fill(null);
+    setLiveSpeedLimits(null);
     const w = windowGeometry(route.geometry, 0, MAX_TRACE_POINTS, cum);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
     fetchingRef.current = true;
-    fetchTrafficSignals(w.trace, mode)
-      .then((found) => {
-        if (genRef.current === gen) setSignals(found);
+    fetchRouteMatchWindow(w.trace, mode)
+      .then(({ signals: found, speedLimitsByPoint }) => {
+        if (genRef.current !== gen) return;
+        setSignals(found);
+        writeLimits(limitsRef.current, 0, speedLimitsByPoint);
+        setLiveSpeedLimits([...limitsRef.current]);
       })
       .finally(() => {
         // Only release the lock if this is still the active generation; a stale
         // previous-route fetch must not clear the new route's in-flight flag.
         if (genRef.current === gen) fetchingRef.current = false;
       });
-  }, [route, mode, cum]);
+  }, [route, mode, cum, setLiveSpeedLimits]);
 
   // Advance the window as the driver nears its far edge (long routes only).
   useEffect(() => {
@@ -66,14 +92,20 @@ export function useNavTrafficSignals(): LngLat[] {
     if (alongMeters < windowRef.current.endMeters - PREFETCH_METERS) return;
     fetchingRef.current = true;
     const gen = genRef.current;
+    const startIndex = windowRef.current.nextStart;
     // Advance the window ref BEFORE the async fetch so a segment with no signals
     // still moves us forward (or to done) and can't re-trigger this effect on
     // every fix.
-    const w = windowGeometry(route.geometry, windowRef.current.nextStart, MAX_TRACE_POINTS, cum);
+    const w = windowGeometry(route.geometry, startIndex, MAX_TRACE_POINTS, cum);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
-    fetchTrafficSignals(w.trace, mode)
-      .then((found) => {
-        if (genRef.current !== gen || found.length === 0) return;
+    fetchRouteMatchWindow(w.trace, mode)
+      .then(({ signals: found, speedLimitsByPoint }) => {
+        if (genRef.current !== gen) return;
+        if (speedLimitsByPoint.length > 0) {
+          writeLimits(limitsRef.current, startIndex, speedLimitsByPoint);
+          setLiveSpeedLimits([...limitsRef.current]);
+        }
+        if (found.length === 0) return;
         setSignals((prev) => {
           const seen = new Set(prev.map(signalCoordKey));
           const merged = [...prev];
@@ -90,7 +122,7 @@ export function useNavTrafficSignals(): LngLat[] {
       .finally(() => {
         if (genRef.current === gen) fetchingRef.current = false;
       });
-  }, [alongMeters, route, mode, cum]);
+  }, [alongMeters, route, mode, cum, setLiveSpeedLimits]);
 
   return signals;
 }

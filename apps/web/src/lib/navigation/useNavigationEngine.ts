@@ -1,11 +1,10 @@
 import {
   type FixInput,
   fetchDirections,
-  fetchSpeedLimit,
   formatSpokenDistance,
-  type LngLat,
   type NavTickState,
   navOptionsForMode,
+  pickSpeedLimit,
   processFix,
   remainingWaypoints,
   useNavigationStore,
@@ -13,14 +12,15 @@ import {
   VOICE_TIMING_MULTIPLIER,
   type VoiceCue,
 } from "@openmapx/core";
-import along from "@turf/along";
-import { lineString } from "@turf/helpers";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
+import { useNavRecordingStore } from "./navRecordingStore";
 import { useNavSimStore } from "./navSimStore";
 import { useNavigationVoice } from "./useNavigationVoice";
+import { useNavRecorder } from "./useNavRecorder";
+import { useReplayPosition } from "./useReplayPosition";
 import { useSimulatedPosition } from "./useSimulatedPosition";
 
 const freshTick = (): NavTickState => ({
@@ -38,7 +38,7 @@ export function useNavigationEngine(): void {
 
   const tickRef = useRef<NavTickState>(freshTick());
   const reroutingRef = useRef(false);
-  const lastSpeedFetchRef = useRef(0);
+  const captureFix = useNavRecorder();
 
   const speakCue = useCallback(
     (cue: VoiceCue) => {
@@ -67,6 +67,9 @@ export function useNavigationEngine(): void {
       const { status, route, mode, destinationWaypoints, voiceEnabled } = store;
       if ((status !== "navigating" && status !== "rerouting") || !route) return;
 
+      // Capture the raw fix stream for the recorder (no-op unless recording).
+      captureFix(fix, route, mode);
+
       const opts = navOptionsForMode(mode);
       // Shift voice-cue timing earlier/later per the user's preference.
       opts.announceMultiplier =
@@ -84,34 +87,21 @@ export function useNavigationEngine(): void {
       store.applyProgress(result.progress);
       store.setOffRoute(result.offRoute);
 
-      // Speed limit: OSRM populates per-step speedLimit, so prefer that. When
-      // the route lacks it (Valhalla steps carry none), fall back to a
-      // throttled live map-match lookup while driving; walking/cycling clear
-      // the badge.
-      const staticLimit = route.steps[result.progress.currentStepIndex]?.speedLimit ?? null;
-      if (staticLimit !== null) {
-        store.setSpeedLimit(staticLimit);
-      } else if (mode === "driving") {
-        if (fix.timestampMs - lastSpeedFetchRef.current >= 5000) {
-          lastSpeedFetchRef.current = fix.timestampMs;
-          // Build a 2-point trace from the snapped position to a point ~25m
-          // ahead along the route so the matcher snaps to the road we're on.
-          const line = lineString(route.geometry);
-          const ahead = along(line, (result.progress.alongMeters + 25) / 1000, {
-            units: "kilometers",
-          }).geometry.coordinates as LngLat;
-          const trace: LngLat[] = [result.progress.snapped, ahead];
-          fetchSpeedLimit(trace, "driving")
-            .then((limit) => {
-              // Ignore if navigation ended while the lookup was in flight.
-              const st = useNavigationStore.getState().status;
-              if (st === "idle" || st === "arrived") return;
-              useNavigationStore.getState().setSpeedLimit(limit);
-            })
-            // A failed lookup just leaves the badge as-is; never let it surface
-            // as an unhandled rejection.
-            .catch(() => {});
-        }
+      // Speed limit (driving only): read the limit for the segment the user is
+      // on straight from the route. OSRM carries per-segment limits on the route
+      // (`segmentSpeedLimits`); Valhalla's are accumulated up front into
+      // `liveSpeedLimits` by the windowed map-match — both indexed by the snap's
+      // segment, so no per-fix lookup. The per-step `speedLimit` is the final
+      // fallback. Walking/cycling clear the badge.
+      if (mode === "driving") {
+        const segIdx = result.progress.segmentIndex;
+        store.setSpeedLimit(
+          pickSpeedLimit(
+            route.segmentSpeedLimits?.[segIdx],
+            store.liveSpeedLimits?.[segIdx],
+            route.steps[result.progress.currentStepIndex]?.speedLimit,
+          ),
+        );
       } else {
         store.setSpeedLimit(null);
       }
@@ -124,7 +114,13 @@ export function useNavigationEngine(): void {
 
       if (voiceEnabled && result.voiceCue) speakCue(result.voiceCue);
 
-      if (result.needsReroute && !reroutingRef.current) {
+      // Skip live rerouting while replaying a recording — playback applies the
+      // recorded reroutes instead, so the engine must not fetch new routes.
+      if (
+        result.needsReroute &&
+        !reroutingRef.current &&
+        !useNavRecordingStore.getState().replaying
+      ) {
         reroutingRef.current = true;
         haptics.warn();
         store.beginReroute();
@@ -166,7 +162,7 @@ export function useNavigationEngine(): void {
           });
       }
     },
-    [locale, speakCue],
+    [locale, speakCue, captureFix],
   );
 
   // Reset per-session tick state (spoken cues + deviation history) whenever the
@@ -189,9 +185,11 @@ export function useNavigationEngine(): void {
 
   const active = useNavigationStore((s) => s.status !== "idle" && s.status !== "arrived");
   const simEnabled = useNavSimStore((s) => s.enabled);
-  // Exactly one position source is live: real geolocation, or — when the
-  // simulator is enabled — synthetic fixes. Both hooks are always called; the
-  // inactive one is a no-op.
-  useWatchPosition(active && !simEnabled, onFix);
-  useSimulatedPosition(active, onFix);
+  const replaying = useNavRecordingStore((s) => s.replaying);
+  // Exactly one position source is live: a replayed recording, the simulator's
+  // synthetic fixes, or real geolocation. All hooks are always called; the
+  // inactive ones are no-ops.
+  useWatchPosition(active && !simEnabled && !replaying, onFix);
+  useSimulatedPosition(active && !replaying, onFix);
+  useReplayPosition(onFix);
 }

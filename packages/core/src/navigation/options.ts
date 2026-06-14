@@ -27,6 +27,8 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         announceMultiplier: 1,
         arrivalThresholdMeters: 20,
         laneGuidanceMeters: 80,
+        stepGateEntryMeters: 20,
+        stepGateExitMeters: 3,
       };
     case "cycling":
       return {
@@ -51,6 +53,8 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         announceMultiplier: 1,
         arrivalThresholdMeters: 25,
         laneGuidanceMeters: 200,
+        stepGateEntryMeters: 20,
+        stepGateExitMeters: 4,
       };
     default:
       return {
@@ -75,6 +79,8 @@ export function navOptionsForMode(mode: TravelMode): NavTickOptions {
         announceMultiplier: 1,
         arrivalThresholdMeters: 35,
         laneGuidanceMeters: 500,
+        stepGateEntryMeters: 20,
+        stepGateExitMeters: 5,
       };
   }
 }

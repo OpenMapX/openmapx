@@ -87,6 +87,7 @@ export {
 } from "./api/directions";
 export { API_ENDPOINTS } from "./api/endpoints";
 export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./api/roadAlerts";
+export { fetchRouteMatchWindow, type RouteMatchWindow } from "./api/routeAttributes";
 export { fetchSpeedLimit } from "./api/speedLimit";
 export { fetchTrafficSignals } from "./api/trafficSignals";
 // Auth
@@ -262,20 +263,30 @@ export {
   type DeadReckonTarget,
   detectMissedConnection,
   eta,
+  extractTimeline,
   extractTrafficSignals,
+  freshNavTickState,
   type GeometryWindow,
   isOverSpeed,
+  matchSpeedLimitsByPoint,
+  NAV_RECORDING_VERSION,
+  type NavRecording,
   navOptionsForMode,
   nextVoiceCue,
   OVER_SPEED_TOLERANCE_KMH,
+  pickSpeedLimit,
   poiAlongRoute,
   positionAt,
   processFix,
+  type RecordedReroute,
+  type ReplayStep,
   type RoadAlert,
   type RoadAlertType,
   remainingWaypoints,
+  replayRecording,
   resolveRecommendedLanes,
   routeAheadBounds,
+  SIGNAL_LOST_GAP_MS,
   selectActiveAlert,
   shouldReroute,
   shouldWarnCamera,
@@ -284,6 +295,8 @@ export {
   snapToRoute,
   stepDeadReckon,
   stopsUntilAlight,
+  type TimelineEvent,
+  type TimelineEventType,
   upcomingManeuverIndex,
   updateOffRouteScore,
   windowGeometry,

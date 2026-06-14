@@ -21,6 +21,20 @@ describe("simulatePositions", () => {
     expect(Math.abs(fixes[1].coords[1])).toBeGreaterThan(0); // pushed off the line
   });
 
+  it("offsets perpendicular to travel — east of a northbound route, not along it", () => {
+    const north: [number, number][] = [
+      [0, 0],
+      [0, 0.01],
+    ];
+    const base = simulatePositions(north, { stepMeters: 2000 });
+    const off = simulatePositions(north, { stepMeters: 2000, offsetMeters: 50 });
+    // Latitude (the along-route axis here) stays put — the offset is not applied
+    // along the direction of travel...
+    expect(off[0].coords[1]).toBeCloseTo(base[0].coords[1], 6);
+    // ...it shifts ~50 m east instead. 50 m ≈ 0.000449° of longitude at the equator.
+    expect(off[0].coords[0] - base[0].coords[0]).toBeCloseTo(50 / 111_319.49, 5);
+  });
+
   it("populates a realistic heading and speed on each fix", () => {
     const fixes = simulatePositions(geometry, { stepMeters: 20, intervalMs: 1000 });
     // Route runs due east → heading ~90°; speed = 20 m per 1 s = 20 m/s.

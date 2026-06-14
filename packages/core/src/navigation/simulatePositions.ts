@@ -17,12 +17,32 @@ interface SimulateOptions {
   intervalMs?: number;
   startMs?: number;
   accuracy?: number;
-  /** Constant lateral offset (meters) applied north, to simulate off-route. */
+  /**
+   * Constant lateral offset (metres) applied perpendicular to the direction of
+   * travel — to the right of it, with a fixed sign for the whole run — to
+   * simulate a consistent off-route GPS bias. Applied perpendicular (not due
+   * north) so it produces real cross-track deviation on a route of any heading.
+   */
   offsetMeters?: number;
 }
 
 const EARTH = 6_378_137;
 const toRad = (d: number) => (d * Math.PI) / 180;
+/** Metres per degree of latitude (and of longitude at the equator). */
+const METERS_PER_DEG = toRad(1) * EARTH;
+
+/**
+ * Displace a point `offsetMeters` to the right of `heading` (perpendicular to
+ * travel). Longitude degrees are scaled by cos(lat) so the offset is the same
+ * metric distance at any latitude.
+ */
+function applyPerpOffset(p: LngLat, heading: number, offsetMeters: number): LngLat {
+  if (offsetMeters === 0) return p;
+  const perp = toRad(heading + 90);
+  const dLat = (offsetMeters * Math.cos(perp)) / METERS_PER_DEG;
+  const dLng = (offsetMeters * Math.sin(perp)) / (METERS_PER_DEG * Math.cos(toRad(p[1])));
+  return [p[0] + dLng, p[1] + dLat];
+}
 
 function haversine(a: LngLat, b: LngLat): number {
   const dLat = toRad(b[1] - a[1]);
@@ -64,7 +84,6 @@ export function simulatePositions(geometry: LngLat[], options: SimulateOptions =
   const startMs = options.startMs ?? 0;
   const accuracy = options.accuracy ?? 5;
   const offsetMeters = options.offsetMeters ?? 0;
-  const offsetDegLat = offsetMeters / (toRad(1) * EARTH);
 
   const fixes: FixInput[] = [];
   let t = 0;
@@ -77,7 +96,7 @@ export function simulatePositions(geometry: LngLat[], options: SimulateOptions =
     for (let d = 0; d < segLen; d += stepMeters) {
       const p = lerp(a, b, d / segLen);
       fixes.push({
-        coords: [p[0], p[1] + offsetDegLat],
+        coords: applyPerpOffset(p, heading, offsetMeters),
         accuracy,
         timestampMs: startMs + t * intervalMs,
         heading,
@@ -88,11 +107,12 @@ export function simulatePositions(geometry: LngLat[], options: SimulateOptions =
   }
   const last = geometry[geometry.length - 1];
   const prev = geometry[geometry.length - 2] ?? last;
+  const lastHeading = segmentBearing(prev, last);
   fixes.push({
-    coords: [last[0], last[1] + offsetDegLat],
+    coords: applyPerpOffset(last, lastHeading, offsetMeters),
     accuracy,
     timestampMs: startMs + t * intervalMs,
-    heading: segmentBearing(prev, last),
+    heading: lastHeading,
     speed,
   });
   return fixes;
