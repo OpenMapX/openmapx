@@ -116,6 +116,7 @@ export function MapClickFloatingCard() {
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Box
             component="button"
+            type="button"
             onClick={handleCoordClick}
             sx={{
               color: TEAL,

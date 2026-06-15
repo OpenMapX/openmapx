@@ -194,6 +194,7 @@ export function RouteSearchControl() {
               <Box
                 key={c.key}
                 component="button"
+                type="button"
                 onClick={() => setCategoryKey(c.key)}
                 sx={{
                   cursor: "pointer",

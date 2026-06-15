@@ -707,6 +707,7 @@ function ConnectorTypeSection({
         <>
           <Box
             component="button"
+            type="button"
             onClick={() => setShowAll((v) => !v)}
             sx={{
               display: "flex",

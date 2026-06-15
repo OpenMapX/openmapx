@@ -56,6 +56,7 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
         <Avatar
           ref={avatarRef}
           component="button"
+          type="button"
           aria-label={t("account")}
           src={avatarSrc}
           onClick={handleAvatarClick}
