@@ -42,5 +42,7 @@ jobs:
           signed-commit-message: "chore(cla): $contributorName signed the CLA in #$pullRequestNo"
           custom-pr-sign-comment: I have read the CLA Document and I hereby sign the CLA
           custom-allsigned-prcomment: All contributors have signed the CLA. ✅
-          # Bots and the maintainer never need to sign.
-          allowlist: Medformatik,dependabot[bot],renovate[bot],*[bot]
+          # Bots and the maintainer never need to sign. web-flow is GitHub's
+          # committer identity for GPG-signed/web commits (e.g. dependabot's
+          # signed commits), which the action checks alongside the author.
+          allowlist: Medformatik,dependabot[bot],renovate[bot],web-flow,*[bot]
