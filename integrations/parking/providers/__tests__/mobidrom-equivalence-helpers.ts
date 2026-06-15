@@ -21,7 +21,7 @@ export function refParseFeed(buffer: Buffer): MobidromSiteBean[] {
 }
 
 function normalizeCoordinates(raw: [number, number] | undefined): [number, number] | null {
-  if (!raw || raw.length !== 2) return null;
+  if (raw?.length !== 2) return null;
   const [a, b] = raw;
   if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
   if (a > 20 && b < 20) return [b, a];

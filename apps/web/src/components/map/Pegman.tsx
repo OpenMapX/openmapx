@@ -54,7 +54,7 @@ export function Pegman() {
       { layers: [MLY_PHOTO_LAYER, MLY_PANO_LAYER] },
     )[0];
 
-    if (!feature || feature.geometry.type !== "Point") return null;
+    if (feature?.geometry.type !== "Point") return null;
 
     const [lng, lat] = feature.geometry.coordinates as [number, number];
     const screenPt = map.project([lng, lat]);

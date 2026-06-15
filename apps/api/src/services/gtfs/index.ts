@@ -168,7 +168,7 @@ class GtfsManager {
     if (colonIdx < 3) return null;
     const slug = stopId.slice(2, colonIdx);
     const feed = this.feeds.get(slug);
-    if (!feed || feed.status !== "active") return null;
+    if (feed?.status !== "active") return null;
     return feed.schemaName;
   }
 

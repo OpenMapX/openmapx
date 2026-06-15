@@ -103,7 +103,7 @@ export function FlightArcLayer() {
   useEffect(() => {
     const map = mapRef.current;
     const raw = map?.getSource(SOURCE_ID);
-    if (!raw || raw.type !== "geojson") return;
+    if (raw?.type !== "geojson") return;
     const source = raw as GeoJSONSource;
 
     if (mode !== "flying" || !from || !to) {

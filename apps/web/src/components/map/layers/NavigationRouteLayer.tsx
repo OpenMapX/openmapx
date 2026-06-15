@@ -86,7 +86,7 @@ export function NavigationRouteLayer() {
   useEffect(() => {
     const map = mapRef.current;
     const raw = map?.getSource(SOURCE);
-    if (!raw || raw.type !== "geojson") return;
+    if (raw?.type !== "geojson") return;
     const source = raw as GeoJSONSource;
 
     if (status === "idle" || !route || route.geometry.length < 2) {
@@ -107,7 +107,7 @@ export function NavigationRouteLayer() {
   useEffect(() => {
     const map = mapRef.current;
     const raw = map?.getSource(ALT_SOURCE);
-    if (!raw || raw.type !== "geojson") return;
+    if (raw?.type !== "geojson") return;
     const source = raw as GeoJSONSource;
 
     const features =

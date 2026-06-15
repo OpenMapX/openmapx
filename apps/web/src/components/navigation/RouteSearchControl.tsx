@@ -52,7 +52,6 @@ const CATEGORIES: SearchCategory[] = [
 
 function Glyph({ path, size = 24 }: { path: string; size?: number }) {
   return (
-    // biome-ignore lint/a11y/noSvgWithoutTitle: decorative — the adjacent text label names it
     <svg
       width={size}
       height={size}

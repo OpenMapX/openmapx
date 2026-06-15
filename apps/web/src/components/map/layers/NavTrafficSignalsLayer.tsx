@@ -47,7 +47,7 @@ export function NavTrafficSignalsLayer() {
     void styleVersion;
     const map = mapRef.current;
     const raw = map?.getSource(SOURCE);
-    if (!raw || raw.type !== "geojson") return;
+    if (raw?.type !== "geojson") return;
     const source = raw as GeoJSONSource;
     source.setData({
       type: "FeatureCollection",

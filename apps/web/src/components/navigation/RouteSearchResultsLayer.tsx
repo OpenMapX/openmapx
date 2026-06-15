@@ -73,7 +73,7 @@ export function RouteSearchResultsLayer({
   useEffect(() => {
     void styleVersion; // re-populate after the source is recreated on a style swap
     const raw = mapRef.current?.getSource(SOURCE);
-    if (!raw || raw.type !== "geojson") return;
+    if (raw?.type !== "geojson") return;
     (raw as maplibregl.GeoJSONSource).setData({
       type: "FeatureCollection",
       features: results.map((poi) => ({

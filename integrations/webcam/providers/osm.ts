@@ -76,7 +76,7 @@ export async function getOsmWebcamNode(nodeId: number): Promise<RawWebcam | null
   if (!data) return null;
 
   const el = data.elements[0];
-  if (!el || el.type !== "node") return null;
+  if (el?.type !== "node") return null;
 
   return mapOsmToRaw({ id: el.id, lat: el.lat, lon: el.lon, tags: el.tags ?? {} });
 }

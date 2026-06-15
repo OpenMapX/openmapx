@@ -15,7 +15,7 @@ export async function getOsmChargingNode(nodeId: number): Promise<OsmChargingSta
   if (!data) return null;
 
   const el = data.elements[0];
-  if (!el || el.type !== "node") return null;
+  if (el?.type !== "node") return null;
 
   return { id: el.id, lat: el.lat, lon: el.lon, tags: el.tags ?? {} };
 }

@@ -111,7 +111,7 @@ export function OfflineSettingsClient() {
 
         const detach = await watchBackgroundAreaProgress(area.id, (downloaded) => {
           const latest = listAreas().find((a) => a.id === area.id);
-          if (!latest || latest.status !== "downloading") return;
+          if (latest?.status !== "downloading") return;
           const estTotal = latest.tileCount * BYTES_PER_ASSET_ESTIMATE;
           const frac = estTotal > 0 ? Math.min(1, downloaded / estTotal) : 0;
           saveArea({

@@ -37,7 +37,7 @@ export default async function AdminRootLayout({ children }: { children: ReactNod
 
   const [session, selfHosted] = await Promise.all([getAdminSession(), getSelfHosted(cookieHeader)]);
 
-  if (!session || session.user.role !== "admin") {
+  if (session?.user.role !== "admin") {
     redirect("/");
   }
 

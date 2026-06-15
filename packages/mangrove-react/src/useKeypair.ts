@@ -312,7 +312,7 @@ export function useUnlockKeypair() {
   return useMutation({
     mutationFn: async (input: UnlockInput): Promise<void> => {
       const env = await transport.getKeypairEnvelope();
-      if (!env || env.state !== "ready") throw new Error("No keypair to unlock");
+      if (env?.state !== "ready") throw new Error("No keypair to unlock");
       if (env.mode !== "encrypted") throw new Error("Keypair is not encrypted");
 
       let privateJwk: JsonWebKey;
@@ -348,7 +348,7 @@ async function fetchReadyEncryptedEnvelope(
   transport: ReturnType<typeof useMangroveTransport>,
 ): Promise<KeypairEnvelopeEncrypted> {
   const env = await transport.getKeypairEnvelope();
-  if (!env || env.state !== "ready" || env.mode !== "encrypted") {
+  if (env?.state !== "ready" || env.mode !== "encrypted") {
     throw new Error("Keypair must be encrypted to manage wraps");
   }
   return env;

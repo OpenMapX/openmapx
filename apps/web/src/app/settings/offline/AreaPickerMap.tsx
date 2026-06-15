@@ -54,7 +54,7 @@ function addBoundaryLayers(map: maplibregl.Map): void {
 
 function applyBoundary(map: maplibregl.Map | null, boundary: AreaGeometry | null): void {
   const raw = map?.getSource(BOUNDARY_SOURCE);
-  if (!raw || raw.type !== "geojson") return;
+  if (raw?.type !== "geojson") return;
   (raw as GeoJSONSource).setData(
     boundary
       ? {

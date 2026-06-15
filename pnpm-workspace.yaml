@@ -57,12 +57,6 @@ overrides:
   # publisher) satisfies commitlint's `^1.0.0` range, so pin to it until
   # tinyexec regains trusted-publisher evidence on a newer release.
   "tinyexec": "1.1.2"
-  # tsx 4.22.x regressed CJS extensionless resolution: its loader appends `.jsx`
-  # to extensionless `require()`s inside deps (e.g. ajv's `require("./compile/index")`
-  # resolves to a non-existent `index.jsx`), crash-looping the tsx-run services
-  # (apps/api, data-manager) at boot. 4.21.0 is the known-good version. Pin until
-  # the regression is fixed upstream (https://github.com/privatenumber/tsx).
-  "tsx": "4.21.0"
 
 # typescript: held at 5.x — TS6 not yet adopted (native-transition
 # compatibility; see commit fa94ecce). Bump deliberately, not via routine

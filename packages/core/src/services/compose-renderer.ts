@@ -417,6 +417,7 @@ export function renderServiceSnippet(
   // "permission denied" at runtime that's painful to diagnose.
   if ((m.bindMounts ?? []).some((bm) => bm.source === "@docker-socket")) {
     snippet.group_add = [
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal docker-compose variable interpolation, not a JS template
       "${DOCKER_GID:?DOCKER_GID must be set to the host docker socket group id — find it with: stat -c %g /var/run/docker.sock}",
     ];
   }
