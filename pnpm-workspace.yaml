@@ -57,7 +57,3 @@ overrides:
   # publisher) satisfies commitlint's `^1.0.0` range, so pin to it until
   # tinyexec regains trusted-publisher evidence on a newer release.
   "tinyexec": "1.1.2"
-
-# typescript: held at 5.x — TS6 not yet adopted (native-transition
-# compatibility; see commit fa94ecce). Bump deliberately, not via routine
-# dep upgrades. No override entry needed while every workspace declares ^5.

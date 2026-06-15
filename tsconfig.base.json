@@ -6,6 +6,8 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "rootDir": ".",
     "paths": {
       "@integrations/*": ["./integrations/*"],
       "@openmapx/integration-framework": ["./packages/integration-framework/src/index.ts"],

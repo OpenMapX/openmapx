@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
     "noEmit": true,
+    "types": ["node"],
     "paths": {
       "@integrations/*": ["../../integrations/*"],
       "@openmapx/integration-framework": ["../integration-framework/src/index.ts"],
