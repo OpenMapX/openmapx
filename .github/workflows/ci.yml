@@ -73,8 +73,9 @@ jobs:
         # Skip for Dependabot: it can't author changesets, and mechanical
         # dependency bumps don't need a release entry. Human PRs still must add
         # one (an empty changeset for test-only/infra/internal: `pnpm exec
-        # changeset --empty`).
-        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        # changeset --empty`). Keyed off the PR author, not github.actor, so it
+        # still skips when a maintainer updates/rebases the bot's branch.
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         # Exits non-zero if a publishable package changed since main without
         # an accompanying changeset. The baseBranch is "main" per
         # .changeset/config.json — keep these in sync.
