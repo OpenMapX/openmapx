@@ -11,12 +11,12 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-# Only what changesets needs: push the version commit/tags + GitHub releases
-# (contents) and open the "Version Packages" PR (pull-requests). No id-token —
-# npm publish/OIDC provenance is disabled.
+# Least-privilege default; the release job escalates to only what changesets
+# needs: push the version commit/tags + GitHub releases (contents) and open the
+# "Version Packages" PR (pull-requests). No id-token — npm publish/OIDC
+# provenance is disabled.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release:
@@ -27,14 +27,17 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -46,7 +49,7 @@ jobs:
       # Publishing to npm is intentionally disabled — uncomment `publish:`
       # and add the NPM_TOKEN secret if/when packages are published.
       - name: Create release PR
-        uses: changesets/action@v1
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
         with:
           version: pnpm exec changeset version
           commit: "chore: version packages"

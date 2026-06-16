@@ -4,23 +4,26 @@ on:
   pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
+# Least-privilege default; the validate job escalates to what the action needs.
 permissions:
-  # `statuses: write` is required because action-semantic-pull-request@v6
-  # reports its result via the commit-statuses API (also used by `wip: true`
-  # to flag [WIP] titles). Without it the action fails with
-  # "Resource not accessible by integration". `pull-requests: write` lets it
-  # read the PR title under `pull_request_target`.
-  # See: https://github.com/amannn/action-semantic-pull-request#permissions
-  pull-requests: write
-  statuses: write
+  contents: read
 
 jobs:
   validate:
     name: Validate conventional commit title
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      # `statuses: write` is required because action-semantic-pull-request@v6
+      # reports its result via the commit-statuses API (also used by `wip: true`
+      # to flag [WIP] titles). Without it the action fails with
+      # "Resource not accessible by integration". `pull-requests: write` lets it
+      # read the PR title under `pull_request_target`.
+      # See: https://github.com/amannn/action-semantic-pull-request#permissions
+      pull-requests: write
+      statuses: write
     steps:
-      - uses: amannn/action-semantic-pull-request@v6
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

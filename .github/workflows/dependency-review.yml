@@ -5,7 +5,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write # for the summary comment
 
 jobs:
   dependency-review:
@@ -14,10 +13,13 @@ jobs:
     # The dependency-review API requires a public repo (or GitHub Advanced
     # Security). Skip while the repo is private so PRs don't fail on a 403.
     if: ${{ !github.event.repository.private }}
+    permissions:
+      contents: read
+      pull-requests: write # for the summary comment
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - name: Dependency review
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
         with:
           # Block PRs that introduce known-vulnerable dependencies.
           fail-on-severity: high

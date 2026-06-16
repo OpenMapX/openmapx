@@ -18,11 +18,11 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    # Code Scanning requires GitHub Advanced Security on private repos.
-    # To enable: make the repo public OR set repo variable
-    # ENABLE_CODE_SCANNING=true under Settings → Secrets and variables →
-    # Actions → Variables.
-    if: vars.ENABLE_CODE_SCANNING == 'true'
+    # Code scanning is free on public repos and needs GitHub Advanced Security
+    # on private ones. Run whenever the repo is public; fall back to the
+    # ENABLE_CODE_SCANNING variable for private repos with GHAS and for
+    # scheduled runs (where github.event.repository is absent).
+    if: ${{ github.event.repository.visibility == 'public' || vars.ENABLE_CODE_SCANNING == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -37,14 +37,14 @@ jobs:
         language: [javascript-typescript]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - uses: github/codeql-action/init@v4
+      - uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
 
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
           category: "/language:${{ matrix.language }}"

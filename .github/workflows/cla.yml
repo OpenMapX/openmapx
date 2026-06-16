@@ -6,26 +6,31 @@ on:
   pull_request_target:
     types: [opened, closed, synchronize]
 
-# pull_request_target runs in the context of the base repo, so the signature
-# file can be written back. Keep the token scopes minimal.
+# Least-privilege default: read-only at the top level. The cla job escalates to
+# the writes it needs. pull_request_target runs in the base repo's context, so
+# the signature file can be written back from there.
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+  contents: read
 
 jobs:
   cla:
     name: check / record signature
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Scoped to this job only (not the whole workflow) so the elevated token is
+    # never exposed to any future job added here.
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: write
     steps:
       - name: CLA Assistant
         if: >
           (github.event.comment.body == 'recheck' ||
            github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') ||
           github.event_name == 'pull_request_target'
-        uses: contributor-assistant/github-action@v2.6.1
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # A classic PAT (repo scope) or fine-grained token with Contents:write

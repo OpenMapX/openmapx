@@ -67,7 +67,15 @@ updates:
       prefix: ci
 
   - package-ecosystem: docker
-    directory: "/infra/docker"
+    # Cover every Dockerfile so the digest-pinned base images get bumped (a
+    # frozen digest only stays secure if something keeps it current).
+    directories:
+      - "/infra/docker"
+      - "/apps/api"
+      - "/apps/web"
+      - "/docs"
+      - "/services/data-manager"
+      - "/services/motis/tools/transitous"
     schedule:
       interval: weekly
       day: monday

@@ -1,7 +1,9 @@
-FROM docker.io/golang:1.26 AS build-gtfsclean
-RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@latest
+FROM docker.io/golang:1.26@sha256:792443b89f65105abba56b9bd5e97f680a80074ac62fc844a584212f8c8102c3 AS build-gtfsclean
+# Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
+# instead of @latest so the build is reproducible and can't silently pull new code.
+RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 # snapshot-5
 
-FROM docker.io/debian:bookworm-slim
+FROM docker.io/debian:bookworm-slim@sha256:96e378d7e6531ac9a15ad505478fcc2e69f371b10f5cdf87857c4b8188404716
 
 # Pin the MOTIS release we install. Override with `--build-arg MOTIS_VERSION=vX.Y.Z`.
 # Keep this aligned with the `ghcr.io/motis-project/motis` image tag the

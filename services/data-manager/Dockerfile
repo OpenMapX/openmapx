@@ -14,10 +14,12 @@
 # The GitHub Actions workflow at .github/workflows/docker.yml builds this
 # image with `context: .` for the same reason.
 
-FROM docker.io/golang:1.26 AS build-gtfsclean
-RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@latest
+FROM docker.io/golang:1.26@sha256:792443b89f65105abba56b9bd5e97f680a80074ac62fc844a584212f8c8102c3 AS build-gtfsclean
+# Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
+# instead of @latest so the build is reproducible and can't silently pull new code.
+RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 # snapshot-5
 
-FROM node:24-slim AS base
+FROM node:24-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203 AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -63,7 +65,7 @@ COPY services/data-manager/ services/data-manager/
 WORKDIR /app/services/data-manager
 RUN pnpm build
 
-FROM node:24-slim AS runner
+FROM node:24-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203 AS runner
 WORKDIR /app
 
 RUN apt-get update \
