@@ -70,10 +70,12 @@ jobs:
           retention-days: 7
 
       - name: Require changeset for publishable-package changes (PR only)
-        if: github.event_name == 'pull_request'
+        # Skip for Dependabot: it can't author changesets, and mechanical
+        # dependency bumps don't need a release entry. Human PRs still must add
+        # one (an empty changeset for test-only/infra/internal: `pnpm exec
+        # changeset --empty`).
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         # Exits non-zero if a publishable package changed since main without
         # an accompanying changeset. The baseBranch is "main" per
-        # .changeset/config.json — keep these in sync. For PRs that
-        # intentionally need no release entry (test-only, infra, internal
-        # apps), add an empty changeset: `pnpm exec changeset --empty`.
+        # .changeset/config.json — keep these in sync.
         run: pnpm exec changeset status --since=origin/main
