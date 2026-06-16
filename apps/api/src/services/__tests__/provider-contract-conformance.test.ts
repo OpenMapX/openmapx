@@ -6,7 +6,7 @@ import {
   assertTransitProviderContract,
 } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // apps/api/src/services/__tests__ → repo root → integrations/
@@ -36,6 +36,22 @@ function backendIntegrationDirs(): string[] {
  */
 describe("Provider contract conformance", () => {
   const dirs = backendIntegrationDirs();
+
+  // Some integrations (e.g. transit-dynamic-registry) fetch a live catalog in
+  // setup() to enumerate their providers. This check only inspects provider
+  // shape, not network data, and the live fetch made the suite flaky — a slow
+  // catalog host blew past the test timeout. Disable network so every setup()
+  // resolves deterministically; integrations that need a real fetch to register
+  // providers are contract-checked in their own tests (e.g.
+  // integrations/transit-dynamic-registry/__tests__/provider-contract.test.ts).
+  beforeAll(() => {
+    vi.stubGlobal("fetch", () =>
+      Promise.reject(new Error("network disabled in provider-contract conformance test")),
+    );
+  });
+  afterAll(() => {
+    vi.unstubAllGlobals();
+  });
 
   it("finds backend integrations to check", () => {
     expect(dirs.length).toBeGreaterThan(0);
