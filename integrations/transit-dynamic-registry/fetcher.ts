@@ -195,7 +195,17 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const headers: Record<string, string> = {};
-    if (githubToken && url.includes("api.github.com")) {
+    // Only attach the token to the real GitHub API host. A substring check
+    // (url.includes("api.github.com")) would also match e.g.
+    // https://api.github.com.evil.com and leak the credential, so compare the
+    // parsed hostname exactly.
+    let isGithubApiHost = false;
+    try {
+      isGithubApiHost = new URL(url).hostname === "api.github.com";
+    } catch {
+      isGithubApiHost = false;
+    }
+    if (githubToken && isGithubApiHost) {
       headers.Authorization = `token ${githubToken}`;
     }
     return await fetch(url, { signal: controller.signal, headers });

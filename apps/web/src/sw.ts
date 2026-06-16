@@ -375,6 +375,10 @@ self.addEventListener("install", (event) => {
 // Allow the page to trigger skipWaiting — gates SW updates behind a user
 // confirmation in the UI.
 self.addEventListener("message", (event) => {
+  // Service-worker message events are same-origin-scoped by the platform, but
+  // verify explicitly: ignore anything whose origin isn't this SW's origin.
+  if (event.origin && event.origin !== self.location.origin) return;
+
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }

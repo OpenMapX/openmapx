@@ -103,6 +103,7 @@ describe("generateTransitousApiKeys", () => {
           "1",
           "--recurse-submodules",
           "--shallow-submodules",
+          "--",
           DEFAULT_TRANSITOUS_REPO_URL,
           join(tmp, "infra", "docker", "data", ".transitous-catalog"),
         ],

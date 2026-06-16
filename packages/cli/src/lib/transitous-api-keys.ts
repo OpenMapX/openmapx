@@ -107,7 +107,18 @@ async function ensureTransitousCatalog(
   rmSync(catalogDir, { recursive: true, force: true });
   await runner(
     "git",
-    ["clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules", repoUrl, catalogDir],
+    // `--` terminates option parsing so a repoUrl starting with `-` can't be
+    // read by git as a flag (argument injection).
+    [
+      "clone",
+      "--depth",
+      "1",
+      "--recurse-submodules",
+      "--shallow-submodules",
+      "--",
+      repoUrl,
+      catalogDir,
+    ],
     {
       cwd: dataDir,
       stdio: "pipe",
