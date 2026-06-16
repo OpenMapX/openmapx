@@ -55,6 +55,11 @@ overrides:
   # >=4.1.2 closes GHSA-h67p-54hq-rp68 (quadratic-complexity DoS via merge-key
   # aliases). Pulled in transitively by @changesets/cli.
   "js-yaml": "^4.1.2"
+  # read-yaml-file@1.1.0 (a @changesets/cli transitive) calls js-yaml's
+  # `safeLoad`, removed in js-yaml 4 — so the js-yaml override above crashes
+  # `changeset status`. 2.1.0 is the newest CJS release that uses js-yaml 4's
+  # `load` API (3.0.0 is ESM-only and breaks the CJS changesets requires).
+  "read-yaml-file": "^2.1.0"
   # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
   # even though earlier and later versions have it; pin to the latest provenance-
   # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install
