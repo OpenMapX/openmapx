@@ -11,7 +11,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "csv-parse": "^6.2.1",
+    "csv-parse": "^7.0.0",
     "fast-xml-parser": "^5.8.0",
     "gbfs-typescript-types": "^1.0.15",
     "gtfs-realtime-bindings-transit": "^1.10.0"
