@@ -15,6 +15,7 @@ import {
   listBackups,
   preflightRestore,
   readBackupManifest,
+  resolveBackupDir,
 } from "../src/commands/backup";
 
 let tmp: string;
@@ -98,6 +99,18 @@ describe("assertValidBackupName", () => {
   });
   it("does not throw for valid names", () => {
     expect(() => assertValidBackupName("good-1.0")).not.toThrow();
+  });
+});
+
+describe("resolveBackupDir (shared containment guard)", () => {
+  it("returns the named child directory of backups/", () => {
+    expect(resolveBackupDir(tmp, "snap")).toBe(join(tmp, "infra", "docker", "backups", "snap"));
+  });
+  it("refuses a name that escapes the backups root", () => {
+    expect(() => resolveBackupDir(tmp, "..")).toThrow(/outside backups/);
+  });
+  it("refuses the backups root itself", () => {
+    expect(() => resolveBackupDir(tmp, ".")).toThrow(/outside backups/);
   });
 });
 

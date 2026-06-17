@@ -81,6 +81,22 @@ export function assertValidBackupName(name: string): void {
   }
 }
 
+/**
+ * Resolve a named backup's directory under infra/docker/backups and assert the
+ * result stays strictly inside that root. `assertValidBackupName` already rejects
+ * traversal-shaped names; this is the shared defense-in-depth backstop (used by
+ * create/restore/delete) so a future gap in that guard can neither escape the
+ * backups root nor target the root itself.
+ */
+export function resolveBackupDir(rootDir: string | undefined, name: string): string {
+  const backupsRoot = resolve(repoPaths(rootDir).infraDir, "backups");
+  const backupDir = resolve(backupsRoot, name);
+  if (!backupDir.startsWith(`${backupsRoot}/`)) {
+    throw new Error(`Refusing to operate on a backup path outside backups/: ${backupDir}`);
+  }
+  return backupDir;
+}
+
 /** Default backup name = ISO timestamp with `:` replaced by `-`. */
 export function defaultBackupName(now: Date = new Date()): string {
   return now
@@ -315,9 +331,7 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   const name = opts.name ?? defaultBackupName();
   assertValidBackupName(name);
 
-  const paths = repoPaths(opts.rootDir);
-  const backupsRoot = join(paths.infraDir, "backups");
-  const backupDir = join(backupsRoot, name);
+  const backupDir = resolveBackupDir(opts.rootDir, name);
 
   if (existsSync(backupDir)) {
     throw new Error(`Backup directory already exists: ${backupDir}`);
@@ -649,8 +663,7 @@ export interface RestorePreflight {
  */
 export function preflightRestore(opts: RestoreOptions): RestorePreflight {
   assertValidBackupName(opts.name);
-  const paths = repoPaths(opts.rootDir);
-  const backupDir = join(paths.infraDir, "backups", opts.name);
+  const backupDir = resolveBackupDir(opts.rootDir, opts.name);
   const manifestPath = join(backupDir, "manifest.json");
   let manifest = readBackupManifest(manifestPath);
 
@@ -907,16 +920,7 @@ export interface DeleteBackupOptions {
 
 export function deleteBackup(opts: DeleteBackupOptions): void {
   assertValidBackupName(opts.name);
-  const paths = repoPaths(opts.rootDir);
-  const backupDir = resolve(paths.infraDir, "backups", opts.name);
-  // Defense in depth: the resolved path must be strictly *inside* backups/ — a
-  // named child directory. Equal to backups/ itself (e.g. name ".") is refused
-  // too, so a future regression in the name guard can never rmSync the whole
-  // backups root.
-  const backupsRoot = resolve(paths.infraDir, "backups");
-  if (!backupDir.startsWith(`${backupsRoot}/`)) {
-    throw new Error(`Refusing to delete path outside backups/: ${backupDir}`);
-  }
+  const backupDir = resolveBackupDir(opts.rootDir, opts.name);
   if (!existsSync(backupDir)) {
     throw new Error(`Backup not found: ${opts.name}`);
   }
