@@ -38,6 +38,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { DomainChip } from "./DomainChip";
+import { HealthHistoryChart } from "./HealthHistoryChart";
 import { IntegrationStatusDot } from "./IntegrationStatusDot";
 import { RequiredServicesPanel } from "./RequiredServicesPanel";
 import { SetCredentialDialog } from "./SetCredentialDialog";
@@ -972,6 +973,22 @@ function HealthTab({
                 No health data available yet. Run a check to populate.
               </Typography>
             )}
+          </CardContent>
+        </Card>
+      )}
+      {data.hasHealthCheck && (
+        <Card variant="outlined">
+          <CardContent>
+            <Typography
+              variant="subtitle2"
+              gutterBottom
+              sx={{
+                color: "text.secondary",
+              }}
+            >
+              Health History
+            </Typography>
+            <HealthHistoryChart integrationId={integrationId} />
           </CardContent>
         </Card>
       )}
