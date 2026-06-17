@@ -22,6 +22,7 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
+import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
@@ -113,6 +114,8 @@ export function IntegrationList() {
   const [domainFilter, setDomainFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("all");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
   const showToast = useAdminToast();
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
@@ -213,6 +216,11 @@ export function IntegrationList() {
       return true;
     });
   }, [integrations, search, domainFilter, statusFilter, qualityFilter]);
+
+  const paged = useMemo(
+    () => filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [filtered, page, rowsPerPage],
+  );
 
   const counts = useMemo(() => {
     const enabled = integrations.filter((i) => i.enabled).length;
@@ -315,7 +323,10 @@ export function IntegrationList() {
           size="small"
           placeholder="Search by name, id, domain…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(0);
+          }}
           sx={{ minWidth: 260 }}
           slotProps={{
             input: {
@@ -331,7 +342,10 @@ export function IntegrationList() {
         <FormControl size="small" sx={{ minWidth: 140 }}>
           <Select
             value={domainFilter}
-            onChange={(e) => setDomainFilter(e.target.value)}
+            onChange={(e) => {
+              setDomainFilter(e.target.value);
+              setPage(0);
+            }}
             displayEmpty
             startAdornment={
               <FilterListIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} />
@@ -349,7 +363,10 @@ export function IntegrationList() {
         <FormControl size="small" sx={{ minWidth: 140 }}>
           <Select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as StatusFilter);
+              setPage(0);
+            }}
           >
             <MenuItem value="all">All statuses</MenuItem>
             <MenuItem value="enabled">Enabled</MenuItem>
@@ -362,7 +379,10 @@ export function IntegrationList() {
         <FormControl size="small" sx={{ minWidth: 130 }}>
           <Select
             value={qualityFilter}
-            onChange={(e) => setQualityFilter(e.target.value as QualityFilter)}
+            onChange={(e) => {
+              setQualityFilter(e.target.value as QualityFilter);
+              setPage(0);
+            }}
           >
             <MenuItem value="all">All types</MenuItem>
             <MenuItem value="built-in">Built-in</MenuItem>
@@ -382,6 +402,7 @@ export function IntegrationList() {
               setDomainFilter("all");
               setStatusFilter("all");
               setQualityFilter("all");
+              setPage(0);
             }}
           >
             Clear
@@ -444,7 +465,7 @@ export function IntegrationList() {
             {filtered.length === 0 && (
               <TableEmptyState colSpan={7} message="No integrations match your filters" />
             )}
-            {filtered.map((integration) => (
+            {paged.map((integration) => (
               <TableRow key={integration.id} hover>
                 <TableCell>
                   <IntegrationStatusDot
@@ -531,6 +552,20 @@ export function IntegrationList() {
           </TableBody>
         </Table>
       </TableContainer>
+      {filtered.length > 0 && (
+        <TablePagination
+          component="div"
+          count={filtered.length}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[25, 50, 100]}
+          onPageChange={(_, p) => setPage(p)}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(Number(e.target.value));
+            setPage(0);
+          }}
+        />
+      )}
     </Stack>
   );
 }

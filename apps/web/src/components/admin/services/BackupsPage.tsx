@@ -22,6 +22,7 @@ import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
+import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
@@ -69,6 +70,8 @@ export function BackupsPage() {
   const [restoreServiceIds, setRestoreServiceIds] = useState("");
   const [restoreStopRunning, setRestoreStopRunning] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<BackupSummary | null>(null);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<BackupsResponse>({
     queryKey: ["admin", "services", "backups"],
@@ -257,97 +260,115 @@ export function BackupsPage() {
                 {sortedBackups.length === 0 ? (
                   <TableEmptyState colSpan={7} message="No backups found yet." />
                 ) : (
-                  sortedBackups.map((backup) => (
-                    <TableRow key={backup.name} hover>
-                      <TableCell>
-                        <Stack
-                          direction="row"
-                          sx={{
-                            alignItems: "center",
-                            gap: 1,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <Typography
-                            variant="body2"
+                  sortedBackups
+                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                    .map((backup) => (
+                      <TableRow key={backup.name} hover>
+                        <TableCell>
+                          <Stack
+                            direction="row"
                             sx={{
-                              fontFamily: "monospace",
-                              fontWeight: 600,
+                              alignItems: "center",
+                              gap: 1,
+                              flexWrap: "wrap",
                             }}
                           >
-                            {backup.name}
-                          </Typography>
-                          {backup.corrupt && (
-                            <Tooltip
-                              title={`Cannot be restored: ${backup.corruptReason ?? "manifest is missing or malformed"}`}
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontFamily: "monospace",
+                                fontWeight: 600,
+                              }}
                             >
-                              <Chip
-                                label="corrupt"
-                                size="small"
-                                color="warning"
-                                variant="outlined"
-                              />
-                            </Tooltip>
-                          )}
-                        </Stack>
-                      </TableCell>
-                      <TableCell>{new Date(backup.createdAt).toLocaleString()}</TableCell>
-                      <TableCell>
-                        {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
-                      </TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.services}</TableCell>
-                      <TableCell>{backup.corrupt ? "—" : backup.volumes}</TableCell>
-                      <TableCell>{backup.corrupt ? "—" : formatBytes(backup.totalBytes)}</TableCell>
-                      <TableCell align="right">
-                        <Stack
-                          direction="row"
-                          spacing={0.5}
-                          sx={{
-                            justifyContent: "flex-end",
-                          }}
-                        >
-                          <Tooltip
-                            title={
-                              backup.corrupt
-                                ? "Corrupt backup — cannot be restored"
-                                : "Restore backup"
-                            }
+                              {backup.name}
+                            </Typography>
+                            {backup.corrupt && (
+                              <Tooltip
+                                title={`Cannot be restored: ${backup.corruptReason ?? "manifest is missing or malformed"}`}
+                              >
+                                <Chip
+                                  label="corrupt"
+                                  size="small"
+                                  color="warning"
+                                  variant="outlined"
+                                />
+                              </Tooltip>
+                            )}
+                          </Stack>
+                        </TableCell>
+                        <TableCell>{new Date(backup.createdAt).toLocaleString()}</TableCell>
+                        <TableCell>
+                          {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
+                        </TableCell>
+                        <TableCell>{backup.corrupt ? "—" : backup.services}</TableCell>
+                        <TableCell>{backup.corrupt ? "—" : backup.volumes}</TableCell>
+                        <TableCell>
+                          {backup.corrupt ? "—" : formatBytes(backup.totalBytes)}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Stack
+                            direction="row"
+                            spacing={0.5}
+                            sx={{
+                              justifyContent: "flex-end",
+                            }}
                           >
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="primary"
-                                onClick={() => setRestoreTarget(backup)}
-                                disabled={
-                                  backup.corrupt ||
-                                  restoreMutation.isPending ||
-                                  deleteMutation.isPending
-                                }
-                              >
-                                <RestoreIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Delete backup">
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => setDeleteTarget(backup)}
-                                disabled={restoreMutation.isPending || deleteMutation.isPending}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            <Tooltip
+                              title={
+                                backup.corrupt
+                                  ? "Corrupt backup — cannot be restored"
+                                  : "Restore backup"
+                              }
+                            >
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="primary"
+                                  onClick={() => setRestoreTarget(backup)}
+                                  disabled={
+                                    backup.corrupt ||
+                                    restoreMutation.isPending ||
+                                    deleteMutation.isPending
+                                  }
+                                >
+                                  <RestoreIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="Delete backup">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => setDeleteTarget(backup)}
+                                  disabled={restoreMutation.isPending || deleteMutation.isPending}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))
                 )}
               </TableBody>
             </Table>
           </TableContainer>
+          {sortedBackups.length > 0 && (
+            <TablePagination
+              component="div"
+              count={sortedBackups.length}
+              page={page}
+              rowsPerPage={rowsPerPage}
+              rowsPerPageOptions={[25, 50, 100]}
+              onPageChange={(_, p) => setPage(p)}
+              onRowsPerPageChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setPage(0);
+              }}
+            />
+          )}
         </Paper>
       )}
       <Dialog open={!!restoreTarget} onClose={() => setRestoreTarget(null)} maxWidth="sm" fullWidth>

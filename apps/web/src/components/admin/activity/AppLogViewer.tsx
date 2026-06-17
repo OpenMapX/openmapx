@@ -13,6 +13,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
+import TablePagination from "@mui/material/TablePagination";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
@@ -116,6 +117,8 @@ export function AppLogViewer() {
   const [timeRange, setTimeRange] = useState("last 1h");
   const [search, setSearch] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(100);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const sinceMs = TIME_RANGES[timeRange];
@@ -126,9 +129,12 @@ export function AppLogViewer() {
     total: number;
     sources: string[];
   }>({
-    queryKey: ["admin", "logs", levelFilter, sourceFilter, timeRange, search],
+    queryKey: ["admin", "logs", levelFilter, sourceFilter, timeRange, search, page, rowsPerPage],
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: "200" });
+      const params = new URLSearchParams({
+        limit: String(rowsPerPage),
+        offset: String(page * rowsPerPage),
+      });
       if (levelFilter && levelFilter !== "all") params.set("level", levelFilter);
       if (sourceFilter && sourceFilter !== "all") params.set("source", sourceFilter);
       if (since) params.set("since", String(since));
@@ -167,7 +173,10 @@ export function AppLogViewer() {
           <Select
             value={levelFilter}
             label="Level"
-            onChange={(e) => setLevelFilter(e.target.value)}
+            onChange={(e) => {
+              setLevelFilter(e.target.value);
+              setPage(0);
+            }}
           >
             {LEVEL_OPTIONS.map((l) => (
               <MenuItem key={l} value={l}>
@@ -182,7 +191,10 @@ export function AppLogViewer() {
           <Select
             value={sourceFilter}
             label="Source"
-            onChange={(e) => setSourceFilter(e.target.value)}
+            onChange={(e) => {
+              setSourceFilter(e.target.value);
+              setPage(0);
+            }}
           >
             <MenuItem value="all">All sources</MenuItem>
             {sources.map((s) => (
@@ -198,7 +210,10 @@ export function AppLogViewer() {
           <Select
             value={timeRange}
             label="Time range"
-            onChange={(e) => setTimeRange(e.target.value)}
+            onChange={(e) => {
+              setTimeRange(e.target.value);
+              setPage(0);
+            }}
           >
             {Object.keys(TIME_RANGES).map((r) => (
               <MenuItem key={r} value={r}>
@@ -212,7 +227,10 @@ export function AppLogViewer() {
           size="small"
           placeholder="Search…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(0);
+          }}
           sx={{ minWidth: 180 }}
         />
 
@@ -284,6 +302,18 @@ export function AppLogViewer() {
           </>
         )}
       </Box>
+      <TablePagination
+        component="div"
+        count={data?.total ?? 0}
+        page={page}
+        rowsPerPage={rowsPerPage}
+        rowsPerPageOptions={[100, 200, 500]}
+        onPageChange={(_, p) => setPage(p)}
+        onRowsPerPageChange={(e) => {
+          setRowsPerPage(Number(e.target.value));
+          setPage(0);
+        }}
+      />
     </Stack>
   );
 }
