@@ -46,22 +46,30 @@ export async function getStopsInBbox(
   const [west, south, east, north] = bbox;
   const rows = await sql.unsafe(
     `
-    SELECT
-      s.stop_id, s.stop_name, s.stop_lat, s.stop_lon,
-      s.location_type, s.parent_station, s.platform_code,
-      (
-        SELECT ARRAY_AGG(DISTINCT r.route_type)
-        FROM "${schema}".stop_times st2
-        JOIN "${schema}".trips t2 ON t2.trip_id = st2.trip_id
-        JOIN "${schema}".routes r ON r.route_id = t2.route_id
-        WHERE st2.stop_id = s.stop_id
-      ) as route_types
-    FROM "${schema}".stops s
-    WHERE s.stop_loc IS NOT NULL
-      AND s.stop_loc::geometry && ST_MakeEnvelope($1, $2, $3, $4, 4326)
-      AND s.location_type IN (0, 1)
-    ORDER BY s.stop_name
-    LIMIT $5
+    WITH matched AS (
+      SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon,
+             s.location_type, s.parent_station, s.platform_code
+      FROM "${schema}".stops s
+      WHERE s.stop_loc IS NOT NULL
+        AND s.stop_loc::geometry && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+        AND s.location_type IN (0, 1)
+      ORDER BY s.stop_name
+      LIMIT $5
+    ),
+    rt AS (
+      SELECT st.stop_id, ARRAY_AGG(DISTINCT r.route_type) AS route_types
+      FROM "${schema}".stop_times st
+      JOIN "${schema}".trips t ON t.trip_id = st.trip_id
+      JOIN "${schema}".routes r ON r.route_id = t.route_id
+      WHERE st.stop_id IN (SELECT stop_id FROM matched)
+      GROUP BY st.stop_id
+    )
+    SELECT m.stop_id, m.stop_name, m.stop_lat, m.stop_lon,
+           m.location_type, m.parent_station, m.platform_code,
+           rt.route_types
+    FROM matched m
+    LEFT JOIN rt ON rt.stop_id = m.stop_id
+    ORDER BY m.stop_name
     `,
     [west, south, east, north, limit],
   );
@@ -105,23 +113,33 @@ export async function searchStopsByName(
   assertValidGtfsSchema(schema);
   const rows = await sql.unsafe(
     `
-    SELECT
-      s.stop_id, s.stop_name, s.stop_lat, s.stop_lon,
-      s.location_type, s.parent_station, s.platform_code,
-      (
-        SELECT ARRAY_AGG(DISTINCT r.route_type)
-        FROM "${schema}".stop_times st2
-        JOIN "${schema}".trips t2 ON t2.trip_id = st2.trip_id
-        JOIN "${schema}".routes r ON r.route_id = t2.route_id
-        WHERE st2.stop_id = s.stop_id
-      ) as route_types
-    FROM "${schema}".stops s
-    WHERE s.location_type IN (0, 1)
-      AND s.stop_name ILIKE $1
+    WITH matched AS (
+      SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon,
+             s.location_type, s.parent_station, s.platform_code
+      FROM "${schema}".stops s
+      WHERE s.location_type IN (0, 1)
+        AND s.stop_name ILIKE $1
+      ORDER BY
+        CASE WHEN s.location_type = 1 THEN 0 ELSE 1 END,
+        s.stop_name
+      LIMIT $2
+    ),
+    rt AS (
+      SELECT st.stop_id, ARRAY_AGG(DISTINCT r.route_type) AS route_types
+      FROM "${schema}".stop_times st
+      JOIN "${schema}".trips t ON t.trip_id = st.trip_id
+      JOIN "${schema}".routes r ON r.route_id = t.route_id
+      WHERE st.stop_id IN (SELECT stop_id FROM matched)
+      GROUP BY st.stop_id
+    )
+    SELECT m.stop_id, m.stop_name, m.stop_lat, m.stop_lon,
+           m.location_type, m.parent_station, m.platform_code,
+           rt.route_types
+    FROM matched m
+    LEFT JOIN rt ON rt.stop_id = m.stop_id
     ORDER BY
-      CASE WHEN s.location_type = 1 THEN 0 ELSE 1 END,
-      s.stop_name
-    LIMIT $2
+      CASE WHEN m.location_type = 1 THEN 0 ELSE 1 END,
+      m.stop_name
     `,
     [`%${query}%`, limit],
   );
