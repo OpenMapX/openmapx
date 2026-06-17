@@ -176,6 +176,25 @@ describe("GET /admin/settings", () => {
     }
   });
 
+  it("keeps the live MapTiler key but drops the dead style-provider controls from the map group", async () => {
+    const res = await app.inject({ method: "GET", url: "/admin/settings" });
+    const body = res.json();
+
+    const map = body.groups.find((g: { id: string }) => g.id === "map");
+    const keys = map.settings.map((s: { key: string }) => s.key);
+
+    // The base style provider is env-only (NEXT_PUBLIC_STYLE_PROVIDER); the old
+    // MAP_STYLE_PROVIDER / CUSTOM_STYLE_URL admin fields drove nothing and are gone.
+    expect(keys).toContain("maptilerApiKey");
+    expect(keys).not.toContain("styleProvider");
+    expect(keys).not.toContain("customStyleUrl");
+
+    // With the provider dropdown gone, the key must not be gated behind a
+    // (now non-existent) styleProvider value — it always renders.
+    const apiKey = map.settings.find((s: { key: string }) => s.key === "maptilerApiKey");
+    expect(apiKey.showWhen).toBeUndefined();
+  });
+
   it("rejects unauthenticated requests with 401", async () => {
     mockRequireAdmin.mockRejectedValueOnce(
       Object.assign(new Error("Authentication required"), { statusCode: 401 }),

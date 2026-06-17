@@ -27,8 +27,7 @@ interface SettingDef {
   /**
    * Show this setting only when another setting in the same group has a
    * matching value. Evaluated client-side against the current local form
-   * state. Used in the Map panel so MapTiler / Custom-style fields don't
-   * render when the chosen Style Provider doesn't need them.
+   * state — lets a panel hide fields that don't apply to the current choice.
    */
   showWhen?: { key: string; equals: unknown | unknown[] };
 }
@@ -207,33 +206,13 @@ const SETTING_DEFS: SettingDef[] = [
   // Map
   {
     group: "map",
-    key: "styleProvider",
-    label: "Style Provider",
-    description: "Where to load the base map style from.",
-    type: "select",
-    options: ["maptiler", "self-hosted", "custom"],
-    env: "MAP_STYLE_PROVIDER",
-    default: "maptiler",
-  },
-  {
-    group: "map",
     key: "maptilerApiKey",
     label: "MapTiler API Key",
+    description: "MapTiler Cloud API key for the built-in MapTiler tile and style proxy.",
     type: "string",
     secret: true,
     env: "MAPTILER_KEY",
     default: "",
-    showWhen: { key: "styleProvider", equals: "maptiler" },
-  },
-  {
-    group: "map",
-    key: "customStyleUrl",
-    label: "Custom Style URL",
-    description: "Used when style provider is set to 'custom'.",
-    type: "string",
-    env: "CUSTOM_STYLE_URL",
-    default: "",
-    showWhen: { key: "styleProvider", equals: "custom" },
   },
   // Data-Use Policy
   {

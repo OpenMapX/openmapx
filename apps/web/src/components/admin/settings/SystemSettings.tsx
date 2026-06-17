@@ -288,10 +288,9 @@ function SettingsGroupPanel({
       const body: Record<string, unknown> = {};
       for (const s of group.settings) {
         if (s.envOverride) continue;
-        // Don't write fields hidden by their showWhen predicate — we'd
-        // otherwise clobber the stored value of the inactive provider
-        // (e.g. saving with styleProvider=self-hosted shouldn't reset
-        // maptilerApiKey or customStyleUrl).
+        // Don't write fields hidden by their showWhen predicate — saving while
+        // a field is hidden would clobber the stored value of the option that
+        // isn't currently active.
         if (!isVisible(s, localValues)) continue;
         body[s.key] = localValues[s.key];
       }
