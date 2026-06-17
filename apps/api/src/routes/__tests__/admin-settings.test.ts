@@ -147,6 +147,35 @@ describe("GET /admin/settings", () => {
     selectResolveWith = [];
   });
 
+  it("redacts env-sourced secrets but exposes non-secret env values", async () => {
+    const origKey = process.env.MAPTILER_KEY;
+    const origLocale = process.env.DEFAULT_LOCALE;
+    process.env.MAPTILER_KEY = "super-secret-key";
+    process.env.DEFAULT_LOCALE = "de";
+
+    try {
+      const res = await app.inject({ method: "GET", url: "/admin/settings" });
+      const body = res.json();
+
+      // An env-sourced secret is flagged as set + locked, but its raw value
+      // must never reach the browser.
+      const map = body.groups.find((g: { id: string }) => g.id === "map");
+      const apiKey = map.settings.find((s: { key: string }) => s.key === "maptilerApiKey");
+      expect(apiKey).toMatchObject({ source: "env", envOverride: true, secret: true });
+      expect(apiKey.value).not.toBe("super-secret-key");
+
+      // A non-secret env override exposes its real value so the UI can show it.
+      const general = body.groups.find((g: { id: string }) => g.id === "general");
+      const locale = general.settings.find((s: { key: string }) => s.key === "defaultLocale");
+      expect(locale).toMatchObject({ value: "de", source: "env", envOverride: true });
+    } finally {
+      if (origKey === undefined) delete process.env.MAPTILER_KEY;
+      else process.env.MAPTILER_KEY = origKey;
+      if (origLocale === undefined) delete process.env.DEFAULT_LOCALE;
+      else process.env.DEFAULT_LOCALE = origLocale;
+    }
+  });
+
   it("rejects unauthenticated requests with 401", async () => {
     mockRequireAdmin.mockRejectedValueOnce(
       Object.assign(new Error("Authentication required"), { statusCode: 401 }),

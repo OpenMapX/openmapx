@@ -374,8 +374,11 @@ export async function resolveSettings(): Promise<SettingsGroup[]> {
       source = "default";
     }
 
-    if (def.secret && source !== "env" && value !== "") {
-      value = source === "database" ? "***" : "";
+    // Never send a raw secret to the client, whatever its source. "***" is a
+    // "configured" sentinel so the UI can show the field as set + locked
+    // without exposing the value (the real value stays in env / the DB).
+    if (def.secret && value !== "") {
+      value = "***";
     }
 
     if (!grouped[def.group]) grouped[def.group] = [];

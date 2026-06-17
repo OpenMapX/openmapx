@@ -215,20 +215,26 @@ function SettingField({
     );
   }
 
+  // Secrets resolved from an env var are redacted server-side ("***") and must
+  // never be displayed — show a readable note instead of masked dots. Every
+  // other field (including non-secret env overrides) shows its real value so
+  // the operator can see what's actually in effect.
+  const isEnvSecret = setting.envOverride && setting.secret;
+  const displayValue = isEnvSecret ? "(set by environment variable)" : String(value ?? "");
+  const inputType = isEnvSecret
+    ? "text"
+    : setting.secret && !showSecret
+      ? "password"
+      : setting.type === "number"
+        ? "number"
+        : "text";
+
   return (
     <TextField
       label={setting.label}
       size="small"
-      type={
-        setting.secret && !showSecret ? "password" : setting.type === "number" ? "number" : "text"
-      }
-      value={
-        disabled
-          ? setting.envOverride
-            ? "(set by environment variable)"
-            : String(value ?? "")
-          : String(value ?? "")
-      }
+      type={inputType}
+      value={displayValue}
       disabled={disabled}
       helperText={setting.description}
       onChange={(e) =>
@@ -304,8 +310,12 @@ function SettingsGroupPanel({
     },
   });
 
-  const hasEnvOverrides = group.settings.some((s) => s.envOverride);
   const visibleSettings = group.settings.filter((s) => isVisible(s, localValues));
+  // Reflect only the settings the operator can actually see: a setting hidden
+  // by its showWhen predicate (e.g. the MapTiler key while the provider is
+  // self-hosted) must not flag the whole panel as env-overridden, or the badge
+  // contradicts an otherwise-editable field.
+  const hasEnvOverrides = visibleSettings.some((s) => s.envOverride);
 
   return (
     <Accordion
@@ -318,6 +328,10 @@ function SettingsGroupPanel({
       // specificity to override every corner on every panel; without the
       // double-class scope our plain `&` rule loses the cascade.
       sx={{
+        // MUI draws a top divider via an ::before pseudo-element meant for
+        // flush-stacked accordions. With our spaced-out outlined cards it just
+        // floats as a stray line above each one — remove it.
+        "&::before": { display: "none" },
         "&.MuiAccordion-rounded": {
           borderRadius: 1,
           "&:first-of-type, &:last-of-type": { borderRadius: 1 },
@@ -443,7 +457,7 @@ function SettingsGroupPanel({
                 save.isPending ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />
               }
               onClick={() => save.mutate()}
-              disabled={save.isPending || group.settings.every((s) => s.envOverride)}
+              disabled={save.isPending || visibleSettings.every((s) => s.envOverride)}
             >
               Save {group.label}
             </Button>
