@@ -87,4 +87,62 @@ describe("download-gtfs helpers", () => {
     expect(state.datasets.map((dataset) => dataset.id)).toEqual(["de_bvg"]);
     expect(readFileSync(join(tmp, "gtfs", "de_bvg.gtfs.zip"), "utf-8")).toBe("GTFS");
   });
+
+  it("rejects a feed id that escapes the gtfs directory", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-download-gtfs-"));
+    const calls: Array<[string, string]> = [];
+    const downloader = async (url: string, targetPath: string) => {
+      calls.push([url, targetPath]);
+    };
+    const result = await downloadGtfs({
+      feeds: [{ id: "../../etc/passwd", country: "de", url: "https://example.com/x.zip" }],
+      countries: [],
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      downloader,
+    });
+    expect(calls).toHaveLength(0);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]?.message).toContain('".."');
+  });
+
+  it("rejects a feed url that is not http(s)", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-download-gtfs-"));
+    const calls: Array<[string, string]> = [];
+    const downloader = async (url: string, targetPath: string) => {
+      calls.push([url, targetPath]);
+    };
+    const result = await downloadGtfs({
+      feeds: [{ id: "de_evil", country: "de", url: "file:///etc/passwd" }],
+      countries: [],
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      downloader,
+    });
+    expect(calls).toHaveLength(0);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]?.message).toContain("http(s)");
+  });
+
+  it("accepts a normal feed and downloads it once", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-download-gtfs-"));
+    const calls: Array<[string, string]> = [];
+    const downloader = async (url: string, targetPath: string) => {
+      calls.push([url, targetPath]);
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(targetPath, "GTFS");
+    };
+    const result = await downloadGtfs({
+      feeds: [{ id: "de_bvg", country: "de", url: "https://example.com/de_bvg.zip" }],
+      countries: [],
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      downloader,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.[0]).toBe("https://example.com/de_bvg.zip");
+    expect(calls[0]?.[1].endsWith("de_bvg.gtfs.zip")).toBe(true);
+    expect(result.failures).toHaveLength(0);
+    expect(result.downloaded).toHaveLength(1);
+  });
 });

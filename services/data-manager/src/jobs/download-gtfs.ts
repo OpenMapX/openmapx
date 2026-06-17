@@ -35,6 +35,42 @@ function feedArchiveFilename(id: string): string {
   return `${withoutZip}.gtfs.zip`;
 }
 
+/**
+ * Reject feed ids that would escape the `gtfs/` directory when turned into a
+ * filename. Mirrors the guard on `DELETE /datasets/gtfs/:slug` (api.ts) so the
+ * download path can't write outside `<dataDir>/gtfs`.
+ */
+function assertSafeFeedId(id: string): void {
+  const trimmed = id.trim();
+  if (
+    !trimmed ||
+    trimmed.includes("/") ||
+    trimmed.includes("\\") ||
+    trimmed.includes("..") ||
+    trimmed.includes("\0")
+  ) {
+    throw new Error(`invalid feed id "${id}": must not contain path separators or ".."`);
+  }
+}
+
+/**
+ * Reject feed URLs whose scheme isn't http(s). `curlAtomic` shells out to
+ * `curl`, which would otherwise honor `file://`, `gopher://`, `dict://`, etc.
+ * Host is intentionally NOT restricted — self-hosted deployments may mirror
+ * feeds on an internal host.
+ */
+function assertHttpFeedUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`invalid feed url "${url}"`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`feed url must use http(s): "${url}"`);
+  }
+}
+
 export interface DownloadGtfsOptions {
   feeds: FeedDescriptor[];
   countries: string[];
@@ -76,6 +112,8 @@ export async function downloadGtfs(opts: DownloadGtfsOptions): Promise<DownloadG
     const batch = filtered.slice(i, i + concurrency);
     const settled = await Promise.allSettled(
       batch.map(async (feed) => {
+        assertSafeFeedId(feed.id);
+        assertHttpFeedUrl(feed.url);
         const targetPath = join(targetDir, feedArchiveFilename(feed.id));
         await downloader(feed.url, targetPath);
         const sizeBytes = statSync(targetPath).size;
