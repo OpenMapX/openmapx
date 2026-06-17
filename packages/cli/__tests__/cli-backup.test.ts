@@ -82,6 +82,14 @@ describe("isValidBackupName", () => {
     expect(isValidBackupName("foo;rm")).toBe(false);
     expect(isValidBackupName("foo$bar")).toBe(false);
   });
+
+  it("rejects dot, dot-dot, hidden, and flag-like names", () => {
+    expect(isValidBackupName(".")).toBe(false);
+    expect(isValidBackupName("..")).toBe(false);
+    expect(isValidBackupName(".hidden")).toBe(false);
+    expect(isValidBackupName("-rf")).toBe(false);
+    expect(isValidBackupName("--name")).toBe(false);
+  });
 });
 
 describe("assertValidBackupName", () => {
@@ -451,5 +459,13 @@ describe("deleteBackup", () => {
 
   it("rejects an invalid backup name (defense in depth)", () => {
     expect(() => deleteBackup({ rootDir: tmp, name: "../../etc" })).toThrow(/Invalid backup name/);
+  });
+
+  it("refuses to wipe the backups root itself (e.g. name '.')", () => {
+    writeBackup("keep", { name: "keep", createdAt: "now", services: [] });
+    const backupsRoot = join(tmp, "infra", "docker", "backups");
+    expect(() => deleteBackup({ rootDir: tmp, name: "." })).toThrow(/Invalid backup name/);
+    expect(existsSync(backupsRoot)).toBe(true);
+    expect(existsSync(join(backupsRoot, "keep"))).toBe(true);
   });
 });

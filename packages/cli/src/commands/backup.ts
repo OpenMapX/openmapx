@@ -65,7 +65,11 @@ export interface BackupManifest {
 
 // ─── Validation helpers (pure / unit-testable) ─────────────────────────────
 
-const NAME_REGEX = /^[a-zA-Z0-9._-]+$/;
+// Leading char must be alphanumeric: this rejects "." / ".." (which, joined into
+// the backups directory, resolve to the backups root or its parent) and
+// leading-dash names. ISO-timestamp default names start with a digit, so they
+// remain valid.
+const NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 export function isValidBackupName(name: string): boolean {
   return typeof name === "string" && name.length > 0 && NAME_REGEX.test(name);
@@ -905,9 +909,12 @@ export function deleteBackup(opts: DeleteBackupOptions): void {
   assertValidBackupName(opts.name);
   const paths = repoPaths(opts.rootDir);
   const backupDir = resolve(paths.infraDir, "backups", opts.name);
-  // Defense in depth: verify the resolved path is still under backups/.
+  // Defense in depth: the resolved path must be strictly *inside* backups/ — a
+  // named child directory. Equal to backups/ itself (e.g. name ".") is refused
+  // too, so a future regression in the name guard can never rmSync the whole
+  // backups root.
   const backupsRoot = resolve(paths.infraDir, "backups");
-  if (!backupDir.startsWith(`${backupsRoot}/`) && backupDir !== backupsRoot) {
+  if (!backupDir.startsWith(`${backupsRoot}/`)) {
     throw new Error(`Refusing to delete path outside backups/: ${backupDir}`);
   }
   if (!existsSync(backupDir)) {

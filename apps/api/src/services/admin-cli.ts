@@ -15,7 +15,11 @@ const {
 
 const SERVICE_SELECTION_FILE = "service-selection.json";
 const BACKUPS_DIR = "backups";
-const BACKUP_NAME_RE = /^[a-zA-Z0-9._-]+$/;
+// Leading char must be alphanumeric: this rejects "." / ".." (path traversal
+// when the name is joined into the backups directory) and leading-dash names
+// (argument-injection-shaped when forwarded as a CLI argv element). Mirrors the
+// slug guard used for other CLI arguments in admin-job-handlers.ts.
+const BACKUP_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 export interface ServiceSelectionSummary {
   source: "env" | "file" | "default";

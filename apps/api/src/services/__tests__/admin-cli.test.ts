@@ -34,4 +34,14 @@ describe("assertValidBackupName", () => {
   it("rejects a name containing a newline", () => {
     expect(() => assertValidBackupName("line1\nline2")).toThrow(/Invalid backup name/);
   });
+
+  it("rejects dot, dot-dot, hidden, and flag-like names (traversal / arg-injection hardening)", () => {
+    for (const name of [".", "..", ".hidden", "-rf", "--name"]) {
+      expect(() => assertValidBackupName(name)).toThrow(/Invalid backup name/);
+    }
+  });
+
+  it("still accepts an ISO-timestamp default name", () => {
+    expect(() => assertValidBackupName("2026-04-19T15-23-00Z")).not.toThrow();
+  });
 });
