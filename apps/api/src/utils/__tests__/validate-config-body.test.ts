@@ -19,6 +19,7 @@ const schema = {
     ratio: { type: "number" },
     debug: { type: "boolean" },
     mode: { type: "string", enum: ["fast", "slow"] },
+    endpoint: { type: "string", format: "url" },
     enabled: { type: "boolean" },
   },
 };
@@ -198,6 +199,44 @@ describe("validateConfigBody enabled handling", () => {
     const result = validateConfigBody({ enabled: false }, schema, { rejectEnabled: false });
     expect(result.errors).toEqual([]);
     expect(result.updates).toEqual({ enabled: false });
+  });
+});
+
+describe("validateConfigBody url-format fields", () => {
+  it("accepts an internal http(s) endpoint", () => {
+    const result = validateConfigBody({ endpoint: "https://osrm:5000" }, schema);
+    expect(result.errors).toEqual([]);
+    expect(result.updates.endpoint).toBe("https://osrm:5000");
+  });
+
+  it("accepts http://localhost so self-hosted internal URLs pass", () => {
+    const result = validateConfigBody({ endpoint: "http://localhost:8081" }, schema);
+    expect(result.errors).toEqual([]);
+    expect(result.updates.endpoint).toBe("http://localhost:8081");
+  });
+
+  it("rejects a file:// url", () => {
+    const result = validateConfigBody({ endpoint: "file:///etc/passwd" }, schema);
+    expect(result.errors).toEqual(['"endpoint" must be a valid http(s) URL']);
+    expect(result.updates).not.toHaveProperty("endpoint");
+  });
+
+  it("rejects a non-URL string", () => {
+    const result = validateConfigBody({ endpoint: "not a url" }, schema);
+    expect(result.errors).toEqual(['"endpoint" must be a valid http(s) URL']);
+    expect(result.updates).not.toHaveProperty("endpoint");
+  });
+
+  it("accepts an empty string as unset", () => {
+    const result = validateConfigBody({ endpoint: "" }, schema);
+    expect(result.errors).toEqual([]);
+    expect(result.updates.endpoint).toBe("");
+  });
+
+  it("leaves plain string fields unaffected by the url check", () => {
+    const result = validateConfigBody({ baseUrl: "not a url" }, schema);
+    expect(result.errors).toEqual([]);
+    expect(result.updates).toEqual({ baseUrl: "not a url" });
   });
 });
 

@@ -112,6 +112,19 @@ export function validateConfigBody(
       result.errors.push(`"${key}" must be a string`);
       continue;
     }
+    const format = def.format as string | undefined;
+    if (format === "url" && typeof value === "string" && value !== "") {
+      let parsed: URL | null = null;
+      try {
+        parsed = new URL(value);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+        result.errors.push(`"${key}" must be a valid http(s) URL`);
+        continue;
+      }
+    }
     if (def.enum && !(def.enum as unknown[]).includes(value)) {
       result.errors.push(`"${key}" must be one of: ${(def.enum as unknown[]).join(", ")}`);
       continue;
