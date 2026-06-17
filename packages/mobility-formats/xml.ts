@@ -70,7 +70,20 @@ export function stripXmlNamespace(name: string): string {
   return separatorIndex >= 0 ? name.slice(separatorIndex + 1) : name;
 }
 
+// Transit feeds (SIRI/OJP/NetEx/DATEX/GTFS-RT) never declare custom XML
+// entities. Reject any document that does: an internal-subset `<!ENTITY ...>`
+// is the "billion laughs" amplification vector, and the parser runs on live,
+// third-party feeds. Numeric/predefined entity decoding stays enabled.
+function assertNoEntityDeclarations(content: string): void {
+  // Case-insensitive scan for an ENTITY declaration anywhere in the prolog.
+  if (/<!ENTITY/i.test(content)) {
+    throw new Error("XML entity declarations are not allowed");
+  }
+}
+
 export function parseXmlDocument(content: string, options: XmlParseOptions = {}): XmlObject {
+  assertNoEntityDeclarations(content);
+
   if (options.validate ?? true) {
     const validationResult = XMLValidator.validate(content);
     if (validationResult !== true) {
