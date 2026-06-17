@@ -370,6 +370,95 @@ describe("GET /admin/audit", () => {
   });
 });
 
+describe("GET /admin/audit/export", () => {
+  function auditRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "evt-1",
+      actorId: "user-1",
+      action: "user.ban",
+      targetType: "user",
+      targetId: "user-99",
+      details: { reason: "spam" },
+      ipAddress: "127.0.0.1",
+      createdAt: new Date("2026-06-17T12:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
+  it("exports JSON with the audit rows array", async () => {
+    mockDbSelect.mockImplementationOnce(() => makeSelectChain([auditRow()]));
+
+    const res = await app.inject({ method: "GET", url: "/admin/audit/export?format=json" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.headers["content-disposition"]).toMatch(
+      /attachment; filename="audit-log-\d{4}-\d{2}-\d{2}\.json"/,
+    );
+    const body = res.json();
+    expect(Array.isArray(body)).toBe(true);
+    expect(body[0]).toMatchObject({ action: "user.ban", targetId: "user-99" });
+  });
+
+  it("exports CSV with the fixed columns and RFC-4180 escaping", async () => {
+    mockDbSelect.mockImplementationOnce(() =>
+      makeSelectChain([
+        auditRow({
+          action: 'weird,"action"',
+          targetId: "line\nbreak",
+        }),
+      ]),
+    );
+
+    const res = await app.inject({ method: "GET", url: "/admin/audit/export?format=csv" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+    expect(res.headers["content-disposition"]).toMatch(
+      /attachment; filename="audit-log-\d{4}-\d{2}-\d{2}\.csv"/,
+    );
+    const text = res.body;
+    // Header is the first physical line; the data row spans a wrapped line
+    // because the targetId field contains a real newline inside its quotes.
+    expect(text.startsWith("createdAt,actorId,action,targetType,targetId\n")).toBe(true);
+    // createdAt serialized as ISO, comma/quote/newline fields quoted+escaped
+    expect(text).toContain("2026-06-17T12:00:00.000Z");
+    expect(text).toContain('"weird,""action"""');
+    expect(text).toContain('"line\nbreak"');
+    // details must NOT appear in CSV
+    expect(text).not.toContain("spam");
+  });
+
+  it("caps at 10,000 rows and sets X-Export-Truncated when exceeded", async () => {
+    const oversized = Array.from({ length: 10_001 }, (_, i) => auditRow({ id: `evt-${i}` }));
+    mockDbSelect.mockImplementationOnce(() => makeSelectChain(oversized));
+
+    const res = await app.inject({ method: "GET", url: "/admin/audit/export?format=json" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["x-export-truncated"]).toBe("true");
+    expect(res.json()).toHaveLength(10_000);
+  });
+
+  it("does not set X-Export-Truncated when within the cap", async () => {
+    mockDbSelect.mockImplementationOnce(() => makeSelectChain([auditRow()]));
+
+    const res = await app.inject({ method: "GET", url: "/admin/audit/export?format=json" });
+
+    expect(res.headers["x-export-truncated"]).toBeUndefined();
+  });
+
+  it("rejects unauthenticated requests with 401", async () => {
+    mockRequireAdmin.mockRejectedValueOnce(
+      Object.assign(new Error("Authentication required"), { statusCode: 401 }),
+    );
+
+    const res = await app.inject({ method: "GET", url: "/admin/audit/export?format=json" });
+
+    expect(res.statusCode).toBe(401);
+  });
+});
+
 describe("POST /admin/integrations/reload", () => {
   it("enqueues integration reload job and writes audit log", async () => {
     const res = await app.inject({ method: "POST", url: "/admin/integrations/reload" });

@@ -8,7 +8,6 @@ import IntegrationsIcon from "@mui/icons-material/Extension";
 import CatalogIcon from "@mui/icons-material/GridView";
 import CacheIcon from "@mui/icons-material/LayersClear";
 import PoiIcon from "@mui/icons-material/LocationOn";
-import StatusIcon from "@mui/icons-material/MonitorHeart";
 import UsersIcon from "@mui/icons-material/People";
 import BackupIcon from "@mui/icons-material/Restore";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -100,12 +99,6 @@ const BASE_NAV_ITEMS = [
     label: "POI ingest",
     href: "/admin/poi-ingest",
     icon: <PoiIcon fontSize="small" />,
-    selfHostedOnly: false,
-  },
-  {
-    label: "Status",
-    href: "/admin/status",
-    icon: <StatusIcon fontSize="small" />,
     selfHostedOnly: false,
   },
   {

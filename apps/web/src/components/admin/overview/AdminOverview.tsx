@@ -267,7 +267,7 @@ export function AdminOverview() {
       {/* Summary cards */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <StatCard title="System Health" icon={<CheckCircleOutlineIcon />} href="/admin/status">
+          <StatCard title="System Health" icon={<CheckCircleOutlineIcon />} href="/status">
             <Typography
               variant="h4"
               color={
@@ -413,7 +413,7 @@ export function AdminOverview() {
               </Stack>
             </StatCard>
           ) : (
-            <StatCard title="Services" icon={<DnsIcon />} href="/admin/status">
+            <StatCard title="Services" icon={<DnsIcon />} href="/status">
               <Typography
                 variant="h4"
                 sx={{

@@ -1,12 +1,15 @@
 "use client";
 
+import DownloadIcon from "@mui/icons-material/Download";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import FormControl from "@mui/material/FormControl";
 import IconButton from "@mui/material/IconButton";
 import InputLabel from "@mui/material/InputLabel";
 import ListSubheader from "@mui/material/ListSubheader";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
@@ -228,6 +231,29 @@ export function AuditLog() {
 
   const hasFilters = !!actionFilter || !!targetTypeFilter || !!targetSearch;
 
+  const [exportAnchor, setExportAnchor] = useState<null | HTMLElement>(null);
+
+  function exportUrl(format: "csv" | "json"): string {
+    const params = new URLSearchParams({ format });
+    if (actionFilter) params.set("action", actionFilter);
+    if (targetTypeFilter) params.set("targetType", targetTypeFilter);
+    if (targetSearch.trim()) params.set("targetId", targetSearch.trim());
+    return `${env.apiUrl}/api/admin/audit/export?${params}`;
+  }
+
+  function handleExport(format: "csv" | "json") {
+    setExportAnchor(null);
+    // Top-level navigation to the download endpoint sends the admin session
+    // cookie and lets the server-set Content-Disposition drive the download —
+    // no client-side serialization of the rows here.
+    const a = document.createElement("a");
+    a.href = exportUrl(format);
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   return (
     <Stack
       sx={{
@@ -299,6 +325,19 @@ export function AuditLog() {
         <Box sx={{ flexGrow: 1 }} />
 
         <Chip label={`${data?.total ?? 0} events`} size="small" variant="outlined" />
+
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<DownloadIcon fontSize="small" />}
+          onClick={(e) => setExportAnchor(e.currentTarget)}
+        >
+          Export
+        </Button>
+        <Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>
+          <MenuItem onClick={() => handleExport("csv")}>Export as CSV</MenuItem>
+          <MenuItem onClick={() => handleExport("json")}>Export as JSON</MenuItem>
+        </Menu>
 
         <Tooltip title="Refresh">
           <IconButton
