@@ -140,16 +140,7 @@ export async function getDepartures(
   minutes: number,
 ): Promise<GtfsDepartureRow[]> {
   assertValidGtfsSchema(schema);
-  // Check if service_days view exists
-  const viewCheck = await sql.unsafe(
-    `
-    SELECT EXISTS (
-      SELECT 1 FROM pg_matviews WHERE schemaname = $1 AND matviewname = 'service_days'
-    ) as exists
-  `,
-    [schema],
-  );
-  if (!viewCheck[0]?.exists) return [];
+  if (!(await hasServiceDaysView(schema))) return [];
 
   const rows = await sql.unsafe(
     `
@@ -189,15 +180,7 @@ export async function getArrivals(
   minutes: number,
 ): Promise<GtfsDepartureRow[]> {
   assertValidGtfsSchema(schema);
-  const viewCheck = await sql.unsafe(
-    `
-    SELECT EXISTS (
-      SELECT 1 FROM pg_matviews WHERE schemaname = $1 AND matviewname = 'service_days'
-    ) as exists
-  `,
-    [schema],
-  );
-  if (!viewCheck[0]?.exists) return [];
+  if (!(await hasServiceDaysView(schema))) return [];
 
   const rows = await sql.unsafe(
     `
@@ -258,15 +241,7 @@ export async function getDeparturesByDate(
   date: string,
 ): Promise<GtfsDepartureRow[]> {
   assertValidGtfsSchema(schema);
-  const viewCheck = await sql.unsafe(
-    `
-    SELECT EXISTS (
-      SELECT 1 FROM pg_matviews WHERE schemaname = $1 AND matviewname = 'service_days'
-    ) as exists
-    `,
-    [schema],
-  );
-  if (!viewCheck[0]?.exists) return [];
+  if (!(await hasServiceDaysView(schema))) return [];
 
   const rows = await sql.unsafe(
     `
@@ -324,10 +299,30 @@ export async function getSchemaStats(
 }
 
 const schemaStopOriginalIdSupport = new Map<string, boolean>();
+const schemaServiceDaysSupport = new Map<string, boolean>();
 
 /** Invalidate per-schema metadata caches. Call before/after a schema is dropped or re-imported. */
 export function invalidateSchemaCaches(schema: string): void {
   schemaStopOriginalIdSupport.delete(schema);
+  schemaServiceDaysSupport.delete(schema);
+}
+
+async function hasServiceDaysView(schema: string): Promise<boolean> {
+  assertValidGtfsSchema(schema);
+  const cached = schemaServiceDaysSupport.get(schema);
+  if (cached !== undefined) return cached;
+
+  const rows = await sql.unsafe(
+    `
+    SELECT EXISTS (
+      SELECT 1 FROM pg_matviews WHERE schemaname = $1 AND matviewname = 'service_days'
+    ) as exists
+  `,
+    [schema],
+  );
+  const exists = rows[0]?.exists === true;
+  schemaServiceDaysSupport.set(schema, exists);
+  return exists;
 }
 
 async function hasOriginalStopIdColumn(schema: string): Promise<boolean> {
