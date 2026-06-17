@@ -6,6 +6,7 @@ import OverviewIcon from "@mui/icons-material/Dashboard";
 import ServicesIcon from "@mui/icons-material/Dns";
 import IntegrationsIcon from "@mui/icons-material/Extension";
 import CatalogIcon from "@mui/icons-material/GridView";
+import CacheIcon from "@mui/icons-material/LayersClear";
 import PoiIcon from "@mui/icons-material/LocationOn";
 import StatusIcon from "@mui/icons-material/MonitorHeart";
 import UsersIcon from "@mui/icons-material/People";
@@ -117,6 +118,12 @@ const BASE_NAV_ITEMS = [
     label: "Settings",
     href: "/admin/settings",
     icon: <SettingsIcon fontSize="small" />,
+    selfHostedOnly: false,
+  },
+  {
+    label: "Cache",
+    href: "/admin/cache",
+    icon: <CacheIcon fontSize="small" />,
     selfHostedOnly: false,
   },
 ] as const;

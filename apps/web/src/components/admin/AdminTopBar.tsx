@@ -27,6 +27,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   status: "Status",
   activity: "Activity",
   settings: "Settings",
+  cache: "Cache",
   sources: "Sources",
 };
 

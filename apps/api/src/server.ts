@@ -20,6 +20,7 @@ import {
 } from "./integration-host";
 import { redis } from "./redis";
 import { adminRoute } from "./routes/admin";
+import { adminCacheRoute } from "./routes/admin-cache";
 import { registerCapabilityBindingRoutes } from "./routes/admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./routes/admin-compose";
 import { registerAdminServiceReposRoutes } from "./routes/admin-service-repos";
@@ -352,6 +353,7 @@ await server.register(adminServicesRoute, { prefix: "/api" });
 await server.register(dataManagerRoute, { prefix: "/api" });
 await server.register(adminSettingsRoute, { prefix: "/api" });
 await server.register(adminStoreRoute, { prefix: "/api" });
+await server.register(adminCacheRoute, { prefix: "/api" });
 await server.register(attributionRoute, { prefix: "/api" });
 await registerCapabilityBindingRoutes(server);
 await registerAdminServiceReposRoutes(server);
