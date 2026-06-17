@@ -35,6 +35,7 @@ import { useEnv } from "@/lib/EnvProvider";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { useAdminToast } from "../shared/AdminToast";
 import { ServiceStatusChip } from "../shared/ServiceStatusChip";
+import { TableEmptyState } from "../shared/TableEmptyState";
 
 type QualityFilter = "all" | ServiceQuality;
 
@@ -694,27 +695,14 @@ export function ServiceCatalog() {
               {isLoading ? (
                 <SkeletonRows />
               ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6}>
-                    <Box
-                      sx={{
-                        py: 3,
-                        textAlign: "center",
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: "text.secondary",
-                        }}
-                      >
-                        {services.length === 0
-                          ? "No services registered yet."
-                          : "No services match the current filters."}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                </TableRow>
+                <TableEmptyState
+                  colSpan={6}
+                  message={
+                    services.length === 0
+                      ? "No services registered yet."
+                      : "No services match the current filters."
+                  }
+                />
               ) : (
                 filtered.map((svc) => (
                   <TableRow key={svc.id} hover>

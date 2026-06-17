@@ -27,7 +27,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { jobStatusColor } from "../shared/jobStatus";
 
 // Types
 
@@ -154,14 +156,6 @@ function attentionHref(item: AttentionItem): string {
   return "/admin";
 }
 
-function jobStatusColor(status: string): "default" | "success" | "error" | "warning" | "info" {
-  if (status === "success") return "success";
-  if (status === "failed") return "error";
-  if (status === "running") return "info";
-  if (status === "queued") return "warning";
-  return "default";
-}
-
 // Main
 
 // Collapsed list size for the Needs Attention + Credentials Overview
@@ -236,14 +230,7 @@ export function AdminOverview() {
           gap: 3,
         }}
       >
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Overview
-        </Typography>
+        <AdminPageHeader title="Overview" />
         <Grid container spacing={2}>
           {[1, 2, 3, 4].map((i) => (
             <Grid key={i} size={{ xs: 12, sm: 6, md: 3 }}>
@@ -272,25 +259,11 @@ export function AdminOverview() {
       }}
     >
       {/* Header */}
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 1,
-        }}
-      >
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Overview
-        </Typography>
-        <HealthBadge status={data.systemHealth.status} />
-      </Stack>
+      <AdminPageHeader
+        title="Overview"
+        actions={<HealthBadge status={data.systemHealth.status} />}
+      />
+
       {/* Summary cards */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>

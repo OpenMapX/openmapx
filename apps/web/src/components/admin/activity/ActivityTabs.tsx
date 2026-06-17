@@ -3,8 +3,8 @@
 import Box from "@mui/material/Box";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
-import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AppLogViewer } from "./AppLogViewer";
 import { AuditLog } from "./AuditLog";
 import { JobList } from "./JobList";
@@ -14,15 +14,9 @@ export function ActivityTabs() {
 
   return (
     <Box>
-      <Typography
-        variant="h5"
-        sx={{
-          fontWeight: 700,
-          mb: 2,
-        }}
-      >
-        Activity
-      </Typography>
+      <Box sx={{ mb: 2 }}>
+        <AdminPageHeader title="Activity" />
+      </Box>
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v as number)}

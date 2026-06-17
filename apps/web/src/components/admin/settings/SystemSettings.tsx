@@ -31,6 +31,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 
 interface ResolvedSetting {
   group: string;
@@ -709,17 +710,10 @@ export function SystemSettings() {
   return (
     <Stack
       sx={{
-        gap: 2,
+        gap: 3,
       }}
     >
-      <Typography
-        variant="h5"
-        sx={{
-          fontWeight: 700,
-        }}
-      >
-        Settings
-      </Typography>
+      <AdminPageHeader title="Settings" subtitle="Operator configuration" />
       {data.groups.map((group) => (
         <SettingsGroupPanel
           key={group.id}

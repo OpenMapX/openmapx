@@ -39,6 +39,7 @@ import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { formatBytes } from "@/lib/storageFormat";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 
 interface OsmInfo {
@@ -1306,42 +1307,24 @@ export function DataWorkflowsPage() {
 
   return (
     <Box>
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography
-            variant="h5"
-            sx={{
-              fontWeight: 700,
-            }}
-          >
-            Data &amp; Feed Workflows
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            Manage OSM data, GTFS feeds, builds, and long-running data jobs
-          </Typography>
-        </Box>
-        <Box sx={{ flex: 1 }} />
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Button component={Link} href="/admin/services" variant="outlined" size="small">
-          ← Services
-        </Button>
-      </Stack>
+      <Box sx={{ mb: 3 }}>
+        <AdminPageHeader
+          title="Data workflows"
+          subtitle="Manage OSM data, GTFS feeds, builds, and long-running data jobs"
+          actions={
+            <>
+              <Tooltip title="Refresh">
+                <IconButton size="small" onClick={() => refetch()} disabled={isFetching}>
+                  <RefreshIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Button component={Link} href="/admin/services" variant="outlined" size="small">
+                ← Services
+              </Button>
+            </>
+          }
+        />
+      </Box>
       <Stack spacing={3}>
         <DataOperationsSection apiUrl={apiUrl} />
         <OsmSection osm={data.osm} />

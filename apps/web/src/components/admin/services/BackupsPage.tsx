@@ -1,7 +1,6 @@
 "use client";
 
 import DeleteIcon from "@mui/icons-material/Delete";
-import HistoryIcon from "@mui/icons-material/History";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RestoreIcon from "@mui/icons-material/Restore";
 import Alert from "@mui/material/Alert";
@@ -32,7 +31,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { formatBytes } from "@/lib/storageFormat";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { TableEmptyState } from "../shared/TableEmptyState";
 
 interface BackupSummary {
   name: string;
@@ -161,44 +162,22 @@ export function BackupsPage() {
   return (
     <Stack
       sx={{
-        gap: 2.5,
+        gap: 3,
       }}
     >
-      <Stack
-        direction="row"
-        spacing={1.5}
-        sx={{
-          alignItems: "center",
-        }}
-      >
-        <HistoryIcon color="primary" />
-        <Box>
-          <Typography
-            variant="h5"
-            sx={{
-              fontWeight: 700,
-            }}
-          >
-            Backups
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            Create, restore, and delete service-volume backups
-          </Typography>
-        </Box>
-        <Box sx={{ flex: 1 }} />
-        <Tooltip title="Refresh">
-          <span>
-            <IconButton onClick={() => refetch()} disabled={isFetching || isLoading}>
-              <RefreshIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
-      </Stack>
+      <AdminPageHeader
+        title="Backups"
+        subtitle="Create, restore, and delete service-volume backups"
+        actions={
+          <Tooltip title="Refresh">
+            <span>
+              <IconButton onClick={() => refetch()} disabled={isFetching || isLoading}>
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        }
+      />
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
@@ -276,20 +255,7 @@ export function BackupsPage() {
               </TableHead>
               <TableBody>
                 {sortedBackups.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7}>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: "text.secondary",
-                          py: 2,
-                          textAlign: "center",
-                        }}
-                      >
-                        No backups found yet.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
+                  <TableEmptyState colSpan={7} message="No backups found yet." />
                 ) : (
                   sortedBackups.map((backup) => (
                     <TableRow key={backup.name} hover>

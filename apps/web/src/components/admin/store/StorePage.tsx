@@ -39,6 +39,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { DomainChip } from "../integrations/DomainChip";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { InstallFromUrlDialog } from "./InstallFromUrlDialog";
 import type { StoreCatalogEntry } from "./StoreCard";
@@ -628,91 +629,65 @@ export function StorePage() {
   return (
     <Box>
       {/* Page header */}
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          justifyContent: "space-between",
-          mb: 3,
-          flexWrap: "wrap",
-          gap: 1,
-        }}
-      >
-        <Box>
-          <Typography
-            variant="h5"
-            sx={{
-              fontWeight: 700,
-            }}
-          >
-            Community Store
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            Browse, install, and manage community integrations
-          </Typography>
-          {updatesQuery.data && (
-            <Stack
-              direction="row"
-              sx={{
-                gap: 0.75,
-                mt: 1,
-                flexWrap: "wrap",
-              }}
-            >
-              <Chip
-                size="small"
+      <Box sx={{ mb: 3 }}>
+        <AdminPageHeader
+          title="Store"
+          subtitle="Browse and install integration bundles"
+          actions={
+            <>
+              <Button
                 variant="outlined"
-                color={updatesQuery.data.available > 0 ? "warning" : "success"}
-                label={
-                  updatesQuery.data.available > 0
-                    ? `${updatesQuery.data.available} update${updatesQuery.data.available === 1 ? "" : "s"} available`
-                    : "All installed integrations are up to date"
-                }
-              />
-              {updatesQuery.data.updates
-                .filter((u) => u.hasUpdate)
-                .slice(0, 3)
-                .map((u) => (
-                  <Chip
-                    key={u.id}
-                    size="small"
-                    variant="outlined"
-                    label={`${u.id}: ${u.installedVersion} → ${u.latestVersion}`}
-                  />
-                ))}
-            </Stack>
-          )}
-        </Box>
-        <Stack
-          direction="row"
-          sx={{
-            gap: 1,
-          }}
-        >
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={() => refreshMutation.mutate()}
-            disabled={refreshMutation.isPending}
-            size="small"
+                startIcon={<RefreshIcon />}
+                onClick={() => refreshMutation.mutate()}
+                disabled={refreshMutation.isPending}
+                size="small"
+              >
+                {refreshMutation.isPending ? "Refreshing…" : "Refresh Catalog"}
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setInstallUrlOpen(true)}
+                size="small"
+              >
+                Install from URL
+              </Button>
+            </>
+          }
+        />
+        {updatesQuery.data && (
+          <Stack
+            direction="row"
+            sx={{
+              gap: 0.75,
+              mt: 1,
+              flexWrap: "wrap",
+            }}
           >
-            {refreshMutation.isPending ? "Refreshing…" : "Refresh Catalog"}
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setInstallUrlOpen(true)}
-            size="small"
-          >
-            Install from URL
-          </Button>
-        </Stack>
-      </Stack>
+            <Chip
+              size="small"
+              variant="outlined"
+              color={updatesQuery.data.available > 0 ? "warning" : "success"}
+              label={
+                updatesQuery.data.available > 0
+                  ? `${updatesQuery.data.available} update${updatesQuery.data.available === 1 ? "" : "s"} available`
+                  : "All installed integrations are up to date"
+              }
+            />
+            {updatesQuery.data.updates
+              .filter((u) => u.hasUpdate)
+              .slice(0, 3)
+              .map((u) => (
+                <Chip
+                  key={u.id}
+                  size="small"
+                  variant="outlined"
+                  label={`${u.id}: ${u.installedVersion} → ${u.latestVersion}`}
+                />
+              ))}
+          </Stack>
+        )}
+      </Box>
       {/* Tabs: Browse / Installed */}
       <Tabs
         value={mainTab}

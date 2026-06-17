@@ -41,8 +41,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
+import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { BanUserDialog } from "./BanUserDialog";
 import { CreateUserDialog } from "./CreateUserDialog";
@@ -161,7 +163,11 @@ function ActionsMenu({
 
   return (
     <>
-      <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)}>
+      <IconButton
+        size="small"
+        aria-label="User actions"
+        onClick={(e) => setAnchor(e.currentTarget)}
+      >
         <MoreVertIcon fontSize="small" />
       </IconButton>
       <Menu
@@ -318,35 +324,23 @@ export function UserList() {
   return (
     <Stack
       sx={{
-        gap: 2,
+        gap: 3,
       }}
     >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 1,
-        }}
-      >
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Users
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setCreateOpen(true)}
-          size="small"
-        >
-          Create User
-        </Button>
-      </Stack>
+      <AdminPageHeader
+        title="Users"
+        subtitle="Accounts, roles, bans, impersonation"
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setCreateOpen(true)}
+            size="small"
+          >
+            Create User
+          </Button>
+        }
+      />
       <Stack
         direction={{ xs: "column", sm: "row" }}
         sx={{
@@ -424,18 +418,7 @@ export function UserList() {
             ) : (
               <TableBody>
                 {users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: "text.secondary",
-                        }}
-                      >
-                        No users found
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
+                  <TableEmptyState colSpan={8} message="No users found" />
                 ) : (
                   users.map((user) => {
                     const isSelf = user.id === currentUserId;

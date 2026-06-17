@@ -1,21 +1,14 @@
 "use client";
 
 import Chip from "@mui/material/Chip";
-
-const STATUS_COLOR: Record<string, "default" | "primary" | "success" | "error" | "warning"> = {
-  queued: "default",
-  running: "primary",
-  success: "success",
-  failed: "error",
-  canceled: "warning",
-};
+import { jobStatusColor } from "../shared/jobStatus";
 
 export function JobStatusChip({ status }: { status: string }) {
   return (
     <Chip
       label={status}
       size="small"
-      color={STATUS_COLOR[status] ?? "default"}
+      color={jobStatusColor(status)}
       variant={status === "running" ? "filled" : "outlined"}
     />
   );

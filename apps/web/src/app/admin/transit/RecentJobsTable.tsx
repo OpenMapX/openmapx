@@ -16,6 +16,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
+import { jobStatusColor } from "@/components/admin/shared/jobStatus";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
 
 function formatTime(iso: string | null): string {
@@ -31,14 +32,6 @@ function formatTime(iso: string | null): string {
   } catch {
     return iso;
   }
-}
-
-function jobStatusColor(status: string): "default" | "success" | "error" | "primary" | "warning" {
-  if (status === "running") return "primary";
-  if (status === "success") return "success";
-  if (status === "failed" || status === "error") return "error";
-  if (status === "partial" || status === "stale" || status === "canceled") return "warning";
-  return "default";
 }
 
 function durationLabel(startedAt: string, finishedAt: string | null): string {

@@ -30,7 +30,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { TableEmptyState } from "../shared/TableEmptyState";
 import { DomainChip } from "./DomainChip";
 import { computeStatusVariant, IntegrationStatusDot } from "./IntegrationStatusDot";
 import { StatusBadge } from "./StatusBadge";
@@ -263,56 +265,44 @@ export function IntegrationList() {
         gap: 3,
       }}
     >
-      <Stack
-        direction="row"
-        sx={{
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 1,
-        }}
-      >
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-          }}
-        >
-          Integrations
-        </Typography>
-        <Stack
-          direction="row"
-          sx={{
-            gap: 0.75,
-            flexWrap: "wrap",
-          }}
-        >
-          <Chip label={`${integrations.length} total`} size="small" variant="outlined" />
-          <Chip
-            label={`${counts.enabled} enabled`}
-            size="small"
-            color="success"
-            variant="outlined"
-          />
-          <Chip label={`${counts.disabled} disabled`} size="small" variant="outlined" />
-          {counts.unhealthy > 0 && (
+      <AdminPageHeader
+        title="Integrations"
+        subtitle="Providers, credentials, health"
+        actions={
+          <Stack
+            direction="row"
+            sx={{
+              gap: 0.75,
+              flexWrap: "wrap",
+            }}
+          >
+            <Chip label={`${integrations.length} total`} size="small" variant="outlined" />
             <Chip
-              label={`${counts.unhealthy} unhealthy`}
+              label={`${counts.enabled} enabled`}
               size="small"
-              color="error"
+              color="success"
               variant="outlined"
             />
-          )}
-          {counts.unconfigured > 0 && (
-            <Chip
-              label={`${counts.unconfigured} unconfigured`}
-              size="small"
-              color="warning"
-              variant="outlined"
-            />
-          )}
-        </Stack>
-      </Stack>
+            <Chip label={`${counts.disabled} disabled`} size="small" variant="outlined" />
+            {counts.unhealthy > 0 && (
+              <Chip
+                label={`${counts.unhealthy} unhealthy`}
+                size="small"
+                color="error"
+                variant="outlined"
+              />
+            )}
+            {counts.unconfigured > 0 && (
+              <Chip
+                label={`${counts.unconfigured} unconfigured`}
+                size="small"
+                color="warning"
+                variant="outlined"
+              />
+            )}
+          </Stack>
+        }
+      />
       <Stack
         direction="row"
         sx={{
@@ -452,20 +442,7 @@ export function IntegrationList() {
           </TableHead>
           <TableBody>
             {filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7}>
-                  <Typography
-                    variant="body2"
-                    align="center"
-                    sx={{
-                      color: "text.secondary",
-                      py: 3,
-                    }}
-                  >
-                    No integrations match your filters
-                  </Typography>
-                </TableCell>
-              </TableRow>
+              <TableEmptyState colSpan={7} message="No integrations match your filters" />
             )}
             {filtered.map((integration) => (
               <TableRow key={integration.id} hover>

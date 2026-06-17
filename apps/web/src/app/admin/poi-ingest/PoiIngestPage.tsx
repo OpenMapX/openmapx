@@ -7,9 +7,9 @@ import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { AdminPageHeader } from "@/components/admin/shared/AdminPageHeader";
 import { usePoiIngestState } from "@/lib/admin/poiIngestHooks";
 import { InflightCard } from "./InflightCard";
 import { OverviewCard } from "./OverviewCard";
@@ -27,46 +27,26 @@ export function PoiIngestPage() {
 
   return (
     <Box>
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography
-            variant="h5"
-            sx={{
-              fontWeight: 700,
-            }}
-          >
-            POI ingest pipeline
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            EV charging · parking · per-source PostGIS ingest
-          </Typography>
-        </Box>
-        <Box sx={{ flex: 1 }} />
-        <Tooltip title="Refresh all">
-          <IconButton
-            size="small"
-            onClick={() => {
-              void refetch();
-              void queryClient.invalidateQueries({ queryKey: ["admin", "poi-ingest"] });
-            }}
-            disabled={isFetching}
-          >
-            <RefreshIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Stack>
+      <Box sx={{ mb: 3 }}>
+        <AdminPageHeader
+          title="POI ingest"
+          subtitle="EV charging · parking · per-source PostGIS ingest"
+          actions={
+            <Tooltip title="Refresh all">
+              <IconButton
+                size="small"
+                onClick={() => {
+                  void refetch();
+                  void queryClient.invalidateQueries({ queryKey: ["admin", "poi-ingest"] });
+                }}
+                disabled={isFetching}
+              >
+                <RefreshIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          }
+        />
+      </Box>
       {isLoading && (
         <Box
           sx={{
