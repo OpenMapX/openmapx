@@ -38,6 +38,22 @@ export interface ApiOptions {
 
 const startedAt = Date.now();
 
+// Conservative git ref-name shape. Blocks option injection (leading "-"),
+// path traversal ("..") and refspec magic ("@{", "~", "^", ":", whitespace,
+// control chars) while allowing the slugs/branches the catalog actually uses
+// (e.g. "main", "release/2026-06", "feature/x-y").
+const SAFE_GIT_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+
+function isSafeGitRef(ref: string): boolean {
+  return (
+    SAFE_GIT_REF.test(ref) &&
+    !ref.includes("..") &&
+    !ref.includes("@{") &&
+    !ref.endsWith("/") &&
+    !ref.endsWith(".lock")
+  );
+}
+
 export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? "/data";
   const repoRoot = opts.repoRoot ?? process.env.OPENMAPX_ROOT_DIR ?? "";
@@ -347,6 +363,16 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post<{
     Body?: { branch?: string; force?: boolean; lockedBy?: string };
   }>("/transit/bump", async (req, reply) => {
+    const branch = req.body?.branch?.trim() || "main";
+    if (!isSafeGitRef(branch)) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: "invalid-branch",
+        message: `branch "${branch}" is not a valid git ref name`,
+      };
+    }
+
     if (!repoRoot) {
       reply.code(503);
       return {
@@ -356,7 +382,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       };
     }
 
-    const branch = req.body?.branch?.trim() || "main";
     const force = req.body?.force === true;
     const lockedBy = req.body?.lockedBy?.trim() || "api";
 
