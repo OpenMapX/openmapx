@@ -1,4 +1,3 @@
-// integrations/hotels/typeahead.ts
 import { haversineKm } from "@openmapx/core/server";
 import { nameMatches, normalizeName } from "./match.js";
 import type { HotelQuery } from "./types.js";

@@ -1,14 +1,11 @@
-// integrations/hotels/provider.ts
 import type { HotelOffer } from "@openmapx/core/server";
 import { fetchLiteApiOffer, type RateOptions } from "./liteapi.js";
 import type { HotelQuery } from "./types.js";
 
 /**
- * A live hotel-rates provider. Phase B implements `searchOffer` (read-only price
- * display). Phase C (booking) will add optional `prebook`/`book` methods to the
- * SAME object — declared here as commented intent so the shape is fixed now and
- * booking drops in without touching call sites. See
- * docs/plans/hotel-prices-and-booking.md.
+ * A live hotel-rates provider. `searchOffer` does read-only price display.
+ * Optional `prebook`/`book` (booking) methods can be added to the SAME object
+ * later — the shape is fixed now so booking drops in without touching call sites.
  */
 export interface HotelRatesProvider {
   readonly id: string;

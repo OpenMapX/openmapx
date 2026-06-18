@@ -217,7 +217,7 @@ async function fetchRatesForHotel(
  * Fetch the lowest live nightly rate for THIS hotel: resolve the matching
  * nearby hotel id, then price just that one. Returns null on any failure
  * (missing coords/dates, no match, network/upstream error) so the caller falls
- * back to Tier 1 silently. Two cached server-side calls to a fixed host.
+ * back to the deep-link experience silently. Two cached server-side calls to a fixed host.
  */
 export async function fetchLiteApiOffer(
   apiKey: string,

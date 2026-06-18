@@ -1,4 +1,3 @@
-// apps/web/src/components/panels/place/HotelCompareList.tsx
 "use client";
 
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -72,7 +71,7 @@ function Row({
  * "All options" compare list for a lodging place. Renders an Official-site row
  * (place.website) when present, then the region-filtered OTAs. Each opens the
  * provider's pre-filled search via the backend hand-off. Mirrors the food
- * delivery provider list. Tier 1 shows no prices (deep-link only).
+ * delivery provider list. Shows no prices (deep-link only).
  */
 export function HotelCompareList({
   place,

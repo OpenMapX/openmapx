@@ -1,4 +1,3 @@
-// integrations/hotels/official.ts
 import { USER_AGENT_CONTACT } from "@openmapx/core";
 import { assertResolvesToPublicIp } from "@openmapx/core/server";
 import type { Logger } from "@openmapx/integration-framework";
@@ -19,7 +18,7 @@ export interface BookingDates {
  * id, so it's a precise official entry point — far better than the homepage.
  * For engines whose date params we're confident about we append the stay;
  * others are passed through (their own date picker takes over). Best-effort,
- * same philosophy as the OTA builders — see docs/plans/hotel-prices-and-booking.md.
+ * same philosophy as the OTA builders.
  */
 const IBE_ENGINES: ReadonlyArray<{
   test: RegExp;

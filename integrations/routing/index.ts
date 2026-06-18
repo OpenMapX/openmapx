@@ -97,7 +97,7 @@ function roundWaypoints(wps: [number, number][]): [number, number][] {
  * Cache TTL (seconds). When the caller pins a wall-clock (`departAt` or
  * `arriveBy`), the engine response is deterministic for that time and we can
  * cache aggressively. Without a pinned time, Valhalla treats the request as
- * "now" — once predicted-traffic tiles land (Tier 3 #8), the answer drifts as
+ * "now" — once predicted-traffic tiles land, the answer drifts as
  * "now" advances, so we keep the implicit-time TTL short.
  */
 const CACHE_TTL_PINNED_SECONDS = 3600;

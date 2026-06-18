@@ -17,9 +17,9 @@ import { zomatoProvider } from "./zomato.js";
 
 /**
  * Registry of food-delivery deep-link providers. Each builder produces the most
- * location-scoped URL the platform supports so results land on the right city
- * (see docs/plans/restaurant-menus-and-delivery.md). Order is the default UI
- * order. To add a platform: implement a `DeliveryProvider` module and append it.
+ * location-scoped URL the platform supports so results land on the right city.
+ * Order is the default UI order. To add a platform: implement a `DeliveryProvider`
+ * module and append it.
  */
 export const DELIVERY_PROVIDERS: readonly DeliveryProvider[] = [
   uberEatsProvider,

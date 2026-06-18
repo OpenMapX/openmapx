@@ -1,4 +1,3 @@
-// integrations/hotels/wikidata.ts
 import { USER_AGENT_CONTACT } from "@openmapx/core";
 
 /** OTA hotel ids resolved from a Wikidata entity (any subset may be present). */

@@ -123,7 +123,7 @@ function toUberStoreUrl(actionUrl: string, countryCode?: string): string {
  * This is the one place we call a platform's internal API rather than pure
  * deep-linking — justified because it yields the precise store page Google
  * itself uses, is a single cached server-side request to a fixed host, and
- * degrades gracefully. See docs/plans/restaurant-menus-and-delivery.md.
+ * degrades gracefully.
  */
 async function resolveUberEatsStoreUrl(q: DeliveryQuery): Promise<string | null> {
   const loc = buildUberEatsLocation(q);

@@ -1,5 +1,3 @@
-// packages/core/src/git-clone.ts
-//
 // Shared `git clone --depth 1` helper used by both the community-service
 // repository registrar (`apps/api/src/services/service-repositories.ts`) and
 // the community-integration installer (`integration/installer.ts`). Both

@@ -125,7 +125,7 @@ export function buildReviewLinks(place: Place): PlaceReviewLink[] {
   for (const platform of PLATFORMS) {
     let matched: PlaceReviewLink | undefined;
 
-    // Tier 1: OSM extratags (check all keys in priority order)
+    // First: OSM extratags (check all keys in priority order)
     if (platform.osmTagKeys) {
       for (const key of platform.osmTagKeys) {
         const val = osmTags[key];
@@ -136,7 +136,7 @@ export function buildReviewLinks(place: Place): PlaceReviewLink[] {
       }
     }
 
-    // Tier 2: place.ids external identifier
+    // Next: place.ids external identifier
     if (!matched) {
       const idsVal = ids[platform.scheme];
       if (idsVal) matched = directLinkFor(platform, idsVal, "wikidata");
@@ -147,7 +147,7 @@ export function buildReviewLinks(place: Place): PlaceReviewLink[] {
       continue;
     }
 
-    // Tier 3: Search URL fallback — only if the platform provides one.
+    // Last: Search URL fallback — only if the platform provides one.
     // Direct-only platforms are omitted entirely when we have no known id.
     if (platform.searchUrl && shouldBuildReviewFallbackSearch(platform.scheme, place)) {
       const searchUrl = platform.searchUrl(place);

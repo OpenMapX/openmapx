@@ -1,4 +1,3 @@
-// integrations/hotels/official.test.ts
 import { describe, expect, it } from "vitest";
 import { extractOfficialBookingUrl } from "./official.js";
 

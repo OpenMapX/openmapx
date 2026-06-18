@@ -1,4 +1,3 @@
-// integrations/hotels/providers.ts
 import type { HotelProvider, HotelProviderConfig, HotelQuery } from "./types.js";
 
 const enc = encodeURIComponent;
@@ -19,8 +18,7 @@ interface ProviderSpec {
 /**
  * OTA registry. Each builder produces the most location/date-scoped search URL
  * the platform supports, so the user lands on the right hotel/city with dates
- * pre-filled (see docs/plans/hotel-prices-and-booking.md). Order is the default
- * UI order. Adding an OTA is one entry here.
+ * pre-filled. Order is the default UI order. Adding an OTA is one entry here.
  */
 const SPECS: readonly ProviderSpec[] = [
   {

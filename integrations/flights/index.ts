@@ -6,7 +6,7 @@ import type { FlightProviderConfig, FlightProviderInfo } from "./types.js";
 /**
  * Flight-search integration. Exposes deep-link builders for external flight
  * engines so the directions panel can open a pre-filled search. No live flight
- * data is fetched — see docs/plans/flights-in-directions.md for why.
+ * data is fetched.
  *
  * Routes (under `/api/integrations/flights`):
  *   GET /providers          → list providers + capabilities + default

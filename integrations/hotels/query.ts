@@ -1,4 +1,3 @@
-// integrations/hotels/query.ts
 import type { HotelQuery } from "./types.js";
 
 const MAX_LEN = 120;

@@ -1,5 +1,3 @@
-// packages/core/src/git-url.ts
-//
 // Defense-in-depth allowlist for Git repository URLs that the platform will
 // clone on behalf of an admin (community service repos + community
 // integrations). Admin-only endpoints already gate access, but `git clone` of

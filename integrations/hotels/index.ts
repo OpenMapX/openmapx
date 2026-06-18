@@ -1,4 +1,3 @@
-// integrations/hotels/index.ts
 import { bareDomain, type HotelOffer, type HotelProviderInfo } from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { buildExactDeepLink, type IdResolverDeps, resolveOtaHotelId } from "./idResolver.js";
@@ -11,12 +10,12 @@ import type { HotelProviderConfig } from "./types.js";
 import { resolveWikidataOtaIds } from "./wikidata.js";
 
 /**
- * Hotels integration. Tier 1 hands a lodging place panel off to external hotel
- * OTAs pre-filled with the hotel name, dates, and occupancy. `/resolve` and the
+ * Hotels integration. Hands a lodging place panel off to external hotel OTAs
+ * pre-filled with the hotel name, dates, and occupancy. `/resolve` and the
  * exact `/:provider/open` redirect make live (cached) Wikidata + Trip.com
  * typeahead lookups to find an OTA's internal hotel id, so id-only OTAs link to
- * the exact hotel (Booking stays a universal search). (Tier 2 adds GET /offers
- * for a live lowest rate via LiteAPI.) See docs/plans/hotel-prices-and-booking.md.
+ * the exact hotel (Booking stays a universal search). GET /offers additionally
+ * returns a live lowest rate via LiteAPI when configured.
  *
  * Routes (under `/api/integrations/hotels`):
  *   GET /providers?country=de  → OTAs serving that country (or all)
@@ -70,7 +69,7 @@ export function setup(ctx: IntegrationContext): void {
   const liteApiKey = typeof ctx.config.liteApiKey === "string" ? ctx.config.liteApiKey : undefined;
   const liteApiCurrency =
     (typeof ctx.config.liteApiCurrency === "string" && ctx.config.liteApiCurrency.trim()) || "EUR";
-  /** One provider instance per configured key; null ⇒ Tier 2 off. */
+  /** One provider instance per configured key; null ⇒ live rates off. */
   const ratesProvider = liteApiKey ? createLiteApiProvider(liteApiKey) : null;
   /** Live lowest-rate cache: prices are short-lived. */
   const OFFER_TTL = 15 * 60; // 15 minutes
@@ -129,7 +128,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/offers", async (req, reply) => {
     if (!ratesProvider) {
-      // Tier 2 not configured — Tier 1 deep-links remain the experience.
+      // Live rates not configured — deep-links remain the experience.
       reply.status(204).send({});
       return;
     }

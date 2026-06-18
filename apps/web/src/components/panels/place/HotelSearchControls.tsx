@@ -1,4 +1,3 @@
-// apps/web/src/components/panels/place/HotelSearchControls.tsx
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";

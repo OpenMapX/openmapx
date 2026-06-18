@@ -17,7 +17,7 @@ const RESOLVE_NEGATIVE_TTL = 24 * 60 * 60;
  * Food-delivery integration. Exposes deep-link builders for external delivery
  * platforms so a restaurant's place panel can hand the user off to the
  * platform's search pre-filled with the restaurant name. No live menu/price/ETA
- * data is fetched — see docs/plans/restaurant-menus-and-delivery.md.
+ * data is fetched.
  *
  * Routes (under `/api/integrations/food-delivery`):
  *   GET /providers?country=de  → providers serving that country (or all)

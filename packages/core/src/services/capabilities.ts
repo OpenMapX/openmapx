@@ -1,5 +1,3 @@
-// packages/core/src/services/capabilities.ts
-//
 // Well-known capabilities and data types used in service manifests.
 //
 // `provides:` (and integration `requires.capability:`) holds **service

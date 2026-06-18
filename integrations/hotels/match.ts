@@ -1,9 +1,7 @@
-// integrations/hotels/match.ts
-//
 // Shared hotel name-matching helpers. The LiteAPI rate matcher (liteapi.ts
 // pickBestHotel) and the Trip.com typeahead matcher (typeahead.ts
 // pickKeywordMatch) must decide "is this candidate the same hotel as the query?"
-// IDENTICALLY — otherwise the Tier-2 price badge and the Tier-1 deep link can
+// IDENTICALLY — otherwise the live price badge and the deep link can
 // resolve to different properties for the same place. Keep the rule here, once.
 
 /** Lowercase, fold diacritics, collapse to single-spaced alphanumerics. */

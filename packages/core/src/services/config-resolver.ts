@@ -1,5 +1,3 @@
-// packages/core/src/services/config-resolver.ts
-//
 // Pure helpers for resolving per-service operator configuration. The renderer
 // (core) stays free of DB/process-env knowledge by accepting a pre-resolved
 // `Map<serviceId, Record<string, unknown>>` in `RenderContext`. This module

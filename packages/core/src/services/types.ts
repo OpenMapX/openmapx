@@ -1,5 +1,3 @@
-// packages/core/src/services/types.ts
-//
 // Public types for the service plugin system. The Zod schemas in
 // manifest-schema.ts are the source of truth for runtime validation;
 // these types provide the editor-facing shape and are inferred from

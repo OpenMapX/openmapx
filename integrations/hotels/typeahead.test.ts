@@ -1,4 +1,3 @@
-// integrations/hotels/typeahead.test.ts
 import { describe, expect, it } from "vitest";
 import tripFixture from "./__fixtures__/tripcom-keywords.json" with { type: "json" };
 import { parseTripcomKeywords, pickKeywordMatch } from "./typeahead.js";

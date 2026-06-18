@@ -70,7 +70,7 @@ export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
       const ranked: Array<{ rank: number; typeRank: number; record: AirportRecord }> = [];
       const seen = new Set<number>();
 
-      // Tier 1: exact IATA/ICAO/ident hit — always wins.
+      // Exact IATA/ICAO/ident hit — always wins.
       const exact = byCodeMap.get(queryUpper);
       if (exact) {
         ranked.push({
@@ -81,7 +81,7 @@ export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
         seen.add(exact.id);
       }
 
-      // Tier 2-4: walk all entries and bucket by match strength.
+      // Otherwise: walk all entries and bucket by match strength.
       for (const e of entries) {
         if (seen.has(e.record.id)) continue;
         let rank: number | null = null;

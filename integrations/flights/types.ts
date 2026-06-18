@@ -2,8 +2,7 @@
  * Shared types for the flight-search integration.
  *
  * This integration does NOT fetch live flight data — no free, fresh,
- * commercially-licensable open flight schedule/price feed exists (see
- * docs/plans/flights-in-directions.md). Instead each provider is a pure
+ * commercially-licensable open flight schedule/price feed exists. Instead each provider is a pure
  * deep-link builder: it turns a normalised {@link FlightSearchQuery} into a
  * URL that opens a pre-filled search on an external flight engine. Adding a
  * new engine (e.g. another metasearch site) is a single file in `providers/`

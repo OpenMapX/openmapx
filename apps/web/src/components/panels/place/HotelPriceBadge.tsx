@@ -1,4 +1,3 @@
-// apps/web/src/components/panels/place/HotelPriceBadge.tsx
 "use client";
 
 import Box from "@mui/material/Box";
@@ -6,7 +5,7 @@ import Typography from "@mui/material/Typography";
 import type { HotelOffer } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 
-/** "from €75 / night" reference price from a live offer (Tier 2). */
+/** "from €75 / night" reference price from a live offer. */
 export function HotelPriceBadge({ offer }: { offer: HotelOffer }) {
   const t = useTranslations("place");
   const locale = useLocale();

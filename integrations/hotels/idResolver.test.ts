@@ -1,4 +1,3 @@
-// integrations/hotels/idResolver.test.ts
 import { describe, expect, it } from "vitest";
 import { buildExactDeepLink, resolveOtaHotelId } from "./idResolver.js";
 

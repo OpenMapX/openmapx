@@ -1,4 +1,3 @@
-// integrations/hotels/query.test.ts
 import { describe, expect, it } from "vitest";
 import { parseHotelQuery } from "./query.js";
 

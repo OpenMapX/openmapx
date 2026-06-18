@@ -1,4 +1,3 @@
-// integrations/hotels/providers.test.ts
 import { describe, expect, it } from "vitest";
 import { getHotelProvider, HOTEL_PROVIDERS, providerServes } from "./providers.js";
 import type { HotelQuery } from "./types.js";

@@ -1,5 +1,3 @@
-// packages/core/src/repo-paths.ts
-//
 // Single source of truth for finding the OpenMapX repo root and the canonical
 // subdirectories underneath it. Used by:
 //

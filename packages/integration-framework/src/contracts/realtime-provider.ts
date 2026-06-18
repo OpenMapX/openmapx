@@ -17,8 +17,7 @@ export interface RealtimeCapabilities {
 /**
  * Realtime delta for a single (trip, stop) pair. Consumed by the transit
  * orchestrator to enrich scheduled departures with live `expectedAt` /
- * `delaySeconds` / `canceled` / `platform` overrides — see plan §4.4(3) /
- * D3 in docs/plans/2026-05-21-transit-mobility-architecture.md.
+ * `delaySeconds` / `canceled` / `platform` overrides.
  *
  * Providers that cannot resolve the given tripId (wrong prefix, unknown
  * trip) return `null` so the orchestrator can move on to the next provider

@@ -27,7 +27,7 @@ export interface HotelSearchParams {
   adults?: number;
   /** Number of rooms. */
   rooms?: number;
-  /** ISO-4217 currency for live (Tier 2) rates, e.g. "EUR". */
+  /** ISO-4217 currency for live rates, e.g. "EUR". */
   currency?: string;
   /**
    * ISO-3166-1 alpha-2 guest nationality for live rates, e.g. "DE". Case-
@@ -40,13 +40,13 @@ export interface HotelSearchParams {
   wikidata?: string;
 }
 
-/** Tier 2 client config: whether live prices are on + the currency to preset. */
+/** Client config: whether live prices are on + the currency to preset. */
 export interface HotelConfig {
   liveEnabled: boolean;
   defaultCurrency: string;
 }
 
-/** One live rate (Tier 2 — LiteAPI). */
+/** One live rate (LiteAPI). */
 export interface HotelOffer {
   /** Provider/source id, e.g. `liteapi`. */
   source: string;
@@ -61,7 +61,7 @@ export interface HotelOffer {
   refundable: boolean;
 }
 
-/** Tier 2 `/offers` response. */
+/** Live `/offers` response. */
 export interface HotelOffersResponse {
   /** Best (lowest) offer found for the matched hotel, or null when none. */
   best: HotelOffer | null;

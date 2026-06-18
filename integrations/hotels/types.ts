@@ -1,13 +1,10 @@
-// integrations/hotels/types.ts
-
 /**
  * Shared types for the hotels integration.
  *
- * Like flights/food-delivery, Tier 1 fetches NO live data — each provider is a
- * pure deep-link builder that turns a normalised HotelQuery into an OTA search
- * URL pre-filled with the hotel name, dates, and occupancy. Tier 2 (LiteAPI)
- * adds a single live "lowest rate" for display only. See
- * docs/plans/hotel-prices-and-booking.md.
+ * Like flights/food-delivery, the deep-link path fetches NO live data — each
+ * provider is a pure deep-link builder that turns a normalised HotelQuery into
+ * an OTA search URL pre-filled with the hotel name, dates, and occupancy. The
+ * LiteAPI path adds a single live "lowest rate" for display only.
  */
 
 /** Normalised, validated hotel hand-off request. Built by query.ts. */

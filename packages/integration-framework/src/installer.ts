@@ -1,5 +1,3 @@
-// packages/core/src/integration/installer.ts
-//
 // Pure functions for installing, removing, validating, and bundling community
 // integrations under `custom_integrations/`. The CLI (`pnpm openmapx
 // integrations …`) and the admin Store (`apps/api/src/services/store.ts`) both

@@ -1,5 +1,3 @@
-// packages/core/src/spawn.ts
-//
 // `spawn(cmd, args)` with three things you almost always want when running
 // child processes from server code:
 //

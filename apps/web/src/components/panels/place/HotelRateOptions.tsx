@@ -1,4 +1,3 @@
-// apps/web/src/components/panels/place/HotelRateOptions.tsx
 "use client";
 
 import Box from "@mui/material/Box";

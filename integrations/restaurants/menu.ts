@@ -386,7 +386,7 @@ function fromHeuristics(html: string, base: string): MenuResult | null {
  * Resolve a restaurant's menu URL from its own website. Fetches the homepage
  * (robots.txt permitting), reads schema.org `hasMenu` first, then falls back to
  * scoring menu-like anchor links. We only ever return a LINK — never rehosted
- * menu content (see docs/plans/restaurant-menus-and-delivery.md §A5).
+ * menu content.
  */
 export async function resolveMenuUrl(websiteUrl: string, log: Logger): Promise<MenuResult | null> {
   const normalized = normalizeWebsite(websiteUrl);

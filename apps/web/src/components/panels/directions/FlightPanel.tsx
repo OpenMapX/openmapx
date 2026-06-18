@@ -320,7 +320,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
  * Flight directions surface. Resolves nearest airports for the directions
  * origin/destination, lets the user adjust airports, dates, passengers, cabin
  * and direct-only, pick a search engine, then opens a pre-filled search on that
- * engine. No live flight data is fetched (see docs/plans/flights-in-directions.md).
+ * engine. No live flight data is fetched.
  */
 export function FlightPanel() {
   const t = useTranslations("directions");

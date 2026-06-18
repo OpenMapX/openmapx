@@ -47,7 +47,7 @@ export interface DirectionsState {
    * (`integrations/transit/*` → MOTIS). These paths share no code or types.
    * MOTIS street routing must only ever reach the app inside transit
    * `TripLeg` access legs (intermodal first/last-mile) — never wire MOTIS into
-   * the `/directions` chain. See docs/plans/2026-06-05-motis-feature-opportunities.md §4 (2.2).
+   * the `/directions` chain.
    */
   mode: TravelMode;
   activeRouteIndex: number;

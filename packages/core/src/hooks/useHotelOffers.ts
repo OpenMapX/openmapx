@@ -4,8 +4,8 @@ import { API_ENDPOINTS } from "../api/endpoints";
 import type { HotelOffersResponse, HotelSearchParams } from "../types/hotel";
 
 /**
- * Live lowest-rate lookup (Tier 2). Returns null when live prices are off / no
- * match (the backend replies 204) — the UI then shows only the Tier-1 list.
+ * Live lowest-rate lookup. Returns null when live prices are off / no match
+ * (the backend replies 204) — the UI then shows only the deep-link list.
  * Gated on coordinates + dates. Currency + guest nationality (user-chosen) are
  * part of the key so changing them refetches.
  */

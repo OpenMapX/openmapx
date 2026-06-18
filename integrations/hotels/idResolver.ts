@@ -1,4 +1,3 @@
-// integrations/hotels/idResolver.ts
 import type { HotelProviderConfig, HotelQuery } from "./types.js";
 import type { WikidataOtaIds } from "./wikidata.js";
 

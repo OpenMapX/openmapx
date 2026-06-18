@@ -1,4 +1,3 @@
-// integrations/hotels/wikidata.test.ts
 import { describe, expect, it } from "vitest";
 import fixture from "./__fixtures__/wikidata-windsor-palace.json" with { type: "json" };
 import { parseWikidataOtaIds } from "./wikidata.js";

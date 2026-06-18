@@ -1,5 +1,3 @@
-// apps/api/src/services/service-config-resolver.ts
-//
 // Full-cascade resolver for per-service operator configuration. Layers DB
 // values on top of the core env/defaults resolver so the admin panel can
 // surface exactly where each configured value is coming from — and so the

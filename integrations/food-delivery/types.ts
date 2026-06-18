@@ -3,8 +3,7 @@
  *
  * Like the `flights` integration, this fetches NO live data from the delivery
  * platforms — no public consumer API resolves "this restaurant → its order
- * page", and the platform APIs are merchant/POS-side (see
- * docs/plans/restaurant-menus-and-delivery.md). Each provider is therefore a
+ * page", and the platform APIs are merchant/POS-side. Each provider is therefore a
  * pure deep-link builder that turns a normalised {@link DeliveryQuery} into a
  * URL that opens the platform pre-filled with the restaurant name AND a delivery
  * location (so results are scoped to the right city, not the platform default).
