@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "apiKey": {
+      "openChargeMapApiKey": {
         "type": "string",
         "title": "OpenChargeMap API Key",
         "description": "OpenChargeMap API key.",
@@ -96,8 +96,8 @@
     {
       "name": "OpenChargeMap",
       "type": "http",
-      "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${apiKey}&latitude=0&longitude=0&distance=100",
-      "requiredConfigKeys": ["apiKey"],
+      "urlTemplate": "https://api.openchargemap.io/v3/poi/?output=json&maxresults=1&key=${openChargeMapApiKey}&latitude=0&longitude=0&distance=100",
+      "requiredConfigKeys": ["openChargeMapApiKey"],
       "impersonate": true
     },
     {

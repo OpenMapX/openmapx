@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "clientId": {
+      "dbBahnParkClientId": {
         "type": "string",
         "title": "DB BahnPark Client ID",
         "description": "Deutsche Bahn Parking API client ID.",
@@ -41,7 +41,7 @@
           "notes": "Provides ~315 DB BahnPark facilities. The higher transit-authority plan needs a separate data agreement."
         }
       },
-      "apiKey": {
+      "dbBahnParkApiKey": {
         "type": "string",
         "title": "DB BahnPark API Key",
         "description": "Deutsche Bahn Parking API key.",
@@ -139,10 +139,10 @@
       "type": "http",
       "urlTemplate": "https://apis.deutschebahn.com/db-api-marketplace/apis/parking-information/db-bahnpark/v2/parking-facilities?limit=1",
       "headers": {
-        "DB-Client-Id": "${clientId}",
-        "DB-Api-Key": "${apiKey}"
+        "DB-Client-Id": "${dbBahnParkClientId}",
+        "DB-Api-Key": "${dbBahnParkApiKey}"
       },
-      "requiredConfigKeys": ["clientId", "apiKey"]
+      "requiredConfigKeys": ["dbBahnParkClientId", "dbBahnParkApiKey"]
     },
     {
       "name": "ParkenDD",
@@ -290,19 +290,25 @@
       "name": "Stadt Düsseldorf (VT-Manager)",
       "type": "http",
       "url": "https://vtmanager.duesseldorf.de/geoserverwfs?request=getfeature&service=wfs&version=1.1.0&typename=Parkhaeuser&outputFormat=application/json&srsname=epsg:4326",
-      "headers": { "User-Agent": "Mozilla/5.0" }
+      "headers": {
+        "User-Agent": "Mozilla/5.0"
+      }
     },
     {
       "name": "Stadt Salzburg (WFS)",
       "type": "http",
       "url": "https://data.stadt-salzburg.at/geodaten/wfs?service=WFS&version=1.1.0&request=GetFeature&srsName=urn:x-ogc:def:crs:EPSG:4326&outputFormat=application/json&typeName=ogdsbg:parkplatz",
-      "headers": { "User-Agent": "Mozilla/5.0" }
+      "headers": {
+        "User-Agent": "Mozilla/5.0"
+      }
     },
     {
       "name": "Stadt Bielefeld (WFS)",
       "type": "http",
       "url": "https://www.bielefeld01.de/md/WFS/parkplaetze/01?SERVICE=WFS&VERSION=1.1.0&REQUEST=GetCapabilities",
-      "headers": { "User-Agent": "Mozilla/5.0" }
+      "headers": {
+        "User-Agent": "Mozilla/5.0"
+      }
     },
     {
       "name": "Stadtwerke Bamberg (carparkcounter)",
@@ -313,13 +319,17 @@
       "name": "Stadtwerke Trier (parken-v2)",
       "type": "http",
       "url": "https://service.swt.de/parken-v2.xml",
-      "headers": { "User-Agent": "Mozilla/5.0" }
+      "headers": {
+        "User-Agent": "Mozilla/5.0"
+      }
     },
     {
       "name": "Stadtwerke Potsdam (parking CSV)",
       "type": "http",
       "url": "https://cs1-swp.westeurope.cloudapp.azure.com:8443/parking_csv",
-      "headers": { "User-Agent": "Mozilla/5.0" }
+      "headers": {
+        "User-Agent": "Mozilla/5.0"
+      }
     },
     {
       "name": "OpenStreetMap Overpass",

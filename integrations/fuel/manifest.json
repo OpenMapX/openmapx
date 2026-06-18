@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "apiKey": {
+      "tankerkoenigApiKey": {
         "type": "string",
         "title": "Tankerkönig API Key",
         "description": "Tankerkoenig API key for German fuel prices.",
@@ -59,8 +59,8 @@
     {
       "name": "Tankerkoenig (DE)",
       "type": "http",
-      "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${apiKey}",
-      "requiredConfigKeys": ["apiKey"]
+      "urlTemplate": "https://creativecommons.tankerkoenig.de/json/list.php?lat=52.52&lng=13.405&rad=1&sort=dist&type=all&apikey=${tankerkoenigApiKey}",
+      "requiredConfigKeys": ["tankerkoenigApiKey"]
     },
     {
       "name": "E-Control (AT)",

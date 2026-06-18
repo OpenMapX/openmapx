@@ -30,7 +30,7 @@
         "type": "boolean",
         "default": true
       },
-      "apiKey": {
+      "firmsApiKey": {
         "type": "string",
         "title": "NASA FIRMS Map Key",
         "description": "NASA FIRMS map key.",
@@ -52,8 +52,8 @@
   },
   "healthCheck": {
     "type": "http",
-    "urlTemplate": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/${apiKey}/VIIRS_SNPP_NRT/0,0,1,1/1",
-    "requiredConfigKeys": ["apiKey"]
+    "urlTemplate": "https://firms.modaps.eosdis.nasa.gov/api/area/csv/${firmsApiKey}/VIIRS_SNPP_NRT/0,0,1,1/1",
+    "requiredConfigKeys": ["firmsApiKey"]
   },
   "quality": "built-in",
   "category": "Data Overlays",

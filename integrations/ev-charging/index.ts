@@ -15,7 +15,7 @@ export function setup(ctx: IntegrationContext): void {
   initRuntime(ctx);
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
-  setOcmApiKey(ctx.config.apiKey as string | undefined);
+  setOcmApiKey(ctx.config.openChargeMapApiKey as string | undefined);
   setAfdcApiKey(ctx.config.afdcApiKey as string | undefined);
   setNobilApiKey(ctx.config.nobilApiKey as string | undefined);
   setLogger(ctx.log);

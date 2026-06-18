@@ -13,7 +13,7 @@ export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
   setDotLogger(ctx.log);
-  setWindyApiKey(ctx.config.apiKey as string | undefined);
+  setWindyApiKey(ctx.config.windyApiKey as string | undefined);
   setNpsApiKey(ctx.config.npsApiKey as string | undefined);
   setManifestDataSources(ctx.manifest.dataSources ?? []);
   ctx.registerMobilityDataSource(webcamProvider);

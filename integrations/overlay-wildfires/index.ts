@@ -117,7 +117,7 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const mapKey = ctx.config.apiKey as string | undefined;
+    const mapKey = ctx.config.firmsApiKey as string | undefined;
     if (!mapKey) {
       ctx.log.warn("FIRMS map key not configured");
       reply.status(503).send({ message: "Wildfire data not configured" });

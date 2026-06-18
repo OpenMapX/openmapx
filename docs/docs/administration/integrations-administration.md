@@ -93,8 +93,8 @@ the config key uppercased. The key match is case-insensitive, so a camelCase
 schema key like `apiKey` is set by `INTEGRATION_<ID>_APIKEY`:
 
 ```bash
-# infra/docker/.env — overrides the `apiKey` setting of the `ev-charging` integration
-INTEGRATION_EV_CHARGING_APIKEY=your-key-here
+# infra/docker/.env — overrides the `apiKey` setting of the `geocoding-maptiler` integration
+INTEGRATION_GEOCODING_MAPTILER_APIKEY=your-key-here
 ```
 
 For the bigger picture of where settings live — `.env`, the admin panel, and how

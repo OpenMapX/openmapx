@@ -30,7 +30,7 @@
         "type": "boolean",
         "default": true
       },
-      "apiKey": {
+      "openAqApiKey": {
         "type": "string",
         "title": "OpenAQ API Key",
         "description": "OpenAQ API key.",
@@ -54,9 +54,9 @@
     "type": "http",
     "urlTemplate": "https://api.openaq.org/v3/locations?bbox=-0.1,-0.1,0.1,0.1&parameters_id=2&limit=1&page=1",
     "headers": {
-      "X-API-Key": "${apiKey}"
+      "X-API-Key": "${openAqApiKey}"
     },
-    "requiredConfigKeys": ["apiKey"]
+    "requiredConfigKeys": ["openAqApiKey"]
   },
   "quality": "built-in",
   "category": "Data Overlays",

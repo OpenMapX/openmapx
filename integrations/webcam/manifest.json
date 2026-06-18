@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "apiKey": {
+      "windyApiKey": {
         "type": "string",
         "title": "Windy Webcams API Key",
         "description": "Get a free key at https://api.windy.com/keys",
@@ -241,9 +241,9 @@
       "type": "http",
       "urlTemplate": "https://api.windy.com/webcams/api/v3/webcams?limit=1",
       "headers": {
-        "x-windy-api-key": "${apiKey}"
+        "x-windy-api-key": "${windyApiKey}"
       },
-      "requiredConfigKeys": ["apiKey"]
+      "requiredConfigKeys": ["windyApiKey"]
     },
     {
       "name": "NPS Webcams",

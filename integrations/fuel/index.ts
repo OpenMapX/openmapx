@@ -9,7 +9,7 @@ export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
   if (resolved?.url) setOverpassUrl(resolved.url);
   setFuelLogger(ctx.log);
-  setTankerkoenigApiKey(ctx.config.apiKey as string | undefined);
+  setTankerkoenigApiKey(ctx.config.tankerkoenigApiKey as string | undefined);
   // Source attribution metadata from the manifest so every credit shown in
   // the UI is traceable to a single declaration site. Must run before
   // `registerMobilityDataSource` so the provider's `attribution` field has
