@@ -745,7 +745,12 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       request,
     });
 
-    return { ok: true };
+    // Reload so the running integration picks up the new secret. An
+    // integration captures its resolved config (incl. vault secrets) once at
+    // `setup(ctx)` load time, so without this a freshly-set key never reaches
+    // the provider until the next restart. Mirrors the config-PATCH endpoint.
+    const reloadResult = await reloadIntegrations();
+    return { ok: true, ...reloadResult };
   });
 
   // DELETE /admin/credentials/:integrationId/:key
@@ -769,7 +774,10 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         request,
       });
 
-      return { ok: true };
+      // Reload so the running integration drops the removed secret (see the
+      // set-secret handler above).
+      const reloadResult = await reloadIntegrations();
+      return { ok: true, ...reloadResult };
     },
   );
 

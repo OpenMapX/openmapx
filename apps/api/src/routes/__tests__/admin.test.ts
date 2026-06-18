@@ -182,9 +182,10 @@ vi.mock("../../services/admin-ops.js", () => ({
 }));
 
 // validate-config-body
+const mockGetSecretFields = vi.fn().mockReturnValue([]);
 vi.mock("../../utils/validate-config-body.js", () => ({
   validateConfigBody: vi.fn().mockReturnValue({ updates: {}, errors: [] }),
-  getSecretFields: vi.fn().mockReturnValue([]),
+  getSecretFields: (...args: unknown[]) => mockGetSecretFields(...args),
 }));
 
 // resolve-actor
@@ -473,5 +474,39 @@ describe("POST /admin/integrations/reload", () => {
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "integration.reload.all" }),
     );
+  });
+});
+
+describe("PUT /admin/credentials/:integrationId/:key", () => {
+  it("stores the secret AND reloads so the running integration picks it up", async () => {
+    mockGetSecretFields.mockReturnValueOnce([{ key: "apiKey", title: "API Key" }]);
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/admin/credentials/fuel/apiKey",
+      payload: { value: "secret-value" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+    expect(mockSetSecret).toHaveBeenCalledWith(
+      "fuel",
+      "apiKey",
+      "secret-value",
+      fakeSession.user.id,
+    );
+    // The crux: without this reload the freshly-vaulted key never reaches the
+    // provider (config is captured once at setup() load time).
+    expect(mockReloadIntegrations).toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /admin/credentials/:integrationId/:key", () => {
+  it("deletes the secret AND reloads", async () => {
+    const res = await app.inject({ method: "DELETE", url: "/admin/credentials/fuel/apiKey" });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDeleteSecret).toHaveBeenCalledWith("fuel", "apiKey");
+    expect(mockReloadIntegrations).toHaveBeenCalled();
   });
 });
