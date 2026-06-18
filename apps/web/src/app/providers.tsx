@@ -64,6 +64,17 @@ const theme = createTheme({
     MuiPaper: {
       defaultProps: { elevation: 0 },
     },
+    MuiAccordion: {
+      styleOverrides: {
+        // MUI draws a top divider via an ::before pseudo-element intended for
+        // flush-stacked accordions. Every accordion in this app is a spaced,
+        // outlined/bordered card where it just floats as a stray line above
+        // each one — disable it globally so panels don't need to fix it locally.
+        root: {
+          "&::before": { display: "none" },
+        },
+      },
+    },
     MuiIconButton: {
       styleOverrides: {
         root: {

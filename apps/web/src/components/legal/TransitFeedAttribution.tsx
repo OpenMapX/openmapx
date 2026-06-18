@@ -90,7 +90,7 @@ export function TransitFeedAttribution({ feeds, labels }: TransitFeedAttribution
           key={country}
           disableGutters
           elevation={0}
-          sx={{ "&:before": { display: "none" }, border: 1, borderColor: "divider", mb: 0.5 }}
+          sx={{ border: 1, borderColor: "divider", mb: 0.5 }}
         >
           <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40 }}>
             <Typography variant="body2" sx={{ fontWeight: 500 }}>

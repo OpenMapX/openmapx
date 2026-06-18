@@ -327,10 +327,6 @@ function SettingsGroupPanel({
       // specificity to override every corner on every panel; without the
       // double-class scope our plain `&` rule loses the cascade.
       sx={{
-        // MUI draws a top divider via an ::before pseudo-element meant for
-        // flush-stacked accordions. With our spaced-out outlined cards it just
-        // floats as a stray line above each one — remove it.
-        "&::before": { display: "none" },
         "&.MuiAccordion-rounded": {
           borderRadius: 1,
           "&:first-of-type, &:last-of-type": { borderRadius: 1 },
