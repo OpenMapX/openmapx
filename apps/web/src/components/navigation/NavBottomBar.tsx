@@ -16,38 +16,52 @@ import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import { formatDuration, formatMeasurementDistance } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 interface Props {
-  distanceRemaining: number;
   durationRemaining: number;
   etaEpochMs: number;
-  voiceEnabled: boolean;
   keepScreenOn: boolean;
-  onToggleVoice: () => void;
   onToggleKeepScreenOn: () => void;
-  onOverview: () => void;
   onEnd: () => void;
-  units: "metric" | "imperial";
+  /** Distance remaining; omit for transit, which has no single trip distance. */
+  distanceRemaining?: number;
+  units?: "metric" | "imperial";
+  /** Voice toggle; omit to hide the voice button (transit has no voice guidance). */
+  voiceEnabled?: boolean;
+  onToggleVoice?: () => void;
+  /** Overview action; omit to drop the "Route overview" menu item. */
+  onOverview?: () => void;
+  /**
+   * Overrides the default secondary line ("{distance} · ETA {time}"). Transit
+   * passes its own "Arrive {time}" here since it shows no distance.
+   */
+  secondary?: ReactNode;
 }
 
 export function NavBottomBar({
-  distanceRemaining,
   durationRemaining,
   etaEpochMs,
-  voiceEnabled,
   keepScreenOn,
-  onToggleVoice,
   onToggleKeepScreenOn,
-  onOverview,
   onEnd,
-  units,
+  distanceRemaining,
+  units = "metric",
+  voiceEnabled,
+  onToggleVoice,
+  onOverview,
+  secondary,
 }: Props) {
   const t = useTranslations("navigation");
   const fmt = useDateTimeFormat();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const etaTime = fmt.time(etaEpochMs);
+  const secondaryLine =
+    secondary ??
+    (distanceRemaining != null
+      ? `${formatMeasurementDistance(distanceRemaining, units)} · ${t("eta", { time: etaTime })}`
+      : t("eta", { time: etaTime }));
 
   const closeMenu = () => setMenuAnchor(null);
 
@@ -73,15 +87,17 @@ export function NavBottomBar({
           {formatDuration(durationRemaining)}
         </Typography>
         <Typography variant="body2" color="text.secondary" noWrap>
-          {formatMeasurementDistance(distanceRemaining, units)} · {t("eta", { time: etaTime })}
+          {secondaryLine}
         </Typography>
       </Box>
-      <IconButton
-        onClick={onToggleVoice}
-        aria-label={t(voiceEnabled ? "muteVoice" : "unmuteVoice")}
-      >
-        {voiceEnabled ? <VolumeUpIcon /> : <VolumeOffIcon />}
-      </IconButton>
+      {onToggleVoice && (
+        <IconButton
+          onClick={onToggleVoice}
+          aria-label={t(voiceEnabled ? "muteVoice" : "unmuteVoice")}
+        >
+          {voiceEnabled ? <VolumeUpIcon /> : <VolumeOffIcon />}
+        </IconButton>
+      )}
       <IconButton
         onClick={(e) => setMenuAnchor(e.currentTarget)}
         aria-label={t("moreOptions")}
@@ -90,17 +106,19 @@ export function NavBottomBar({
         <MoreVertIcon />
       </IconButton>
       <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={closeMenu}>
-        <MenuItem
-          onClick={() => {
-            onOverview();
-            closeMenu();
-          }}
-        >
-          <ListItemIcon>
-            <MapIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t("overview")}</ListItemText>
-        </MenuItem>
+        {onOverview && (
+          <MenuItem
+            onClick={() => {
+              onOverview();
+              closeMenu();
+            }}
+          >
+            <ListItemIcon>
+              <MapIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>{t("overview")}</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem onClick={() => onToggleKeepScreenOn()}>
           <ListItemIcon>
             <ScreenLockPortraitIcon fontSize="small" />

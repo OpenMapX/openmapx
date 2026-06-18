@@ -1,0 +1,155 @@
+"use client";
+
+import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
+import NotificationImportantIcon from "@mui/icons-material/NotificationImportant";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import { stopsUntilAlight, type TransitProgress, useVehicleJourney } from "@openmapx/core";
+import type { TripLeg } from "@openmapx/mobility-core/transit";
+import { useTranslations } from "next-intl";
+import { useEffect, useRef } from "react";
+import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { haptics } from "@/lib/haptics";
+import { NavBannerShell } from "./NavBannerShell";
+
+/**
+ * Slice the full vehicle journey down to the stops for this leg, between the
+ * board and alight stop ids. Mirrors the logic in TransitLegStops so the
+ * countdown matches what the itinerary detail view shows.
+ */
+function legStopsFor(
+  stops: { stopId: string; name: string; lat: number; lng: number }[],
+  leg: TripLeg,
+): { lat: number; lng: number; name: string }[] {
+  const fromId = leg.from.stopId;
+  const toId = leg.to.stopId;
+  const fromIdx = fromId ? stops.findIndex((s) => s.stopId === fromId) : -1;
+  const toIdx =
+    fromIdx !== -1 && toId
+      ? stops.findIndex((s, i) => i > fromIdx && s.stopId === toId)
+      : toId
+        ? stops.findIndex((s) => s.stopId === toId)
+        : -1;
+  const sliced =
+    fromIdx !== -1 && toIdx !== -1 && toIdx > fromIdx ? stops.slice(fromIdx, toIdx + 1) : stops;
+  return sliced.map((s) => ({ lat: s.lat, lng: s.lng, name: s.name }));
+}
+
+/**
+ * Transit follow-along banner for the current leg. Reuses {@link NavBannerShell}
+ * so it matches the driving {@link ManeuverBanner}: a teal card with the mode
+ * badge + "{line} to {destination}" + a leg counter, the live next-stop preview
+ * in the darkened sub-row (the transit analogue of the driving "Then …" line),
+ * and — when the alight stop is one away — a prominent "get off now" card below
+ * (mirroring how the driving banner surfaces an approach alert beneath itself).
+ */
+export function TransitLegBanner({
+  leg,
+  legIndex,
+  totalLegs,
+  transitProgress,
+}: {
+  leg: TripLeg;
+  legIndex: number;
+  totalLegs: number;
+  transitProgress: TransitProgress | null;
+}) {
+  const t = useTranslations("navigation");
+  const isTransitLeg = leg.mode !== "walking" && !!leg.route;
+  const { data: journey } = useVehicleJourney(isTransitLeg ? (leg.tripId ?? null) : null);
+  const alertedRef = useRef(false);
+
+  const legStops =
+    isTransitLeg && journey?.stops && transitProgress ? legStopsFor(journey.stops, leg) : [];
+  const { nextStopName, stopsRemaining } =
+    transitProgress && legStops.length > 0
+      ? stopsUntilAlight(leg.geometry.coordinates, legStops, transitProgress.snapped)
+      : { nextStopName: null as string | null, stopsRemaining: 0 };
+
+  const alightSoon = legStops.length > 0 && stopsRemaining > 0 && stopsRemaining <= 1;
+
+  // Fire the haptic pulse once per entry into the alight window; reset when we
+  // leave it so a re-entry can buzz again.
+  useEffect(() => {
+    if (alightSoon && !alertedRef.current) {
+      alertedRef.current = true;
+      haptics.warn();
+    } else if (!alightSoon) {
+      alertedRef.current = false;
+    }
+  }, [alightSoon]);
+
+  const leading =
+    leg.mode === "walking" || !leg.route ? (
+      <DirectionsWalkIcon sx={{ fontSize: 40 }} />
+    ) : (
+      <RouteBadge
+        shortName={leg.route.shortName}
+        color={leg.route.color}
+        mode={leg.mode}
+        size="medium"
+      />
+    );
+
+  const title =
+    leg.mode === "walking"
+      ? t("walkTo", { place: leg.to.name })
+      : t("ride", {
+          line: leg.route?.shortName ?? leg.route?.longName ?? "",
+          to: leg.to.name,
+        });
+
+  // Sub-row: the live next-stop / alight preview for transit legs. Hidden while
+  // `alightSoon`, since the prominent card below carries that message instead.
+  const secondary =
+    isTransitLeg && !alightSoon ? (
+      <Typography variant="body2" sx={{ opacity: 0.9 }} noWrap>
+        {nextStopName
+          ? t("nextStop", { stop: nextStopName })
+          : stopsRemaining > 0
+            ? t("alightAtCount", { place: leg.to.name, count: stopsRemaining })
+            : t("alightAt", { place: leg.to.name })}
+      </Typography>
+    ) : undefined;
+
+  return (
+    <>
+      <NavBannerShell leading={leading} secondary={secondary}>
+        <Typography variant="h6" sx={{ lineHeight: 1.15 }} noWrap>
+          {title}
+        </Typography>
+        <Typography variant="caption" sx={{ opacity: 0.85 }}>
+          {t("legCounter", { current: legIndex + 1, total: totalLegs })}
+        </Typography>
+      </NavBannerShell>
+      {alightSoon && (
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{
+            pointerEvents: "auto",
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            px: 2,
+            py: 1.25,
+            bgcolor: "error.main",
+            color: "error.contrastText",
+            borderRadius: 2,
+            boxShadow: 2,
+          }}
+        >
+          <NotificationImportantIcon sx={{ fontSize: 28 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              {t("alightSoon")}
+            </Typography>
+            <Typography variant="caption" noWrap>
+              {t("alightAt", { place: leg.to.name })}
+            </Typography>
+          </Box>
+        </Box>
+      )}
+    </>
+  );
+}

@@ -23,6 +23,7 @@
     "alightSoon": "Get off at the next stop",
     "legCounter": "Leg {current}/{total}",
     "arriveAt": "Arrive {time}",
+    "delayMinutes": "+{minutes} min",
     "overview": "Route overview",
     "moreOptions": "More options",
     "rerouteFailed": "Couldn't find a new route. Retrying…",

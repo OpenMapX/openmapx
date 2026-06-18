@@ -23,6 +23,7 @@
     "alightSoon": "Am nächsten Halt aussteigen",
     "legCounter": "Abschnitt {current}/{total}",
     "arriveAt": "Ankunft {time}",
+    "delayMinutes": "+{minutes} Min.",
     "overview": "Routenübersicht",
     "moreOptions": "Weitere Optionen",
     "rerouteFailed": "Keine neue Route gefunden. Wird erneut versucht…",
