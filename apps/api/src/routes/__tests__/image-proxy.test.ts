@@ -38,7 +38,19 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
     "www.511pa.com",
     "cwwp2.dot.ca.gov",
     "sub.upload.wikimedia.org",
+    "www.gravatar.com", // OSM avatars served via Gravatar
+    "secure.gravatar.com",
+    "0.gravatar.com", // Gravatar CDN subdomain
   ])("allows subdomains of an allowlisted host (%s)", (host) => {
+    expect(isAllowedHost(host)).toBe(true);
+  });
+
+  it.each([
+    // OSM avatar S3 bucket — the redirect target of Active Storage avatar URLs.
+    "openstreetmap-user-avatars.s3.dualstack.eu-west-1.amazonaws.com", // observed (dualstack, eu-west-1)
+    "openstreetmap-user-avatars.s3.amazonaws.com", // legacy global virtual-host form
+    "openstreetmap-user-avatars.s3.eu-west-1.amazonaws.com", // non-dualstack regional form
+  ])("allows the OSM avatar S3 bucket (%s)", (host) => {
     expect(isAllowedHost(host)).toBe(true);
   });
 
@@ -50,6 +62,10 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
     "fbcdn.net", // deliberately NOT allowlisted wholesale
     "notlocalhost",
     "",
+    "evil.amazonaws.com", // not the OSM avatar bucket — *.amazonaws.com stays closed
+    "openstreetmap-user-avatars-evil.s3.amazonaws.com", // different bucket, leftmost label must match exactly
+    "openstreetmap-user-avatars.s3.dualstack.eu-west-1.amazonaws.com.attacker.com", // suffix-spoof past .amazonaws.com
+    "gravatar.com.attacker.com", // Gravatar suffix-spoof
   ])("rejects non-allowlisted / spoofed host %s", (host) => {
     expect(isAllowedHost(host)).toBe(false);
   });

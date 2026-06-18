@@ -38,6 +38,9 @@ const ALLOWED_HOSTS = [
   // OpenStreetMap / other
   "openstreetmap.org", // OAuth/profile avatars and other OSM-hosted user images
   "tile.openstreetmap.org",
+  // Gravatar — OSM serves a user's avatar from Gravatar when they enable it,
+  // so `user.img.href` is a `*.gravatar.com` URL (www/secure/CDN subdomains).
+  "gravatar.com",
   // Entur Mobility branding/vehicle assets exposed by the server-side provider.
   "api.entur.io",
   // Mangrove review photos. Passive thumbnail loads should not expose the
@@ -70,6 +73,18 @@ const ALLOWED_HOSTS = [
  * rejected). Exported for direct SSRF-allowlist testing.
  */
 export function isAllowedHost(hostname: string): boolean {
+  // OpenStreetMap serves uploaded user avatars from a dedicated S3 bucket. The
+  // Active Storage redirect URL we store (on `www.openstreetmap.org`, already
+  // allowlisted) 302s to a virtual-hosted bucket URL whose region/dualstack
+  // form varies (e.g. `openstreetmap-user-avatars.s3.dualstack.eu-west-1.
+  // amazonaws.com`). Match that one bucket by its exact leftmost label, anchored
+  // under `.amazonaws.com`, so OSM avatars load without opening the rest of
+  // `*.amazonaws.com` (which the allowlist deliberately excludes).
+  if (
+    hostname.split(".")[0] === "openstreetmap-user-avatars" &&
+    hostname.endsWith(".amazonaws.com")
+  )
+    return true;
   return ALLOWED_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`));
 }
 
