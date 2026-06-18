@@ -2,16 +2,17 @@
 
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
-import { useSidebarStore } from "@openmapx/core";
+import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import NextLink from "next/link";
 import { useTranslations } from "next-intl";
-import { PANEL_WIDTH } from "@/lib/layout";
+import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 
 export function MapFooter() {
   const t = useTranslations("footer");
   const sidebarOpen = useSidebarStore((s) => s.activeSidebarId !== null);
   const collapsed = useSidebarStore((s) => s.collapsed);
-  const shifted = sidebarOpen && !collapsed;
+  const navigating = useNavigationStore((s) => s.status !== "idle");
+  const shifted = isPanelShiftActive({ sidebarOpen, sidebarCollapsed: collapsed, navigating });
   return (
     <Box
       component="footer"

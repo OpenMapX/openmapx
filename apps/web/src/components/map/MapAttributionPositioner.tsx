@@ -2,7 +2,7 @@
 
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import { useEffect } from "react";
-import { PANEL_WIDTH } from "@/lib/layout";
+import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 
 // Pixels to lift the bottom-right attribution while navigating, so it clears
 // the navigation bottom sheet instead of hiding behind it.
@@ -22,8 +22,7 @@ export function attribShiftPx(state: {
   sidebarCollapsed: boolean;
   navigating: boolean;
 }): string {
-  const shifted = state.sidebarOpen && !state.sidebarCollapsed && !state.navigating;
-  return shifted ? `${PANEL_WIDTH}px` : "0px";
+  return isPanelShiftActive(state) ? `${PANEL_WIDTH}px` : "0px";
 }
 
 /**
