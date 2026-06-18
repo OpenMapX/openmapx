@@ -1,6 +1,12 @@
 import { type BoundingBox, ConfigurationError } from "@openmapx/core";
+import { impersonatingFetch } from "@openmapx/integration-framework/impersonate";
 import type { OcmPoi, OcmReferenceData } from "./ocm-types.js";
 
+// OpenChargeMap sits behind Cloudflare bot mitigation that serves a managed
+// challenge (HTTP 403, `cf-mitigated: challenge`) to Node's undici TLS
+// fingerprint while letting browsers through — so plain `fetch` always 403s
+// from a server. `impersonatingFetch` presents a real Chrome ClientHello,
+// which clears it.
 const OCM_BASE = "https://api.openchargemap.io/v3";
 
 // Populated by setup(ctx) from the resolved integration config cascade.
@@ -46,7 +52,7 @@ export async function searchOcm(
   }
 
   const url = `${OCM_BASE}/poi/?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await impersonatingFetch(url);
 
   if (!res.ok) {
     throw new Error(`OCM API error: ${res.status} ${res.statusText}`);
@@ -66,7 +72,7 @@ export async function getOcmDetail(id: string): Promise<OcmPoi | null> {
   });
 
   const url = `${OCM_BASE}/poi/?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await impersonatingFetch(url);
 
   if (!res.ok) {
     throw new Error(`OCM API error: ${res.status} ${res.statusText}`);
@@ -80,7 +86,7 @@ export async function getOcmReferenceData(): Promise<OcmReferenceData> {
   const key = getApiKey();
 
   const url = `${OCM_BASE}/referencedata/?key=${encodeURIComponent(key)}`;
-  const res = await fetch(url);
+  const res = await impersonatingFetch(url);
 
   if (!res.ok) {
     throw new Error(`OCM reference data error: ${res.status} ${res.statusText}`);

@@ -27,6 +27,10 @@
     "./testing": {
       "types": "./src/testing/index.ts",
       "default": "./src/testing/index.ts"
+    },
+    "./impersonate": {
+      "types": "./src/impersonate.ts",
+      "default": "./src/impersonate.ts"
     }
   },
   "scripts": {
@@ -37,6 +41,7 @@
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
+    "impit": "^0.14.1",
     "intl-messageformat": "^11.2.8",
     "js-yaml": "^4.2.0",
     "zod": "^4.4.3"

@@ -123,6 +123,14 @@ const healthCheckSchema = z.object({
    * instead of attempting the request.
    */
   requiredConfigKeys: z.array(z.string()).optional(),
+  /**
+   * Run this probe through a browser-fingerprint HTTP client (impit) instead of
+   * Node's `fetch`. Set when the upstream sits behind Cloudflare bot mitigation
+   * that 403-challenges Node's undici TLS fingerprint (`cf-mitigated: challenge`)
+   * while letting browsers through — e.g. OpenChargeMap. The data-fetching
+   * provider must impersonate too for the integration to actually work.
+   */
+  impersonate: z.boolean().optional(),
   category: z.string().optional(),
 });
 

@@ -1,6 +1,7 @@
 import { createConnection } from "node:net";
 import { USER_AGENT, validatePublicUrl } from "@openmapx/core";
 import { type LoadedIntegration, toIntegrationMeta } from "@openmapx/integration-framework";
+import { impersonatingFetch } from "@openmapx/integration-framework/impersonate";
 import { recordHealthResult } from "./health-history";
 import { serviceUrl } from "./service-registry";
 
@@ -67,6 +68,7 @@ async function executeSingleHealthCheck(
     urlTemplate?: string;
     headers?: Record<string, string>;
     requiredConfigKeys?: string[];
+    impersonate?: boolean;
     category?: string;
   },
   suffix?: string,
@@ -253,14 +255,25 @@ async function executeSingleHealthCheck(
 
   const start = Date.now();
   try {
-    const res = await fetch(checkUrl, {
-      method: "GET",
-      headers: {
-        "User-Agent": UA,
-        ...interpolatedHeaders,
-      },
-      signal: AbortSignal.timeout(TIMEOUT),
-    });
+    // A Cloudflare-fronted upstream (e.g. OpenChargeMap) 403-challenges Node's
+    // undici TLS fingerprint while letting browsers through. `impersonate`
+    // routes the probe through a browser-fingerprint client; don't force our
+    // own User-Agent there — let the impersonated browser UA stand (any
+    // manifest-declared headers still apply).
+    const res = hc.impersonate
+      ? await impersonatingFetch(checkUrl, {
+          method: "GET",
+          headers: interpolatedHeaders,
+          signal: AbortSignal.timeout(TIMEOUT),
+        })
+      : await fetch(checkUrl, {
+          method: "GET",
+          headers: {
+            "User-Agent": UA,
+            ...interpolatedHeaders,
+          },
+          signal: AbortSignal.timeout(TIMEOUT),
+        });
     const ms = Date.now() - start;
 
     if (hc.type === "ping") {
