@@ -3,14 +3,33 @@
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Snackbar from "@mui/material/Snackbar";
+import { useNavigationStore } from "@openmapx/core";
 import type { Serwist } from "@serwist/window";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import {
+  hasActiveAreaDownload,
+  hasUnsavedTextEntry,
+  isSafeToAutoReload,
+  markAutoReloaded,
+  msSinceLastAutoReload,
+} from "@/lib/swAutoUpdate";
+
+const BANNER_GRACE_MS = 30_000;
 
 export function SwUpdateNotice() {
   const t = useTranslations("pwa");
+  const queryClient = useQueryClient();
   const [updateReady, setUpdateReady] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const [graceElapsed, setGraceElapsed] = useState(false);
   const swRef = useRef<Serwist | null>(null);
+  const updateReadyRef = useRef(false);
+
+  useEffect(() => {
+    setVisible(document.visibilityState === "visible");
+  }, []);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
@@ -18,13 +37,44 @@ export function SwUpdateNotice() {
     if (!("serviceWorker" in navigator)) return;
 
     let cancelled = false;
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const handleVisibilityChange = () => {
+      setVisible(document.visibilityState === "visible");
+      attemptAutoApply();
+    };
+
+    const handleOnline = () => {
+      attemptAutoApply();
+    };
+
+    const attemptAutoApply = () => {
+      if (!updateReadyRef.current) return;
+      if (document.visibilityState !== "hidden") return;
+      const safe = isSafeToAutoReload({
+        online: navigator.onLine,
+        navStatus: useNavigationStore.getState().status,
+        mutationCount: queryClient.isMutating(),
+        hasActiveDownload: hasActiveAreaDownload(),
+        hasUnsavedText: hasUnsavedTextEntry(),
+        msSinceLastAutoReload: msSinceLastAutoReload(),
+      });
+      if (!safe) return;
+      markAutoReloaded();
+      swRef.current?.messageSkipWaiting();
+    };
 
     void import("@serwist/window").then((mod) => {
       if (cancelled) return;
       const sw = new mod.Serwist("/sw.js", { scope: "/" });
 
       sw.addEventListener("waiting", () => {
+        updateReadyRef.current = true;
         setUpdateReady(true);
+        graceTimer = setTimeout(() => setGraceElapsed(true), BANNER_GRACE_MS);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("online", handleOnline);
+        attemptAutoApply();
       });
 
       sw.addEventListener("controlling", (event) => {
@@ -45,8 +95,11 @@ export function SwUpdateNotice() {
 
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
+      if (graceTimer !== null) clearTimeout(graceTimer);
     };
-  }, []);
+  }, [queryClient]);
 
   const handleReload = () => {
     const sw = swRef.current;
@@ -59,7 +112,7 @@ export function SwUpdateNotice() {
 
   return (
     <Snackbar
-      open={updateReady}
+      open={updateReady && visible && graceElapsed}
       anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       sx={{ zIndex: 1500, mb: "var(--omx-safe-bottom)" }}
     >
@@ -71,7 +124,12 @@ export function SwUpdateNotice() {
             {t("reload")}
           </Button>
         }
-        sx={{ width: "100%" }}
+        sx={{
+          width: "100%",
+          bgcolor: "primary.main",
+          color: "primary.contrastText",
+          "& .MuiAlert-icon": { color: "inherit" },
+        }}
       >
         {t("updateAvailable")}
       </Alert>
