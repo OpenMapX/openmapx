@@ -28,7 +28,19 @@
         "type": "string",
         "title": "Valhalla API key",
         "description": "API key appended as `?api_key=` to requests. Required for Stadia Maps (free non-commercial tier); leave blank for key-less self-hosted instances. Also settable via the VALHALLA_API_KEY env var.",
-        "format": "password"
+        "format": "password",
+        "x-openmapx-setup": {
+          "url": "https://client.stadiamaps.com/dashboard/",
+          "urlLabel": "Get Stadia Maps API key",
+          "steps": [
+            "Sign up at client.stadiamaps.com/signup (free, no credit card).",
+            "Open the dashboard and click 'Manage Properties'.",
+            "Select your property from the dropdown.",
+            "Under Authentication Configuration, generate your API key and copy it."
+          ],
+          "cost": "Free tier: 200,000 credits/month, no credit card.",
+          "notes": "Only needed for the hosted Stadia Maps default; self-hosted Valhalla needs no key. Stadia's free tier is non-commercial / evaluation use only."
+        }
       }
     }
   },

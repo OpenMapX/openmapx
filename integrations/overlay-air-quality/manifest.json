@@ -34,7 +34,19 @@
         "type": "string",
         "title": "OpenAQ API Key",
         "description": "OpenAQ API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://explore.openaq.org/register",
+          "urlLabel": "Register at OpenAQ",
+          "steps": [
+            "Register a free account at explore.openaq.org/register (no disposable email addresses).",
+            "Verify your email and sign in to OpenAQ Explorer.",
+            "Open the account settings page (explore.openaq.org/account).",
+            "Copy your API key from settings."
+          ],
+          "cost": "Free.",
+          "notes": "OpenAQ now requires an API key for all programmatic access (use the v3 API). The key is sent in the X-API-Key request header."
+        }
       }
     }
   },

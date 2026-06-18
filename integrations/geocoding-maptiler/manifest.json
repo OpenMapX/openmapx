@@ -20,7 +20,19 @@
         "title": "MapTiler API Key",
         "description": "MapTiler API key. Get one at maptiler.com/cloud.",
         "x-openmapx-secret": true,
-        "x-openmapx-sharedSecretName": "maptiler-api-key"
+        "x-openmapx-sharedSecretName": "maptiler-api-key",
+        "x-openmapx-setup": {
+          "url": "https://cloud.maptiler.com/account/keys/",
+          "urlLabel": "Get MapTiler API key",
+          "steps": [
+            "Sign up at cloud.maptiler.com (no credit card required).",
+            "Open Account, then the API keys page.",
+            "Click 'New key', enter a name, and optionally restrict it by HTTP origin.",
+            "Copy the generated key."
+          ],
+          "cost": "Free tier: up to 100k tile loads/month, no credit card.",
+          "notes": "Free plan is for non-commercial and evaluation use; service pauses for the month once the quota is exhausted."
+        }
       }
     }
   },

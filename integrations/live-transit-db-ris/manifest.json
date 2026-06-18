@@ -20,14 +20,38 @@
         "type": "string",
         "title": "DB RIS Maps Client ID",
         "description": "Deutsche Bahn RIS API client ID.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace via 'DB Kundenkonto' and create an application.",
+            "Request access to the RIS::Maps API (ris-maps/v2), part of DB's RIS ÖPNV API family.",
+            "Once authorized, subscribe ('Abonnieren') RIS::Maps to your application.",
+            "Open the application's details and copy its Client ID into this field."
+          ],
+          "cost": "No public self-service tier — pricing/quota set per contract.",
+          "notes": "RIS::Maps (live vehicle positions) is not in the open self-service catalog and requires a positive authorization check and contract with Deutsche Bahn AG. Shares one DB RIS credential set with geocoding-db-ris and transit-ris-routing."
+        }
       },
       "apiKey": {
         "type": "string",
         "title": "DB RIS Maps API Key",
         "description": "Deutsche Bahn RIS API key.",
         "x-openmapx-secret": true,
-        "x-openmapx-sharedSecretName": "db-ris-api-key"
+        "x-openmapx-sharedSecretName": "db-ris-api-key",
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace and create an application ('Neue Anwendung erstellen').",
+            "Copy the Client Secret (API key) shown once at application creation.",
+            "After DB authorizes access, subscribe ('Abonnieren') the RIS::Maps API to that application.",
+            "Paste the Client Secret here (sent as the DB-Api-Key header)."
+          ],
+          "cost": "No public self-service tier — pricing/quota set per contract.",
+          "notes": "Requires Deutsche Bahn AG authorization. The same Client Secret can be reused for all three DB RIS integrations; it is shown only once at creation."
+        }
       },
       "administrationIds": {
         "type": "string",

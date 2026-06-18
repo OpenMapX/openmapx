@@ -23,9 +23,41 @@
       "ollamaEndpoint": { "type": "string", "format": "url" },
       "ollamaModel": { "type": "string", "default": "gemma3:4b-it-qat" },
       "claudeModel": { "type": "string", "default": "claude-haiku-4-5-20251001" },
-      "anthropicApiKey": { "type": "string", "format": "password", "x-openmapx-secret": true },
+      "anthropicApiKey": {
+        "type": "string",
+        "format": "password",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://console.anthropic.com/settings/keys",
+          "urlLabel": "Get API key",
+          "steps": [
+            "Sign up / log in at console.anthropic.com.",
+            "Open Settings → Billing and add a payment method.",
+            "Open Settings → API Keys and click 'Create Key'.",
+            "Copy the sk-ant-... key immediately (shown only once)."
+          ],
+          "cost": "Paid, usage-based",
+          "notes": "Optional — local Ollama is the default LLM. Only set this to use Claude as a cloud fallback for natural-language search."
+        }
+      },
       "openaiModel": { "type": "string", "default": "gpt-4o-mini" },
-      "openaiApiKey": { "type": "string", "format": "password", "x-openmapx-secret": true },
+      "openaiApiKey": {
+        "type": "string",
+        "format": "password",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://platform.openai.com/api-keys",
+          "urlLabel": "Get API key",
+          "steps": [
+            "Sign up / log in at platform.openai.com.",
+            "Open the 'API keys' page and click 'Create new secret key'.",
+            "Copy the sk-... key immediately (shown only once).",
+            "Add billing/credit under Settings → Billing so requests are not rejected."
+          ],
+          "cost": "Paid, usage-based",
+          "notes": "Optional — local Ollama is the default LLM. Only set this to use OpenAI as a cloud fallback for natural-language search."
+        }
+      },
       "privacyMode": {
         "type": "string",
         "enum": ["strict", "consent", "open"],

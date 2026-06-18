@@ -13,9 +13,11 @@ import InputAdornment from "@mui/material/InputAdornment";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { CredentialSetupGuide } from "./CredentialSetupGuide";
 
 interface SetCredentialDialogProps {
   open: boolean;
@@ -24,6 +26,7 @@ interface SetCredentialDialogProps {
   credentialKey: string;
   title: string;
   description?: string;
+  setup?: CredentialSetup;
 }
 
 export function SetCredentialDialog({
@@ -33,6 +36,7 @@ export function SetCredentialDialog({
   credentialKey,
   title,
   description,
+  setup,
 }: SetCredentialDialogProps) {
   const env = useEnv();
   const apiUrl = env.apiUrl;
@@ -105,6 +109,7 @@ export function SetCredentialDialog({
               {description}
             </Typography>
           )}
+          {setup && <CredentialSetupGuide setup={setup} defaultExpanded />}
           <TextField
             label={title}
             type={showValue ? "text" : "password"}

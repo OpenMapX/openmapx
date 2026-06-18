@@ -24,11 +24,13 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
+import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 
 type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
@@ -39,6 +41,7 @@ interface CredentialStatus {
   description?: string;
   source: "vault" | "env" | "missing";
   sharedSecretName?: string;
+  setup?: CredentialSetup;
   updatedAt?: string;
   updatedBy?: string | null;
   isLegacyEnvVar: boolean;
@@ -434,6 +437,11 @@ function CredentialsTable({
                       {cred.description}
                     </Typography>
                   )}
+                  {cred.setup && (
+                    <Box sx={{ pl: 2.5 }}>
+                      <CredentialSetupGuide setup={cred.setup} />
+                    </Box>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Chip
@@ -489,6 +497,7 @@ function CredentialsTable({
           credentialKey={dialogField.key}
           title={dialogField.title}
           description={dialogField.description}
+          setup={dialogField.setup}
         />
       )}
     </>

@@ -27,7 +27,25 @@
         "type": "string",
         "title": "Tankerkönig API Key",
         "description": "Tankerkoenig API key for German fuel prices.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://onboarding.tankerkoenig.de/",
+          "urlLabel": "Request Tankerkönig API key",
+          "steps": [
+            "Open onboarding.tankerkoenig.de (linked from creativecommons.tankerkoenig.de via 'API-Key').",
+            "Enter a working email address and describe your non-commercial use case.",
+            "Agree to the CC BY 4.0 terms (attribution to tankerkoenig.de required).",
+            "Submit the form; registration is reviewed manually and can take a few days.",
+            "Receive the API key by email once approved."
+          ],
+          "cost": "Free for non-commercial use (commercial use needs a paid agreement).",
+          "notes": "Data is CC BY 4.0 (MTS-K) — attribution required. Free-tier limits: 1 request/min, 25 km radius.",
+          "email": {
+            "to": "info@tankerkoenig.de",
+            "subject": "Tankerkönig API key request (non-commercial)",
+            "body": "Hello,\n\nI would like to request a free non-commercial Tankerkönig API key.\n\nUse case: displaying current German fuel prices in a self-hosted, non-commercial OpenMapX map application.\n\nI agree to the CC BY 4.0 terms and will attribute the data to tankerkoenig.de.\n\nThank you."
+          }
+        }
       }
     }
   },

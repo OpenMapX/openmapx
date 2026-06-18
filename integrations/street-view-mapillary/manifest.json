@@ -33,7 +33,18 @@
         "title": "Mapillary Access Token",
         "description": "Mapillary client access token for the Graph API.",
         "x-openmapx-secret": true,
-        "x-openmapx-sharedSecretName": "mapillary-token"
+        "x-openmapx-sharedSecretName": "mapillary-token",
+        "x-openmapx-setup": {
+          "url": "https://www.mapillary.com/dashboard/developers",
+          "urlLabel": "Get Mapillary access token",
+          "steps": [
+            "Sign in at mapillary.com and open the Developers dashboard.",
+            "Click 'Register Application'.",
+            "Fill in the application details and submit.",
+            "Copy the Client Token (format MLY|...) for use as the Graph API v4 access token."
+          ],
+          "notes": "Same Mapillary account/token as photos-mapillary."
+        }
       }
     }
   },

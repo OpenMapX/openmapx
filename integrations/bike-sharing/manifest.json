@@ -27,13 +27,37 @@
         "type": "string",
         "title": "DB Call-a-Bike Client ID",
         "description": "Deutsche Bahn GBFS client ID.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/shared-mobility-gbfs",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace via 'DB Kundenkonto' (accept the terms and verify your email).",
+            "Click 'Neue Anwendung erstellen' to create an application.",
+            "In the Katalog, open 'Shared Mobility GBFS' and subscribe ('Abonnieren') the FREE plan to your application.",
+            "Open the application's details and copy its Client ID into this field."
+          ],
+          "cost": "Free: 1,000 requests/day on the FREE plan, no approval.",
+          "notes": "GBFS data for DB Call a Bike / DB Connect. One DB application can serve all DB integrations. The PRO plan is requested by email to DBC.SharingAPI@deutschebahn.com."
+        }
       },
       "apiKey": {
         "type": "string",
         "title": "DB Call-a-Bike API Key",
         "description": "Deutsche Bahn GBFS API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/shared-mobility-gbfs",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace and create an application ('Neue Anwendung erstellen').",
+            "Copy the Client Secret (API key) shown once at application creation.",
+            "In the Katalog, subscribe ('Abonnieren') the 'Shared Mobility GBFS' FREE plan to your application.",
+            "Paste the Client Secret here (sent as the DB-Api-Key header)."
+          ],
+          "cost": "Free: 1,000 requests/day on the FREE plan, no approval.",
+          "notes": "The Client Secret is shown only once at creation; regenerate it in the application settings if lost."
+        }
       }
     }
   },

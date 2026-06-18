@@ -27,19 +27,59 @@
         "type": "string",
         "title": "OpenChargeMap API Key",
         "description": "OpenChargeMap API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://openchargemap.org/site/loginprovider/beginlogin",
+          "urlLabel": "Get Open Charge Map API key",
+          "steps": [
+            "Go to openchargemap.org and create an account or sign in.",
+            "Open 'My Profile' → 'My Apps'.",
+            "Click 'Register an Application' and enter a name and description.",
+            "Copy the API key issued immediately."
+          ],
+          "cost": "Free",
+          "notes": "Required for regular use and for calls with maxresults > 250. Sent via the 'X-API-Key' header or 'key' query parameter."
+        }
       },
       "afdcApiKey": {
         "type": "string",
         "title": "AFDC/NREL API Key",
         "description": "NREL (National Renewable Energy Laboratory) developer API key (developer.nrel.gov) covering the AFDC Alternative Fuel Stations dataset for the United States and Canada.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developer.nrel.gov/signup/",
+          "urlLabel": "Sign up for an NREL API key",
+          "steps": [
+            "Open developer.nrel.gov/signup/.",
+            "Enter your first name, last name, and email, and accept the terms.",
+            "Submit the form; the 40-character API key is generated instantly and emailed to you."
+          ],
+          "cost": "Free, instant",
+          "notes": "This NREL / api.data.gov key powers the AFDC Alternative Fuel Stations dataset. DEMO_KEY works for testing but has very low rate limits."
+        }
       },
       "nobilApiKey": {
         "type": "string",
         "title": "NOBIL API Key",
         "description": "NOBIL API key for Norway and Sweden charging station data.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://info.nobil.no/api",
+          "urlLabel": "Request a NOBIL API key",
+          "steps": [
+            "Open info.nobil.no/api and review the Creative Commons (CC BY 4.0) terms.",
+            "Use the 'Ask for an API-key' section to contact NOBIL with your project details.",
+            "Accept the CC BY 4.0 terms of use.",
+            "Receive the API key by email."
+          ],
+          "cost": "Free (Creative Commons data, attribution required)",
+          "notes": "Norway/Sweden charging data. The request is handled by email rather than an instant self-service form.",
+          "email": {
+            "to": "post@nobil.no",
+            "subject": "NOBIL API key request",
+            "body": "Hello,\n\nI would like to request a NOBIL API key (API v3) to display Norwegian/Swedish EV charging station data in a self-hosted OpenMapX map application.\n\nI have read and accept the Creative Commons Attribution 4.0 (CC BY 4.0) terms of use and will attribute NOBIL accordingly.\n\nProject: self-hosted, non-commercial mapping application.\n\nThank you."
+          }
+        }
       }
     }
   },

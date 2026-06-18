@@ -34,7 +34,19 @@
         "type": "string",
         "title": "NASA FIRMS Map Key",
         "description": "NASA FIRMS map key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://firms.modaps.eosdis.nasa.gov/api/map_key/",
+          "urlLabel": "Request a FIRMS MAP_KEY",
+          "steps": [
+            "Open firms.modaps.eosdis.nasa.gov/api/map_key/.",
+            "Enter your email address in the MAP_KEY request form and submit.",
+            "Check your inbox — FIRMS emails the MAP_KEY to that address.",
+            "Paste the MAP_KEY here."
+          ],
+          "cost": "Free.",
+          "notes": "Rate limit is 5000 transactions per 10-minute interval. Return to the same page later to resend, modify, or delete the key."
+        }
       }
     }
   },

@@ -26,7 +26,19 @@
         "type": "string",
         "title": "LiteAPI key (enables live prices)",
         "description": "Optional. When set, lodging places show a live lowest nightly rate from LiteAPI (https://liteapi.travel) with editable currency + guest nationality. Leave empty to ship deep-link price comparison only (Tier 1). Use a sand_… key to test, prod_… to go live. Search/rate calls are free on LiteAPI's core tier; booking is not done in-app (deep-link hand-off only).",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://dashboard.liteapi.travel/signup",
+          "urlLabel": "Sign up for a LiteAPI key",
+          "steps": [
+            "Go to liteapi.travel and choose 'Signup' (no credit card required).",
+            "Open the dashboard and go to the 'Developers' section.",
+            "Select the 'API Keys' tab.",
+            "Copy your sandbox key to start; add a credit card to generate a production key."
+          ],
+          "cost": "Free sandbox key; production key requires a card on file",
+          "notes": "Sandbox simulates bookings without real charges; production keys are needed for live lodging prices."
+        }
       },
       "liteApiCurrency": {
         "type": "string",

@@ -124,6 +124,14 @@ the env value wins over a vaulted one. An integration whose every required
 secret is still missing is flagged as unconfigured in the list and on the
 Overview dashboard.
 
+Where an integration's manifest provides it, each credential also shows a short
+**setup guide** inline — a "Get API key" button linking straight to the
+provider's registration page, an optional pre-filled request email for providers
+that grant access by hand, a free-tier/pricing hint, and a collapsible list of
+steps to obtain the value. It appears next to the field on the Credentials tab,
+on the bulk-configure page, and in the Set-credential dialog, so you rarely need
+to leave the panel to hunt down where a key comes from.
+
 ## Capability bindings
 
 Integrations don't name a specific backend; they ask for a **capability**. The

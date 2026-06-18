@@ -27,32 +27,95 @@
         "type": "string",
         "title": "DB BahnPark Client ID",
         "description": "Deutsche Bahn Parking API client ID.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/parking-information-db-bahnpark",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace via 'DB Kundenkonto'.",
+            "Create an application with 'Neue Anwendung erstellen'.",
+            "In the Katalog, open 'Parking Information Service - DB BahnPark' and subscribe the free Testzugang plan.",
+            "Open the application's details and copy its Client ID into this field."
+          ],
+          "cost": "Free: Testzugang allows up to 1,000 transactions/month (max 10 req/min), no approval.",
+          "notes": "Provides ~315 DB BahnPark facilities. The higher transit-authority plan needs a separate data agreement."
+        }
       },
       "apiKey": {
         "type": "string",
         "title": "DB BahnPark API Key",
         "description": "Deutsche Bahn Parking API key.",
         "x-openmapx-secret": true,
-        "x-openmapx-sharedSecretName": "db-parking-api-key"
+        "x-openmapx-sharedSecretName": "db-parking-api-key",
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/parking-information-db-bahnpark",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace and create an application ('Neue Anwendung erstellen').",
+            "Copy the Client Secret (API key) shown once during application creation.",
+            "Subscribe ('Abonnieren') the 'Parking Information Service - DB BahnPark' Testzugang plan to that application.",
+            "Paste the Client Secret here (sent as the DB-Api-Key header)."
+          ],
+          "cost": "Free: Testzugang allows up to 1,000 transactions/month (max 10 req/min), no approval.",
+          "notes": "The Client Secret is displayed only once at creation; regenerate it in the application settings if lost."
+        }
       },
       "utmcUsername": {
         "type": "string",
         "title": "UTMC Username",
         "description": "NE Travel Data (Newcastle) username. Request via data@glasgow.gov.uk. The data-manager POI ingest reads UTMC_USERNAME from its own env vars; this UI field is retained for operator visibility.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.netraveldata.co.uk/?page_id=9",
+          "urlLabel": "Register for NE Travel Data",
+          "steps": [
+            "Go to the UTMC Open Data Service (NE Travel Data) at netraveldata.co.uk and register a free account via the 'Register' link.",
+            "Confirm your registration email and set a password.",
+            "Use the username you signed up with as this value — the same site account credentials authenticate the API feeds."
+          ],
+          "cost": "Free",
+          "notes": "This is the Newcastle / Tyne & Wear (UTMC) feed at netraveldata.co.uk — not a Glasgow contact. The website login you create is the API credential.",
+          "email": {
+            "to": "info@netraveldata.co.uk",
+            "subject": "API access request — UTMC Open Data Service (car park feed)",
+            "body": "Hello,\n\nI would like to access the UTMC / NE Travel Data open-data API, in particular the car park occupancy feeds for Tyne & Wear / Newcastle.\n\nI have registered an account on netraveldata.co.uk; could you please confirm that my account credentials are enabled for API access, or advise if any additional registration step is required?\n\nIntended use: integrating live car-park availability into an open-source mapping application.\n\nThank you,\n[Your name]"
+          }
+        }
       },
       "utmcPassword": {
         "type": "string",
         "title": "UTMC Password",
         "description": "NE Travel Data (Newcastle) password. The data-manager POI ingest reads UTMC_PASSWORD from its own env vars; this UI field is retained for operator visibility.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.netraveldata.co.uk/?page_id=9",
+          "urlLabel": "Register for NE Travel Data",
+          "steps": [
+            "During registration on netraveldata.co.uk, set (or reset) the password for your account.",
+            "Use that account password as this value.",
+            "The username + password pair is sent as HTTP credentials when fetching the UTMC car-park feed."
+          ],
+          "cost": "Free",
+          "notes": "Same netraveldata.co.uk account as the UTMC username — there is no separate API password; the website login doubles as the API credential."
+        }
       },
       "nswTransportApiKey": {
         "type": "string",
         "title": "NSW Transport API Key",
         "description": "Register at https://opendata.transport.nsw.gov.au/",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://opendata.transport.nsw.gov.au/",
+          "urlLabel": "Get API key",
+          "steps": [
+            "Register for a free account at opendata.transport.nsw.gov.au and log in to the Open Data Hub.",
+            "Click your profile icon, choose 'API Tokens', enter a name, click 'CREATE API TOKEN' and copy the key (shown only once).",
+            "In the data catalogue, open the 'Car park API' dataset and subscribe it to your application.",
+            "Paste the generated token here (sent as the 'apikey' authorization header)."
+          ],
+          "cost": "Free",
+          "notes": "Transport for NSW (Australia). The Car Park API provides real-time Park&Ride / Sydney Metro car-park occupancy."
+        }
       }
     }
   },

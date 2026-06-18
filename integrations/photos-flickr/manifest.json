@@ -19,7 +19,19 @@
         "type": "string",
         "title": "Flickr API Key",
         "description": "Flickr API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.flickr.com/services/apps/create/apply/",
+          "urlLabel": "Apply for a Flickr API key",
+          "steps": [
+            "Sign in to Flickr, then open flickr.com/services/apps/create/ and click 'Request an API Key'.",
+            "Choose 'Apply for a Non-Commercial Key'.",
+            "Enter your app name and a brief description, accept the terms, and submit.",
+            "Copy the API Key shown immediately."
+          ],
+          "cost": "Free for non-commercial use, issued instantly",
+          "notes": "Non-commercial = personal / non-profit projects; commercial keys require Flickr staff review."
+        }
       }
     }
   },

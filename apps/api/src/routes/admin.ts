@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { CredentialSetup } from "@openmapx/integration-framework";
 import { and, asc, count, desc, eq, gt, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -72,6 +73,7 @@ interface CredentialStatusEntry {
   description?: string;
   source: "vault" | "env" | "missing";
   sharedSecretName?: string;
+  setup?: CredentialSetup;
   updatedAt?: string;
   updatedBy?: string | null;
 }
@@ -107,6 +109,7 @@ async function computeCredentialStatus(integration: {
       description: field.description,
       source,
       sharedSecretName: field.sharedSecretName,
+      setup: field.setup,
       updatedAt: vaultEntry?.updatedAt?.toISOString(),
       updatedBy: vaultEntry?.updatedBy ?? null,
     });

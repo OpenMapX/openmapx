@@ -18,7 +18,19 @@
         "type": "string",
         "title": "GitHub API Token (Transit Registry)",
         "description": "Optional GitHub API token. Raises the unauthenticated 60/hr rate limit to 5000/hr when fetching the registry from api.github.com.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://github.com/settings/tokens",
+          "urlLabel": "Get GitHub token",
+          "steps": [
+            "Go to github.com/settings/tokens (Settings → Developer settings → Personal access tokens → Tokens (classic)).",
+            "Click 'Generate new token (classic)', add a note and an expiration.",
+            "Leave ALL scope checkboxes unchecked — a token with no scopes can read public information.",
+            "Generate the token and copy it."
+          ],
+          "cost": "Free.",
+          "notes": "No scopes required (public read only). Used solely to raise GitHub's unauthenticated REST limit from 60/hr to 5,000/hr when fetching the public registry."
+        }
       }
     }
   },

@@ -34,7 +34,19 @@
         "type": "string",
         "title": "OpenWeatherMap API Key",
         "description": "Required for temperature/cloud/wind/pressure tile layers. Radar works without it.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://home.openweathermap.org/users/sign_up",
+          "urlLabel": "Sign up for OpenWeather",
+          "steps": [
+            "Create a free account at home.openweathermap.org using your email.",
+            "Confirm your email via the verification link.",
+            "Sign in and open the 'API keys' tab (home.openweathermap.org/api_keys).",
+            "Copy the default key or generate a new one."
+          ],
+          "cost": "Free plan: 60 calls/minute, 1,000,000 calls/month.",
+          "notes": "Optional — the radar overlay works without it; the key only enables the temperature/cloud/wind/pressure tile layers. Same OpenWeather account/key as weather-openweathermap. New keys activate up to 2 hours after registration."
+        }
       }
     }
   },

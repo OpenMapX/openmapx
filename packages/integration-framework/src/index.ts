@@ -134,6 +134,7 @@ export type {
 } from "./loader";
 export { toIntegrationMeta } from "./loader";
 export type {
+  CredentialSetup,
   IntegrationDataSource,
   IntegrationFrontend,
   IntegrationHealthCheck,
@@ -146,9 +147,11 @@ export type {
 } from "./manifest";
 export {
   createManifestAttribution,
+  credentialSetupSchema,
   dataSourceToAttribution,
   INTEGRATION_ID_REGEX,
   integrationManifestSchema,
+  readCredentialSetup,
   validateManifest,
 } from "./manifest";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";

@@ -14,6 +14,8 @@
  * `errors` is empty.
  */
 
+import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
+
 /** Walk into the `properties` block of a configSchema (the manifest may nest it under `properties` or omit the wrapping object). */
 function configSchemaProperties(
   configSchema: Record<string, unknown> | undefined,
@@ -27,6 +29,8 @@ export interface SecretFieldDescriptor {
   title: string;
   description?: string;
   sharedSecretName?: string;
+  /** Operator "how to obtain this key" guidance from `x-openmapx-setup`. */
+  setup?: CredentialSetup;
 }
 
 /**
@@ -47,6 +51,7 @@ export function getSecretFields(
         title: (def.title as string) ?? key,
         description: def.description as string | undefined,
         sharedSecretName: def["x-openmapx-sharedSecretName"] as string | undefined,
+        setup: readCredentialSetup(def),
       });
     }
   }

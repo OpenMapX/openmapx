@@ -14,10 +14,13 @@ import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import type { CredentialSetup } from "@openmapx/integration-framework";
+import { readCredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
+import { CredentialSetupGuide } from "./CredentialSetupGuide";
 
 type ConfigSource = "default" | "database" | "vault" | "config.json" | "env";
 
@@ -38,6 +41,7 @@ interface SchemaProperty {
   enum?: string[];
   format?: string;
   "x-openmapx-secret"?: boolean;
+  "x-openmapx-setup"?: CredentialSetup;
 }
 
 interface ConfigSchemaFormProps {
@@ -88,6 +92,7 @@ export function ConfigSchemaForm({
         enum: def?.enum,
         format: def?.format,
         default: def?.default,
+        setup: readCredentialSetup(def),
       }));
   }, [schema]);
 
@@ -247,6 +252,7 @@ export function ConfigSchemaForm({
                 {field.description}
               </Typography>
             )}
+            {field.setup && <CredentialSetupGuide setup={field.setup} />}
             {field.type === "boolean" ? (
               <FormControlLabel
                 control={

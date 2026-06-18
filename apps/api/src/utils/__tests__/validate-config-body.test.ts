@@ -65,6 +65,42 @@ describe("getSecretFields", () => {
     expect(fields.map((f) => f.key)).toEqual(["token"]);
   });
 
+  it("extracts the x-openmapx-setup guidance block", () => {
+    const fields = getSecretFields({
+      properties: {
+        token: {
+          type: "string",
+          "x-openmapx-secret": true,
+          "x-openmapx-setup": {
+            url: "https://provider.example/keys",
+            steps: ["Sign up", "Copy key"],
+            cost: "Free tier",
+            email: { to: "api@provider.example", subject: "Access" },
+          },
+        },
+      },
+    });
+    expect(fields[0]?.setup).toEqual({
+      url: "https://provider.example/keys",
+      steps: ["Sign up", "Copy key"],
+      cost: "Free tier",
+      email: { to: "api@provider.example", subject: "Access" },
+    });
+  });
+
+  it("ignores a malformed x-openmapx-setup block", () => {
+    const fields = getSecretFields({
+      properties: {
+        token: {
+          type: "string",
+          "x-openmapx-secret": true,
+          "x-openmapx-setup": { steps: "not-an-array" },
+        },
+      },
+    });
+    expect(fields[0]?.setup).toBeUndefined();
+  });
+
   it("skips reserved keys and non-object definitions", () => {
     const fields = getSecretFields({
       properties: {

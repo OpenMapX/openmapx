@@ -18,7 +18,18 @@
         "type": "string",
         "title": "MobilityData refresh token",
         "description": "Long-lived refresh token from mobilitydatabase.org → account settings. Exchanged at runtime for short-lived access tokens. Required; the integration disables itself when unset.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://mobilitydatabase.org/sign-in",
+          "urlLabel": "Get Mobility Database refresh token",
+          "steps": [
+            "Sign up / sign in at mobilitydatabase.org.",
+            "Open the Account Details screen in your account.",
+            "Copy the long-lived refresh token shown there."
+          ],
+          "cost": "Free.",
+          "notes": "The refresh token is long-lived; it is exchanged at runtime for a short-lived access token valid for one hour."
+        }
       },
       "includeRtFeeds": {
         "type": "boolean",

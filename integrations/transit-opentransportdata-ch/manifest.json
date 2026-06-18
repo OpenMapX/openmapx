@@ -18,7 +18,19 @@
         "title": "OpenTransportData CH API Key",
         "description": "API key from api-manager.opentransportdata.swiss for OJP, live alerts, GTFS-RT and optional formation access.",
         "x-openmapx-secret": true,
-        "x-openmapx-sharedSecretName": "opentransportdata-ch-api-key"
+        "x-openmapx-sharedSecretName": "opentransportdata-ch-api-key",
+        "x-openmapx-setup": {
+          "url": "https://api-manager.opentransportdata.swiss/",
+          "urlLabel": "Get opentransportdata.swiss API key",
+          "steps": [
+            "Register at api-manager.opentransportdata.swiss with your email, name, and a password.",
+            "Create an application in your account.",
+            "On the API Manager overview, select the API you need (e.g. OJP 2.0, GTFS-RT alerts), open it, and assign it to your app.",
+            "Copy the generated key."
+          ],
+          "cost": "Free with registration.",
+          "notes": "Only one key can be created per API, and a revoked key cannot be self-recreated for the same API. Sent as an 'Authorization: Bearer <key>' header. Support: opendata@sbb.ch."
+        }
       },
       "requestorRef": {
         "type": "string",

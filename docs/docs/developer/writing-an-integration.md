@@ -211,6 +211,46 @@ environment override for a key follows the pattern
 `INTEGRATION_<ID>_<KEY>` (id and key upper-cased, hyphens and camelCase to
 underscores), for example `INTEGRATION_KNOWLEDGE_SUNRISE_SUNSET_API_KEY`.
 
+### Helping operators obtain a key (`x-openmapx-setup`)
+
+A credential field is only useful if the operator can actually get a value for
+it. Attach an `x-openmapx-setup` block to any credential property — a vault
+secret or a plain `"format": "password"` key field — and the admin panel renders
+a "Get API key" button, an optional pre-written request email, a free-tier hint,
+and a collapsible step-by-step guide right next to the input (on the Credentials
+tab, the bulk-configure page, the config form, and the Set-credential dialog):
+
+```json
+{
+  "apiKey": {
+    "type": "string",
+    "title": "Provider API key",
+    "x-openmapx-secret": true,
+    "x-openmapx-setup": {
+      "url": "https://provider.example/account/keys",
+      "urlLabel": "Open dashboard",
+      "steps": [
+        "Create a free account at provider.example.",
+        "Open Account → API keys.",
+        "Create a key and copy it."
+      ],
+      "cost": "Free tier: 100k requests/month",
+      "notes": "Activation can take a few minutes.",
+      "email": {
+        "to": "api@provider.example",
+        "subject": "API access request",
+        "body": "Hello,\n\nI'd like to request an API key for ..."
+      }
+    }
+  }
+}
+```
+
+Every field is optional. Use `email` only for providers that grant access by
+manual request (it renders a `mailto:` with the subject/body pre-filled); for
+self-service providers a `url` plus `steps` is enough. Keep the steps short and
+imperative — they are operator instructions, not prose.
+
 ## Implement `setup(ctx)`
 
 `index.ts` exports a `setup(ctx)` function that the host calls once at load time,

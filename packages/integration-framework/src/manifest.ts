@@ -36,6 +36,74 @@ const dataSourceSchema = z.object({
   dpaUrl: z.string().optional(),
 });
 
+/**
+ * Operator-facing "how to obtain this credential" guidance attached to a
+ * `configSchema` property under the `x-openmapx-setup` key. The admin panel
+ * renders it next to the credential/API-key input so an operator can sign up,
+ * follow the steps, and paste the value without leaving the page.
+ *
+ * Attach it to any credential-bearing property — a vault secret
+ * (`x-openmapx-secret: true`) or a plain key field (`format: "password"`):
+ *
+ * ```json
+ * "apiKey": {
+ *   "type": "string",
+ *   "title": "Provider API key",
+ *   "x-openmapx-secret": true,
+ *   "x-openmapx-setup": {
+ *     "url": "https://provider.example/account/keys",
+ *     "steps": ["Create a free account.", "Open Account → API keys.", "Copy the key."],
+ *     "cost": "Free tier: 100k requests/month",
+ *     "notes": "Activation can take a few minutes.",
+ *     "email": {
+ *       "to": "api@provider.example",
+ *       "subject": "API access request",
+ *       "body": "Hello,\n\nI'd like to request an API key for ..."
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export const credentialSetupSchema = z.object({
+  /** Where to sign up / request access / open the API-key dashboard. */
+  url: z.string().optional(),
+  /** Label for the primary action button (defaults to "Get API key"). */
+  urlLabel: z.string().optional(),
+  /** Ordered, human-readable steps to obtain the credential. */
+  steps: z.array(z.string()).optional(),
+  /** Free-tier / pricing summary, e.g. "Free up to 100k requests/month". */
+  cost: z.string().optional(),
+  /** Caveats worth flagging up front (approval delay, regional limits…). */
+  notes: z.string().optional(),
+  /**
+   * Pre-written request email for providers that grant access manually.
+   * Rendered as a `mailto:` link with the subject/body pre-filled.
+   */
+  email: z
+    .object({
+      to: z.string(),
+      subject: z.string().optional(),
+      body: z.string().optional(),
+    })
+    .optional(),
+});
+
+export type CredentialSetup = z.infer<typeof credentialSetupSchema>;
+
+/**
+ * Read the `x-openmapx-setup` guidance off a single `configSchema` property
+ * definition, validating its shape. Returns `undefined` when absent or
+ * malformed so callers can render defensively. Keeps the magic key name in one
+ * place for both the API (credential-status builder) and the admin UI.
+ */
+export function readCredentialSetup(propertyDef: unknown): CredentialSetup | undefined {
+  if (!propertyDef || typeof propertyDef !== "object") return undefined;
+  const raw = (propertyDef as Record<string, unknown>)["x-openmapx-setup"];
+  if (!raw) return undefined;
+  const parsed = credentialSetupSchema.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
+
 const healthCheckSchema = z.object({
   name: z.string().optional(),
   type: z.enum(["http", "ping", "tcp", "custom"]),

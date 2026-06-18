@@ -27,13 +27,36 @@
         "type": "string",
         "title": "NRW Mobidrom Client ID",
         "description": "OAuth2 client ID override for the NRW Mobidrom GBFS API. Defaults to the publicly documented 'gbfs-api' client.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
+          "urlLabel": "MOBIDROM data platform",
+          "steps": [
+            "Open the MOBIDROM (Mobidata-NRW) data platform at mobilitaetsdaten.nrw and browse the Datenkatalog.",
+            "Open the 'E-Scooter-Sharing NRW' dataset, which publishes the OAuth2 token URL, Client ID and Client Secret.",
+            "To use your own client, register an account on the platform and request OAuth2 client credentials.",
+            "Set this field to the issued client_id."
+          ],
+          "cost": "Free (open data)",
+          "notes": "Optional override — the integration ships with the publicly documented default client (client_id 'gbfs-api'), so most operators leave this blank unless the published credentials get rotated."
+        }
       },
       "nrwMobidromClientSecret": {
         "type": "string",
         "title": "NRW Mobidrom Client Secret",
         "description": "OAuth2 client secret override for the NRW Mobidrom GBFS API. Defaults to the publicly documented secret (see dataset page).",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw",
+          "urlLabel": "MOBIDROM data platform",
+          "steps": [
+            "On the 'E-Scooter-Sharing NRW' dataset page, copy the published Client Secret if using the public default.",
+            "For your own client, register on mobilitaetsdaten.nrw and request OAuth2 client credentials.",
+            "Set this field to that value (must be paired with the matching client ID)."
+          ],
+          "cost": "Free (open data)",
+          "notes": "Optional override — defaults work out of the box. Only set this together with the client ID when you have your own registered OAuth2 client."
+        }
       }
     }
   },

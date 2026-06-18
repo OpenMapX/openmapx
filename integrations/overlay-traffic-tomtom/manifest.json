@@ -33,7 +33,19 @@
         "type": "string",
         "title": "TomTom Traffic API Key",
         "description": "TomTom Traffic API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developer.tomtom.com/",
+          "urlLabel": "Get TomTom API key",
+          "steps": [
+            "Register for a free account on the TomTom Developer Portal at developer.tomtom.com.",
+            "Open the Dashboard / 'My APIs & SDKs' key-management area.",
+            "Use the auto-created 'My first API key' or add a new key.",
+            "Copy the API key."
+          ],
+          "cost": "Free Freemium tier: 2,500 non-tile + 50,000 tile requests/day, no credit card.",
+          "notes": "Freemium tier permits commercial use; rate limit ~5 calls/sec for non-tile APIs."
+        }
       }
     }
   },

@@ -17,7 +17,19 @@
         "type": "string",
         "title": "TfL API Key",
         "description": "Transport for London API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://api-portal.tfl.gov.uk/signup",
+          "urlLabel": "Get TfL API key",
+          "steps": [
+            "Sign up at api-portal.tfl.gov.uk/signup and activate your account via the confirmation email.",
+            "Sign in, open the Products section and subscribe to the '500 Requests per min' product.",
+            "After subscribing you are taken to your Profile, where your subscription keys are listed.",
+            "Copy the key (the 'app_key')."
+          ],
+          "cost": "Free. Anonymous access is capped at 50 req/min; a registered key raises this to 500 req/min.",
+          "notes": "The key is appended to requests as the app_key query parameter."
+        }
       }
     }
   },

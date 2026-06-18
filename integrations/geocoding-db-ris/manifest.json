@@ -19,14 +19,38 @@
         "type": "string",
         "title": "DB RIS Stations Client ID",
         "description": "Deutsche Bahn RIS API client ID.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/ris-stations",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace via 'DB Kundenkonto'.",
+            "Create an application with 'Neue Anwendung erstellen'.",
+            "In the Katalog, open 'RIS::Stations' and subscribe ('Abonnieren') a plan (start with the free Testzugang).",
+            "Open the application's details and copy its Client ID into this field."
+          ],
+          "cost": "Free test access (2 months, ~10,000 req/month); paid plans run roughly EUR 4,200-84,000/year.",
+          "notes": "RIS::Stations access is granted only after a positive authorization check by Deutsche Bahn AG. One DB application can serve all three DB RIS integrations — they share the same Client ID / API key pair."
+        }
       },
       "apiKey": {
         "type": "string",
         "title": "DB RIS Stations API Key",
         "description": "Deutsche Bahn RIS API key.",
         "x-openmapx-secret": true,
-        "x-openmapx-sharedSecretName": "db-ris-api-key"
+        "x-openmapx-sharedSecretName": "db-ris-api-key",
+        "x-openmapx-setup": {
+          "url": "https://developers.deutschebahn.com/db-api-marketplace/apis/product/ris-stations",
+          "urlLabel": "Open DB API Marketplace",
+          "steps": [
+            "Register/log in to the DB API Marketplace and create an application ('Neue Anwendung erstellen').",
+            "Copy the Client Secret (API key) shown once during application creation.",
+            "Subscribe ('Abonnieren') the 'RIS::Stations' product (Testzugang or a paid plan) to that application.",
+            "Paste the Client Secret here (sent as the DB-Api-Key header)."
+          ],
+          "cost": "Free test access (2 months, ~10,000 req/month); paid plans run roughly EUR 4,200-84,000/year.",
+          "notes": "Access requires Deutsche Bahn AG approval. The Client Secret is shown only once at creation; regenerate it if lost."
+        }
       }
     }
   },

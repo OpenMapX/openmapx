@@ -17,7 +17,19 @@
         "type": "string",
         "title": "Transitland API Key",
         "description": "Transitland API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.transit.land/documentation",
+          "urlLabel": "Get Transitland API key",
+          "steps": [
+            "Go to the Transitland sign-up page and create (or sign in to) an Interline account.",
+            "Pick a plan — the free 'Transitland Explorer' plan or a paid plan — and press Order.",
+            "Sign in to your Interline account at any time to retrieve your API key.",
+            "Add the key to requests via the api_key query parameter or header."
+          ],
+          "cost": "Free 'Transitland Explorer' tier (10,000 REST queries/month). Professional plan is $200/month (annual).",
+          "notes": "Direct sign-up: app.interline.io/products/tlv2_api/orders/new. The GraphQL API is paid-tier only."
+        }
       }
     }
   },

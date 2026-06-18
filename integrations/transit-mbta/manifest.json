@@ -17,7 +17,19 @@
         "type": "string",
         "title": "MBTA API Key",
         "description": "MBTA v3 API key.",
-        "x-openmapx-secret": true
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://api-v3.mbta.com/register",
+          "urlLabel": "Get MBTA API key",
+          "steps": [
+            "Go to api-v3.mbta.com/register and create an account with your email and password.",
+            "Verify your email, then sign in to the MBTA V3 API client portal.",
+            "Request a key for your application (issuing may take up to a day).",
+            "Copy the generated API key."
+          ],
+          "cost": "Free. A registered key raises the limit from 20 req/min (unauthenticated) to a default of 1,000 req/min.",
+          "notes": "A valid key is also required to pin the API version and to use streaming requests. You can request a higher rate limit from within the portal."
+        }
       }
     }
   },
