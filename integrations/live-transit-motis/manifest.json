@@ -6,7 +6,7 @@
   "documentation": "https://motis-project.de/",
   "domains": ["live-transit"],
   "dependencies": ["overlay-live-transit"],
-  "requires": [{ "service": "motis", "optional": false }],
+  "requires": [{ "service": "motis", "optional": true }],
   "backend": {
     "routes": false
   },
@@ -19,15 +19,26 @@
       },
       "endpoint": {
         "type": "string",
-        "title": "MOTIS endpoint",
-        "description": "Base URL of the MOTIS instance. Falls back to the service registry's resolved URL.",
+        "title": "Local MOTIS endpoint URL",
+        "description": "Base URL of a self-hosted MOTIS server. Leave blank to rely on the `motis` service registry entry.",
+        "format": "url"
+      },
+      "transitousUrl": {
+        "type": "string",
+        "title": "Transitous endpoint URL",
+        "description": "Base URL of the cloud Transitous instance, used for realtime on `mo:` (Transitous-served) trips and stops.",
         "format": "url"
       }
     }
   },
   "healthCheck": [
     {
-      "name": "MOTIS endpoint",
+      "name": "Transitous",
+      "type": "http",
+      "url": "https://api.transitous.org/api/v1/geocode?text=test"
+    },
+    {
+      "name": "MOTIS self-hosted",
       "type": "ping",
       "urlTemplate": "${service:motis}",
       "url": "http://localhost:8081"
@@ -36,6 +47,22 @@
   "quality": "built-in",
   "category": "Transit",
   "dataSources": [
+    {
+      "sourceId": "transitous",
+      "name": "Transitous",
+      "url": "https://api.transitous.org/",
+      "license": "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+      "licenseUrl": "https://transitous.org/sources/",
+      "commercialUse": "conditional",
+      "attribution": "Public transport data via Transitous — see transitous.org/sources/",
+      "notes": "The Transitous public API (api.transitous.org) is 'not intended for commercial or for-profit purposes' — commercial use is decided case-by-case on request, and open-source clients must publish their source and visibly link transitous.org/sources/ for attribution (see transitous.org/api/). The MOTIS routing software is AGPL-3.0-or-later, but that licenses the software, not the data; the aggregated timetable data is per upstream feed (mostly CC-BY / CC-BY-SA / open-government licences).",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://transitous.org/privacy/",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
     {
       "sourceId": "motis-rt",
       "name": "MOTIS GTFS-RT Pass-through",

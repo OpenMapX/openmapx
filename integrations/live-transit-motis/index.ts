@@ -20,6 +20,7 @@ import { withAttribution } from "@openmapx/mobility-core/result";
 
 const attribution = createManifestAttribution();
 
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { AlertSeverity, ServiceAlert } from "@openmapx/mobility-core/transit";
 
 /**
@@ -30,6 +31,7 @@ import type { AlertSeverity, ServiceAlert } from "@openmapx/mobility-core/transi
  * through every consumer of the local instance.
  */
 const FALLBACK_MOTIS_URL = "http://localhost:8081";
+const TRANSITOUS_URL = "https://api.transitous.org";
 const TIMEOUT_MS = 8_000;
 const PROVIDER_ID = "live-transit-motis";
 const SOURCE_ID = "motis-rt";
@@ -56,18 +58,34 @@ function resolveMotisUrl(ctx: IntegrationContext): string {
 // any multi-value list. Serialise arrays comma-joined to match the spec.
 const QUERY_SERIALIZER = { array: { explode: false, style: "form" } } as const;
 
-const client: Client = (() => {
+function makeClient(baseUrl: string): Client {
   const c = createClient({
-    baseUrl: FALLBACK_MOTIS_URL,
+    baseUrl,
     headers: { "User-Agent": USER_AGENT_TRANSIT },
     querySerializer: QUERY_SERIALIZER,
   });
-  c.interceptors.request.use((request) => {
-    const signal = AbortSignal.timeout(TIMEOUT_MS);
-    return new Request(request, { signal });
-  });
+  c.interceptors.request.use(
+    (request) => new Request(request, { signal: AbortSignal.timeout(TIMEOUT_MS) }),
+  );
   return c;
-})();
+}
+
+// Two instances so realtime is queried against the SAME MOTIS that produced the
+// id: `mo:` ids come from the cloud Transitous instance, everything else (`ms:`)
+// from the deployment's self-hosted MOTIS. Routing by prefix (not reachability)
+// is required — a `mo:` trip simply does not exist in the local instance, and
+// vice versa — and mirrors transit-motis's getVehicleJourney prefix handling.
+const localClient = makeClient(FALLBACK_MOTIS_URL);
+const transitousClient = makeClient(TRANSITOUS_URL);
+
+function routeForId(id: string): { client: Client; attribution: Attribution[] } {
+  if (id.startsWith("mo:")) {
+    const attr = attribution.bySource("transitous");
+    return { client: transitousClient, attribution: attr ? [attr] : [] };
+  }
+  const attr = attribution.bySource("motis-rt");
+  return { client: localClient, attribution: attr ? [attr] : [] };
+}
 
 /** MOTIS id prefixes the local + cloud + RT providers all share. */
 const MOTIS_ID_PREFIX_RE = /^(ms:|mo:|mr:)/;
@@ -184,8 +202,12 @@ function mapMotisAlert(alert: MotisAlert, index: number): ServiceAlert {
 
 export function setup(ctx: IntegrationContext): void {
   attribution.set(ctx.manifest.dataSources ?? []);
-  client.setConfig({
+  localClient.setConfig({
     baseUrl: resolveMotisUrl(ctx),
+    headers: { "User-Agent": USER_AGENT_TRANSIT },
+  });
+  transitousClient.setConfig({
+    baseUrl: (ctx.config.transitousUrl as string | undefined) || TRANSITOUS_URL,
     headers: { "User-Agent": USER_AGENT_TRANSIT },
   });
 
@@ -200,6 +222,7 @@ export function setup(ctx: IntegrationContext): void {
       tripUpdates: true,
     },
     async getAlertsForStop(stopId) {
+      const { client, attribution: attr } = routeForId(stopId);
       try {
         const { data } = await stoptimes({
           client,
@@ -207,9 +230,9 @@ export function setup(ctx: IntegrationContext): void {
         });
         const motisAlerts: MotisAlert[] = data?.place?.alerts ?? [];
         const mapped = motisAlerts.map((alert, index) => mapMotisAlert(alert, index));
-        return withAttribution(mapped, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+        return withAttribution(mapped, attr, freshnessNow({ hasRealtimeData: true }));
       } catch {
-        return withAttribution([], attribution.all(), freshnessNow({ hasRealtimeData: true }));
+        return withAttribution([], attr, freshnessNow({ hasRealtimeData: true }));
       }
     },
     async getTripUpdate(tripId, stopId) {
@@ -219,6 +242,7 @@ export function setup(ctx: IntegrationContext): void {
       if (!MOTIS_ID_PREFIX_RE.test(tripId)) {
         return withAttribution(null, attribution.all(), freshnessNow({ hasRealtimeData: true }));
       }
+      const { client, attribution: attr } = routeForId(tripId);
       try {
         const { data } = await motisTrip({
           client,
@@ -226,9 +250,9 @@ export function setup(ctx: IntegrationContext): void {
         });
         const itinerary = data as Itinerary | undefined;
         const delta = itinerary ? deltaFromItinerary(itinerary, tripId, stopId) : null;
-        return withAttribution(delta, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+        return withAttribution(delta, attr, freshnessNow({ hasRealtimeData: true }));
       } catch {
-        return withAttribution(null, attribution.all(), freshnessNow({ hasRealtimeData: true }));
+        return withAttribution(null, attr, freshnessNow({ hasRealtimeData: true }));
       }
     },
   };
@@ -242,5 +266,8 @@ export const __testing = {
   mapMotisAlert,
   mapMotisAlertSeverity,
   resolveMotisUrl,
+  routeForId,
   stripPrefix,
+  localClient,
+  transitousClient,
 };

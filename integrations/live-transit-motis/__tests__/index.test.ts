@@ -18,6 +18,14 @@ function createCtx(config: Record<string, unknown> = {}): CtxHandle {
     manifest: {
       dataSources: [
         {
+          sourceId: "transitous",
+          name: "Transitous",
+          url: "https://api.transitous.org/",
+          license: "Mixed",
+          providerCountry: "DE",
+          providerPrivacyUrl: "https://transitous.org/privacy/",
+        },
+        {
           sourceId: "motis-rt",
           name: "MOTIS GTFS-RT Pass-through",
           url: "https://motis-project.de/",
@@ -70,7 +78,9 @@ describe("live-transit-motis provider", () => {
       alerts: { byStop: true, byRoute: false, byBbox: false },
       tripUpdates: true,
     });
-    expect(provider.attribution[0]?.sourceId).toBe("motis-rt");
+    expect(provider.attribution.map((a) => a.sourceId)).toEqual(
+      expect.arrayContaining(["transitous", "motis-rt"]),
+    );
     expect(typeof provider.getAlertsForStop).toBe("function");
     expect(typeof provider.getTripUpdate).toBe("function");
     expect(provider.getVehiclePositions).toBeUndefined();
@@ -301,6 +311,44 @@ describe("live-transit-motis provider", () => {
       const mod = await loadModule();
       const ctx = ctxWith({ service: null });
       expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://localhost:8081");
+    });
+  });
+
+  describe("prefix routing", () => {
+    it("routeForId picks the client + attribution by id prefix", async () => {
+      const mod = await loadModule();
+      const { ctx } = createCtx();
+      mod.setup(ctx);
+      const { routeForId, transitousClient, localClient } = mod.__testing;
+
+      expect(routeForId("mo:NL:123").client).toBe(transitousClient);
+      expect(routeForId("ms:DE:456").client).toBe(localClient);
+      expect(routeForId("8000105").client).toBe(localClient);
+
+      expect(routeForId("mo:x").attribution[0]?.sourceId).toBe("transitous");
+      expect(routeForId("ms:x").attribution[0]?.sourceId).toBe("motis-rt");
+    });
+
+    it("queries Transitous for mo: stops and the local instance for ms: stops", async () => {
+      const motisClient = await import("@motis-project/motis-client");
+      vi.mocked(motisClient.stoptimes).mockResolvedValue({
+        data: { place: { alerts: [] } },
+      } as never);
+
+      const mod = await loadModule();
+      const { ctx, getProvider } = createCtx();
+      mod.setup(ctx);
+      const provider = getProvider();
+
+      await provider.getAlertsForStop?.("mo:NL:123");
+      expect(motisClient.stoptimes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ client: mod.__testing.transitousClient }),
+      );
+
+      await provider.getAlertsForStop?.("ms:DE:456");
+      expect(motisClient.stoptimes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ client: mod.__testing.localClient }),
+      );
     });
   });
 });
