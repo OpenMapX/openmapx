@@ -4,7 +4,12 @@
  * Used by hafas-mgate adapter, hafas provider, and db-vendo provider to avoid
  * duplicating departure/remark normalization logic.
  */
-import type { Departure, TransportMode, TripRemark } from "@openmapx/mobility-core/transit";
+import type {
+  Departure,
+  OccupancyLevel,
+  TransportMode,
+  TripRemark,
+} from "@openmapx/mobility-core/transit";
 
 /**
  * Maps FPTF product strings to internal TransportMode values.
@@ -117,6 +122,26 @@ export function normalizeRemarks(raw: unknown[] | undefined): TripRemark[] | und
 }
 
 /**
+ * Map an FPTF `loadFactor` (db-vendo-client / hafas-client occupancy, derived
+ * from DB `auslastungsmeldungen` stufe 1–4) to our `OccupancyLevel`:
+ * low-to-medium → low · high → medium · very-high → high · exceptionally-high → overcrowded.
+ */
+export function mapFptfLoadFactor(loadFactor: string | undefined): OccupancyLevel | undefined {
+  switch (loadFactor) {
+    case "low-to-medium":
+      return "low";
+    case "high":
+      return "medium";
+    case "very-high":
+      return "high";
+    case "exceptionally-high":
+      return "overcrowded";
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Normalize a raw FPTF departure object into the internal Departure type.
  *
  * @param d     Raw FPTF departure (from hafas-client or hafas-mgate)
@@ -153,7 +178,7 @@ export function normalizeFptfDeparture(d: any, prefix: string): Departure {
     delaySeconds,
     platform: d.plannedPlatform ?? d.platform ?? undefined,
     canceled: d.cancelled ?? false,
-    occupancy: d.occupancy as Departure["occupancy"],
+    occupancy: mapFptfLoadFactor(d.loadFactor),
     remarks: normalizeRemarks(d.remarks),
   };
 }

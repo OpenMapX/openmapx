@@ -1,4 +1,5 @@
 import {
+  mapFptfLoadFactor,
   mapProducts,
   normalizeFptfDeparture,
   normalizeRemarks,
@@ -276,6 +277,9 @@ function legToTripLeg(leg: any): TripLeg {
     geometry,
     tripId: !isWalking && leg.tripId ? `${PREFIX}${leg.tripId}` : undefined,
     routeId: !isWalking && line.id ? `${PREFIX}${line.id}` : undefined,
+    // DB occupancy forecast (auslastungsmeldungen), surfaced by db-vendo-client
+    // as an FPTF loadFactor on rail/bus legs. Undefined on walking legs.
+    occupancy: mapFptfLoadFactor(leg.loadFactor),
     _intermediateStopCount,
   };
 }

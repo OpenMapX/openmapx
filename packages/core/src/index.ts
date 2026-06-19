@@ -503,6 +503,7 @@ export {
 } from "./utils/formatting";
 export {
   FPTF_PRODUCT_MODE,
+  mapFptfLoadFactor,
   mapProducts,
   normalizeFptfDeparture,
   normalizeRemarks,

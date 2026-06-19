@@ -604,6 +604,36 @@ describe("planJourney", () => {
     expect(leg.to.stopId).toBe("db:8000261");
   });
 
+  it("maps a leg's FPTF loadFactor to occupancy", async () => {
+    mockClient.journeys.mockResolvedValue({
+      journeys: [
+        {
+          legs: [
+            {
+              walking: false,
+              tripId: "trip999",
+              origin: { id: "8000105", name: "A", location: { latitude: 50.1, longitude: 8.6 } },
+              destination: {
+                id: "8000261",
+                name: "B",
+                location: { latitude: 48.1, longitude: 11.5 },
+              },
+              departure: "2026-03-10T10:00:00+01:00",
+              arrival: "2026-03-10T13:30:00+01:00",
+              line: { id: "ice1", name: "ICE 1", product: "nationalExpress" },
+              loadFactor: "very-high",
+            },
+          ],
+        },
+      ],
+    });
+
+    const { planJourney } = await loadModule();
+    const result = await planJourney(50.1, 8.6, 48.1, 11.5, "2026-03-10", "10:00:00");
+
+    expect(result?.itineraries[0].legs[0].occupancy).toBe("high");
+  });
+
   it("uses arrival param when arriveBy=true", async () => {
     mockClient.journeys.mockResolvedValue({
       journeys: [
