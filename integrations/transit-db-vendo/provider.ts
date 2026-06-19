@@ -284,6 +284,62 @@ function legToTripLeg(leg: any): TripLeg {
   };
 }
 
+/**
+ * db-vendo product categories, in the order DB's own products list defines them.
+ * Used to build the per-category `products` boolean filter for journeys().
+ */
+const DB_PRODUCT_IDS = [
+  "nationalExpress",
+  "national",
+  "regionalExpress",
+  "regional",
+  "suburban",
+  "bus",
+  "ferry",
+  "subway",
+  "tram",
+  "taxi",
+] as const;
+
+/**
+ * Map MOTIS transit modes (the allow-list the rest of the app speaks) onto
+ * db-vendo product categories. FUNICULAR/AERIAL_LIFT have no DB equivalent and
+ * are dropped; NIGHT_RAIL and COACH fold into the closest DB category.
+ */
+const MOTIS_MODE_TO_DB_PRODUCT: Record<string, (typeof DB_PRODUCT_IDS)[number]> = {
+  HIGHSPEED_RAIL: "nationalExpress",
+  LONG_DISTANCE: "national",
+  NIGHT_RAIL: "national",
+  REGIONAL_FAST_RAIL: "regionalExpress",
+  REGIONAL_RAIL: "regional",
+  SUBURBAN: "suburban",
+  SUBWAY: "subway",
+  TRAM: "tram",
+  BUS: "bus",
+  COACH: "bus",
+  FERRY: "ferry",
+};
+
+/**
+ * Translate a MOTIS `transitModes` allow-list into a db-vendo `products` filter
+ * (per-category booleans). Unspecified categories default to true in db-vendo,
+ * so every category is set explicitly. Returns undefined — meaning "don't
+ * constrain, keep all products" — when no modes are given or none map to a DB
+ * category, since db-vendo throws on an all-false filter.
+ */
+export function modesToDbProducts(modes?: string[]): Record<string, boolean> | undefined {
+  if (!modes || modes.length === 0) return undefined;
+  const allowed = new Set<string>();
+  for (const mode of modes) {
+    const product = MOTIS_MODE_TO_DB_PRODUCT[mode];
+    if (product) allowed.add(product);
+  }
+  if (allowed.size === 0) return undefined;
+  const products: Record<string, boolean> = {};
+  for (const id of DB_PRODUCT_IDS) products[id] = allowed.has(id);
+  return products;
+}
+
 export async function planJourney(
   fromLat: number,
   fromLng: number,
@@ -293,9 +349,11 @@ export async function planJourney(
   time: string,
   arriveBy?: boolean,
   numItineraries?: number,
+  opts?: { modes?: string[] },
 ): Promise<TripPlan | null> {
   try {
     const dt = new Date(`${date}T${time}Z`);
+    const products = modesToDbProducts(opts?.modes);
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const data: any = await client.journeys(
       { type: "location", address: "Origin", latitude: fromLat, longitude: fromLng },
@@ -306,6 +364,9 @@ export async function planJourney(
         results: numItineraries ?? 3,
         stopovers: true,
         remarks: true,
+        // Restrict vehicle categories when the caller passed a mode allow-list;
+        // omitted entirely otherwise so DB returns all products.
+        ...(products ? { products } : {}),
         // polylines are not supported in journeys() for db-vendo-client; only
         // refreshJourney() accepts the option, but the DB vendo API no longer
         // returns polylineGroup data there either. We use stopover coordinates

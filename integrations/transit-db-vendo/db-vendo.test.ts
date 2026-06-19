@@ -714,6 +714,73 @@ describe("planJourney", () => {
     expect(options.results).toBe(5);
   });
 
+  it("forwards a mode allow-list as a db-vendo products filter", async () => {
+    mockClient.journeys.mockResolvedValue({ journeys: [] });
+
+    const { planJourney } = await loadModule();
+    await planJourney(52.5, 13.4, 52.51, 13.41, "2026-03-10", "10:00:00", false, 3, {
+      modes: ["REGIONAL_RAIL", "TRAM", "BUS"],
+    });
+
+    const options = mockClient.journeys.mock.calls[0][2];
+    expect(options.products).toEqual({
+      nationalExpress: false,
+      national: false,
+      regionalExpress: false,
+      regional: true,
+      suburban: false,
+      bus: true,
+      ferry: false,
+      subway: false,
+      tram: true,
+      taxi: false,
+    });
+  });
+
+  it("omits the products filter when no modes are given", async () => {
+    mockClient.journeys.mockResolvedValue({ journeys: [] });
+
+    const { planJourney } = await loadModule();
+    await planJourney(52.5, 13.4, 52.51, 13.41, "2026-03-10", "10:00:00");
+
+    const options = mockClient.journeys.mock.calls[0][2];
+    expect(options).not.toHaveProperty("products");
+  });
+});
+
+describe("modesToDbProducts", () => {
+  it("maps MOTIS modes to db-vendo product booleans", async () => {
+    const { modesToDbProducts } = await loadModule();
+    expect(modesToDbProducts(["HIGHSPEED_RAIL", "REGIONAL_RAIL", "BUS"])).toEqual({
+      nationalExpress: true,
+      national: false,
+      regionalExpress: false,
+      regional: true,
+      suburban: false,
+      bus: true,
+      ferry: false,
+      subway: false,
+      tram: false,
+      taxi: false,
+    });
+  });
+
+  it("folds NIGHT_RAIL/COACH into the closest category and drops unmapped modes", async () => {
+    const { modesToDbProducts } = await loadModule();
+    const products = modesToDbProducts(["NIGHT_RAIL", "COACH", "FUNICULAR", "AERIAL_LIFT"]);
+    expect(products?.national).toBe(true);
+    expect(products?.bus).toBe(true);
+    // FUNICULAR/AERIAL_LIFT have no DB equivalent — they add no category.
+    expect(products?.tram).toBe(false);
+  });
+
+  it("returns undefined for empty input or unmappable-only modes", async () => {
+    const { modesToDbProducts } = await loadModule();
+    expect(modesToDbProducts(undefined)).toBeUndefined();
+    expect(modesToDbProducts([])).toBeUndefined();
+    expect(modesToDbProducts(["FUNICULAR", "AERIAL_LIFT"])).toBeUndefined();
+  });
+
   it("computes duration and transfer count correctly", async () => {
     mockClient.journeys.mockResolvedValue({
       journeys: [

@@ -54,8 +54,11 @@ export function setup(ctx: IntegrationContext): void {
     },
     async planTrip(params) {
       const now = new Date();
-      const date = params.departureTime?.slice(0, 10) ?? now.toISOString().slice(0, 10);
-      const time = params.departureTime?.slice(11, 19) ?? now.toISOString().slice(11, 19);
+      // Arrive-by when an arrival time is given; otherwise plan a departure.
+      const arriveBy = params.arrivalTime != null;
+      const when = arriveBy ? params.arrivalTime : params.departureTime;
+      const date = when?.slice(0, 10) ?? now.toISOString().slice(0, 10);
+      const time = when?.slice(11, 19) ?? now.toISOString().slice(11, 19);
       const plan = await dbVendo.planJourney(
         params.from.lat,
         params.from.lng,
@@ -63,6 +66,9 @@ export function setup(ctx: IntegrationContext): void {
         params.to.lng,
         date,
         time,
+        arriveBy,
+        params.numItineraries,
+        { modes: params.modes },
       );
       return wrapRT(plan ? [plan] : []);
     },
