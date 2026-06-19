@@ -96,6 +96,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setVoiceGuidanceTiming = useSettingsStore((s) => s.setVoiceGuidanceTiming);
   const speedCameraAlerts = useSettingsStore((s) => s.speedCameraAlerts);
   const setSpeedCameraAlerts = useSettingsStore((s) => s.setSpeedCameraAlerts);
+  const aiSearchEnabled = useSettingsStore((s) => s.aiSearchEnabled);
+  const setAiSearchEnabled = useSettingsStore((s) => s.setAiSearchEnabled);
   const fullScreen = useFullScreenOnMobile();
 
   return (
@@ -221,6 +223,20 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </SettingRow>
           <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
             {ts("speedCameraAlertsHint")}
+          </Typography>
+        </Section>
+
+        <Section title={ts("search")}>
+          <SettingRow label={ts("aiSearch")}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Switch
+                checked={aiSearchEnabled}
+                onChange={(e) => setAiSearchEnabled(e.target.checked)}
+              />
+            </Box>
+          </SettingRow>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {ts("aiSearchHint")}
           </Typography>
         </Section>
       </DialogContent>

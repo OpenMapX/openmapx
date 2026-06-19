@@ -1,5 +1,5 @@
-import type { BoundingBox, OverpassFilter } from "@openmapx/core";
-import { OverpassTimeoutError } from "@openmapx/core";
+import type { BoundingBox, OverpassFilter, TagPredicate } from "@openmapx/core";
+import { OverpassTimeoutError, removeFilterPredicate } from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
@@ -9,6 +9,13 @@ const MAX_SHRINK_RETRIES = 3;
 const SHRINK_FACTOR = 0.6;
 const PRESET_PREFIX = "preset:";
 const PRESET_SENTINEL = "__preset__";
+
+// Progressive relaxation: when a structured filter returns fewer than this many
+// results, drop attribute (`require`) predicates one at a time so an
+// over-specific NL query still surfaces near-misses instead of nothing. Each
+// drop is one more Overpass round-trip, so the number of drops is capped.
+const RELAX_MIN_RESULTS = 5;
+const MAX_RELAX_DROPS = 4;
 
 function shrinkBbox(bbox: BoundingBox, factor: number): BoundingBox {
   const centerLat = (bbox.north + bbox.south) / 2;
@@ -171,35 +178,73 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     filter: OverpassFilter,
     bbox: BoundingBox,
     options?: { lang?: string },
-  ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+  ): Promise<{ results: PoiSearchResult[]; partial: boolean; relaxed: TagPredicate[] }> {
     const provider = getProviders().find((p) => typeof p.searchByFilter === "function");
     if (!provider?.searchByFilter) {
       throw httpError(400, "No filter-search provider available");
     }
     const boundSearch = provider.searchByFilter.bind(provider);
-    let currentBbox = bbox;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const results = await boundSearch(filter, currentBbox, {
-          lang: options?.lang,
-        });
-        for (const r of results) {
-          if (r.openingHours && !r.openingHoursInfo) {
-            r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
-              lat: r.coordinates[1],
-              lon: r.coordinates[0],
-            });
+
+    // Run one filter with the existing shrink-on-timeout retry, enriching each
+    // result's opening-hours info before returning.
+    async function runWithShrink(
+      f: OverpassFilter,
+    ): Promise<{ results: PoiSearchResult[]; partial: boolean }> {
+      let currentBbox = bbox;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const results = await boundSearch(f, currentBbox, { lang: options?.lang });
+          for (const r of results) {
+            if (r.openingHours && !r.openingHoursInfo) {
+              r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
+                lat: r.coordinates[1],
+                lon: r.coordinates[0],
+              });
+            }
           }
+          return { results, partial: attempt > 0 };
+        } catch (err) {
+          if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
+            currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
+            continue;
+          }
+          throw err;
         }
-        return { results, partial: attempt > 0 };
-      } catch (err) {
-        if (err instanceof OverpassTimeoutError && attempt < MAX_SHRINK_RETRIES) {
-          currentBbox = shrinkBbox(currentBbox, SHRINK_FACTOR);
-          continue;
-        }
-        throw err;
       }
     }
+
+    const full = await runWithShrink(filter);
+    // Enough exact matches, or no attribute predicates to drop — return as-is.
+    if (full.results.length >= RELAX_MIN_RESULTS || (filter.require?.length ?? 0) === 0) {
+      return { ...full, relaxed: [] };
+    }
+
+    // Too few exact matches: progressively drop `require` predicates from the
+    // end (never the category selectors) until we clear the threshold or run
+    // out of allowed drops.
+    let working = filter;
+    let bestResults = full.results;
+    let anyPartial = full.partial;
+    const relaxed: TagPredicate[] = [];
+    const maxDrops = Math.min(filter.require?.length ?? 0, MAX_RELAX_DROPS);
+    for (let i = 0; i < maxDrops; i++) {
+      const reqs = working.require;
+      if (!reqs || reqs.length === 0) break;
+      relaxed.push(reqs[reqs.length - 1]);
+      working = removeFilterPredicate(working, "require", reqs.length - 1);
+      const next = await runWithShrink(working);
+      anyPartial = anyPartial || next.partial;
+      bestResults = next.results;
+      if (bestResults.length >= RELAX_MIN_RESULTS) break;
+    }
+
+    // Relaxing only helps when it surfaced more than the strict query did. If it
+    // never did (e.g. the area is simply empty), keep the strict results and
+    // report no relaxation so the UI doesn't claim filters were ignored.
+    if (bestResults.length > full.results.length) {
+      return { results: bestResults, partial: anyPartial, relaxed };
+    }
+    return { ...full, relaxed: [] };
   }
 
   return { search, searchText, searchFiltered, searchByFilter, getProviders };

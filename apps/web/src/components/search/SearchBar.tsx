@@ -55,6 +55,7 @@ import {
   usePresetSuggest,
   useSavedPlacesStore,
   useSearchStore,
+  useSettingsStore,
   useSidebarStore,
   useStopSearch,
 } from "@openmapx/core";
@@ -316,11 +317,15 @@ export function SearchBar() {
   // Stop recognition if the component unmounts mid-listen.
   useEffect(() => () => recognitionRef.current?.abort(), []);
 
+  // The natural-language parse is opt-out: when AI search is disabled in
+  // Settings the parse never fires, so search falls back to plain autocomplete.
+  const aiSearchEnabled = useSettingsStore((s) => s.aiSearchEnabled);
+
   const { data: nlpData, isFetching: nlpFetching } = useNlpSearch(
     debouncedQuery,
     mapCenter,
     mapBbox,
-    nlpSubmitted,
+    nlpSubmitted && aiSearchEnabled,
     locale,
     nlpNoCloud,
   );

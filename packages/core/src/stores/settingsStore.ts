@@ -8,6 +8,7 @@ const TIME_FORMAT_STORAGE_KEY = "openmapx:timeFormat";
 const DATE_FORMAT_STORAGE_KEY = "openmapx:dateFormat";
 const VOICE_TIMING_STORAGE_KEY = "openmapx:voiceGuidanceTiming";
 const SPEED_CAMERA_ALERTS_STORAGE_KEY = "openmapx:speedCameraAlerts";
+const AI_SEARCH_STORAGE_KEY = "openmapx:aiSearch";
 
 const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
@@ -51,6 +52,13 @@ function readSpeedCameraAlerts(): boolean {
   return getStorage().getString(SPEED_CAMERA_ALERTS_STORAGE_KEY) === "true";
 }
 
+// Natural-language ("AI") search is on by default; users can opt out for privacy
+// or to avoid the inference latency. Stored only when toggled, so an absent value
+// means enabled.
+function readAiSearch(): boolean {
+  return getStorage().getString(AI_SEARCH_STORAGE_KEY) !== "false";
+}
+
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
@@ -66,6 +74,9 @@ interface SettingsState {
   /** Opt-in speed-camera approach alerts (off by default; region-gated downstream). */
   speedCameraAlerts: boolean;
   setSpeedCameraAlerts: (v: boolean) => void;
+  /** Natural-language ("AI") search understanding (on by default; opt-out). */
+  aiSearchEnabled: boolean;
+  setAiSearchEnabled: (v: boolean) => void;
   /**
    * Re-read the persisted preferences from storage. The store is created at
    * module-eval time, which can run before the platform storage adapter is
@@ -101,6 +112,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(SPEED_CAMERA_ALERTS_STORAGE_KEY, String(speedCameraAlerts));
     set({ speedCameraAlerts });
   },
+  aiSearchEnabled: readAiSearch(),
+  setAiSearchEnabled: (aiSearchEnabled) => {
+    getStorage().setString(AI_SEARCH_STORAGE_KEY, String(aiSearchEnabled));
+    set({ aiSearchEnabled });
+  },
   hydrate: () =>
     set({
       units: readUnits(),
@@ -108,5 +124,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       dateFormat: readDateFormat(),
       voiceGuidanceTiming: readVoiceTiming(),
       speedCameraAlerts: readSpeedCameraAlerts(),
+      aiSearchEnabled: readAiSearch(),
     }),
 }));

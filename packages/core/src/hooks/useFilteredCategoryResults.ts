@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useCategorySearchStore } from "../stores/categorySearchStore";
 import { useOpeningHoursStore } from "../stores/openingHoursStore";
 import { applyHoursFilter } from "../utils/categoryFilter";
+import type { TagPredicate } from "../utils/overpassFilter";
 import { useCategorySearch } from "./useCategorySearch";
 import { useExploreFilters } from "./useExploreFilters";
 import { useFilterSearch } from "./useFilterSearch";
@@ -44,6 +45,7 @@ export function useFilteredCategoryResults() {
 
   const adHocRaw = filterResponse?.results;
   const adHocPartial = filterResponse?.partial ?? false;
+  const adHocRelaxed = (filterResponse?.relaxed ?? []) as TagPredicate[];
 
   const adHocFiltered = useMemo(() => {
     if (!adHocRaw) return adHocRaw;
@@ -62,6 +64,7 @@ export function useFilteredCategoryResults() {
       isError: filterIsError,
       error: filterError,
       partial: adHocPartial,
+      relaxed: adHocRelaxed,
       isTransitCategory: false,
     };
   }
@@ -73,6 +76,7 @@ export function useFilteredCategoryResults() {
     isError: categoryIsError,
     error: categoryError,
     partial: categoryPartial,
+    relaxed: [] as TagPredicate[],
     isTransitCategory,
   };
 }

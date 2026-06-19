@@ -9,7 +9,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import type { CategoryPlace } from "@openmapx/core";
+import type { CategoryPlace, TagPredicate } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
   categoryPlaceToPlace,
@@ -37,6 +37,18 @@ const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   tram: TramIcon,
   bus: DirectionsBusIcon,
 };
+
+// Human-readable label for a dropped `require` predicate, for the relaxation
+// notice. Prefers the meaningful term: the value for things like `cuisine~thai`,
+// or the (last segment of the) key for affirmative tags like `diet:vegan=yes`.
+const AFFIRMATIVE_VALUES = new Set(["yes", "only", "true", "1", "wlan"]);
+function relaxedFilterLabel(pred: TagPredicate): string {
+  const tail = pred.key.includes(":") ? (pred.key.split(":").pop() ?? pred.key) : pred.key;
+  const niceKey = tail.replace(/_/g, " ");
+  const value = pred.value;
+  if (!value || AFFIRMATIVE_VALUES.has(value)) return niceKey;
+  return `${niceKey}: ${value}`;
+}
 
 function TransitStopCard({
   stop,
@@ -176,7 +188,7 @@ export function CategoryResultsContent() {
   const { setSelectedPlace } = usePlaceStore();
   const { flyTo, mapRef, mapReady } = useMap();
 
-  const { filtered, isLoading, isError, error, partial, isTransitCategory } =
+  const { filtered, isLoading, isError, error, partial, relaxed, isTransitCategory } =
     useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops, isPending: transitPending } = transitStopsQuery;
@@ -304,6 +316,13 @@ export function CategoryResultsContent() {
         <Box sx={{ px: 2, pt: 1.5 }}>
           <Alert severity="info" variant="outlined">
             {ts("partialResults")}
+          </Alert>
+        </Box>
+      )}
+      {!isTransitCategory && !isError && relaxed && relaxed.length > 0 && (
+        <Box sx={{ px: 2, pt: 1.5 }}>
+          <Alert severity="info" variant="outlined">
+            {ts("relaxedFilters", { filters: relaxed.map(relaxedFilterLabel).join(", ") })}
           </Alert>
         </Box>
       )}

@@ -38,4 +38,22 @@ describe("useSettingsStore", () => {
     useSettingsStore.getState().setUnits("metric");
     expect(useSettingsStore.getState().units).toBe("metric");
   });
+
+  it("AI search defaults to enabled", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().aiSearchEnabled).toBe(true);
+  });
+
+  it("setAiSearchEnabled(false) persists and hydrates back as disabled", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().setAiSearchEnabled(false);
+    expect(useSettingsStore.getState().aiSearchEnabled).toBe(false);
+    expect(storage.getString("openmapx:aiSearch")).toBe("false");
+    useSettingsStore.setState({ aiSearchEnabled: true });
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().aiSearchEnabled).toBe(false);
+  });
 });

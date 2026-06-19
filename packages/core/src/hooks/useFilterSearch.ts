@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import type { BoundingBox } from "../types/geometry";
-import { normalizeFilter, type OverpassFilter } from "../utils/overpassFilter";
+import { normalizeFilter, type OverpassFilter, type TagPredicate } from "../utils/overpassFilter";
 import { isAreaTooLarge } from "./useCategorySearch";
 
 export function useFilterSearch(
@@ -19,14 +19,17 @@ export function useFilterSearch(
       lang,
     ],
     queryFn: () =>
-      apiClient.post<{ results: CategoryPlace[]; partial: boolean }>(API_ENDPOINTS.poiFilter, {
-        filter,
-        south: bbox?.south,
-        west: bbox?.west,
-        north: bbox?.north,
-        east: bbox?.east,
-        ...(lang && { lang }),
-      }),
+      apiClient.post<{ results: CategoryPlace[]; partial: boolean; relaxed?: TagPredicate[] }>(
+        API_ENDPOINTS.poiFilter,
+        {
+          filter,
+          south: bbox?.south,
+          west: bbox?.west,
+          north: bbox?.north,
+          east: bbox?.east,
+          ...(lang && { lang }),
+        },
+      ),
     enabled: filter !== null && filter.selectors.length > 0 && bbox !== null,
     staleTime: 30_000,
     retry: (_count, error) => !isAreaTooLarge(error),
