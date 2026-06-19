@@ -9,6 +9,13 @@ import { formatAddress } from "@openmapx/integration-geocoding/format-address";
 import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 import { uniqueModes } from "./mode-map.js";
 
+// MOTIS declares array query params (here the geocode `language` list) as
+// `explode: false` — comma-joined in one param — and honours only the FIRST
+// occurrence of a repeated param. The client-fetch default (`explode: true`)
+// would collapse a multi-value list to its first entry, so serialise arrays
+// comma-joined to match the spec.
+const QUERY_SERIALIZER = { array: { explode: false, style: "form" } } as const;
+
 interface MotisInstance {
   client: Client;
   prefix: string;
@@ -18,6 +25,7 @@ interface MotisInstance {
 const transitousInstance: MotisInstance = (() => {
   const client = createClient({
     baseUrl: "https://api.transitous.org",
+    querySerializer: QUERY_SERIALIZER,
   });
   return { client, prefix: "mo:", provider: "mo" };
 })();
@@ -27,6 +35,7 @@ let motisLocalBaseUrl = "http://localhost:8081";
 const motisLocalInstance: MotisInstance = (() => {
   const client = createClient({
     baseUrl: motisLocalBaseUrl,
+    querySerializer: QUERY_SERIALIZER,
   });
   return { client, prefix: "ms:", provider: "ms" };
 })();

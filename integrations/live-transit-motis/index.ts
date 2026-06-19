@@ -50,10 +50,17 @@ function resolveMotisUrl(ctx: IntegrationContext): string {
   );
 }
 
+// MOTIS declares array query params as `explode: false` (comma-joined in one
+// param) and honours only the FIRST occurrence of a repeated param, so the
+// client-fetch default (`explode: true`) would drop all but the first value of
+// any multi-value list. Serialise arrays comma-joined to match the spec.
+const QUERY_SERIALIZER = { array: { explode: false, style: "form" } } as const;
+
 const client: Client = (() => {
   const c = createClient({
     baseUrl: FALLBACK_MOTIS_URL,
     headers: { "User-Agent": USER_AGENT_TRANSIT },
+    querySerializer: QUERY_SERIALIZER,
   });
   c.interceptors.request.use((request) => {
     const signal = AbortSignal.timeout(TIMEOUT_MS);
