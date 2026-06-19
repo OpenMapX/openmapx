@@ -106,6 +106,40 @@ function normalizeItinerary(it: any): TripItinerary {
   };
 }
 
+/**
+ * Map a MOTIS transitModes allow-list to OTP's comma-separated `mode` value.
+ * OTP groups all heavy rail under RAIL (so it can't distinguish regional from
+ * long-distance), and needs WALK in the list for access/egress legs. Returns
+ * undefined — "plan with all transit modes" — when no modes are given or none
+ * map to an OTP mode.
+ */
+const MOTIS_MODE_TO_OTP: Record<string, string> = {
+  HIGHSPEED_RAIL: "RAIL",
+  LONG_DISTANCE: "RAIL",
+  NIGHT_RAIL: "RAIL",
+  REGIONAL_FAST_RAIL: "RAIL",
+  REGIONAL_RAIL: "RAIL",
+  SUBURBAN: "RAIL",
+  SUBWAY: "SUBWAY",
+  TRAM: "TRAM",
+  BUS: "BUS",
+  COACH: "BUS",
+  FERRY: "FERRY",
+  FUNICULAR: "FUNICULAR",
+  AERIAL_LIFT: "GONDOLA",
+};
+
+export function motisModesToOtp(modes?: string[]): string | undefined {
+  if (!modes || modes.length === 0) return undefined;
+  const otp = new Set<string>();
+  for (const mode of modes) {
+    const mapped = MOTIS_MODE_TO_OTP[mode];
+    if (mapped) otp.add(mapped);
+  }
+  if (otp.size === 0) return undefined;
+  return ["WALK", ...otp].join(",");
+}
+
 export async function plan(params: TripPlanParams): Promise<TripPlan | null> {
   const available = await isOtpAvailable();
   if (!available) return null;

@@ -13,6 +13,7 @@ import {
   humanizeNsrEnum,
   isQuayId,
   isTruthyString,
+  motisModesToEntur,
   normalizeColor,
   normalizeLine,
   normalizeStopPlace,
@@ -538,5 +539,28 @@ describe("normalizeStopPlace", () => {
     [{ id: "NSR:StopPlace:1", name: "x", latitude: 1 }],
   ])("returns null for invalid stop place %j", (input) => {
     expect(normalizeStopPlace(input)).toBeNull();
+  });
+});
+
+describe("motisModesToEntur", () => {
+  it("maps MOTIS modes to Entur transportMode objects", () => {
+    expect(motisModesToEntur(["REGIONAL_RAIL", "TRAM", "BUS"])).toEqual([
+      { transportMode: "rail" },
+      { transportMode: "tram" },
+      { transportMode: "bus" },
+    ]);
+  });
+
+  it("collapses rail variants to a single rail entry and maps SUBWAY→metro, FERRY→water", () => {
+    expect(motisModesToEntur(["HIGHSPEED_RAIL", "SUBURBAN", "SUBWAY", "FERRY"])).toEqual([
+      { transportMode: "rail" },
+      { transportMode: "metro" },
+      { transportMode: "water" },
+    ]);
+  });
+
+  it("returns undefined for empty input", () => {
+    expect(motisModesToEntur(undefined)).toBeUndefined();
+    expect(motisModesToEntur([])).toBeUndefined();
   });
 });

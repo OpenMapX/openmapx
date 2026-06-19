@@ -829,6 +829,7 @@ query PlanTrip(
   $dateTime: DateTime!
   $arriveBy: Boolean
   $numTripPatterns: Int
+  $modes: Modes
 ) {
   trip(
     from: { coordinates: { latitude: $fromLat, longitude: $fromLon }, name: "Origin" }
@@ -836,6 +837,7 @@ query PlanTrip(
     dateTime: $dateTime
     arriveBy: $arriveBy
     numTripPatterns: $numTripPatterns
+    modes: $modes
   ) {
     fromPlace { name latitude longitude }
     toPlace { name latitude longitude }
@@ -3453,15 +3455,49 @@ export async function getRouteStops(routeId: string, hintStopId?: string): Promi
   }
 }
 
+/**
+ * Map a MOTIS transitModes allow-list to Entur (Transmodel) transportMode enum
+ * values for the JourneyPlanner v3 `modes` filter. Returns undefined — "all
+ * modes" — when no modes are given or none map.
+ */
+const MOTIS_MODE_TO_ENTUR: Record<string, string> = {
+  HIGHSPEED_RAIL: "rail",
+  LONG_DISTANCE: "rail",
+  NIGHT_RAIL: "rail",
+  REGIONAL_FAST_RAIL: "rail",
+  REGIONAL_RAIL: "rail",
+  SUBURBAN: "rail",
+  SUBWAY: "metro",
+  TRAM: "tram",
+  BUS: "bus",
+  COACH: "coach",
+  FERRY: "water",
+  FUNICULAR: "funicular",
+  AERIAL_LIFT: "cableway",
+};
+
+export function motisModesToEntur(modes?: string[]): Array<{ transportMode: string }> | undefined {
+  if (!modes || modes.length === 0) return undefined;
+  const set = new Set<string>();
+  for (const mode of modes) {
+    const mapped = MOTIS_MODE_TO_ENTUR[mode];
+    if (mapped) set.add(mapped);
+  }
+  if (set.size === 0) return undefined;
+  return [...set].map((transportMode) => ({ transportMode }));
+}
+
 export async function planTrip(params: {
   from: { lat: number; lng: number };
   to: { lat: number; lng: number };
   departureTime?: string;
   arrivalTime?: string;
   modes?: string[];
+  numItineraries?: number;
 }): Promise<TripPlan | null> {
   const dateTime = params.arrivalTime ?? params.departureTime ?? new Date().toISOString();
   const arriveBy = Boolean(params.arrivalTime);
+  const transportModes = motisModesToEntur(params.modes);
   try {
     const data = await fetchGraphQl<{ trip?: EnturTrip | null }>(
       journeyPlannerEndpoint,
@@ -3473,7 +3509,8 @@ export async function planTrip(params: {
         toLon: params.to.lng,
         dateTime,
         arriveBy,
-        numTripPatterns: 3,
+        numTripPatterns: params.numItineraries ?? 3,
+        ...(transportModes ? { modes: { transportModes } } : {}),
       },
     );
     return normalizeTripPlan(data.trip);

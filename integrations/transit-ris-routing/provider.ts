@@ -225,6 +225,20 @@ export function isConfigured(): boolean {
   return isRisConfigured();
 }
 
+/**
+ * RIS::Routing's request schema for a mode allow-list or the Deutschlandticket
+ * filter is undocumented, so the provider can't enforce either constraint. When
+ * a request carries one, RIS must step aside so a provider that can honour it
+ * (db-vendo's native filter, MOTIS's mode intersection) serves instead — RIS is
+ * priority 1, so otherwise it would preempt them and return non-compliant trips.
+ */
+export function risCanHonor(params: {
+  modes?: string[];
+  deutschlandticketOnly?: boolean;
+}): boolean {
+  return !(params.modes && params.modes.length > 0) && !params.deutschlandticketOnly;
+}
+
 export async function planJourney(
   fromLat: number,
   fromLng: number,

@@ -39,9 +39,12 @@ export function setup(ctx: IntegrationContext): void {
     },
 
     async planTrip(params) {
-      const departureTime = params.departureTime ? new Date(params.departureTime) : new Date();
-      const date = departureTime.toISOString().slice(0, 10);
-      const time = departureTime.toISOString().slice(11, 16);
+      if (!ris.risCanHonor(params)) return wrapRT([]);
+      const arriveBy = params.arrivalTime != null;
+      const when = arriveBy ? params.arrivalTime : params.departureTime;
+      const dt = when ? new Date(when) : new Date();
+      const date = dt.toISOString().slice(0, 10);
+      const time = dt.toISOString().slice(11, 16);
 
       const plan = await ris.planJourney(
         params.from.lat,
@@ -50,6 +53,8 @@ export function setup(ctx: IntegrationContext): void {
         params.to.lng,
         date,
         time,
+        arriveBy,
+        params.numItineraries,
       );
       return wrapRT(plan ? [plan] : []);
     },

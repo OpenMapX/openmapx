@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isConfigured, mapLang, mapLeg, mapTrip, parseDuration, planJourney } from "./provider.js";
+import {
+  isConfigured,
+  mapLang,
+  mapLeg,
+  mapTrip,
+  parseDuration,
+  planJourney,
+  risCanHonor,
+} from "./provider.js";
 import { setRisCredentials } from "./ris-client.js";
 
 type LegInput = Parameters<typeof mapLeg>[0];
@@ -221,5 +229,20 @@ describe("planJourney", () => {
   it("returns null when the routing response has no trips", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(mockOk({ trips: [] })));
     expect(await planJourney(50, 6, 51, 7, "2026-03-10", "10:00")).toBeNull();
+  });
+});
+
+describe("risCanHonor", () => {
+  it("can serve an unconstrained request", () => {
+    expect(risCanHonor({})).toBe(true);
+    expect(risCanHonor({ modes: [] })).toBe(true);
+  });
+
+  it("defers when a mode allow-list is requested (no API mode filter)", () => {
+    expect(risCanHonor({ modes: ["REGIONAL_RAIL"] })).toBe(false);
+  });
+
+  it("defers when the Deutschlandticket filter is requested", () => {
+    expect(risCanHonor({ deutschlandticketOnly: true })).toBe(false);
   });
 });

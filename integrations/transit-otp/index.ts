@@ -1,5 +1,5 @@
 import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
-import { isOtpAvailable, plan, setOtpUrl } from "./provider.js";
+import { isOtpAvailable, motisModesToOtp, plan, setOtpUrl } from "./provider.js";
 
 const { attribution, wrapRT, init } = defineTransitProvider();
 
@@ -40,14 +40,24 @@ export function setup(ctx: IntegrationContext): void {
         facilities: false,
       },
       async planTrip(params) {
+        // OTP groups all heavy rail under RAIL, so it can't exclude
+        // long-distance trains — it can't honour the Deutschlandticket filter.
+        // Defer to a provider that can (MOTIS/db-vendo) rather than leak ICE/IC
+        // into a D-Ticket result.
+        if (params.deutschlandticketOnly) return wrapRT([]);
         const now = new Date();
+        const arriveBy = params.arrivalTime != null;
+        const when = arriveBy ? params.arrivalTime : params.departureTime;
         const result = await plan({
           fromLat: params.from.lat,
           fromLng: params.from.lng,
           toLat: params.to.lat,
           toLng: params.to.lng,
-          time: params.departureTime?.slice(11, 19) ?? now.toISOString().slice(11, 19),
-          date: params.departureTime?.slice(0, 10) ?? now.toISOString().slice(0, 10),
+          time: when?.slice(11, 19) ?? now.toISOString().slice(11, 19),
+          date: when?.slice(0, 10) ?? now.toISOString().slice(0, 10),
+          modes: motisModesToOtp(params.modes),
+          numItineraries: params.numItineraries,
+          arriveBy,
         });
         return wrapRT(result ? [result] : []);
       },

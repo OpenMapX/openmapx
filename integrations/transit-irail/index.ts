@@ -50,9 +50,14 @@ export function setup(ctx: IntegrationContext): void {
       return wrapRT(await irail.getVehicleJourney(vehicleId));
     },
     async planTrip(params) {
+      // iRail is rail-only with no mode filter on its API, so it can't enforce a
+      // mode allow-list — defer to a provider that can when one is requested.
+      if (params.modes?.length) return wrapRT([]);
       const now = new Date();
-      const date = params.departureTime?.slice(0, 10) ?? now.toISOString().slice(0, 10);
-      const time = params.departureTime?.slice(11, 19) ?? now.toISOString().slice(11, 19);
+      const arriveBy = params.arrivalTime != null;
+      const when = arriveBy ? params.arrivalTime : params.departureTime;
+      const date = when?.slice(0, 10) ?? now.toISOString().slice(0, 10);
+      const time = when?.slice(11, 19) ?? now.toISOString().slice(11, 19);
       const plan = await irail.planConnections(
         params.from.lat,
         params.from.lng,
@@ -60,6 +65,8 @@ export function setup(ctx: IntegrationContext): void {
         params.to.lng,
         date,
         time,
+        arriveBy,
+        params.numItineraries,
       );
       return wrapRT(plan ? [plan] : []);
     },

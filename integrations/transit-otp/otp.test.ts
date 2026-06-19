@@ -10,7 +10,7 @@ vi.mock("@openmapx/core", () => ({
   }),
 }));
 
-import { isOtpAvailable, plan, setOtpUrl } from "./provider.js";
+import { isOtpAvailable, motisModesToOtp, plan, setOtpUrl } from "./provider.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -166,5 +166,26 @@ describe("OTP transit provider", () => {
     });
 
     expect(failingResult).toBeNull();
+  });
+});
+
+describe("motisModesToOtp", () => {
+  it("maps MOTIS modes to OTP modes with WALK for access legs", () => {
+    expect(motisModesToOtp(["REGIONAL_RAIL", "TRAM", "BUS"])).toBe("WALK,RAIL,TRAM,BUS");
+  });
+
+  it("collapses all rail variants to RAIL and dedupes", () => {
+    expect(motisModesToOtp(["HIGHSPEED_RAIL", "REGIONAL_RAIL", "SUBURBAN"])).toBe("WALK,RAIL");
+  });
+
+  it("maps SUBWAY/FERRY/AERIAL_LIFT and folds COACH into BUS", () => {
+    expect(motisModesToOtp(["SUBWAY", "FERRY", "AERIAL_LIFT", "COACH"])).toBe(
+      "WALK,SUBWAY,FERRY,GONDOLA,BUS",
+    );
+  });
+
+  it("returns undefined for empty input", () => {
+    expect(motisModesToOtp(undefined)).toBeUndefined();
+    expect(motisModesToOtp([])).toBeUndefined();
   });
 });
