@@ -55,6 +55,28 @@ export function shouldReroute(
  * remaining stop is located by projecting it onto the route and comparing its
  * arc-length to how far we've travelled (`alongMeters`).
  */
+/**
+ * Drop reroute timestamps (ms) older than `windowMs` relative to `nowMs`, keeping
+ * a rolling window for churn detection.
+ */
+export function pruneRerouteTimes(
+  timestampsMs: number[],
+  nowMs: number,
+  windowMs: number,
+): number[] {
+  return timestampsMs.filter((t) => nowMs - t < windowMs);
+}
+
+/**
+ * Reroute churn: at least `maxInWindow` reroutes within the rolling window
+ * (`timestampsMs` must already be pruned to it). The engine reacts by imposing a
+ * short cooldown so it stops re-rerouting onto fresh routes that immediately read
+ * off-route (GPS noise, an awkward first maneuver) — breaking the loop.
+ */
+export function isReroutingTooOften(timestampsMs: number[], maxInWindow: number): boolean {
+  return timestampsMs.length >= maxInWindow;
+}
+
 export function remainingWaypoints(
   routeGeometry: LngLat[],
   destinationWaypoints: LngLat[],

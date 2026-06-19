@@ -58,6 +58,7 @@ interface OsrmStep {
   geometry: { type: "LineString"; coordinates: [number, number][] };
   intersections?: OsrmIntersection[];
   annotation?: OsrmAnnotation;
+  driving_side?: "left" | "right";
 }
 
 interface OsrmLeg {
@@ -222,6 +223,7 @@ export function transformOsrmStep(step: OsrmStep): RouteStep {
     maneuver: { type: step.maneuver.type, modifier: step.maneuver.modifier },
     lanes: osrmLanes(step),
     speedLimit: osrmSpeedLimit(step),
+    drivingSide: step.driving_side,
   };
 }
 

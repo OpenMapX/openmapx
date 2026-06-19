@@ -302,6 +302,7 @@
     "accessBike": "Bike",
     "accessCar": "Park & ride",
     "fastestRoute": "Fastest route",
+    "co2Estimate": "≈ {co2} (est.)",
     "from": "from",
     "to": "to",
     "origin": "Origin",

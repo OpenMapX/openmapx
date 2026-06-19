@@ -1,9 +1,12 @@
 "use client";
 
 import { useNavigationStore } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
+import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { useMap } from "@/lib/MapContext";
+import { useMapAttributions } from "@/lib/useMapAttributions";
 import { buildNavRouteLine, splitNavRoute } from "./navRouteSplit";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
@@ -27,6 +30,16 @@ export function NavigationRouteLayer() {
   const routes = useNavigationStore((s) => s.routes);
   const activeRouteIndex = useNavigationStore((s) => s.activeRouteIndex);
   const progress = useNavigationStore((s) => s.progress);
+  const routeProvider = useNavigationStore((s) => s.routeProvider);
+
+  // Credit the routing engine on the map's attribution control while navigating,
+  // so the credit shows during turn-by-turn (the directions panel is gone).
+  const registry = useIntegrationRegistry();
+  const navRouteAttributions = useMemo(
+    () => (status === "idle" ? [] : attributionsForProviders(registry, [routeProvider])),
+    [registry, routeProvider, status],
+  );
+  useMapAttributions("nav-route", navRouteAttributions);
 
   // Cache the turf line + total length per route so the per-fix update below
   // doesn't re-walk the whole geometry every time the user moves.

@@ -2,10 +2,13 @@
 
 import type { LngLat } from "@openmapx/core";
 import { useDirections, useDirectionsStore, useSettingsStore } from "@openmapx/core";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
+import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { useMap } from "@/lib/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/lib/theme";
+import { useMapAttributions } from "@/lib/useMapAttributions";
 
 type GeoJSONSource = maplibregl.GeoJSONSource;
 
@@ -48,6 +51,16 @@ export function RouteLayer() {
     avoidFerries,
     units,
   });
+
+  // Credit the routing engine that served the drawn route, on the map's
+  // attribution control — so the credit persists when the directions panel is
+  // closed (the panel shows the same credit while open).
+  const registry = useIntegrationRegistry();
+  const routeAttributions = useMemo(
+    () => attributionsForProviders(registry, [data?.provider]),
+    [registry, data?.provider],
+  );
+  useMapAttributions("route", routeAttributions);
 
   // Add map source and layers
   useEffect(() => {

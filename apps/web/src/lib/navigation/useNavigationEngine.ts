@@ -2,10 +2,12 @@ import {
   type FixInput,
   fetchDirections,
   formatSpokenDistance,
+  isReroutingTooOften,
   type NavTickState,
   navOptionsForMode,
   pickSpeedLimit,
   processFix,
+  pruneRerouteTimes,
   remainingWaypoints,
   useNavigationStore,
   useSettingsStore,
@@ -30,6 +32,13 @@ const freshTick = (): NavTickState => ({
   spokenCues: [],
 });
 
+// Churn guard: when reroutes fire too often (the fresh route keeps reading
+// off-route from GPS noise / an awkward first maneuver), pause rerouting briefly
+// so the recomputed route can settle instead of churning on every fix.
+const REROUTE_CHURN_WINDOW_MS = 120_000; // 2 min
+const REROUTE_CHURN_MAX = 3; // reroutes within the window that trip the cooldown
+const REROUTE_CHURN_COOLDOWN_MS = 30_000;
+
 /** Wires GPS fixes → processFix → navigationStore + side effects (voice, reroute). */
 export function useNavigationEngine(): void {
   const t = useTranslations("navigation");
@@ -38,6 +47,9 @@ export function useNavigationEngine(): void {
 
   const tickRef = useRef<NavTickState>(freshTick());
   const reroutingRef = useRef(false);
+  // Recent successful-reroute times (ms) + cooldown deadline for the churn guard.
+  const rerouteTimesRef = useRef<number[]>([]);
+  const rerouteCooldownUntilRef = useRef(0);
   const captureFix = useNavRecorder();
 
   const speakCue = useCallback(
@@ -119,7 +131,8 @@ export function useNavigationEngine(): void {
       if (
         result.needsReroute &&
         !reroutingRef.current &&
-        !useNavRecordingStore.getState().replaying
+        !useNavRecordingStore.getState().replaying &&
+        Date.now() >= rerouteCooldownUntilRef.current
       ) {
         reroutingRef.current = true;
         haptics.warn();
@@ -141,8 +154,20 @@ export function useNavigationEngine(): void {
             if (st === "idle" || st === "arrived") return;
             const next = res.routes?.[res.activeRouteIndex ?? 0];
             if (next) {
+              // Churn guard: record this reroute; if too many fired recently,
+              // pause further reroutes so the fresh route can settle.
+              const now = Date.now();
+              rerouteTimesRef.current = pruneRerouteTimes(
+                [...rerouteTimesRef.current, now],
+                now,
+                REROUTE_CHURN_WINDOW_MS,
+              );
+              if (isReroutingTooOften(rerouteTimesRef.current, REROUTE_CHURN_MAX)) {
+                rerouteCooldownUntilRef.current = now + REROUTE_CHURN_COOLDOWN_MS;
+                rerouteTimesRef.current = [];
+              }
               tickRef.current = freshTick();
-              useNavigationStore.getState().applyReroute(next);
+              useNavigationStore.getState().applyReroute(next, res.provider);
             } else {
               // No alternative found: stay on the old route and tell the user.
               useNavigationStore.setState({ status: "navigating" });
@@ -173,6 +198,15 @@ export function useNavigationEngine(): void {
   useEffect(() => {
     tickRef.current = freshTick();
   }, [activeRoute]);
+
+  // Clear the churn guard when navigation ends so a new session starts clean.
+  const navStatus = useNavigationStore((s) => s.status);
+  useEffect(() => {
+    if (navStatus === "idle") {
+      rerouteTimesRef.current = [];
+      rerouteCooldownUntilRef.current = 0;
+    }
+  }, [navStatus]);
 
   // Opt into the navigation simulator from the URL (`?navsim=1`) once on mount.
   // It swaps synthetic fixes for real geolocation so the full pipeline can be

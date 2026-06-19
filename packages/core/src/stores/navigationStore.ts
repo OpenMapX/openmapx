@@ -46,6 +46,8 @@ interface NavigationState {
   route: Route | null;
   /** Active route plus its alternatives, so the user can switch mid-trip. */
   routes: Route[];
+  /** Integration id of the routing provider that produced the active route, for map attribution. */
+  routeProvider: string | null;
   activeRouteIndex: number;
   destinationWaypoints: LngLat[];
   progress: NavProgress | null;
@@ -83,6 +85,7 @@ interface NavigationState {
     mode: TravelMode,
     waypoints: LngLat[],
     alternatives?: Route[],
+    provider?: string,
   ) => void;
   /** Switch the followed route to one of `routes` (an alternative shown on the map). */
   selectRoute: (index: number) => void;
@@ -104,7 +107,7 @@ interface NavigationState {
   setWeakGps: (v: boolean) => void;
   signalRerouteFailed: () => void;
   beginReroute: () => void;
-  applyReroute: (route: Route) => void;
+  applyReroute: (route: Route, provider?: string) => void;
   setCameraMode: (m: CameraMode) => void;
   toggleVoice: () => void;
   toggleKeepScreenOn: () => void;
@@ -125,6 +128,7 @@ const INITIAL = {
   mode: "driving" as TravelMode,
   route: null as Route | null,
   routes: [] as Route[],
+  routeProvider: null as string | null,
   activeRouteIndex: 0,
   destinationWaypoints: [] as LngLat[],
   progress: null,
@@ -145,7 +149,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   voiceEnabled: readBoolPref(VOICE_STORAGE_KEY, true),
   keepScreenOn: readBoolPref(KEEP_SCREEN_ON_STORAGE_KEY, true),
 
-  startGroundNavigation: (route, mode, waypoints, alternatives = []) =>
+  startGroundNavigation: (route, mode, waypoints, alternatives = [], provider) =>
     set({
       ...INITIAL,
       status: "navigating",
@@ -153,6 +157,7 @@ export const useNavigationStore = create<NavigationState>((set) => ({
       mode,
       route,
       routes: [route, ...alternatives],
+      routeProvider: provider ?? null,
       activeRouteIndex: 0,
       destinationWaypoints: waypoints,
     }),
@@ -206,8 +211,15 @@ export const useNavigationStore = create<NavigationState>((set) => ({
   // Clear progress: it belongs to the OLD route. Leaving the previous route's
   // (larger) alongMeters in place would mislead every progress consumer for one
   // render against the new, often shorter, geometry until the next fix arrives.
-  applyReroute: (route) =>
-    set({ status: "navigating", route, offRoute: false, progress: null, liveSpeedLimits: null }),
+  applyReroute: (route, provider) =>
+    set((s) => ({
+      status: "navigating",
+      route,
+      offRoute: false,
+      progress: null,
+      liveSpeedLimits: null,
+      routeProvider: provider ?? s.routeProvider,
+    })),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   toggleVoice: () =>
     set((s) => {

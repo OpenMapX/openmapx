@@ -268,6 +268,7 @@ export {
   freshNavTickState,
   type GeometryWindow,
   isOverSpeed,
+  isReroutingTooOften,
   matchSpeedLimitsByPoint,
   NAV_RECORDING_VERSION,
   type NavRecording,
@@ -278,6 +279,7 @@ export {
   poiAlongRoute,
   positionAt,
   processFix,
+  pruneRerouteTimes,
   type RecordedReroute,
   type ReplayStep,
   type RoadAlert,
@@ -453,6 +455,7 @@ export {
   facetsForCategory,
 } from "./utils/categoryFacets";
 export { applyHoursFilter } from "./utils/categoryFilter";
+export { AVERAGE_CAR_CO2_GRAMS_PER_KM, estimateDrivingCo2Grams } from "./utils/co2";
 // Utils
 export {
   type CommonsPage,

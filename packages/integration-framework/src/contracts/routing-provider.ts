@@ -69,6 +69,12 @@ export interface RouteStep {
   roundaboutExitCount?: number;
   /** Interchange signage (exit number / branch / toward), when known. */
   sign?: ManeuverSign;
+  /**
+   * Legal driving side at this step ("left"/"right"), when the engine reports it
+   * (OSRM). Lets the UI draw roundabouts in the correct rotation. Valhalla does
+   * not expose it per maneuver, so it is undefined on Valhalla-served routes.
+   */
+  drivingSide?: "left" | "right";
 }
 
 export interface RouteLeg {

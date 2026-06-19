@@ -49,6 +49,12 @@ const COSTING_MAP: Record<string, string> = {
   motorcycle: "motorcycle",
 };
 
+/**
+ * Per-maneuver penalty (seconds) for motorised costings — nudges routes toward
+ * fewer turns than Valhalla's turn-happy ~5s default.
+ */
+const MANEUVER_PENALTY_SECONDS = 10;
+
 const ELEVATION_INTERVAL = 30; // metres between elevation samples
 
 /**
@@ -402,13 +408,20 @@ function transformMatchedPoint(point: ValhallaTraceMatchedPoint): MatchPoint {
 
 /**
  * Build the per-mode Valhalla `costing_options` from the avoid flags. Each is a
- * 0–1 weight where 0 means "avoid": `use_highways`, `use_tolls`, `use_ferry`.
+ * 0–1 weight where 0 means "avoid": `use_highways`, `use_tolls`, `use_ferry`. Motorised
+ * costings (`auto`, `motorcycle`) also get a raised `maneuver_penalty` for fewer turns.
  */
-export function buildCostingOptions(options: RoutingOptions): Record<string, unknown> {
+export function buildCostingOptions(
+  options: RoutingOptions,
+  costing: string,
+): Record<string, unknown> {
   const costingOptions: Record<string, unknown> = {};
   if (options.avoidHighways) costingOptions.use_highways = 0;
   if (options.avoidTolls) costingOptions.use_tolls = 0;
   if (options.avoidFerries) costingOptions.use_ferry = 0;
+  if (costing === "auto" || costing === "motorcycle") {
+    costingOptions.maneuver_penalty = MANEUVER_PENALTY_SECONDS;
+  }
   return costingOptions;
 }
 
@@ -422,7 +435,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
-    const costingOptions = buildCostingOptions(options);
+    const costingOptions = buildCostingOptions(options, COSTING_MAP[mode]);
 
     const locations = waypoints.map((wp) => ({ lon: wp[0], lat: wp[1], type: "break" as const }));
 
@@ -476,7 +489,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
-    const costingOptions = buildCostingOptions(options);
+    const costingOptions = buildCostingOptions(options, COSTING_MAP[mode]);
 
     const locations = waypoints.map((wp) => ({
       lon: wp[0],

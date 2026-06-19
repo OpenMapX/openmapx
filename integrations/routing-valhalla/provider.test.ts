@@ -178,17 +178,23 @@ describe("valhallaSign", () => {
 });
 
 describe("buildCostingOptions", () => {
-  it("returns an empty object when no avoid flags are set", () => {
-    expect(buildCostingOptions({})).toEqual({});
+  it("returns an empty object when no avoid flags are set (non-motorised costing)", () => {
+    expect(buildCostingOptions({}, "bicycle")).toEqual({});
   });
 
   it("sets use_tolls=0 when avoidTolls is set", () => {
-    expect(buildCostingOptions({ avoidTolls: true })).toEqual({ use_tolls: 0 });
+    expect(buildCostingOptions({ avoidTolls: true }, "bicycle")).toEqual({ use_tolls: 0 });
   });
 
   it("maps every avoid flag to its Valhalla costing knob", () => {
     expect(
-      buildCostingOptions({ avoidHighways: true, avoidTolls: true, avoidFerries: true }),
+      buildCostingOptions({ avoidHighways: true, avoidTolls: true, avoidFerries: true }, "bicycle"),
     ).toEqual({ use_highways: 0, use_tolls: 0, use_ferry: 0 });
+  });
+
+  it("adds a maneuver penalty for motorised costings only", () => {
+    expect(buildCostingOptions({}, "auto")).toEqual({ maneuver_penalty: 10 });
+    expect(buildCostingOptions({}, "motorcycle")).toEqual({ maneuver_penalty: 10 });
+    expect(buildCostingOptions({}, "pedestrian")).toEqual({});
   });
 });

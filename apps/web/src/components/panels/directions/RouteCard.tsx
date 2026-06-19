@@ -9,12 +9,14 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type { Route } from "@openmapx/core";
 import {
+  estimateDrivingCo2Grams,
   formatDistance,
   formatDuration,
   useDirectionsStore,
   useNavigationStore,
 } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { formatCo2Emission } from "@/lib/formatCo2";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { TEAL } from "@/lib/theme";
 import { requestHeadingPermission } from "@/lib/useHeading";
@@ -29,6 +31,7 @@ export function RouteCard({
   onDetails,
   units,
   alternatives = [],
+  provider,
 }: {
   route: Route;
   index: number;
@@ -38,10 +41,13 @@ export function RouteCard({
   units: "metric" | "imperial";
   /** The other routes, carried into navigation so they can be switched to mid-trip. */
   alternatives?: Route[];
+  /** Integration id of the routing provider that served this route, for nav attribution. */
+  provider?: string;
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
+  const locale = useLocale();
   const startGroundNavigation = useNavigationStore((s) => s.startGroundNavigation);
   const waypoints = useDirectionsStore((s) => s.waypoints);
 
@@ -52,7 +58,7 @@ export function RouteCard({
     // await hands control back to the event loop.
     primeSpeechSynthesis();
     await requestHeadingPermission();
-    startGroundNavigation(route, route.mode, coords, alternatives);
+    startGroundNavigation(route, route.mode, coords, alternatives, provider);
   };
 
   const dist =
@@ -118,6 +124,15 @@ export function RouteCard({
         >
           {dist}
         </Typography>
+        {route.mode === "driving" &&
+          (() => {
+            const co2 = formatCo2Emission(estimateDrivingCo2Grams(route.distance), locale);
+            return co2 ? (
+              <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+                {t("co2Estimate", { co2 })}
+              </Typography>
+            ) : null;
+          })()}
         {active && index === 0 && (
           <Typography
             variant="caption"

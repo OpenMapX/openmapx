@@ -31,7 +31,13 @@ export {
   type TimelineEvent,
   type TimelineEventType,
 } from "./recording";
-export { remainingWaypoints, shouldReroute, updateOffRouteScore } from "./reroute";
+export {
+  isReroutingTooOften,
+  pruneRerouteTimes,
+  remainingWaypoints,
+  shouldReroute,
+  updateOffRouteScore,
+} from "./reroute";
 export {
   type AlongRouteOptions,
   type AlongRoutePoi,
