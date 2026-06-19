@@ -53,19 +53,22 @@ function ModeButton({
           flexDirection: "column",
           alignItems: "center",
           gap: 0.4,
-          px: 0.75,
+          px: 0.5,
           py: 0.5,
           cursor: disabled ? "default" : "pointer",
           opacity: disabled ? 0.35 : 1,
           borderRadius: 1,
           "&:hover": {},
+          // Keep the 44px touch-target floor; don't squish inside the
+          // horizontally-scrollable mode row.
           minWidth: 44,
+          flexShrink: 0,
         }}
       >
         {/* Icon inside pill */}
         <Box
           sx={{
-            px: 1.5,
+            px: 1,
             height: 32,
             borderRadius: 99,
             bgcolor: active ? "var(--omx-teal-light)" : "background.paper",

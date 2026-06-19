@@ -510,7 +510,20 @@ export function DirectionsPanelContent() {
           <MenuIcon sx={{ fontSize: 22 }} />
         </IconButton>
 
-        <Box sx={{ display: "flex", flex: 1, justifyContent: "space-around" }}>
+        <Box
+          sx={{
+            display: "flex",
+            flex: 1,
+            // Let this flex child shrink below its content so an over-wide set
+            // of mode buttons scrolls here instead of widening the panel.
+            minWidth: 0,
+            justifyContent: "space-around",
+            flexWrap: "nowrap",
+            overflowX: "auto",
+            scrollbarWidth: "none",
+            "&::-webkit-scrollbar": { display: "none" },
+          }}
+        >
           {MODES.map(({ mode: m, icon, labelKey, disabled }) => {
             const isActive = mode === m;
             const isTransit = m === "transit";
