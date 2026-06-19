@@ -4,6 +4,7 @@ import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NavigationIcon from "@mui/icons-material/Navigation";
+import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
@@ -21,7 +22,7 @@ import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { TEAL } from "@/lib/theme";
 import { requestHeadingPermission } from "@/lib/useHeading";
 
-const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling"]);
+const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
 
 export function RouteCard({
   route,
@@ -71,6 +72,8 @@ export function RouteCard({
       <DirectionsCarIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
     ) : route.mode === "walking" ? (
       <DirectionsWalkIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
+    ) : route.mode === "motorcycle" ? (
+      <TwoWheelerIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
     ) : (
       <DirectionsBikeIcon sx={{ fontSize: 22, color: active ? TEAL : "text.disabled" }} />
     );
