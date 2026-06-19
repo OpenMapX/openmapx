@@ -3,6 +3,16 @@ import { USER_AGENT_TRANSIT } from "@openmapx/core";
 
 const TIMEOUT_MS = 8_000;
 
+// MOTIS declares array query params (transitModes, pre/postTransitModes, …) as
+// `explode: false` — comma-joined in a single param (`transitModes=TRAM,BUS`).
+// The MOTIS server honours only the FIRST occurrence of a repeated param, so the
+// client-fetch default (`explode: true` → `transitModes=TRAM&transitModes=BUS`)
+// silently collapses every multi-mode allow-list to its first entry. That makes
+// the Deutschlandticket filter (whose list starts with the deprecated, unmatched
+// REGIONAL_FAST_RAIL) return zero itineraries. Serialise arrays comma-joined to
+// match the spec.
+const QUERY_SERIALIZER = { array: { explode: false, style: "form" } } as const;
+
 export interface MotisInstance {
   client: Client;
   prefix: string;
@@ -23,6 +33,7 @@ export const transitousInstance: MotisInstance = (() => {
   const client = createClient({
     baseUrl: "https://api.transitous.org",
     headers: { "User-Agent": USER_AGENT_TRANSIT },
+    querySerializer: QUERY_SERIALIZER,
   });
   withTimeout(client);
   return { client, prefix: "mo:", provider: "mo" };
@@ -31,6 +42,7 @@ export const transitousInstance: MotisInstance = (() => {
 export const motisLocalInstance: MotisInstance = (() => {
   const client = createClient({
     baseUrl: "http://localhost:8081",
+    querySerializer: QUERY_SERIALIZER,
   });
   withTimeout(client);
   return { client, prefix: "ms:", provider: "ms" };
